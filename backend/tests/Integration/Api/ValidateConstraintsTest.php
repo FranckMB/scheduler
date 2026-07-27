@@ -142,10 +142,6 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid'], 'un avertissement n’invalide rien');
         self::assertSame([], $data['conflicts'], 'les contraintes du gymnase désactivé sont retirées du jeu validé');
-        // Ces tests ne créent AUCUN créneau : la vérification de capacité (P2-9)
-        // y ajoute donc toujours son avertissement « 0 créneau offert ». Elle est
-        // orthogonale à ce que ce fichier vérifie — on cible l'avertissement de
-        // gymnase désactivé plutôt que d'exiger qu'il soit le SEUL.
         self::assertStringContainsString(
             '« SM2 impose Barros » vise le gymnase Barros',
             implode(' | ', $data['warnings']),
@@ -191,10 +187,6 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid']);
         self::assertSame([], $data['errors'], 'la datée visant le gymnase désactivé est retirée, donc plus rien à valider');
-        // Ces tests ne créent AUCUN créneau : la vérification de capacité (P2-9)
-        // y ajoute donc toujours son avertissement « 0 créneau offert ». Elle est
-        // orthogonale à ce que ce fichier vérifie — on cible l'avertissement de
-        // gymnase désactivé plutôt que d'exiger qu'il soit le SEUL.
         self::assertContains(
             '« SM1 exige 2 séances à Barros » vise le gymnase Barros, désactivé pour cette période : elle ne sera pas appliquée.',
             $data['warnings'],
@@ -211,15 +203,7 @@ final class ValidateConstraintsTest extends WebTestCase
 
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid']);
-        // Ces tests ne créent AUCUN créneau : la vérification de capacité (P2-9)
-        // y ajoute donc toujours son avertissement « 0 créneau offert ». Elle est
-        // orthogonale à ce que ce fichier vérifie — on cible l'avertissement de
-        // gymnase désactivé plutôt que d'exiger qu'il soit le SEUL.
-        self::assertStringNotContainsString(
-            'désactivé pour cette période',
-            implode(' | ', $data['warnings']),
-            'sans désactivation, aucune contrainte n’est écartée',
-        );
+        self::assertSame([], $data['warnings'], 'sans désactivation, aucune contrainte n’est écartée');
     }
 
     protected function setUp(): void

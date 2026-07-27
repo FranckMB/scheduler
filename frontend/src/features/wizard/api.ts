@@ -342,6 +342,12 @@ export interface ValidateResult {
   valid: boolean;
   errors: Record<string, string[]>;
   conflicts: { constraint1Id: string; constraint2Id: string; reason: string }[];
+  /**
+   * Messages NON bloquants, déjà rédigés côté serveur (contrainte écartée d'une
+   * période, manque de créneaux…). Ils arrivent avec `valid: true` : les lire
+   * seulement quand la validation échoue les perdrait tous.
+   */
+  warnings: string[];
 }
 
 /** Pre-solve gate (BW3). Returns the body whether valid (200) or not (422). Period mode scopes to a calendar entry. */

@@ -2029,12 +2029,16 @@ def diagnose_locked_slot_violations(
         return (venue_names or {}).get(venue_id) or venue_id
 
     warnings: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
 
-    def _emit(constraint: Mapping[str, Any], team_id: str, message: str) -> None:
-        # One warning per (constraint, team): a lock spanning several 30-min slot
-        # starts must not shout the same sentence three times.
-        key = (str(constraint.get("id")), team_id)
+    def _emit(constraint: Mapping[str, Any], team_id: str, lock_id: str, message: str) -> None:
+        # Clé (contrainte, équipe, VERROU) : deux verrous distincts qui violent la
+        # même règle sont deux choses à corriger, et n'en montrer qu'une laisserait
+        # le gestionnaire croire son planning réparé après un seul geste.
+        # (La justification précédente — « un verrou couvre plusieurs départs de
+        # 30 min » — était fausse : `locked_slots` porte UNE entrée par verrou,
+        # la déduplication par `lock_key` ayant déjà eu lieu dans `model.py`.)
+        key = (str(constraint.get("id")), team_id, lock_id)
         if key in seen:
             return
         seen.add(key)
@@ -2052,6 +2056,7 @@ def diagnose_locked_slot_violations(
         day_int = int(day)
         start = _time_to_minutes(start_text)
         where = f"{_venue(venue_id)} à {start_text}"
+        lock_id = f"{venue_id}|{day_int}|{start_text}"
 
         # 1. Coach availability — every required coach of the team, like the solver.
         coach_ids = [str(c) for c in (coach_map.get(team_id) or [])]
@@ -2061,6 +2066,7 @@ def diagnose_locked_slot_violations(
                     _emit(
                         _constraint_of_coach(coach_id, _coach(coach_id)),
                         team_id,
+                        lock_id,
                         f"Réservation maintenue pour {_team(team_id)} ({where}) alors que "
                         f"{_coach(coach_id)} est indisponible : le verrou prime, la contrainte est ignorée.",
                     )
@@ -2069,20 +2075,40 @@ def diagnose_locked_slot_violations(
         for constraint in windows:
             if str(constraint.get("scope_target_id") or constraint.get("scopeTargetId") or "") != team_id:
                 continue
-            config = constraint.get("config") or {}
+            # MÊME porte que `add_time_window_constraints`, et au MÊME endroit :
+            # avant tout parsing d'horaire. Sans elle on accuserait une règle
+            # PREFERRED que le solveur n'applique jamais (le diagnostic mentirait),
+            # et `_time_to_minutes` lèverait sur une valeur malformée qu'aucun
+            # chemin d'exécution ne parse aujourd'hui — transformant une
+            # génération qui passait en 500.
+            if not constraint.get("isActive", True):
+                continue
+            rule_type = constraint.get("ruleType") or constraint.get("rule_type")
             family = str(constraint.get("family") or "").upper()
+            if rule_type == "PREFERRED" and family == "TIME":
+                continue
+            if rule_type not in ("HARD", "LOCK") or family not in ("TIME", "DAY"):
+                continue
+            config = constraint.get("config") or {}
             if family == "DAY":
                 forbidden_days = _day_int_set(config.get("forbiddenDays"))
                 allowed_days = _day_int_set(config.get("allowedDays"))
                 if day_int in forbidden_days or (allowed_days and day_int not in allowed_days):
-                    _emit(constraint, team_id, f"Réservation maintenue pour {_team(team_id)} ({where}) un jour exclu par sa règle de jours.")
+                    _emit(constraint, team_id, lock_id, f"Réservation maintenue pour {_team(team_id)} ({where}) un jour exclu par sa règle de jours.")
                 continue
             min_start = config.get("minStartTime")
             max_start = config.get("maxStartTime")
-            if (min_start is not None and start < _time_to_minutes(min_start)) or (
-                max_start is not None and start > _time_to_minutes(max_start)
+            # `maxEndTime` porte sur la FIN de séance (début + durée), pas sur son
+            # début — l'omettre laissait subsister le silence que cette détection
+            # existe pour fermer.
+            max_end = config.get("maxEndTime")
+            duration = int(slot.get("duration_minutes") or slot.get("durationMinutes") or DEFAULT_SESSION_MINUTES)
+            if (
+                (min_start is not None and start < _time_to_minutes(min_start))
+                or (max_start is not None and start > _time_to_minutes(max_start))
+                or (max_end is not None and start + duration > _time_to_minutes(max_end))
             ):
-                _emit(constraint, team_id, f"Réservation maintenue pour {_team(team_id)} ({where}) hors de sa fenêtre horaire.")
+                _emit(constraint, team_id, lock_id, f"Réservation maintenue pour {_team(team_id)} ({where}) hors de sa fenêtre horaire.")
 
         # 3. Forbidden (team, venue) pairs — venue closures land here.
         for item in forbidden:
@@ -2091,7 +2117,16 @@ def diagnose_locked_slot_violations(
             tid = item.get("scope_target_id") or item.get("team_id")
             vid = item.get("venue_id") or item.get("room_id")
             if tid is not None and vid is not None and str(tid) == team_id and str(vid) == venue_id:
-                _emit(item, team_id, f"Réservation maintenue pour {_team(team_id)} ({where}) dans un gymnase qui lui est interdit.")
+                # `parse_v2_constraints` aplatit ces règles en paires (équipe,
+                # gymnase) sans `id` ni `name` : passer le dict brut rendait
+                # « (contrainte « None ») » et fusionnait tous les gymnases
+                # interdits d'une équipe en un seul avertissement.
+                _emit(
+                    {"id": f"forbidden-venue-{team_id}-{venue_id}", "name": f"gymnase interdit ({_venue(venue_id)})"},
+                    team_id,
+                    lock_id,
+                    f"Réservation maintenue pour {_team(team_id)} ({where}) dans un gymnase qui lui est interdit.",
+                )
 
     return warnings
 

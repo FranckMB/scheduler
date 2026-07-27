@@ -40,12 +40,28 @@ final class TrainingCapacityChecker
      */
     public function warnings(string $clubId, string $seasonId, ?string $schedulePlanId = null): array
     {
+        // PÉRIODE : on se tait, volontairement (revue #317). Une période filtre son
+        // offre ET sa demande — `buildForOverlay` écarte les gymnases désactivés
+        // (`VenuePeriodOverride`) et les jours fermés, puis retire les équipes
+        // désactivées et applique leurs `sessionsPerWeek` de période
+        // (`TeamPeriodOverride`). Recopier ces règles ici, c'est le miroir qui
+        // dérive : la première version surestimait l'offre (silence sur un vrai
+        // manque) ET la demande (fausse alerte sur une période parfaitement
+        // dimensionnée) — les deux à la fois.
+        //
+        // S'appuyer sur la source unique est impossible en l'état : `buildForOverlay`
+        // exige un `Schedule`, qui n'existe pas AVANT la génération. Tant que ce
+        // chemin n'est pas ouvert, mieux vaut ne rien dire que dire faux.
+        if (null !== $schedulePlanId) {
+            return [];
+        }
+
         $demand = $this->demand($clubId, $seasonId);
         if (0 === $demand) {
             return [];
         }
 
-        $supply = $this->supply($clubId, $seasonId, $schedulePlanId);
+        $supply = $this->supply($clubId, $seasonId);
         if ($supply >= $demand) {
             return [];
         }
@@ -71,9 +87,11 @@ final class TrainingCapacityChecker
             'seasonId' => $seasonId,
             'isActive' => true,
         ]) as $team) {
-            // `minSessionsOverride` prime quand il est posé : c'est le minimum que
-            // le gestionnaire a explicitement choisi pour cette équipe.
-            $total += $team->getMinSessionsOverride() ?? $team->getSessionsPerWeek();
+            // `sessionsPerWeek` — ce que l'équipe DEMANDE, pas son plancher.
+            // Retenir `minSessionsOverride` sous-estimait la demande : le solveur
+            // place jusqu'à `sessionsPerWeek`, donc une équipe visant 3 séances
+            // avec un minimum de 1 masquait deux séances de besoin réel.
+            $total += $team->getSessionsPerWeek();
         }
 
         return $total;
@@ -84,13 +102,13 @@ final class TrainingCapacityChecker
      * accueille deux équipes, le compter pour 1 sous-estimerait l'offre et ferait
      * crier au loup.
      */
-    private function supply(string $clubId, string $seasonId, ?string $schedulePlanId): int
+    private function supply(string $clubId, string $seasonId): int
     {
         $total = 0;
         foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy([
             'clubId' => $clubId,
             'seasonId' => $seasonId,
-            'schedulePlanId' => $schedulePlanId,
+            'schedulePlanId' => null, // la grille de SAISON : `null` = ligne de base partagée
         ]) as $slot) {
             $total += $slot->getCapacity();
         }
