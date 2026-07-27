@@ -4,55 +4,66 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Dependency;
 
+use Composer\InstalledVersions;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * NR — le stack Symfony reste homogène sur la LTS 7.4 (P4-31).
  *
- * `extra.symfony.require: "7.4.*"` est un réglage FLEX, pas Composer : il ne
- * contraint que les `symfony/*` listés en require DIRECTE. Tout paquet
- * purement transitif y échappe, et comme leurs requirants acceptent
- * `^7.4|^8.0`, Composer prend le plus haut. C'est ainsi que 19 paquets — dont
- * `http-kernel`, `dependency-injection`, `routing`, `security-core` — ont
- * dérivé en 8.0.x sous des bundles 7.4.x, sans qu'aucun outil ne le signale.
+ * Flex CONTRAINT bien les splits Symfony à `extra.symfony.require`, transitifs
+ * compris (`PackageFilter::removeLegacyPackages()` ne teste jamais si le paquet
+ * est en require directe). Mais il exempte tout paquet dont la version
+ * candidate est DÉJÀ celle du lock. C'est là que la dérive s'installe : une
+ * fois `http-kernel` verrouillé en 8.0.14, chaque mise à jour partielle le
+ * laisse tel quel, et plus rien ne le ramène — 19 paquets ont vécu des
+ * semaines en 8.0.x sous des bundles 7.4.x sans qu'aucun outil ne le signale.
  *
  * Le coût n'est pas théorique. `UserInterface::eraseCredentials` a disparu de
  * l'interface INSTALLÉE, Rector a supprimé la méthode de `User`, et le code
  * compilait toujours : le conteneur n'aurait explosé qu'au réalignement. Plus
  * grave à terme, la branche 8.0 sort de support en juillet 2026 — une CVE sur
- * `http-kernel` n'y serait jamais corrigée, et `composer audit` (bloquant en
- * CI) rougirait sans issue.
+ * `http-kernel` n'y serait jamais corrigée, et `composer audit` rougirait sans
+ * issue.
  *
- * Ce test lit le lock et échoue dès qu'un paquet repart hors 7.4. Il est
- * FAIL-CLOSED : un `symfony/*` inconnu doit être en 7.4 par défaut, donc un
- * nouveau transitif introduit par un bump se signale tout seul.
+ * Ce test lit les versions **INSTALLÉES**, pas le lock. C'est l'installé que
+ * lisent Rector, PHPStan et le conteneur — un lock propre au-dessus d'un
+ * `vendor/` périmé (bind-mount non rafraîchi) est précisément la configuration
+ * où la dérive frappe sans que le lock ne la montre.
  */
 #[Group('phase1')]
 final class SymfonyStackAlignmentTest extends TestCase
 {
-    /**
-     * Les familles `symfony/*` qui ont leur PROPRE versionnage et ne suivent
-     * pas les majeures du framework. Elles sont contraintes malgré tout : les
-     * lister ne doit pas revenir à les dispenser de toute vérification, sinon
-     * l'exception devient la porte de sortie qu'on cherche à fermer.
-     *
-     * @var array<string, string> motif de nom => préfixe de version attendu
-     */
-    private const INDEPENDENT_FAMILIES = [
-        '-contracts' => 'v3.',   // contrats : majeure 3.x depuis Symfony 5
-        'polyfill-' => 'v1.',    // polyfills : majeure 1.x, indépendante
-        'flex' => 'v2.',         // plugin Composer
-        'mercure' => 'v0.',      // composant + bundle Mercure
-    ];
+    private const EXPECTED_FRAMEWORK_PREFIX = '7.4.';
 
-    private const EXPECTED_FRAMEWORK_PREFIX = 'v7.4.';
+    /**
+     * Les paquets `symfony/*` qui ne suivent PAS les majeures du framework.
+     *
+     * Inventaire EXACT et ancré, jamais un `str_contains` : « mercure » en
+     * sous-chaîne exempterait un futur `symfony/mercure-bridge` — un split
+     * versionné 7.4 comme les autres — et le ferait échapper au contrôle.
+     *
+     * Leur majeure n'est délibérément PAS assertée : figer « mercure en 0.x »
+     * ferait rougir un gate sur une release amont légitime (0.7 → 1.0), c'est-
+     * à-dire punir un bump dependabot pour un commit qui n'a rien changé.
+     * Ce qui est gardé ici, c'est que la LISTE n'enfle pas — voir
+     * `testTheExemptionListStaysClosed`.
+     *
+     * @var list<string> noms exacts
+     */
+    private const EXEMPT_EXACT = ['symfony/flex', 'symfony/mercure', 'symfony/mercure-bundle'];
+
+    /** @var list<string> préfixes ancrés sur le nom complet */
+    private const EXEMPT_PREFIXES = ['symfony/polyfill-'];
+
+    /** @var list<string> suffixes ancrés sur le nom complet */
+    private const EXEMPT_SUFFIXES = ['-contracts'];
 
     public function testEverySymfonyFrameworkPackageStaysOnTheLtsBranch(): void
     {
         $drifted = [];
-        foreach ($this->lockedSymfonyPackages() as $name => $version) {
-            if (null !== $this->independentFamilyPrefix($name)) {
+        foreach ($this->installedSymfonyPackages() as $name => $version) {
+            if ($this->isExempt($name)) {
                 continue;
             }
             if (!str_starts_with($version, self::EXPECTED_FRAMEWORK_PREFIX)) {
@@ -65,9 +76,9 @@ final class SymfonyStackAlignmentTest extends TestCase
             $drifted,
             \sprintf(
                 "Ces paquets Symfony ont quitté la LTS 7.4 :\n%s\n"
-                . 'Corriger en les nommant explicitement en `7.4.*` dans composer.json '
-                . "(`extra.symfony.require` ne couvre PAS les transitifs), puis\n"
-                . '`composer update <paquets> --with-all-dependencies`.',
+                . "Correctif : `composer update <ces paquets>` suffit — Flex les re-filtre vers 7.4.*.\n"
+                . 'Les épingler dans composer.json est inutile (Flex couvre déjà les transitifs) ; '
+                . 'ce qui bloque, c\'est l\'exemption par le lock, que la mise à jour lève.',
                 implode("\n", array_map(
                     static fn (string $n, string $v): string => "  - {$n} {$v}",
                     array_keys($drifted),
@@ -78,65 +89,77 @@ final class SymfonyStackAlignmentTest extends TestCase
     }
 
     /**
-     * Le garde-fou du garde-fou : une famille « indépendante » reste bornée.
-     * Sans ceci, élargir `INDEPENDENT_FAMILIES` suffirait à faire taire le
-     * test au lieu de corriger la dérive.
+     * Le garde-fou du garde-fou — le VRAI.
+     *
+     * La version précédente prétendait fermer ce trou en vérifiant la majeure
+     * des familles exemptées. Elle ne fermait rien : le contrôle était un
+     * `str_starts_with($version, $prefix)` et toute version Composer commence
+     * par « v », donc ajouter `'http-' => 'v'` exemptait `http-kernel` en
+     * gardant les deux tests verts.
+     *
+     * Le seul verrou honnête est un INVENTAIRE : la liste d'exceptions est
+     * figée ici. L'élargir fait rougir ce test, donc exige de toucher une
+     * liste littérale que la revue voit — au lieu d'une ligne de constante
+     * qui passerait pour un détail.
      */
-    public function testIndependentlyVersionedFamiliesStayOnTheirOwnMajor(): void
+    public function testTheExemptionListStaysClosed(): void
     {
-        $unexpected = [];
-        foreach ($this->lockedSymfonyPackages() as $name => $version) {
-            $prefix = $this->independentFamilyPrefix($name);
-            if (null !== $prefix && !str_starts_with($version, $prefix)) {
-                $unexpected[$name] = $version;
-            }
-        }
-
-        self::assertSame([], $unexpected, 'Une famille à versionnage propre a changé de majeure : à revalider à la main avant d’élargir l’exception.');
+        self::assertSame(
+            ['symfony/flex', 'symfony/mercure', 'symfony/mercure-bundle'],
+            self::EXEMPT_EXACT,
+            'Élargir la liste d’exceptions exempte des paquets du contrôle LTS : à justifier en revue, pas à glisser dans une constante.',
+        );
+        self::assertSame(['symfony/polyfill-'], self::EXEMPT_PREFIXES);
+        self::assertSame(['-contracts'], self::EXEMPT_SUFFIXES);
     }
 
     /**
-     * Le stack doit rester substantiel : si le lock ne remontait plus qu'une
-     * poignée de paquets (chemin faux, format changé), les deux tests ci-dessus
-     * passeraient au vert sur du vide.
+     * Le stack doit rester substantiel : si l'inventaire ne remontait plus
+     * qu'une poignée de paquets (API Composer changée, autoload absent), le
+     * test ci-dessus passerait au vert sur du vide.
      */
-    public function testTheLockActuallyDescribesTheSymfonyStack(): void
+    public function testTheInstalledSetActuallyDescribesTheSymfonyStack(): void
     {
-        self::assertGreaterThan(40, \count($this->lockedSymfonyPackages()));
+        self::assertGreaterThan(40, \count($this->installedSymfonyPackages()));
     }
 
-    /** @return array<string, string> nom du paquet => version verrouillée */
-    private function lockedSymfonyPackages(): array
+    /**
+     * Les versions RÉELLEMENT chargées par ce process.
+     *
+     * @return array<string, string> nom du paquet => version installée
+     */
+    private function installedSymfonyPackages(): array
     {
-        $raw = file_get_contents(\dirname(__DIR__, 3) . '/composer.lock');
-        self::assertIsString($raw, 'composer.lock illisible');
-
-        $lock = json_decode($raw, true, 512, \JSON_THROW_ON_ERROR);
-        self::assertIsArray($lock);
-
         $packages = [];
-        foreach (['packages', 'packages-dev'] as $section) {
-            /** @var list<array{name: string, version: string}> $entries */
-            $entries = \is_array($lock[$section] ?? null) ? $lock[$section] : [];
-            foreach ($entries as $package) {
-                if (str_starts_with($package['name'], 'symfony/')) {
-                    $packages[$package['name']] = $package['version'];
-                }
+        foreach (InstalledVersions::getInstalledPackages() as $name) {
+            if (!str_starts_with($name, 'symfony/')) {
+                continue;
+            }
+            $version = InstalledVersions::getPrettyVersion($name);
+            if (null !== $version) {
+                $packages[$name] = ltrim($version, 'v');
             }
         }
 
         return $packages;
     }
 
-    /** Le préfixe de version attendu si le paquet relève d'une famille indépendante, sinon null. */
-    private function independentFamilyPrefix(string $name): ?string
+    private function isExempt(string $name): bool
     {
-        foreach (self::INDEPENDENT_FAMILIES as $needle => $prefix) {
-            if (str_contains($name, $needle)) {
-                return $prefix;
+        if (\in_array($name, self::EXEMPT_EXACT, true)) {
+            return true;
+        }
+        foreach (self::EXEMPT_PREFIXES as $prefix) {
+            if (str_starts_with($name, $prefix)) {
+                return true;
+            }
+        }
+        foreach (self::EXEMPT_SUFFIXES as $suffix) {
+            if (str_ends_with($name, $suffix)) {
+                return true;
             }
         }
 
-        return null;
+        return false;
     }
 }
