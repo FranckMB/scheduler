@@ -1,8 +1,11 @@
-import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
+import { createBrowserRouter, Navigate, RouterProvider, type RouteObject } from "react-router";
 
 import { AppLayout } from "@/app/AppLayout";
 import { AuthGuard } from "@/app/AuthGuard";
+import { RouteErrorBoundary } from "@/app/RouteErrorBoundary";
+import { AdminGuard } from "@/features/admin/AdminGuard";
 import { LoginPage } from "@/features/auth/LoginPage";
+import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
 /**
  * Découpage du bundle (P4-6) — un chunk unique de 834 kB partait à CHAQUE
@@ -17,62 +20,81 @@ import { LoginPage } from "@/features/auth/LoginPage";
  * Les gros gains : `/admin` (console superadmin — un gestionnaire de club ne
  * l'ouvre jamais), `/wizard` (la plus grosse feature), `/doleances/:token`
  * (page publique sans login : le coach n'a besoin de rien d'autre).
+ *
+ * Découper impose trois filets, sans lesquels le gain se paie en pannes muettes :
+ *  - `errorElement` — un chunk 404 (déploiement pendant la session) remplaçait
+ *    TOUTE l'app par l'écran anglais non stylé du router, invisible de Sentry ;
+ *  - `HydrateFallback` — sans lui, react-router rend `null` : page BLANCHE à
+ *    chaque ouverture directe ou F5 d'une route lazy ;
+ *  - un indicateur d'attente (`useNavigation`, cf. AppLayout) — sinon un clic de
+ *    navigation ne produit AUCUN retour tant que le chunk n'est pas là.
+ *
+ * Les GARDES restent eager : un `AdminGuard` lazy ferait télécharger son chunk
+ * pour décider d'une redirection.
  */
-const router = createBrowserRouter([
-  { path: "/login", element: <LoginPage /> },
+// Exporté pour le NR des filets (router.test.tsx) : la présence de `errorElement`
+// et `HydrateFallback` ne casse aucun test de page si elle disparaît.
+export const routes: RouteObject[] = [
   {
-    path: "/admin/login",
-    lazy: async () => ({ Component: (await import("@/features/admin/AdminLoginPage")).AdminLoginPage }),
-  },
-  {
-    path: "/admin",
-    lazy: async () => ({ Component: (await import("@/features/admin/AdminGuard")).AdminGuard }),
+    // Route racine technique : elle ne rend rien elle-même, elle porte les filets
+    // pour TOUT l'arbre (une erreur de route remonte au parent le plus proche).
+    errorElement: <RouteErrorBoundary />,
+    HydrateFallback: FullPageSpinner,
     children: [
+      { path: "/login", element: <LoginPage /> },
       {
-        lazy: async () => ({ Component: (await import("@/features/admin/AdminShell")).AdminShell }),
+        path: "/admin/login",
+        lazy: async () => ({ Component: (await import("@/features/admin/AdminLoginPage")).AdminLoginPage }),
+      },
+      {
+        path: "/admin",
+        element: <AdminGuard />,
         children: [
           {
-            index: true,
-            lazy: async () => ({ Component: (await import("@/features/admin/AdminDashboardPage")).AdminDashboardPage }),
+            lazy: async () => ({ Component: (await import("@/features/admin/AdminShell")).AdminShell }),
+            children: [
+              {
+                index: true,
+                lazy: async () => ({ Component: (await import("@/features/admin/AdminDashboardPage")).AdminDashboardPage }),
+              },
+              { path: "*", element: <Navigate to="/admin" replace /> },
+            ],
           },
-          { path: "*", element: <Navigate to="/admin" replace /> },
         ],
       },
-    ],
-  },
-  {
-    path: "/register",
-    lazy: async () => ({ Component: (await import("@/features/auth/RegisterPage")).RegisterPage }),
-  },
-  {
-    path: "/forgot-password",
-    lazy: async () => ({ Component: (await import("@/features/auth/ForgotPasswordPage")).ForgotPasswordPage }),
-  },
-  {
-    path: "/reset-password/:token",
-    lazy: async () => ({ Component: (await import("@/features/auth/ResetPasswordPage")).ResetPasswordPage }),
-  },
-  {
-    path: "/verify-email/:token",
-    lazy: async () => ({ Component: (await import("@/features/auth/VerifyEmailPage")).VerifyEmailPage }),
-  },
-  {
-    path: "/waiting",
-    lazy: async () => ({ Component: (await import("@/features/auth/WaitingApprovalPage")).WaitingApprovalPage }),
-  },
-  {
-    path: "/confidentialite",
-    lazy: async () => ({ Component: (await import("@/features/legal/PrivacyPage")).PrivacyPage }),
-  },
-  // #10 C2 — page publique SANS login : le coach saisit ses disponibilités via son
-  // lien personnel. Route plate, hors AuthGuard (aucune session requise).
-  {
-    path: "/doleances/:token",
-    lazy: async () => ({ Component: (await import("@/features/coach-wishes/PublicWishPage")).PublicWishPage }),
-  },
-  {
-    element: <AuthGuard />,
-    children: [
+      {
+        path: "/register",
+        lazy: async () => ({ Component: (await import("@/features/auth/RegisterPage")).RegisterPage }),
+      },
+      {
+        path: "/forgot-password",
+        lazy: async () => ({ Component: (await import("@/features/auth/ForgotPasswordPage")).ForgotPasswordPage }),
+      },
+      {
+        path: "/reset-password/:token",
+        lazy: async () => ({ Component: (await import("@/features/auth/ResetPasswordPage")).ResetPasswordPage }),
+      },
+      {
+        path: "/verify-email/:token",
+        lazy: async () => ({ Component: (await import("@/features/auth/VerifyEmailPage")).VerifyEmailPage }),
+      },
+      {
+        path: "/waiting",
+        lazy: async () => ({ Component: (await import("@/features/auth/WaitingApprovalPage")).WaitingApprovalPage }),
+      },
+      {
+        path: "/confidentialite",
+        lazy: async () => ({ Component: (await import("@/features/legal/PrivacyPage")).PrivacyPage }),
+      },
+      // #10 C2 — page publique SANS login : le coach saisit ses disponibilités via son
+      // lien personnel. Route plate, hors AuthGuard (aucune session requise).
+      {
+        path: "/doleances/:token",
+        lazy: async () => ({ Component: (await import("@/features/coach-wishes/PublicWishPage")).PublicWishPage }),
+      },
+      {
+        element: <AuthGuard />,
+        children: [
       {
         element: <AppLayout />,
         children: [
@@ -104,9 +126,13 @@ const router = createBrowserRouter([
           { path: "*", element: <Navigate to="/" replace /> },
         ],
       },
+        ],
+      },
     ],
   },
-]);
+];
+
+const router = createBrowserRouter(routes);
 
 export function AppRouter() {
   return <RouterProvider router={router} />;

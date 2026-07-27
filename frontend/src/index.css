@@ -87,3 +87,10 @@ body {
   color: var(--color-foreground);
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+/* Barre d'attente de navigation (P4-6) : un aller-retour indéterminé, pas une
+   progression — on ne connaît pas la taille du chunk restant. */
+@keyframes loading-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
