@@ -119,7 +119,7 @@ final class SolverMetricsRecorderTest extends TestCase
         $entityManager = $this->createMock(EntityManagerInterface::class);
         $entityManager->method('getConnection')->willReturn($connection);
         $entityManager->method('getRepository')->willReturnCallback(
-            static fn (string $class) => Team::class === $class ? $teams : $venues,
+            static fn (string $class): MockObject => Team::class === $class ? $teams : $venues,
         );
 
         return $entityManager;

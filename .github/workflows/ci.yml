@@ -139,11 +139,37 @@ jobs:
       - name: Run PHP-CS-Fixer (dry-run)
         run: docker compose exec -T php-fpm composer cs-fix -- --dry-run --diff
 
-      # P4-24 : Rector devient BLOQUANT. Sans ce garde, un bump de `rector/rector`
-      # (groupe composer, dependabot) élargit une règle et fait diverger 54 fichiers
-      # du style sans que rien ne le signale — `make -C backend rector` en dry-run
-      # local était le seul endroit qui le voyait, et personne n'y passe avant merge.
-      # Dry-run : la CI rapporte le diff, elle ne réécrit pas.
+  # P4-24 : Rector dans son PROPRE job, sans `needs` et sans être
+  # une dépendance de quoi que ce soit — exactement la forme de `dependency-audit`,
+  # et pour la même raison. `rector.php` tire ses règles des versions INSTALLÉES
+  # (`withComposerBased`, `withPreparedSets`) : un bump dependabot peut donc élargir
+  # une règle et rougir ce check sur un commit qui n'a rien changé. Le mettre dans
+  # `phpstan` ferait sauter `blocking-tests` (isolation tenant/RLS) et `build-docker`
+  # pour de la dérive de STYLE — un signal de forme prendrait le déploiement en otage.
+  # Ici il rougit seul, demande un arbitrage humain, et ne bloque ni tests ni images.
+  # ⚠ POUR QU'IL BLOQUE LE MERGE, il faut ajouter le contexte « Rector (style gate) »
+  # aux required status checks de `main` (réglage repo). Sans ça il rougit sans
+  # empêcher quoi que ce soit — c'est le piège de sortir une étape d'un job requis.
+  rector:
+    name: Rector (style gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
+      - name: Start services
+        run: docker compose up -d --wait php-fpm postgres redis
+
+      - name: Install PHP deps
+        run: docker compose exec -T php-fpm composer install --no-interaction
+
+      # Dry-run : la CI rapporte le diff, elle ne réécrit pas. Pour CORRIGER en
+      # local : `docker compose exec php-fpm sh -c 'cd /app/backend && composer rector'`
+      # (`make -C backend rector` est lui aussi un dry-run — il montre, il ne fixe pas).
       - name: Run Rector (dry-run)
         run: docker compose exec -T php-fpm composer rector -- --dry-run
 
@@ -170,6 +196,12 @@ jobs:
 
       - name: Init test database
         run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:database:create --if-not-exists --connection admin --env=test && php bin/console doctrine:migrations:migrate --no-interaction --env=test'
+
+      # L'axe auth/memberships : sans ce test dans le gate BLOQUANT, une
+      # re-suppression de `eraseCredentials` (bump Rector + `make rector` pour
+      # verdir le job de style) passe tous les checks requis.
+      - name: UserInterfaceContractTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Unit/Entity/UserInterfaceContractTest.php --group phase1'
 
       - name: TenantIsolationTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TenantIsolationTest.php --group phase1'

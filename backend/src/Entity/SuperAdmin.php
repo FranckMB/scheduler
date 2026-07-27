@@ -70,4 +70,14 @@ final class SuperAdmin implements UserInterface, PasswordAuthenticatedUserInterf
     {
         return ['ROLE_SUPER_ADMIN'];
     }
+
+    /**
+     * Même raison que `User::eraseCredentials()` : requise par `UserInterface` en
+     * Symfony 7.x (dépréciée, retirée en 8.0), et le projet cible 7.4 alors que
+     * `security-core` traîne en 8.0.x dans le lock. Ici l'enjeu est plus large que
+     * la console : sans elle, un réalignement rend `SuperAdmin` non chargeable,
+     * `SuperAdminProvider` non instanciable, et c'est le CONTENEUR ENTIER qui ne
+     * démarre plus — toute l'API, pas seulement `/api/admin`.
+     */
+    public function eraseCredentials(): void {}
 }

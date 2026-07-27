@@ -261,6 +261,19 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
         return $this->passwordHash;
     }
 
+    /**
+     * Requis par `UserInterface` en Symfony 7.x (déprécié, retiré en 8.0).
+     *
+     * Rector l'avait SUPPRIMÉE (RemoveEraseCredentialsRector) parce qu'il lit la
+     * version INSTALLÉE : `symfony/security-core` est transitivement en 8.0.x
+     * alors que tout le reste du stack — et `extra.symfony.require` — vise 7.4.
+     * Sans cette méthode, le jour où security-core est réaligné sur 7.4, `User`
+     * n'implémente plus une méthode abstraite de l'interface : fatal au boot du
+     * conteneur, plus aucune authentification. La garder est inoffensif en 8.0
+     * (simple méthode publique en trop) : c'est l'option sûre dans les deux sens.
+     */
+    public function eraseCredentials(): void {}
+
     private function newUuid(): string
     {
         $bytes = random_bytes(16);

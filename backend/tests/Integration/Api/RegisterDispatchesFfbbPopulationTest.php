@@ -9,6 +9,7 @@ use App\Tests\VerifiesRegistration;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Transport\InMemory\InMemoryTransport;
 
 /**
@@ -58,7 +59,7 @@ final class RegisterDispatchesFfbbPopulationTest extends WebTestCase
         $transport = self::getContainer()->get('messenger.transport.ffbb_in_memory');
         \assert($transport instanceof InMemoryTransport);
 
-        return array_map(static fn ($envelope) => $envelope->getMessage(), $transport->getSent());
+        return array_map(static fn (Envelope $envelope): object => $envelope->getMessage(), $transport->getSent());
     }
 
     private function registerAndVerify(string $ara, ?string $clubName): void

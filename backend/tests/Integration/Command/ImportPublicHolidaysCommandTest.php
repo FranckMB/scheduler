@@ -47,7 +47,7 @@ final class ImportPublicHolidaysCommandTest extends KernelTestCase
             $mapper,
         );
         $application = new Application(self::$kernel);
-        $application->add($command);
+        $application->addCommand($command);
         $tester = new CommandTester($application->find('app:public-holidays:import'));
 
         $tester->execute([]);

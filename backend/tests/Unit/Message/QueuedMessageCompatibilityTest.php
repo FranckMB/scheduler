@@ -29,22 +29,6 @@ use Symfony\Component\Messenger\Transport\Serialization\PhpSerializer;
 #[Group('phase1')]
 final class QueuedMessageCompatibilityTest extends TestCase
 {
-    /**
-     * Réécrit un nom de classe dans une charge sérialisée, en recalculant les
-     * longueurs — y compris la clé « mangled » d'une propriété privée
-     * (`\0FQCN\0prop`), qui est le piège : un simple alias de classe ne la
-     * couvre pas, d'où le `__unserialize` du message.
-     */
-    private static function renameSerializedClass(string $payload, string $from, string $to): string
-    {
-        $rewrite = static fn (string $needle, string $replacement): array => [
-            \sprintf('O:%d:"%s"', \strlen($needle), $needle) => \sprintf('O:%d:"%s"', \strlen($replacement), $replacement),
-            \sprintf('s:%d:"%s"', \strlen("\0{$needle}\0clubId"), "\0{$needle}\0clubId") => \sprintf('s:%d:"%s"', \strlen("\0{$replacement}\0clubId"), "\0{$replacement}\0clubId"),
-        ];
-
-        return strtr($payload, $rewrite($from, $to));
-    }
-
     public function testAnEnvelopeQueuedBeforeTheRenameStillDecodes(): void
     {
         // On fabrique la charge EXACTEMENT comme Redis la contient aujourd'hui :
@@ -54,7 +38,7 @@ final class QueuedMessageCompatibilityTest extends TestCase
         $current = PopulateClubFromFfbbMessage::class;
         $legacy = 'App\Message\PopulateClubFromFfbbMessage';
         $body = serialize(new Envelope(new PopulateClubFromFfbbMessage('11111111-1111-4111-8111-111111111111')));
-        $legacyBody = self::renameSerializedClass($body, $current, $legacy);
+        $legacyBody = $this->renameSerializedClass($body, $current, $legacy);
 
         self::assertStringContainsString($legacy, $legacyBody, 'la charge de test doit bien porter l’ancien nom');
 
@@ -96,5 +80,21 @@ final class QueuedMessageCompatibilityTest extends TestCase
             PopulateClubFromFfbbMessage::class,
             new ReflectionClass('App\Message\PopulateClubFromFfbbMessage')->getName(),
         );
+    }
+
+    /**
+     * Réécrit un nom de classe dans une charge sérialisée, en recalculant les
+     * longueurs — y compris la clé « mangled » d'une propriété privée
+     * (`\0FQCN\0prop`), qui est le piège : un simple alias de classe ne la
+     * couvre pas, d'où le `__unserialize` du message.
+     */
+    private function renameSerializedClass(string $payload, string $from, string $to): string
+    {
+        $rewrite = static fn (string $needle, string $replacement): array => [
+            \sprintf('O:%d:"%s"', \strlen($needle), $needle) => \sprintf('O:%d:"%s"', \strlen($replacement), $replacement),
+            \sprintf('s:%d:"%s"', \strlen("\0{$needle}\0clubId"), "\0{$needle}\0clubId") => \sprintf('s:%d:"%s"', \strlen("\0{$replacement}\0clubId"), "\0{$replacement}\0clubId"),
+        ];
+
+        return strtr($payload, $rewrite($from, $to));
     }
 }
