@@ -396,6 +396,7 @@ def _solve(
         *diagnose_locked_slot_violations(
             model.locked_slots,
             parsed,
+            slot_durations=model.slot_durations,
             team_names={str(t.get("id")): str(t.get("name") or t.get("id")) for t in data.get("teams", [])},
             coach_names={str(c.get("id")): _coach_label(c) for c in data.get("coaches", [])},
             venue_names={str(v.get("id")): str(v.get("name") or v.get("id")) for v in data.get("venues", [])},

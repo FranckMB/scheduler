@@ -142,11 +142,7 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid'], 'un avertissement n’invalide rien');
         self::assertSame([], $data['conflicts'], 'les contraintes du gymnase désactivé sont retirées du jeu validé');
-        self::assertStringContainsString(
-            '« SM2 impose Barros » vise le gymnase Barros',
-            implode(' | ', $data['warnings']),
-            'les DEUX contraintes du gymnase désactivé doivent être nommées',
-        );
+        self::assertCount(2, $data['warnings'], 'les DEUX contraintes du gymnase désactivé, et RIEN d’autre');
         self::assertStringContainsString(
             '« SM1 impose Barros » vise le gymnase Barros',
             implode(' | ', $data['warnings']),
@@ -187,8 +183,8 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid']);
         self::assertSame([], $data['errors'], 'la datée visant le gymnase désactivé est retirée, donc plus rien à valider');
-        self::assertContains(
-            '« SM1 exige 2 séances à Barros » vise le gymnase Barros, désactivé pour cette période : elle ne sera pas appliquée.',
+        self::assertSame(
+            ['« SM1 exige 2 séances à Barros » vise le gymnase Barros, désactivé pour cette période : elle ne sera pas appliquée.'],
             $data['warnings'],
         );
     }

@@ -232,3 +232,94 @@ def test_two_distinct_locks_violating_the_same_rule_are_both_reported() -> None:
     messages = _violation_messages(result)
     assert len(messages) == 2, f"les DEUX verrous doivent être signalés, obtenu : {messages}"
     assert any("18:00" in m for m in messages) and any("20:00" in m for m in messages)
+
+
+def _day_rule(team_id: str, cid: str, *, allowed: list[int] | None = None, forbidden: list[int] | None = None) -> dict[str, Any]:
+    config: dict[str, Any] = {}
+    if allowed is not None:
+        config["allowedDays"] = allowed
+    if forbidden is not None:
+        config["forbiddenDays"] = forbidden
+    return {"id": cid, "isActive": True, "family": "DAY", "ruleType": "HARD", "scopeTargetId": team_id, "config": config}
+
+
+def test_day_rules_are_evaluated_UNITED_not_one_by_one() -> None:
+    """Revue #317 round 2 — deux règles DAY s'unissent, elles ne s'excluent pas.
+
+    `add_time_window_constraints` fusionne les `allowedDays` de toutes les règles
+    d'une équipe : `[2]` et `[6]` autorisent mardi ET samedi. Les évaluer isolément
+    faisait accuser le verrou d'avoir écrasé une règle qui, unie, permet ce jour —
+    le « papier peint » que `stays_quiet` existe pour empêcher.
+    """
+    payload = make_payload(
+        teams=[make_team("SM1", sessions_per_week=1)],
+        venues=[make_venue("gym", [(SATURDAY, "18:00"), (TUESDAY, "18:00")])],
+        constraints=[_day_rule("SM1", "c-mardi", allowed=[TUESDAY]), _day_rule("SM1", "c-samedi", allowed=[SATURDAY])],
+        slot_templates=[_hard_lock("SM1", "gym", SATURDAY, "18:00")],
+    )
+
+    result = solve_payload(payload)
+
+    assert _violation_messages(result) == [], "samedi est autorisé par l'UNION — l'accuser serait un faux positif"
+
+
+def test_a_day_truly_excluded_by_the_union_is_reported() -> None:
+    """Le bord opposé : l'union ne doit pas non plus tout absoudre."""
+    payload = make_payload(
+        teams=[make_team("SM1", sessions_per_week=1)],
+        venues=[make_venue("gym", [(SATURDAY, "18:00"), (TUESDAY, "18:00")])],
+        constraints=[_day_rule("SM1", "c-mardi", allowed=[TUESDAY])],
+        slot_templates=[_hard_lock("SM1", "gym", SATURDAY, "18:00")],
+    )
+
+    result = solve_payload(payload)
+
+    messages = _violation_messages(result)
+    assert len(messages) == 1, f"samedi est hors de la seule règle existante, obtenu : {messages}"
+    assert "samedi" in messages[0], "le JOUR doit être nommé — sans lui, deux verrous s'affichent à l'identique"
+
+
+def test_a_rule_that_is_neither_hard_nor_lock_is_never_examined() -> None:
+    """Revue #317 round 2 — la ligne `rule_type not in (HARD, LOCK)` n'était pas exercée.
+
+    Mon premier test de cette porte utilisait PREFERRED + TIME, intercepté par la
+    branche ANTÉRIEURE : la condition ajoutée n'était jamais atteinte. Ici la
+    famille est DAY et le type SOFT — seule la seconde ligne peut l'écarter.
+    """
+    rule = _day_rule("SM1", "c-soft", allowed=[TUESDAY])
+    rule["ruleType"] = "SOFT"
+
+    payload = make_payload(
+        teams=[make_team("SM1", sessions_per_week=1)],
+        venues=[make_venue("gym", [(SATURDAY, "18:00"), (TUESDAY, "18:00")])],
+        constraints=[rule],
+        slot_templates=[_hard_lock("SM1", "gym", SATURDAY, "18:00")],
+    )
+
+    result = solve_payload(payload)
+
+    assert _violation_messages(result) == [], "une règle SOFT n'est pas appliquée — l'accuser serait un mensonge"
+
+
+def test_two_locks_differing_only_by_duration_are_both_reported() -> None:
+    """Revue #317 round 2 — la clé de dédup omettait la durée.
+
+    `_extract_hard_locks` clé les verrous sur (équipe, gymnase, jour, début, DURÉE)
+    et son commentaire explique que les confondre laisserait des minutes non
+    bloquées. Ma clé les fusionnait à nouveau, faisant disparaître une violation.
+    """
+    long_lock = _hard_lock("SM1", "gym", SATURDAY, "18:00")
+    long_lock["durationMinutes"] = 120
+    long_lock["id"] = "lock-long"
+
+    payload = make_payload(
+        teams=[make_team("SM1", sessions_per_week=2)],
+        venues=[make_venue("gym", [(SATURDAY, "18:00"), (TUESDAY, "18:00")])],
+        coaches=[{"id": "c1", "firstName": "Maxime", "lastName": "Durand", "isActive": True}],
+        constraints=[_coach_link("SM1", "c1"), _coach_off("c1", SATURDAY)],
+        slot_templates=[_hard_lock("SM1", "gym", SATURDAY, "18:00"), long_lock],
+    )
+
+    result = solve_payload(payload)
+
+    assert len(_violation_messages(result)) == 2, "deux durées = deux verrous distincts pour model.py, donc deux violations"

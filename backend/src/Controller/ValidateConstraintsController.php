@@ -42,6 +42,7 @@ final class ValidateConstraintsController extends AbstractController
     public function __construct(
         private readonly ConstraintRepository $constraintRepository,
         private readonly TrainingCapacityChecker $capacityChecker,
+        private readonly ScheduleConstraintBuilder $scheduleConstraintBuilder,
         private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly SeasonResolver $seasonResolver,
         private readonly ConstraintValidationService $validationService,
@@ -118,8 +119,23 @@ final class ValidateConstraintsController extends AbstractController
         // Le solveur le signale déjà après coup (`session_below_effective_min`), mais
         // le gestionnaire l'apprend alors au bout d'une génération, sur un planning
         // déjà bancal. C'est un avertissement : la comparaison est nécessaire mais
-        // pas suffisante, et `sessionsPerWeek` est une demande, pas une garantie.
-        $warnings = [...$warnings, ...$this->capacityChecker->warnings($clubId, $seasonId, $schedulePlanId)];
+        // pas suffisante.
+        //
+        // On passe le PÉRIMÈTRE (« est-ce une période ? »), pas l'identifiant de plan :
+        // une période jamais « Adaptée » n'en a pas, et `planId !== null` lui aurait
+        // appliqué le calcul de la saison entière.
+        // PÉRIODE : on n'appelle même pas. Son payload se construit avec
+        // `buildForOverlay`, qui exige un `Schedule` inexistant AVANT génération ;
+        // recopier ses filtres (gymnases désactivés, jours fermés, équipes
+        // désactivées) serait refaire l'erreur que ce contrôle a déjà payée deux
+        // fois. Le test porte sur le PÉRIMÈTRE, pas sur l'identifiant de plan :
+        // une période jamais « Adaptée » n'en a pas.
+        if (null === $calendarEntryId) {
+            $warnings = [
+                ...$warnings,
+                ...$this->capacityChecker->warnings($this->scheduleConstraintBuilder->buildForClubSeason($clubId, $seasonId)),
+            ];
+        }
 
         $conflicts = array_map(
             static fn (array $c): array => [
