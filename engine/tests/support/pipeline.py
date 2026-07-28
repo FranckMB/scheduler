@@ -127,6 +127,7 @@ def make_payload(
     constraints: list[dict[str, Any]] | None = None,
     slot_templates: list[dict[str, Any]] | None = None,
     priority_tiers: list[dict[str, Any]] | None = None,
+    coaches: list[dict[str, Any]] | None = None,
     seed: int = 42,
     timeout: int = 30,
 ) -> dict[str, Any]:
@@ -139,7 +140,7 @@ def make_payload(
         "solverTimeoutSeconds": timeout,
         "venues": venues,
         "teams": teams,
-        "coaches": [],
+        "coaches": coaches or [],
         "slotTemplates": slot_templates or [],
         "constraints": constraints or [],
         "priorityTiers": priority_tiers

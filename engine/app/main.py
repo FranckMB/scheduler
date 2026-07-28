@@ -17,6 +17,7 @@ from app.solver.constraints import (
     add_level_1_hard_constraints,
     add_time_window_constraints,
     add_venue_minimum_constraints,
+    diagnose_locked_slot_violations,
     parse_v2_constraints,
 )
 from app.solver.model import DEFAULT_SESSION_MINUTES, ScheduleCpModel, _time_to_minutes, build_model
@@ -386,6 +387,21 @@ def _solve(
     # ruleType coerced…) ride the same diagnostics channel as hard conflicts.
     conflicts = [*conflicts, *vm_conflicts, *parsed.get("parse_warnings", [])]
 
+    # P2-9 — dire ce qu'un verrou HARD a écrasé. Le créneau verrouillé n'a PAS de
+    # variable (model.py), donc aucune des contraintes ci-dessus ne pouvait le
+    # toucher : sans ce diagnostic, le solveur renvoyait `completed` sans un mot
+    # sur une réservation posée le jour de congé du coach.
+    conflicts = [
+        *conflicts,
+        *diagnose_locked_slot_violations(
+            model.locked_slots,
+            parsed,
+            team_names={str(t.get("id")): str(t.get("name") or t.get("id")) for t in data.get("teams", [])},
+            coach_names={str(c.get("id")): _coach_label(c) for c in data.get("coaches", [])},
+            venue_names={str(v.get("id")): str(v.get("name") or v.get("id")) for v in data.get("venues", [])},
+        ),
+    ]
+
     assignments_by_team: dict[str, list[Any]] = {}
     for slot_key, var in model.x.items():
         team_id = slot_key[0]
@@ -527,3 +543,11 @@ async def sync_implicit_constraints(input_data: ImplicitConstraintSyncRequest) -
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"status": "ok", "contract_version": read_contract_version()}
+
+
+def _coach_label(coach: dict[str, Any]) -> str:
+    """Prénom + nom pour un message lisible ; à défaut, l'identifiant (P2-9)."""
+    first = str(coach.get("first_name") or coach.get("firstName") or "").strip()
+    last = str(coach.get("last_name") or coach.get("lastName") or "").strip()
+    full = f"{first} {last}".strip()
+    return full or str(coach.get("id"))
