@@ -1989,14 +1989,24 @@ def _day_label(day: int) -> str:
     return _DAY_LABELS[day - 1] if 1 <= day <= 7 else f"jour {day}"
 
 
-def _day_rules_union(windows: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, set[int]]]:
-    """Les règles DAY UNIES par équipe, comme `add_time_window_constraints` les unit.
+def _day_rules_union(
+    windows: Iterable[Mapping[str, Any]],
+) -> dict[str, tuple[dict[str, set[int]], list[Mapping[str, Any]]]]:
+    """Les règles DAY UNIES par équipe, avec les contraintes qui les portent.
 
-    Les évaluer contrainte par contrainte accusait à tort : deux règles
+    L'union est la seule sémantique que le solveur applique : deux règles
     `allowedDays=[2]` et `allowedDays=[6]` autorisent mardi ET samedi une fois
-    unies, alors qu'isolément chacune exclut le jour de l'autre.
+    unies, alors qu'isolément chacune exclut le jour de l'autre. Les évaluer
+    séparément accusait donc à tort.
+
+    Mais l'union seule ne suffit pas à RENDRE COMPTE : le gestionnaire doit
+    savoir QUELLE règle corriger. On garde donc les contraintes sources pour
+    nommer, à l'émission, celles qui excluent effectivement le jour du verrou —
+    un libellé synthétique « règles de jours de SM1 » ne correspond à rien dans
+    son écran de contraintes.
     """
     union: dict[str, dict[str, set[int]]] = {}
+    sources: dict[str, list[Mapping[str, Any]]] = {}
     for constraint in windows:
         if not _is_enforced_window(constraint):
             continue
@@ -2006,11 +2016,39 @@ def _day_rules_union(windows: Iterable[Mapping[str, Any]]) -> dict[str, dict[str
         if not team_id:
             continue
         config = constraint.get("config") or {}
-        rules = union.setdefault(team_id, {"forbidden": set(), "allowed": set()})
+        rules = union.setdefault(team_id, {"forbidden": set(), "allowed": set(), "forced": set()})
         rules["forbidden"].update(_day_int_set(config.get("forbiddenDays")))
         rules["allowed"].update(_day_int_set(config.get("allowedDays")))
+        # `forcedDays` AUSSI : le solveur l'impose (`sum(forced_day_vars) >= 1`).
+        # L'omettre laissait un verrou rendre cette exigence insatisfaisable sans
+        # que ce diagnostic — dont c'est le rôle — n'en dise rien.
+        rules["forced"].update(_day_int_set(config.get("forcedDays")))
+        sources.setdefault(team_id, []).append(constraint)
 
-    return union
+    return {team_id: (rules, sources.get(team_id, [])) for team_id, rules in union.items()}
+
+
+def _day_constraints_excluding(
+    day: int, rules: Mapping[str, set[int]], sources: Iterable[Mapping[str, Any]]
+) -> list[Mapping[str, Any]]:
+    """Parmi les sources, celles qui excluent RÉELLEMENT ce jour.
+
+    Une règle dont les `allowedDays` ne mentionnent pas le jour ne l'exclut que si
+    aucune autre ne l'autorise — c'est l'union qui tranche. On ne nomme donc que
+    les règles fautives une fois l'union appliquée : celles qui l'interdisent
+    explicitement, et, si le jour est hors de la liste blanche unie, celles qui
+    portent cette liste.
+    """
+    excluded_by_whitelist = bool(rules["allowed"]) and day not in rules["allowed"]
+    guilty = []
+    for constraint in sources:
+        config = constraint.get("config") or {}
+        if day in _day_int_set(config.get("forbiddenDays")) or (
+            excluded_by_whitelist and _day_int_set(config.get("allowedDays"))
+        ):
+            guilty.append(constraint)
+
+    return guilty
 
 
 def _is_enforced_window(constraint: Mapping[str, Any]) -> bool:
@@ -2032,7 +2070,6 @@ def diagnose_locked_slot_violations(
     locked_slots: Iterable[Mapping[str, Any]],
     parsed: Mapping[str, Any],
     *,
-    slot_durations: Mapping[tuple[str, int, str], int] | None = None,
     team_names: Mapping[str, str] | None = None,
     coach_names: Mapping[str, str] | None = None,
     venue_names: Mapping[str, str] | None = None,
@@ -2076,7 +2113,6 @@ def diagnose_locked_slot_violations(
         return (venue_names or {}).get(venue_id) or venue_id
 
     day_union = _day_rules_union(windows)
-    durations = slot_durations or {}
 
     warnings: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
@@ -2109,7 +2145,10 @@ def diagnose_locked_slot_violations(
         # Le JOUR fait partie du message : sans lui, deux verrous même gymnase et
         # même heure des jours différents s'affichent à l'octet près identiques,
         # et le gestionnaire ne sait pas lequel il vient de corriger.
-        where = f"{_venue(venue_id)} le {_day_label(day_int)} à {start_text}"
+        # La durée fait partie du libellé : deux verrous mêmes gymnase/jour/heure et
+        # durées différentes sont DISTINCTS (cf. `lock_id`), et sans elle leurs deux
+        # avertissements s'affichaient à l'octet près identiques.
+        where = f"{_venue(venue_id)} le {_day_label(day_int)} à {start_text} ({duration} min)"
         # La durée fait partie de la clé, comme dans `_extract_hard_locks` : deux
         # verrous identiques sauf la durée y sont DISTINCTS, les fusionner ici
         # ferait disparaître une violation.
@@ -2146,10 +2185,14 @@ def diagnose_locked_slot_violations(
             # début — l'omettre laissait subsister le silence que cette détection
             # existe pour fermer.
             max_end = config.get("maxEndTime")
-            # La règle appliquée mesure la fin avec la durée du CRÉNEAU
-            # (`model.slot_durations`), pas celle du verrou : un verrou plus court
-            # ou plus long que le créneau qu'il occupe ferait diverger les deux.
-            slot_duration = durations.get((venue_id, day_int, start_text), duration)
+            # La durée du VERROU, pas celle du créneau de grille. Le round 2 avait
+            # basculé sur `slot_durations` par souci de miroir — sur-correction : ce
+            # qui déborde de la fenêtre, c'est la séance que le gestionnaire a
+            # RÉSERVÉE. Un verrou de 120 min sur un créneau de 90 court jusqu'à
+            # 20:00 ; mesurer 90 le déclarait dans les clous et taisait un vrai
+            # dépassement. Les verrous de durée ≠ du créneau sont un cas supporté —
+            # `_extract_hard_locks` clé justement sur la durée.
+            slot_duration = duration
             if (
                 (min_start is not None and start < _time_to_minutes(min_start))
                 or (max_start is not None and start > _time_to_minutes(max_start))
@@ -2161,15 +2204,34 @@ def diagnose_locked_slot_violations(
         # que le solveur applique (`forbidden ∪ complément de allowed`).
         # `day_rules` et non `rules` : ce dernier porte déjà les indisponibilités
         # coach, et le réutiliser ici l'écrasait dès le deuxième verrou.
-        day_rules = day_union.get(team_id)
-        if day_rules is not None:
+        entry = day_union.get(team_id)
+        if entry is not None:
+            day_rules, day_sources = entry
             allowed = day_rules["allowed"]
             if day_int in day_rules["forbidden"] or (allowed and day_int not in allowed):
+                # On nomme les contraintes RÉELLEMENT fautives, pas un libellé
+                # synthétique : le gestionnaire doit retrouver la règle dans son
+                # écran pour la corriger.
+                for constraint in _day_constraints_excluding(day_int, day_rules, day_sources):
+                    _emit(
+                        constraint,
+                        team_id,
+                        lock_id,
+                        f"Réservation maintenue pour {_team(team_id)} ({where}) un jour exclu par ses règles de jours.",
+                    )
+
+            # `forcedDays` : le solveur exige AU MOINS une séance ce jour-là. Un
+            # verrou posé un AUTRE jour peut consommer le créneau qui l'aurait
+            # satisfaite — d'où un INFEASIBLE que rien n'expliquait.
+            forced = day_rules["forced"]
+            if forced and day_int not in forced:
                 _emit(
-                    {"id": f"day-rules-{team_id}", "name": f"règles de jours de {_team(team_id)}"},
+                    {"id": f"forced-days-{team_id}", "name": f"jours imposés de {_team(team_id)}"},
                     team_id,
                     lock_id,
-                    f"Réservation maintenue pour {_team(team_id)} ({where}) un jour exclu par ses règles de jours.",
+                    f"Réservation maintenue pour {_team(team_id)} ({where}) alors que son planning "
+                    f"impose une séance {', '.join(_day_label(d) for d in sorted(forced))} : "
+                    "le verrou peut rendre cette exigence insatisfaisable.",
                 )
 
         # 3. Forbidden (team, venue) pairs — venue closures land here.

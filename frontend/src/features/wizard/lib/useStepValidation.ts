@@ -243,12 +243,7 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
       errors.push("La vérification des contraintes n'a pas pu être effectuée — réessayez avant de générer.");
     }
 
-    // Les avertissements du serveur arrivent AVEC `valid: true` — les lire dans le
-    // `if (!valid)` ci-dessus les perdrait précisément quand tout va bien par
-    // ailleurs. Ils n'invalident rien (règle fondateur du #8), ils informent.
-    const warnings = [...(constraintValidation?.warnings ?? [])];
-
-    return { errors, warnings, pending: constraintNeeded && constraintQuery.isLoading };
+    return { errors, warnings: [], pending: constraintNeeded && constraintQuery.isLoading };
   }
   return okValidation();
 }

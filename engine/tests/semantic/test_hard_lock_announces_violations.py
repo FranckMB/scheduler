@@ -322,4 +322,87 @@ def test_two_locks_differing_only_by_duration_are_both_reported() -> None:
 
     result = solve_payload(payload)
 
-    assert len(_violation_messages(result)) == 2, "deux durées = deux verrous distincts pour model.py, donc deux violations"
+    messages = _violation_messages(result)
+    assert len(messages) == 2, "deux durées = deux verrous distincts pour model.py, donc deux violations"
+    # Revue #317 round 3 : compter ne suffit pas. Deux messages IDENTIQUES ne
+    # servent à rien — le gestionnaire ne sait pas lequel il vient de corriger.
+    assert messages[0] != messages[1], "les deux avertissements doivent être distinguables"
+    assert any("120 min" in m for m in messages) and any("90 min" in m for m in messages)
+
+
+def test_a_lock_overrunning_the_window_with_ITS_OWN_duration_is_reported() -> None:
+    """Revue #317 round 3 — c'est la RÉSERVATION qui déborde, pas le créneau.
+
+    Le round 2 avait basculé la mesure sur la durée du créneau de grille par souci
+    de miroir. Sur-correction : un verrou de 120 min posé sur un créneau de 90
+    court jusqu'à 20:00 et viole une fenêtre `maxEndTime = 19:30`, mais mesurer 90
+    donnait 19:30 pile — pas de dépassement, silence. Faux négatif dans le
+    détecteur même que cette PR ajoute.
+    """
+    long_lock = _hard_lock("SM1", "gym", SATURDAY, "18:00")
+    long_lock["durationMinutes"] = 120
+
+    payload = make_payload(
+        teams=[make_team("SM1", sessions_per_week=1)],
+        # Le créneau de grille fait 90 min : c'est l'écart avec le verrou qui compte.
+        venues=[make_venue("gym", [(SATURDAY, "18:00"), (TUESDAY, "18:00")], duration_minutes=90)],
+        constraints=[_time_window("SM1", rule_type="HARD", config={"maxEndTime": "19:30"})],
+        slot_templates=[long_lock],
+    )
+
+    result = solve_payload(payload)
+
+    messages = _violation_messages(result)
+    assert len(messages) == 1, f"18:00 + 120 min = 20:00 dépasse 19:30, obtenu : {messages}"
+    assert "fenêtre horaire" in messages[0]
+
+
+def test_a_forced_day_left_unserved_by_a_lock_is_reported() -> None:
+    """Revue #317 round 3 — `forcedDays` était absent de l'union.
+
+    Le solveur impose au moins une séance les jours forcés
+    (`sum(forced_day_vars) >= 1`). Un verrou posé AILLEURS peut consommer le
+    créneau qui l'aurait satisfaite : le gestionnaire recevait un INFEASIBLE que
+    rien n'expliquait, alors que nommer le verrou est précisément le rôle de ce
+    diagnostic.
+    """
+    rule = _day_rule("SM1", "c-force", forbidden=None)
+    rule["config"] = {"forcedDays": [TUESDAY]}
+
+    payload = make_payload(
+        teams=[make_team("SM1", sessions_per_week=1)],
+        venues=[make_venue("gym", [(SATURDAY, "18:00"), (TUESDAY, "18:00")])],
+        constraints=[rule],
+        slot_templates=[_hard_lock("SM1", "gym", SATURDAY, "18:00")],
+    )
+
+    result = solve_payload(payload)
+
+    messages = _violation_messages(result)
+    assert len(messages) == 1, f"un jour imposé non servi doit être signalé, obtenu : {messages}"
+    assert "mardi" in messages[0], "le jour imposé doit être nommé"
+
+
+def test_the_day_warning_names_the_REAL_constraint_not_a_synthetic_one() -> None:
+    """Revue #317 round 3 — l'union avait fait perdre la contrainte fautive.
+
+    Passer à l'union est la bonne sémantique d'ÉVALUATION, mais l'émission
+    nommait un `day-rules-<équipe>` synthétique que le gestionnaire ne retrouve
+    nulle part dans son écran de contraintes — il savait qu'une règle avait été
+    écrasée, pas laquelle corriger.
+    """
+    rule = _day_rule("SM1", "regle-du-mardi", allowed=[TUESDAY])
+    rule["name"] = "SM1 uniquement le mardi"
+
+    payload = make_payload(
+        teams=[make_team("SM1", sessions_per_week=1)],
+        venues=[make_venue("gym", [(SATURDAY, "18:00"), (TUESDAY, "18:00")])],
+        constraints=[rule],
+        slot_templates=[_hard_lock("SM1", "gym", SATURDAY, "18:00")],
+    )
+
+    result = solve_payload(payload)
+
+    messages = _violation_messages(result)
+    assert len(messages) == 1
+    assert "SM1 uniquement le mardi" in messages[0], "la VRAIE règle doit être nommée, pas un libellé fabriqué"

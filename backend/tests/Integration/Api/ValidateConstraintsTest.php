@@ -142,7 +142,7 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid'], 'un avertissement n’invalide rien');
         self::assertSame([], $data['conflicts'], 'les contraintes du gymnase désactivé sont retirées du jeu validé');
-        self::assertCount(2, $data['warnings'], 'les DEUX contraintes du gymnase désactivé, et RIEN d’autre');
+        self::assertCount(2, $data['warnings']);
         self::assertStringContainsString(
             '« SM1 impose Barros » vise le gymnase Barros',
             implode(' | ', $data['warnings']),
