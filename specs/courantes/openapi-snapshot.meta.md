@@ -1,6 +1,10 @@
-Last verified @ docs/audit-drift-2026-07 2026-07-25
+Last verified @ 2026-07-29 (audit de dérive documentaire — snapshot et ressources recomptés,
+entrée #8 manquante insérée, entrées périmées annotées ; le JSON n'a pas été régénéré, il
+n'en avait pas besoin)
 
-Snapshot régénéré depuis le backend vivant : `php bin/console api:openapi:export`. **92 paths.**
+Snapshot régénéré depuis le backend vivant le 2026-07-25 : `php bin/console api:openapi:export`.
+**92 paths**, en phase avec les ressources de `backend/src/ApiResource/` (chacune est
+représentée, aucun path orphelin).
 Changements récents :
 - **Feature #10 doléances coachs (C1/C2/C3, 2026-07-25)** : +`/api/coach_wishes` (CRUD todo-list),
   +`/api/coach_wish_campaigns` (CRUD + actions `POST /{id}/send-links` et `POST /{id}/remind`,
@@ -11,6 +15,16 @@ Changements récents :
   (append-only : `containers[]`, `externalDependencies[]`). Les endpoints journaux
   (`/api/admin/audit-log`, `/api/admin/messenger/failed`, `/api/admin/system-errors`) sont des
   controllers purs → **hors export** (gap `CustomRoutesOpenApiFactory`, tracké roadmap §9).
+- **#8 — la période POSSÈDE sa grille de gymnases (2026-07-24, RUPTURE)** : nouvelle ressource
+  **`VenuePeriodOverride`** (`/api/venue_period_overrides` + `/{id}`) — réglage **épars** par
+  (plan de période, gymnase) : `mode` `DISABLED`/`BLANK`, **pas de ligne = hériter** (le défaut).
+  Plus deux opérations d'action déclarées sur la ressource, donc exportées :
+  `POST /api/venue_period_overrides/reset-grid` (« reprendre la grille du planning principal »)
+  et `POST /api/venue_period_overrides/clear-grid` (« vider »), chacune atomique et destructive.
+  ⚠ C'est ici que le modèle **additif** meurt : les `VenueTrainingSlot` d'une période sont une
+  **copie** ancrée `schedulePlanId`, prise à la naissance du plan et **jamais unie** aux créneaux
+  de saison (`ScheduleConstraintBuilder::buildForOverlay`). Un épinglage HARD devenu orphelin
+  **bloque la génération** (422 nommant le gymnase et le jour, `OrphanPinGuard`).
 - **P2-5 E1 — plans de période à la semaine (2026-07-18)** : aucun path touché (82).
   `CalendarEntry` gagne **`parentEntryId`** (lecture + écriture au POST seulement) — une
   semaine ENFANT d'une période mère, qui naît avec son propre plan (rail 1 entrée = 1 plan).
@@ -92,12 +106,20 @@ Changements récents :
   `teamSelectionInitialized` (read-only) — vrai dès la 1re surcharge d'équipe
   (`TeamPeriodOverride`). Le wizard ne pré-remplit « Fanion seul » que si faux →
   plus de re-seed après un reset « tout actif » ou un reload (survit au F5).
+  ⚠ Dépassé sur deux points : le flag a migré sur **`SchedulePlan`** (lot C1, 2026-07-17,
+  entrée ci-dessus) et le défaut de seed n'est plus « Fanion seul » mais **conscient du type
+  de période** (E3, 2026-07-19) — reprise = Fanion + importantes (2 premiers rangs),
+  fermeture = tout le club actif. Le mécanisme de garde, lui, est inchangé.
 - **structure de période éditable (2026-07-12)** : `VenueTrainingSlot` gagne
   `calendarEntryId` (créneau scopé période, additif ; listing par défaut = saisonnier
   `IS NULL`, `?calendarEntryId=` liste ceux d'une période). Nouvelle ressource
   **`TeamPeriodOverride`** (`/api/team_period_overrides`) — surcharge sparse par
   (période, équipe) : `isActive` + `sessionsPerWeek?`. Le build overlay résout
   saisonnier→période (créneaux additifs, équipe off = 0 séance, séances override).
+  ⚠ **Doublement dépassé** : l'ancre est passée à `schedulePlanId` (lot C2/C3, 2026-07-17)
+  **et** le modèle **additif** a été abandonné (#8, 2026-07-24) — la période **possède** sa
+  grille, copiée à la naissance du plan, jamais unie au saisonnier. Il n'y a plus de
+  résolution « saisonnier→période » au build.
 - **planning-versions étoile = contexte chargé (2026-07-11)** : `Schedule` expose
   `isLiveContext` (read-only, ★) — la version dont la structure est le contexte
   actuellement chargé (posé sur chaque plan de saison COMPLETED, re-pointé par

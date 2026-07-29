@@ -1,5 +1,7 @@
 # Les 3 types de planning — référence produit
 
+Last verified @ 2026-07-29
+
 > **Rôle de ce document** : la trace durable du modèle métier des plannings, validé avec le
 > fondateur le 2026-07-12. C'est LA référence à consulter avant tout travail sur la
 > génération : quel type se déclenche quand, ce qu'on y manipule, quel besoin il comble,
@@ -101,7 +103,8 @@
   équipes on/off + séances, **grille de gymnases possédée par la période** (#8 — copie du
   modèle de saison, éditable gymnase par gymnase à l'écran), **choix des semaines** (E1), été inclus (E2),
   **défaut équipes = Fanion + importantes** (E3), **nom auto** `Planning de vacances de … du …
-  au …` (E6). Reste la modale « Demandes des coachs » (E5, futur — P2-1). Voir « Écarts ».
+  au …` (E6), **collecte des doléances coachs** (E5 — C1/C2/C3, feature CLOSE). Reste
+  optionnel, non demandé : un flux guidé « reprise progressive » (bonus P2-1). Voir « Écarts ».
 
 ## Écarts implémentation ↔ cible (actés 2026-07-12)
 
@@ -142,3 +145,12 @@
 - **2026-07-11/12** — overlays spontanés / différentiels (couche diff éparse, socle
   jamais touché) : `TeamPeriodOverride`, `VenueTrainingSlot.calendarEntryId`,
   `ConstraintPeriodOverride` (#208, #210, #211, #212).
+  > ⚠ **Dépassé, ne pas coder dessus.** Deux choses ont bougé depuis. (1) **L'ancre** : les
+  > jumeaux sparse se sont ré-ancrés au **plan** (`schedulePlanId`, lot C2/C3 du 2026-07-17),
+  > `VenueTrainingSlot.calendarEntryId` n'existe plus. (2) **Le modèle lui-même, pour les
+  > créneaux** : depuis #8 (2026-07-24) la période **possède** sa grille — les créneaux de
+  > saison y sont **copiés** à la naissance du plan, et le build overlay ne les unit **jamais**
+  > avec ceux de la saison. Seuls `TeamPeriodOverride` (activation + séances) et
+  > `ConstraintPeriodOverride` (toggle) sont restés des diffs épars. Les contraintes **datées**,
+  > elles, sont restées sur la `CalendarEntry` — c'est un fait de calendrier, pas un réglage
+  > de plan (à ne pas confondre avec les ancres ci-dessus).

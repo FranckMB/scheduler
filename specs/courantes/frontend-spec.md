@@ -4,7 +4,7 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-07-10 (register vérifié par email A3 : 202 + /verify-email)
+Last verified @ 2026-07-29 (routes, stack, stores, pagination et export re-vérifiés contre `frontend/src/`)
 
 ---
 
@@ -24,8 +24,9 @@ Versions figées pour le rebuild. Aucune librairie ne sera ajoutée sans justifi
 | Grille planning | Composant custom `WeekGrid` | — | Grille hebdomadaire maison (`src/features/planning/WeekGrid.tsx`) — **pas de FullCalendar** |
 | Drag & drop | @dnd-kit (core 6 + sortable) | 6.x | Tri des équipes (inter-tier), accessible DnD |
 | Primitives UI | Radix UI (label, slot) + cva + tailwind-merge | — | Composants shadcn-style dans `src/shared/components/ui/` |
-| Routing | React Router | 7 | Routes déclaratives, nested layouts |
-| Icons | lucide-react | latest | Icônes SVG tree-shakeable |
+| Routing | react-router | 8 | Data router (`createBrowserRouter`), **`lazy` par route** (P4-6), nested layouts. ⚠ paquet `react-router`, **pas** `react-router-dom` |
+| Icons | lucide-react | 1.x | Icônes SVG tree-shakeable |
+| Reporting d'erreurs | @sentry/react | 10.x | **Erreurs seules** — pas d'APM ni de replay (`tracesSampleRate: 0`, quota free tier). DSN absent → init sautée, SDK inerte (INF-01) |
 | Types API | — (manuels) | — | Types API écrits à la main par feature (`features/*/api.ts`) ; le codegen `openapi-typescript`/`types.gen.ts` a été **supprimé** (FRT-15 : 8365 l., 0 import, source de vérité fantôme) |
 
 ### Principes de la stack
@@ -42,12 +43,27 @@ Versions figées pour le rebuild. Aucune librairie ne sera ajoutée sans justifi
 
 ## 2. Routes / Objectives
 
-Chaque route a un objectif produit précis. Le routing utilise React Router 7 avec nested
-layouts (`src/app/router.tsx`).
+Chaque route a un objectif produit précis. Le routing utilise **react-router 8** en *data
+router* avec nested layouts (`src/app/router.tsx`).
+
+**Découpage du bundle par route (P4-6).** Tout est en `lazy` **sauf** `/login` et les gardes
+(`AuthGuard`, `AdminGuard` — leur code doit être là pour décider). Trois filets rendent ce
+découpage sûr et **aucun n'est optionnel** quand on ajoute une route :
+
+| Filet | Sans lui |
+|---|---|
+| `errorElement` (racine **et** imbriqué sous `AppLayout`) | Un chunk 404 (déploiement pendant la session) remplace **toute l'app** par l'écran anglais non stylé du router, invisible de Sentry. L'imbriqué préserve en-tête, navigation et bandeaux quand une seule page échoue. |
+| `HydrateFallback` | react-router rend `null` → **page blanche** à chaque ouverture directe ou F5 d'une route lazy. |
+| Indicateur d'attente (`useNavigation`, dans `AppLayout`) | Un clic de navigation ne produit **aucun retour** tant que le chunk n'est pas arrivé. |
+
+> Compromis assumé : le data router résout le `lazy` de **toutes** les routes appariées avant
+> d'en rendre une seule — un visiteur anonyme sur `/planning` télécharge donc la page avant
+> d'être redirigé vers `/login`. Ce JS est public et sans donnée ; l'éviter demanderait de
+> dupliquer la décision d'auth dans un `loader` par route.
 
 | Route | Objectif | Auth | Layout |
 |-------|----------|------|--------|
-| `/login` | Connexion gestionnaire (email + password) | Public | `AuthLayout` |
+| `/login` | Connexion gestionnaire (email + password) — **seule page eager** | Public | `AuthLayout` |
 | `/register` | Inscription (A3) : soumet le formulaire → écran « vérifie tes emails » (aucune session ; le club et le JWT sont créés à la vérification) | Public | `AuthLayout` |
 | `/verify-email/:token` | Consomme le lien email → crée/rejoint le club, connecte, redirige (`/waiting` si pending, sinon `/`) | Public | `AuthLayout` |
 | `/forgot-password` | Demande de réinitialisation de mot de passe (`POST /api/password/forgot`) | Public | `AuthLayout` |
@@ -59,6 +75,11 @@ layouts (`src/app/router.tsx`).
 | `/wizard` | Assistant de saisie 6 étapes : Équipes → Gymnases → Coachs → Contraintes → Récapitulatif → Génération (`AuthGuard` y redirige tant que `me.seasonPlan.hasFinishedVersion === false`, c.-à-d. tant que le club n'a jamais généré) | Required | `AppLayout` |
 | `/club` | Identité du club : logo (upload + recadrage `LogoCropper` + suppression), couleur d'accent (+ palette), **section « Informations du club »** (champs FFBB — voir ci-dessous, admin) **et section « Demandes »** (approbation des adhésions `pending`, admin — l'ancienne route `/pending-members` a été repliée ici) | Required | `AppLayout` |
 | `/profile` | Profil utilisateur | Required | `AppLayout` |
+| `/confidentialite` | Politique de confidentialité (`PrivacyPage`) — atteignable depuis le menu compte | Public | aucun (autonome) |
+| **`/doleances/:token`** | **Page publique SANS login** (#10, lot C2) : le coach saisit ses disponibilités par équipe × semaine depuis son lien personnel tokenisé, pré-rempli de l'état courant ; il n'envoie que les sections qu'il a modifiées. Route **plate, hors `AuthGuard`** — aucune session requise. Contrat : `types-de-planning.md` §E5 | **Public** | aucun (autonome) |
+| `/admin/login` | Authentification **superadmin SA0** (mot de passe + TOTP obligatoire) | Public | `AdminAuthLayout` |
+| `/admin` | **Console superadmin** derrière `AdminGuard` → `AdminShell` : santé des services et conteneurs, dépendances externes, journaux (audit · messenger failed · erreurs système). Identité **globale et séparée** — un JWT club ne franchit jamais ce pare-feu, et la session admin ne pose jamais `app.club_id`. Client HTTP dédié (`adminApi`, préfixe `/api/admin`, cookie de session) qui **ne lit jamais** le store JWT club. Contrat : `superadmin-auth.md` | Session SA0 | `AdminShell` |
+| `/admin/*` (inconnue) | Redirige vers `/admin` — **hors du shell lazy**, pour qu'une URL admin inconnue ne télécharge pas la console entière | Session SA0 | — |
 
 > Toute URL authentifiée inconnue (dont l'ancienne `/pending-members`) redirige vers `/` (catch-all `router.tsx`).
 
@@ -69,6 +90,9 @@ layouts (`src/app/router.tsx`).
 - **Onboarding** : `AuthGuard` verrouille l'app au wizard tant que `me.seasonPlan.hasFinishedVersion === false` (le club n'a jamais généré). Le flag legacy `club.onboardingCompleted` **n'est plus lu pour le routage**.
 - **Gate cockpit** : `CockpitPage` redirige vers `/wizard` tant que `me.seasonPlan.hasFinishedVersion === false`. Le critère est **dérivé** (le plan de saison porte ≥1 version terminée) et **indépendant du pointeur** : rouvrir un planning ne re-verrouille **pas** le cockpit — voir `planning-lifecycle-validated.md` et `specs/courantes/accueil-cockpit-temporel.md` §2ter.
 - **Gate matchs / plans secondaires** : bloqués tant que `me.seasonPlan.chosenScheduleId === null` (front désactivé + `SocleGuard` **409** côté serveur).
+- **Routes exemptées du verrou d'onboarding** : `AuthGuard` autorise `/wizard`, `/profile` et `/club` (constante `ONBOARDING_ALLOWED`).
+  ⚠️ **Écart connu, non tranché** : `/confidentialite` figure au **menu compte** (`AppLayout`) mais **pas** dans `ONBOARDING_ALLOWED` — un club en cours d'onboarding qui clique « Confidentialité » est renvoyé vers `/wizard`. Décision fondateur en attente (l'ajouter à la liste, ou le retirer du menu tant que l'onboarding n'est pas terminé).
+- **`/doleances/:token` et `/admin*` sont hors de cet arbre** : la page doléances est publique (aucune session), la console superadmin a sa propre garde (`AdminGuard`) et sa propre session.
 
 ### Routes non livrées
 
@@ -157,8 +181,20 @@ export const api = ky.create({
 ### Règles
 
 - **Toutes les requêtes passent par l'instance `api` ky.** Pas de `fetch()` direct dans les composants.
-- **Aucun header tenant.** Le club et la saison actifs sont résolus **côté serveur** depuis la
-  membership du JWT (`backend-inventory.md` §4). Le frontend n'envoie ni `X-Club-Id` ni `X-Season-Id`.
+- **Aucun header `X-Club-Id`.** Le club actif est résolu **côté serveur** depuis la membership
+  du JWT (`backend-inventory.md` §4) — un header falsifié est refusé en 403.
+- **`X-Season-Id` est envoyé, mais seulement s'il y a une sélection explicite.** Le hook
+  `beforeRequest` pose l'en-tête depuis `seasonStore.selectedSeasonId` quand il est non nul et
+  que la requête n'en porte pas déjà un (un appel cross-saison ponctuel — re-datation lors
+  d'une transition — gagne donc sur la sélection courante). Absent = le serveur dérive la
+  saison courante (pivot du 15 juillet). Il est **validé côté serveur dans tous les cas**,
+  jamais fait confiance côté client.
+- **Auto-guérison d'une saison périmée** : si le backend répond **403 avec l'en-tête
+  `X-Season-Rejected`** (saison purgée côté serveur), le hook `afterResponse` vide
+  `seasonStore` et recharge. Le déclencheur est ce marqueur, **pas** un 403 quelconque — sinon
+  un refus d'autorisation légitime effacerait la sélection au lieu de remonter son erreur.
+  Sans ce filet, l'app ne pourrait plus jamais se rétablir : le serveur 403-erait *toutes* les
+  requêtes, `/api/me` compris.
 - **401 → logout automatique** (sauf sur `/api/login`). Le hook `afterResponse` vide le store et redirige vers `/login`.
 - **Pas de hardcodage d'URL.** `prefix: '/api'` utilise le proxy Vite en dev et Nginx en prod.
 - **Content-Type.** API Platform sert du JSON-LD (`application/ld+json`). Le déballage hydra vit dans `src/shared/api/collection.ts`.
@@ -170,15 +206,24 @@ export const api = ky.create({
 export default defineConfig({
   server: {
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8080', changeOrigin: true },
-      '/.well-known/mercure': { target: 'http://127.0.0.1:3000', changeOrigin: true },
-      '/engine': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/api': { target: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080', changeOrigin: true },
+      // Fichiers PDF/PNG exportés, servis depuis le `public/exports` du backend.
+      '/exports': { target: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080', changeOrigin: true },
+      '/.well-known/mercure': { target: process.env.MERCURE_PROXY_TARGET ?? 'http://127.0.0.1:3000', changeOrigin: true },
+      // FRT-17 : PAS de proxy `/engine` — le frontend ne contacte JAMAIS l'engine
+      // directement (frontière §2 de CLAUDE.md). Le proxy mort a été supprimé.
     },
   },
 });
 ```
 
-En production, le Nginx frontend proxy `/api` → backend Nginx et `/.well-known/mercure` → Mercure hub.
+En production, le Nginx frontend proxy `/api` → backend Nginx, `/exports` → backend et
+`/.well-known/mercure` → Mercure hub.
+
+> ⚠️ **Écart connu, non tranché** : `docker/frontend/nginx.conf` conserve un bloc
+> `location /engine/` → `http://engine:8000/`. Il n'est appelé par aucun code de
+> `frontend/src/`, mais il ouvre une route que la frontière §2 interdit. Décision fondateur
+> en attente (le retirer, ou documenter pourquoi il reste).
 
 ---
 
@@ -248,21 +293,28 @@ Le rapport post-génération affiche les `schedule_diagnostics` avec :
 - Liens directs vers l'entité à corriger (équipe, coach, salle)
 - Pas d'auto-correction MVP — l'utilisateur clique → navigue vers l'entité
 
-### 6.5 Export PDF asynchrone avec feedback — NON LIVRÉ
+### 6.5 Export du planning — LIVRÉ
 
-Le backend expose `POST /api/schedules/{id}/export-pdf` (asynchrone, Messenger), mais
-**aucune UI d'export PDF n'existe dans le frontend livré** (aucun appel à `export-pdf`
-dans `frontend/src/`). Besoin forward conservé : statut « Génération PDF en cours »,
-activation du bouton de téléchargement à réception, timeout UX 60 s.
+`ExportMenu` (`src/features/planning/ExportMenu.tsx`) → hook `useScheduleExport`
+(`features/planning/queries.ts`) → `POST /api/schedules/{id}/export-pdf` (asynchrone,
+Messenger ; handler backend `ExportPdfHandler`).
+
+- **Périmètre au choix** : tous les gymnases, ou **un seul** (`{ venueId }` dans le body) —
+  chaque export tient sur une page paysage.
+- Les fichiers produits sont servis sous **`/exports`** : proxifié par Vite en dev
+  (`vite.config.ts`) et par le Nginx frontend en prod (`docker/frontend/nginx.conf`).
 
 ### 6.6 Multi-tenant transparent
 
 Le gestionnaire ne voit jamais le concept de `club_id` ou `season_id`. Le frontend :
 
-- N'envoie **aucun** header tenant : le backend dérive club et saison actifs de la
-  membership du JWT (`TenantFilterListener`)
+- N'envoie **aucun** header `X-Club-Id` : le backend dérive le club de la membership du JWT
+  (`TenantFilterListener`)
 - N'affiche jamais de sélecteur de club (un user = un club en MVP)
-- Le sélecteur de saison est implicite (saison active par défaut)
+- La **saison**, elle, est visible et choisissable : `SeasonSelector` (dans `app/`) écrit dans
+  `seasonStore`, qui alimente `X-Season-Id`. Sans sélection, le serveur dérive la saison
+  courante (pivot du 15 juillet) — un club mono-saison ne voit donc jamais le sujet. Le
+  bandeau `ReadonlySeasonBanner` signale une saison archivée (écritures → 409).
 
 ### 6.6 bis Cycle de vie du planning (le pointeur du plan)
 
@@ -362,23 +414,23 @@ const useGenerateSchedule = () => {
 
 ### Pagination JSON-LD
 
-API Platform sert des collections au format JSON-LD (`hydra:member`, `hydra:totalItems`, `hydra:view`).
+API Platform 4 sert les collections en JSON-LD avec la clé **`member`** — **sans** le
+préfixe `hydra:`.
 
 ```typescript
-// Illustration — parsing collection JSON-LD
-type HydraCollection<T> = {
-  'hydra:member': T[];
-  'hydra:totalItems': number;
-  'hydra:view'?: {
-    'hydra:next'?: string;
-    'hydra:previous'?: string;
-  };
-};
-
-// Livré : collection()/collectionAll() (src/shared/api/collection.ts) déballent
-// hydra:member et suivent hydra:next pour agréger toutes les pages — pas
-// d'useInfiniteQuery dans le code actuel.
+// Fidèle au code livré (src/shared/api/collection.ts)
+// collection()  : déballe `member`, tolère aussi un tableau nu, sinon [].
+// collectionAll(): pagine par `?page=N` (PAGE_SIZE = 30), dédoublonne par `id`,
+//                  s'arrête sur une page courte OU une page n'apportant rien de
+//                  neuf (garde contre un `page` no-op côté serveur).
+const raw = await api.get(path, { searchParams }).json<unknown>();
+if (Array.isArray(raw)) return raw as T[];
+if (Array.isArray((raw as { member?: unknown }).member)) return (raw as { member: T[] }).member;
+return [];
 ```
+
+Le frontend n'utilise **pas** `useInfiniteQuery` (aucune occurrence dans `src/`) :
+`collectionAll()` agrège toutes les pages en une requête logique.
 
 ### Règles
 
@@ -396,9 +448,14 @@ type HydraCollection<T> = {
 | Store | Fichier | Contenu | Persistence |
 |-------|---------|---------|-------------|
 | `authStore` | `src/shared/stores/authStore.ts` | `token` uniquement (`setToken`, `clear`) | `localStorage` (`persist`, clé `cs-auth`, `migrate` avec null-check) |
-| `themeStore` | `src/shared/stores/themeStore.ts` | mode clair/sombre | persisté |
-| wizard `store` | `src/features/wizard/store.ts` | étape courante + état UI du wizard | Non persisté |
+| `themeStore` | `src/shared/stores/themeStore.ts` | mode clair/sombre + slot `accent` du club | persisté (clé `cs-theme`, relue avant le premier rendu — voir §10) |
+| `seasonStore` | `src/shared/stores/seasonStore.ts` | saison sélectionnée (`selectedSeasonId`) — alimente l'en-tête `X-Season-Id` | persisté |
+| `toastStore` | `src/shared/stores/toastStore.ts` | file des notifications, rendue par `ui/toaster` | Non persisté |
+| `transitionUiStore` | `src/shared/stores/transitionUiStore.ts` | état UI du bandeau de bascule de saison | persisté |
+| wizard `store` | `src/features/wizard/store.ts` | étape courante, étape max atteinte, **mode** (`season`/`period`) + `calendarEntryId` — **aucune donnée métier** | persisté (`version: 4`) |
 | planning `store` | `src/features/planning/store.ts` | planning sélectionné + état UI (vue, filtres) | Non persisté |
+| matches `store` | `src/features/matches/store.ts` | état UI du module matchs | Non persisté |
+| admin `store` | `src/features/admin/store.ts` | état UI de la console superadmin | Non persisté |
 
 ### authStore
 
@@ -447,21 +504,24 @@ type AuthState = {
 | `/verify-email/:token` | `POST /api/register/verify` (émet le JWT → app) |
 | `/forgot-password`, `/reset-password/:token` | `POST /api/password/forgot`, `POST /api/password/reset` |
 | `/waiting` | `GET /api/me` (poll 5 s jusqu'à `membershipStatus === "active"`) |
-| `/` (planning) | `GET /api/me`, `GET /api/schedules` (poll 2,5 s si génération en vol), `GET /api/schedule_slot_templates?scheduleId={id}`, `GET /api/schedule_diagnostics?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/validate`, `POST /api/schedules/{id}/reopen`, `PUT /api/schedule_plans/{id}` (renommage du plan), `PUT /api/schedules/{id}` (renommage de la version), `POST /api/schedule-slots/{id}/manual-edit/lock`, `POST /api/schedule-slots/{id}/manual-edit/one-time`, collections référentiels (`teams`, `venues`, `coaches`, `sport_categories`, `team_coaches`, `coach_player_memberships`) |
+| `/planning` | `GET /api/me`, `GET /api/schedules` (poll 2,5 s si génération en vol), `GET /api/schedule_slot_templates?scheduleId={id}`, `GET /api/schedule_diagnostics?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/validate`, `POST /api/schedules/{id}/reopen`, `POST /api/schedules/{id}/export-pdf` (`ExportMenu`), `PUT /api/schedule_plans/{id}` (renommage du plan), `PUT /api/schedules/{id}` (renommage de la version), `DELETE /api/schedules/{id}` (suppression d'une version de travail), `POST /api/schedule-slots/{id}/manual-edit/lock`, `POST /api/schedule-slots/{id}/manual-edit/one-time`, collections référentiels (`teams`, `venues`, `coaches`, `sport_categories`, `team_coaches`, `coach_player_memberships`) |
+| `/` (cockpit) | `GET /api/me`, `GET /api/schedules`, `GET /api/schedule_plans`, `GET /api/calendar_entries` (+ conflits d'entrée), campagnes de doléances (badge radar) |
 | `/wizard` | CRUD `teams`/`venues`/`coaches`/`constraints`/`venue_training_slots`…, `GET /api/priority_tiers`, `GET /api/sport_categories`, `POST /api/teams/reorder` (mode tri), `POST /api/constraints/validate`, `POST /api/schedules` + `generate` (étape Génération) |
-| `/club` | `PATCH /api/club/appearance`, `POST/DELETE /api/club/logo`, `GET /api/clubs/{clubId}/logo` (public, cache-buster sur l'URL après upload) |
-| `/pending-members` | `GET /api/memberships/pending`, `POST /api/memberships/{id}/approve`, `POST /api/memberships/{id}/reject` |
+| `/club` | `PATCH /api/club/appearance`, `POST/DELETE /api/club/logo`, `GET /api/clubs/{clubId}/logo` (public, cache-buster sur l'URL après upload), `PATCH /api/club/info` (fiche FFBB, management-gated), `GET /api/memberships/pending`, `POST /api/memberships/{id}/approve`, `POST /api/memberships/{id}/reject` (section « Demandes » — l'ancienne route `/pending-members` a été repliée ici) |
 | `/profile` | `GET /api/me` |
+| `/doleances/:token` | Endpoints **publics** de la campagne de doléances (lecture du formulaire pré-rempli + soumission des seules sections modifiées) — aucun JWT |
+| `/admin*` | `POST /api/admin/auth/password`, `POST /api/admin/auth/totp`, `GET /api/admin/auth/me`, `GET /api/admin/{overview,health,clubs,jobs,actions}`, `POST /api/admin/jobs/{key}/run` (en-tête `X-CSRF-Token`) — client `adminApi` dédié, cookie de session `same-origin` |
 
 ### Headers obligatoires
 
 | Header | Source | Injection |
 |--------|--------|-----------|
 | `Authorization: Bearer {jwt}` | `authStore.token` | ky `beforeRequest` hook |
+| `X-Season-Id` | `seasonStore.selectedSeasonId` | ky `beforeRequest` — **conditionnel** : uniquement si une saison est explicitement sélectionnée et que la requête n'en porte pas déjà une |
 
-**Aucun header tenant** : `X-Club-Id`/`X-Season-Id` restent supportés côté backend comme
-override (tests), mais le frontend ne les envoie pas — le tenant est dérivé du JWT
-(`backend-inventory.md` §4).
+**Aucun header `X-Club-Id`** : le club est dérivé du JWT côté serveur (`backend-inventory.md`
+§4) ; le frontend ne l'envoie jamais. `X-Season-Id`, lui, est envoyé quand le gestionnaire a
+choisi une saison (voir §4) — et validé côté serveur dans tous les cas.
 
 ### Authentification
 
@@ -470,7 +530,11 @@ override (tests), mais le frontend ne les envoie pas — le tenant est dérivé 
 | `/api/login` | POST | `{ email, password }` | `{ token }` (JWT) | Stocker token en Zustand, redirect `/` |
 | `/api/register` | POST | `{ email, password, firstName, lastName, ara, club_name?, consent }` (consent obligatoire — RGPD) | **202** `{ status:"verification_pending" }` (aucun token — A3) | Afficher l'écran « vérifie tes emails » ; **pas de redirect** (le JWT vient de la vérification) |
 | `/api/register/verify` | POST | `{ token }` (du lien email) | `{ token, membershipStatus, user }` | Stocker token ; `pending` → `/waiting`, sinon `/` |
-| `/api/me` | GET | — | `{ id, email, firstName, lastName, membershipStatus, role, club: { id, name, onboardingCompleted, logoUrl, accentColor, accentPalette }, seasonPlan: { id, name, chosenScheduleId, hasFinishedVersion, currentStructureHash } \| null, hasGenerated, seasons }` | Query `["me"]` — source des guards, du thème (accent) et de l'état du plan de saison (ADR-0002) |
+| `/api/me` | GET | — | `{ id, email, firstName, lastName, membershipStatus, role, club: {…} \| null, seasonPlan: { id, name, chosenScheduleId, hasFinishedVersion, currentStructureHash } \| null, seasons, … }` — **forme complète : `src/features/auth/api.ts` (`MeResponse`)**, source de vérité (le bloc `club` porte aussi l'accent sombre, la fiche FFBB, la ligue et le comité) | Query `["me"]` — source des guards, du thème (accent) et de l'état du plan de saison (ADR-0002) |
+
+Les trois champs **structurants** de cette réponse : `club.accentColor` / `club.accentColorDark`
+(thème appliqué par `useApplyClubTheme`), `seasonPlan.hasFinishedVersion` (verrou d'onboarding
+et gate cockpit) et `seasonPlan.chosenScheduleId` (gate matchs et plans secondaires).
 
 Référence : `backend-inventory.md` §3 (AuthController, PasswordController, MembershipController).
 
@@ -499,12 +563,11 @@ Référence : `backend-inventory.md` §3 (ManualEditController).
 
 Toutes les collections API Platform sont paginées à 30 items/page (JSON-LD).
 
-- `hydra:member` : items de la page
-- `hydra:totalItems` : total
-- `hydra:view` : navigation (`hydra:next`, `hydra:previous`)
-- Query param `page` pour la pagination
+- `member` : items de la page (clé **sans** préfixe `hydra:` — API Platform 4)
+- Query param `page` pour la pagination — c'est celui que suit `collectionAll()`
 
-Le frontend utilise `useInfiniteQuery` pour les listes longues (teams, diagnostics) et `useQuery` pour les collections courtes (tiers, categories).
+Le frontend passe par `collection()` / `collectionAll()` (§7 ci-dessus) — **pas**
+d'`useInfiniteQuery`.
 
 Référence : `backend-inventory.md` §6.
 
@@ -527,28 +590,69 @@ Référence : `backend-inventory.md` §1 (config API Platform).
 frontend/src/
 ├── main.tsx                    # Entry point
 ├── index.css                   # Tailwind 4 (@theme) + variables d'accent
-├── app/                        # AppLayout, AuthGuard, providers, router
+├── app/                        # router (lazy + filets), RootShell, RouteErrorBoundary,
+│                               # ErrorBoundary, AppLayout, AuthGuard, providers,
+│                               # SeasonSelector, SeasonTransitionBanner, ReadonlySeasonBanner
 ├── features/                   # Logique métier par domaine (liste : ls src/features/)
-│   ├── auth/                   # Login/Register/ForgotPassword/ResetPassword/WaitingApproval + api/queries
-│   ├── club/                   # ClubPage (logo + accent + section Demandes/approbation), LogoCropper
+│   ├── admin/                  # Console superadmin : AdminGuard, AdminShell, AdminLoginPage,
+│   │                           # AdminDashboardPage, sections/, Journaux/, client `adminApi` dédié
+│   ├── auth/                   # Login/Register/ForgotPassword/ResetPassword/WaitingApproval/VerifyEmail + api/queries
+│   ├── club/                   # ClubPage (logo + accent + infos FFBB + section Demandes), LogoCropper
+│   ├── coach-wishes/           # #10 doléances : CoachWishesModal, CampaignDialog, CoachWishForm,
+│   │                           # PublicWishPage (route publique), RadarCoachWishAction
 │   ├── cockpit/                # CockpitPage : bandeau planning socle, calendrier mensuel, radar overlays
+│   ├── legal/                  # PrivacyPage (/confidentialite)
 │   ├── matches/                # MatchesPage : grille week-end, radar conflits, ImportFbiDialog
-│   ├── planning/               # PlanningPage, PlanningToolbar, WeekGrid, SlotDetail, DiagnosticsPanel, ResourceFilter, GenerationWaiting, store, lib/grid
+│   ├── planning/               # PlanningPage, PlanningToolbar, WeekGrid, SlotDetail, DiagnosticsPanel,
+│   │                           # ResourceFilter, GenerationWaiting, ExportMenu, store, lib/grid
 │   ├── profile/                # ProfilePage
-│   ├── season-transition/      # SeasonSelector, SeasonTransitionBanner, transitionUiStore
-│   └── wizard/                 # WizardLayout, steps/ (Teams, Venues, Coaches, Constraints, Recap, Generate), lib/, store
+│   ├── season-transition/      # RedateEventsDialog + api (le bandeau et le sélecteur vivent dans app/)
+│   └── wizard/                 # WizardLayout, steps/ (Teams, Venues, Coaches, Constraints, Recap,
+│                               # Generate + PeriodStructure, StructureSummary), lib/, store
 ├── shared/
-│   ├── api/                    # client ky, collection (hydra), errors
-│   ├── components/ui/          # Composants UI réutilisables (shadcn-style)
+│   ├── api/                    # client ky, collection (JSON-LD clé `member`), errors
+│   ├── components/ui/          # Primitives (shadcn-style) — dont delete-confirm, load-error-hint,
+│   │                           # team-select, modal, menu, accordion, toaster, empty-hint
 │   ├── hooks/                  # useApplyTheme, useApplyClubTheme
-│   ├── lib/                    # color, palette, queryClient, utils
-│   └── stores/                 # authStore, themeStore
-└── test/                       # setup vitest
+│   ├── lib/                    # readState, teamTiers, color, palette, duration, errorMessage,
+│   │                           # download, clipboard, passwordPolicy, useModalA11y, queryClient, utils
+│   └── stores/                 # authStore, themeStore, seasonStore, toastStore, transitionUiStore
+└── test/                       # setup vitest, helpers de rendu, suite a11y
 ```
+
+### Trois pièces transverses à connaître avant de coder
+
+- **`shared/lib/readState.ts`** — « cette lecture est-elle exploitable ? », une seule réponse
+  pour toute l'app. Trois états sur un unique critère (*a-t-on une donnée ?*) : `loading`
+  (rien à montrer encore), `failed` (échec **et** rien en cache — le seul cas où un écran doit
+  céder la place à une erreur), `ready` (on a une donnée, même périmée). Deux conséquences :
+  un `isError` de **refetch d'arrière-plan** ne doit pas détruire un écran qui fonctionne, et
+  `data ?? []` pendant un premier chargement fabrique un **vide crédible** (« aucun créneau »)
+  qui pousse à re-saisir (doublons) ou à valider une période qu'on croit vide.
+- **`shared/components/ui/delete-confirm`** — confirmation destructive qui **annonce ses
+  impacts** (« N réservations seront retirées »). À réutiliser plutôt qu'un `confirm()` nu.
+- **`shared/components/ui/team-select`** — tout sélecteur d'équipes de l'app (contraintes,
+  coachs, matchs, import FBI) passe par lui : optgroups par rang, même ordre que l'étape
+  Équipes. Reclasser une équipe met l'ordre à jour **partout**.
 
 ### Alias
 
 - `@/` → `src/` (configuré dans `vite.config.ts` et `tsconfig.json`)
+
+### Thème appliqué avant le premier rendu
+
+`src/main.tsx` lit le mode persisté (`readPersistedThemeMode`, clé `cs-theme`) et pose la
+classe `.dark` **avant** le premier paint de React. Sans cela l'arbre se rend en clair puis un
+effet bascule la classe : flash du mauvais thème **et** animation `transition-colors` qui
+laisse les surfaces à des couleurs intermédiaires **sub-AA** (A11Y-06). Le pré-paint et
+`useApplyTheme` partagent le même prédicat et la même forme de stockage, pour ne jamais
+diverger.
+
+### Reporting d'erreurs
+
+`main.tsx` initialise Sentry **uniquement si `VITE_SENTRY_DSN` est posé au build** : erreurs
+seules, `tracesSampleRate: 0`, pas de replay (quota free tier préservé, INF-01). DSN absent =
+init sautée, SDK inerte — tout est câblé d'avance.
 
 ### Naming
 

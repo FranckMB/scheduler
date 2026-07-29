@@ -24,6 +24,7 @@
 | Portabilité | export JSON compte / workspace club | obligation légale (art. 20) | à la demande (10/h par user) | `GET /api/me/export`, `GET /api/club/export` (management) | `RgpdExportTest` |
 | Contacts officiels FFBB | président/correspondant (nom/tél/email publiés par la FFBB) | **intérêt légitime** (organisation des rencontres, annuaire adverse) | tant que publiés (refresh FFBB) ; **survivent** à la purge du club | opposition : exclusion du refresh (à outiller avec l'annuaire) | revue DP1 |
 | Journal d'audit | actions sensibles — **ids uniquement, jamais de PII** | intérêt légitime (accountability art. 5.2) | 12 mois | `app:audit:purge` (connexion admin — append-only DB pour le runtime) | `AuditTrailTest` |
+| Doléances coachs (#10) | `CoachWish` (souhaits par équipe × semaine, **commentaire libre**), `CoachWishToken` (lien personnel + horodatage d'envoi `sentAt`) | contrat (via le club) | saison courante + N-1 | `app:seasons:purge` (`SeasonDataPurger` supprime `CoachWish` et `CoachWishCampaign` ; les tokens partent par cascade FK de la campagne) | `PurgeSeasonsCommandTest` |
 | Consentement | `termsAcceptedAt` + `termsVersion` au register | obligation légale (preuve) | vie du compte (anonymisé avec lui). Couvre 100 % des comptes réels : exigé au register avant le premier utilisateur de production (pas de backfill nécessaire — les comptes dev/test antérieurs n'en ont pas) | — | `ConsentTest` |
 
 ## 3. Mécanismes clés (pointeurs code)
@@ -35,7 +36,7 @@
 - **Audit** : `AuditTrail` (INSERT DBAL + SAVEPOINT, no-PII) ; append-only tenu par la DB (aucune policy UPDATE/DELETE) ; lecture = future console superadmin (SA1).
 - **Consentement** : requis au register (400 sinon, validation payload-only = enumeration-safe A3) ; version des textes = `AuthController::TERMS_VERSION`.
 
-## 4. Doctrine backups (à implémenter en P0-3)
+## 4. Doctrine backups (**livrée** — cf. `docs/ops/backup-restore.md`, 2026-07-18)
 
 Les sauvegardes contiennent des données effacées : purge **naturelle par rotation 30 j**, **aucune
 restauration sélective** de données effacées (une restauration complète post-incident ré-exécute
@@ -46,9 +47,13 @@ les mécanismes). À graver dans la config de backup P0-3.
 
 - Backend : sweep 2026-07-11 — aucun email/nom dans les `logger->…` (codes FFBB publics, ids,
   messages d'exception). Règle : **jamais d'email/nom dans un log** ; les ids suffisent.
-- Engine : les access-logs uvicorn contiennent des IPs (données perso) — rétention/config à poser
-  dans le profil prod (**P0-2**), noté ici pour ne pas le perdre.
+- Engine : les access-logs uvicorn contiennent des IPs (données perso) — la **rotation** est posée
+  par l'ancre `logging` de `docker-compose.prod.yml` (cf. `docs/ops/prod-stack.md`) ; la **durée de
+  rétention** reste à confirmer côté hébergeur.
 - Mercure : payloads `{status, score, unplaced, warnings}` — pas de PII.
+- **Doléances (#10)** : le **commentaire libre** d'une doléance est un champ à contenu non maîtrisé
+  (le coach y écrit ce qu'il veut, potentiellement des données personnelles) — **jamais loggé**,
+  jamais inclus dans un payload Mercure ni dans un message d'erreur.
 
 ## 6. Reste à faire (hors P0-1)
 

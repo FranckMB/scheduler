@@ -30,12 +30,7 @@ Tu dois voir apparaître : `clubscheduler-php-fpm`, `clubscheduler-nginx`, `club
 cd backend && make fixtures
 ```
 
-Si la commande `make fixtures` n'existe pas, utilise :
-
-```bash
-cd backend && make exec
-php bin/console doctrine:fixtures:load
-```
+> ⚠️ **Ne lance JAMAIS `doctrine:fixtures:load` à la main.** Sous `app_user`, la phase de purge est silencieusement filtrée par RLS (elle supprime zéro ligne sur les tables tenant) et le rechargement collisionne alors avec les données survivantes — base à moitié purgée. La fixture s'en protège désormais et **lève une exception** si la connexion n'est pas celle du superutilisateur. Passe toujours par `make fixtures`, qui injecte la connexion `admin`.
 
 ### Vérifier la santé du backend
 
@@ -49,15 +44,15 @@ Tu dois recevoir une réponse JSON avec `"status": "ok"`.
 
 Les fixtures injectent un jeu de données complet pour tester la génération :
 
-| Entité | Quantité | Détail |
-|--------|----------|--------|
-| Club | 1 | **BCCL** (B CHARPENNES CROIX LUIZET), code FFBB `ARA0069036` — l'id est **généré** ; les fixtures retrouvent le club par son `ffbbClubCode`, il n'y a pas d'UUID fixe |
-| Saison | 1 | **2025-2026** (marquée comme active) |
-| Équipes | 49 | U9 à U21 + seniors (SM1, SM2, SM3, SF…), avec tags et tiers de priorité |
-| Coachs | 26 | Liés aux équipes via `TeamCoach` |
-| Salles | 9 | Armand, ADN, Debarros, Annexe, Jean Vilar, Tonkin, JDR, Matéo, Camus (JDR et Matéo divisibles) |
-| Contraintes | ~19 | Disponibilités coachs, exclusions, préférences |
-| Réservations | 1 | Créneau réservé fixe (pin `HARD` pour le solveur) |
+| Entité | Détail |
+|--------|--------|
+| Club | **BCCL** (B CHARPENNES CROIX LUIZET), code FFBB `ARA0069036` — l'id est **généré** ; les fixtures retrouvent le club par son `ffbbClubCode`, il n'y a pas d'UUID fixe |
+| Saison | **2025-2026** (marquée comme active) |
+| Équipes | U9 à U21, seniors (SM…, SF…), Loisir, Vétérans et groupes CEC — avec tags et tiers de priorité (`$newTeamsData` dans `BasketballInit`) |
+| Coachs | Liés aux équipes via `TeamCoach` ; certains sont aussi joueurs (`CoachPlayerMembership`) |
+| Salles | Armand, ADN, Debarros, Annexe, Jean Vilar, Tonkin, JDR, Matéo, Camus (JDR et Matéo divisibles) |
+| Contraintes | Disponibilités coachs, exclusions, préférences (regroupées par famille TIME · DAY · FACILITY · COACH) |
+| Réservations | Créneau réservé fixe (pin `HARD` pour le solveur) |
 
 Ces données sont suffisantes pour lancer une première génération sans rien configurer toi-même.
 
@@ -135,6 +130,16 @@ Remplace `a1b2c3d4-...` par l'UUID retourné à l'étape précédente.
 3. Il passe le statut à `PENDING`.
 4. Il dispatche un message `GenerateScheduleMessage` sur le bus asynchrone Redis.
 5. Il retourne immédiatement un **202 Accepted**.
+
+### Ce qui peut être refusé tout de suite
+
+Trois cas s'arrêtent **avant** la mise en file : rien n'est créé, aucun diagnostic n'est écrit, tu reçois l'erreur dans la réponse.
+
+| Code | Cause | Que faire |
+|------|-------|-----------|
+| **409** | La version est celle que son plan **pointe** — c'est le planning en vigueur | La rouvrir d'abord : `POST /api/schedules/{id}/reopen` |
+| **422** | `GenerationComplexityGuard` : le problème dépasse les plafonds anti-DoS (A10) | Réduire le périmètre. Les plafonds valent ~10× un gros club FFBB : les franchir signale une donnée aberrante |
+| **422** | `OrphanPinGuard` : un verrou ou une réservation ne correspond plus à aucun créneau de la grille de période | Le message nomme le gymnase et le jour — redéfinis les créneaux, ou retire l'épinglage |
 
 ### Réponse
 
@@ -689,6 +694,8 @@ Frontend (React)          Backend (Symfony)           Engine (Python)
 | Lister les créneaux | GET | `/api/schedule_slot_templates?scheduleId={id}` | — |
 | Lister les diagnostics | GET | `/api/schedule_diagnostics?scheduleId={id}` | — |
 | Exporter le PDF | POST | `/api/schedules/{id}/export-pdf` | Header `Authorization: Bearer <jwt>` |
+| Exporter le tableur | POST | `/api/schedules/{id}/export-xlsx` | Header `Authorization: Bearer <jwt>` |
+| Rouvrir (dépointer) une version | POST | `/api/schedules/{id}/reopen` | Header `Authorization: Bearer <jwt>` — **obligatoire avant de régénérer une version pointée** |
 
 ### Conventions
 
@@ -719,7 +726,3 @@ Si tous les items sont cochés, tu peux lancer la génération en toute confianc
 - **Makefile backend** : `backend/Makefile` — toutes les commandes utiles (test, lint, migration, shell)
 - **CI** : `.github/workflows/ci.yml` — ordre exact des tests bloquants
 - **AGENTS.md** (racine du repo) : architecture globale, conventions, pièges courants
-
----
-
-*Dernière mise à jour : 15 juin 2026*

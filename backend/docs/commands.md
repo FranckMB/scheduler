@@ -12,7 +12,9 @@
 | `make test` | PHPStan + CS-Fixer + PHPUnit **`--testsuite Unit`** (⚠️ PAS le gate bloquant : ni `--group phase1`, ni `tests/` entier) |
 | `make tests-complete` | PHPStan + CS-Fixer + **`phpunit tests/`** (le DOSSIER entier — miroir EXACT du job CI `Unit Tests` ; seule cible qui voit Api/Command/Double/EventListener/MessageHandler/OpenApi/Validator) |
 | `make phpunit` | PHPUnit **`--group phase1`** seul (le gate bloquant, `APP_ENV=test` injecté) |
+| `make db-init` | Crée + migre la base de **dev** — idempotent, ne détruit rien |
 | `make db-init-test` | Crée + migre la base de test (**pré-requis de toute suite**) |
+| `make jwt-keys` | Génère le keypair JWT s'il est absent (`config/jwt/*.pem`, gitignoré) — idempotent |
 | `make db-reset` / `make db-reset-test` | Drop + recreate + migrate (dev / test) |
 | `make fixtures` | Fixtures dev + seed jours fériés/vacances — **injecte l'URL admin** (RLS : ne JAMAIS lancer `doctrine:fixtures:load` à la main, le purge silencieux casse) |
 | `make phpstan` / `make cs` / `make cs-fix` / `make rector` | Analyses (cs/rector en dry-run, `cs-fix` applique) |
@@ -30,7 +32,7 @@ Toutes manuelles sauf mention. Détail : `ls backend/src/Command/`.
 | `app:superadmin:create <email>` | Crée une identité superadmin séparée ; demande le mot de passe interactivement et affiche une seule fois la clé/URI TOTP |
 | `app:jobs:run <clé> [--source=cli\|scheduled] [--scheduled-for=<ISO-8601>]` | Exécute exclusivement un job du catalogue opérationnel fermé, empêche le chevauchement et persiste statut/durée/code de sortie dans `admin_job_run` ; `--scheduled-for` est interne et obligatoire avec `--source=scheduled` |
 | `app:jobs:run-due` | Tick du `cron-runner` chaque minute : calcule les créneaux dus en `Europe/Paris`, rattrape le dernier créneau manqué après redémarrage et garantit au plus une exécution par `(job, créneau)` |
-| `app:schedules:reconcile-stuck` | Passe en FAILED les plannings bloqués PENDING/GENERATING (crash worker / message perdu) |
+| `app:schedules:reconcile-stuck` | Passe en FAILED les plannings bloqués PENDING/GENERATING (crash worker / message perdu) — **auto, toutes les 10 min** (avec `--older-than=60`) |
 | `app:constraint:export-implicit` | Exporte la config des contraintes implicites en JSON (versionnée avec le contrat) |
 | `app:overlays:purge` | Supprime les versions overlay des périodes échues — manuel, jamais auto |
 | `app:seasons:purge` | Supprime les saisons < N-1 (rétention : courante + précédente + futures) — **auto, quotidien à 03:00 (Europe/Paris)** |
