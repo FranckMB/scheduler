@@ -24,13 +24,24 @@ règle « jamais merger sans go » reste en vigueur pour tout le reste).
 
 1. `gh pr checkout <n>` puis rebase sur `main` à jour (`git fetch origin && git rebase origin/main`).
    Conflit de lockfile → régénérer le lockfile (`npm install` / `composer update <paquet>` /
-   pip selon la zone) plutôt que résoudre à la main.
+   pip selon la zone) plutôt que résoudre à la main — **toujours DANS le container de la zone**,
+   jamais sur l'hôte (voir l'encart Flex ci-dessous : c'est le container qui porte les plugins qui
+   contraignent la résolution).
 2. **Majeur ?** Lire le changelog/notes de migration du paquet (WebFetch sur le repo GitHub du
    paquet) AVANT de lancer les tests — savoir quoi surveiller.
 3. Installer et lancer la **suite de la zone** :
-   - `frontend/` : `npm ci && npx tsc -b && npx eslint . && npx vitest run && npx vite build`
-   - `backend/` : dans le container — `composer install`, puis `make test` (CS-Fixer + PHPStan + PHPUnit phase1)
-   - `engine/` : dans le container — `make test` (pytest + ruff + mypy)
+   - `frontend/` : **dans le container**, jamais sur l'hôte — `make -C frontend test` (qui enchaîne
+     `lint` = eslint + `tsc -b --force`, puis vitest). ⚠️ **Rebuilder l'image tooling d'abord**
+     (`docker compose --profile tools build frontend-tooling`) : elle COPIE le code, donc sans
+     rebuild on valide une version périmée. Compléter par un `npx vite build` dans le même
+     container si le paquet touche la chaîne de build.
+   - `backend/` : dans le container — `composer install`, puis `make -C backend tests-complete`
+     (PHPStan + CS-Fixer + `phpunit tests/`, miroir exact du job CI ; il enchaîne lui-même
+     `db-init-test`). ⚠️ **Pas `make test`**, qui ne lance que la testsuite `Unit` et laisse
+     7 dossiers hors de vue (cf. CLAUDE.md §10.2). Si le lot touche php-cs-fixer, phpstan ou
+     rector, lancer AUSSI `make -C backend rector` : ces trois-là sont des gates CI distincts et
+     peuvent rougir sur du code inchangé.
+   - `engine/` : dans le container — `make test` (ruff + mypy + bandit + pytest)
    - `ci` (github-actions) : pas de tests locaux — vérifier que les versions d'actions existent et
      lire le diff (breaking inputs renommés/supprimés).
 4. Dépendance **runtime** backend ou engine touchée (pas dev-only) → redémarrer les containers
@@ -40,7 +51,18 @@ règle « jamais merger sans go » reste en vigueur pour tout le reste).
 ## Étape 2 — Par PR : réparer si rouge
 
 1. Diagnostiquer : la casse vient-elle de l'upgrade (API changée, config à migrer, dépréciation
-   devenue erreur) ou d'un flaky ? Flaky → relancer une fois avant de conclure.
+   devenue erreur) ou d'un flaky ? Flaky → relancer une fois avant de conclure. **Avant tout :
+   la casse est-elle INTRODUITE par la PR, ou déjà présente sur `main` ?** Comparer les deux
+   (ex. `git show origin/main:backend/composer.lock`) — un défaut préexistant ne se répare pas ici.
+
+> ⚠️ **Piège composer/Flex — attendu à CHAQUE lot backend.** `SymfonyStackAlignmentTest` échoue en
+> listant des paquets Symfony passés en 8.0.x ? Ce n'est ni un flaky ni une régression de notre
+> code : **Dependabot résout hors de notre container**, donc sans le plugin Flex qui impose
+> `extra.symfony.require` (`7.4.*`) à TOUS les splits Symfony, transitifs compris. Il tire alors la
+> dernière majeure. **Correctif** : `composer update <les paquets visés> --with-all-dependencies`
+> **dans le container**, ce qui conserve les montées voulues et ramène Symfony sur la LTS.
+> **Surtout PAS un pin dans `composer.json`** : il traiterait le symptôme en laissant croire que les
+> transitifs ne sont pas couverts (CLAUDE.md §5, P4-31 — récidive constatée le 2026-07-29).
 2. Réparer **notre code** pour suivre la nouvelle API — jamais figer/downgrader la version pour
    éviter la réparation, sauf si la migration dépasse ~1 h de travail ou touche un axe structurant
    (§7.1 CLAUDE.md). Dans ce cas : commenter la PR avec le diagnostic, la laisser ouverte, la
@@ -77,5 +99,9 @@ règle « jamais merger sans go » reste en vigueur pour tout le reste).
 - **Jamais** merger une PR dont la suite de zone est rouge.
 - **Jamais** downgrader une dépendance de sécurité (les PRs `security` de Dependabot sont prioritaires — les traiter en premier, toutes zones confondues).
 - Backend/engine : tout se lance **dans les containers** (PHPUnit avec `APP_ENV=test`).
-- Frontend : host uniquement.
+- **Tout se lance dans les containers, frontend compris.** L'hôte n'a que Docker, Docker Compose et
+  Make — convention du dépôt (CLAUDE.md §10), et **les 12 cibles de `frontend/Makefile` passent par
+  `docker compose`, sans exception**. Tester le frontend sur l'hôte valide une version de Node qui
+  n'est celle de personne : ni celle de la CI (runners `setup-node`), ni celle de l'image tooling —
+  et fait conclure à tort qu'il faut agir sur le poste du fondateur (constaté 2026-07-29).
 - Une seule PR à la fois — pas de merges parallèles (conflits de lockfile en cascade).
