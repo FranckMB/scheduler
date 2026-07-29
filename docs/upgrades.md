@@ -5,6 +5,74 @@
 > l'upgrade apporte, et ce qu'il a fallu adapter chez nous. But : comprendre les mises à jour,
 > pas les subir. Ordre antichronologique.
 
+## 2026-07-29 — lot Dependabot (4 PRs : 3 mergées, 1 toujours bloquée) + passage à Node 24
+
+> Ce lot rattrape le retard signalé par l'audit doc du même jour : le journal avait quatre lots
+> d'écart. Les lots intermédiaires (2026-07-25 → 27) avaient été mergés sans passer par ici.
+
+### Groupe github-actions ×3 — docker/setup-buildx v4, login v4, build-push v7 (CI, majeurs)
+**C'est quoi** : les trois actions GitHub qui construisent et publient nos **images Docker de
+production** vers ghcr.io, dans le workflow de déploiement.
+**Ça apporte** : passage au runtime **Node 24** côté action (les versions 3/6 partaient sur un Node
+en fin de vie) et nettoyage des options obsolètes. À prendre maintenant : ces actions finiront par
+refuser de tourner sur les runners récents.
+**Adapté chez nous** : **rien**. Trois vérifications faites avant de merger — (1) `setup-buildx` est
+utilisé **sans aucun input** chez nous, donc les suppressions d'options annoncées ne peuvent pas
+nous atteindre ; (2) les seuls inputs qu'on passe (`context`, `file`, `target`, `push`, `tags`,
+`cache-from`, `cache-to`, `registry`/`username`/`password`) sont tous des options de base,
+inchangées ; (3) l'exigence « Actions Runner ≥ 2.327.1 » est satisfaite puisque tous nos jobs
+tournent sur `ubuntu-latest`, mis à jour par GitHub.
+⚠️ **Angle mort assumé** : ces actions ne vivent que dans `deploy.yml`, qui **n'est pas exercé par
+la CI**. Le changement ne sera réellement éprouvé qu'au prochain tag `v*`.
+
+### Groupe composer backend ×4 — doctrine-bundle 3.3.1, php-cs-fixer, phpstan, rector
+**C'est quoi** : la colle Symfony↔Doctrine (accès PostgreSQL), plus les trois outils qui gardent le
+style et la qualité du code backend — ceux-là mêmes qui font échouer la CI quand on dérive.
+**Ça apporte** : correctifs en amont pour Doctrine ; pour les trois outils, des règles plus fines et
+la compatibilité avec les versions récentes de PHP. Les bumps d'outils d'analyse sont à prendre tôt :
+plus on attend, plus la moisson de nouvelles remarques est grosse d'un coup.
+**Adapté chez nous** : **le lockfile a dû être re-résolu.** Dependabot avait fait dériver
+**14 paquets Symfony en 8.0.x** sous des bundles 7.4 — la LTS sur laquelle le projet est
+délibérément resté. Le test `SymfonyStackAlignmentTest` l'a attrapé (il lit ce qui est
+*réellement installé*, pas le lock). La cause est structurelle : **Dependabot résout hors de notre
+conteneur**, donc sans le plugin Flex qui impose `7.4.*` à tous les paquets Symfony, y compris ceux
+tirés indirectement. Correctif conforme à la règle du dépôt — `composer update` des quatre paquets
+**dans le conteneur**, jamais un pin dans `composer.json` : un pin traiterait le symptôme en laissant
+croire que les dépendances indirectes ne sont pas couvertes. Les quatre montées voulues sont
+conservées, la dérive est à zéro. **À savoir pour la suite : tout lot composer futur peut reproduire
+ce cas** — c'est le test qui protège, pas Dependabot.
+
+### jsdom 29 → 30 (frontend, dev-only, majeur)
+**C'est quoi** : le navigateur simulé dans lequel tournent les tests unitaires du frontend. Il n'y a
+pas de vrai Chrome dans Vitest : jsdom joue le rôle du DOM.
+**Ça apporte** : `CSS.escape()`/`CSS.supports()`, des propriétés CSS supplémentaires et un
+`getComputedStyle()` plus juste. Utile pour nous : nos tests d'accessibilité s'appuient sur le style
+calculé. (Rappel : jsdom n'a **toujours pas** de moteur de rendu — le contraste de couleur reste
+invérifiable en test unitaire, cf. A11Y-06.)
+**Adapté chez nous** : **rien dans le code**, mais ça a révélé un décalage de version de Node —
+voir l'entrée suivante.
+
+### ⛔ typescript 6.0 → 7.0 (frontend) — TOUJOURS bloquée (#223)
+Re-vérifié ce jour : `typescript-eslint` plafonne encore sa dépendance à `typescript >=4.8.4 <6.1.0`,
+y compris sur la dernière version publiée (**8.65.0**) et sur ses pré-versions (`8.65.1-alpha.11`).
+Sous TS 7, l'analyseur casse et **tout le lint tombe** — or le lint fait partie des contrôles
+obligatoires avant merge. Rien à réparer chez nous : la migration TS 7 elle-même est triviale.
+C'est l'écosystème qui n'a pas suivi. **Réouvrir quand une version de `typescript-eslint` acceptera
+TS 7**, et faire alors le bump des deux ensemble.
+
+### Node 22 → 24 (CI + image Docker frontend) — décision fondateur
+**C'est quoi** : la version de Node.js qui exécute l'outillage frontend (tests, compilation
+TypeScript, build).
+**Ça apporte** : la sortie d'une zone grise. jsdom 30 exige `^22.22.2 || ^24.15.0 || >=26` ; la CI et
+Docker prenaient le **dernier** 22.x et passaient, mais l'hôte du fondateur était en **22.22.1**, un
+patch en dessous. Le pire cas : CI verte, poste local hors plage, et une casse qui n'aurait pas
+ressemblé à un problème de version. Node 24 est la version supportée suivante.
+**Adapté chez nous** : les trois `setup-node` de la CI, le stage `tooling` de l'image frontend (les
+stages de build et de prod en héritent), et l'ajout d'un champ `engines` qui n'existait pas —
+désormais npm **avertit** si Node est trop vieux, au lieu de laisser le problème invisible. Le
+`pdf-worker` n'est pas touché : il embarque son propre Node via l'image Puppeteer.
+⚠️ **Action fondateur : installer Node 24 sur ton poste.**
+
 ## 2026-07-19 — lot Dependabot (7 PRs : 6 mergées, 1 bloquée)
 
 ### doctrine/doctrine-migrations-bundle 3.7 → 4.0 (backend, majeur)
