@@ -153,6 +153,9 @@ rafraîchi toutes les 60 secondes et par le bouton d'actualisation global.
 fermée calculée en `Europe/Paris` :
 
 - réconciliation des générations bloquées toutes les 10 minutes (`--older-than 60`) ;
+- digest des doléances coach chaque jour à 07:00 — n'envoie que si une réponse est postérieure
+  au dernier digest (silence total = aucun email), et pousse le récap final le lendemain de la
+  deadline ;
 - rappels de périodes et de transition chaque jour à 08:00 ;
 - purges comptes non vérifiés à 02:00, clubs effacés à 02:15, comptes inactifs à 02:30,
   saisons à 03:00 et audit à 03:30 ;

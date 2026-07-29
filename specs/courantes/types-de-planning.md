@@ -10,8 +10,8 @@
 > [`ADR-0002 — pattern « Plan »`](../../docs/architecture/adr-0002-pattern-plan.md) — un
 > concept = une maison, pas de duplication.
 > Mécanique temporelle : [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md)
-> (CalendarEntry, cockpit) · besoin détaillé vacances :
-> [`../evolution/plan-vacances-collecte-coach.md`](../evolution/plan-vacances-collecte-coach.md).
+> (CalendarEntry, cockpit) · entités et gardes serveur :
+> [`backend-inventory.md`](backend-inventory.md) §2.
 
 ## Vue d'ensemble
 
@@ -95,7 +95,8 @@
   (todo-list par équipe × semaine, coche « traité ») + **« Solliciter les coachs »**
   (campagne → lien tokenisé sans login `/doleances/{token}` → page publique pré-remplie →
   emails + digest quotidien + relance) + **badge radar** « X/Y répondu · N à traiter ».
-  Un souhait, jamais une contrainte. Détail : [`plan-vacances-collecte-coach.md`](../evolution/plan-vacances-collecte-coach.md) §9-10.
+  Un souhait, jamais une contrainte. Détail : E5 ci-dessous ·
+  [`backend-inventory.md`](backend-inventory.md) §2 (entités, token, page publique).
 - **État** : 🟢 rodé sur les axes livrés — héritage contraintes + défaut intelligent (#212),
   équipes on/off + séances, **grille de gymnases possédée par la période** (#8 — copie du
   modèle de saison, éditable gymnase par gymnase à l'écran), **choix des semaines** (E1), été inclus (E2),
@@ -112,6 +113,17 @@
 | E4 | ✅ **Livré (arrivé avec #262, tracé 2026-07-19)** : `PeriodTeams` expose l'ajustement des séances/équipe (champ 1–7) **et** le toggle actif/inactif (= 0 séance) dans le flux période — pour la **fermeture comme la reprise** (`TeamPeriodOverride`) | 2 | — |
 | E5 | ✅ **C1 livré (2026-07-25, #10)** : la modale **« Doléances des coachs »** est une todo-list par (équipe × semaine), ancrée à l'entrée MÈRE des vacances, ouverte de deux portes — bandeau du wizard (filtrée sur la semaine du plan courant) et carte de période au cockpit (toutes semaines). Filtres coach/équipe, coche « traité », saisie « au nom d'un coach ». ✅ **C2 livré (2026-07-25, #10)** : **collecte SANS email** — bouton « Solliciter les coachs » (campagne modifiable : semaines / équipes / deadline) → un **lien personnel par coach** (`/doleances/{token}`, token en clair, réutilisable/révisable jusqu'à la deadline) que le gestionnaire **copie dans WhatsApp** → **page publique sans login** pré-remplie, le coach saisit ses souhaits (n'envoie que les sections modifiées) → tombe dans la todo-list C1 (écrase + « à retraiter ») → **badge radar** « X/Y coachs ont répondu · N à traiter ». ✅ **C3 livré (2026-07-25, #10 — feature CLOSE)** : bouton « Envoyer les liens par email » (global + individuel, badge « pas d'email »/« envoyé le… »), **digest quotidien 7h** aux gestionnaires (seulement si nouvelle réponse ; récap final une fois après la deadline), **relance des silencieux** (1×/jour). Le dialog campagne porte un **filtre par équipe + statut** (répondu / en attente / pas d'email) sur la liste des coachs (n'affecte que la liste, pas les boutons d'envoi). | 3 | — |
 | E6 | ✅ **Livré (2026-07-19)** : noms par défaut des plans conformes (`SchedulePlanProvisioner`, source unique serveur, ADR-0002 inv. 12) — SEASON `Planning de la saison …`, CLOSURE `Ajustement {gymnase} du … au …`, HOLIDAY `Planning de vacances de … du … au …`. Le nom du PLAN (réponse) est distinct du `CalendarEntry.title` (fait déclencheur) ; renommable | 1 + 2 + 3 | — |
+
+> **Décisions de conception figées de la collecte (fondateur, 2026-07-25/26)** — le *pourquoi*
+> derrière E5, à ne pas re-poser : **token stocké EN CLAIR** (« copier le lien » doit
+> re-fonctionner à tout moment pour WhatsApp, ce qu'un hash interdit ; le privilège est borné par
+> construction — n'écrit qu'un souhait, dans le périmètre du token, et meurt à la deadline) ·
+> **D1** `sentAt` **par token** (un coach ajouté tardivement garde sa propre date) · **D2** le
+> bouton global n'est **pas** un renvoi général — uniquement les jamais-servis (un changement de
+> périmètre ne re-notifie pas) · **D3** blocage de relance = **jour calendaire**, pas 24 h
+> glissantes · **D5** le récap final **part toujours**, même à 0/8 (c'est le signal d'agir
+> autrement) · **D6** deadline **incluse** · **D8** format email validé à la saisie **et** à
+> l'envoi. Hors périmètre, non demandés : tracking d'ouverture, préférences de notification, SMS.
 
 > Suivi : ces écarts sont des items de backlog dans
 > [`../evolution/roadmap.md`](../evolution/roadmap.md) — ils se cadrent et se livrent

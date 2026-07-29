@@ -1,9 +1,9 @@
 # Étude d'hébergement & infrastructure — ClubScheduler
 
-> **Statut** : **étude / aide à la décision** (2026-07-10, revue 2026-07-17). Pas un plan d'implémentation. But : comparer les options d'hébergement, chiffrer, et **recommander** une architecture pour la commercialisation (mi-2027).
+> **Statut** : **étude / aide à la décision** (2026-07-10, revues 2026-07-17 et 2026-07-29). Pas un plan d'implémentation. But : comparer les options d'hébergement, chiffrer, et **recommander** une architecture pour la commercialisation (mi-2027).
 > **Périmètre** : **technique** uniquement. L'angle économique (coût par club, arbitrage managé vs temps fondateur, RGPD comme argument de vente) vit dans `business/hebergement-couts.md` — *dossier local, non versionné* (`.gitignore`).
 > **Nature** : SaaS multi-tenant (clubs de basket FFBB, marché **français**) → contraintes **RGPD / localisation UE**, données critiques (plannings, contacts), charge **CPU-bursty** (solveur CP-SAT).
-> **Prérequis liés** (prod-readiness) : **backups PostgreSQL** et **observabilité** (Sentry/health/alerting) **livrés côté code le 2026-07-18** (`docs/ops/backup-restore.md`) — reste l'activation OPS (snapshots hébergeur, DSN Sentry, `BACKUP_SYNC_COMMAND` off-site) à la mise en prod, cf. §6. **Config prod distincte reste ⬜** (P0-2, `specs/evolution/roadmap.md` §Backlog).
+> **Prérequis liés** (prod-readiness) — **tous soldés côté code, il ne reste que de l'activation OPS** : **backups PostgreSQL** + **observabilité** (Sentry/health/alerting) livrés le 2026-07-18 (`docs/ops/backup-restore.md`) ; **stack de production** livrée le 2026-07-25 (`docker-compose.prod.yml` autonome, images immuables ghcr.io, `mem_limit`/INF-03 — `docs/ops/prod-stack.md`) ; **pipeline de déploiement** livré le 2026-07-26 (tag `v*` → build/push ghcr.io → SSH fail-closed, `docs/ops/deploy.md`). P0-2/P0-3/P0-4 clos. **Restent à faire au moment de la mise en prod, pas avant** : snapshots hébergeur, DSN Sentry, `BACKUP_SYNC_COMMAND` off-site, `DEPLOY_ENABLED=true` + secrets SSH — cf. §6.
 
 ---
 
@@ -37,13 +37,13 @@
 Le `docker-compose.yml` actuel sur **un seul serveur** (Hetzner/OVH/Scaleway).
 - **Forces** : migration **quasi nulle** (déjà en compose), coût **plancher**, contrôle total, un seul lieu.
 - **Faiblesses** : **SPOF** (un serveur = tout tombe), backups/patchs **à ta charge**, pas de scale du solveur, Postgres **auto-géré** (risque #1 : sauvegardes mal faites = perte de données). Pas de HA.
-- **Coût** : **~15–40 €/mois** (1 VPS 4–8 vCPU / 8–16 Go).
+- **Coût** : **~140–170 €/mois** (1 VPS 4–8 vCPU **dédiés** / 8–16 Go). *(Le chiffre 15–40 € qui figurait ici supposait du vCPU partagé et une grille Hetzner antérieure au 15/06/2026 — cf. §4.)*
 
 ### Option B — VPS applicatif + **PostgreSQL managé** (hybride, recommandé au lancement)
 App en compose sur un VPS ; **base déléguée** à un Postgres managé UE (backups/PITR/patchs inclus).
 - **Forces** : **résout le point #1** (backups/PITR gérés) sans usine à gaz ; coût maîtrisé ; migration faible ; le VPS reste jetable/reconstruisible.
 - **Faiblesses** : SPOF applicatif subsiste (mais l'app est stateless → redéployable vite) ; deux fournisseurs à gérer.
-- **Coût** : **~40–90 €/mois** (VPS 4–8 vCPU + Postgres managé 2 vCPU/4–8 Go + backups).
+- **Coût** : **~150–180 €/mois** (VPS 4–8 vCPU **dédiés** + Postgres managé d'entrée de gamme + backups) — soit ~11 €/mois de plus que l'option A, ce qui est l'argument central du §5. *(Le chiffre 40–90 € qui figurait ici est périmé pour la même raison que celui de l'option A — cf. §4.)*
 - 🔴 **Pré-requis bloquant à vérifier avant de s'engager** (relevé 2026-07-17) : la connexion `admin` (`clubscheduler`) bypasse RLS **parce qu'elle est superuser** — sous `FORCE ROW LEVEL SECURITY`, le propriétaire de la table ne bypasse pas (cf. `docs/security/rls.md`, `backend/docs/RLS.md`). Or **un Postgres managé n'accorde jamais le superuser**. Il faut donc confirmer auprès du provider qu'on peut obtenir un rôle portant l'attribut **`BYPASSRLS`** (lui-même non grantable sans superuser). Sans ça : **migrations, `make fixtures` et la console superadmin cassent** sur un managé. Option A n'a pas ce problème (Postgres auto-géré = superuser disponible). **À trancher avant tout engagement contractuel** — c'est le point qui peut invalider la recommandation §5.
 
 ### Option C — PaaS conteneurs (Clever Cloud 🇫🇷, Scaleway Containers, Render/Railway)
@@ -63,7 +63,7 @@ Front sur CDN + API en conteneurs scale-to-zero + solveur en jobs à la demande.
 
 ## 3. Focus données (le vrai sujet)
 
-Le risque produit #1 n'est pas le CPU, c'est **la perte de données** (aujourd'hui **aucun backup** en place). Quelle que soit l'option, **un PostgreSQL managé UE avec PITR** (point-in-time recovery) est **non négociable** avant la commercialisation. C'est ce qui fait pencher vers **B ou C** plutôt que A (auto-géré). Ordre de grandeur : un managé 🇫🇷/UE = **~20–50 €/mois** pour la taille du lancement, backups inclus — l'assurance la moins chère du projet.
+Le risque produit #1 n'est pas le CPU, c'est **la perte de données**. Une première réponse est **livrée** (2026-07-18) : `pg_dump` piloté par l'activité, rétention 14, preuve par `app:db:restore-check`, hook off-site — mais un dump quotidien n'est **pas** du PITR (fenêtre de perte = jusqu'à 24 h, et la restauration est manuelle). Quelle que soit l'option, **un PostgreSQL managé UE avec PITR** (point-in-time recovery) reste **non négociable** avant la commercialisation — le dump devient alors la ceinture en plus des bretelles, pas le seul filet. C'est ce qui fait pencher vers **B ou C** plutôt que A (auto-géré). Ordre de grandeur : un managé 🇫🇷/UE = **~20–50 €/mois** pour la taille du lancement, backups inclus — l'assurance la moins chère du projet.
 
 ## 4. Coûts comparés (ordres de grandeur, UE, hors trafic)
 
@@ -79,7 +79,7 @@ Le risque produit #1 n'est pas le CPU, c'est **la perte de données** (aujourd'h
 
 ## 5. Recommandation (phasée)
 
-- **Lancement (mi-2027) → Option B.** VPS UE (Scaleway/OVH/Hetzner, 4–8 vCPU **dédiés** — cf. §6) faisant tourner le `docker compose` **moins la base**, + **PostgreSQL managé UE avec PITR** (gamme d'entrée suffisante). Migration minime, backups **résolus**, coût **~150–180 €/mois** (révisé le 2026-07-17, cf. §4). Le solveur bursty tient sur les cœurs du VPS au lancement (peu de générations concurrentes). Ajouter : **SMTP tiers**, **Sentry**, un **health/uptime** externe, secrets hors repo, CI/CD de déploiement.
+- **Lancement (mi-2027) → Option B.** VPS UE (Scaleway/OVH/Hetzner, 4–8 vCPU **dédiés** — cf. §6) faisant tourner le `docker compose` **moins la base**, + **PostgreSQL managé UE avec PITR** (gamme d'entrée suffisante). Migration minime, backups **résolus**, coût **~150–180 €/mois** (révisé le 2026-07-17, cf. §4). Le solveur bursty tient sur les cœurs du VPS au lancement (peu de générations concurrentes). Reste à ajouter le jour J : **SMTP tiers** (le seul composant encore absent du code), un **health/uptime externe** (la surveillance interne ne voit pas sa propre panne), et les **secrets** côté provider. Sentry, backups, stack prod et pipeline de déploiement sont **déjà livrés** et n'attendent que leur configuration.
 - **Croissance → sortir le solveur du VPS** en premier (c'est lui qui sature en pic) : soit un 2ᵉ VPS worker, soit basculer **engine + workers vers un PaaS scale-to-load** (Option C partielle) pendant que web+DB restent stables. Hybride assumé.
 - **Échelle (500+ clubs) → PaaS complet (C) ou K8s (D)** si la charge et l'équipe le justifient. **Ne pas** commencer par là : c'est du temps d'ingénierie volé au produit avant d'en avoir le besoin.
 
@@ -94,7 +94,7 @@ Le risque produit #1 n'est pas le CPU, c'est **la perte de données** (aujourd'h
 - **Backups testés** : `app:db:restore-check` livré (2026-07-18) — restaure le dernier dump dans une base jetable et le prouve, cf. `docs/ops/backup-restore.md`. Reste à **mesurer le RTO** en conditions réelles sur l'infra retenue (temps de reconstruction depuis un backup nu) : la saisonnalité rend la HA prématurée mais le RTO critique — une panne d'un jour en février ne se voit pas, la même en septembre tue la saison.
 - **Secrets** : clés JWT/Mercure/DB hors repo (déjà tracké par l'audit A15) → gestionnaire de secrets du provider ou variables d'env chiffrées.
 - **Observabilité** : Sentry + health-checks + alerting **livrés côté code** (2026-07-18, cf. `docs/ops/backup-restore.md` §5) — reste à poser les DSN et activer à la mise en prod. La console superadmin les *affiche*, ne les remplace pas — cf. `console-superadmin.md`.
-- **CI/CD de déploiement** : build image → push registry → deploy (aujourd'hui `build-docker` en CI ; il manque le *deploy*).
+- **CI/CD de déploiement** : **livré** (2026-07-26, `docs/ops/deploy.md`) — tag `v*` ou `make deploy` → build/push des 6 images prod sur ghcr.io → job SSH **dormant tant que `DEPLOY_ENABLED≠true`** (donc mergeable avant même qu'une VM existe) → dump pré-migration obligatoire, migrate via la nouvelle image avant bascule, sondes, pin `VERSION` en dernier. Rollback = redéployer le tag précédent. Ce qui reste dépend de l'hébergeur choisi : la VM, ses secrets, et le premier `DEPLOY_ENABLED=true`.
 - **Coûts trafic/SSE** : Mercure = connexions longues ; vérifier que l'offre ne facture pas au vilain (concurrence de connexions).
 
 ## 7. Ce que ce fichier n'engage pas

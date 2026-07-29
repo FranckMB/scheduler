@@ -3,6 +3,9 @@
 > **But de ce document** : permettre de relancer une session de zéro sans rien re-cadrer.
 > Tout ce qui suit est **décidé** (fondateur, 2026-07-16) — ce ne sont pas des pistes.
 > Ce qui reste ouvert est marqué **À TRANCHER**.
+> **Revu le 2026-07-29** : le §1 reste **entièrement valide** (vérifié dans le code — voir
+> l'encadré), mais son vocabulaire a été réaligné sur ADR-0002 lot C4, et les dettes croisées
+> déjà soldées ont été retirées de la liste en fin de fichier.
 
 ## D'où on vient
 
@@ -11,8 +14,11 @@
   d'autre. Valider = pointer + **supprimer** les sœurs ; rouvrir = **dépointer**. Aucun
   pointage automatique. Le legacy (`baselineScheduleId`, `socleValidatedAt`,
   `planningName`, statuts `VALIDATED`/`ARCHIVED`, `SetBaselineController`) est mort.
-- **PR-1 « périmètre engagé »** (branche `feat/engaged-team-guard`) : une équipe qui joue
-  en compétition ne peut être ni **supprimée** ni changer de **`level`**. Voir
+- **Périmètre engagé — P2-7a, livré** (PR #239, mergée ; l'ancienne branche
+  `feat/engaged-team-guard` n'existe plus) : une équipe qui joue en compétition ne peut être ni
+  **supprimée** ni changer de **`level`**. La garde mord sur **≥1 match quel qu'en soit le
+  statut** — l'import FBI crée tout en `UNPLACED`, donc filtrer sur `PLACED` l'aurait rendue
+  inerte au moment précis où elle doit mordre. Voir
   [`module-matchs.md`](../courantes/module-matchs.md).
 
 ## La réalité du terrain (fondateur — à lire avant tout)
@@ -44,9 +50,21 @@ V2 n'est pas pointée) → V1 pointée ET V2 COMPLETED coexistent → valider V2
 supprime V1. Les gardes existent sur `/generate` et `/regenerate` de la version **pointée**,
 mais **pas sur la création**. Les portes sont fermées, le mur est ouvert.
 
-**À faire** : `ScheduleStateProcessor::processPost` refuse de créer une version de saison
-(`calendarEntryId === null`) tant que le plan SEASON en pointe une. Message : « rouvrez le
-planning avant d'en préparer un autre ».
+> **Toujours vrai au 2026-07-29** (re-vérifié) : `ScheduleStateProcessor::processPost` ne porte
+> aucune garde de ce type. `SocleGuard` n'expose que `assertSeasonPlanChosen`, qui exige
+> exactement **l'inverse** (un plan de saison pointé) pour créer un **overlay** ou un match.
+> Rien ne refuse une **seconde version de saison**.
+
+**À faire** : `ScheduleStateProcessor::processPost` refuse de créer une version **sous le plan
+SEASON** tant que ce plan en pointe une. Message : « rouvrez le planning avant d'en préparer un
+autre ».
+
+⚠ **Vocabulaire** — le cadrage d'origine disait « une version de saison (`calendarEntryId ===
+null`) ». Depuis **ADR-0002 lot C4**, une version s'attache par **`schedulePlanId`** et le socle
+se reconnaît au **type du plan** (`SchedulePlanType::SEASON`), pas à un `calendarEntryId` nul —
+`Schedule.calendarEntryId` n'est plus le discriminant. La garde se pose donc dans la branche
+`SchedulePlanType::SEASON === $plan['type']` (et sur le défaut `$planId === null`, qui résout
+vers le plan de saison via `ensureSeasonPlanId`).
 
 **Effet** : « la seule manière de modifier le plan est Rouvrir » devient vrai **par
 construction**. La garde `overlays_exist` de `ValidateScheduleController` ne sert alors plus
@@ -121,7 +139,7 @@ Les dettes croisées pendant cette session y sont des lignes à part entière :
 | **P2-8** | Le front re-dérive 3 règles de refus du serveur (chaque miroir dérive) |
 | **P3-10** | Libellés de versions : le front ignore `Schedule.versionNumber`, stable côté serveur |
 | **P3-11** | Radar : aucun état de chargement |
-| **P3-12** | Doc ops : tunnel Cloudflare pour les démos |
+| ~~**P3-12**~~ | ~~Doc ops : tunnel Cloudflare pour les démos~~ — **livré le 2026-07-17** (PR #242, [`demo-tunnel-cloudflare.md`](../../docs/technique/demo-tunnel-cloudflare.md)) |
 | **DOC-1** | Divergence doc↔code : le module matchs est-il découplé du socle ? **À trancher** |
 | **DOC-2** | Un match déposé à la fédération peut perdre sa salle sans avertissement (suppression de gymnase / restore). **À trancher** |
 | **DOC-3** | `PUT /api/teams` : `level` absent est indiscernable de `level` effacé → 409 nommant un champ non envoyé. **À trancher** |
