@@ -173,14 +173,16 @@ final class ScheduleConstraintBuilder
      * schedule-input cache (overlays are rare; the base key stays clean).
      *
      * - closure (fermeture): ALL permanent constraints kept by default (minus those
-     *   explicitly disabled) + dated ; each closed venue is expanded into per-team
-     *   FACILITY HARD `forbiddenVenueId` constraints — the engine understands
-     *   `forbiddenVenueId` (→ forbidden_assignments) but NOT `config.type=venue_closed`.
-     * - holiday (reprise): same expansion applies when a dated venue closure is present;
-     *   the engine still only consumes `forbiddenVenueId`, so the dated cockpit entry is
-     *   rewritten the same way before solve.
+     *   explicitly disabled) + dated.
      * - holiday (reprise): permanent constraints inherited with a SMART default that
      *   follows the team selection (inheritedPermanents, reprise predicate) + dated.
+     *
+     * A dated `config.type=venue_closed` entry produces NO constraint at all: since
+     * P2-5 5b the closed venue simply LOSES its training slots on the weekdays it is
+     * actually closed (VenueClosureDays, incident ∩ window). No slot ⇒ no variable ⇒
+     * the solver cannot place there that day, and stays free the other days. The old
+     * per-team `forbiddenVenueId` expansion is GONE — the engine's forbidden_assignments
+     * is day-blind, so it closed the venue for the WHOLE week.
      *
      * In both, a permanent/dated TEAM-scoped constraint whose team was deactivated for
      * the period is dropped (its team is absent from the payload — no ghost teamId).

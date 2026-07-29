@@ -1,12 +1,15 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-> **État courant (2026-07-25)** : SA0, SA1, la console read-only SA2, le socle
+Last verified @ 2026-07-29
+
+> **État courant** : SA0, SA1, la console read-only SA2, le socle
 > d'historisation SA3-A, la supervision SA3-B, la planification fiable SA3-C et
-> les relances d'imports SA3-D sont livrés — **plus SA2-stats (usage produit),
-> SA4 v1 (catalogue d'actions support), l'alerting santé + data-freshness (2026-07-18),
-> et la console en 6 onglets avec monitoring conteneurs/dépendances externes + 3 journaux
-> read-only (audit / échecs async / erreurs système) + heartbeats cron & pdf-worker
-> (2026-07-25)**. Le redémarrage de conteneur depuis l'UI a été étudié puis **retiré**
+> les relances d'imports SA3-D sont livrés — **plus SA2-stats (usage produit, §SA2 API),
+> SA4 v1 (catalogue d'actions support, §Actions de support), l'alerting santé +
+> data-freshness (2026-07-18, §Fraîcheur des données et alerting), et la console en
+> onglets avec monitoring conteneurs/dépendances externes + les journaux read-only
+> audit / échecs async / erreurs système (2026-07-25, §Journaux read-only) + heartbeats
+> cron & pdf-worker**. Le redémarrage de conteneur depuis l'UI a été étudié puis **retiré**
 > (socle `docker.sock` non transposable en prod — voir console-superadmin.md). Les actions
 > cross-tenant restent dans [`../evolution/console-superadmin.md`](../evolution/console-superadmin.md).
 
@@ -76,7 +79,12 @@ réutilisent ni le firewall ni le JWT club :
 
 - `GET /api/admin/overview` retourne le nombre de clubs opérationnels, actifs à 7/30
   jours, nouveaux sur 7 jours et désabonnés, ainsi que les métriques solveur des 30
-  derniers jours (volumes, issues, taux `INFEASIBLE`, p50/p95 et série journalière) ;
+  derniers jours (volumes, issues, taux `INFEASIBLE`, p50/p95 et série journalière).
+  Il porte **aussi** un bloc `usage` (**SA2-stats**, adoption produit du parc) :
+  `plansByType` (plans par type, dont validés), `timeToFirstValidation` (délai jusqu'à
+  la première validation, par périmètre), `solverByPlanType` (volumes et p50/p95 par
+  type de plan) et `clubSizes` (répartition par tranche de taille, avec la médiane de
+  gymnases) ;
 - `GET /api/admin/clubs?page=1&limit=25&query=...` recherche sur nom, slug ou code FFBB
   et retourne une liste paginée avec offre/compteur, dates d'activité, saison courante,
   volumétrie active de la saison et indicateurs solveur sur 30 jours. `limit` est borné
@@ -124,12 +132,14 @@ le statut, les horodatages, la durée et le code de sortie. Elle ne stocke ni so
 console ni texte d'exception afin de ne pas transformer la télémétrie en journal de
 données métier.
 
-`app:jobs:run <clé>` est l'unique wrapper opérationnel. Son catalogue fermé contient les
-huit tâches déjà exécutées chaque heure par `cron-runner` : rappels de périodes et de
-transition, réconciliation des générations bloquées, purges des comptes non vérifiés,
-clubs effacés, comptes inactifs, anciennes saisons et audit. Un verrou advisory
-PostgreSQL empêche le chevauchement d'un même job ; une tentative `running` abandonnée
-est marquée `interrupted` au prochain démarrage acquis.
+`app:jobs:run <clé>` est l'unique wrapper opérationnel. À sa livraison, SA3-A a repris
+telles quelles les tâches que `cron-runner` exécutait déjà chaque heure : rappels de
+périodes et de transition, réconciliation des générations bloquées, purges des comptes
+non vérifiés, clubs effacés, comptes inactifs, anciennes saisons et audit. Le catalogue
+s'est étoffé depuis (alertes santé & fraîcheur, sauvegarde base, digest des doléances
+coach, imports calendaires) — **`AdminJobCatalog` fait foi**, il est la seule source de
+la liste. Un verrou advisory PostgreSQL empêche le chevauchement d'un même job ; une
+tentative `running` abandonnée est marquée `interrupted` au prochain démarrage acquis.
 
 SA3-A ne changeait pas la cadence existante ; SA3-C la remplace par les horaires décrits
 ci-dessous. SA3-D ajoute les deux relances de référence décrites plus bas.
@@ -142,7 +152,7 @@ la clé, le libellé, la commande, la cadence déclarée et, lorsqu'elle existe,
 exécution avec son statut, son origine, ses dates, sa durée et son code de sortie. Un JWT
 club ne peut pas accéder à cette route.
 
-Le dashboard React `/admin` affiche les dix jobs du catalogue dans un panneau indépendant. Un job sans
+Le dashboard React `/admin` affiche **tous les jobs du catalogue** dans un panneau indépendant. Un job sans
 historique est explicitement marqué « Jamais exécuté » ; une indisponibilité de ce flux ne
 masque ni la santé technique, ni les indicateurs, ni les comptes clubs. Le flux est
 rafraîchi toutes les 60 secondes et par le bouton d'actualisation global.
@@ -153,6 +163,10 @@ rafraîchi toutes les 60 secondes et par le bouton d'actualisation global.
 fermée calculée en `Europe/Paris` :
 
 - réconciliation des générations bloquées toutes les 10 minutes (`--older-than 60`) ;
+- **alertes santé & fraîcheur toutes les 10 minutes** (`app:health:alert`, voir plus bas) ;
+- **sauvegarde de la base chaque jour à 01:00** (`app:db:backup`) — le tick est bon marché,
+  la commande **skippe s'il n'y a eu aucune activité** : la cadence réelle des dumps suit
+  l'activité des clubs, pas le calendrier ;
 - digest des doléances coach chaque jour à 07:00 — n'envoie que si une réponse est postérieure
   au dernier digest (silence total = aucun email), et pousse le récap final le lendemain de la
   deadline ;
@@ -185,3 +199,77 @@ passages planifiés ; une exécution déjà active répond 409. Le dashboard Rea
 confirmation, affiche l'état en cours puis rafraîchit l'historique. Les rappels,
 réconciliations et purges ne sont pas déclenchables depuis cette route ; en particulier
 `app:purge-orphans` reste volontairement manuel.
+
+## Fraîcheur des données et alerting (2026-07-18)
+
+`GET /api/admin/freshness` (`AdminDataFreshnessService::referentials`) répond à « mes
+données de référence sont-elles à jour ? ». Chaque ligne porte une clé, un libellé, la
+date de dernière mise à jour, le seuil de péremption en jours et un booléen `stale` :
+les deux référentiels calendaires (`school-holidays`, `public-holidays`, rapprochés de
+leur job d'import et de leur table) et la **couverture de sauvegarde** (`db-backup`,
+via `BackupCoverage` : le dernier dump du répertoire de backups confronté à la dernière
+activité réelle — un parc sans activité n'est pas « en retard », un parc actif sans dump
+l'est).
+
+Le job `health-alerts` (`app:health:alert`, toutes les 10 minutes) croise la santé
+technique, ces lignes de fraîcheur et les compteurs solveur sur 24 h via
+`HealthAlertEvaluator`, puis notifie. Les règles sont volontairement étroites pour ne
+pas fabriquer de faux rouges :
+
+- un service n'alerte que sur `down` — `unknown` est un indéterminé (Mercure non
+  configuré, heartbeat worker expiré pendant un déploiement), pas un incident ;
+- **exception Messenger** : sa file `unknown` alerte, elle — une file illisible masque
+  des générations qui s'empilent, c'est le trou de silence du composant central. Le
+  seuil de backlog est **lu du payload santé** (`backlogWarningThreshold`), pour que le
+  dashboard et l'alerte ne puissent pas diverger ;
+- taux `INFEASIBLE` : au-delà de 50 % sur 24 h, avec un **plancher de volume** — jamais
+  d'alerte sur deux générations.
+
+`AdminAlertStateStore` mémorise l'état (`preview` / `commit`) : on notifie sur
+**transition**, pas sur état stable — sinon un incident non résolu enverrait un mail
+toutes les 10 minutes.
+
+## Actions de support SA4 v1
+
+`GET /api/admin/actions` publie un **catalogue fermé** (`AdminActionCatalog`) : clé,
+libellé, description et un drapeau `dangerous` qui pilote la confirmation côté UI.
+Les trois actions livrées sont `reset-generation-quota` (remise à zéro du compteur de
+générations de la saison, non destructive), `reset-current-season` (vide la saison
+courante — le club repart au wizard, la saison et le club survivent) et
+`purge-old-seasons` (supprime les saisons au-delà de la rétention).
+
+`POST /api/admin/clubs/{clubId}/actions/{key}` exécute l'action. La route **n'accepte
+jamais un nom de commande brut** : elle prend la commande et ses arguments **fixes** du
+catalogue, et n'ajoute qu'un seul argument runtime, le club — lui-même validé. L'ordre
+des gardes est délibéré : le contexte d'audit (club visé + action visée) est posé
+**avant toute garde**, pour qu'une tentative *refusée* soit tracée ; puis CSRF de
+session, puis identité `SuperAdmin`, puis existence de l'action, puis forme UUID du
+club, puis existence du club. Aucun `requirements` de route sur `clubId` : il ferait un
+404 **au routeur, avant le firewall**, ce qui apprendrait la forme attendue à un probe
+non authentifié sans rien tracer.
+
+L'historique vit sous la clé `action:{key}`, jamais mélangé au dernier passage du
+panneau jobs, et le verrou advisory est **partagé avec le job planifié** quand la
+commande en a un (`purge-seasons`) : geste manuel et cron se sérialisent au lieu de se
+masquer.
+
+## Journaux read-only (2026-07-25)
+
+Trois lectures paginées complètent la console, toutes protégées et auditées comme le
+reste de `/api/admin/**` :
+
+- `GET /api/admin/audit-log` — le journal d'audit SA0, filtrable par `actor` (UUID
+  validé), `route` et `since` ;
+- `GET /api/admin/messenger/failed` — les messages de la failure queue ; un message dont
+  la classe n'existe plus dans le code est rendu « (classe inconnue) » plutôt que de
+  faire tomber la lecture ;
+- `GET /api/admin/system-errors` — les erreurs système, filtrables par `since` (date ISO).
+
+Toutes trois pratiquent la même pagination (`page`/`limit`, limite par défaut et plafond
+côté serveur) et rendent **400** sur un paramètre malformé plutôt que de le laisser
+atteindre PostgreSQL. `GET /api/admin/health` a par ailleurs été étendu de façon
+**append-only** par `containers[]` et `externalDependencies[]`.
+
+⚠ Ces trois routes sont des **contrôleurs purs** : elles ne sont pas déclarées dans
+`CustomRoutesOpenApiFactory`, donc **absentes de l'export OpenAPI** — même gap que les
+autres routes `#[Route]` custom, suivi dans `specs/evolution/roadmap.md` §9.

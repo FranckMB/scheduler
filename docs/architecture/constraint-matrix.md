@@ -8,10 +8,11 @@
 > Origine : ENG-10/11/12/13 — le motif « contrainte saisie ≠ contrainte honorée » renaissait à
 > chaque nouvelle option UI non câblée côté solveur.
 
-Statuts : **dure** = jamais violée (sur-contraint → non placé + diagnostic, jamais une violation
-silencieuse) · **soft** = orientée par l'objectif, ne bloque jamais la faisabilité · **warning** =
-diagnostic `constraint_not_honored` explicite · **non proposé** = absent de l'UI (verrouillé par le
-test Vitest).
+Statuts : **dure** = jamais violée *par le solveur* (sur-contraint → non placé + diagnostic, jamais une
+violation silencieuse — mais lire la section « Le verrou HARD est SOUVERAIN » plus bas : face à un
+**verrou**, « dure » ne tient pas) · **soft** = orientée par l'objectif, ne bloque jamais la
+faisabilité · **warning** = diagnostic `constraint_not_honored` explicite · **non proposé** = absent
+de l'UI (verrouillé par le test Vitest).
 
 ## Offre du wizard (après P0.1)
 
@@ -56,6 +57,39 @@ test Vitest).
 > deux séances consécutives d'une même équipe) — activée pour toutes les équipes, ne bloque jamais
 > (soft). `SCORE_FORMULA_VERSION` **bumpé V6→V7** (nouveau poids `spacing`).
 
+## Le verrou HARD est SOUVERAIN — et depuis P2-9 il le dit (2026-07-28)
+
+Un créneau **verrouillé** (onglet « Réserver », verrou manuel → `slotTemplates` `lockLevel=HARD`) est
+**pré-placé HORS du solveur** : `model.py` ne crée jamais la variable `x[équipe, gymnase, jour, heure]`
+correspondante. Or **toute** contrainte de cette matrice agit en forçant cette variable à 0 — sans
+variable, il n'y a rien à forcer. La contrainte n'est pas *battue*, elle est **INATTEIGNABLE**.
+
+Mesuré avant correctif, même payload, seule différence le verrou : sans verrou, SM1 est placée mardi
+(coach indisponible le samedi, respecté) ; avec verrou, SM1 est placée **samedi**, `diagnostics` vide,
+statut `completed`. Le produit affirmait avoir respecté une contrainte qu'il avait laissé tomber.
+
+- **Ce qui n'a PAS changé** : le verrou reste souverain (décision fondateur **ALIGN-07**, non
+  rouverte). Il prime sur tout, y compris une contrainte « dure » de la matrice ci-dessus.
+- **Ce qui a changé** : le silence. `diagnose_locked_slot_violations`
+  (`engine/app/solver/constraints.py`, appelée depuis `main.py`) croise les verrous avec les
+  contraintes **SAISIES par le gestionnaire** — indisponibilité coach, fenêtres horaires, règles de
+  jours (unies par équipe), gymnase interdit — et émet un `constraint_not_honored` **INFO** qui nomme
+  la contrainte, l'équipe, le coach, le gymnase, le jour et l'heure. INFO et jamais ERROR : le
+  gestionnaire a le droit d'épingler, il a le droit de savoir ce que son épingle a écrasé. La
+  détection **réplique exactement** les règles d'application (intervalle coach comparé au début de
+  créneau, min/max start des fenêtres, paire équipe+gymnase des interdits) — toute dérive entre les
+  deux ferait mentir le diagnostic sur ce que le solveur a réellement fait.
+- **Périmètre volontaire** : uniquement le SAISI. Les règles **structurelles** qu'un verrou contourne
+  aussi (un coach dans deux gymnases à la même heure) décrivent une impossibilité physique, pas une
+  préférence : elles bloqueront la génération au lieu d'avertir, dans un lot dédié.
+- **Second effet ALIGN-07** : un verrou HARD prend le **créneau entier**, divisible ou non
+  (`blocked_venue_slots`, `model.py`) — partager un créneau `capacity>1` se déclare en **co-épinglant**
+  les N équipes. Détail : `backend/docs/constraint-coverage.md`.
+
+Verrous de non-régression : `engine/tests/semantic/test_hard_lock_announces_violations.py` (avec un
+TÉMOIN explicite — sans lui, constater que SM1 joue le samedi n'accuserait pas le verrou) et
+`engine/tests/semantic/test_hard_lock_divisible_slot.py`.
+
 ## Verrous
 
 | Verrou | Fichier |
@@ -66,9 +100,10 @@ test Vitest).
 | Expansion CLUB→équipes | `backend/tests/Unit/Service/ScheduleConstraintBuilderTest.php` |
 
 Contrat backend↔engine **inchangé** (config = dict opaque, warnings via `diagnostics` existants) —
-pas de bump `CONTRACT_VERSION`. `SCORE_FORMULA_VERSION` **bumpé V5→V6** : nouveau poids
-`avoided_venue = −60` (vrai malus sur le créneau du gymnase évité — un bonus-complément sur les
-autres gymnases biaisait l'arbitrage inter-équipes). Sémantiques d'agrégation : indispos coach =
+pas de bump `CONTRACT_VERSION`. **`SCORE_FORMULA_VERSION` actuel : V7** (`engine/app/solver/objective.py`)
+— V5→V6 : nouveau poids `avoided_venue = −60` (vrai malus sur le créneau du gymnase évité — un
+bonus-complément sur les autres gymnases biaisait l'arbitrage inter-équipes) ; V6→V7 : poids
+`spacing` (ALIGN-06). Sémantiques d'agrégation : indispos coach =
 **union des blacklists ∩ des whitelists** ; plusieurs « éviter tel jour » soft = **union par équipe**
 (deux compléments indépendants s'annulaient) ; double règle de gymnase sur une équipe → diagnostic
 INFO (last-wins signalé).

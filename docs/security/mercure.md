@@ -35,6 +35,22 @@ Now (`docker-compose.yml`, service `mercure`):
 Both hold dev placeholders. **Prod: replace `MERCURE_JWT_SECRET` with a random
 32+ byte secret** and keep it in sync between the hub (compose) and the backend
 publisher (`backend/config/packages/mercure.yaml` reads `%env(MERCURE_JWT_SECRET)%`).
+Where the secret is generated and stored on the VM: `docs/ops/deploy.md` (§`.env.prod`).
+
+## Prod (`docker-compose.prod.yml`)
+
+The prod stack tightens the same four axes rather than restating them:
+
+- **No published port at all.** The dev hub is bound to `127.0.0.1:${MERCURE_PORT}`;
+  in prod the service declares no `ports:` — browsers reach it only through the
+  frontend edge (`location /.well-known/mercure` in `docker/frontend/nginx.prod.conf`).
+- **Image pinned** to `dunglas/mercure:v0.19` where dev rides `:latest` — a routine
+  `docker compose pull` must never swap the hub version under a running production.
+- **`cors_origins ${PUBLIC_BASE_URL}` — that single origin**, not the dev
+  `localhost:5173 / localhost:8081` allow-list.
+- **Secrets declared `${MERCURE_JWT_SECRET:?}`**: the stack refuses to start if the
+  variable is missing, so a dev placeholder cannot silently ride into prod through
+  an incomplete `.env.prod`.
 
 ## Public URL
 

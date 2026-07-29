@@ -23,9 +23,29 @@
 | **COACH_AVAILABILITY** « indisponible » | `coachId` + `unavailableDays` (+ `fromTime`/`untilTime` optionnels, Lot C) | **HARD** (épinglé) | Lionel indispo vendredi ; indispo mardi à partir de 20:00 |
 | **COACH_AVAILABILITY** « disponible uniquement » | `coachId` + `availableDays` (whitelist) (+ `fromTime`/`untilTime` optionnels) | **HARD** (épinglé) | coach dispo seulement le mardi de 20:00 à 22:00 |
 | **Cible** | `targetTag` si groupe (sinon `scope`/`scopeTargetId`) | — | groupe FEMININE / REGIONAL |
-| **Onglet « Réserver »** | *pas une contrainte* → `ScheduleSlotTemplate` lock **HARD** — verrouille le **créneau entier**, divisible ou non (ALIGN-07) ; partager = co-épingler les N équipes (picker borné à `capacity`) | — | épingle 1 séance ; SM1 seul, ou SM1+SM2 co-épinglés |
+| **Onglet « Réserver »** | *pas une contrainte* → entité **`Reservation`** persistée serveur (`POST`/`DELETE /api/reservations`), stratifiée par `calendarEntryId` (NULL = plan de base, sinon overlay de période — même stratification que les contraintes). Le backend la sérialise en verrou **HARD** dans les `slotTemplates` du payload moteur (`ScheduleConstraintBuilder`). Verrouille le **créneau entier**, divisible ou non (ALIGN-07) ; partager = co-épingler les N équipes (picker borné à `capacity`) | — | épingle 1 séance ; SM1 seul, ou SM1+SM2 co-épinglés |
 | **Écran Gymnases** (hors onglet contraintes) | *aucune contrainte* — `canSplit` devient `trainingSlots[].capacity` côté backend (`canSplit ? capacity : 1`) | — | ADN divisible |
 | **Classement équipes** (hors onglet) | `PRIORITY_TIER` **sans** `orToolsWeight` (poids fixes codés en dur côté engine) | — | rangs S/A/B/C/D |
+
+> ⚠️ `ScheduleSlotTemplate` ne porte **plus** les réservations : il ne stocke que les
+> **résultats** du solveur, liés à un `Schedule`. L'ancien flux « store client → template au
+> lancement » a été supprimé (B2).
+
+## 1bis. Ce que le wizard émet en **mode période** (#8)
+
+En mode période, le wizard écrit sur trois canaux **qui ne sont pas des contraintes** mais qui
+modifient la grille et le périmètre servis au solveur. Les ignorer donne une lecture fausse du
+tableau d'alignement ci-dessous : une contrainte peut être parfaitement alignée sur les trois
+couches et rester sans effet parce que son gymnase est désactivé pour la période.
+
+| Canal | Ce que le front écrit | Effet |
+|---|---|---|
+| **Grille de la période** | `VenueTrainingSlot` propres au plan de période (création / édition / suppression) | La période **possède** sa grille — copie du modèle de saison prise à la naissance du plan ; l'overlay ne s'unit **jamais** aux créneaux de la saison |
+| **`VenuePeriodOverride`** | `mode: "DISABLED"` (état persisté, table *sparse* — pas de ligne = hériter) + deux **actions** atomiques `reset-grid` (« reprendre la grille ») et `clear-grid` (« vider ») | `DISABLED` retire le gymnase de la période **sans toucher sa grille** ; les deux actions sont destructives et emportent les réservations du gymnase en cascade |
+| **`ConstraintPeriodOverride`** | Bascule d'une contrainte **permanente héritée**, uniquement quand elle **dévie du défaut intelligent** | Active/désactive la contrainte **pour la fenêtre** ; le plan de base et le `Constraint.isActive` ne sont jamais modifiés |
+| **`TeamPeriodOverride`** | Activation / désactivation d'une équipe pour la fenêtre | Une contrainte TEAM d'une équipe désactivée est **non applicable** et retirée du payload côté serveur |
+
+Détail des écrans et des arbitrages : `specs/courantes/frontend-wizard.md`.
 
 ## 2. Table d'alignement 3 couches
 

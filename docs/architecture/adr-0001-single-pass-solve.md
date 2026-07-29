@@ -55,6 +55,14 @@ OPTIMAL **or FEASIBLE** phase-1 outcomes: after a phase-1 timeout the locked
 bound is the best-FOUND placement value, not a proven optimum — chaining can
 then only improve on that incumbent, never degrade it.
 
+The **search effort** is adaptive alongside the budget: `_adaptive_workers` mirrors
+the timeout tiers — 1 worker below a complexity of 200 (deterministic, the golden
+fixtures depend on it), 8 above. The single worker *finds* the optimum quickly on
+dense soft-preference problems but cannot *prove* it; the portfolio closes the
+proof. Accepted consequence: above the threshold the **assignment** is no longer
+deterministic — the objective **value** is. This changes neither the feasibility
+guarantee nor the no-relaxation decision.
+
 This does **not** contradict the decision of this ADR — and the ADR's title must
 be read accordingly:
 

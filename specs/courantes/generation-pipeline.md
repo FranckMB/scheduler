@@ -1,5 +1,7 @@
 # Génération d'un planning — conduite normalisée (bout en bout)
 
+Last verified @ 2026-07-29
+
 > Vérité courante. Décrit ce qui **doit** se passer, zone par zone, quand un
 > gestionnaire lance une génération : ce que fait le frontend, ce que fait le
 > backend, ce que répond le moteur, comment le résultat est importé puis affiché.
@@ -11,8 +13,8 @@
 ```
 Frontend (wizard/planning)                Backend (Symfony)                 Engine (FastAPI/CP-SAT)
 ──────────────────────────                ─────────────────                ──────────────────────
+POST /api/reservations (×N)  ───────────▶ réservations (étape Créneaux, EN AMONT du lancement)
 POST /api/schedules (DRAFT)  ───────────▶ crée Schedule (club+season stampés)
-POST /api/slot_templates (×N) ──────────▶ enregistre les réservations
 POST /api/schedules/{id}/generate ──────▶ GenerateScheduleController
                                           └▶ GenerateScheduleMessage (Messenger/Redis)
                                              └▶ GenerateScheduleHandler
@@ -20,9 +22,10 @@ POST /api/schedules/{id}/generate ──────▶ GenerateScheduleControll
                                                 ├─ POST http://engine:8000/generate ─▶ solveur CP-SAT
                                                 │                                     ◀─ { status, slots[], diagnostics }
                                                 ├─ importe les slots placés
-                                                └─ Mercure publish  ────────────┐
-GET /api/schedules/{id} (poll PENDING/GENERATING) ◀───── status COMPLETED/FAILED│
-Planning : GET /api/schedules (collection) ◀────────────────────────────────────┘
+                                                └─ Mercure publish (canal ouvert, AUCUN abonné
+                                                   frontend à ce jour — voir §2)
+GET /api/schedules/{id} (poll PENDING/GENERATING) ◀───── status COMPLETED/FAILED
+Planning : GET /api/schedules (collection)
 └▶ atterrissage sur le plan de saison → affichage des créneaux
 ```
 
@@ -32,12 +35,22 @@ via `POST /generate` ; backend → frontend via Mercure SSE `club:{clubId}:sched
 
 ## 2. Frontend — ce qu'il fait
 
-- **Lancement** (`features/wizard/queries.ts` → `useLaunchGeneration`) : `createSchedule(name)`
-  puis un `POST /api/slot_templates` par réservation, puis `generateSchedule(id)`.
-  Invalide `["schedules"]` en `onSuccess`.
+- **Lancement** (`features/wizard/queries.ts` → `useLaunchGeneration`) : **deux appels, pas
+  plus** — `createSchedule(name, schedulePlanId)` puis `generateSchedule(scheduleId)`. En mode
+  période, la version existante du plan est **réutilisée** (`existingScheduleId`) au lieu d'en
+  créer une nouvelle. Invalide `["schedules"]` en `onSuccess`.
+  ⚠ **Le lancement n'écrit AUCUNE donnée de structure.** Les réservations ont été posées bien
+  plus tôt, à l'étape Créneaux du wizard (`POST /api/reservations`) ; les `ScheduleSlotTemplate`
+  sont **produits par l'import du résultat**, côté serveur. Il n'existe pas de route
+  `/api/slot_templates` — la ressource s'appelle `/api/schedule_slot_templates`.
 - **Attente** (`features/wizard/steps/GenerateStep.tsx` + `useScheduleStatus`) : poll
   `GET /api/schedules/{id}` tant que le statut ∈ `{PENDING, GENERATING}`. Garde-fou
   client `TIMEOUT_MS = 5 min` → sinon écran d'échec + réessai.
+- **Aucun abonné Mercure côté frontend.** Le backend publie bien sur
+  `club:{clubId}:schedule:{scheduleId}`, mais **personne ne consomme le flux** : l'UI **poll**
+  (`useScheduleStatus` pendant la génération, `useSchedules` toutes les 2,5 s tant qu'une version
+  est en vol). Le canal reste ouvert pour un futur abonnement — ne pas diagnostiquer une
+  génération « qui ne s'affiche pas » en cherchant un bug SSE.
 - **Affichage** : dès qu'un schedule est `COMPLETED`, `GenerateStep` bascule sur
   `<PlanningPage embedded />`. La page choisit le plan à ouvrir via
   `pickLandingScheduleId` (`features/planning/PlanningPage.tsx`) : **jamais un overlay
@@ -61,6 +74,16 @@ via `POST /generate` ; backend → frontend via Mercure SSE `club:{clubId}:sched
   gardé par `ContractSchemaTest`) : `status`, `slots[]` (placements), `diagnostics[]`.
 - INFEASIBLE → `status="failed"` + diagnostics. COMPLETED possible **avec** des
   warnings (un plan sous-optimal reste un plan).
+- **Un verrou HARD ne bâillonne plus les contraintes (P2-9 volet 1, 2026-07-28).** Un créneau
+  verrouillé HARD est **pré-placé hors du solveur** : la variable de décision correspondante
+  n'est jamais créée, donc aucune contrainte ne peut agir dessus — elle n'est pas *battue*, elle
+  est **inatteignable**. Le verrou reste **souverain** (décision fondateur, ALIGN-07), mais il
+  n'est plus **silencieux** : `diagnose_locked_slot_violations` croise les verrous avec les
+  contraintes **saisies par le gestionnaire** (indispo coach, fenêtres horaires et jours,
+  gymnase interdit) et émet un diagnostic **`constraint_not_honored`** (sévérité INFO) qui nomme
+  l'équipe, le coach, le gymnase et l'heure. Périmètre volontaire : uniquement le saisi — les
+  impossibilités **physiques** qu'un verrou contourne aussi (un coach dans deux gymnases à la
+  même heure) bloqueront la génération dans un lot dédié, elles ne relèvent pas de l'avertissement.
 
 ## 5. Invariants de contrat — les erreurs *silencieuses* à surveiller
 
@@ -100,6 +123,7 @@ le planning s'ouvre sur rien après une génération réussie.
 | Génération qui n'affiche pas le plan (bout en bout) | `frontend/tests/e2e/journey.spec.ts` (wizard → génération réelle → planning affiché → validé → cockpit) |
 | Contrat schémas engine⇄backend | `backend` `CrossStack/ContractSchemaTest` |
 | Solveur répond et produit un plan | `backend/scripts/smoke-solver.sh` → COMPLETED |
+| Verrou HARD qui fait taire une contrainte saisie | `engine/tests/semantic/test_hard_lock_announces_violations.py` (+ `test_constraint_matrix.py`) — un `constraint_not_honored` est attendu |
 
 **Principe** : un test de pipeline qui n'assert que le **statut** (`COMPLETED`) est
 aveugle aux erreurs de contrat de *données*. Toujours doubler d'un test qui assert le

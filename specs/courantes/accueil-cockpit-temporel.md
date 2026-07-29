@@ -1,5 +1,7 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
+Last verified @ 2026-07-29
+
 > **Statut** : **approche arrêtée** (décisions tranchées §9) — **référence de `roadmap.md` §2**.
 > **Pas un plan** — pas de tâches, pas d'effort chiffré ; l'exécution se planifiera palier par palier (§8).
 > **Nature** : ce document fixe une **idée claire et maligne d'UX + d'architecture** pour
@@ -107,9 +109,16 @@ contre le socle ; si on le change, ils ne valent plus.
 - **Tant qu'aucun calendrier secondaire n'existe** (typiquement en **début de saison** — les
   contraintes coach arrivent encore le 12 septembre), on **remanie le socle librement**, sans
   friction : **rien ne dépend encore de lui**. Le figer de force serait absurde.
-- **Dès que des secondaires existent**, « Modifier » devient **coûteux** : ça **supprime les N
-  overlays** → **confirmation proportionnée** (« supprime N calendriers secondaires »). Zéro
-  overlay = zéro confirmation ; N overlays = avertissement à la hauteur.
+- **Dès que des secondaires existent**, « Modifier » devient **coûteux** : ça **supprime les
+  calendriers secondaires concernés** → **confirmation proportionnée**, qui les **nomme**. Zéro
+  concerné = zéro confirmation ; sinon avertissement à la hauteur.
+
+> **Portée bornée — ce n'est PAS « tous les secondaires »** (ADR-0002 inv. 14, amendé fondateur
+> 2026-07-24) : seules partent les périodes **entièrement à venir**. Le pivot est la date de
+> **début** — « rien du passé, rien de ce qui est en cours ». Une période déjà commencée
+> **survit** à la réouverture du socle. Sont concernées les périodes qui **portent un plan**,
+> **validé ou non** (une période « Adaptée » mais jamais générée compte). Référence normative :
+> [`planning-lifecycle-validated.md`](planning-lifecycle-validated.md) §6.
 
 > **Le gel est donc DE FACTO, pas une serrure.** On ne verrouille pas la base par un état ; on
 > **arrête d'y toucher parce que ça coûterait les overlays**. En routine (mars, saison lancée),
@@ -121,8 +130,8 @@ contre le socle ; si on le change, ils ne valent plus.
    à partir de maintenant, le modifier supprimera tes calendriers secondaires. Ton socle est-il
    prêt ? » — c'est le **moment de bascule** où la base devient **porteuse**. On le **rend visible**
    (sinon la bascule serait silencieuse).
-2. **À la modification du socle quand des secondaires existent** → ⚠ « Ceci **supprime** les N
-   calendriers secondaires (à refaire). »
+2. **À la modification du socle quand des secondaires à venir existent** → ⚠ « Ceci **supprime**
+   ces calendriers secondaires (à refaire) », la liste à l'appui. Ceux déjà commencés n'y sont pas.
 
 Le premier **annonce** le gel au bon moment ; le second **protège** contre la perte. C'est tout —
 pas d'état « verrouillé » à gérer, juste ces deux confirmations.
@@ -136,9 +145,13 @@ C'est cohérent avec la vraie vie du club : la semaine type se **stabilise** en 
 fermetures, événements) qui bougent ensuite — plus la base.
 
 **Ça réutilise le cycle de vie existant** (`planning-lifecycle-validated.md`) : **« Modifier » =
-`reopen`**. La seule chose à ajouter : la réouverture **liste et supprime les overlays
-dépendants** — **silencieuse s'il n'y en a pas**, avec confirmation sévère sinon. Le work-loop
-« générer → ajuster → régénérer » vit surtout **avant** que des secondaires existent.
+`reopen`**. La seule chose à ajouter : la réouverture **liste et supprime les plans de période
+non commencés** — **silencieuse s'il n'y en a pas**, avec confirmation sévère sinon (409
+`overlays_exist` puis rejeu avec `confirmDeleteOverlays: true`). La destruction va **de bout en
+bout** : versions, plan, et tous les réglages ancrés au plan (grille copiée, réservations, modes
+gymnase, overrides d'équipes et de contraintes) — **l'entrée de calendrier survit** et retombe
+« à traiter » au radar. Le work-loop « générer → ajuster → régénérer » vit surtout **avant** que
+des secondaires existent.
 
 ## 2ter. Le socle débloque le cockpit (le plancher d'abord)
 
@@ -233,8 +246,12 @@ Pour éviter 4 tables (`period_templates`, `period_template_slots`, `period_assi
 | Objet | `kind` | Impact planning | Porte un plan secondaire ? |
 |---|---|---|---|
 | **Événement club** | `event` | **Au choix du gestionnaire** : informatif (défaut) **ou** perturbant | Non (mais un événement perturbant peut mener à une adaptation) |
-| **Indisponibilité datée** | `venue_closure` (ou coach) | Oui, sur la fenêtre : la ressource est indispo | Optionnel (déclenche une adaptation) |
-| **Période** | `period` (vacances / coupure / mutualisation) | Oui, remplace la base sur la fenêtre | Oui (son calendrier secondaire) |
+| **Indisponibilité datée** | `period` + `periodType=closure` | Oui, sur la fenêtre : la ressource est indispo | Optionnel (le plan naît du geste « Adapter ») |
+| **Période** | `period` (`periodType` : vacances / coupure / mutualisation) | Oui, la période possède sa propre grille sur la fenêtre | Oui (son calendrier secondaire) |
+
+> **Deux `kind`, pas trois** (`CalendarEntryKind` = `event` \| `period`) : « signaler une
+> indispo » n'est pas un type d'objet, c'est un **raccourci de saisie** vers une `period`
+> `closure` dont la contrainte datée est pré-remplie. Voir §9ter.a.
 
 - **Un événement club** = un post-it daté (tournoi, AG, stage). **Informatif par défaut**
   (n'affecte pas la semaine type). Mais le gestionnaire peut le marquer **perturbant**
@@ -264,8 +281,9 @@ Donc :
 **Ça simplifie la roadmap §8** : la « dérivation fuseau/zone depuis l'adresse (API Géo) » 🔴
 devient une **dérivation triviale depuis le code FFBB** 🟢.
 
-Le clic « signaler un souci » crée une `venue_closure` ; « c'est récurrent / toute une
-période » la promeut en `period` avec un calendrier secondaire.
+Le clic « signaler un souci » crée une `period` `periodType=closure` (avec sa contrainte datée
+pré-remplie) ; c'est ensuite le geste **« Adapter »** qui lui donne un plan, donc un calendrier
+secondaire.
 
 ---
 
@@ -297,8 +315,9 @@ période » la promeut en `period` avec un calendrier secondaire.
   sont visibles, non modifiables.
 - **« Modifier »** → rouvre le **wizard (mode libre)** pour changer le socle. **Libre tant qu'il
   n'y a pas encore de calendrier secondaire** (début de saison) ; sinon **destructeur** — ça
-  supprime les N secondaires → **confirmation proportionnée** (cf. coût progressif §2bis). En
-  routine (saison lancée), on n'y touche plus.
+  supprime les secondaires **encore à venir** (les périodes déjà commencées survivent, §2bis) →
+  **confirmation proportionnée** (cf. coût progressif §2bis). En routine (saison lancée), on n'y
+  touche plus.
 
 **Calendrier** = **la couche des événements / exceptions**, **PAS la semaine type** (elle est la
 base, accessible derrière le bandeau — inutile de la redessiner). Il montre **uniquement ce qui
@@ -326,8 +345,16 @@ a un CTA.** C'est la version généralisée des alertes J-14 de la vision d'orig
   pour un férié public ; « Vacances — … » pour des vacances scolaires). Les **vacances** portent
   en plus un **« Adapter »** directement dans la modale (même action que le radar : crée la période
   de vacances si absente puis ouvre le wizard en mode période ; « Voir le planning » si l'overlay
-  existe déjà) — pas besoin de passer par le radar. **Exception : les vacances d'été** (`ete`) sont
-  hors saison → **info seulement, jamais d'« Adapter »** (comme le radar, qui les exclut).
+  existe déjà) — pas besoin de passer par le radar.
+  - Si la période couvre **plusieurs semaines calendaires**, un **choix des semaines**
+    (`WeekPickerDialog`) s'interpose avant le wizard : chaque semaine cochée devient une entrée
+    **enfant** (`parentEntryId`) avec **son propre plan** (P2-5 E1) ; une seule semaine → wizard
+    direct. Même règle au radar et dans la modale, pour ne pas offrir deux comportements au même
+    geste.
+  - **L'été s'adapte comme les autres vacances** (E2, 2026-07-18) : l'exclusion `ete` a été
+    **levée** (`isAdaptableHoliday` supprimé) et les dates sont **clampées à la saison**. Seul cas
+    restant sans « Adapter » : une fenêtre **entièrement hors** de la saison de travail — la
+    modale l'**explique** au lieu d'afficher un bouton mort.
 - **Date avec entrée(s)** → le popover **liste** ce qui est là ; chaque entrée porte ses actions
   (voir / éditer / supprimer). Une indispo/période porte un **« Adapter → »** qui ouvre
   l'**écran dédié**.
@@ -385,7 +412,7 @@ différents** :
 
 | Étape wizard | En mode période |
 |---|---|
-| Équipes | Roster **hérité** (non ré-éditable), mais **activable/désactivable** pour la période + **séances** surchargeables. **Défaut : Fanion seul** (ramp de reprise), ajustable. |
+| Équipes | Roster **hérité** (non ré-éditable), mais **activable/désactivable** pour la période + **séances** surchargeables (champ 1–7, toggle = 0 séance). **Défaut conscient du type de période** (E3, 2026-07-19) : **reprise** (`holiday`) = **Fanion + importantes** (les 2 premiers rangs, S+A) pré-cochées, avec repli sur le meilleur rang réellement présent si le club n'a ni S ni A — la reprise n'est jamais vide ; **fermeture** (`closure`) = **tout le club actif** (structure verrouillée, les équipes loisir se décochent à la main). |
 | Gymnases | **La période possède SA grille** (#8, 2026-07-24) : les créneaux de saison y sont **copiés** à la naissance du plan, puis modifiables sans jamais toucher au planning principal. Plus rien d'additif — le socle et la période ne sont **jamais** unis. Fermetures datées marquées **« fermé cette période »**. À l'écran, un **sélecteur de gymnase** (une grille à la fois, comme l'éditeur de saison) montre la grille servie à la période, éditable créneau par créneau (clic = poser, clic sur un créneau = modale jour/heure/durée/capacité + suppression confirmée). Par gymnase : un **état** actif/désactivé qui ne touche jamais la grille — désactiver n'a donc aucun coût, réactiver la rend telle quelle — et deux **actions** destructives atomiques, « reprendre la grille du planning principal » et « vider », chacune confirmée en annonçant les réservations emportées. Un gymnase désactivé a sa grille **gelée** dans un `<fieldset disabled>` (inerte souris ET clavier) : la table ne stocke qu'un mode par gymnase, donc vider écraserait l'état désactivé. Sous le capot, réglage épars `VenuePeriodOverride` — pas de ligne = hériter, le défaut. Un épinglage qui ne retombe sur aucun créneau **bloque la génération** en nommant le gymnase et le jour. |
 | Coachs | **Hérités, lecture seule** (lien équipe↔coach préservé) |
 | **Contraintes** | **Active.** Pré-remplie avec **l'exception** (ex. De Barros indispo sur la fenêtre) ; le gestionnaire **ajoute les contraintes propres à la période** (« du coup U13 passe le mercredi ») et **hérite les contraintes permanentes du socle**, chacune **cochable/décochable** pour la fenêtre. DIFF `ConstraintPeriodOverride` épars : une ligne n'existe que pour une **déviation** du défaut (le socle et le `isActive` propre de la contrainte ne sont **jamais** touchés). **Défaut selon le type de période :** <br>• **Fermeture** (closure) → **tout gardé** (on décoche ce qui gêne). <br>• **Reprise** (holiday) → défaut **intelligent qui suit les équipes** : contrainte **club/coach** gardée, contrainte **d'équipe** gardée seulement si l'équipe reprend (décochée si l'équipe est en pause), contrainte **de gymnase** décochée (pas de créneaux socle en reprise). Calculé (pas de seed persisté), miroir back/front. |
@@ -483,7 +510,8 @@ exceptions », toute la §2 devient **incrémentale** au lieu d'un mur 🔴.
 - L'accueil **n'est plus** le planning — c'est le cockpit ; le planning reste **derrière le
   bandeau**.
 - **Projection, pas matérialisation** : occurrences uniquement en delta d'exception.
-- **1 entité `CalendarEntry`** (event / venue_closure / period) plutôt que 4 tables d'emblée.
+- **1 entité `CalendarEntry`**, à **2 `kind`** (`event` / `period` — l'indispo est une `period`
+  `closure`, pas un 3ᵉ type) plutôt que 4 tables d'emblée.
 - **Calendrier secondaire = overlay de période borné**, pas une alternative plein-saison.
 - Le **radar** est la to-do actionnable (généralise les alertes J-14).
 - **Calendrier = vue par mois entier, jour courant entouré** (plus lisible qu'une fenêtre
@@ -503,14 +531,20 @@ exceptions », toute la §2 devient **incrémentale** au lieu d'un mur 🔴.
   **écran dédié** = **le wizard en mode période** (§5bis, §6bis).
 - **Le calendrier affiche les événements/exceptions, pas la semaine type** (jour vide = base
   normale). La projection ne sert qu'à la demande (overlay, PDF daté) — pas au rendu du mois.
-- **Période additive vs remplaçante, portée par `periodType`** : fermeture = **additive** (base
-  + exception) ; coupure = **remplaçante totale** ; vacances/mutualisation = **remplaçante
-  partielle**. **Validé.**
+- **Une période ne s'AJOUTE jamais à la base — tranché par #8 (2026-07-24).** Elle **possède sa
+  grille de créneaux** : copie du modèle de saison prise à la naissance du plan, ancrée
+  `schedulePlanId`, **jamais unie** aux créneaux de saison au build. Ce que `periodType` porte
+  encore, c'est l'**héritage des contraintes permanentes** : `closure` → toutes gardées (on
+  décoche ce qui gêne) ; `holiday` → défaut intelligent (club/coach gardées, équipe selon la
+  sélection, gymnase décochée). `cutoff` et `mutualisation` ne portent pas de plan.
+  *(Cette ligne remplace l'ancienne formulation « additive vs remplaçante », et clôt l'arbitrage
+  que §9ter.e laissait ouvert.)*
 - **`CalendarEntry` à 2 `kind`** (event / period) + réutilisation de `Constraint` (FK nullable
   `calendarEntryId`) et de `Schedule` (overlay). Quasi aucune nouvelle table.
 - **Plan principal = socle à COÛT PROGRESSIF (§2bis)** : **librement remaniable tant qu'aucun
   overlay n'existe** (début de saison, contraintes coach encore mouvantes) ; « Modifier » devient
-  **destructeur dès qu'il y a des secondaires** (supprime les N, confirmation proportionnée).
+  **destructeur dès qu'il y a des secondaires à venir** (les supprime — les périodes déjà
+  commencées survivent ; confirmation proportionnée qui les nomme).
   **Gel de facto, pas une serrure.** Grille en lecture seule ; l'édition = « Modifier » → wizard
   (= `reopen`). Le quotidien passe par les périodes/overlays.
 - **Le socle DÉBLOQUE le cockpit, en DEUX seuils (§2ter)** : tant que le plan n'a **rien généré**,
@@ -561,9 +595,17 @@ CalendarEntry
   periodType        closure | holiday | cutoff | mutualisation | custom
   schoolHolidayId   uuid?        -- si dérivée d'une période de vacances (zone du club)
   status            proposed | active | ignored   -- « proposed » = vacances suggérées par le radar
-  overlayScheduleId uuid?        -- le plan secondaire généré pour la fenêtre
+  parentEntryId     uuid?        -- semaine ENFANT d'une période mère (P2-5 E1)
   createdBy, createdAt, updatedAt
 ```
+
+> **Plus de pointeur d'overlay sur l'entrée.** Le champ `overlayScheduleId` a bien existé
+> (livré au palier A le 2026-07-04) puis a été **supprimé** par ADR-0002 lot D-b (2026-07-18) :
+> il posait la même question que le pointeur du plan, à deux endroits. Désormais le plan
+> secondaire est un `SchedulePlan` ancré à la `CalendarEntry`, et c'est **lui** qui pointe sa
+> version (`chosenScheduleId`). Lecture : `SchedulePlanProvisioner::chosenOfPeriodPlan`, ou
+> `chosenByPeriodPlans` pour résoudre N entrées en une requête. Un plan de période qui ne pointe
+> rien = **aucun overlay applicable**, pas un overlay vide.
 
 ### c. La réutilisation maligne (≈ zéro nouvelle table à part `CalendarEntry`)
 
@@ -600,18 +642,31 @@ Supprimer une `period` → son overlay + ses contraintes datées partent → l'�
 > entrées). La **projection** répond à « qu'y a-t-il concrètement le mardi 6 mai ? » (à la
 > demande, jamais matérialisée d'avance).
 
-### e. Le seul vrai arbitrage de modèle qui reste
+### e. L'arbitrage « additive vs remplaçante » — TRANCHÉ par #8 (2026-07-24)
 
-**Une `period` est-elle additive ou remplaçante ?**
-- **Fermeture de salle** = **additive** : base + « Barros off » (on garde tout le reste).
-- **Coupure (`cutoff`)** = **remplaçante totale** : rien (pas d'entraînement).
-- **Vacances / mutualisation** = **remplaçante partielle** : un autre jeu de créneaux (SM1+SM2
-  ensemble…).
+Cette section posait la dernière question ouverte du modèle : « une `period` est-elle
+**additive** (base + exception) ou **remplaçante** ? ». **La réponse livrée est : ni l'une ni
+l'autre — la période est PROPRIÉTAIRE.**
 
-→ `periodType` porte cette sémantique. Proposition : la génération de l'overlay part **des
-contraintes permanentes** (héritées), **+** les contraintes de la période, **sauf** si
-`periodType = cutoff/holiday` où l'on **repart d'un socle réduit**. **À confirmer** — c'est la
-seule décision de modèle non tranchée.
+- **Créneaux** : la période **possède sa grille**. Les `VenueTrainingSlot` de la saison sont
+  **copiés** dans le plan à sa naissance (ancre `schedulePlanId`), puis vivent leur vie. Le
+  build d'overlay ne lit **que** les créneaux du plan — **aucune union**, aucune résolution
+  « saisonnier→période ». Modifier la grille d'une période ne touche donc jamais le socle, et
+  réciproquement. Par gymnase, un réglage **épars** `VenuePeriodOverride` (`DISABLED` / `BLANK`,
+  pas de ligne = hériter) et deux actions destructives atomiques (« reprendre la grille du
+  planning principal », « vider »).
+- **Contraintes permanentes** : c'est là, et seulement là, que `periodType` porte encore une
+  sémantique d'héritage. `closure` → toutes gardées (le gestionnaire décoche) ; `holiday` →
+  défaut intelligent qui suit la sélection d'équipes (club/coach gardées, équipe gardée si
+  l'équipe reprend, gymnase décochée). Diff épars `ConstraintPeriodOverride` : une ligne
+  n'existe que pour une **déviation** du défaut.
+- **Contraintes datées** : inchangées, elles restent portées par la `CalendarEntry` — elles
+  décrivent le **fait** (« Barros fermé »), pas un réglage de plan.
+- `cutoff` et `mutualisation` ne portent pas de plan de période.
+
+Corollaire opérationnel : un épinglage HARD qui ne retombe sur aucun créneau de la grille de la
+période **bloque la génération** (422 nommant le gymnase et le jour, `OrphanPinGuard`) — dans un
+modèle additif il aurait silencieusement retrouvé un créneau de saison.
 
 ## 10. En une phrase
 

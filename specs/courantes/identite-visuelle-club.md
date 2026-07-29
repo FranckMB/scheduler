@@ -8,7 +8,22 @@
 >
 > **Décision — quand uploader le logo** : **après** la création du club, dans l'écran « Gestion du club » (pas à l'inscription). L'inscription reste minimale (nom/email/ffbb, friction basse — l'utilisateur n'a souvent pas son logo sous la main) ; l'identité est un réglage fait ensuite, potentiellement par un autre gestionnaire. C'est l'implémentation actuelle.
 
-> **Base de réflexion initiale** (conservée pour contexte). Statut : ✅ livré · 🟡 partiel/scaffoldé · ⬜ à faire.
+## Réfs (à jour)
+
+- Application de l'accent : `frontend/src/shared/hooks/useApplyClubTheme.ts` (lit `accentColor` / `accentColorDark` / `accentPalette` depuis `/api/me`, dérive `--accent-foreground` en AA).
+- Design tokens : `frontend/src/index.css` (`@theme`, slots `--accent`).
+- Mode clair/sombre : `frontend/src/shared/stores/themeStore.ts` (+ slot `accent`).
+- **Pré-paint du thème** : `frontend/src/main.tsx` (`readPersistedThemeMode`) pose la classe `.dark` **avant** le premier rendu React. Sans lui, l'arbre se rend en clair puis un effet bascule : flash du mauvais thème **et** animation `transition-colors` qui laisse les surfaces à des couleurs intermédiaires **sub-AA** (A11Y-06).
+- Écran de réglage : `frontend/src/features/club/ClubPage.tsx` + `LogoCropper.tsx`.
+- Surfaces de marque : `frontend/src/app/AppLayout.tsx` (logo au header, fallback icône `CalendarCheck2`), `frontend/src/features/wizard/steps/GenerateStep.tsx` (mark d'attente).
+
+---
+
+<details><summary><b>Historique — base de réflexion initiale (superseded par le LIVRÉ ci-dessus), conservée pour trace</b></summary>
+
+> ⚠️ Les statuts ⬜ / 🟡 de ce bloc décrivent l'état **de départ** (avant livraison), pas un
+> reste-à-faire. Ce qui reste réellement ouvert est listé dans l'en-tête « Reste ⬜ ».
+> Statut : ✅ livré · 🟡 partiel/scaffoldé · ⬜ à faire.
 
 ## Pourquoi
 
@@ -44,15 +59,11 @@ Le design system est construit autour d'**une seule couleur d'accent** (`--accen
 2. **Logo** : champ + upload + affichage (header, écran d'attente).
 3. **Extraction couleur depuis le logo** : confort, non bloquant.
 
-## Questions ouvertes
+## Questions ouvertes (toutes TRANCHÉES — voir l'en-tête « Livré »)
 
-1. **Accent = choix manuel** (color picker dans les réglages club) **ou dérivé du logo** (extraction) — ou les deux (dérivé pré-rempli, éditable) ?
-2. **Stockage du logo** : URL externe, ou upload + stockage (où ? quota par plan ?).
-3. **Garde-fou contraste** : imposer un accent AA (clamp automatique de la luminance) ou laisser libre au risque d'illisibilité ?
-4. Le logo remplace-t-il l'**initiale** de l'écran d'attente, ou on garde l'initiale en fallback quand pas de logo ?
+1. **Accent = choix manuel ou dérivé du logo ?** → **les deux** : extraction de 3 couleurs du logo qui *pré-remplit* une suggestion, ensuite éditable (deux sélecteurs : thème clair + thème sombre).
+2. **Stockage du logo** → upload via l'abstraction `LogoStorage` (locale en dev, swappable). *Reste ouvert* : l'implémentation objet/S3 pour la prod.
+3. **Garde-fou contraste** → **AA automatique** : `--accent-foreground` est dérivé pour rester lisible quelle que soit la couleur choisie.
+4. **Le logo remplace-t-il l'initiale ?** → le logo s'affiche quand il existe, **fallback** sur l'icône générique sinon (header) / l'initiale du club (écran d'attente).
 
-## Réfs
-
-- Design tokens & intention : `frontend/src/index.css` (slot `--accent`, commentaire « per club »).
-- Point d'injection : `frontend/src/shared/stores/themeStore.ts` (slot `accent`).
-- Surfaces : `frontend/src/app/AppLayout.tsx`, `frontend/src/features/wizard/steps/GenerateStep.tsx` (mark d'attente).
+</details>

@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 2026-07-25 (CONTRACT_VERSION 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156)
+Last verified @ 2026-07-29 (CONTRACT_VERSION 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156 · P2-9 volet 1 : diagnostics de verrou, #317)
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
@@ -45,16 +45,20 @@ Quatre endpoints exposés par `app/main.py` :
 - **Handler** : `generate_schedule(input_data: ScheduleInputSchema)`. **ENG-14** : rejette (422) un payload dont le **MAJOR de contrat** diffère de `read_contract_version()` (ex. `version` "1.x" alors que l'engine parle "2.x") — garde-fou du contrat manuel backend↔engine avant tout solve. **ENG-06** : un handler d'exception global (`_unhandled_exception_handler`) logge toute erreur non gérée (traceback serveur) et renvoie un 500 JSON propre sans fuite.
 - **Isolation** : acquiert un `asyncio.Lock` par `club_id` (voir §5) avant de lancer `build_schedule`.
 - **Pipeline** (`build_schedule` → `_solve`) :
+  0. `build_schedule` lance `_solve` dans un **thread worker** (`await asyncio.to_thread(...)`) sous un `_solve_semaphore` global (`ENGINE_MAX_CONCURRENT_SOLVES`, défaut 1) : la boucle d'événements reste réactive pendant un solve (`/health` répond), la contention CPU reste bornée (ENG-03 corrigé).
   1. `input_data.model_dump(by_alias=True)` → dict.
   2. `build_model(data)` — crée `ScheduleCpModel`, variables `x`, extrait HARD locks.
   3. `parse_v2_constraints(data["constraints"])` — règle v2 → collections solver.
+  3 bis. `venue_capacity_caps` appliqués sur `model.slot_capacities` en `min(capacité du créneau, maxTeams)` — resserre uniquement.
   4. Calcul `hard_satisfied_team_ids` (teams dont `sessionsPerWeek` est couvert par locks HARD → exclus du penalty unplaced).
   5. `adjusted_min_by_team` — min sessions mis à 0 pour teams sans assignments disponibles ou en conflit forcedDays/forbiddenDays.
   6. Construction `assignments` avec start/end pour contraintes consécutives.
   7. `add_level_1_hard_constraints(...)` — toutes les contraintes hard en un seul pass.
   8. `add_time_window_constraints(...)` — TIME/DAY hard windows + conflits.
+  8 bis. `add_venue_minimum_constraints(...)` — planchers `minAtVenueId` (ALIGN-05) + diagnostics `venue_minimum_unreachable` quand le plancher est prouvablement inatteignable.
+  8 ter. **`diagnose_locked_slot_violations(...)` — P2-9 volet 1 (livré 2026-07-28, PR #317).** Un verrou HARD est pré-placé hors solveur : `model.py` ne crée **pas** sa variable `x[...]`, donc aucune contrainte (qui s'applique en forçant cette variable à 0) ne peut l'atteindre — le verrou ne bat pas la contrainte, il la rend inatteignable. Cette fonction recroise `model.locked_slots` avec les contraintes **saisies** — indisponibilité coach (intervalle testé sur l'heure de début, pour chaque coach requis), fenêtres `minStartTime`/`maxStartTime`/`maxEndTime` (cette dernière mesurée sur la durée **du verrou**, pas du créneau de grille), règles DAY évaluées sur l'**UNION par équipe** (dont `forcedDays`, qu'un verrou posé un autre jour peut rendre insatisfaisable), paires (équipe, gymnase) interdites — et émet un `constraint_not_honored` de sévérité **INFO** par (contrainte, équipe, verrou), en nommant la règle réellement fautive. Le verrou reste **SOUVERAIN** : ALIGN-07 n'est pas rouvert, seul le silence disparaît. Hors périmètre volontaire : les règles structurelles (coach dans deux gymnases à la même heure) doivent bloquer, pas avertir. Gardé par `engine/tests/semantic/test_hard_lock_announces_violations.py` — axe structurant « sémantique des contraintes » (CLAUDE.md §7.1).
   9. `remaining_sessions` : `sum(team_vars) <= max(0, sessionsPerWeek - locked_count)`.
-  10. `add_preferred_day_bonus(...)` + `add_level_2_objective(..., apply_chaining=False)` — objectif Level-2 **placement seul** (les termes de chaînage sont construits mais exclus de l'objectif de phase 1).
+  10. Termes soft : `add_preferred_day_bonus` + `add_preferred_time_bonus` + `add_match_day_rest_bonus` + `add_spacing_penalty` (plus les termes `preferred` / `avoided_venue` construits inline), puis `add_level_2_objective(..., apply_chaining=False)` — objectif Level-2 **placement seul** (les termes de chaînage sont construits mais exclus de l'objectif de phase 1).
   11. **Solve en 2 phases** (voir ci-dessous) → `(status, solver, model, conflicts)`.
   12. `build_result(..., constraint_version=read_contract_version())` → dict → `ScheduleOutputSchema.model_validate(...)`.
 - **Solve en 2 phases** (`_solve`) :
@@ -113,8 +117,8 @@ Sous-schemas clés :
 - **SolverMetricsSchema** : `solverVersion: str`, `nbVariables: int`, `nbConstraints: int`, `wallTimeMs: int`, plus les identifiants de déterminisme (optionnels, `None` accepté pour les anciens payloads) : `scoreFormulaVersion: str | None` (formule T24 qui a produit le score) et `constraintVersion: str | None` (version de contrat backend↔engine).
 - **ScheduleSlotSchema** : `id`, `teamId`, `venueId`, `coachId`, `dayOfWeek`, `startTime` (time), `durationMinutes`, `lockLevel` (default `"NONE"`), `temporaryLock`, `temporaryLockFor`, `temporaryMinSessionsOverride`, `pendingConstraintSuggestion`.
 - **DiagnosticSchema** : `id`, `type`, `severity`, `teamId`, `coachId`, `venueId`, `dayOfWeek`, `startTime`, `durationMinutes`, `message`, `suggestions: list[str]`, `createdAt`.
-  - Types valides (commentaire code) : `unplaced`, `soft_lock_moved`, `coach_overload`, `session_below_effective_min`, `conflict`, `unused_slot`, `coach_no_rest_day`, `day_constraint_conflict`.
-  - **Canal séparé — `parse_warnings`** (pas des `DiagnosticSchema`) : `parse_v2_constraints` émet des warnings `type == "constraint_not_honored"` (`_not_honored_warning`, `constraints.py`) quand une contrainte saisie ne peut pas être traduite en terme solver (audit P0.1 — traçabilité UI↔engine). Cf. `docs/architecture/constraint-matrix.md`.
+  - Types valides : `unplaced`, `soft_lock_moved`, `coach_overload`, `session_below_effective_min`, `conflict`, `unused_slot`, `coach_no_rest_day`, `day_constraint_conflict`, `venue_minimum_unreachable`, `constraint_not_honored`. Catalogue commenté (causes + action corrective) : `engine/docs/solver-errors.md`.
+  - **`constraint_not_honored`** (`_not_honored_warning`, `constraints.py`) : émis quand une contrainte saisie ne peut pas être honorée. **Deux producteurs** — (1) `parse_v2_constraints` au parse, en `WARNING`, quand la règle n'est pas traduisible en terme solver (sans équipe cible, dispo coach reçue en non-HARD, règle de gymnase écrasée) — audit P0.1, traçabilité UI↔engine ; (2) `diagnose_locked_slot_violations` après construction du modèle, en **INFO**, quand un verrou HARD a rendu la contrainte inatteignable (P2-9, cf. §2). Les deux rejoignent `diagnostics[]` via `main.py`. Cf. `docs/architecture/constraint-matrix.md` et `engine/docs/constraint-vocabulary.md`.
 
 ---
 
@@ -126,13 +130,13 @@ Sous-schemas clés :
 |--------|-----------|-------------------|
 | `HARD` | Impératif — faisabilité | Contrainte CP-SAT (`model.Add(...)`) |
 | `PREFERRED` | Souhait — optimisation | Bonus objectif Level-2 (pas de contrainte hard) |
-| `LOCK` | Slot pré-placé fixé | `fixed_slots` → variable forcée à 1 |
+| `LOCK` | Règle « figée » | Traité **exactement comme `HARD`** : TIME/DAY → `time_windows` ; FACILITY → `forced_venues` / `venue_minimums`. La collection `fixed_slots` n'est alimentée par **aucune** branche de `parse_v2_constraints` (chemin résiduel). ⚠ Ne pas confondre avec `slotTemplates[].lockLevel`, autre mécanisme (cf. §5 Hard locks) |
 
 > `BONUS` **n'existe plus** (audit P0.1 ENG-12) : l'UI ne le propose plus ; les lignes legacy `BONUS` sont normalisées en `PREFERRED` à l'entrée de `parse_v2_constraints` (`constraints.py` — plus honnête que de les dropper en silence).
 
 ### 4.2 Family & Scope
 
-- **`family`** : catégorie de règle. Valeurs vues dans `parse_v2_constraints` : `TIME`, `DAY`, `COACH_AVAILABILITY`, `FACILITY`.
+- **`family`** : catégorie de règle. Valeurs reconnues (`_KNOWN_FAMILIES`, `constraints.py`) : `TIME`, `DAY`, `FACILITY`, `FACILITY_CAPACITY`, `COACH_AVAILABILITY`. Types legacy reconnus (`_KNOWN_TYPES`) : `TEAM_COACH`, `COACH_PLAYER_UNAVAILABILITY`, `PRIORITY_TIER`. Une contrainte dont **ni** la famille **ni** le type n'est reconnu est loggée comme dérive de contrat.
 - **`scope`** : cible de la règle. Valeur vue : `TEAM`. (D'autres scopes peuvent exister mais ne sont pas traités différemment dans le code lu.)
 - **`scopeTargetId`** : ID de la cible (team, coach, venue selon family/scope).
 
@@ -140,7 +144,8 @@ Sous-schemas clés :
 
 | Condition de match | Collection alimentée |
 |--------------------|---------------------|
-| `ruleType == "LOCK"` | `fixed_slots` (IDs forcés à 1) |
+| `ruleType == "LOCK"` + `family in ("TIME","DAY")` | `time_windows` (traité comme `HARD` par `add_time_window_constraints`) |
+| `ruleType == "LOCK"` + `family == "FACILITY"` | même traitement que `HARD` (`forced_venues` / `venue_minimums`) |
 | `type == "TEAM_COACH"` (legacy) | `team_coach_map[teamId]` → coachIds |
 | `type == "COACH_PLAYER_UNAVAILABILITY"` (legacy) | `team_player_map[teamId]` → coachIds |
 | `family == "COACH_AVAILABILITY"` | `coach_unavailability[scopeTargetId]` → `unavailableDays` |
@@ -148,7 +153,10 @@ Sous-schemas clés :
 | `family == "FACILITY"` + `forcedVenueId` + `HARD` + `scope=TEAM` | `forced_venues[scopeTargetId]` = `forcedVenueId` |
 | `family == "FACILITY"` + `preferredVenueId` + `PREFERRED` + `scope=TEAM` | `preferred_venues[scopeTargetId]` = `preferredVenueId` |
 | `family == "FACILITY"` + `forbiddenVenueId` | `forbidden_assignments` → `[{scope_target_id, venue_id}]` |
-| `family == "FACILITY"` + `avoidedVenueId` (soft) | `avoided_venues` → `[{scope_target_id, venue_id}]` (malus objectif, poids `avoided_venue`) |
+| `family == "FACILITY"` + `forbiddenVenueId` + `PREFERRED` + cible | `avoided_venues` → `[{scope_target_id, venue_id}]` (malus objectif, poids `avoided_venue`). **Même clé** que l'interdiction dure : c'est le `ruleType` qui décide dur/soft (il n'existe **pas** de clé `avoidedVenueId`) |
+| `family == "FACILITY"` + `minAtVenueId` (+ `minAtVenueCount`, défaut 1) + HARD/LOCK + `scope=TEAM` | `venue_minimums` → plancher `somme(vars équipe@gymnase) ≥ N` (ALIGN-05) |
+| `family == "FACILITY_CAPACITY"` + `venueId` + `maxTeams` | `venue_capacity_caps[venueId]` → appliqué en `min(capacité du créneau, maxTeams)` |
+| contrainte reconnue mais inapplicable (sans équipe cible, dispo coach reçue en non-HARD, règle de gymnase écrasée par une autre) | `parse_warnings` → diagnostics `constraint_not_honored` |
 | `type == "PRIORITY_TIER"` (legacy) | `priority_tiers[tierId]` = `defaultMinSessions` |
 | `family in ("TIME","DAY")` | `time_windows` (traité par `add_time_window_constraints`) |
 
@@ -168,7 +176,7 @@ Familles de contraintes comptées dans `HardConstraintStats` (liste exhaustive :
 | 5 | `fixed_slots` | Slots pré-placés (LOCK) forcés à 1 |
 | 6 | `forbidden_assignments` | Variables interdites forcées à 0 (ID ou pair team+venue) |
 | 7 | `coach_unavailability` | Slots coach indisponible forcés à 0 |
-| 8 | `min_sessions` | Chaque équipe a ≥ son minimum effectif de sessions |
+| 8 | `min_sessions` | **Câblé SOFT-ONLY (ENG-18)** : `_solve` passe un plancher **0** pour chaque équipe, donc aucune contrainte dure n'est posée. La cible est portée par le bonus objectif `session_count` + les diagnostics `session_below_effective_min`. La fonction reste *capable* d'un plancher dur, non utilisé en production |
 | 9 | `forced_venues` | Si salle forcée, autres salles exclues (forcées à 0) |
 | 10 | `one_session_per_day` | ≤ 1 session/jour/équipe sauf `allowMultipleSessionsPerDay=True` |
 | 11 | `age_ascending` | Teams plus jeunes entraînées plus tôt (même venue+jour) — exempt si `ageMin=None` ou HARD-locked |
@@ -178,9 +186,10 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 ### 4.5 Time windows (`add_time_window_constraints`)
 
 - `family == "TIME"` + `ruleType == "HARD"` : force `var == 0` si `startTime` hors `[minStartTime, maxStartTime]`.
-- `family == "DAY"` + `ruleType == "HARD"` : `forcedDays` (≥ 1 session sur ces jours), `forbiddenDays` (vars à 0).
+- `family == "TIME"` + `maxEndTime` (HARD only, ALIGN-04) : force `var == 0` si `début du créneau + sa durée > maxEndTime`. Le chemin soft (`add_preferred_time_bonus`) ne lit **que** min/maxStartTime.
+- `family == "DAY"` + `ruleType == "HARD"` : `forcedDays` (≥ 1 session sur ces jours), `forbiddenDays` (vars à 0), `allowedDays` (liste blanche : tout jour praticable hors liste est interdit ; liste vide = « non configuré », aucune restriction).
 - `family == "TIME"`/`"DAY"` + `ruleType == "PREFERRED"` : **bonus soft dans l'objectif** (`add_preferred_time_bonus` / `add_preferred_day_bonus`, poids `preferred_time`/`preferred_day` = 30) — pas de contrainte hard. Cf. commentaire `constraints.py` « PREFERRED TIME is a soft bonus handled in the objective ».
-- Conflit `forcedDays ∩ forbiddenDays` → diagnostic `day_constraint_conflict` (severity ERROR), toutes vars team à 0.
+- Conflit → diagnostic `day_constraint_conflict` (severity ERROR), toutes vars team à 0. **Deux formes** : `forcedDays ∩ forbiddenDays` non vide, OU une liste blanche `allowedDays` dont **tous** les jours sont explicitement interdits (les deux sont testées contre le `forbiddenDays` d'origine, pas contre le complément de la whitelist, pour que le diagnostic soit explicite).
 
 ---
 
@@ -194,7 +203,7 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 - **Seed** : `solver.parameters.random_seed = input_data.solver_seed` (default 42) — les deux phases.
 - **Workers** : `num_search_workers` **adaptatif** (`_adaptive_workers`, main.py) — complexité `n_teams×n_venues` ≤200 → **1** (déterministe, dont dépendent les goldens petits) · else → **8** (le worker unique trouve l'optimum en ~2s sur les problèmes denses riches en soft mais ne le prouve pas — 612s de blocage sur BCCL ; le portfolio 8 workers ferme la preuve en ~2s, même valeur d'objectif, assignation non-déterministe mais valeur stable). Appliqué aux deux phases.
   - ⚠️ **Réconciliation spec** : `specs/initiales/…contraintes_v2.md §2` promet « même entrée + même `solver_seed` + même version → planning **exactement** identique ». Depuis les workers adaptatifs, cette garantie n'est plus **exacte** qu'en dessous du seuil (≤200 complexité, 1 worker) ; au-dessus, seule la **valeur d'objectif** (score) est reproductible, pas l'arrangement exact (décision produit 2026-07-07, cf. roadmap §1 — le gestionnaire ajuste de toute façon). Les initiales étant gelées, la réconciliation vit ici.
-- **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V6"`. Maximise somme pondérée. Poids fixes (`LEVEL_2_OBJECTIVE_WEIGHTS`, objective.py — source de vérité, ne pas figer d'autres valeurs ici) :
+- **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V7"`. Maximise somme pondérée. Poids fixes (`LEVEL_2_OBJECTIVE_WEIGHTS`, objective.py — source de vérité, ne pas figer d'autres valeurs ici) :
 
 | Critère | Poids |
 |---------|-------|
@@ -209,6 +218,7 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 | Tier C | 10 |
 | Tier D | 1 |
 | `rest` | 3 |
+| `spacing` | −2 (malus soft, ALIGN-06 : deux séances d'une même équipe sur des jours consécutifs) |
 
 - **Contraintes v2 effectives** (série ENGINE, 2026-07-03) : `parse_v2_constraints` → `ParsedConstraints` (TypedDict). Indispo coach par jour (COACH_AVAILABILITY `unavailableDays`/`availableDays`, jours int) appliquée ; FACILITY_CAPACITY (`maxTeams`) = `min(capacité slot, maxTeams)` ; LOCK TIME/DAY = HARD ; `allowedDays` = whitelist ; `forcedDays`/`forbiddenDays`/min-maxStartTime HARD. `preferred_time` (soft) + repos lendemain de match (règle implicite, `matchDay` → jour+1 libre, poids `rest`).
 
@@ -238,5 +248,5 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 ## 7. Tests & Fixtures
 
 - **Fixtures golden** (`engine/tests/fixtures/`) : scénarios JSON (liste : `ls engine/tests/fixtures/`) — dont `simple_club`, `medium_club`, `dense_club`, `bccl_regression`, `impossible`, `age_order_club`, `consecutive_emerick`, `no_rest_enzo`, `overlap_anna`, `overlap_nicolas`, `score_hard_only_teams`, `vacation_week`.
-- **Suites** (emplacements — liste vivante via `ls engine/tests/`) : `tests/golden/`, `tests/invariants/`, `tests/perf/`, **`tests/semantic/`** (matrice de contraintes audit P0.1 — `constraint_matrix.py` = source unique UI↔engine, `test_constraint_matrix.py`, `test_diagnostics.py`, `test_features.py`, `test_semantic_smoke.py`), `tests/test_result_builder.py`, plus tests spécialisés (age order, chaining bonus, coach rest day, salarié distribution, max consecutive sessions, adaptive timeout, capacity slots, time/day constraints, objective, generate contract…).
+- **Suites** (emplacements — liste vivante via `ls engine/tests/`) : `tests/golden/`, `tests/invariants/`, `tests/perf/`, **`tests/semantic/`** (matrice de contraintes audit P0.1 — `constraint_matrix.py` = source unique UI↔engine, `test_constraint_matrix.py`, `test_diagnostics.py`, `test_features.py`, `test_semantic_smoke.py`, `test_hard_lock_divisible_slot.py` = ALIGN-07, `test_hard_lock_announces_violations.py` = P2-9 volet 1), `tests/test_result_builder.py`, plus tests spécialisés (age order, chaining bonus, coach rest day, salarié distribution, max consecutive sessions, adaptive timeout, capacity slots, time/day constraints, objective, generate contract…).
 - **Toolchain tests** : `pytest` + `pytest-timeout` + `hypothesis`.

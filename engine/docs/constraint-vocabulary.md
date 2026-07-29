@@ -67,7 +67,7 @@
 | `forbiddenVenueId` (uuid) | **éviter** ce gymnase | assignation interdite (dur) | malus objectif **−60** (soft « évite ») |
 | `minAtVenueId` (uuid) + `minAtVenueCount` (int, défaut 1) | **au moins N** séances dans ce gymnase (plancher, ≠ forçage) | pose `somme(vars de l'équipe dans ce gymnase) ≥ N` ; les autres séances restent libres | — **HARD-only** |
 
-- **`minAtVenueId`** (ALIGN-05) est un **plancher**, pas un forçage : contrairement à `forcedVenueId` (TOUTES les séances), il garantit `≥ N` séances ici et laisse le reste libre. **Fail-soft** : si l'équipe a moins de créneaux disponibles dans ce gymnase que `N`, l'engine **n'ajoute pas** la contrainte et émet un diagnostic `venue_minimum_unreachable` (sévérité ERROR) au lieu d'un INFEASIBLE. Le backend refuse en amont `N > séances/semaine de l'équipe` (fail-fast avant génération).
+- **`minAtVenueId`** (ALIGN-05) est un **plancher**, pas un forçage : contrairement à `forcedVenueId` (TOUTES les séances), il garantit `≥ N` séances ici et laisse le reste libre. **Fail-soft** : si l'équipe a moins de **jours distincts** disponibles dans ce gymnase que `N` (elle joue ≤ 1 séance/jour, donc deux créneaux le même jour ne comptent que pour une séance), l'engine **n'ajoute pas** la contrainte et émet un diagnostic `venue_minimum_unreachable` (sévérité ERROR) au lieu d'un INFEASIBLE. Le backend refuse en amont `N > séances/semaine de l'équipe` (fail-fast avant génération).
 - **Exclusivité groupe** : `CLUB + targetTag + (forcedVenueId ou preferredVenueId HARD)` → le backend force le tag ET **interdit le gymnase hors tag** → gymnase **réservé** au groupe.
 - **Fermeture datée** (`config.type = "venue_closed"`, période cockpit) → le backend l'**étend** en `forbiddenVenueId` HARD par équipe sur la fenêtre.
 
@@ -136,8 +136,38 @@ supérieur l'emporte dans l'objectif. Le **minimum de séances** du rang est une
 | `COACH_NO_OVERLAP` | un coach jamais sur 2 séances simultanées |
 | `COACH_PLAYER_NO_OVERLAP` | un coach qui **joue** aussi n'est jamais convoqué à 2 séances simultanées (ex. Mathis coach U13M2 + joueur U21M1) |
 | `MIN_SESSIONS` | chaque équipe vise son nombre de séances/semaine (**cible soft**, cf. ENG-18) |
+| `COACH_REST_DAY` | **dur** : chaque coach a ≥ 1 jour de repos du lundi au vendredi (≤ 4 jours travaillés). Ignoré pour un coach dont le `maxDaysOverride` est déjà ≤ 4 |
+| `SALARIE_DISTRIBUTION` | **dur** : au moins un coach salarié (`isEmployee`) présent chaque jour lun-ven. Inactif si le club compte moins de 2 salariés |
+| `MAX_CONSECUTIVE_SESSIONS` | **dur** : une même personne n'est jamais sur les 3 créneaux d'un enchaînement A→B→C le même jour, **tous gymnases confondus** |
+| `ONE_SESSION_PER_DAY` | **dur** : ≤ 1 séance par jour et par équipe, sauf `allowMultipleSessionsPerDay` |
+| `AGE_ASCENDING` | **dur** : à gymnase et jour égaux, une équipe plus jeune ne passe pas après une plus âgée. Exempt si `ageMin` est absent (Loisir, Baby) ou si l'équipe est verrouillée en HARD |
 | jour de repos après match | bonus soft (`add_match_day_rest_bonus`) : préfère laisser le lendemain d'un match libre |
 | espacement des jours (`spacing`) | **bonus soft** (`add_spacing_penalty`, poids `−2`) : malus sur deux séances d'une même équipe sur des jours consécutifs (jour, jour+1) — préfère espacer, ne bloque jamais (ALIGN-06) |
+
+## Ce qu'un verrou HARD écrase (P2-9)
+
+Un créneau `slotTemplates[].lockLevel = "HARD"` est pré-placé **hors du solveur** : `model.py` ne crée
+jamais la variable `x[équipe, gymnase, jour, début]` correspondante. Or **toute** clé de ce document
+s'applique en forçant cette variable à 0 — sans variable, il n'y a rien à forcer. Le verrou ne « gagne »
+donc pas contre la contrainte : il la rend **inatteignable**. Le verrou reste **souverain** (ALIGN-07,
+décision fondateur non rouverte).
+
+Ce qui a changé, c'est le silence. `diagnose_locked_slot_violations` (`constraints.py`) recroise chaque
+verrou avec les contraintes **saisies** et émet un `constraint_not_honored` de sévérité **INFO** par
+(contrainte, équipe, verrou), en nommant la règle réellement fautive :
+
+| Vérification | Miroir exact de l'application |
+|---|---|
+| `COACH_AVAILABILITY` | intervalle bloqué `(jour, from, to)` testé sur l'**heure de début** du verrou, pour **chaque** coach requis de l'équipe |
+| `minStartTime` / `maxStartTime` | comparaison sur l'heure de début |
+| `maxEndTime` | `début + durée **DU VERROU**` (pas celle du créneau de grille : un verrou de 120 min sur un créneau de 90 déborde réellement) |
+| `forbiddenDays` / `allowedDays` | évalués sur l'**UNION par équipe** — la seule sémantique que le solveur applique ; les règles nommées sont celles qui excluent effectivement le jour une fois l'union faite |
+| `forcedDays` | un verrou posé un **autre** jour peut consommer le créneau qui aurait satisfait l'exigence → avertissement dédié |
+| `forbiddenVenueId` | paire (équipe, gymnase), ce qui couvre aussi les fermetures de gymnase étendues par le backend |
+
+> **Hors périmètre volontaire** : les règles implicites **structurelles** (un coach dans deux gymnases à
+> la même heure) ne sont pas couvertes ici. Elles décrivent une impossibilité physique, pas une
+> préférence : elles doivent bloquer la génération, pas produire un avertissement.
 
 ## Ce que l'engine NE comprend PAS (à ce jour)
 

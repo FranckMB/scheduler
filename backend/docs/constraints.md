@@ -38,12 +38,13 @@ Le champ `family` (enum `ConstraintFamily`) définit la famille de la contrainte
 
 #### `TIME` — Fenêtre horaire
 
-Restreint les horaires de début d'entraînement.
+Restreint la fenêtre horaire de l'entraînement. La validation exige **au moins une** de ces trois clés.
 
 | Clé `config` | Type | Description | Exemple |
 |--------------|------|-------------|---------|
 | `maxStartTime` | string (HH:MM) | Heure max de début | `"19:30"` |
 | `minStartTime` | string (HH:MM) | Heure min de début | `"20:00"` |
+| `maxEndTime` | string (HH:MM) | Heure max de **fin** (mode « fini avant ») — l'engine calcule fin = début + durée du créneau. **Exige une règle `HARD`/`LOCK`** : le chemin souple l'ignore, la validation le refuse donc en `PREFERRED`/`BONUS` | `"20:30"` |
 
 > Exemple : `{maxStartTime: "19:30"}` signifie "l'entraînement doit commencer au plus tard à 19h30". Si la séance dure 1h30, elle finira donc à 21h00 au plus tard.
 
@@ -76,7 +77,7 @@ Oriente ou bloque l'utilisation d'une salle spécifique. La validation exige **a
 
 > Exemple : `{forbiddenVenueId: "uuid-jean-vilar"}` empêche toute équipe concernée d'aller au gymnase Jean Vilar.
 
-Il n'existe **pas** de clé `closedDay` ni `onlyDay`. Une fermeture de salle **datée** ne passe pas par une contrainte saisie à la main : elle se déclare dans le **cockpit** (entrée calendrier `venue_closed`), que le backend développe en contraintes `FACILITY` `HARD` `forbiddenVenueId` par équipe au moment de la construction du payload — l'engine ne comprend que `forbiddenVenueId`, pas la sémantique « salle fermée ».
+Il n'existe **pas** de clé `closedDay` ni `onlyDay`. Une fermeture de salle **datée** ne passe pas par une contrainte saisie à la main : elle se déclare dans le **cockpit** (entrée calendrier `venue_closed`) et **ne devient jamais une contrainte** — depuis P2-5 5b le backend retire purement et simplement les créneaux du gymnase du payload sur ses jours fermés (voir §3.3).
 
 #### `COACH_AVAILABILITY` — Disponibilité d'entraîneur
 
@@ -137,7 +138,7 @@ Voici huit contraintes réelles ou plausibles pour le BCCL, présentées sous fo
 | Matéo — préféré régional | `CLUB` | `FACILITY` | `PREFERRED` | `{preferredVenueId:"uuid-mateo", targetTag:"REGIONAL"}` | Les équipes régionales vont de préférence à Matéo |
 | SM3 — mercredi seulement | `TEAM` | `DAY` | `HARD` | `{allowedDays:[3]}` | SM3 ne s'entraîne que le mercredi |
 | SM3 — à partir de 20h | `TEAM` | `TIME` | `HARD` | `{minStartTime:"20:00"}` | SM3 commence au plus tôt à 20h |
-| ADN — fermé (période datée) | — (cockpit) | `FACILITY` | `HARD` | `{forbiddenVenueId:"uuid-adn"}` par équipe | Fermeture saisie dans le cockpit (`venue_closed`), développée par le backend en interdictions par équipe |
+| ADN — fermé (période datée) | — (cockpit) | — (aucune contrainte) | — | — | Fermeture saisie dans le cockpit (`venue_closed`) : le backend **retire les créneaux d'ADN du payload** sur ses jours fermés, sans produire aucune contrainte (§3.3) |
 | Coach Enzo — indisponible vendredi | `COACH` | `COACH_AVAILABILITY` | `HARD` | `{coachId:"uuid-enzo", unavailableDays:[5]}` | Enzo n'est disponible aucun vendredi |
 
 ### 3.1 Exemple détaillé : "Jeunes — fin à 19h30"
@@ -184,21 +185,15 @@ C'est une contrainte très forte. Dans la pratique, le BCCL pourrait la déclare
 
 Une fermeture de salle ne se saisit **pas** comme une contrainte à la main (il n'existe pas de clé `closedDay` : une telle config serait rejetée par la validation, qui exige `forcedVenueId`, `forbiddenVenueId`, `preferredVenueId` ou `minAtVenueId`). Elle se déclare dans le **cockpit**, via une entrée de calendrier de type `venue_closed` portant la salle et la période concernées.
 
-Au moment de construire le payload pour l'engine, le backend (`ScheduleConstraintBuilder`) développe cette fermeture en contraintes concrètes : pour **chaque équipe**, une contrainte `FACILITY` `HARD` avec `{forbiddenVenueId: "uuid-adn"}`. L'engine ne connaît en effet que `forbiddenVenueId` (traduit en affectations interdites) — c'est l'expansion backend qui porte la sémantique « salle fermée ».
+> ⚠️ **Ce mécanisme a changé (P2-5 5b, #263).** Le backend développait autrefois cette fermeture en une contrainte `FACILITY` `HARD` `{forbiddenVenueId: "uuid-adn"}` **par équipe**. Cette expansion est **supprimée** : l'interdiction d'affectation de l'engine est *day-blind*, elle fermait donc le gymnase **toute la semaine** même quand l'incident n'en couvrait qu'une partie.
 
-```json
-{
-  "scope": "TEAM",
-  "scopeTargetId": "uuid-equipe",
-  "family": "FACILITY",
-  "ruleType": "HARD",
-  "config": {
-    "forbiddenVenueId": "uuid-adn"
-  }
-}
-```
+Aujourd'hui, au moment de construire le payload d'overlay, `ScheduleConstraintBuilder::buildForOverlay` calcule (via `VenueClosureDays`) les **jours de semaine où chaque gymnase est réellement fermé** — l'intersection de l'incident et de la fenêtre du plan — puis **retire du payload les créneaux du gymnase sur ces jours-là**. Aucune contrainte n'est produite.
 
-Contrairement à une contrainte `TEAM` ou `COACH` isolée, cette fermeture réduit l'offre de créneaux disponibles pour **toutes** les équipes. Si ADN est la seule salle disponible le lundi soir pendant la période fermée, alors aucune équipe ne pourra s'entraîner ce soir-là.
+Le raisonnement est celui du solveur : **pas de créneau ⇒ pas de variable ⇒ le solveur ne peut rien y placer** ce jour-là, mais il conserve toute liberté **les autres jours**. La sémantique « salle fermée » est portée par la structure du payload, plus par une contrainte.
+
+Effet de bord assumé : si un même jour de semaine se répète dans le bloc fermé, la fermeture porte sur tout le bloc — le mécanisme **sur-ferme** au pire, il ne **sous-ferme** jamais.
+
+Comme l'ancienne expansion, cette fermeture réduit l'offre de créneaux pour **toutes** les équipes. Si ADN est la seule salle disponible le lundi soir pendant la période fermée, alors aucune équipe ne pourra s'entraîner ce soir-là.
 
 ---
 

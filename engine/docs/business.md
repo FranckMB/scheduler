@@ -58,7 +58,7 @@ Une regle metier qui faconne l'emploi du temps. Chaque contrainte a :
   - `DAY` : jours preferes ou interdits (ex. "pas le vendredi", "preferer le mardi")
   - `FACILITY` : assignation de salle (ex. "le SM1 doit etre au Gymnase A")
   - `COACH_AVAILABILITY` : indisponibilite d'un entraineur (ex. "Maxime Dupont indisponible le mercredi")
-  - `FACILITY_CAPACITY` : fermeture temporaire d'une salle
+  - `FACILITY_CAPACITY` : nombre maximum d'equipes **simultanees** sur un creneau d'un gymnase. Elle ne peut que **resserrer** la capacite du creneau, jamais l'elargir. Ce n'est **pas** une fermeture : une fermeture temporaire est etendue **cote backend** en `FACILITY` / `forbiddenVenueId` par equipe
 
 - **Type de regle (`ruleType`)** :
   - `HARD` : doit absolument etre respectee. Si ce n'est pas possible, le solveur declare l'instance infaisable
@@ -74,11 +74,16 @@ Ces regles sont toujours actives, meme si l'utilisateur ne les configure pas :
 
 | Contrainte | Description |
 |------------|-------------|
-| `VENUE_AT_MOST_ONE` | Une salle = une equipe a la fois. Deux equipes ne peuvent pas partager le meme gymnase au meme moment |
+| `VENUE_AT_MOST_ONE` | Un creneau de gymnase accueille au plus sa **capacite** d'equipes : 1 pour un gymnase non divisible (deux equipes ne peuvent pas le partager au meme moment), N pour un gymnase divisible a N terrains |
 | `COACH_NO_OVERLAP` | Un entraineur **principal** = une equipe a la fois. Maxime Dupont ne peut pas diriger le SM1 et l'U15M1 en meme temps. Seul le coach `MAIN` est concerne (l'assistant est optionnel et ne bloque pas) |
 | `COACH_PLAYER_NO_OVERLAP` | Un entraineur-joueur ne peut pas etre a deux endroits simultanement. S'il entraine le SM1 a 19h00, il ne peut pas jouer avec les Seniors 2 a la meme heure |
 | `TEAM_NO_OVERLAP` | Une equipe ne peut pas avoir deux seances en meme temps. Le SM1 ne peut pas s'entrainer a 19h00 au Gymnase A et a 19h00 au Gymnase B simultanement |
 | `MIN_SESSIONS` | Chaque equipe **vise** son nombre de seances : c'est une **cible soft** (bonus dans l'objectif, audit ENG-18), jamais une garantie dure — le plancher dur est 0 en production. Si le SM1 demande 3 seances, le moteur est fortement incite a les placer, mais peut en placer moins quand les ressources manquent |
+| `COACH_REST_DAY` | Chaque entraineur garde au moins un jour de repos du lundi au vendredi (au plus 4 jours travailles). Ignore pour un entraineur dont le maximum de jours declare est deja inferieur ou egal a 4 |
+| `SALARIE_DISTRIBUTION` | Au moins un entraineur **salarie** est present chaque jour du lundi au vendredi. La regle ne s'active que si le club compte au moins 2 salaries |
+| `MAX_CONSECUTIVE_SESSIONS` | Une meme personne n'enchaine jamais 3 creneaux consecutifs le meme jour (A puis B puis C), meme en changeant de gymnase |
+| `ONE_SESSION_PER_DAY` | Une equipe n'a qu'une seance par jour, sauf si elle est explicitement autorisee a en avoir plusieurs |
+| `AGE_ASCENDING` | Dans un meme gymnase le meme jour, une equipe plus jeune ne s'entraine pas apres une plus agee — les petits passent en premier. Sans effet pour les equipes sans tranche d'age (Loisir, Baby) ou verrouillees en HARD |
 
 ### Creneau (`ScheduleSlotTemplate`)
 
@@ -93,6 +98,10 @@ Chaque creneau a un niveau de verrouillage (`lockLevel`) :
 - `NONE` : libre, le moteur peut le deplacer
 - `SOFT` : purement indicatif — le moteur l'**ignore au moment du solve** (aucun bonus de preservation dans l'objectif). Si le creneau ressort ailleurs, un diagnostic `soft_lock_moved` (severite `WARNING`) est emis **a posteriori** pour signaler le deplacement
 - `HARD` : fige, le moteur ne peut absolument pas le deplacer
+
+Un creneau `HARD` est pose **hors du solveur** : le moteur ne cree meme pas la variable de decision correspondante. Consequence directe, et il faut la connaitre : **aucune contrainte saisie ne s'applique a un creneau verrouille** (indisponibilite d'entraineur, fenetre horaire, jour interdit, gymnase interdit). Le verrou n'est pas "plus fort" que la contrainte, il la rend inatteignable. Le verrou prime — c'est un choix assume : le gestionnaire qui epingle une seance sait pourquoi il le fait. Mais depuis P2-9, le moteur ne le tait plus : il emet un diagnostic `constraint_not_honored` de severite **INFO** qui nomme la contrainte ecrasee, l'equipe, l'entraineur ou le gymnase concerne, le jour, l'heure et la duree. Le gestionnaire voit ce que son epingle a annule, et decide.
+
+Un verrou `HARD` occupe aussi le creneau **en entier**, meme dans un gymnase divisible : les autres equipes en sont exclues. Pour partager un creneau divisible, il faut epingler explicitement chacune des equipes.
 
 ### Niveaux de priorite
 

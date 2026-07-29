@@ -68,7 +68,7 @@ Backend, engine and frontend tooling all run **inside Docker**.
 
 ```bash
 make start      # bring up the stack (docker compose, reads .env)
-make test       # run backend + engine test suites
+make test       # run backend + engine + frontend test suites
 make lint       # code-quality checks
 make stop       # stop the stack
 
@@ -116,10 +116,19 @@ docs/      architecture, testing, glossaire, cartes
 
 **Transverse** :
 - **`CLAUDE.md`** — index opérationnel (stack, frontières, conventions) · racine **`AGENTS.md`** y pointe.
-- **`docs/project-map.md`** — carte détaillée · **`docs/architecture/`** — ADRs · **`docs/testing/`** — stratégie de tests · **`docs/glossary.md`** (termes & payload) · dette & backlog : **`specs/evolution/roadmap.md`**.
+- **`docs/project-map.md`** — carte détaillée · **`docs/architecture/`** — ADRs + matrice contrainte UI↔engine · **`docs/testing/`** — stratégie de tests · **`docs/glossary.md`** (termes & payload) · dette & backlog : **`specs/evolution/roadmap.md`**.
+- **`docs/security/`** — RLS et ses exceptions · durcissement Mercure · registre RGPD (art. 30).
+- **`docs/ops/`** — stack de prod (`docker-compose.prod.yml`) · runbook de déploiement · sauvegardes & restauration.
 - **`specs/`** — specs vivantes : `initiales/` (origine figée) · `courantes/` (ce que l'appli fait) · `evolution/` (à venir). Voir [`specs/README.md`](specs/README.md).
+- **`docs/archive/`** — documents point-in-time conservés pour trace historique, jamais une source de vérité.
 
 ## Status
 
 Active development (V0). Delivered so far: auth, the planning work-loop, and the data-entry
-wizard, backed by the CP-SAT engine. Not deployed anywhere yet.
+wizard, backed by the CP-SAT engine.
+
+**Not running in a live environment yet — but the road to it is paved**: the production stack
+(`docker-compose.prod.yml`, immutable ghcr.io images), the one-command deploy (`make deploy`,
+`.github/workflows/deploy.yml`) and the backup/restore runbook are shipped and tested. The SSH half
+of the deploy stays dormant until the repo variable `DEPLOY_ENABLED=true`. See
+[`docs/ops/`](docs/ops/).
