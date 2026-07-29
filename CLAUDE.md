@@ -70,13 +70,14 @@ All custom agents/skills are **manual / user-triggered**. No hidden automation, 
 - **Light lane** — only if ALL true: ≤2 files, no behaviour/API/schema change, no structuring axis touched (typo, label, doc, tiny fix). Cycle: implement → relevant tests green locally → doc check declaration → `/code-review` → PR → user go.
 
 **Full lane cycle:**
-1. **Need validation (mandatory, before any plan):** reformulate the need in 3–6 lines + open ambiguities + what I will NOT do. **User validates or corrects — no `/plan` before that.**
+0. **Lire le CODE avant d'analyser (non négociable, précède tout le reste).** Tout constat sur l'existant — « ça n'existe pas », « c'est déjà fait », « ce champ vaut X », « ce fichier dit Y » — se **vérifie dans le code** (grep/read/test), jamais de mémoire ni par déduction depuis un doc. La doc et les mémoires d'agent **retardent toujours** sur le code. Coût observé du raccourci : un besoin cadré sur une prémisse fausse part à contresens et se découvre 3 rounds de revue plus tard. Corollaire : ne jamais écrire « vérifié » sur un balayage partiel, et citer `fichier:ligne` quand on affirme un fait sur l'existant.
+1. **Need validation (mandatory, before any plan):** reformulate the need in 3–6 lines + open ambiguities + what I will NOT do — **each factual claim backed by the code read at step 0**. **User validates or corrects — no `/plan` before that.**
 2. `/plan` injecting boundaries §2, conventions §5, scope checklist §9 (the built-in `Plan`/`Explore` subagents do **not** read `CLAUDE.md`). Optional `contrarian-review` on the plan. User validates the plan.
 3. Implement **strictly in scope** (no opportunistic refactor).
 4. **Non-regression (mandatory if a structuring axis §7.1 is touched):** add/extend a test guarding the axis in the same PR (`--group phase1`, engine invariant/golden, or e2e).
 5. **Tests green locally before proposing merge** — run `/validation-runner` (selects the changed zone's targeted suite + cross-zone contract test + the mandatory smoke-solver when engine/backend is touched, and justifies any suite it could not run); it must be green on blocking tests + the new NR tests + zone suite. CI is a double-check and does NOT block the merge.
 6. Change summary + **doc check (mandatory):** either run `documentation-update`, or state explicitly "no doc impacted because …". Never skip silently.
-7. **`/code-review` on every PR** (+ `/security-review` if the change touches auth/data/external integrations).
+7. **`/code-review` on every PR** (+ `/security-review` if the change touches auth/data/external integrations). **Cadrer la revue sur le PÉRIMÈTRE DE LA PR** — le diff et ce qu'il casse (appelants, tests, contrats) : une revue qui part auditer le reste du dépôt noie le vrai défaut sous des remarques hors sujet et fait exploser les rounds. Un défaut réel repéré hors diff ne se corrige pas dans la PR : il devient une ligne de dette en roadmap.
 8. PR → **user's explicit go** → merge.
 
 ### 7.1 Structuring axes (closed list — NR test required when touched)
@@ -92,6 +93,7 @@ tenant isolation (filter/listener/voters) · generation pipeline (controller→m
 ## 9. Scope checklist — inject verbatim into every `/plan`; the produced plan must fill these literally
 
 - besoin reformulé et ambiguïtés identifiées avant de planifier ;
+- **constats sur l'existant vérifiés DANS LE CODE, chacun cité en `fichier:ligne`** (jamais de mémoire, jamais depuis un doc — §7 étape 0) ;
 - zone ou sous-projet concerné (engine / backend / frontend, etc.) ;
 - dossiers autorisés et dossiers interdits pour cette feature ;
 - fichiers probablement modifiés et fichiers de tests probablement modifiés ;
