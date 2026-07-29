@@ -1,11 +1,18 @@
 # Frontend Strategy — TDD, Stack Fixée & Anti-patterns
 
-Last verified @ 09e67f3 2026-07-03
+Last verified @ 2026-07-29 (versions re-lues dans `frontend/package.json`)
 
-> Document stratégique pour le rebuild du frontend ClubScheduler. Fixe le mandat TDD, les
-> versions exactes de la stack, les anti-patterns bannis et les règles de préservation
-> d'infrastructure. Le détail fonctionnel (routes, composants, wizard) est dans
-> `frontend-spec.md` et `frontend-wizard.md` (T12) — ce document ne les duplique pas.
+> **Statut : le rebuild est LIVRÉ.** Les formulations « pour le rebuild » ci-dessous sont
+> historiques ; le document reste la référence vivante des **versions de la stack**, des
+> **anti-patterns bannis** et des **règles de préservation d'infrastructure**.
+>
+> Fixe le mandat de test, les versions de la stack, les anti-patterns et les règles de
+> préservation d'infrastructure. Le détail fonctionnel (routes, composants, wizard) est dans
+> `frontend-spec.md` et `frontend-wizard.md` — ce document ne les duplique pas.
+>
+> ⚠️ **`frontend/package.json` fait foi.** Ce fichier a laissé dériver ses tableaux de
+> versions pendant des semaines tout en se présentant comme un verrou : il « figeait » des
+> versions que personne n'utilisait. En cas de doute, lire le `package.json`, pas ce tableau.
 
 ---
 
@@ -38,15 +45,31 @@ cycle RED → GREEN → REFACTOR avant d'être considéré livrable.
 
 | Outil | Version (`frontend/package.json`) | Rôle |
 |------|---------|------|
-| Vitest | ^3.2 | Runner de test |
+| Vitest | ^4.1 | Runner de test (config `vitest.config.ts` : jsdom, `globals`, setup `src/test/setup.ts`, exclut `tests/e2e/`) |
+| @vitest/coverage-v8 · @vitest/ui | ^4.1 | Couverture · UI de debug |
 | @testing-library/react | ^16.3 | Rendu et queries DOM |
 | @testing-library/user-event | ^14.6 | Simulation d'interaction |
-| jsdom | ^27.0 | Environnement DOM |
-| msw | ^2.8 | Mock réseau HTTP |
-| @playwright/test | ^1.60 | E2E (`frontend/tests/e2e/`) |
+| @testing-library/jest-dom | ^7.0 | Matchers DOM |
+| jsdom | ^29.1 | Environnement DOM |
+| msw | ^2.15 | Mock réseau HTTP |
+| @playwright/test | ^1.62 | E2E (`frontend/tests/e2e/`) |
+| **vitest-axe** · **@axe-core/playwright** | ^0.1 · ^4.12 | **Assertions a11y** — suite unitaire (`src/test/a11y.test.tsx`) + spec de contraste e2e (`tests/e2e/a11y-contrast.spec.ts`) |
+| storybook · @storybook/react-vite | ^10.5 | Atelier de composants (`npm run storybook`) |
 
-> Les versions ci-dessus sont figées au même titre que la stack applicative (§2). Aucune
-> mise à jour sans validation explicite.
+> Toute mise à jour de version doit être **reflétée ici en même temps que dans le lockfile**.
+> Ces tableaux ne sont pas un verrou technique (rien ne les vérifie automatiquement) : ils ne
+> valent que par leur exactitude.
+
+### L'accessibilité est bloquante, pas indicative
+
+`frontend/eslint.config.js` re-sévérise **tout le set `jsx-a11y` recommandé** en `error` via un
+unique interrupteur `A11Y_LEVEL` (garde-fou WCAG 2.2 AA). Le remappage préserve les options
+réglées de chaque règle et **laisse désactivées** celles que `recommended` désactive
+délibérément (ex. `label-has-for`, qui double-signalerait des `label`/`id` correctement
+associés). `label-has-associated-control` connaît les composants maison
+(`Input`, `Select`, `TeamSelect`) pour ne pas crier au faux positif sur un
+`<label>…<Input/></label>`. Repasser à `warn` ne se fait que pour débloquer temporairement un
+gros refactor.
 
 ---
 
@@ -65,8 +88,10 @@ de version majeure ou mineure sans décision explicite et re-vérification de co
 | zustand | ^5.0 | Client state | v5 — `migrate()` requiert null check (voir §3) |
 | ky | ^2.0 | Client HTTP | v2 — API fetch moderne |
 | @dnd-kit/core + sortable + utilities | ^6.3 / ^10.0 / ^3.2 | Drag & drop | Accessible ; utilisé pour le tri des équipes (wizard) |
-| react-router-dom | ^7.1 | Routing | Nested layouts |
-| lucide-react | ^0.470 | Icônes | SVG tree-shakeable |
+| react-router | ^8.3 | Routing | Data router (`createBrowserRouter`), **`lazy` par route** (P4-6), nested layouts. ⚠ paquet **`react-router`**, PAS `react-router-dom` |
+| lucide-react | ^1.27 | Icônes | SVG tree-shakeable |
+| @sentry/react | ^10.68 | Reporting d'erreurs | **Erreurs seules** — pas d'APM, pas de replay, `tracesSampleRate: 0` (quota free tier préservé). DSN absent → init sautée, SDK inerte ; activé en posant `VITE_SENTRY_DSN` au build (INF-01) |
+| @radix-ui/react-label + react-slot | ^2.1 / ^1.1 | Primitives UI | Base des composants shadcn-style de `shared/components/ui/` |
 
 > **FullCalendar n'est PAS installé** : la grille planning est un composant custom
 > (`src/features/planning/WeekGrid.tsx`). La liste exhaustive des dépendances vit dans
@@ -93,15 +118,24 @@ est rejeté automatiquement.
 | 2 | `onSuccess` dans `useQuery` / `useMutation` (TanStack Query v5) | Supprimé en v5 — causait des effets de bord implicites et des fuites de state. | `useEffect` sur `data`/`isSuccess`, ou `select` pour transformer les données. |
 | 3 | `migrate()` sans null check dans Zustand 5 | `persist` v5 passe `persistedState` potentiellement `null` — un `migrate` qui assume un objet non-null lance une `TypeError`. | `migrate: (persistedState: unknown, version: number) => { if (persistedState === null) return initialState; ... }` |
 | 4 | `@apply` dans des composants Tailwind v4 | Tailwind v4 déprécie `@apply` dans les composants — casse l'extraction utility-first et le tree-shaking CSS. | Composer avec des classes utility directement, ou extraire un composant React réutilisable. |
-| 5 | `eslint-config-prettier` pas en dernière position dans `extends` | Si une config ESLint est chargée APRÈS `prettier`, elle ré-active des règles de formatage que prettier désactive — conflits silencieux. | `extends: [..., 'prettier']` — toujours en dernier. |
-| 6 | `tailwind.config.js` (fichier JS de config) | Tailwind v4 remplace la config JS par la directive CSS `@theme` dans le fichier CSS principal. Le fichier JS est ignoré ou cause des conflits. | Définir les tokens (couleurs, fonts, breakpoints) via `@theme { ... }` dans `src/index.css`. |
+| 5 | `tailwind.config.js` (fichier JS de config) | Tailwind v4 remplace la config JS par la directive CSS `@theme` dans le fichier CSS principal. Le fichier JS est ignoré ou cause des conflits. | Définir les tokens (couleurs, fonts, breakpoints) via `@theme { ... }` dans `src/index.css`. |
+| 6 | Lire `error.response` dans un `catch` d'appel ky | ky 2.x **consomme lui-même** le corps de la réponse d'erreur et l'expose en `error.data` avant tout consommateur — re-lire la réponse lance `body stream already read`. C'est aussi pourquoi le client n'a **pas** de hook `beforeError`. | Lire **`error.data`** (`shared/api/errors.ts`, `errorMessage()`). |
+| 7 | `data ?? []` sur une query en premier chargement | Fabrique un **vide crédible** (« aucun créneau », « aucun réglage ») qui pousse le gestionnaire à re-saisir (doublons) ou à valider une période qu'il croit vide. Symétriquement, traiter `isError` comme fatal détruit un écran qui fonctionne alors que seul un refetch d'arrière-plan a échoué. | `readState()` / `readFailed()` (`shared/lib/readState.ts`) — trois états sur le seul critère « a-t-on une donnée ? ». |
+
+> L'anti-pattern historique « `eslint-config-prettier` pas en dernier » a été retiré : le
+> projet n'utilise ni prettier ni `eslint-config-prettier` (aucun script `format`).
 
 ### Détection automatique
 
-Ces anti-patterns doivent être détectés par :
-
-- **ESLint** : règles custom ou plugins (`eslint-plugin-react`, `@tanstack/eslint-plugin-query`).
-- **TypeScript** : `tsc --noEmit` échoue sur `ReactDOM.render` (type supprimé en React 19).
+- **ESLint** (`frontend/eslint.config.js`) : `@eslint/js`, `typescript-eslint`,
+  `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`, `@tanstack/eslint-plugin-query`,
+  `eslint-plugin-jsx-a11y`. L'anti-pattern n°1 est **réellement bloqué** par une règle
+  `no-restricted-syntax` qui interdit `ReactDOM.render`.
+- **TypeScript** : `npx tsc -b --force`.
+  ⚠️ **Jamais `tsc --noEmit`** : le `tsconfig.json` racine est un fichier **solution**
+  (`"files": []` + `references`), donc `--noEmit` n'y voit **aucun fichier** — il sortait 0
+  sans rien vérifier pendant que la CI (qui fait bien `tsc -b`) tombait sur les erreurs. Le
+  `--force` est nécessaire aussi : un `tsbuildinfo` périmé court-circuite la vérification.
 - **Code review** : checklist obligatoire dans le template de PR.
 
 ---
@@ -116,7 +150,13 @@ Le rebuild est un **raz ciblé sur le code source** — l'infrastructure Docker 
 | Fichier | Rôle | Action |
 |---------|------|--------|
 | `docker/frontend/Dockerfile` | Image Docker du frontend (build multi-stage + Nginx) | **Préserver tel quel** — adapter uniquement si la structure de build change. |
-| `docker/frontend/nginx.conf` | Config Nginx (proxy `/api` → backend, `/.well-known/mercure` → hub, `/engine` → engine, SPA fallback) | **Préserver tel quel** — la config proxy est validée et fonctionnelle. |
+| `docker/frontend/nginx.conf` | Config Nginx (proxy `/api` → backend, `/exports` → backend, `/bundles/` → backend, `/.well-known/mercure` → hub, `/engine/` → engine, en-têtes de sécurité + CSP, SPA fallback) | **Préserver tel quel** — la config proxy est validée et fonctionnelle. |
+
+> ⚠️ **Écart connu, non tranché** : le bloc `location /engine/` → `http://engine:8000/` existe
+> toujours dans `docker/frontend/nginx.conf`, alors que le proxy `/engine` a été **supprimé**
+> côté Vite (FRT-17) au nom de la frontière « le frontend ne contacte jamais l'engine »
+> (`CLAUDE.md` §2). Aucun code de `frontend/src/` ne l'appelle, mais il ouvre une route que
+> cette frontière interdit. Décision fondateur en attente.
 
 ### Périmètre du raz
 

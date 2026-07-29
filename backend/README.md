@@ -47,26 +47,28 @@ Toutes les routes sont exposées sous `/api` via **API Platform** (auto-généra
 | `Team` | `/api/teams` | Équipes (catégorie, priorité, créneaux) |
 | `Venue` | `/api/venues` | Salles/lieux de pratique |
 | `Coach` | `/api/coaches` | Entraîneurs |
-| `User` | `/api/users` | Utilisateurs |
-| `ClubUser` | `/api/club-users` | Membres du club (rôles) |
+| `User` | `/api/users/{id}` | Utilisateurs — **item seul** : pas de collection (énumération d'emails), pas de `Delete` (voir `DELETE /api/me`) |
+| `ClubUser` | `/api/club_users` | Membres du club (rôles) |
 | `Sport` | `/api/sports` | Types de sports |
-| `SportCategory` | `/api/sport-categories` | Catégories d'âge |
-| `PriorityTier` | `/api/priority-tiers` | Niveaux de priorité (S/A/B/C/D) |
-| `Plan` | `/api/plans` | Plans d'abonnement |
+| `SportCategory` | `/api/sport_categories` | Catégories d'âge |
+| `PriorityTier` | `/api/priority_tiers` | Niveaux de priorité (S/A/B/C/D) |
+| `SubscriptionPlan` | `/api/subscription_plans` | Plans d'abonnement |
 
 ### Ressources planning (CRUD standard)
 
 | Ressource | Endpoint | Description |
 |-----------|----------|-------------|
-| `Schedule` | `/api/schedules` | Générations de planning |
-| `ScheduleSlotTemplate` | `/api/schedule-slot-templates` | Créneaux générés |
-| `ScheduleDiagnostic` | `/api/schedule-diagnostics` | Erreurs/avertissements |
+| `SchedulePlan` | `/api/schedule_plans` | **Pivot ADR-0002** — le plan SEASON *pointé* EST le calendrier de la saison (`chosenScheduleId`) ; il porte le **nom** (renommage par `PUT`, SEC-07). « Validé » n'est pas un statut. |
+| `Schedule` | `/api/schedules` | Versions de planning (générations) |
+| `ScheduleSlotTemplate` | `/api/schedule_slot_templates` | Créneaux générés |
+| `ScheduleDiagnostic` | `/api/schedule_diagnostics` | Erreurs/avertissements |
+| `Reservation` | `/api/reservations` | Créneaux réservés (pins `HARD` durables) |
 
 ### Ressources contraintes & liens
 
 | Ressource | Endpoint | Description |
 |-----------|----------|-------------|
-| `Constraint` | `/api/constraints` | Contraintes **unifiées** (familles TIME/DAY/FACILITY/COACH_AVAILABILITY · scope CLUB/TEAM/COACH/FACILITY · `config.targetTag` pour cibler un groupe) |
+| `Constraint` | `/api/constraints` | Contraintes **unifiées** (familles TIME/DAY/FACILITY/COACH_AVAILABILITY/FACILITY_CAPACITY · scope CLUB/TEAM/COACH/FACILITY · `config.targetTag` pour cibler un groupe) |
 | `VenueTrainingSlot` | `/api/venue_training_slots` | Disponibilités hebdo des salles (jour, heure, durée, capacité 1/2) |
 | `TeamCoach` | `/api/team_coaches` | Assignations entraîneur-équipe (MAIN/ASSISTANT) |
 | `CoachPlayerMembership` | `/api/coach_player_memberships` | Entraîneurs aussi joueurs |
@@ -75,17 +77,37 @@ Toutes les routes sont exposées sous `/api` via **API Platform** (auto-généra
 
 | Ressource | Endpoint | Description |
 |-----------|----------|-------------|
-| `CalendarEntry` | `/api/calendar_entries` | Périodes/événements du cockpit (kind PERIOD/EVENT ; overlay planning via `overlayScheduleId`) |
+| `CalendarEntry` | `/api/calendar_entries` | Périodes/événements du cockpit (kind PERIOD/EVENT). Le planning de période est un `SchedulePlan` ancré à l'entrée — le pointeur inverse `overlayScheduleId` a été supprimé (ADR-0002 lot D-b) |
 | `Competition` | `/api/competitions` | Compétitions FFBB (championnat/coupe/brassage) — module matchs palier A |
 | `Fixture` | `/api/fixtures` | Rencontres (HOME/AWAY, placement domicile, `externalRef` = n° FBI) |
+
+### Ressources de période (#8 — la période possède sa grille)
+
+Réglages **sparses** ancrés au **plan** (`schedulePlanId`) : pas de ligne = hériter du modèle de saison.
+
+| Ressource | Endpoint | Description |
+|-----------|----------|-------------|
+| `VenuePeriodOverride` | `/api/venue_period_overrides` (+ `/reset-grid`, `/clear-grid`) | Comportement d'un gymnase sur la période (`DISABLED` / `BLANK`) |
+| `TeamPeriodOverride` | `/api/team_period_overrides` | Équipe activée/désactivée + `sessionsPerWeek` sur la période |
+| `ConstraintPeriodOverride` | `/api/constraint_period_overrides` | Contrainte permanente activée/désactivée sur la période |
+
+### Ressources doléances coachs (#10)
+
+| Ressource | Endpoint | Description |
+|-----------|----------|-------------|
+| `CoachWishCampaign` | `/api/coach_wish_campaigns` (+ `/send-links`, `/remind`) | Campagne de collecte (périmètre, semaines, deadline) |
+| `CoachWish` | `/api/coach_wishes` | Doléances déposées |
+| — | `/api/coach-wishes/public/{token}` | **Route PUBLIQUE, sans JWT** (GET/POST) — voir `AGENTS.md` §18 |
 
 ### Opérations custom (au-delà du CRUD)
 
 | Route | Méthode | Description |
 |-------|---------|-------------|
+| `/api/login` | POST | Authentification JSON → JWT (`json_login`, `security.yaml`) |
 | `/api/register` | POST | Inscription — compte non vérifié, **202 générique** (anti-énumération A3, aucun token) ; envoie un lien de vérification par email (`AuthController`) |
 | `/api/register/verify` | POST | Consomme le token du lien email → vérifie le compte, crée/rejoint le club, **émet le JWT** (login effectif) |
 | `/api/me` | GET/PATCH | Profil JWT + contexte club (`AuthController`) |
+| `/api/me` | DELETE | **Effacement RGPD self-service** (`DeleteAccountController`) — self-only (aucun id en entrée), confirmé par **ré-authentification mot de passe** ; anonymisation immédiate, club orphelin purgé après 30 j de grâce |
 | `/api/constraints/validate` | POST | Gate pré-solveur : valide les contraintes + détecte les conflits (200/422) |
 | `/api/schedule-slots/{id}/manual-edit/{constraint,lock,one-time}` | POST | Ajustements manuels de créneau (boucle de travail) |
 
@@ -94,19 +116,25 @@ Toutes les routes sont exposées sous `/api` via **API Platform** (auto-généra
 | Route | Méthode | Description |
 |-------|---------|-------------|
 | `/api/health` | GET | Health check (nginx → php-fpm) |
-| `/api/schedules/{id}/generate` | POST | Lancer la génération de planning (async) |
-| `/api/schedules/{id}/export-pdf` | POST | Exporter le planning en PDF (async) |
+| `/api/schedules/{id}/generate` | POST | Lancer la génération de planning (async). ⚠️ **Trois refus synchrones possibles** : 409 si la version est celle que son plan pointe (rouvrir d'abord), 422 si `GenerationComplexityGuard` juge le problème hors bornes (A10), 422 si `OrphanPinGuard` trouve un épinglage orphelin |
+| `/api/schedules/{id}/reopen` | POST | **Rouvrir** (dépointer) la version en vigueur — obligatoire avant de régénérer |
+| `/api/schedules/{id}/regenerate` | POST | Relancer une génération sur la même version |
+| `/api/schedules/{id}/regenerate-from` | POST | Restaurer la structure photographiée par une version (D3) puis regénérer |
+| `/api/schedules/{id}/export-pdf` | POST | Exporter le planning en PDF (async) — produit aussi un PNG best-effort |
+| `/api/schedules/{id}/export-xlsx` | POST | Exporter le planning en tableur |
 
 ### Opérations cockpit / matchs / transition / calendriers (invokables)
 
 | Route | Méthode | Description |
 |-------|---------|-------------|
-| `/api/calendar-entries/conflicts` | GET | Conflits d'un overlay période vs planning socle (cockpit) |
+| `/api/calendar-entries/{id}/conflicts` | GET | Conflits d'une période vs la version pointée du plan SEASON (cockpit) |
 | `/api/league-match-windows` | GET | Fenêtres de match héritées de la ligue du club (catalogue global, fallback AURA) |
 | `/api/fixtures/conflicts` | GET | Radar conflits coach/joueur des rencontres (module matchs) |
 | `/api/teams/{id}/fixtures/import` | POST | Import FBI des rencontres (.xlsx par équipe) |
 | `/api/season-transition` | GET/POST | Recap + bascule de saison (P1/P2) |
 | `/api/school-holidays`, `/api/public-holidays` | GET | Vacances scolaires / jours fériés (tables globales) |
+| `/api/club/ffbb-import` | POST | Ré-import des données institutionnelles depuis l'API FFBB (rôle management) |
+| `/api/admin/**` | — | Console superadmin SA0 — **firewall séparé** (session + TOTP), jamais atteignable avec un JWT club |
 
 > Source de vérité exhaustive = OpenAPI (`/api/docs`) + snapshot `specs/courantes/openapi-snapshot.json`. Le tableau reste indicatif (pas de décompte figé).
 
@@ -121,12 +149,15 @@ Toutes les routes sont exposées sous `/api` via **API Platform** (auto-généra
 # Le Makefile les lance automatiquement dans le conteneur
 
 make install          # composer install
-make test             # CS-Fixer + PHPStan(niveau 8) + PHPUnit (--group phase1)
+make test             # PHPStan + CS-Fixer + PHPUnit --testsuite Unit
+                      #   ⚠️ PAS le gate bloquant : ni --group phase1, ni tests/ entier
+make tests-complete   # PHPStan + CS-Fixer + `phpunit tests/` (le DOSSIER entier)
+                      #   miroir EXACT du job CI — à lancer AVANT de pousser
 make lint             # CS-Fixer + PHPStan + Rector
 make phpstan          # PHPStan seul (niveau 8)
 make cs-fix           # CS-Fixer (auto-format)
 make db-init-test     # crée + migre la base de TEST (requis avant `make phpunit`)
-make phpunit          # PHPUnit --group phase1
+make phpunit          # PHPUnit --group phase1 (le gate bloquant)
 make db-init          # crée + migre la base de dev — idempotent, ne détruit rien
 make db-reset         # drop + recreate + migre la base de dev (DESTRUCTIF)
 make jwt-keys         # génère le keypair JWT s'il est absent (config/jwt/*.pem, gitignoré)

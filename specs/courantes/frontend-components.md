@@ -1,21 +1,37 @@
 # FORWARD Components Spec — Pages & Shared Components (hors wizard)
 
-Last verified @ 09e67f3 2026-07-03
+Last verified @ 2026-07-29
 
-> Spécification forward des pages et composants frontend **en dehors du wizard
-> d'onboarding**. Le wizard est spécifié intégralement dans `frontend-wizard.md`
-> (T12) — ce document le référence sans le dupliquer. La stack, le routing, le
-> state management et le contrat API global sont dans `frontend-spec.md` (T11).
-> Le snapshot OpenAPI de référence est `specs/courantes/openapi-snapshot.json`.
+> 🛑 **Ce document est SUPERSEDED. Il ne décrit pas le frontend livré.**
 >
-> ⚠️ **Écart avec le code livré** : ce document est antérieur au frontend
-> réellement construit. Le code livré n'a **pas** de routes `/dashboard`,
-> `/teams`, `/priorities`, `/schedules/:id` (planning + diagnostics vivent sur
-> `/`), n'utilise **pas** FullCalendar (grille custom `WeekGrid`), ne consomme
-> **pas** Mercure (polling), et le tri par tier vit dans le wizard (mode
-> « Trier » + `POST /api/teams/reorder`). Les routes/composants réels sont dans
-> `frontend-spec.md` §2/§10 — les sections ci-dessous restent la spec forward
-> d'origine (scénarios Given/When/Then non réconciliés un à un).
+> Les sections 2 à 9 sont la **spécification forward d'origine** (2026-07-03), écrite
+> *avant* le frontend réellement construit. Elles sont conservées pour trace, repliées
+> dans un bloc « Historique » — **ne les lisez pas comme un contrat**.
+>
+> **Où est la vérité :**
+>
+> | Sujet | Doc canonique |
+> |---|---|
+> | Routes, state, contrat API, arborescence livrée | [`frontend-spec.md`](frontend-spec.md) §2 / §8 / §9 / §10 |
+> | Wizard (6 étapes) + mode période | [`frontend-wizard.md`](frontend-wizard.md) |
+> | Cycle de vie du planning (valider / rouvrir / pointeur) | [`planning-lifecycle-validated.md`](planning-lifecycle-validated.md) + ADR-0002 |
+> | Cockpit (accueil temporel, radar) | [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md) |
+> | Module matchs | [`module-matchs.md`](module-matchs.md) |
+> | Doléances coachs (#10) — dont la page publique `/doleances/{token}` | [`types-de-planning.md`](types-de-planning.md) §E5 |
+> | Console superadmin (`/admin`) | [`superadmin-auth.md`](superadmin-auth.md) |
+> | Conventions agent, pièges, primitives partagées | [`../../frontend/AGENTS.md`](../../frontend/AGENTS.md) |
+>
+> **Principaux écarts** entre les sections historiques et le code : aucune des pages
+> qu'elles spécifient n'existe (`/dashboard`, `/teams`, `/priorities`, `/schedules/:id`,
+> `/schedules/:id/diagnostics`) ; pas de **FullCalendar** (grille maison `WeekGrid`) ;
+> pas de **Zod** (formulaires contrôlés, validation manuelle) ; pas de **Mercure consommé**
+> (polling) ; pas de **sidebar** (`AppLayout` = header + menu compte) ; l'édition manuelle
+> passe par `POST /api/schedule-slots/{id}/manual-edit/*` et non par un `PUT` de template ;
+> le tri par rang vit dans le wizard (mode « Trier » + `POST /api/teams/reorder` en bulk
+> atomique). Depuis, sont apparues les routes `/` (cockpit), `/matchs`, `/admin`,
+> `/admin/login`, `/confidentialite` et `/doleances/:token`.
+>
+> Seule la **section 1** ci-dessous (conventions de nommage API) reste valide.
 
 ---
 
@@ -37,6 +53,11 @@ Symfony custom (`/api/me`, `/api/register`, `/api/password/*`, `/api/memberships
 complet dans `backend-inventory.md` §3.
 
 ---
+
+<details><summary><b>Historique — spec forward d'origine (sections 2 à 9), superseded, conservée pour trace</b></summary>
+
+> ⚠️ Tout ce qui suit décrit un frontend qui n'a jamais été construit tel quel. Aucune
+> affirmation de ce bloc ne fait autorité : voir le tableau « Où est la vérité » en tête.
 
 ## 2. Pages
 
@@ -984,3 +1005,5 @@ frontend/src/
 > Aucun fichier `.test.ts` ou `.test.tsx` n'est créé dans le cadre de cette
 > spécification. Les test cases sont en prose Given/When/Then dans ce fichier.
 > La stratégie de test (TDD mandate) est dans `frontend-strategy.md`.
+
+</details>

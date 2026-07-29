@@ -133,7 +133,7 @@ Quand un utilisateur clique sur "Generer l'emploi du temps" dans le frontend, le
 - **`constraints`** : deux formats coexistent :
   - **Format unifie v2** (`scope`, `family`, `ruleType`, `config`) : le nouveau format, plus flexible. Exemple : une contrainte `TIME` avec `maxStartTime: "20:00"`.
   - **Format legacy type** (`teamId`, `type`, `severity`, `value`) : conserve pour la retrocompatibilite, notamment pour les liens equipe-entraineur (`TEAM_COACH`). Exemple : `team-coach:t-sm1` lie le SM1 a Maxime Dupont comme entraineur principal.
-- **`slotTemplates`** : creneaux pre-existants. Un creneau `HARD` est fige. Un creneau `SOFT` est une suggestion. Un creneau `NONE` n'a pas lieu d'etre dans cette liste (il serait genere par le moteur).
+- **`slotTemplates`** : creneaux pre-existants. Un creneau `HARD` est fige. Un creneau `SOFT` est une suggestion. Un creneau `NONE` n'a pas lieu d'etre dans cette liste (il serait genere par le moteur). Cette cle transporte **deux sources** cote backend : les verrous du planning (`ScheduleSlotTemplate`) **et** les reservations durables (`Reservation`), que le backend fusionne dans la meme liste sous forme d'epingles `HARD`. Le moteur ne fait pas la difference.
 - **Pas de section `priorityTiers`** : le backend n'envoie **pas** cette cle (le schema l'accepte, avec une liste vide par defaut). Les poids de priorite que le solveur maximise sont **codes en dur** cote moteur (`LEVEL_2_OBJECTIVE_WEIGHTS`) — un `orToolsWeight` recu dans le payload serait ignore.
 
 ### Resolution des tags
@@ -174,22 +174,30 @@ Chaque variable signifie : "l'equipe T s'entraine-t-elle a la salle V le jour D 
 
 Les creneaux candidats sont **exactement les `trainingSlots` declares par les salles** : chaque `trainingSlot` (salle, jour, `startTime`) constitue **un seul depart candidat**. Il n'y a **pas** de discretisation d'une fenetre horaire en pas de 15 minutes — si le Gymnase A declare un creneau le lundi a 19h00, le seul depart possible ce jour-la est 19h00. La constante `SLOT_MINUTES = 15` ne sert qu'a une chose : bloquer la **duree** des verrous `HARD` (occupation du creneau sur toute la duree de la seance).
 
-Les creneaux `HARD`-verrouilles sont **pre-placees** : la variable correspondante est fixee a 1 et retiree de l'espace d'optimisation. Le solveur ne cherchera pas a les deplacer.
+Les creneaux `HARD`-verrouilles sont **pre-places hors du modele** : **aucune variable `x[...]` n'est creee** pour eux (`model.py` saute les cles presentes dans `hard_slot_keys`), et le `(gymnase, jour, heure)` est retire pour **toutes** les equipes sur toute la duree du verrou — meme sur un creneau divisible (ALIGN-07).
+
+Consequence a connaitre : **aucune contrainte ne peut atteindre un creneau verrouille**. Une contrainte s'applique en forcant une variable a 0 ; s'il n'y a pas de variable, il n'y a rien a forcer. Le verrou n'est donc pas « plus fort » que la contrainte, il la rend inatteignable. Le verrou reste souverain (decision fondateur ALIGN-07), mais depuis P2-9 le moteur ne se tait plus : `diagnose_locked_slot_violations` emet un diagnostic `constraint_not_honored` de severite **INFO** pour chaque contrainte saisie ainsi ecrasee. Les slots verrouilles sont reinjectes tels quels dans la reponse par `build_result`.
 
 ### Etape 2 — `add_level_1_hard_constraints()`
 
 Ces contraintes doivent etre satisfaites pour que la solution soit **faisable**. Si l'une d'elles ne peut pas l'etre, le solveur retournera `INFEASIBLE`.
 
-1. **VENUE_AT_MOST_ONE** : pour chaque salle, jour et slot, la somme des variables est inferieure ou egale a 1. Deux equipes ne peuvent pas partager le Gymnase A le lundi a 19h00.
+1. **VENUE_AT_MOST_ONE** : pour chaque salle, jour et slot, la somme des variables est inferieure ou egale a la **capacite declaree du creneau** (1 pour un gymnase non divisible). Deux equipes ne peuvent pas partager le Gymnase A le lundi a 19h00 s'il n'est pas divisible ; un gymnase a 3 terrains en accueille 3.
 2. **COACH_NO_OVERLAP** : pour chaque entraineur, jour et slot, la somme des equipes qu'il entraine est inferieure ou egale a 1. Maxime Dupont ne peut pas diriger deux equipes en meme temps.
 3. **COACH_PLAYER_NO_OVERLAP** : pour chaque entraineur-joueur, la somme de ses seances d'entrainement et de ses seances de joueur est inferieure ou egale a 1.
 4. **TEAM_NO_OVERLAP** : pour chaque equipe, jour et slot, la somme est inferieure ou egale a 1. Le SM1 ne peut pas avoir deux seances a 19h00.
-5. **FIXED_SLOTS** : pour chaque creneau `HARD`, la variable vaut exactement 1.
+5. **FIXED_SLOTS** : chemin residuel. La collection `fixed_slots` n'est alimentee par aucune branche de `parse_v2_constraints` aujourd'hui, donc cette contrainte ne pose rien en production. Les verrous `HARD` ne passent **pas** par la : ils sont pre-places hors du modele (voir etape 1).
 6. **FORBIDDEN_ASSIGNMENTS** : pour chaque contrainte `HARD` de type interdiction, la variable vaut 0. Exemple : si le SM1 a une contrainte "pas le vendredi", toutes les variables `x[t-sm1, *, 5, *]` valent 0.
 7. **COACH_UNAVAILABILITY** : pour chaque contrainte `COACH_AVAILABILITY`, les variables correspondantes valent 0.
 8. **FACILITY_CAPACITY** : pour chaque contrainte `FACILITY_CAPACITY`, le nombre d'equipes **simultanees** sur un creneau de la salle est plafonne a `min(capacite du creneau, maxTeams)`. Ce n'est **pas** une fermeture de salle : les fermetures temporaires (`venue_closed`) sont expansees **cote backend** en contraintes `forbiddenVenueId` par equipe avant l'envoi.
 9. **MIN_SESSIONS** : attention, ce n'est **pas** une contrainte dure — c'est une **cible soft** (audit ENG-18). Le nombre de seances souhaite (`sessionsPerWeek`) est encourage via l'objectif, jamais impose (plancher dur 0 en production) : une equipe peut recevoir moins de seances que demande sans rendre l'instance infaisable.
 10. **FORCED_VENUES** : si une equipe a une contrainte `FACILITY` `HARD` l'obligeant a une salle specifique, toutes les variables `x[team, autre_salle, *, *]` valent 0.
+11. **COACH_REST_DAY** : chaque coach a au moins un jour de repos du lundi au vendredi (au plus 4 jours travailles). Ignore pour un coach dont le `maxDaysOverride` est deja inferieur ou egal a 4.
+12. **SALARIE_DISTRIBUTION** : au moins un coach salarie (`isEmployee`) est present chaque jour du lundi au vendredi. Inactif si le club compte moins de 2 salaries.
+13. **MAX_CONSECUTIVE_SESSIONS** : une meme personne n'est jamais sur les 3 creneaux d'un enchainement A -> B -> C le meme jour, tous gymnases confondus.
+14. **ONE_SESSION_PER_DAY** : au plus une seance par jour et par equipe, sauf si l'equipe porte `allowMultipleSessionsPerDay`.
+15. **AGE_ASCENDING** : a gymnase et jour egaux, une equipe plus jeune ne passe pas apres une plus agee. Exempt si `ageMin` est absent (Loisir, Baby) ou si l'equipe est verrouillee en HARD.
+16. **VENUE_MINIMUMS** (`minAtVenueId`) : au moins N seances de l'equipe dans ce gymnase — un plancher, pas un forcage. Si N est prouvablement inatteignable, l'engine n'ajoute pas la contrainte et emet un diagnostic `venue_minimum_unreachable` plutot qu'un INFEASIBLE.
 
 ### Etape 3 — `add_level_2_objective()`
 
@@ -221,6 +229,8 @@ Les bonus et malus sont des termes secondaires. Ils ne changent pas l'ordre de g
 ### Etape 4 — `CpSolver.Solve()`
 
 Le solveur OR-Tools CP-SAT est lance avec un budget de temps **adaptatif** selon la taille du probleme (`n_teams × n_venues`) : **60 s** si ≤ 50, **180 s** si ≤ 200, **600 s** sinon. Le `solverTimeoutSeconds` du payload (defaut 650) n'est qu'un **plafond** — jamais le budget reel. La resolution se fait en **deux phases lexicographiques** (placement d'abord, puis chainage) ; les **10 secondes** souvent citees sont le cap de la **phase 2 (chaining) uniquement**.
+
+Le nombre de workers CP-SAT suit les **memes paliers** (`_adaptive_workers`) : **1** worker si `n_teams × n_venues` ≤ 200 (resolution deterministe, dont dependent les fixtures golden), **8** au-dela (le worker unique trouve l'optimum en quelques secondes sur les problemes denses riches en preferences soft mais n'arrive pas a le **prouver** ; le portfolio a 8 workers ferme la preuve rapidement, pour la meme valeur d'objectif). Au-dela du seuil, la **valeur** du score reste reproductible, mais pas l'arrangement exact des seances.
 
 Trois resultats possibles :
 
@@ -268,6 +278,13 @@ Une fois le solveur termine, le moteur construit la reponse JSON :
       "severity": "WARNING",
       "message": "Le creneau SOFT du SM1 (lundi 19h) a ete deplace vers mardi 19h pour optimiser le score global",
       "teamId": "t-sm1"
+    },
+    {
+      "id": "constraint_not_honored-off-c-maxime-6",
+      "type": "constraint_not_honored",
+      "severity": "INFO",
+      "teamId": "t-sm1",
+      "message": "Réservation maintenue pour SM1 (Gymnase A le samedi à 10:00 (90 min)) alors que Maxime Dupont est indisponible : le verrou prime, la contrainte est ignorée. (contrainte « indisponibilité de Maxime Dupont »)"
     }
   ],
   "metrics": {
@@ -285,7 +302,7 @@ Une fois le solveur termine, le moteur construit la reponse JSON :
 - **`score`** : score total de la solution. 0 signifie que rien n'a ete place
 - **`slots`** : liste des creneaux assignes. Chaque creneau a un `lockLevel` (`NONE` pour les nouveaux, `HARD`/`SOFT` pour les pre-existants preserves)
 - **`unplaced`** : liste des `teamId` pour lesquels aucune seance n'a ete placee
-- **`diagnostics`** : alertes detaillees (voir `solver-errors.md` pour le catalogue complet). Les severites reelles sont `ERROR` / `WARNING` / `INFO` (ex. `soft_lock_moved` = `WARNING`). Le `DiagnosticSchema` exige un champ `id` et ne connait **pas** de champ `slotId` (`extra=forbid`)
+- **`diagnostics`** : alertes detaillees (voir `solver-errors.md` pour le catalogue complet). Les severites reelles sont `ERROR` / `WARNING` / `INFO` (ex. `soft_lock_moved` = `WARNING`, `constraint_not_honored` sur verrou = `INFO`). Le `DiagnosticSchema` exige un champ `id` et ne connait **pas** de champ `slotId` (`extra=forbid`)
 - **`metrics`** : metriques techniques du solveur. `nb_variables` et `nb_constraints` donnent une idee de la taille du probleme. `wall_time_ms` indique le temps reel de resolution
 
 ---

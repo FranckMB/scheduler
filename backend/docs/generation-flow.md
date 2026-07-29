@@ -47,7 +47,13 @@ Authorization: Bearer <token>
 
 ### 2.3 Traitement par GenerateScheduleController
 
-Le contrôleur `GenerateScheduleController` exécute trois actions atomiques :
+Le contrôleur `GenerateScheduleController` commence par **trois refus synchrones** — aucun ne crée de planning `PENDING` ni de diagnostic, l'appelant reçoit l'erreur immédiatement :
+
+1. **409 Conflict** si la version est celle que son plan **pointe** : c'est le planning en vigueur, il faut d'abord le **rouvrir** (`POST /api/schedules/{id}/reopen`).
+2. **422 Unprocessable Entity** si `GenerationComplexityGuard` juge le problème hors bornes (garde anti-DoS A10 « generation bomb » : plafonds généreux, ~10× un gros club FFBB ; les contraintes y sont comptées **permanentes only**, comme dans le payload).
+3. **422 Unprocessable Entity** si `OrphanPinGuard` trouve un **épinglage orphelin** — un verrou ou une réservation qui ne correspond plus à aucun créneau après une refonte de la grille de période. Le message nomme le gymnase et le jour ; c'est au gestionnaire de trancher (planning de période uniquement).
+
+Ces gardes passées, il exécute trois actions :
 
 1. **Vérification des droits** : l'utilisateur appartient-il au club propriétaire du planning ?
 2. **Mise à jour du statut** : `Schedule.status` passe de `DRAFT` à `PENDING`.
@@ -91,7 +97,11 @@ Il n'y a donc **pas d'échec** pour l'utilisateur, et le diagnostic `engine_busy
 
 ### 3b — Construction du payload (ScheduleConstraintBuilder)
 
-Le verrou acquis, `ScheduleConstraintBuilder` construit le payload JSON destiné au moteur. Voici ce qu'il fait, dans l'ordre :
+Le verrou acquis, `ScheduleConstraintBuilder` construit le payload JSON destiné au moteur.
+
+> ⚠️ **Deux branches.** Ce qui suit décrit `buildForClubSeason` (plan de base). Si le `Schedule` est l'**overlay d'une période** (`calendarEntryId` renseigné), le handler bascule sur `buildForOverlay`, qui **contourne le cache d'entrées** et lit **la grille de la période et elle seule** — les `VenueTrainingSlot` ancrés à son `schedulePlanId`, **jamais d'union** avec les créneaux de saison (feature #8). Détail dans `backend/AGENTS.md`.
+
+Voici ce que fait la branche de base, dans l'ordre :
 
 1. **Salles actives** (`venues[]`) : récupère toutes les salles du club pour la saison active. Il n'y a **pas de fenêtres par défaut** : chaque salle est sérialisée avec ses créneaux d'ouverture réels (`VenueTrainingSlot`) dans une clé `trainingSlots` — liste éventuellement **vide** si aucun créneau n'a été saisi (la salle est alors inutilisable par le solveur).
 
@@ -105,7 +115,7 @@ Le verrou acquis, `ScheduleConstraintBuilder` construit le payload JSON destiné
 
    > Exemple : l'objet coach d'Enzo ne contient que son identité. Son indisponibilité du vendredi voyage dans `constraints[]` (`COACH_AVAILABILITY`, `{coachId, unavailableDays: [5]}`), et ses encadrements SM1 (MAIN) / SM2 (ASSISTANT) en contraintes issues de `TeamCoach`.
 
-4. **Contraintes utilisateur** (`constraints[]`) : récupère toutes les entités `Constraint` actives. Résout les tags `CLUB` en contraintes `TEAM` individuelles (voir [constraints.md](./constraints.md) section 4). Sérialise au format v2.
+4. **Contraintes utilisateur** (`constraints[]`) : `ConstraintRepository::findPermanentByClubSeason` — **uniquement les contraintes permanentes** (`calendarEntryId IS NULL`), jamais `findByClubSeason`. Une contrainte **datée** appartient à une période du cockpit et ne doit JAMAIS alimenter la génération du plan de base. Résout ensuite les tags `CLUB` en contraintes `TEAM` individuelles (voir [constraints.md](./constraints.md) section 4). Sérialise au format v2.
 
 5. **Créneaux existants** (`slotTemplates[]`) : récupère les `ScheduleSlotTemplate` existants avec leur `lockLevel` (enum `NONE` | `SOFT` | `HARD` — il n'existe pas de valeur `LOCK`). Les créneaux `HARD` sont figés, le solveur ne peut pas les déplacer (en pratique seuls `NONE` et `HARD` atteignent le payload : le `SOFT` est rejeté à l'écriture). Les réservations (`Reservation`) sont fusionnées dans la même liste, comme des pins `HARD`.
 
@@ -259,7 +269,7 @@ Le moteur a trouvé un planning valide. `ScheduleResultImporter` exécute les op
 4. **Mise à jour du planning** :
    - `Schedule.status` → `COMPLETED`
    - `Schedule.score` → valeur du score objectif (ex: `117679`)
-   - `Schedule.solverMetrics` → métriques brutes du solveur (temps de résolution, nombre de itérations, etc.)
+   - `Schedule.solverNbVariables` / `solverNbConstraints` / `solverNbConflicts` / `solverWallTimeMs` → métriques brutes du solveur. **Il n'existe pas de champ `solverMetrics`** : ce sont quatre colonnes distinctes, et l'historique par génération vit dans l'entité `SolverMetric` (alimentée par `SolverMetricsRecorder`).
 
 ### 5.2 Cas : statut "failed" ou "infeasible"
 
@@ -342,6 +352,9 @@ Voici un tableau récapitulatif de tous les cas d'erreur possibles, avec leur ca
 
 | Cas | Cause | Statut résultant | Diagnostic | Action recommandée |
 |-----|-------|-----------------|------------|-------------------|
+| **Version en vigueur** | La version est celle que son plan **pointe** (ADR-0002 inv. 1) | — (refus synchrone **409**, rien n'est mis en file) | Aucun | La rouvrir d'abord : `POST /api/schedules/{id}/reopen` |
+| **Problème hors bornes** | `GenerationComplexityGuard` (A10) : le club/saison dépasse les plafonds anti-« generation bomb » | — (refus synchrone **422**) | Aucun | Réduire le périmètre. Les plafonds sont ~10× un gros club FFBB : les franchir signale une donnée aberrante, pas un usage normal |
+| **Épinglage orphelin** | `OrphanPinGuard` (#8) : un verrou ou une réservation ne correspond plus à aucun créneau de la grille de période | — (refus synchrone **422**) | Aucun | Le message nomme le gymnase et le jour : redéfinir les créneaux, ou retirer l'épinglage |
 | **Club déjà en génération** | Verrou Redis `schedule_generation:club:{clubId}` tenu par un autre worker | `PENDING` (retry Messenger via `RecoverableMessageHandlingException`) | Aucun | Rien à faire : la demande sera rejouée automatiquement à la fin de la génération en cours |
 | **Timeout HTTP (> 650 s)** | Problème trop complexe pour le solveur CP-SAT (budget adaptatif 60/180/600 s dépassé côté engine) | `FAILED` | `engine_timeout` | Simplifier les contraintes `HARD`, augmenter le nombre de salles, ou réduire le nombre d'équipes |
 | **Payload invalide (422)** | Réponse engine sans clé `status` (corps d'erreur Pydantic) — improbable car le payload est construit par `ScheduleConstraintBuilder` | `FAILED` | `engine_failed` | Comparer le `snapshotData` au schéma engine (contrat v2.1) |

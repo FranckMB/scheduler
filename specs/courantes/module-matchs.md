@@ -1,8 +1,24 @@
 # Module matchs (FFBB) — état livré
 
+Last verified @ 2026-07-29
+
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C). Ici = ce qui
-> **existe** aujourd'hui. Module **autonome**, gating découplé du socle d'entraînement.
+> **existe** aujourd'hui. Module **fonctionnellement autonome** : ses entités, son moteur de conflits et sa
+> grille week-end ne dépendent pas du solveur d'entraînement, et rien de ce module n'entre dans le payload
+> solveur.
+
+> ⚠ **DOC-1 — divergence connue, arbitrage ouvert (constat au 2026-07-29, ne pas coder « comme si »).**
+> L'intention produit écrite dans [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md)
+> §10 est un **gating découplé** de la validation du socle. **Le code livré fait l'inverse** : créer un match
+> (`FixtureStateProcessor`) comme importer un fichier FBI (`ImportFixturesController`) appellent
+> `App\Service\SocleGuard::assertSeasonPlanChosen`, qui rend **409** tant que le plan SEASON ne **pointe**
+> aucune version (ADR-0002 inv. 13, seuil 2 du cockpit — voir
+> [`planning-lifecycle-validated.md`](planning-lifecycle-validated.md) §0). Le front verrouille l'entrée
+> « matchs » sur le même critère (`chosenScheduleId`).
+> **Cette page décrit le CODE.** Laquelle des deux lectures fait foi est une **décision du fondateur**,
+> non tranchée à ce jour : soit la spec d'évolution s'aligne sur le couplage, soit les deux appels de garde
+> sautent. Tant que ce n'est pas arbitré, ne pas « corriger » l'un des deux côtés en silence.
 
 ## Palier A — PR-1 (socle backend, 2026-07-06)
 
@@ -45,8 +61,11 @@ Croise l'empreinte-temps `MatchFootprint` d'un `Fixture` avec les autres occupat
   d'occupation se chevauchent.
 - **`MATCH_TRAINING`** : un `Fixture` chevauchant un entraînement d'une équipe du coach, lu dans le **planning
   effectif à la date du match**. Une période ACTIVE **capture** les dates qu'elle couvre : à l'intérieur le
-  planning de base ne s'applique pas — son **overlay** (`CalendarEntry.overlayScheduleId`) s'il existe, **sinon
-  aucun entraînement** (une coupure = « pas d'entraînement », donc aucun conflit fantôme). Hors période = la
+  planning de base ne s'applique pas — son **overlay**, c'est-à-dire la **version choisie du plan de la
+  période** (`SchedulePlanProvisioner::chosenByPeriodPlans`, ADR-0002 lot D-b du 2026-07-18 ; le champ
+  `CalendarEntry.overlayScheduleId` a été **supprimé** à cette occasion, et un plan de période qui ne pointe
+  rien = **aucun overlay**), s'il existe,
+  **sinon aucun entraînement** (une coupure = « pas d'entraînement », donc aucun conflit fantôme). Hors période = la
   **version choisie du plan SEASON** (`SchedulePlanProvisioner::chosenOfSeasonPlan`, ADR-0002). Le créneau hebdo (`ScheduleSlotTemplate`, `dayOfWeek`+`startTime`+`durationMinutes`)
   est **projeté sur la date**, puis chevauché. Le coach en conflit = le `coachId` **assigné au créneau** s'il
   existe, sinon les coachs de l'équipe du créneau (pas de faux positif sur un co-coach qui ne tient pas la séance).
@@ -107,8 +126,9 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   - **Salle : lue mais non stockée** (gymnases adverses = annuaire palier B).
   - Dates/heures : `jj/mm/aaaa` + `HH:MM` **et** serials Excel ; invalide = erreur de ligne.
 - **Endpoint** `POST /api/teams/{id}/fixtures/import` (multipart, opération API Platform sur `TeamResource`,
-  contrôleur `ImportFixturesController`) — séquence SEC-04 : équipe d'un autre club/saison invisible → 404,
-  membre non-management → 403, saison archivée → 409, non-xlsx → 400.
+  contrôleur `ImportFixturesController`) — séquence SEC-04, dans cet ordre : équipe d'un autre club/saison
+  invisible → 404, pas d'adhésion active → 404, membre non-management → 403, saison archivée → 409,
+  **plan de saison sans version choisie → 409 (`SocleGuard`, cf. encadré en tête)**, non-xlsx → 400.
 - **UI** : bouton « Importer FBI » dans `/matchs` → `ImportFbiDialog` (équipe + fichier, reste ouvert pour
   afficher le rapport créés/ignorés/erreurs). Invalidation `fixtures` + `competitions`.
 

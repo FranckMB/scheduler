@@ -12,7 +12,16 @@ Read order for any agent working in this repo:
 Package-level detail stays next to the code:
 
 - [`backend/AGENTS.md`](backend/AGENTS.md) — backend (PHP / Symfony) specifics.
-- [`engine/AGENTS.md`](engine/AGENTS.md) and [`engine/app/solver/AGENTS.md`](engine/app/solver/AGENTS.md) — engine / solver specifics.
+- [`engine/AGENTS.md`](engine/AGENTS.md) — engine / solver specifics.
 - [`frontend/AGENTS.md`](frontend/AGENTS.md) — frontend (React / Vite) specifics.
 
-Other context files: [`docs/cleanup-candidates.md`](docs/cleanup-candidates.md), [`docs/testing/testing-strategy.md`](docs/testing/testing-strategy.md), [`docs/architecture/adr-index.md`](docs/architecture/adr-index.md), [`docs/technique/DEVELOPMENT.md`](docs/technique/DEVELOPMENT.md) (human quick-start).
+Other context files:
+
+- [`docs/glossary.md`](docs/glossary.md) — business terms and payload keys (one concept = one word).
+- [`docs/testing/testing-strategy.md`](docs/testing/testing-strategy.md) — CI pipeline, blocking gate, how to run tests locally.
+- [`docs/architecture/adr-index.md`](docs/architecture/adr-index.md) — ADRs + the constraint matrix.
+- [`docs/security/`](docs/security/) — RLS and its exceptions · Mercure hardening · RGPD register.
+- [`docs/ops/`](docs/ops/) — prod stack (`docker-compose.prod.yml`) · deploy runbook · backups & restore.
+- [`docs/technique/DEVELOPMENT.md`](docs/technique/DEVELOPMENT.md) — human quick-start.
+
+Debt, backlog and safe deletions have a **single home**: [`specs/evolution/roadmap.md`](specs/evolution/roadmap.md) (§Backlog · §Dette). Point-in-time documents that no longer describe the product live in [`docs/archive/`](docs/archive/) — historical trace only, never a source of truth.

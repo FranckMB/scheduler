@@ -62,8 +62,14 @@ Les diagnostics apparaissent dans le tableau `diagnostics[]` de la reponse. Ils 
 |------|----------|---------------|------------------|-------------------|
 | `unplaced` | ERROR | Une equipe n'a recu aucune seance | Aucun creneau disponible ne correspond aux contraintes de l'equipe. Tous les slots des salles sont pris. Les contraintes HARD sont trop restrictives. | Ajouter des disponibilites de salle. Alleger les contraintes HARD (ex. lever l'interdiction du vendredi). Ajouter une nouvelle salle. |
 | `soft_lock_moved` | WARNING | Un creneau verrouille en SOFT a ete deplace | Le solveur a trouve une meilleure solution globale en deplacant ce creneau. Ou bien le creneau entrait en conflit avec une autre equipe de priorite superieure. | Accepter le deplacement, ou passer le verrou en HARD si le creneau doit absolument rester a cette place. |
-| `coach_overload` | WARNING | Un entraineur est assigne a plus de seances que son seuil | Plusieurs equipes partagent le meme entraineur principal. Le seuil `maxDaysOverride` de l'entraineur est trop bas. | Assigner un entraineur supplementaire a certaines equipes. Augmenter le seuil de l'entraineur. Repartir le coaching (entraineur principal + adjoint). |
-| `conflict` | ERROR | Deux contraintes HARD se contredisent | Une equipe a une contrainte "pas le lundi" et une autre "obligatoirement le lundi". Une salle est fermee le jour ou une equipe y est forcee d'aller. | Revoir les contraintes en conflit. Supprimer l'une des deux regles contradictoires. |
+| `coach_overload` | WARNING | Un entraineur intervient sur plus de **jours** que son maximum recommande (`maxDaysOverride`) — deux seances le meme jour comptent pour **un** jour, pas deux | Plusieurs equipes partagent le meme entraineur principal. Le seuil `maxDaysOverride` de l'entraineur est trop bas. | Assigner un entraineur supplementaire a certaines equipes. Augmenter le seuil de l'entraineur. Repartir le coaching (entraineur principal + adjoint). |
+| `conflict` | ERROR | Deux contraintes HARD se contredisent, ou le solveur n'a pas abouti | Instance INFEASIBLE, budget de temps epuise sans solution (UNKNOWN), modele invalide, ou double-reservation constatee apres coup (gymnase au-dela de sa capacite, coach sur deux equipes en meme temps). | Revoir les contraintes en conflit. Supprimer l'une des deux regles contradictoires. |
+| `session_below_effective_min` | ERROR / WARNING | Une equipe recoit moins de seances que demande | Creneaux de gymnase insuffisants, ou equipes plus prioritaires servies d'abord. | ERROR quand le minimum cible du tier n'est pas atteint, WARNING quand il l'est mais qu'il manque une seance demandee. Ajouter de la disponibilite de gymnase. |
+| `unused_slot` | WARNING | Un creneau declare n'a recu aucune equipe | Le creneau est incompatible avec les contraintes des equipes restantes (jour interdit, fenetre horaire, gymnase interdit), ou plus aucune equipe n'a de seance a placer. | Reaffecter le creneau a une equipe compatible, ou le retirer des disponibilites du gymnase. |
+| `coach_no_rest_day` | WARNING | Un entraineur travaille les 5 jours ouvres | Emis uniquement quand la passe de repli a ete utilisee (contrainte de jour de repos abandonnee pour trouver une solution). | Repartir des seances sur un autre coach, ou declarer une indisponibilite sur un jour. |
+| `day_constraint_conflict` | ERROR | Les regles de jours d'une equipe se contredisent | Un jour est a la fois impose (`forcedDays`) et interdit (`forbiddenDays`), ou tous les jours de la liste blanche (`allowedDays`) sont interdits. L'equipe est alors forcee a 0 seance. | Retirer le recouvrement entre la regle "uniquement / impose" et la regle "evite". |
+| `venue_minimum_unreachable` | ERROR | Un plancher "au moins N seances dans ce gymnase" est inatteignable | Le gymnase offre a l'equipe moins de **jours distincts** que N (elle joue au plus une seance par jour). | Baisser N, ou ouvrir des creneaux sur d'autres jours dans ce gymnase. |
+| `constraint_not_honored` | INFO / WARNING | Une contrainte saisie n'a pas pu etre appliquee | **INFO** : un verrou HARD l'a ecrasee (P2-9) — indisponibilite coach, fenetre horaire, jour exclu, gymnase interdit. Le verrou prime, la contrainte devient inatteignable. **WARNING** : la contrainte est arrivee sans equipe cible et n'a donc pu etre appliquee a personne. | INFO : retirer le verrou, ou assumer qu'il prime — c'est une decision de gestionnaire, pas une erreur. WARNING : verifier le ciblage de la regle cote backend. |
 
 ---
 
@@ -108,6 +114,8 @@ Il ne reste que le week-end. Mais le club n'a pas de salle ouverte le samedi ou 
 
 **Correction** : convertir certains verrous HARD en SOFT. Ou les supprimer completement pour laisser le moteur optimiser. Ou ajouter des disponibilites de salle en soiree (21h00-22h30).
 
+> **A lire avant de conclure a un bug de contrainte.** Un creneau verrouille en HARD est pre-place **hors du solveur** : sa variable de decision n'existe pas, donc aucune contrainte saisie ne peut s'y appliquer (le verrou ne "gagne" pas contre la contrainte, il la rend inatteignable). Depuis P2-9, chaque verrou qui ecrase ainsi une contrainte produit un diagnostic `constraint_not_honored` de severite **INFO** nommant la regle, l'equipe, le gymnase, le jour, l'heure et la duree — y compris quand le statut final est `completed`. Si un gestionnaire signale "ma contrainte n'est pas respectee", ces INFO sont le premier endroit ou regarder.
+
 ---
 
 ## Interpretation du score
@@ -140,7 +148,9 @@ Supposons un club avec :
 - U13M2 (C, 2 seances) : 1 seance placee = 1 x 10 = 10
 - Ecole de basket (D, 1 seance) : 0 seance placee = 0
 
-Score de base = 62 210. Des bonus/penalites s'ajoutent ensuite (preservation des SOFT locks, respect des preferences, surcharge entraineur).
+Score de base = 62 210. S'y ajoutent ensuite les termes soft **reels** de l'objectif : `session_count` (+20 par seance placee), `preferred` / `avoided_venue` (+60 / -60 sur le gymnase prefere ou evite), `preferred_day` et `preferred_time` (+30), `rest` (+3, lendemain de match libre), `spacing` (-2, deux seances sur des jours consecutifs), le bonus de chainage (au plus 8) et la penalite `UNPLACED_PENALTY` (-100 000 par equipe totalement non placee).
+
+L'objectif ne contient **ni** bonus de preservation des verrous `SOFT` **ni** penalite de surcharge d'entraineur : `soft_lock_moved` et `coach_overload` sont des **diagnostics post-solve**, le solveur les constate apres coup au lieu de les optimiser.
 
 ---
 

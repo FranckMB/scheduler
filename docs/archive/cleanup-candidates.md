@@ -1,5 +1,10 @@
 # Cleanup Candidates — ClubScheduler
 
+> ⚠️ **ARCHIVED (2026-07-29)** — every candidate below was resolved on 2026-07-01, and the file:line
+> references no longer point at anything (`objective.py` no longer holds the aliases, `helpers.py`
+> now exists). Kept for historical trace only. **Safe deletions and debt now live in a single home:
+> [`specs/evolution/roadmap.md`](../../specs/evolution/roadmap.md) §Dette.**
+
 Concrete, **proof-backed** removal/simplification candidates surfaced by the onboarding audit. This is a shortlist of the safest items from `specs/evolution/roadmap.md` §Dette. **Update 2026-07-01: all candidates below are now resolved** — C1→E1 (aliases deleted), C2→E4 (comment removed), C3→E5 (doc fixed), C4→E2 (`helpers.py`), C5→E3 (documented, ADR-0001). Historique : git log de `docs/technical-debt.md` (absorbé roadmap §Dette, 2026-07-11). Each requires an explicit scoped plan + validation before action. Perimeter: backend + engine (frontend excluded).
 
 | # | Candidate | Location | Proof | Suggested action | Risk |

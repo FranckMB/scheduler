@@ -43,11 +43,11 @@ L'**engine** est un microservice Python qui reçoit un contexte complet (clubs, 
 
 ### `POST /generate`
 
-**Request** : `ScheduleInputSchema` (contract `"2.0"`)
+**Request** : `ScheduleInputSchema` (contrat `"2.1"`, fichier `engine/CONTRACT_VERSION` — seul le **MAJOR** est comparé, donc `"2.0"` passe aussi)
 
 ```json
 {
-  "version": "2.0",
+  "version": "2.1",
   "clubId": "uuid",
   "seasonId": "uuid",
   "scheduleName": "Saison 2026-2027",
@@ -96,9 +96,9 @@ L'**engine** est un microservice Python qui reçoit un contexte complet (clubs, 
 # Toutes les commandes s'exécutent DANS le conteneur engine
 # Le Makefile les lance automatiquement dans le conteneur
 
-make test             # ruff + mypy + pytest
-make lint             # ruff + mypy
-make format           # ruff --fix (auto-format)
+make test             # ruff + mypy + bandit + pytest (puis pytest --cov)
+make lint             # ruff + mypy + bandit
+make format           # ruff format
 make exec             # Entrer dans le conteneur engine
 
 # Dans le conteneur :
@@ -140,12 +140,17 @@ engine/
 4. objective.py      Maximise le score pondéré (Level 2) — poids réels dans LEVEL_2_OBJECTIVE_WEIGHTS :
                       - Tiers S: 10000, A: 1000, B: 100, C: 10, D: 1
                       - preferred: 60 · avoided_venue: -60 · preferred_day/time: 30
-                      - session_count: 20 · rest: 3
+                      - session_count: 20 · rest: 3 · spacing: -2
                       (source de vérité = objective.py ; ne pas figer d'autres valeurs)
 5. OR-Tools CP-SAT   Solve en 2 phases (placement puis chaînage borné 10s), warm-start.
-                      timeout adaptatif plafonné par solver_timeout_seconds (défaut 650s) ; seed = solver_seed (42)
+                      timeout adaptatif (60/180/600s) plafonné par solver_timeout_seconds (défaut 650s)
+                      workers adaptatifs : 1 si n_teams×n_venues ≤ 200, sinon 8 ; seed = solver_seed (42)
 6. result_builder.py   Transforme solution → ScheduleOutputSchema
-                       + génère diagnostics (unplaced, soft_lock_moved, coach_overload, conflict)
+                       + génère diagnostics (unplaced, soft_lock_moved, coach_overload,
+                         session_below_effective_min, unused_slot, conflict) ; s'y ajoutent ceux
+                         produits au parse / à la construction du modèle : day_constraint_conflict,
+                         venue_minimum_unreachable, constraint_not_honored (dont les contraintes
+                         écrasées par un verrou HARD, en INFO). Catalogue : docs/solver-errors.md
 ```
 
 > **Pass unique, pas de fallback silencieux.** INFEASIBLE → `status="failed"` + diagnostics (décision : [`docs/architecture/adr-0001-single-pass-solve.md`](../docs/architecture/adr-0001-single-pass-solve.md)). Le timeout et le seed viennent du payload (`solver_timeout_seconds` / `solver_seed`), pas codés en dur.
@@ -155,7 +160,10 @@ engine/
 > Liste exhaustive et à jour : `constraints.py` (`add_level_1_hard_constraints` / `add_time_window_constraints`) et **`specs/courantes/engine-inventory.md` §4** (la seule vue maintenue — pas de décompte figé ici, il périmerait).
 
 ### Hard (Level 1) — Impératives
-Salle at-most-one (capacité), coach at-most-one, coach-joueur non-overlap, repos coach / distribution salariés / max consécutifs, fixed slots (LOCK), forbidden assignments, indispo coach, fermetures salle, min sessions, forced venues, une session/jour, âge croissant. Détail : engine-inventory §4.4.
+Salle at-most-one (capacité), coach at-most-one, coach-joueur non-overlap, repos coach / distribution salariés / max consécutifs, forbidden assignments, indispo coach, fermetures salle (étendues en `forbiddenVenueId` côté backend), forced venues, planchers par gymnase (`minAtVenueId`, ALIGN-05), une session/jour, âge croissant. Détail : engine-inventory §4.4.
+
+> ⚠ **`min_sessions` n'est PAS dur en production** (ENG-18) : `_solve` passe un plancher 0 pour chaque équipe. La cible est portée par le bonus objectif `session_count` et signalée par le diagnostic `session_below_effective_min`.
+> ⚠ Un **verrou HARD** (`slotTemplates[].lockLevel`) est pré-placé **hors du solveur** : sa variable n'existe pas, donc aucune contrainte ci-dessus ne peut l'atteindre. Le verrou prime (ALIGN-07) ; depuis P2-9 le moteur émet un `constraint_not_honored` INFO pour chaque contrainte ainsi écrasée.
 
 ### Soft (Level 2) — Optimisées
 Tiers S>A>B>C>D, `preferred`, `avoided_venue` (malus), `preferred_day`, `preferred_time`, `session_count`, `rest`. Poids réels : `objective.py` (`LEVEL_2_OBJECTIVE_WEIGHTS`).
@@ -167,6 +175,7 @@ Le métier du solveur vit dans `engine/docs/` — à lire avant de toucher au so
 | Doc | Contenu |
 |-----|---------|
 | [`docs/business.md`](docs/business.md) | **Cœur métier** — concepts (équipe, salle, coach, contrainte : scopes/familles/règles, tiers de priorité, contraintes implicites, niveaux de lock). |
+| [`docs/constraint-vocabulary.md`](docs/constraint-vocabulary.md) | **Vocabulaire engine complet** — chaque clé de `config` que le solveur sait parser, son mécanisme (dur/soft), le `ruleType` qui l'active, et ce qu'un verrou HARD écrase (P2-9). |
 | [`docs/nominal-flow.md`](docs/nominal-flow.md) | Flux nominal d'une requête de bout en bout — structure du payload v2.0, négociation de version, locks par club, étapes du pipeline, schéma de sortie. |
 | [`docs/solver-errors.md`](docs/solver-errors.md) | Erreurs & diagnostics — erreurs HTTP, statuts solveur, types de diagnostics, scénarios d'infaisabilité, lecture du score, guide de debug. |
 | [`AGENTS.md`](AGENTS.md) | Cheat-sheet agent (conventions ruff/mypy/pytest, gotchas, quick-reference). |
