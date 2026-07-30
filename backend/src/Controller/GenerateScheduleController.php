@@ -100,20 +100,35 @@ final class GenerateScheduleController extends AbstractController implements Sea
             return $this->json(['error' => $orphanPin], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $schedule->setStatus(ScheduleStatus::PENDING);
-
         // Launching the first generation completes onboarding (the wizard is done);
         // done at queue time so the UI can leave /wizard for the work loop right away,
         // regardless of whether the solve ends up feasible.
         $club = $this->entityManager->getRepository(Club::class)->find($schedule->getClubId());
-        if ($club instanceof Club) {
-            $club->setLastActivityAt(DateTimeImmutable::createFromInterface($this->clock->now()));
-            if (!$club->getOnboardingCompleted()) {
-                $club->setOnboardingCompleted(true);
-            }
-        }
 
-        $this->entityManager->flush();
+        // P2-9bis (planning lifecycle) : défense en profondeur du socle en vigueur. Ce
+        // contrôleur n'avait NI transaction NI verrou : on enveloppe le passage en PENDING
+        // et le flush dans une transaction qui prend d'abord le verrou de plan-scope de la
+        // saison — sans lui la garde ne serait qu'un TOCTOU. On N'ARME l'assertion QUE pour
+        // une version de saison ; un overlay a déjà passé assertSeasonPlanChosen plus haut,
+        // qui exige l'INVERSE (les deux ne s'appliquent jamais au même appel). Le dispatch
+        // reste APRÈS le commit : le worker ne doit jamais consommer avant que la ligne soit
+        // visible.
+        $isSeasonSchedule = $this->schedulePlanProvisioner->isSeasonSchedule($schedule);
+        $seasonId = $schedule->getSeasonId();
+        $this->entityManager->wrapInTransaction(function () use ($schedule, $club, $isSeasonSchedule, $seasonId): void {
+            if ($isSeasonSchedule) {
+                $this->schedulePlanProvisioner->lockPlanScope(SchedulePlanProvisioner::seasonScopeKey($seasonId));
+                $this->socleGuard->assertSeasonPlanNotChosen($seasonId);
+            }
+            $schedule->setStatus(ScheduleStatus::PENDING);
+            if ($club instanceof Club) {
+                $club->setLastActivityAt(DateTimeImmutable::createFromInterface($this->clock->now()));
+                if (!$club->getOnboardingCompleted()) {
+                    $club->setOnboardingCompleted(true);
+                }
+            }
+            $this->entityManager->flush();
+        });
 
         $this->messageBus->dispatch(
             new GenerateScheduleMessage(

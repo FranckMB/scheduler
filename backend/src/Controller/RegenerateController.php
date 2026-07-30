@@ -10,6 +10,7 @@ use App\Message\GenerateScheduleMessage;
 use App\Service\GenerationComplexityGuard;
 use App\Service\ManagementAccessGuard;
 use App\Service\SchedulePlanProvisioner;
+use App\Service\SocleGuard;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -45,6 +46,7 @@ final class RegenerateController extends AbstractController implements SeasonSco
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly GenerationComplexityGuard $complexityGuard,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly SocleGuard $socleGuard,
     ) {}
 
     #[Route('/api/schedules/{id}/regenerate', name: 'api_schedule_regenerate', methods: ['POST'])]
@@ -114,7 +116,14 @@ final class RegenerateController extends AbstractController implements SeasonSco
             // ADR-0002 C4 : la nouvelle version rejoint LE MÊME plan que la source
             // (régénérer = une V+1 du même plan) ; linkSchedule ne fait que la numéroter.
             ->setSchedulePlanId($source->getSchedulePlanId());
-        $this->entityManager->wrapInTransaction(function () use ($newSchedule): void {
+        $seasonId = $source->getSeasonId();
+        $this->entityManager->wrapInTransaction(function () use ($newSchedule, $seasonId): void {
+            // P2-9bis (planning lifecycle) : défense en profondeur du socle en vigueur.
+            // SOUS le verrou de plan-scope de la saison (tenu jusqu'au commit — une garde
+            // qui lit hors verrou n'est qu'un TOCTOU) : tant que le plan SEASON pointe une
+            // version choisie, on refuse d'en préparer une autre. Miroir de processPost.
+            $this->schedulePlanProvisioner->lockPlanScope(SchedulePlanProvisioner::seasonScopeKey($seasonId));
+            $this->socleGuard->assertSeasonPlanNotChosen($seasonId);
             $this->entityManager->persist($newSchedule);
             $this->schedulePlanProvisioner->linkSchedule($newSchedule);
             $this->entityManager->flush();

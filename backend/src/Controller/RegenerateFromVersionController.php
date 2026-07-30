@@ -9,6 +9,7 @@ use App\Entity\Season;
 use App\Enum\ScheduleStatus;
 use App\Service\ManagementAccessGuard;
 use App\Service\SchedulePlanProvisioner;
+use App\Service\SocleGuard;
 use App\Service\StructureRestorer;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -38,6 +39,7 @@ final class RegenerateFromVersionController extends AbstractController implement
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly StructureRestorer $structureRestorer,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly SocleGuard $socleGuard,
     ) {}
 
     #[Route('/api/schedules/{id}/regenerate-from', name: 'api_schedule_regenerate_from', methods: ['POST'])]
@@ -102,6 +104,12 @@ final class RegenerateFromVersionController extends AbstractController implement
         // COMPLETED, so its plan is shown as-is; "Régénérer" produces a new
         // version later if wanted.
         $this->entityManager->wrapInTransaction(function () use ($clubId, $seasonId, $sourceId, $data): void {
+            // P2-9bis (planning lifecycle) : défense en profondeur du socle en vigueur.
+            // SOUS le verrou de plan-scope de la saison, AVANT le restore destructif : tant
+            // que le plan SEASON pointe une version choisie, on refuse d'en charger une autre
+            // (rouvrir d'abord). Une garde qui lit hors verrou n'est qu'un TOCTOU.
+            $this->schedulePlanProvisioner->lockPlanScope(SchedulePlanProvisioner::seasonScopeKey($seasonId));
+            $this->socleGuard->assertSeasonPlanNotChosen($seasonId);
             $this->structureRestorer->apply($clubId, $seasonId, $data);
             // apply() clears the identity map — reload the season AFTER it to
             // re-point the ★ (a pre-loaded instance would be detached).
