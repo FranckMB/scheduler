@@ -9,7 +9,11 @@ import { toast } from "@/shared/stores/toastStore";
 // During onboarding — until the season has a main plan (baseline, set by the
 // first generation) — the app is locked to the wizard, except the account-menu
 // (burger) destinations, which stay reachable.
-const ONBOARDING_ALLOWED = ["/wizard", "/profile", "/club"];
+// This list MUST mirror the account menu in AppLayout: an entry shown there but
+// missing here is a visible link that bounces back to /wizard. `/confidentialite`
+// was exactly that — and it is the page a user is most likely to want BEFORE
+// finishing signup.
+const ONBOARDING_ALLOWED = ["/wizard", "/profile", "/club", "/confidentialite"];
 
 /**
  * Gate for authenticated routes:
