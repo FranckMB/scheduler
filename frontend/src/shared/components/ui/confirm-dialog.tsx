@@ -98,17 +98,7 @@ export function ConfirmDialog({
           <Button variant="ghost" onClick={onCancel}>
             {cancelLabel}
           </Button>
-          <Button
-            variant={destructive ? "destructive" : "default"}
-            disabled={confirmBlocked}
-            // La friction se ré-arme à chaque tentative : si la confirmation échoue sans
-            // fermer le dialogue (500, réseau, JWT expiré), la phrase déjà tapée laisserait
-            // le geste destructif à un clic. On vide le champ AVANT de déclencher l'action.
-            onClick={() => {
-              setPhraseInput("");
-              onConfirm();
-            }}
-          >
+          <Button variant={destructive ? "destructive" : "default"} disabled={confirmBlocked} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>

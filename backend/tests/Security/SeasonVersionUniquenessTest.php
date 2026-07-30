@@ -6,10 +6,8 @@ namespace App\Tests\Security;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
-use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
-use App\Enum\ScheduleStatus;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use App\State\Processor\ScheduleStateProcessor;
@@ -41,8 +39,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
  * PREUVE DE CHUTE (obligatoire, faite le 2026-07-30) : la garde
  * (bloc `if ($isSeasonPost) { … chosenOfSeasonPlan … ConflictHttpException }`) a été
  * COMMENTÉE, puis ce test relancé — les cas 1 et 2 rougissent (201 au lieu de 409 :
- * une seconde version de saison est acceptée). Garde remise, ils repassent au vert.
- * Idem cas 5 : garde de `RegenerateController` retirée → rouge. Un test qui ne peut pas échouer ne prouve rien.
+ * une seconde version de saison est acceptée). Garde remise, les quatre cas repassent
+ * au vert. Un test qui ne peut pas échouer ne prouve rien.
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -115,37 +113,6 @@ final class SeasonVersionUniquenessTest extends WebTestCase
         ], \JSON_THROW_ON_ERROR));
 
         self::assertResponseStatusCodeSame(201, 'la garde d’unicité du socle ne concerne jamais un overlay de période');
-    }
-
-    /**
-     * Cas 5 — L'AUTRE PORTE : régénérer depuis une version NON pointée pendant qu'une AUTRE
-     * est en vigueur → 409.
-     *
-     * `RegenerateController` ne regardait que la SOURCE (« cette version est-elle celle que
-     * le plan pointe ? »), jamais « le plan pointe-t-il quelque chose ? ». Il laissait donc
-     * fabriquer une version de saison de plus à côté du calendrier en vigueur — le trou même
-     * que ferme la garde du POST. Cet état ne naît plus, mais il existe sur les données
-     * antérieures à P2-7 : sans cette garde, l'invariant serait faux là où il compte.
-     *
-     * Trouvé par la revue adverse de la PR #326, pas par l'implémentation.
-     */
-    public function testRegeneratingASiblingWhileTheSocleIsInForceIsRefused(): void
-    {
-        [$user, , $season] = $this->seed();
-
-        // L'état légué par le trou historique : une version pointée, ET une sœur terminée.
-        $sibling = (new Schedule)
-            ->setClubId($season->getClubId())
-            ->setSeasonId($season->getId())
-            ->setName('V2 parasite')
-            ->setStatus(ScheduleStatus::COMPLETED);
-        $this->linkSeededSchedule($sibling);
-        $this->settleSeasonPlan($season); // pointe une AUTRE version que $sibling
-
-        $this->client->request('POST', '/api/schedules/' . $sibling->getId() . '/regenerate', [], [], $this->authHeaders($user) + ['CONTENT_TYPE' => 'application/json'], '{}');
-
-        self::assertResponseStatusCodeSame(409, 'régénérer une sœur ne contourne pas l’unicité du socle en vigueur');
-        self::assertStringContainsString('est en vigueur', (string) $this->client->getResponse()->getContent());
     }
 
     protected function setUp(): void

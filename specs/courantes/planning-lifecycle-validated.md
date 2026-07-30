@@ -92,10 +92,19 @@ préparer un autre. ». La garde est posée **sous le verrou de plan-scope de la
 (`SchedulePlanProvisioner::seasonScopeKey`) et **dans la transaction** de création (même
 patron que `ValidateScheduleController`/`ReopenScheduleController` : un
 `pg_advisory_xact_lock` pris hors transaction se relâcherait au statement suivant). Elle ne
-s'arme jamais pour un overlay de période (plan CLOSURE/HOLIDAY). « La seule manière de
-modifier le planning de saison est Rouvrir » est désormais vrai **par construction** — les
-autres portes (régénérer/`regenerate-from` la version choisie, valider qui supprime les
-sœurs) étaient déjà fermées. Posée en défense en profondeur même si l'UI n'atteint pas ce
+s'arme jamais pour un overlay de période (plan CLOSURE/HOLIDAY).
+
+⚠️ **Portée exacte — ne pas lire « par construction » plus loin qu'elle ne va.** Cette garde
+ferme **la création d'une version de saison**, et elle seule. Trois autres chemins peuvent
+encore agir sur le calendrier de saison **quand des versions sœurs héritées existent** (état
+que seul le trou d'avant P2-7 a pu produire — il ne naît plus) : `regenerate` et `generate`
+ne refusent que si la version *source* est celle qui est pointée, jamais si le plan pointe
+une AUTRE version ; `regenerate-from` restaure une structure ancienne sans consulter le
+pointeur du tout. Fermer les quatre portes derrière un invariant unique — « tant que le plan
+de saison est en vigueur, rien ne touche au calendrier de saison ni à ses entrées » — est
+tracé en dette (roadmap, **P2-9bis**) : c'est un lot de conception, pas un correctif, et les
+tentatives ponctuelles ont produit des régressions (revue #326 round 2). Posée en défense en
+profondeur même si l'UI n'atteint pas ce
 chemin (`GenerateStep.tsx` masque « Lancer la génération » dès qu'un planning de saison
 `COMPLETED` existe). NR : `Security/SeasonVersionUniquenessTest` (phase1).
 
