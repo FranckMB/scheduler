@@ -108,6 +108,13 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
     public function testAVersionIsCreatedUnderANamedPlanWhichLinksAndTypesIt(): void
     {
         [$user, $club, $season] = $this->seed();
+
+        // Sans schedulePlanId → le socle (plan SEASON). P2-7 : une version de saison ne naît
+        // plus tant que le plan SEASON en pointe une — cette sous-assertion doit donc PRÉCÉDER
+        // settleSeasonPlan (sinon le POST sans plan se heurte au 409 « socle en vigueur »).
+        $seasonVersion = $this->postSchedule($user, ['name' => 'V saison', 'status' => 'DRAFT']);
+        self::assertSame('SEASON', $this->getSchedule($user, (string) $seasonVersion['id'])['planType'], 'sans plan nommé, la version naît sous le socle');
+
         // inv. 13 : un overlay se bâtit sur un socle pointé.
         $this->settleSeasonPlan($season);
         $entryId = $this->postClosurePeriod($user);
@@ -120,10 +127,6 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
         self::assertArrayNotHasKey('calendarEntryId', $overlay, 'le doublon d’ancre a disparu de la sortie API (C4)');
         // planType est dérivé + batché à la LECTURE (pas dans la réponse POST) — on le relit.
         self::assertSame('CLOSURE', $this->getSchedule($user, (string) $overlay['id'])['planType'], 'son type vient du plan');
-
-        // Sans schedulePlanId → le socle (plan SEASON).
-        $seasonVersion = $this->postSchedule($user, ['name' => 'V saison', 'status' => 'DRAFT']);
-        self::assertSame('SEASON', $this->getSchedule($user, (string) $seasonVersion['id'])['planType'], 'sans plan nommé, la version naît sous le socle');
 
         // Un plan inconnu/étranger est refusé (le back valide l’appartenance au club).
         $this->client->request('POST', '/api/schedules', [], [], $this->authHeaders($user) + ['CONTENT_TYPE' => 'application/json'], json_encode([

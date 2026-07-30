@@ -494,6 +494,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         title="Rouvrir le planning principal ?"
         description={`Rouvrir ce planning principal supprimera ${reopenOverlayCount ?? 0} planning${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} secondaire${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
         confirmLabel="Rouvrir et supprimer"
+        confirmPhrase="modifier mon planning de saison"
         onConfirm={() => reopen(true)}
         onCancel={() => setReopenOverlayCount(null)}
       />
