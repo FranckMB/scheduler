@@ -1,32 +1,16 @@
-# Reprise — le geste « modifier mon planning de saison » (P2-7)
+# Le planning de saison — la mémoire produit derrière P2-7 / P2-9bis
 
-> **But de ce document** : permettre de relancer une session de zéro sans rien re-cadrer.
-> Tout ce qui suit est **décidé** (fondateur, 2026-07-16) — ce ne sont pas des pistes.
-> Ce qui reste ouvert est marqué **À TRANCHER**.
-> **Revu le 2026-07-29** : le §1 reste **entièrement valide** (vérifié dans le code — voir
-> l'encadré), mais son vocabulaire a été réaligné sur ADR-0002 lot C4, et les dettes croisées
-> déjà soldées ont été retirées de la liste en fin de fichier.
+> **Ce que ce fichier est, depuis le 2026-07-31** : ce que la roadmap ne peut pas porter — le
+> **verbatim du fondateur**, le **pourquoi métier**, les **décisions à ne pas re-poser** et les
+> **leçons de méthode**. Ce n'est plus un cadrage : P2-7 et P2-9bis sont **livrés** (roadmap
+> §Backlog).
 >
-> **Livré le 2026-07-30 — P2-7 est soldé.** §1 (une seule porte) et §2 (confirmation forte)
-> sont livrés dans la forme décrite plus bas ; §3 (matchs) est **abandonné** par décision
-> fondateur ; §4 était déjà soldé par #8 (2026-07-24). La question « (a) et (b) » de la
-> section **À TRANCHER** est tranchée. Trace courte : `specs/evolution/roadmap.md` (ligne
-> P2-7) ; comportement gradué dans `specs/courantes/planning-lifecycle-validated.md` et
-> `docs/architecture/adr-0002-pattern-plan.md` (invariant 1, amendement 2026-07-30).
-
-## D'où on vient
-
-- **Bascule ADR-0002** (PR #238, mergée) : le plan de type `SEASON` et la version qu'il
-  **pointe** sont LE calendrier de la saison. « Validé » se dérive du pointeur, et de rien
-  d'autre. Valider = pointer + **supprimer** les sœurs ; rouvrir = **dépointer**. Aucun
-  pointage automatique. Le legacy (`baselineScheduleId`, `socleValidatedAt`,
-  `planningName`, statuts `VALIDATED`/`ARCHIVED`, `SetBaselineController`) est mort.
-- **Périmètre engagé — P2-7a, livré** (PR #239, mergée ; l'ancienne branche
-  `feat/engaged-team-guard` n'existe plus) : une équipe qui joue en compétition ne peut être ni
-  **supprimée** ni changer de **`level`**. La garde mord sur **≥1 match quel qu'en soit le
-  statut** — l'import FBI crée tout en `UNPLACED`, donc filtrer sur `PLACED` l'aurait rendue
-  inerte au moment précis où elle doit mordre. Voir
-  [`module-matchs.md`](../courantes/module-matchs.md).
+> **Le comportement livré ne vit PAS ici** — il vit dans
+> [`planning-lifecycle-validated.md`](../courantes/planning-lifecycle-validated.md) (cycle de vie,
+> gardes, codes HTTP), [`adr-0002-pattern-plan.md`](../../docs/architecture/adr-0002-pattern-plan.md)
+> (invariants) et [`module-matchs.md`](../courantes/module-matchs.md) (périmètre engagé). **Les
+> dettes ouvertes ne vivent pas ici non plus** : elles sont en [`roadmap.md`](roadmap.md) §Dette,
+> et les recopier ferait exactement ce que la section « Méthode » ci-dessous interdit.
 
 ## La réalité du terrain (fondateur — à lire avant tout)
 
@@ -36,178 +20,52 @@
 > ça remet tout le fonctionnement du club en question. Dans le workflow d'un club, le
 > planning de la saison **ne change quasiment JAMAIS** — il s'ajuste dans de rares cas. »
 
-**Conséquence de cadrage** : ce lot ne sert PAS à fluidifier un flux courant. Il sert à ce
-que **le cas rare ne casse rien**. La confirmation forte n'est pas une friction à
-minimiser — **c'est la fonctionnalité**.
+**Conséquence de cadrage** : ce lot ne servait PAS à fluidifier un flux courant. Il servait à ce
+que **le cas rare ne casse rien**. La confirmation forte n'est pas une friction à minimiser —
+**c'est la fonctionnalité**.
 
-**Le cas réel qui arrive** : le BCCL a un gymnase en construction. Quand il le récupère,
-le planning de saison changera. Ce n'est pas hypothétique.
+**Le cas réel qui arrive** : le BCCL a un gymnase en construction. Quand il le récupère, le
+planning de saison changera. Ce n'est pas hypothétique.
 
-## Ce qu'il reste à faire (P2-7)
-
-### 1. Une seule porte — fermer la création concurrente
-
-**Défaut prouvé** (test HTTP réel, cette session) : `POST /api/schedules` rend **201**
-alors que le plan pointe déjà une version. Le modèle du fondateur — « par définition,
-quand une version est pointée, les autres sont supprimées » — **n'est pas garanti par le
-code**.
-
-Aujourd'hui : plan pointe V1 → `POST /api/schedules` (201) → `POST /V2/generate` (accepté,
-V2 n'est pas pointée) → V1 pointée ET V2 COMPLETED coexistent → valider V2 bascule et
-supprime V1. Les gardes existent sur `/generate` et `/regenerate` de la version **pointée**,
-mais **pas sur la création**. Les portes sont fermées, le mur est ouvert.
-
-> **Toujours vrai au 2026-07-29** (re-vérifié) : `ScheduleStateProcessor::processPost` ne porte
-> aucune garde de ce type. `SocleGuard` n'expose que `assertSeasonPlanChosen`, qui exige
-> exactement **l'inverse** (un plan de saison pointé) pour créer un **overlay** ou un match.
-> Rien ne refuse une **seconde version de saison**.
-
-**À faire** : `ScheduleStateProcessor::processPost` refuse de créer une version **sous le plan
-SEASON** tant que ce plan en pointe une. Message : « rouvrez le planning avant d'en préparer un
-autre ».
-
-> **✅ Livré (2026-07-30)** : `ScheduleStateProcessor::processPost` refuse en **409** (message
-> exact : « Le planning de la saison est en vigueur — rouvrez-le avant d'en préparer un
-> autre. ») tout POST « de saison » (sans `schedulePlanId`, ou avec le plan SEASON explicitement
-> nommé) tant que `SchedulePlanProvisioner::chosenOfSeasonPlan($seasonId)` répond non-null. Posée
-> **sous le verrou de plan-scope de la saison** (`SchedulePlanProvisioner::seasonScopeKey`) et
-> **dans la transaction** de création (même patron que `ValidateScheduleController` /
-> `ReopenScheduleController`) : un `pg_advisory_xact_lock` pris hors transaction se relâcherait
-> au statement suivant, laissant passer deux POST concurrents. NR :
-> `backend/tests/Security/SeasonVersionUniquenessTest.php` (phase1, preuve de chute faite).
-> La garde est posée **même si l'UI n'atteint pas ce chemin** (`GenerateStep.tsx` n'affiche
-> « Lancer la génération » que si aucun planning de saison `COMPLETED` n'existe) — défense en
-> profondeur assumée sur ce point.
-
-⚠ **Vocabulaire** — le cadrage d'origine disait « une version de saison (`calendarEntryId ===
-null`) ». Depuis **ADR-0002 lot C4**, une version s'attache par **`schedulePlanId`** et le socle
-se reconnaît au **type du plan** (`SchedulePlanType::SEASON`), pas à un `calendarEntryId` nul —
-`Schedule.calendarEntryId` n'est plus le discriminant. La garde se pose donc dans la branche
-`SchedulePlanType::SEASON === $plan['type']` (et sur le défaut `$planId === null`, qui résout
-vers le plan de saison via `ensureSeasonPlanId`).
-
-**Effet** : « la seule manière de modifier le plan est Rouvrir » devient vrai **par
-construction**. La garde `overlays_exist` de `ValidateScheduleController` ne sert alors plus
-qu'au cas « pointeur null avec des plans secondaires survivants ».
-
-### 2. Confirmation forte
-
-Rouvrir n'est pas un clic : **popup d'avertissement + validation explicite** (« je veux
-modifier mon planning de saison ») pour que le gestionnaire assume les conséquences.
-
-Aujourd'hui : le 409 `overlays_exist` + `confirmDeleteOverlays: true` ne parle que des
-plannings secondaires.
-
-> **✅ Livré (2026-07-30), dans la forme retenue** : pas de nouvelle popup — la popup
-> existante de réouverture (celle du 409 `overlays_exist`, qui ne s'affiche **que** s'il y a
-> des plannings de période à détruire) exige désormais de taper la phrase exacte
-> « modifier mon planning de saison » avant que son bouton s'active. Prop **additive**
-> `confirmPhrase` sur `frontend/src/shared/components/ui/confirm-dialog.tsx`, câblée dans
-> `PlanningPage.tsx` **uniquement** sur le dialogue de réouverture. **Pas** sur le dialogue de
-> validation — décision fondateur explicite : au moment de valider, le plan de saison est en
-> cours et il n'existe pas de plan secondaire ; valider ne supprime que les versions de
-> travail sœurs.
-
-### 3. Les matchs — ❌ ABANDONNÉ (décision fondateur, 2026-07-30)
-
-> **Politique de suppression abandonnée** — ce que le cadrage prévoyait, et qui ne sera PAS fait :
-> les matchs `PLACED`/`SUBMITTED`/`VALIDATED` auraient survécu, les `UNPLACED` auraient été
-> supprimés (import FBI à refaire). **Rien de tout cela n'est implémenté.**
-
-⚠️ **Reste vrai, et n'est PAS abrogé** (fait métier, indépendant de la politique ci-dessus) :
-un match **à l'extérieur** engage — il naît `PLACED`, l'horaire étant imposé par l'adversaire.
-Et une équipe portant ≥1 match, quel qu'en soit le statut, reste **intouchable** (P2-7a,
-`TeamEngagementGuard`).
-
-Le cadrage d'origine prévoyait donc de supprimer les matchs `UNPLACED` à la réouverture.
-**Abandonné** : le module matchs est déjà gaté sur le pointeur de la saison
-(`SocleGuard::assertSeasonPlanChosen`, consommé par `FixtureStateProcessor` et
-`ImportFixturesController` — voir `docs/architecture/adr-0002-pattern-plan.md` inv. 13),
-donc rouvrir rend le module **inaccessible sans rien détruire**. Les supprimer obligerait à
-refaire l'import FBI pour un résultat déjà acquis. Le fondateur ajoute que la partie matchs
-fera l'objet d'une prochaine grosse évolution (à traiter à ce moment-là, pas ici).
-
-### 4. Rien du passé, rien de ce qui est en cours
-
-« Supprimer tout » ne vise que ce qui **n'a pas encore eu lieu**. Une période **en cours**
-survit aussi (pivot = la date de **début**) : seules les périodes **entièrement futures**
-sont supprimées.
-
-~~**Défaut à emporter** : `CalendarEntryRepository::findWithOverlayByClubSeason` n'a **aucun
-filtre de date**. Rouvrir en mars détruit aujourd'hui l'overlay des vacances de Toussaint,
-une période passée.~~ **Soldé le 2026-07-24 (#8)** : la méthode est remplacée par
-`findWithPlanNotStarted`, qui filtre sur `startDate > aujourd'hui` — conforme à la règle
-ci-dessus. Attention, la portée s'est en même temps ÉLARGIE dans l'autre sens : elle prend
-désormais les périodes dont le plan n'est **pas validé** (une période « Adaptée » mais
-jamais générée possède déjà sa grille copiée, cf. ADR-0002 inv. 5 amendé).
-
-## Décisions déjà prises — ne pas les re-poser
+## Décisions à ne pas re-poser
 
 | Question | Décision |
 |---|---|
-| Rouvrir supprime-t-il les matchs ? | ~~**Oui**, avec confirmation — mais **seulement les `UNPLACED`** (les engagés survivent, cf. PR-1)~~ **Abandonné (2026-07-30)** : rouvrir ne supprime aucun match — le module matchs est déjà inaccessible sans version pointée (`SocleGuard`), voir §3 |
-| Ce lot dans la PR de la bascule ? | **Non** — lot dédié : comportement nouveau, sa propre confirmation, ses tests |
-| Périmètre engagé = axe structurant §7.1 ? | **Oui** — tests en `--group phase1` + ligne CI |
-| Le niveau (`Team.level`) | **Figé sans exception** dès l'engagement, y compris `null → REGIONAL`. Il se saisit AVANT de générer (tag NIVEAU → contraintes → photo de structure). Le laisser bouger ferait diverger la photo et la base. Seule tolérance : un PUT qui ré-écho le **même** niveau |
+| Le niveau (`Team.level`) d'une équipe engagée | **Figé sans exception** dès l'engagement, y compris `null → REGIONAL`. Il se saisit AVANT de générer (tag NIVEAU → contraintes → photo de structure) ; le laisser bouger ferait diverger la photo et la base. Seule tolérance : un PUT qui ré-écho le **même** niveau |
 | Le rang / tier | **Libre** — perception interne du club, ça bouge |
 | `isActive` | **Libre** — « la désactivation concerne les overlays et les plannings de vacances » |
+| Rouvrir supprime-t-il les matchs ? | **Non — abandonné le 2026-07-30.** Le cadrage prévoyait de supprimer les `UNPLACED` ; inutile, le module matchs est déjà inaccessible sans version pointée (`SocleGuard`). Les supprimer aurait imposé de refaire l'import FBI pour un résultat déjà acquis. La partie matchs fera l'objet d'une évolution dédiée |
+| Valider une AUTRE version pendant que le socle est en vigueur | **Question sans objet depuis le 2026-07-30.** La création concurrente étant fermée, une seconde version de saison ne peut plus coexister avec la version pointée : le cas est inatteignable par construction, il n'a pas besoin de règle propre |
+| Import FFBB qui change un niveau | Non traité, **volontairement** — « si je veux changer le niveau par import FFBB pour les matchs, je gérerai ce cas à ce moment-là » |
 
-## À TRANCHER en début de session
+## Méthode — ce que ces lots ont coûté
 
-- **(a) et (b) suivent-ils les mêmes règles ?** Deux gestes déplacent le calendrier de
-  base : **rouvrir** la version pointée, et **valider une autre version**. Le fondateur
-  considère (b) comme inexistant — « quand une version est pointée, les autres sont
-  supprimées ». C'est vrai **du modèle**, faux **du code** tant que le §1 ci-dessus n'est
-  pas fait. Une fois la création concurrente fermée, (b) devient inatteignable et la
-  question disparaît. **À confirmer.**
-
-  > **✅ Tranché (2026-07-30)** : le fondateur confirme — une fois la création concurrente
-  > fermée (§1 livré), une seconde version de saison ne peut plus exister à côté de la
-  > version pointée, donc « valider une autre version de saison pendant que le socle est en
-  > vigueur » est **inatteignable par construction**. (b) n'a plus besoin de règle propre.
-- **Import FFBB qui change un niveau** : « si je veux changer le niveau par import FFBB
-  pour les matchs, je gérerai ce cas à ce moment-là ». Non traité, volontairement.
-
-## Les autres lots ? Dans la roadmap, pas ici
-
-Ce document ne porte QUE le cadrage de P2-7 — ce que la roadmap ne peut pas tenir : le
-verbatim du fondateur, le pourquoi métier, les décisions déjà prises.
-
-**Tout le reste vit dans [`roadmap.md`](roadmap.md)**, le suivi unique (CLAUDE.md §8). Le
-recopier ici en ferait un second endroit qui dit la même chose — précisément le motif qui a
-coûté 40 défauts sur la bascule.
-
-Les dettes croisées pendant cette session y sont des lignes à part entière :
-
-| | |
-|---|---|
-| **P2-8** | Le front re-dérive 3 règles de refus du serveur (chaque miroir dérive) |
-| **P3-10** | Libellés de versions : le front ignore `Schedule.versionNumber`, stable côté serveur |
-| **P3-11** | Radar : aucun état de chargement |
-| ~~**P3-12**~~ | ~~Doc ops : tunnel Cloudflare pour les démos~~ — **livré le 2026-07-17** (PR #242, [`demo-tunnel-cloudflare.md`](../../docs/technique/demo-tunnel-cloudflare.md)) |
-| **DOC-1** | Divergence doc↔code : le module matchs est-il découplé du socle ? **À trancher** |
-| **DOC-2** | Un match déposé à la fédération peut perdre sa salle sans avertissement (suppression de gymnase / restore). **À trancher** |
-| **DOC-3** | `PUT /api/teams` : `level` absent est indiscernable de `level` effacé → 409 nommant un champ non envoyé. **À trancher** |
-
-Et les lots structurants : **P2-6** (pattern « Plan », dont le **lot C** — réglages de
-période & génération pilotés par plan, inv. 5, cf.
-[`adr-0002-pattern-plan.md`](../../docs/architecture/adr-0002-pattern-plan.md)), **P2-7a**
-(le périmètre engagé, livré).
-
-## Méthode — ce que cette session a coûté
-
-La bascule ADR-0002 a demandé **4 rounds de revue et 40 défauts confirmés**. **Un seul
-motif** : une garde, un compteur ou un sélecteur resté sur l'ancienne vérité. Deux endroits
-qui répondent à la même question finissent **toujours** par répondre autre chose.
+La bascule ADR-0002 a demandé **4 rounds de revue et 40 défauts confirmés**. **Un seul motif** :
+une garde, un compteur ou un sélecteur resté sur l'ancienne vérité. Deux endroits qui répondent à
+la même question finissent **toujours** par répondre autre chose.
 
 À garder pour la suite :
 
-1. **Un test qui ne peut pas échouer ne prouve rien.** Désarmer la garde et vérifier que le
-   test tombe. Trois défauts de cette session ont survécu à des tests verts.
-2. **Ne jamais écrire « vérifié » sur un balayage incomplet.** Le contournement de
-   `wipeStructure` a été raté exactement comme ça.
-3. **Ne pas assouplir une règle du fondateur sans demander.** Une entorse prise seul a
-   fabriqué un bug, présenté ensuite comme une découverte.
-4. **`cache:clear` avant `api:openapi:export`.** Un export sur cache périmé a produit un
-   snapshot faux, committé après vérification du diff.
+1. **Un test qui ne peut pas échouer ne prouve rien.** Désarmer la garde et vérifier que le test
+   tombe. Trois défauts de la bascule ont survécu à des tests verts. *(Corollaire découvert le
+   2026-07-30 : un test peut aussi passer pour la MAUVAISE raison — rejeté par une garde
+   antérieure. Construire l'état pour que ce soit bien la garde visée qui morde, et asserter sur
+   son message.)*
+2. **Ne jamais écrire « vérifié » sur un balayage incomplet.** Le contournement de `wipeStructure`
+   a été raté exactement comme ça.
+3. **Ne pas assouplir une règle du fondateur sans demander.** Une entorse prise seul a fabriqué un
+   bug, présenté ensuite comme une découverte.
+4. **`cache:clear` avant `api:openapi:export`.** Un export sur cache périmé a produit un snapshot
+   faux, committé après vérification du diff.
 5. **Committer avant tout `git checkout`.** Trois tests non committés ont été perdus ainsi.
+6. **Un test déclaré bloquant n'est pas un test bloquant** *(2026-07-30)*. Le job CI
+   `blocking-tests` énumère **un step par fichier** : un test annoncé dans `CLAUDE.md` §4 mais
+   absent de `ci.yml` ne garde rien. Ajouter les deux **dans le même commit**.
+7. **Ne pas patcher sous pression de revue, correctif par correctif** *(2026-07-30)*. Six
+   correctifs posés isolément en ont produit trois nouveaux, dont un **pire que le défaut
+   d'origine** — fermer une porte sans regarder ses voisines a transformé « Charger cette version »
+   en cul-de-sac destructif. Quand une revue révèle un défaut de **conception**, s'arrêter et
+   re-cadrer vaut mieux que corriger vite.
+8. **Une relecture de soi-même ne vaut pas une revue extérieure** *(2026-07-30)*. Une revue inline
+   a conclu « aucun finding rouge » sur une PR qui en contenait trois, dont un test bloquant qui
+   ne bloquait rien. Sur un axe structurant, passer par `/code-review`.

@@ -56,7 +56,7 @@ Schedule (= Version)                    ← existant, recentré
    ⚠️ **Amendement P2-7 (décision fondateur, 2026-07-30)** : l'invariant tenait implicitement
    qu'« une version pointée est la seule version de saison » — faux du code jusqu'ici,
    `POST /api/schedules` rendait 201 même avec un socle en vigueur (defect prouvé,
-   `specs/evolution/reprise-perimetre-engage.md` §1). **Aucune version de saison ne naît
+   `specs/evolution/reprise-perimetre-engage.md`). **Aucune version de saison ne naît
    tant que le plan SEASON en pointe une** : `ScheduleStateProcessor::processPost` refuse en
    409 tout POST « de saison » (sans `schedulePlanId`, ou avec le plan SEASON explicite) tant
    que `chosenOfSeasonPlan` répond non-null, sous le verrou de plan-scope de la saison et
@@ -201,7 +201,7 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
     lequel ne voyait que les plans **validés** et laissait vivre, sans le dire, la grille
     copiée d'une période adaptée (« Adapter ») mais jamais générée) ; (2) **seulement les
     périodes ENTIÈREMENT À VENIR** — pivot = la date de DÉBUT, « rien du passé, rien de ce
-    qui est en cours » (décision fondateur 2026-07-16, `specs/evolution/reprise-perimetre-engage.md` §4) :
+    qui est en cours » (décision fondateur 2026-07-16) :
     une période commencée est déjà annoncée aux coachs et à moitié jouée, la détruire au
     milieu coûterait plus que de la laisser finir sur l'ancien socle. Ce filtre de date
     solde la dette que cette spec signalait (`findWithOverlayByClubSeason` n'en avait aucun,
