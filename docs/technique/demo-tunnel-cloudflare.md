@@ -40,7 +40,7 @@ est éteinte demande un vrai hébergement (VPS + tunnel nommé, ou déploiement)
 
 | Port | Service | Ce que verrait l'invité via le tunnel |
 |------|---------|----------------------------------------|
-| **8081** | `frontend` (nginx) | ✅ **le SPA**, qui proxifie `/api/`, `/exports/`, `/.well-known/mercure`, `/engine/` sur la même origine |
+| **8081** | `frontend` (nginx) | ✅ **le SPA**, qui proxifie `/api/`, `/exports/`, `/.well-known/mercure` sur la même origine |
 | 8080 | `nginx` (API Symfony) | ❌ du JSON — aucune interface |
 
 Une seule origine publique suffit donc : `8081` sert l'appli **et** relaie l'API (cf.
@@ -78,9 +78,10 @@ atteint l'appli. C'est acceptable pour une démo courte et surveillée, pas pour
 - La stack de démo est la stack **de dev** : `APP_ENV=dev`, secrets par défaut du `.env`, comptes
   de fixtures à mots de passe connus (`mara.mb@bccl.fr` / `maraboubccl`). Ne jamais pointer un
   tunnel vers une base contenant de vraies données personnelles de club.
-- `/engine/` est proxifié par le nginx frontend : **le solveur devient joignable publiquement et
-  sans auth** pendant le tunnel. Un lien fuité = quelqu'un peut lancer des solves (CPU). Raison de
-  plus pour ne pas laisser l'URL vivre.
+- ~~`/engine/` est proxifié par le nginx frontend : le solveur devient joignable publiquement et
+  sans auth pendant le tunnel.~~ **Corrigé le 2026-07-31** : le `location /engine/` a été retiré du
+  nginx de dev (il était déjà absent de la conf prod), donc le solveur n'est plus atteignable par
+  le tunnel. Il ne l'est que par le backend, comme le veut la frontière §2.
 - Le lien de vérification d'email part dans **Mailpit** (`localhost:8025`, hors tunnel) : un invité
   ne peut pas s'inscrire tout seul. Donne-lui un compte de fixtures, ou récupère le lien dans
   Mailpit et transmets-le à la main.

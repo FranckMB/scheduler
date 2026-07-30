@@ -33,6 +33,7 @@ function renderAt(path: string) {
           <Route path="/profile" element={<div>PROFILE</div>} />
           <Route path="/club" element={<div>CLUB</div>} />
           <Route path="/matchs" element={<div>MATCHS</div>} />
+          <Route path="/confidentialite" element={<div>PRIVACY</div>} />
         </Route>
         <Route path="/wizard" element={<div>WIZARD</div>} />
         <Route path="/waiting" element={<div>WAITING</div>} />
@@ -57,6 +58,15 @@ describe("AuthGuard — onboarding lock", () => {
     meState.data = activeMember(false);
     renderAt("/club");
     expect(screen.getByText("CLUB")).toBeInTheDocument();
+  });
+
+  // Le menu compte affiche « Confidentialité » (AppLayout) : l'omettre de
+  // ONBOARDING_ALLOWED en faisait un lien visible qui renvoyait au wizard — et c'est
+  // justement la page qu'on veut pouvoir lire AVANT de finir son inscription.
+  it("keeps /confidentialite reachable while onboarding", () => {
+    meState.data = activeMember(false);
+    renderAt("/confidentialite");
+    expect(screen.getByText("PRIVACY")).toBeInTheDocument();
   });
 
   it("does NOT fire the cockpit hint for a pending (not-yet-active) member", () => {
