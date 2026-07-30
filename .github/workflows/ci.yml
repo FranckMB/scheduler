@@ -259,6 +259,9 @@ jobs:
       - name: PeriodPlanBirthTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/PeriodPlanBirthTest.php --group phase1'
 
+      - name: SeasonVersionUniquenessTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SeasonVersionUniquenessTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest

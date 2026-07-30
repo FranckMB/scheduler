@@ -110,14 +110,16 @@ plannings secondaires.
 
 ### 3. Les matchs — ❌ ABANDONNÉ (décision fondateur, 2026-07-30)
 
-~~| | |
-|---|---|
-| `PLACED` / `SUBMITTED` / `VALIDATED` | **survivent** — et **contraignent** : leur équipe est engagée (PR-1) |
-| `UNPLACED` | **supprimés** → l'import FBI doit être refait |
+> **Politique de suppression abandonnée** — ce que le cadrage prévoyait, et qui ne sera PAS fait :
+> les matchs `PLACED`/`SUBMITTED`/`VALIDATED` auraient survécu, les `UNPLACED` auraient été
+> supprimés (import FBI à refaire). **Rien de tout cela n'est implémenté.**
 
-Un match **à l'extérieur** engage : il naît `PLACED` (horaire imposé par l'adversaire).~~
+⚠️ **Reste vrai, et n'est PAS abrogé** (fait métier, indépendant de la politique ci-dessus) :
+un match **à l'extérieur** engage — il naît `PLACED`, l'horaire étant imposé par l'adversaire.
+Et une équipe portant ≥1 match, quel qu'en soit le statut, reste **intouchable** (P2-7a,
+`TeamEngagementGuard`).
 
-Le cadrage d'origine prévoyait de supprimer les matchs `UNPLACED` à la réouverture.
+Le cadrage d'origine prévoyait donc de supprimer les matchs `UNPLACED` à la réouverture.
 **Abandonné** : le module matchs est déjà gaté sur le pointeur de la saison
 (`SocleGuard::assertSeasonPlanChosen`, consommé par `FixtureStateProcessor` et
 `ImportFixturesController` — voir `docs/architecture/adr-0002-pattern-plan.md` inv. 13),

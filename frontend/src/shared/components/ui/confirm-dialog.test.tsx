@@ -63,4 +63,24 @@ describe("ConfirmDialog", () => {
     expect(screen.getByRole("textbox")).toHaveValue("");
     expect(screen.getByRole("button", { name: "Confirmer" })).toBeDisabled();
   });
+
+  // Revue #326 : une confirmation qui ÉCHOUE ne ferme pas le dialogue (500, réseau, JWT
+  // expiré — `reopen()` ne vide `reopenOverlayCount` que dans onSuccess). Sans ré-armement,
+  // la phrase déjà tapée laissait le geste destructif à un clic pour la tentative suivante :
+  // la friction était dépensée une fois pour toutes.
+  it("re-arms the phrase after a confirm attempt that leaves the dialog open", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmDialog open title="Sûr ?" confirmLabel="Confirmer" confirmPhrase={PHRASE} onConfirm={onConfirm} onCancel={vi.fn()} />,
+    );
+    await user.type(screen.getByRole("textbox"), PHRASE);
+    await user.click(screen.getByRole("button", { name: "Confirmer" }));
+    expect(onConfirm).toHaveBeenCalledOnce();
+
+    // Le dialogue est toujours ouvert (l'appelant n'a pas basculé `open`) : le champ est
+    // revidé et le bouton de nouveau grisé — il faut retaper pour réessayer.
+    expect(screen.getByRole("textbox")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Confirmer" })).toBeDisabled();
+  });
 });

@@ -82,6 +82,15 @@ final class RegenerateController extends AbstractController implements SeasonSco
         if ($this->schedulePlanProvisioner->isChosen($source->getId())) {
             return $this->json(['error' => 'La version choisie est le planning en vigueur. Rouvrez-le avant de régénérer.'], Response::HTTP_CONFLICT);
         }
+        // P2-7 : le socle en vigueur est UNIQUE. La garde ci-dessus ne regarde que la
+        // SOURCE ; elle laissait passer la régénération depuis une version NON pointée
+        // pendant qu'une AUTRE l'est — on fabriquait alors une version de saison de plus
+        // à côté du calendrier en vigueur, exactement ce que la garde du POST interdit.
+        // Cet état ne naît plus (POST fermé), mais il existe sur les données créées avant
+        // P2-7 : sans cette garde, le trou reste atteignable par une autre porte.
+        if (null !== $this->schedulePlanProvisioner->chosenOfSeasonPlan($source->getSeasonId())) {
+            return $this->json(['error' => 'Le planning de la saison est en vigueur — rouvrez-le avant d\'en préparer un autre.'], Response::HTTP_CONFLICT);
+        }
         // Never branch while any version of the season is still solving.
         $inFlight = $this->entityManager->getRepository(Schedule::class)->count([
             'clubId' => $source->getClubId(),
