@@ -11,7 +11,6 @@ ClubScheduler is designed to use **PostgreSQL Row-Level Security (RLS)** to enfo
 | User | Purpose | DDL Rights | RLS Bypass |
 |------|---------|------------|------------|
 | `app_user` | Symfony runtime (API requests) | **None** | **No** — policies apply |
-| `migration_user` | legacy (created by init SQL, **not used by any configured connection**) | `GRANT ALL` on schema/tables/sequences (DML + `CREATE` on schema) — **no `ALTER`/`DROP` on existing tables** (not grantable in PostgreSQL; requires ownership, held by `clubscheduler`) | **No** — `NOSUPERUSER`, no `BYPASSRLS`, no policy targets it → default-deny on tenant tables under `FORCE` |
 | `clubscheduler` | **migrations / ops / superadmin door** (Doctrine `admin` connection, `DATABASE_ADMIN_URL`) | all (owner/superuser) | **Yes** — superuser bypasses every policy (see CLAUDE.md §6) |
 
 > **Security rule:** `app_user` is **not** a `SUPERUSER` and does **not** hold `CREATEDB` or `CREATEROLE`.
@@ -84,7 +83,7 @@ Migrations and ops run on the **`admin` Doctrine connection** (`clubscheduler`, 
 DATABASE_ADMIN_URL="postgresql://clubscheduler:...@postgres:5432/clubscheduler?serverVersion=16&charset=utf8"
 ```
 
-⚠ Do **not** use `migration_user` for migrations: it has no RLS bypass (default-deny under `FORCE`) and is not wired to any connection — it is a legacy artifact of the init SQL.
+⚠ `migration_user` **no longer exists** (dropped 2026-07-31, migration `Version20260731090000`). It was created by the init SQL with schema-wide `GRANT ALL` and used by **no** connection — a dormant service account with broad privileges. It could not be wired up either: `NOSUPERUSER` without `BYPASSRLS` means default-deny under `FORCE`, so migrations and fixtures would break. Migrations run on the `admin` connection (`clubscheduler`).
 
 ### 2. Setting the Tenant Context
 
@@ -123,7 +122,7 @@ SELECT * FROM public.event;
 | File | Purpose |
 |------|---------|
 | `docker/postgres/init/01-rls.sql` | Helper function to batch-enable RLS on existing tables |
-| `docker/postgres/init/02-users.sh` | Creates `app_user` and `migration_user` with correct grants |
+| `docker/postgres/init/02-users.sh` | Creates `app_user` with its runtime grants (DML only, no DDL) |
 | `docker/postgres/init/03-rls-template.sql` | Copy-paste templates for `ALTER TABLE ... ENABLE RLS` and `CREATE POLICY` |
 
 ## Troubleshooting
@@ -133,4 +132,4 @@ SELECT * FROM public.event;
 | `0 rows returned` for a table that has data | `app.club_id` not set | In `psql`: run `SELECT set_config('app.club_id', '<uuid>', false)` (or the `app_security.set_club_id(...)` helper). In the app: the context is set automatically by `TenantConnectionContext` |
 | `permission denied for table` | `app_user` lacks `GRANT` | Re-run `02-users.sh` or check `GRANT` statements |
 | Policy not enforced for table owner | `FORCE ROW LEVEL SECURITY` missing | Run `ALTER TABLE ... FORCE ROW LEVEL SECURITY` |
-| Migration fails with RLS error | Migration runs as `app_user` (or `migration_user` — no bypass either) | Run migrations on the `admin` connection (`clubscheduler`, superuser) |
+| Migration fails with RLS error | Migration runs as `app_user` (no bypass) | Run migrations on the `admin` connection (`clubscheduler`, superuser) |

@@ -130,7 +130,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       # Consumed once by the 02-users.sh init script (first cluster init only).
       APP_USER_PASSWORD: ${APP_USER_PASSWORD:?}
-      MIGRATION_USER_PASSWORD: ${MIGRATION_USER_PASSWORD:?}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
