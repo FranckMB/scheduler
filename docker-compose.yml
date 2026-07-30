@@ -133,7 +133,6 @@ services:
       # Historical dev passwords for the 02-users.sh init script (fail-closed:
       # it aborts when unset). Prod supplies real values via .env.prod.
       APP_USER_PASSWORD: ${APP_USER_PASSWORD:-app_user_password}
-      MIGRATION_USER_PASSWORD: ${MIGRATION_USER_PASSWORD:-migration_user_password}
     ports:
       - "127.0.0.1:${POSTGRES_PORT}:5432"
     volumes:

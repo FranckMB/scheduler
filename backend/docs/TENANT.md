@@ -57,7 +57,7 @@ Console commands do **not** trigger `kernel.request`. Therefore:
 
 - The `tenant_filter` is **not** enabled automatically.
 - the `app.club_id` GUC is **never** set without an HTTP context.
-- CLI scripts that need tenant isolation must implement their own mechanism (e.g., explicit `--club-id` option, or `TenantConnectionContext::setClubId()` per club like the reminder crons). Maintenance tasks that must SEE ALL tenants run on the **`admin` Doctrine connection (`clubscheduler`, superuser — the only RLS bypass)**. ⚠ `migration_user` does **NOT** bypass RLS: it is created `NOSUPERUSER` without `BYPASSRLS` and no policy targets it — under `FORCE ROW LEVEL SECURITY` it is default-deny on every tenant table. It exists in the init SQL but is not used by any configured connection.
+- CLI scripts that need tenant isolation must implement their own mechanism (e.g., explicit `--club-id` option, or `TenantConnectionContext::setClubId()` per club like the reminder crons). Maintenance tasks that must SEE ALL tenants run on the **`admin` Doctrine connection (`clubscheduler`, superuser — the only RLS bypass)**. ⚠ There is exactly **one** RLS bypass, and it is that `admin` connection. A second role (`migration_user`) used to exist in the init SQL with schema-wide `GRANT ALL` but no bypass and no configured connection — a dormant service account, **dropped on 2026-07-31** (`Version20260731090000`).
 
 ## Registration
 
@@ -108,4 +108,4 @@ services:
 ## See Also
 
 - `backend/docs/RLS.md` — PostgreSQL RLS setup and troubleshooting
-- `docker/postgres/init/02-users.sh` — `app_user` / `migration_user` creation
+- `docker/postgres/init/02-users.sh` — `app_user` creation (`migration_user` dropped 2026-07-31, cf. RLS.md)

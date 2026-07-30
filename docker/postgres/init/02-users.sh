@@ -10,11 +10,9 @@
 set -euo pipefail
 
 : "${APP_USER_PASSWORD:?02-users.sh: APP_USER_PASSWORD must be set (dev compose provides the dev default; prod .env.prod provides the real one)}"
-: "${MIGRATION_USER_PASSWORD:?02-users.sh: MIGRATION_USER_PASSWORD must be set}"
 
 psql -v ON_ERROR_STOP=1 \
      -v app_user_password="$APP_USER_PASSWORD" \
-     -v migration_user_password="$MIGRATION_USER_PASSWORD" \
      --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<'EOSQL'
 -- =============================================================================
 -- 1. APPLICATION USER (app_user)
@@ -39,25 +37,19 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_user;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO app_user;
 
 -- =============================================================================
--- 2. MIGRATION USER (migration_user)
+-- 2. (retiré) MIGRATION USER
 -- =============================================================================
--- Used by Doctrine Migrations / Symfony console only during deploy/migrate.
--- Needs DDL privileges to create/alter/drop tables, but NOT SUPERUSER.
-
-CREATE USER migration_user WITH PASSWORD :'migration_user_password' NOSUPERUSER NOCREATEDB NOCREATEROLE;
-
--- Full access to public schema for DDL operations
-GRANT ALL PRIVILEGES ON SCHEMA public TO migration_user;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO migration_user;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO migration_user;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO migration_user;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO migration_user;
-
--- Allow the migration user to execute the RLS helper function
-GRANT EXECUTE ON FUNCTION app_security.enable_rls_for_existing_clubscheduler_tables() TO migration_user;
+-- `migration_user` a été SUPPRIMÉ le 2026-07-31 (migration Version20260731090000).
+-- Il était créé ici avec GRANT ALL sur le schéma, ses tables et ses séquences (plus des
+-- ALTER DEFAULT PRIVILEGES qui étendaient ces droits aux tables futures) — et n'était
+-- utilisé par AUCUNE connexion : les migrations passent par `clubscheduler`
+-- (DATABASE_ADMIN_URL). Un compte de service dormant à droits larges, sans contrepartie.
+-- Il ne pouvait pas non plus être câblé pour de vrai : NOSUPERUSER sans BYPASSRLS, il est
+-- default-deny sous FORCE ROW LEVEL SECURITY — migrations et fixtures casseraient.
+-- Détail : backend/docs/RLS.md.
 
 -- =============================================================================
--- 3. RLS CONTEXT SETTER HELPER (executed by app_user or migration_user)
+-- 3. RLS CONTEXT SETTER HELPER (executed by app_user)
 -- =============================================================================
 -- This function safely sets the tenant context variable used by RLS policies.
 -- It is owned by the bootstrap superuser but executable by app_user.
@@ -76,5 +68,4 @@ COMMENT ON FUNCTION app_security.set_club_id(uuid) IS
     'Sets the RLS tenant context variable. Must be called before each transaction that relies on tenant_isolation policies.';
 
 GRANT EXECUTE ON FUNCTION app_security.set_club_id(uuid) TO app_user;
-GRANT EXECUTE ON FUNCTION app_security.set_club_id(uuid) TO migration_user;
 EOSQL
