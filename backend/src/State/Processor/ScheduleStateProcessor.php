@@ -75,6 +75,11 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         $entry = null;
         $weekGuardEntryId = null;
         $planId = $input->schedulePlanId;
+        // P2-7 : un POST « de saison » = pas de plan (→ plan SEASON par défaut) OU un plan
+        // explicitement de type SEASON. C'est ce POST-là que la garde d'unicité sérialise
+        // sous le verrou de plan-scope (dans la transaction), pour refuser une nouvelle
+        // version tant que le socle de la saison est en vigueur (chosenOfSeasonPlan non-null).
+        $isSeasonPost = null === $planId;
         if (null !== $planId) {
             $plan = $this->schedulePlanProvisioner->fetchPlanContext($planId);
             // Club ET saison : le plan doit être du club ET de la saison active. Nommer un plan
@@ -88,6 +93,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
                 || $plan['seasonId'] !== $resolvedSeasonId) {
                 throw new UnprocessableEntityHttpException('Unknown schedule plan.');
             }
+            $isSeasonPost = SchedulePlanType::SEASON === $plan['type'];
             if (SchedulePlanType::SEASON !== $plan['type']) {
                 // Overlay (plan CLOSURE/HOLIDAY). Une sœur en cours de solve bloque : on ne
                 // réécrit jamais un solve en vol (miroir de la garde saison).
@@ -128,7 +134,18 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         // Atomic (like RegenerateController): the row and its version number commit
         // together. A linkSchedule failure must never leave a committed-but-unnumbered
         // schedule occupying the period slot.
-        $this->entityManager->wrapInTransaction(function () use ($schedule, $weekGuardEntryId): void {
+        $this->entityManager->wrapInTransaction(function () use ($schedule, $weekGuardEntryId, $isSeasonPost, $resolvedSeasonId): void {
+            // P2-7 (planning lifecycle) : le socle en vigueur est unique. Sous le verrou de
+            // plan-scope de la saison (tenu jusqu'au commit — un pg_advisory_xact_lock pris
+            // hors transaction se relâcherait au statement suivant, cf. l.103-105), si le plan
+            // SEASON pointe déjà une version choisie, on refuse d'en préparer une autre :
+            // rouvrir (dépointer) est le geste explicite qui rouvre l'espace de travail.
+            if ($isSeasonPost) {
+                $this->schedulePlanProvisioner->lockPlanScope(SchedulePlanProvisioner::seasonScopeKey($resolvedSeasonId));
+                if (null !== $this->schedulePlanProvisioner->chosenOfSeasonPlan($resolvedSeasonId)) {
+                    throw new ConflictHttpException('Le planning de la saison est en vigueur — rouvrez-le avant d\'en préparer un autre.');
+                }
+            }
             // P2-5 E1 (exclusivité bloc/semaines) : une période DÉCOUPÉE ne se génère
             // plus « d'un bloc ». SOUS le verrou du plan-scope de l'entrée (tenu
             // jusqu'au commit) : le POST d'un enfant prend le même verrou avant sa

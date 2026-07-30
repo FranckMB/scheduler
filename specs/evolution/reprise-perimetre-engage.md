@@ -6,6 +6,13 @@
 > **Revu le 2026-07-29** : le §1 reste **entièrement valide** (vérifié dans le code — voir
 > l'encadré), mais son vocabulaire a été réaligné sur ADR-0002 lot C4, et les dettes croisées
 > déjà soldées ont été retirées de la liste en fin de fichier.
+>
+> **Livré le 2026-07-30 — P2-7 est soldé.** §1 (une seule porte) et §2 (confirmation forte)
+> sont livrés dans la forme décrite plus bas ; §3 (matchs) est **abandonné** par décision
+> fondateur ; §4 était déjà soldé par #8 (2026-07-24). La question « (a) et (b) » de la
+> section **À TRANCHER** est tranchée. Trace courte : `specs/evolution/roadmap.md` (ligne
+> P2-7) ; comportement gradué dans `specs/courantes/planning-lifecycle-validated.md` et
+> `docs/architecture/adr-0002-pattern-plan.md` (invariant 1, amendement 2026-07-30).
 
 ## D'où on vient
 
@@ -59,6 +66,19 @@ mais **pas sur la création**. Les portes sont fermées, le mur est ouvert.
 SEASON** tant que ce plan en pointe une. Message : « rouvrez le planning avant d'en préparer un
 autre ».
 
+> **✅ Livré (2026-07-30)** : `ScheduleStateProcessor::processPost` refuse en **409** (message
+> exact : « Le planning de la saison est en vigueur — rouvrez-le avant d'en préparer un
+> autre. ») tout POST « de saison » (sans `schedulePlanId`, ou avec le plan SEASON explicitement
+> nommé) tant que `SchedulePlanProvisioner::chosenOfSeasonPlan($seasonId)` répond non-null. Posée
+> **sous le verrou de plan-scope de la saison** (`SchedulePlanProvisioner::seasonScopeKey`) et
+> **dans la transaction** de création (même patron que `ValidateScheduleController` /
+> `ReopenScheduleController`) : un `pg_advisory_xact_lock` pris hors transaction se relâcherait
+> au statement suivant, laissant passer deux POST concurrents. NR :
+> `backend/tests/Security/SeasonVersionUniquenessTest.php` (phase1, preuve de chute faite).
+> La garde est posée **même si l'UI n'atteint pas ce chemin** (`GenerateStep.tsx` n'affiche
+> « Lancer la génération » que si aucun planning de saison `COMPLETED` n'existe) — défense en
+> profondeur assumée sur ce point.
+
 ⚠ **Vocabulaire** — le cadrage d'origine disait « une version de saison (`calendarEntryId ===
 null`) ». Depuis **ADR-0002 lot C4**, une version s'attache par **`schedulePlanId`** et le socle
 se reconnaît au **type du plan** (`SchedulePlanType::SEASON`), pas à un `calendarEntryId` nul —
@@ -78,14 +98,34 @@ modifier mon planning de saison ») pour que le gestionnaire assume les conséqu
 Aujourd'hui : le 409 `overlays_exist` + `confirmDeleteOverlays: true` ne parle que des
 plannings secondaires.
 
-### 3. Les matchs
+> **✅ Livré (2026-07-30), dans la forme retenue** : pas de nouvelle popup — la popup
+> existante de réouverture (celle du 409 `overlays_exist`, qui ne s'affiche **que** s'il y a
+> des plannings de période à détruire) exige désormais de taper la phrase exacte
+> « modifier mon planning de saison » avant que son bouton s'active. Prop **additive**
+> `confirmPhrase` sur `frontend/src/shared/components/ui/confirm-dialog.tsx`, câblée dans
+> `PlanningPage.tsx` **uniquement** sur le dialogue de réouverture. **Pas** sur le dialogue de
+> validation — décision fondateur explicite : au moment de valider, le plan de saison est en
+> cours et il n'existe pas de plan secondaire ; valider ne supprime que les versions de
+> travail sœurs.
 
-| | |
-|---|---|
-| `PLACED` / `SUBMITTED` / `VALIDATED` | **survivent** — et **contraignent** : leur équipe est engagée (PR-1) |
-| `UNPLACED` | **supprimés** → l'import FBI doit être refait |
+### 3. Les matchs — ❌ ABANDONNÉ (décision fondateur, 2026-07-30)
 
-Un match **à l'extérieur** engage : il naît `PLACED` (horaire imposé par l'adversaire).
+> **Politique de suppression abandonnée** — ce que le cadrage prévoyait, et qui ne sera PAS fait :
+> les matchs `PLACED`/`SUBMITTED`/`VALIDATED` auraient survécu, les `UNPLACED` auraient été
+> supprimés (import FBI à refaire). **Rien de tout cela n'est implémenté.**
+
+⚠️ **Reste vrai, et n'est PAS abrogé** (fait métier, indépendant de la politique ci-dessus) :
+un match **à l'extérieur** engage — il naît `PLACED`, l'horaire étant imposé par l'adversaire.
+Et une équipe portant ≥1 match, quel qu'en soit le statut, reste **intouchable** (P2-7a,
+`TeamEngagementGuard`).
+
+Le cadrage d'origine prévoyait donc de supprimer les matchs `UNPLACED` à la réouverture.
+**Abandonné** : le module matchs est déjà gaté sur le pointeur de la saison
+(`SocleGuard::assertSeasonPlanChosen`, consommé par `FixtureStateProcessor` et
+`ImportFixturesController` — voir `docs/architecture/adr-0002-pattern-plan.md` inv. 13),
+donc rouvrir rend le module **inaccessible sans rien détruire**. Les supprimer obligerait à
+refaire l'import FBI pour un résultat déjà acquis. Le fondateur ajoute que la partie matchs
+fera l'objet d'une prochaine grosse évolution (à traiter à ce moment-là, pas ici).
 
 ### 4. Rien du passé, rien de ce qui est en cours
 
@@ -105,7 +145,7 @@ jamais générée possède déjà sa grille copiée, cf. ADR-0002 inv. 5 amendé
 
 | Question | Décision |
 |---|---|
-| Rouvrir supprime-t-il les matchs ? | **Oui**, avec confirmation — mais **seulement les `UNPLACED`** (les engagés survivent, cf. PR-1) |
+| Rouvrir supprime-t-il les matchs ? | ~~**Oui**, avec confirmation — mais **seulement les `UNPLACED`** (les engagés survivent, cf. PR-1)~~ **Abandonné (2026-07-30)** : rouvrir ne supprime aucun match — le module matchs est déjà inaccessible sans version pointée (`SocleGuard`), voir §3 |
 | Ce lot dans la PR de la bascule ? | **Non** — lot dédié : comportement nouveau, sa propre confirmation, ses tests |
 | Périmètre engagé = axe structurant §7.1 ? | **Oui** — tests en `--group phase1` + ligne CI |
 | Le niveau (`Team.level`) | **Figé sans exception** dès l'engagement, y compris `null → REGIONAL`. Il se saisit AVANT de générer (tag NIVEAU → contraintes → photo de structure). Le laisser bouger ferait diverger la photo et la base. Seule tolérance : un PUT qui ré-écho le **même** niveau |
@@ -120,6 +160,11 @@ jamais générée possède déjà sa grille copiée, cf. ADR-0002 inv. 5 amendé
   supprimées ». C'est vrai **du modèle**, faux **du code** tant que le §1 ci-dessus n'est
   pas fait. Une fois la création concurrente fermée, (b) devient inatteignable et la
   question disparaît. **À confirmer.**
+
+  > **✅ Tranché (2026-07-30)** : le fondateur confirme — une fois la création concurrente
+  > fermée (§1 livré), une seconde version de saison ne peut plus exister à côté de la
+  > version pointée, donc « valider une autre version de saison pendant que le socle est en
+  > vigueur » est **inatteignable par construction**. (b) n'a plus besoin de règle propre.
 - **Import FFBB qui change un niveau** : « si je veux changer le niveau par import FFBB
   pour les matchs, je gérerai ce cas à ce moment-là ». Non traité, volontairement.
 

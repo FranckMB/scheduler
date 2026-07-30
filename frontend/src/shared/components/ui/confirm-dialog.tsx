@@ -1,4 +1,4 @@
-import { type ReactNode, useId, useRef } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/shared/components/ui/button";
@@ -12,6 +12,12 @@ interface ConfirmDialogProps {
   cancelLabel?: string;
   destructive?: boolean;
   confirmDisabled?: boolean;
+  /**
+   * Si fournie, le bouton de confirmation reste désactivé tant que l'utilisateur
+   * n'a pas tapé cette phrase EXACTE (comparaison trim + insensible à la casse)
+   * dans un champ dédié. Garde-fou pour un geste lourd et irréversible.
+   */
+  confirmPhrase?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -30,17 +36,33 @@ export function ConfirmDialog({
   cancelLabel = "Annuler",
   destructive = true,
   confirmDisabled = false,
+  confirmPhrase,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
   const titleId = useId();
+  const phraseInputId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
+  const [phraseInput, setPhraseInput] = useState("");
+  const [prevOpen, setPrevOpen] = useState(open);
   // Shared focus-trap + initial focus + focus restoration + Escape (WCAG 2.1.2 / 2.4.3).
   useModalA11y({ ref: panelRef, onClose: onCancel, active: open });
+
+  // Réinitialiser la saisie à chaque bascule ouvert/fermé : une réouverture repart d'un
+  // champ vide, jamais de la phrase déjà validée d'une session précédente. Pattern React
+  // « ajuster l'état pendant le rendu au changement de prop » (pas d'effet, pas de cascade).
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    setPhraseInput("");
+  }
 
   if (!open) {
     return null;
   }
+
+  const phraseSatisfied =
+    undefined === confirmPhrase || phraseInput.trim().toLowerCase() === confirmPhrase.trim().toLowerCase();
+  const confirmBlocked = confirmDisabled || !phraseSatisfied;
 
   return createPortal(
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
@@ -57,11 +79,26 @@ export function ConfirmDialog({
           {title}
         </h2>
         {description ? <div className="mt-2 text-sm text-muted-foreground">{description}</div> : null}
+        {undefined === confirmPhrase ? null : (
+          <div className="mt-4">
+            <label htmlFor={phraseInputId} className="block text-sm text-muted-foreground">
+              Tapez «&nbsp;{confirmPhrase}&nbsp;» pour confirmer
+            </label>
+            <input
+              id={phraseInputId}
+              type="text"
+              autoComplete="off"
+              value={phraseInput}
+              onChange={(event) => setPhraseInput(event.target.value)}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            />
+          </div>
+        )}
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="ghost" onClick={onCancel}>
             {cancelLabel}
           </Button>
-          <Button variant={destructive ? "destructive" : "default"} disabled={confirmDisabled} onClick={onConfirm}>
+          <Button variant={destructive ? "destructive" : "default"} disabled={confirmBlocked} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>

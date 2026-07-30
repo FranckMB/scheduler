@@ -210,7 +210,13 @@ describe("PlanningPage (integration)", () => {
       // First reopen (no flag) → 409 → proportional confirm dialog.
       expect(await screen.findByText(/supprimera 2 plannings secondaires/i)).toBeInTheDocument();
 
-      await user.click(screen.getByRole("button", { name: "Rouvrir et supprimer" }));
+      // P2-7 : le geste lourd exige de taper la phrase — le bouton reste grisé sans elle.
+      const confirmButton = screen.getByRole("button", { name: "Rouvrir et supprimer" });
+      expect(confirmButton).toBeDisabled();
+      await user.type(within(screen.getByRole("dialog")).getByRole("textbox"), "modifier mon planning de saison");
+      expect(confirmButton).toBeEnabled();
+
+      await user.click(confirmButton);
       expect(vi.mocked(reopenSchedule)).toHaveBeenCalledTimes(2);
       expect(vi.mocked(reopenSchedule).mock.calls[1]).toEqual([SID, { confirmDeleteOverlays: true }]);
       // Reopened → back to the wizard's generation step.

@@ -52,6 +52,32 @@ Schedule (= Version)                    ← existant, recentré
 1. **Valider = pointer.** Choisir une version ⇒ `Plan.chosenScheduleId = version` **et les
    autres versions du plan sont supprimées**. Pas de statut `VALIDATED`, pas d'`ARCHIVED` :
    « validé » se **dérive** du pointeur (une seule vérité).
+
+   ⚠️ **Amendement P2-7 (décision fondateur, 2026-07-30)** : l'invariant tenait implicitement
+   qu'« une version pointée est la seule version de saison » — faux du code jusqu'ici,
+   `POST /api/schedules` rendait 201 même avec un socle en vigueur (defect prouvé,
+   `specs/evolution/reprise-perimetre-engage.md` §1). **Aucune version de saison ne naît
+   tant que le plan SEASON en pointe une** : `ScheduleStateProcessor::processPost` refuse en
+   409 tout POST « de saison » (sans `schedulePlanId`, ou avec le plan SEASON explicite) tant
+   que `chosenOfSeasonPlan` répond non-null, sous le verrou de plan-scope de la saison et
+   dans la transaction de création. NR : `Security/SeasonVersionUniquenessTest` (phase1).
+
+   ⚠️ **L'invariant n'est PAS encore tenu de bout en bout, et il faut le dire.** La garde
+   ferme la **création** ; elle ne dit rien des chemins qui agissent sur une version de saison
+   **déjà existante**. Sur les données héritées d'avant P2-7 (une version pointée PLUS une
+   sœur — l'état que le trou produisait), `regenerate` et `generate` ne refusent que si la
+   version *source* est la version pointée, et `regenerate-from` restaure une structure
+   ancienne sans consulter le pointeur. Le bon invariant est plus large que celui qu'on a
+   codé : **tant que le plan de saison est en vigueur, rien ne touche au calendrier de saison
+   ni à ses entrées**. Le fermer demande une garde unique (`SocleGuard`), sous verrou, posée
+   sur les quatre portes, avec les affordances frontend qui suivent — un lot de conception,
+   tracé en dette (roadmap **P2-9bis**). Les tentatives ponctuelles ont été essayées et
+   retirées : fermer `regenerate` seul transforme « Charger cette version » en cul-de-sac
+   destructif (la structure vivante est écrasée, puis « Régénérer » refuse). Revue #326
+   round 2. Le volet « supprimer les
+   matchs `UNPLACED` à la réouverture », envisagé dans le même cadrage, est **abandonné**
+   (décision fondateur) : le module matchs est déjà inaccessible sans version pointée
+   (`SocleGuard::assertSeasonPlanChosen`, inv. 13), rien à en tirer en le vidant.
 2. **Pointeur NULL = espace de travail.** On (re)travaille ⇒ pointeur remis à null, on
    génère des versions (V4, V5…), on choisira. **Aucun pointage automatique** (l'auto-baseline
    au 1er COMPLETED disparaît) — seul le gestionnaire pointe.

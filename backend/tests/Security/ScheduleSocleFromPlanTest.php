@@ -108,8 +108,15 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
     public function testAVersionIsCreatedUnderANamedPlanWhichLinksAndTypesIt(): void
     {
         [$user, $club, $season] = $this->seed();
+
+        // Sans schedulePlanId → le socle (plan SEASON). P2-7 : une version de saison ne naît
+        // plus tant que le plan SEASON en pointe une — cette sous-assertion doit donc PRÉCÉDER
+        // settleSeasonPlan (sinon le POST sans plan se heurte au 409 « socle en vigueur »).
+        $seasonVersion = $this->postSchedule($user, ['name' => 'V saison', 'status' => 'DRAFT']);
+        self::assertSame('SEASON', $this->getSchedule($user, (string) $seasonVersion['id'])['planType'], 'sans plan nommé, la version naît sous le socle');
+
         // inv. 13 : un overlay se bâtit sur un socle pointé.
-        $this->settleSeasonPlan($season);
+        $chosen = $this->settleSeasonPlan($season);
         $entryId = $this->postClosurePeriod($user);
         $periodPlanId = self::getContainer()->get(SchedulePlanProvisioner::class)->periodPlanId($entryId);
         self::assertIsString($periodPlanId, 'la période née du geste porte un plan');
@@ -121,9 +128,20 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
         // planType est dérivé + batché à la LECTURE (pas dans la réponse POST) — on le relit.
         self::assertSame('CLOSURE', $this->getSchedule($user, (string) $overlay['id'])['planType'], 'son type vient du plan');
 
-        // Sans schedulePlanId → le socle (plan SEASON).
-        $seasonVersion = $this->postSchedule($user, ['name' => 'V saison', 'status' => 'DRAFT']);
-        self::assertSame('SEASON', $this->getSchedule($user, (string) $seasonVersion['id'])['planType'], 'sans plan nommé, la version naît sous le socle');
+        // …et la DISCRIMINATION entre plans : le POST sans plan doit résoudre le plan SEASON
+        // même quand d'AUTRES plans existent pour le club/la saison (ici celui de la période).
+        // C'est ce que prouvait la position d'origine de l'assertion ci-dessus ; la garde P2-7
+        // l'a forcée à remonter, donc on la re-couvre ici en rouvrant d'abord le socle — sans
+        // quoi une régression d'`ensureSeasonPlanId` (perte du prédicat `type = 'SEASON'`)
+        // créerait des versions de saison sous un plan de période sans qu'un test bronche.
+        // On l'exerce sur le RÉSOLVEUR lui-même plutôt que par un POST : depuis P2-7 le socle
+        // est en vigueur ici, donc un POST prendrait le 409 d'unicité, et le rouvrir d'abord
+        // détruirait le plan de période — c'est-à-dire l'autre plan dont la présence EST la
+        // condition du test.
+        $seasonPlanId = self::getContainer()->get(SchedulePlanProvisioner::class)->ensureSeasonPlanId($season->getId());
+        self::assertIsString($seasonPlanId);
+        self::assertNotSame($periodPlanId, $seasonPlanId, 'le plan par défaut ne retombe jamais sur celui d’une période');
+        self::assertSame($chosen->getSchedulePlanId(), $seasonPlanId, 'c’est bien le plan SEASON, celui qui porte le socle');
 
         // Un plan inconnu/étranger est refusé (le back valide l’appartenance au club).
         $this->client->request('POST', '/api/schedules', [], [], $this->authHeaders($user) + ['CONTENT_TYPE' => 'application/json'], json_encode([
