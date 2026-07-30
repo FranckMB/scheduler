@@ -94,19 +94,37 @@ patron que `ValidateScheduleController`/`ReopenScheduleController` : un
 `pg_advisory_xact_lock` pris hors transaction se relâcherait au statement suivant). Elle ne
 s'arme jamais pour un overlay de période (plan CLOSURE/HOLIDAY).
 
-⚠️ **Portée exacte — ne pas lire « par construction » plus loin qu'elle ne va.** Cette garde
-ferme **la création d'une version de saison**, et elle seule. Trois autres chemins peuvent
-encore agir sur le calendrier de saison **quand des versions sœurs héritées existent** (état
-que seul le trou d'avant P2-7 a pu produire — il ne naît plus) : `regenerate` et `generate`
-ne refusent que si la version *source* est celle qui est pointée, jamais si le plan pointe
-une AUTRE version ; `regenerate-from` restaure une structure ancienne sans consulter le
-pointeur du tout. Fermer les quatre portes derrière un invariant unique — « tant que le plan
-de saison est en vigueur, rien ne touche au calendrier de saison ni à ses entrées » — est
-tracé en dette (roadmap, **P2-9bis**) : c'est un lot de conception, pas un correctif, et les
-tentatives ponctuelles ont produit des régressions (revue #326 round 2). Posée en défense en
-profondeur même si l'UI n'atteint pas ce
-chemin (`GenerateStep.tsx` masque « Lancer la génération » dès qu'un planning de saison
-`COMPLETED` existe). NR : `Security/SeasonVersionUniquenessTest` (phase1).
+**Défense en profondeur sur les trois autres portes (P2-9bis, livré 2026-07-31).** Le
+cadrage initial soupçonnait un defect sur `regenerate`, `generate` et `regenerate-from` en
+présence d'une version sœur héritée (l'état que seul le trou d'avant P2-7 pouvait produire).
+Ce defect ne s'est jamais confirmé : `ValidateScheduleController` supprime déjà toutes les
+sœurs à la validation, et le POST direct est fermé depuis P2-7 — quand le plan SEASON pointe,
+il n'existe donc **qu'une seule** version de saison, et les trois portes n'ont aucune sœur à
+viser. L'invariant était déjà tenu par cette **propriété émergente**, pas par une règle
+explicite. `SocleGuard::assertSeasonPlanNotChosen` (miroir exact de `assertSeasonPlanChosen`,
+même message) est désormais posée sur les trois portes en défense en profondeur — sous le
+verrou de plan-scope de la saison et dans une transaction, pour qu'une lecture hors verrou ne
+soit pas un simple TOCTOU :
+- `GenerateScheduleController` : n'avait ni transaction ni verrou avant ce lot ; le passage en
+  `PENDING` et le `flush` sont désormais enveloppés, verrou pris d'abord, `dispatch` **après**
+  le commit. L'assertion n'y est armée que pour une version de saison (`isSeasonSchedule`) —
+  un overlay a déjà passé `assertSeasonPlanChosen`, qui exige l'inverse.
+- `RegenerateController` : assertion posée dans son `wrapInTransaction` existant.
+- `RegenerateFromVersionController` : assertion posée dans son `wrapInTransaction` existant,
+  **avant** le restore destructif (`StructureRestorer::apply`).
+
+Le rattrapage de données sur les sœurs héritées d'avant P2-7 est **écarté** (décision
+fondateur, V0 : pas de migration, les fixtures repartent de zéro). NR :
+`Security/SeasonPlanInForceTest` (phase1) — épingle la propriété émergente elle-même
+(valider une version de saison laisse exactement une version) en plus des trois portes et de
+leur non-régression sans socle pointé.
+
+⚠️ **Invariant, formulé juste** : « tant que le plan de saison est en vigueur, aucune AUTRE
+version de saison n'est créée ni résolue, et la structure du club n'est pas écrasée par une
+photo ancienne » — **pas** « rien ne touche au calendrier de saison ni à ses entrées ». La
+structure du club (équipes, gymnases, coachs, contraintes permanentes) reste modifiable toute
+l'année ; c'est précisément à ça que sert la comparaison `snapshotHash`/`currentStructureHash`,
+pas à la geler.
 
 ### 3.3bis Confirmation de validation (responsabilité gestionnaire)
 Le bouton **« Valider »** ouvre une **modale de confirmation** qui matérialise le choix du gestionnaire :
@@ -150,6 +168,7 @@ DRAFT ──generate──▶ PENDING ──▶ GENERATING ──▶ COMPLETED
 - `ValidateScheduleTest` : `/validate` **pointe** la version sur son plan et **supprime les versions sœurs** ; 409 si non-`COMPLETED` ; 409 si une sœur est en génération.
 - `ReopenScheduleTest` : `/reopen` **dépointe** le plan (la version survit) ; 409 si la version n'est pas celle que pointe son plan.
 - `SeasonVersionUniquenessTest` (P2-7, §3.2bis) : `POST /api/schedules` refusé en 409 tant que le plan SEASON pointe une version, sous ses deux formes (sans `schedulePlanId`, avec le plan SEASON explicite) ; accepté si aucune version n'est pointée ; accepté pour un overlay de période même quand le socle est en vigueur.
+- `SeasonPlanInForceTest` (P2-9bis, §3.2bis) : épingle la propriété émergente (valider une version de saison laisse exactement une version de saison) et couvre `generate`/`regenerate`/`regenerate-from` — 409 « est en vigueur » sur une sœur pendant qu'une autre version est pointée, 202/200 nominal sans socle pointé.
 - `SchedulePlanLifecycleTest` / `SchedulePlanReadModelTest` / `SchedulePlanProvisionerTest` : pointeur, compteur de versions, provisioning et modèle de lecture du plan.
 - **Gardes** (`ScheduleLifecycleGuardTest`) : régénération / manual-edit / slot-template / PUT / DELETE → **409** quand le plan pointe la version.
 - **Tenant isolation** (blocking) : `/validate` et `/reopen` cross-club → 403.

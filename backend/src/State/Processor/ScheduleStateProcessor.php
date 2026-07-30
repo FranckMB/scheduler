@@ -142,9 +142,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             // rouvrir (dépointer) est le geste explicite qui rouvre l'espace de travail.
             if ($isSeasonPost) {
                 $this->schedulePlanProvisioner->lockPlanScope(SchedulePlanProvisioner::seasonScopeKey($resolvedSeasonId));
-                if (null !== $this->schedulePlanProvisioner->chosenOfSeasonPlan($resolvedSeasonId)) {
-                    throw new ConflictHttpException('Le planning de la saison est en vigueur — rouvrez-le avant d\'en préparer un autre.');
-                }
+                $this->socleGuard->assertSeasonPlanNotChosen($resolvedSeasonId);
             }
             // P2-5 E1 (exclusivité bloc/semaines) : une période DÉCOUPÉE ne se génère
             // plus « d'un bloc ». SOUS le verrou du plan-scope de l'entrée (tenu
