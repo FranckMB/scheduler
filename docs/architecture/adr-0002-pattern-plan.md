@@ -62,22 +62,38 @@ Schedule (= Version)                    ← existant, recentré
    que `chosenOfSeasonPlan` répond non-null, sous le verrou de plan-scope de la saison et
    dans la transaction de création. NR : `Security/SeasonVersionUniquenessTest` (phase1).
 
-   ⚠️ **L'invariant n'est PAS encore tenu de bout en bout, et il faut le dire.** La garde
-   ferme la **création** ; elle ne dit rien des chemins qui agissent sur une version de saison
-   **déjà existante**. Sur les données héritées d'avant P2-7 (une version pointée PLUS une
-   sœur — l'état que le trou produisait), `regenerate` et `generate` ne refusent que si la
-   version *source* est la version pointée, et `regenerate-from` restaure une structure
-   ancienne sans consulter le pointeur. Le bon invariant est plus large que celui qu'on a
-   codé : **tant que le plan de saison est en vigueur, rien ne touche au calendrier de saison
-   ni à ses entrées**. Le fermer demande une garde unique (`SocleGuard`), sous verrou, posée
-   sur les quatre portes, avec les affordances frontend qui suivent — un lot de conception,
-   tracé en dette (roadmap **P2-9bis**). Les tentatives ponctuelles ont été essayées et
-   retirées : fermer `regenerate` seul transforme « Charger cette version » en cul-de-sac
-   destructif (la structure vivante est écrasée, puis « Régénérer » refuse). Revue #326
-   round 2. Le volet « supprimer les
-   matchs `UNPLACED` à la réouverture », envisagé dans le même cadrage, est **abandonné**
-   (décision fondateur) : le module matchs est déjà inaccessible sans version pointée
-   (`SocleGuard::assertSeasonPlanChosen`, inv. 13), rien à en tirer en le vidant.
+   ⚠️ **Amendement P2-9bis (décision fondateur, livré 2026-07-31)** : le cadrage initial
+   (ci-dessus) soupçonnait un defect sur les chemins agissant sur une version de saison **déjà
+   existante** — `regenerate`/`generate` ne refusant que si la version *source* était la
+   version pointée, `regenerate-from` restaurant une structure ancienne sans consulter le
+   pointeur du tout, sur des données héritées d'avant P2-7 (une version pointée PLUS une
+   sœur). **Ce defect ne s'est jamais confirmé en le construisant** : `ValidateScheduleController`
+   supprime déjà toutes les sœurs à la validation, et P2-7 a fermé le POST direct — quand le
+   plan SEASON pointe, il n'existe donc **qu'une seule** version de saison, et ces trois
+   portes n'ont aucune sœur à viser. L'invariant était déjà tenu, mais par une **propriété
+   émergente** de deux mécanismes distincts, pas par une règle explicite. Le lot livré pose
+   `SocleGuard::assertSeasonPlanNotChosen` (miroir de `assertSeasonPlanChosen`) sur les trois
+   portes en **défense en profondeur**, sous le verrou de plan-scope de la saison et dans une
+   transaction (`GenerateScheduleController` n'avait ni l'une ni l'autre avant ce lot), et
+   `Security/SeasonPlanInForceTest` épingle la propriété émergente elle-même — si une future
+   modification de la validation cessait de supprimer les sœurs, ce test tomberait et
+   préviendrait que les trois portes se rouvrent. Le rattrapage des données héritées est
+   **écarté** (V0, pas de migration, fixtures repartues de zéro). **Invariant tenu, formulé
+   juste** : tant que le plan de saison est en vigueur, aucune AUTRE version de saison n'est
+   créée ni résolue, et la structure du club n'est pas écrasée par une photo ancienne — **pas**
+   « rien ne touche au calendrier de saison ni à ses entrées » (la structure du club — équipes,
+   gymnases, coachs, contraintes permanentes — reste modifiable toute l'année ; c'est l'objet
+   de la comparaison `snapshotHash`/`currentStructureHash`, pas de son gel). **Ce que
+   l'historique de cadrage garde comme enseignement** : la tentative de fermer `regenerate`
+   seul avait été essayée et retirée, parce qu'elle transformait « Charger cette version » en
+   cul-de-sac destructif (la structure vivante écrasée, puis « Régénérer » qui refuse) — revue
+   #326 round 2 ; c'est pour cette raison que le lot final pose la même garde sur les trois
+   portes ensemble plutôt que porte par porte. Le volet « supprimer les matchs `UNPLACED` à la
+   réouverture », envisagé dans le même cadrage, reste **abandonné** (décision fondateur) : le
+   module matchs est déjà inaccessible sans version pointée (`SocleGuard::assertSeasonPlanChosen`,
+   inv. 13), rien à en tirer en le vidant. Les affordances frontend (`regenerateDisabled`/
+   `canRegenerateFrom`) restent hors scope : aucune UI n'atteint ces chemins en présence d'un
+   socle en vigueur.
 2. **Pointeur NULL = espace de travail.** On (re)travaille ⇒ pointeur remis à null, on
    génère des versions (V4, V5…), on choisira. **Aucun pointage automatique** (l'auto-baseline
    au 1er COMPLETED disparaît) — seul le gestionnaire pointe.
