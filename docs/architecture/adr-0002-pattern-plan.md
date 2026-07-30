@@ -52,6 +52,20 @@ Schedule (= Version)                    ← existant, recentré
 1. **Valider = pointer.** Choisir une version ⇒ `Plan.chosenScheduleId = version` **et les
    autres versions du plan sont supprimées**. Pas de statut `VALIDATED`, pas d'`ARCHIVED` :
    « validé » se **dérive** du pointeur (une seule vérité).
+
+   ⚠️ **Amendement P2-7 (décision fondateur, 2026-07-30)** : l'invariant tenait implicitement
+   qu'« une version pointée est la seule version de saison » — faux du code jusqu'ici,
+   `POST /api/schedules` rendait 201 même avec un socle en vigueur (defect prouvé,
+   `specs/evolution/reprise-perimetre-engage.md` §1). **Aucune version de saison ne naît
+   tant que le plan SEASON en pointe une** : `ScheduleStateProcessor::processPost` refuse en
+   409 tout POST « de saison » (sans `schedulePlanId`, ou avec le plan SEASON explicite) tant
+   que `chosenOfSeasonPlan` répond non-null, sous le verrou de plan-scope de la saison et
+   dans la transaction de création. « Rouvrir » redevient donc le **seul** geste qui ouvre la
+   possibilité d'une nouvelle version de saison — ce que l'invariant 1 supposait déjà sans le
+   garantir. NR : `Security/SeasonVersionUniquenessTest` (phase1). Le volet « supprimer les
+   matchs `UNPLACED` à la réouverture », envisagé dans le même cadrage, est **abandonné**
+   (décision fondateur) : le module matchs est déjà inaccessible sans version pointée
+   (`SocleGuard::assertSeasonPlanChosen`, inv. 13), rien à en tirer en le vidant.
 2. **Pointeur NULL = espace de travail.** On (re)travaille ⇒ pointeur remis à null, on
    génère des versions (V4, V5…), on choisira. **Aucun pointage automatique** (l'auto-baseline
    au 1er COMPLETED disparaît) — seul le gestionnaire pointe.

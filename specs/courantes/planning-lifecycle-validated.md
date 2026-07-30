@@ -61,8 +61,9 @@ Ancrages : `AuthGuard.tsx` (onboarding = `!seasonPlan.hasFinishedVersion`), `Coc
 
 | Action | Endpoint | Effet | Garde |
 |--------|----------|-------|-------|
+| **Créer une version de saison** | `POST /api/schedules` (sans `schedulePlanId`, ou avec le plan SEASON explicite) | prépare une nouvelle version sous le plan SEASON | **409 si le plan SEASON pointe déjà une version choisie** (P2-7, 2026-07-30) — « le planning de la saison est en vigueur, rouvrez-le avant d'en préparer un autre » ; le seul geste qui rouvre l'espace de travail est **Rouvrir** |
 | **Valider (choisir)** | `POST /api/schedules/{id}/validate` | le **plan POINTE** cette version (`chosen_schedule_id`) **et ses versions sœurs du même périmètre sont SUPPRIMÉES** (inv. 1) | 409 si status ≠ `COMPLETED` · 409 si une sœur est `PENDING`/`GENERATING` · 409 `overlays_exist` si déplacer le pointeur de la saison détruirait des plans secondaires |
-| **Rouvrir** | `POST /api/schedules/{id}/reopen` | le plan **DÉPOINTE** — il redevient un espace de travail, la version survit (inv. 2) | 409 si la version n'est pas celle que pointe son plan · 409 `overlays_exist` (voir §6) |
+| **Rouvrir** | `POST /api/schedules/{id}/reopen` | le plan **DÉPOINTE** — il redevient un espace de travail, la version survit (inv. 2) | 409 si la version n'est pas celle que pointe son plan · 409 `overlays_exist` (voir §6) — le front n'active le bouton de confirmation qu'après saisie de la phrase exacte « modifier mon planning de saison » (`ConfirmDialog.confirmPhrase`, **uniquement** sur ce dialogue, pas sur celui de validation) |
 | **Renommer le plan** | `PUT /api/schedule_plans/{id}` | `plan.name` — le **nom appartient au plan** (inv. 12) | gate management (SEC-07) |
 
 - « Valider » reste le mot FR du bouton demandé par le gestionnaire ; ce qu'il fait, c'est **pointer**.
@@ -79,6 +80,24 @@ Le verrou se dérive du **pointeur** : « verrouillé » = **le plan pointe cett
 - `ScheduleStateProcessor` DELETE : la **version choisie ne se supprime pas** (409 — la rouvrir d'abord) et une version en cours de génération non plus (409). Gardé par `ScheduleLifecycleGuardTest` (phase1).
 
 > Le verrou front seul serait une illusion (contrarian-review) : l'enforcement est **serveur**.
+
+### 3.2bis Unicité du socle en vigueur (P2-7, livré 2026-07-30)
+
+Le verrou lecture-seule ci-dessus protège la version **choisie** ; il ne dit rien d'une
+**nouvelle** version créée à côté d'elle. `ScheduleStateProcessor::processPost` ferme ce trou :
+un POST « de saison » (`schedulePlanId` omis → plan SEASON par défaut, ou plan SEASON nommé
+explicitement) est refusé en **409** tant que `SchedulePlanProvisioner::chosenOfSeasonPlan`
+répond non-null — message « Le planning de la saison est en vigueur — rouvrez-le avant d'en
+préparer un autre. ». La garde est posée **sous le verrou de plan-scope de la saison**
+(`SchedulePlanProvisioner::seasonScopeKey`) et **dans la transaction** de création (même
+patron que `ValidateScheduleController`/`ReopenScheduleController` : un
+`pg_advisory_xact_lock` pris hors transaction se relâcherait au statement suivant). Elle ne
+s'arme jamais pour un overlay de période (plan CLOSURE/HOLIDAY). « La seule manière de
+modifier le planning de saison est Rouvrir » est désormais vrai **par construction** — les
+autres portes (régénérer/`regenerate-from` la version choisie, valider qui supprime les
+sœurs) étaient déjà fermées. Posée en défense en profondeur même si l'UI n'atteint pas ce
+chemin (`GenerateStep.tsx` masque « Lancer la génération » dès qu'un planning de saison
+`COMPLETED` existe). NR : `Security/SeasonVersionUniquenessTest` (phase1).
 
 ### 3.3bis Confirmation de validation (responsabilité gestionnaire)
 Le bouton **« Valider »** ouvre une **modale de confirmation** qui matérialise le choix du gestionnaire :
@@ -110,6 +129,7 @@ DRAFT ──generate──▶ PENDING ──▶ GENERATING ──▶ COMPLETED
 - **pickLandingScheduleId** : la version choisie du plan SEASON (hors overlay, hors vol) → sinon `pickDefaultSchedule` (`COMPLETED` le plus récent).
 - **Read-only gating** : si la version sélectionnée est celle que pointe son plan → désactiver régénérer + renommage + passer `readOnly` à `SlotDetail` (move/lock off) et `WeekGrid` (clic slot off).
 - Dédupliquer `IN_FLIGHT` (une source).
+- **Confirmation tapée à la réouverture** (P2-7, 2026-07-30) : la popup de réouverture (`ConfirmDialog` dans `PlanningPage.tsx`) porte `confirmPhrase="modifier mon planning de saison"` — son bouton reste désactivé tant que le gestionnaire n'a pas tapé la phrase exacte. Prop additive sur `shared/components/ui/confirm-dialog.tsx`, câblée **uniquement** sur ce dialogue (pas sur celui de validation).
 
 ## 5. Libellés FR des statuts
 `DRAFT`=Brouillon · `PENDING`=En attente · `GENERATING`=Génération… · `COMPLETED`=Terminé · `FAILED`=Échec (`STATUS_LABELS`, `planning/api.ts`). « Validé » ne figure pas dans cette liste : ce n'est pas un statut mais l'état du **pointeur**, affiché à part (badge / 🔒 « Lecture seule »).
@@ -119,6 +139,7 @@ DRAFT ──generate──▶ PENDING ──▶ GENERATING ──▶ COMPLETED
 **Backend** (`--group phase1` pour l'isolation) :
 - `ValidateScheduleTest` : `/validate` **pointe** la version sur son plan et **supprime les versions sœurs** ; 409 si non-`COMPLETED` ; 409 si une sœur est en génération.
 - `ReopenScheduleTest` : `/reopen` **dépointe** le plan (la version survit) ; 409 si la version n'est pas celle que pointe son plan.
+- `SeasonVersionUniquenessTest` (P2-7, §3.2bis) : `POST /api/schedules` refusé en 409 tant que le plan SEASON pointe une version, sous ses deux formes (sans `schedulePlanId`, avec le plan SEASON explicite) ; accepté si aucune version n'est pointée ; accepté pour un overlay de période même quand le socle est en vigueur.
 - `SchedulePlanLifecycleTest` / `SchedulePlanReadModelTest` / `SchedulePlanProvisionerTest` : pointeur, compteur de versions, provisioning et modèle de lecture du plan.
 - **Gardes** (`ScheduleLifecycleGuardTest`) : régénération / manual-edit / slot-template / PUT / DELETE → **409** quand le plan pointe la version.
 - **Tenant isolation** (blocking) : `/validate` et `/reopen` cross-club → 403.
