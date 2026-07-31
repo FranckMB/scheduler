@@ -9,7 +9,7 @@
 > [`planning-lifecycle-validated.md`](../courantes/planning-lifecycle-validated.md) (cycle de vie,
 > gardes, codes HTTP), [`adr-0002-pattern-plan.md`](../../docs/architecture/adr-0002-pattern-plan.md)
 > (invariants) et [`module-matchs.md`](../courantes/module-matchs.md) (périmètre engagé). **Les
-> dettes ouvertes ne vivent pas ici non plus** : elles sont en [`roadmap.md`](roadmap.md) §Dette,
+> dettes ouvertes ne vivent pas ici non plus** : elles sont en [`roadmap.md`](roadmap.md),
 > et les recopier ferait exactement ce que la section « Méthode » ci-dessous interdit.
 
 ## La réalité du terrain (fondateur — à lire avant tout)

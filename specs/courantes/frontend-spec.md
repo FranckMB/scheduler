@@ -342,7 +342,7 @@ depuis la fiche FFBB est prévu en lot C.
 
 > **RGPD (minimisation).** Président et correspondant sont des **contacts professionnels** (données
 > publiques de la fiche FFBB : nom, téléphone, email). **Aucune adresse de domicile** n'est stockée —
-> seule l'adresse du club et de la salle principale (lieux publics) le sont. Voir `specs/evolution/roadmap.md` §Dette (DP1).
+> seule l'adresse du club et de la salle principale (lieux publics) le sont. Base légale actée avec P0-1 (DP1 soldé) — [`../../docs/security/rgpd.md`](../../docs/security/rgpd.md) §2.
 
 ### 6.7 Optimistic updates pour édition manuelle
 

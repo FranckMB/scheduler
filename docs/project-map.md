@@ -169,5 +169,6 @@ Two further MCP servers are configured in `.mcp.json` and enabled: **Serena** (`
 - Tests & guardrails: [`testing/testing-strategy.md`](testing/testing-strategy.md)
 - Sécurité: [`security/rls.md`](security/rls.md) (RLS, GUC, exceptions) · [`security/mercure.md`](security/mercure.md) (durcissement SEC-05/06) · [`security/rgpd.md`](security/rgpd.md) (registre art. 30)
 - Exploitation: [`ops/prod-stack.md`](ops/prod-stack.md) · [`ops/deploy.md`](ops/deploy.md) · [`ops/backup-restore.md`](ops/backup-restore.md)
-- Debt & backlog priorisé (**suivi unique**, y compris les suppressions sûres): [`../specs/evolution/roadmap.md`](../specs/evolution/roadmap.md) (§Backlog · §Dette)
+- Ce qui reste à faire — bugs, évolutions, dette, suppressions sûres : [`../specs/evolution/roadmap.md`](../specs/evolution/roadmap.md) (**l'ouvert seulement**)
+- Ce qui est livré + les décisions fermées : [`../specs/courantes/etat-des-lieux.md`](../specs/courantes/etat-des-lieux.md)
 - Decisions to formalize: [`architecture/adr-index.md`](architecture/adr-index.md) · matrice contrainte UI↔engine: [`architecture/constraint-matrix.md`](architecture/constraint-matrix.md)
