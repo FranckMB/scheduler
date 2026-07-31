@@ -271,6 +271,11 @@ jobs:
       - name: PeriodGatePayloadParityTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/PeriodGatePayloadParityTest.php --group phase1'
 
+      # P2-9 PR A (axe constraint semantics) : le volet capacité du récap, dans les deux
+      # sens — les nombres viennent du payload du solveur, jamais d'un recalcul à la main.
+      - name: RecapCapacityWarningTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/RecapCapacityWarningTest.php --group phase1'
+
       - name: CoachDoubleBookingTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/CoachDoubleBookingTest.php --group phase1'
 

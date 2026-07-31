@@ -17,6 +17,7 @@ use App\Service\ConstraintValidationService;
 use App\Service\ManagementAccessGuard;
 use App\Service\PeriodConstraintSelection;
 use App\Service\PeriodConstraintSelector;
+use App\Service\ScheduleConstraintBuilder;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
@@ -47,6 +48,7 @@ final class ValidateConstraintsController extends AbstractController
         private readonly VenueRepository $venueRepository,
         private readonly CoachDoubleBookingDetector $coachDoubleBookingDetector,
         private readonly PeriodConstraintSelector $periodConstraintSelector,
+        private readonly ScheduleConstraintBuilder $scheduleConstraintBuilder,
     ) {}
 
     #[Route('/api/constraints/validate', name: 'api_constraints_validate', methods: ['POST'])]
@@ -114,6 +116,24 @@ final class ValidateConstraintsController extends AbstractController
             $this->validationService->detectConflicts($constraints),
         );
 
+        // P2-9 PR A — LE VOLET CAPACITÉ, dans les deux sens (décision fondateur 2026-07-31).
+        // Les nombres viennent du PAYLOAD que le solveur recevra (`buildForClubSeason` /
+        // `buildForPeriodPlan`, en lecture seule depuis P2-9ter) — JAMAIS d'un recalcul à la
+        // main : trois tentatives sont mortes exactement là-dessus, dont une en perdant des
+        // données. Une période sans plan (non génératrice, ou antérieure au lot C1) n'a pas
+        // de payload : rien à mesurer.
+        $capacityPayload = null;
+        if (null !== $calendarEntryId) {
+            if ($selection instanceof PeriodConstraintSelection) {
+                $capacityPayload = $this->scheduleConstraintBuilder->buildForPeriodPlan($clubId, $seasonId, $selection->schedulePlanId, $calendarEntry);
+            }
+        } else {
+            $capacityPayload = $this->scheduleConstraintBuilder->buildForClubSeason($clubId, $seasonId);
+        }
+        if (null !== $capacityPayload) {
+            $warnings = [...$warnings, ...$this->capacityWarnings($capacityPayload)];
+        }
+
         // P2-9 PR B — IMPOSSIBILITÉ PHYSIQUE : un verrou qui met un coach à deux endroits
         // en même temps. Le solveur ne peut PAS l'attraper (un verrou HARD est pré-placé
         // hors modèle, ALIGN-07), et ce n'est pas une préférence bafouée — le gestionnaire
@@ -133,6 +153,67 @@ final class ValidateConstraintsController extends AbstractController
             ['valid' => $valid, 'errors' => $errors, 'conflicts' => $conflicts, 'warnings' => $warnings, 'blockers' => $blockers],
             $valid ? Response::HTTP_OK : Response::HTTP_UNPROCESSABLE_ENTITY,
         );
+    }
+
+    /**
+     * P2-9 PR A — demande vs offre, sur les nombres EXACTS du solveur.
+     *
+     * - Demande = Σ `sessionsPerWeek` du payload (ce que l'équipe VEUT — retenir
+     *   `minSessionsOverride` sous-estimait le besoin ; les surcharges de période sont
+     *   déjà appliquées par le builder).
+     * - Offre = Σ des capacités des créneaux du payload (un créneau à capacité 2 sert
+     *   deux équipes ; le bridage `canSplit` est déjà appliqué par le builder).
+     * - Sous-capacité : « au moins X » — la condition est NÉCESSAIRE, jamais suffisante
+     *   (les créneaux sont situés) ; ne jamais affirmer l'inverse. `offre == demande`
+     *   n'alerte pas.
+     * - Surplus : signalé dès le premier créneau en trop (décision fondateur 2026-07-31 —
+     *   le mou est une INFORMATION : agrandir des créneaux, en ajouter, ou augmenter les
+     *   séances d'une équipe), en ton informatif, jamais alarmiste.
+     *
+     * @param array<string, mixed> $payload
+     *
+     * @return list<string>
+     */
+    private function capacityWarnings(array $payload): array
+    {
+        $demand = 0;
+        $teams = \is_array($payload['teams'] ?? null) ? $payload['teams'] : [];
+        foreach ($teams as $team) {
+            $demand += (int) ($team['sessionsPerWeek'] ?? 0);
+        }
+
+        $offer = 0;
+        foreach (\is_array($payload['venues'] ?? null) ? $payload['venues'] : [] as $venue) {
+            foreach (\is_array($venue['trainingSlots'] ?? null) ? $venue['trainingSlots'] : [] as $slot) {
+                $offer += (int) ($slot['capacity'] ?? 0);
+            }
+        }
+
+        // Aucune équipe au payload : la demande vaut 0 et tout « surplus » serait du bruit
+        // sur un club vide — le récap bloque déjà en amont sur « Ajoutez une équipe ».
+        if (0 === $demand) {
+            return [];
+        }
+
+        if ($offer < $demand) {
+            return [\sprintf(
+                'Vos équipes demandent %d séances par semaine, vos gymnases n\'en offrent que %d : au moins %d séance(s) ne pourront pas être placées. Ajoutez des créneaux, augmentez leur capacité, ou réduisez des séances.',
+                $demand,
+                $offer,
+                $demand - $offer,
+            )];
+        }
+
+        if ($offer > $demand) {
+            return [\sprintf(
+                'Vos gymnases offrent %d places de créneau pour %d séances demandées : %d resteront libres. Vous pouvez agrandir des créneaux (capacité), en ajouter, ou augmenter les séances de certaines équipes.',
+                $offer,
+                $demand,
+                $offer - $demand,
+            )];
+        }
+
+        return [];
     }
 
     private function requestedCalendarEntryId(?Request $request): ?string

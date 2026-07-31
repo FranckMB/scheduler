@@ -183,8 +183,10 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid']);
         self::assertSame([], $data['errors'], 'la datée visant le gymnase désactivé est retirée, donc plus rien à valider');
-        self::assertSame(
-            ['« SM1 exige 2 séances à Barros » vise le gymnase Barros, désactivé pour cette période : elle ne sera pas appliquée.'],
+        // P2-9 PR A ajoute le volet capacité aux warnings — ce test garde LE SIEN (le drop
+        // gymnase désactivé), la capacité a son propre NR (RecapCapacityWarningTest).
+        self::assertContains(
+            '« SM1 exige 2 séances à Barros » vise le gymnase Barros, désactivé pour cette période : elle ne sera pas appliquée.',
             $data['warnings'],
         );
     }
