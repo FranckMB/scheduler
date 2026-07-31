@@ -1,11 +1,23 @@
-Last verified @ 2026-07-29 (audit de dérive documentaire — snapshot et ressources recomptés,
-entrée #8 manquante insérée, entrées périmées annotées ; le JSON n'a pas été régénéré, il
-n'en avait pas besoin)
+Last verified @ 2026-07-31 (JSON **régénéré** depuis le backend vivant)
 
-Snapshot régénéré depuis le backend vivant le 2026-07-25 : `php bin/console api:openapi:export`.
-**92 paths**, en phase avec les ressources de `backend/src/ApiResource/` (chacune est
-représentée, aucun path orphelin).
+Snapshot régénéré depuis le backend vivant le 2026-07-31 : `php bin/console api:openapi:export`.
+En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
+path orphelin).
 Changements récents :
+- **P4-41 (2026-07-31)** : `Schedule.ScheduleInput` — `name` **quitte les champs requis**
+  (`required` ne garde que `status`). ADR-0002 inv. 12 : le nom vit sur le PLAN, une version
+  n'a pas d'identité produit ; un POST sans nom laisse le serveur nommer la version d'après
+  son plan. Une chaîne **vide ou blanche** reste refusée en 422 (`NotBlank(allowNull: true,
+  normalizer: 'trim')`) — absent ≠ vide — et `maxLength: 180` borne le champ, aligné sur la
+  colonne. ⚠ Le JSON a dû être **régénéré une seconde fois** : la première passe précédait
+  l'ajout de `Assert\Length`, donc le contrat publié annonçait un `name` non borné alors que
+  le serveur le refusait déjà (revue #339 round 3 — le déclencheur « changement d'API ⇒
+  régénérer » vaut pour CHAQUE modification, pas une fois par PR).
+- ⚠ **Dérive antérieure ramassée au passage** : la régénération a aussi fait apparaître les
+  `format: uuid` + `externalDocs` de `Reservation.ReservationInput` (`teamId`, `venueId`,
+  `schedulePlanId`) et de `Schedule.ScheduleInput.schedulePlanId`. Ils viennent des
+  `#[Assert\Uuid]` posés par **P4-22a le 2026-07-26**, dont la PR n'avait pas régénéré le
+  snapshot. Signal : le déclencheur « changement d'API ⇒ régénérer » n'avait pas été appliqué.
 - **Feature #10 doléances coachs (C1/C2/C3, 2026-07-25)** : +`/api/coach_wishes` (CRUD todo-list),
   +`/api/coach_wish_campaigns` (CRUD + actions `POST /{id}/send-links` et `POST /{id}/remind`,
   exportées car déclarées comme opérations de la ressource). ⚠ La page **publique**

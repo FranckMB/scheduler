@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SchedulePlan } from "@/features/cockpit/api";
 import { renderWithProviders } from "@/test/utils";
 
 import { getTrainingSlots, listSchedules, OverlaysExistError, reopenSchedule } from "./api";
@@ -68,7 +69,20 @@ vi.mock("./api", () => {
 const navigate = vi.fn();
 vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
 
-const { meState } = vi.hoisted(() => ({ meState: { chosenScheduleId: null as string | null } }));
+const { meState, renameSpy, plansState } = vi.hoisted(() => ({
+  meState: { chosenScheduleId: null as string | null },
+  renameSpy: vi.fn(),
+  // Typé sur le VRAI contrat : un type inline recopié laisserait passer un champ ajouté à
+  // `SchedulePlan` sans que ces fixtures soient recalées (revue #339 round 3).
+  plansState: { plans: [] as SchedulePlan[] },
+}));
+
+// Partiel : seul `useSchedulePlans` est simulé (l'en-tête y lit le nom du plan
+// affiché) — le reste du module cockpit reste réel.
+vi.mock("@/features/cockpit/queries", async (orig) => ({
+  ...(await orig<typeof import("@/features/cockpit/queries")>()),
+  useSchedulePlans: () => ({ data: plansState.plans }),
+}));
 
 vi.mock("@/features/auth/queries", () => ({
   useMe: () => ({
@@ -78,7 +92,7 @@ vi.mock("@/features/auth/queries", () => ({
       seasons: [{ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }], currentSeasonId: "sn1",
     },
   }),
-  useRenamePlanning: () => ({ mutate: vi.fn(), isPending: false }),
+  useRenamePlanning: () => ({ mutate: renameSpy, isPending: false }),
   useWorkingSeason: () => ({ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }),
 }));
 
@@ -86,6 +100,8 @@ const workVersion: Schedule[] = [{ id: SID, name: "Planning A", status: "COMPLET
 
 beforeEach(() => {
   meState.chosenScheduleId = null;
+  renameSpy.mockClear();
+  plansState.plans = [];
   // Default: an editable work version. Re-armed per test so a case that swaps in
   // an in-force version (read-only → panels hidden) cannot leak into the next.
   vi.mocked(listSchedules).mockResolvedValue(workVersion);
@@ -136,6 +152,83 @@ describe("PlanningPage (integration)", () => {
     // La couche du socle peut être demandée le temps que la liste des versions arrive ;
     // ce qui compte est celle sur laquelle l'écran se STABILISE.
     await vi.waitFor(() => expect(vi.mocked(getTrainingSlots).mock.lastCall).toEqual(["toussaint-plan"]));
+  });
+
+  // P2-20 (retour fondateur 2026-07-31) — LE défaut : le stylo « Renommer » passait
+  // `me.seasonPlan.id` EN DUR (PlanningPage.tsx), donc renommer un planning de période
+  // renommait le planning de la SAISON. Le fondateur a renommé sa reprise du 17 août et
+  // a retrouvé son planning de saison rebaptisé. ADR-0002 inv. 12 : le nom vit sur LE
+  // plan — celui de la version affichée.
+  it("renomme le plan de la PÉRIODE affichée, jamais celui de la saison", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Version de période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
+    ]);
+    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Reprise d'été S1", startDate: "2026-08-17", calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: true }];
+    usePlanningStore.setState({ selectedScheduleId: SID });
+    renderWithProviders(<PlanningPage />);
+
+    // Le titre montre le nom du PLAN de période — il affichait « Planning A » (la saison).
+    expect(await screen.findByRole("heading", { name: "Reprise d'été S1" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /renommer le planning/i }));
+    const field = screen.getByRole("textbox", { name: /nom du planning/i });
+    // Le champ se pré-remplissait du nom de la SAISON : on prouve qu'il porte celui du plan affiché.
+    expect(field).toHaveValue("Reprise d'été S1");
+    await userEvent.clear(field);
+    await userEvent.type(field, "Reprise d'été S2{Enter}");
+
+    expect(renameSpy).toHaveBeenCalledWith({ planId: "ete-plan", name: "Reprise d'été S2" });
+  });
+
+  it("renomme bien le plan de SAISON quand c'est lui qui est affiché", async () => {
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByRole("heading", { name: "Planning A" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /renommer le planning/i }));
+    await userEvent.clear(screen.getByRole("textbox", { name: /nom du planning/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /nom du planning/i }), "Saison 26-27{Enter}");
+
+    expect(renameSpy).toHaveBeenCalledWith({ planId: "plan-1", name: "Saison 26-27" });
+  });
+
+  // Revue #339 : un club qui n'a JAMAIS généré n'a aucune version, donc aucun plan
+  // « affiché » — l'en-tête perdait le nom du planning de saison ET son stylo, si bien que
+  // le gestionnaire ne pouvait plus le nommer avant d'avoir généré. Le contexte par défaut
+  // EST la saison. PREUVE DE CHUTE : sans le repli, le titre vaut « Planning ».
+  it("garde le nom et le stylo du plan de saison quand le club n'a aucune version", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([]);
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByRole("heading", { name: "Planning A" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /renommer le planning/i })).toBeInTheDocument();
+  });
+
+  // Un nom vidé n'est pas un renommage : on n'écrase pas une identité par du vide (la
+  // colonne est NOT NULL). Le champ se referme, le titre reste — c'est le retour.
+  it("n'écrit rien quand on valide un nom vidé", async () => {
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByRole("heading", { name: "Planning A" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /renommer le planning/i }));
+    await userEvent.clear(screen.getByRole("textbox", { name: /nom du planning/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /nom du planning/i }), "{Enter}");
+
+    expect(renameSpy).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Planning A" })).toBeInTheDocument();
+  });
+
+  // Le plan d'une période pas encore chargé (collection en vol) : on ne propose pas un
+  // geste dont on n'a pas la cible — c'est cette absence de cible qui faisait retomber
+  // l'écriture sur le plan de saison.
+  it("masque le stylo tant que le plan de la période affichée n'est pas résolu", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Version de période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
+    ]);
+    usePlanningStore.setState({ selectedScheduleId: SID });
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /renommer le planning/i })).not.toBeInTheDocument();
   });
 
   it("drops « Valider » on the version the plan points at (it is in force) and offers « Rouvrir »", async () => {

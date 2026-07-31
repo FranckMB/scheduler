@@ -412,6 +412,40 @@ final class SchedulePlanProvisioner
     }
 
     /**
+     * ADR-0002 inv. 12 — LE nom d'un planning, vu depuis une de ses versions : celui de son
+     * PLAN, toujours. SOURCE UNIQUE de la règle et de son repli.
+     *
+     * `Schedule.name` n'est qu'une PHOTO prise à la création de la version : elle se périme
+     * dès que le gestionnaire renomme le plan, ou dès que `refreshClosurePlanName` y pose le
+     * gymnase. La lire pour afficher, exporter ou nommer un fichier fait diverger le document
+     * remis aux coachs du nom que l'écran affiche (constaté en revue #339 round 2 : le PDF
+     * portait « Vacances d'été — … » dans un fichier nommé « reprise-aout.pdf »).
+     *
+     * Repli sur la photo si le plan a disparu — un export doit rendre un document, pas une erreur.
+     *
+     * ⚠ Portée exacte : « le nom d'un planning vu depuis UNE DE SES VERSIONS ». `OverlayManager::
+     * periodLabelOf` nomme délibérément autrement (le titre de la `CalendarEntry`, c'est-à-dire le
+     * FAIT déclencheur) dans la popup de suppression — le gestionnaire y reconnaît son incident.
+     * Écart assumé, tracé en roadmap plutôt que rendu uniforme dans cette PR.
+     */
+    public function displayNameOf(Schedule $schedule): string
+    {
+        $plan = $this->fetchPlanContext($schedule->getSchedulePlanId());
+
+        return $plan['name'] ?? $schedule->getName();
+    }
+
+    /**
+     * Le nom qu'une NOUVELLE version doit porter : celui de son plan. Les deux sites de
+     * création (POST et Régénérer) l'appellent — la règle et son littéral de repli ne vivent
+     * qu'ici, avec tous les autres noms de plan.
+     */
+    public function versionNameFor(string $schedulePlanId): string
+    {
+        return $this->fetchPlanContext($schedulePlanId)['name'] ?? 'Planning';
+    }
+
+    /**
      * ADR-0002 C4 — LA SEULE VÉRITÉ du « est-ce le socle ? » : plan.type === SEASON.
      * Remplace le doublon d'ancre nullable `null === schedule.calendarEntryId`.
      *
@@ -463,16 +497,16 @@ final class SchedulePlanProvisioner
 
     /**
      * ADR-0002 C4 : le contexte d'un plan pour VALIDER une création (POST /api/schedules
-     * nomme le plan). Rend club/saison/type/déclencheur, ou null si le plan n'existe pas.
+     * nomme le plan). Rend club/saison/type/déclencheur/nom, ou null si le plan n'existe pas.
      * SQL brut : filter-free (la saison du plan n'est pas forcément l'active) ; RLS scope le
      * club (un plan d'un autre club rend null), et l'appelant re-check le club en défense.
      *
-     * @return array{clubId: string, seasonId: string, type: SchedulePlanType, calendarEntryId: string|null}|null
+     * @return array{clubId: string, seasonId: string, type: SchedulePlanType, calendarEntryId: string|null, name: string}|null
      */
     public function fetchPlanContext(string $planId): ?array
     {
         $row = $this->entityManager->getConnection()->fetchAssociative(
-            'SELECT club_id, season_id, type, calendar_entry_id FROM schedule_plan WHERE id = :pid',
+            'SELECT club_id, season_id, type, calendar_entry_id, name FROM schedule_plan WHERE id = :pid',
             ['pid' => $planId],
         );
         if (false === $row) {
@@ -484,6 +518,10 @@ final class SchedulePlanProvisioner
             'seasonId' => (string) $row['season_id'],
             'type' => SchedulePlanType::from((string) $row['type']),
             'calendarEntryId' => null === $row['calendar_entry_id'] ? null : (string) $row['calendar_entry_id'],
+            // inv. 12 : le nom PUBLIC vit ici. Exposé pour que la création d'une version
+            // puisse en dériver son libellé technique au lieu de laisser le client
+            // l'inventer — trois clients le faisaient, chacun à sa façon.
+            'name' => (string) $row['name'],
         ];
     }
 
@@ -518,8 +556,14 @@ final class SchedulePlanProvisioner
     /**
      * E6 / correctif F2 : recale le nom d'un plan de FERMETURE une fois la datée `venue_closed`
      * connue (elle naît après l'entrée, 2 POST). Le nom n'est recalé QUE tant qu'il vaut ENCORE
-     * le générique de naissance (« Ajustement gymnase du … au … ») — comparé à l'octet près, pas
+     * le générique de naissance (« Ajustement gymnase — {repère} ») — comparé à l'octet près, pas
      * par gabarit : dès qu'il est résolu OU renommé par le gestionnaire (inv. 12), il est figé.
+     *
+     * ⚠ Le générique est RECALCULÉ ici par `closurePlanName(null, …)`. Changer le gabarit change
+     * donc la clé de comparaison : les plans nés sous un gabarit ANTÉRIEUR ne matchent plus et ne
+     * seront jamais recalés (constaté à la revue #339 lors du passage au repère en clair). Décision
+     * fondateur, cohérente avec P2-9bis : V0, pas de migration de données — les rares plans
+     * concernés se renomment à la main.
      *
      * Conséquence assumée : re-cibler le gymnase d'UNE MÊME fermeture ne renomme pas (le nom est
      * gelé à la 1re résolution) — un vrai changement de gymnase se fait en créant une nouvelle
@@ -802,9 +846,10 @@ final class SchedulePlanProvisioner
      * E6 (types-de-planning « Nom par défaut ») : le nom PUBLIC du plan de période
      * (ADR-0002 inv. 12) — la RÉPONSE, distincte du FAIT déclencheur (`CalendarEntry.title`,
      * ex. « Gymnase A — fermé »). Source unique côté serveur ; le gestionnaire renomme ensuite.
-     * - CLOSURE : « Ajustement {gymnase} du {début} au {fin} » (gymnase = la datée `venue_closed`).
-     * - HOLIDAY : « Planning de {label} du {début} au {fin} » (label = « Vacances de la Toussaint »
-     *   → « Planning de vacances de la Toussaint … »).
+     * - CLOSURE : « Ajustement {gymnase} — {repère} » (gymnase = la datée `venue_closed`).
+     * - HOLIDAY : « {label} — {repère} » (label du référentiel, ex. « Vacances de la Toussaint »).
+     * Le {repère} se lit en clair (windowSuffix) : « Semaine du 20 octobre 2025 » quand la fenêtre
+     * couvre exactement une semaine calendaire, sinon « du 20 octobre 2025 au 2 novembre 2025 ».
      * Fallback sobre si la donnée manque (gymnase inconnu / vacances hors référentiel) — jamais de crash.
      *
      * ⚠ CLOSURE : la datée `venue_closed` naît APRÈS l'entrée (le front fait 2 POST) ; à la
@@ -854,12 +899,16 @@ final class SchedulePlanProvisioner
             );
             $label = \is_string($found) && '' !== $found ? $found : null;
         }
-        // « Vacances de la Toussaint » → « Planning de vacances de la Toussaint … ».
-        $name = null === $label
-            ? 'Planning de vacances ' . $this->windowSuffix($start, $end)
-            : 'Planning de ' . lcfirst($label) . ' ' . $this->windowSuffix($start, $end);
+        // « Vacances de la Toussaint — Semaine du 20 octobre 2025 ». Le préfixe
+        // « Planning de » est tombé (retour fondateur 2026-07-31) : dans une LISTE de
+        // plannings il ne distinguait rien, il ne faisait que décaler chaque libellé.
+        // R3-B : c'est le LABEL qu'on tronque, jamais le suffixe daté. Budget CALCULÉ (même
+        // raison qu'en closurePlanName) : un plafond fixe laissait la phrase dépasser 180, et
+        // la troncature externe amputait la date.
+        $suffix = ' — ' . $this->windowSuffix($start, $end);
+        $budget = max(1, 180 - mb_strlen($suffix));
 
-        return mb_substr($name, 0, 180);
+        return mb_substr($label ?? 'Vacances', 0, $budget) . $suffix;
     }
 
     /**
@@ -884,15 +933,51 @@ final class SchedulePlanProvisioner
 
     private function closurePlanName(?string $venue, DateTimeImmutable $start, DateTimeImmutable $end): string
     {
-        // R3-B : tronquer le GYMNASE (pas la phrase entière) — le suffixe daté doit TOUJOURS
-        // survivre à la limite de 180 (SchedulePlan.name), sinon le nom ne serait plus comparable
-        // au générique et le compare-and-set ne recalerait plus jamais. « Ajustement » (11) +
-        // gymnase (≤140) + espace (1) + suffixe (~27) ≤ 179.
-        return 'Ajustement ' . mb_substr($venue ?? 'gymnase', 0, 140) . ' ' . $this->windowSuffix($start, $end);
+        // R3-B : c'est le GYMNASE qu'on tronque, JAMAIS la phrase entière — le suffixe daté
+        // doit TOUJOURS survivre à la limite de 180 (`SchedulePlan.name`), sinon le nom cesse
+        // d'être comparable au générique et `refreshClosurePlanName` ne recale plus jamais ce
+        // plan. Le budget se CALCULE au lieu d'être estimé : le suffixe en toutes lettres peut
+        // atteindre ~42 caractères (« du 1er septembre 2026 au 30 septembre 2026 »), là où un
+        // plafond fixe de 140 sur le gymnase laissait la phrase dépasser 180 — et la troncature
+        // externe amputait alors la DATE, exactement ce que cette règle interdit (revue #339).
+        // Le gymnase RESTE dans le libellé (arbitrage fondateur 2026-07-31) : c'est la seule
+        // chose qui distingue deux fermetures de la même semaine.
+        $prefix = 'Ajustement ';
+        $suffix = ' — ' . $this->windowSuffix($start, $end);
+        $budget = max(1, 180 - mb_strlen($prefix) - mb_strlen($suffix));
+
+        return $prefix . mb_substr($venue ?? 'gymnase', 0, $budget) . $suffix;
     }
 
+    /**
+     * Le repère temporel d'un plan de période, en clair (retour fondateur 2026-07-31 :
+     * « Semaine du 17 août » plutôt qu'une plage en chiffres).
+     *
+     * Une fenêtre qui couvre EXACTEMENT une semaine calendaire (lundi → dimanche) se dit
+     * « Semaine du {jour} » — c'est le cas de toutes les semaines-enfants d'une période
+     * découpée (P2-5 E1), donc le cas courant. Toute autre fenêtre garde ses deux bornes :
+     * les résumer à leur lundi mentirait sur la durée.
+     */
     private function windowSuffix(DateTimeImmutable $start, DateTimeImmutable $end): string
     {
-        return 'du ' . $start->format('d/m/Y') . ' au ' . $end->format('d/m/Y');
+        $isFullWeek = '1' === $start->format('N') && '7' === $end->format('N')
+            && 6 === (int) $start->diff($end)->days;
+
+        return $isFullWeek
+            ? 'Semaine du ' . $this->frenchDate($start)
+            : 'du ' . $this->frenchDate($start) . ' au ' . $this->frenchDate($end);
+    }
+
+    /**
+     * « 17 août 2026 », et « 1er septembre 2026 » le premier du mois. Table locale plutôt
+     * qu'`IntlDateFormatter` : ext-intl n'est pas une dépendance du projet, et ces noms de
+     * mois ne bougeront jamais.
+     */
+    private function frenchDate(DateTimeImmutable $date): string
+    {
+        $months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+        $day = (int) $date->format('j');
+
+        return (1 === $day ? '1er' : (string) $day) . ' ' . $months[(int) $date->format('n') - 1] . ' ' . $date->format('Y');
     }
 }

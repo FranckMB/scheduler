@@ -206,6 +206,37 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     null !== selectedSchedule && !isSeasonPlanType(selectedSchedule.planType) && null !== selectedSchedule.schedulePlanId
       ? ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule.schedulePlanId)?.calendarEntryId ?? null)
       : null;
+  // ADR-0002 inv. 12 : LE nom vit sur le PLAN, jamais sur la version. Tout ce que
+  // l'en-tête montre ou modifie (titre, stylo, nom de fichier exporté, popup de
+  // suppression) doit donc désigner le plan de la version AFFICHÉE — pas le plan de
+  // saison. Il était codé en dur : renommer un planning de période renommait le
+  // planning de la SAISON, et l'en-tête affichait son nom sur toutes les périodes.
+  // `null` = plan pas encore résolu (collection en vol, ou plan absent) : l'appelant
+  // dégrade, il ne devine pas.
+  // Le club n'a AUCUNE version : on est dans le contexte SAISON par défaut, le plan de
+  // saison reste le sujet de l'en-tête. Sans ce cas, un club qui n'a jamais généré perdait
+  // le nom de son planning ET son stylo — il ne pouvait plus le nommer (revue #339 round 1).
+  // ⚠ La condition porte sur « le club n'a aucune version » (`schedules.length`), PAS sur
+  // « aucune version RÉSOLUE » : entre deux refetch, la sélection du store peut ne pas se
+  // retrouver dans la liste, et un repli sur ce signal-là ré-armerait le plan de SAISON comme
+  // cible du stylo alors que le gestionnaire est sur une période — le bug d'origine, de retour
+  // par une porte transitoire (revue #339 round 2).
+  // Entre deux refetch, la sélection du store peut ne plus être dans la liste (suppression
+  // d'une version, sélection persistée d'une autre saison) : `selectedSchedule` est alors null
+  // UNE passe de rendu, le temps que l'effet d'atterrissage rejoue. Plutôt que de laisser
+  // l'en-tête retomber sur un générique — ou pire, sur le plan de SAISON alors qu'on regarde
+  // une période —, on lit dès maintenant la version que cet effet va choisir : la MÊME
+  // fonction, donc le même résultat, sans flash et sans deviner (revue #339 round 3).
+  const headerSchedule = selectedSchedule ?? schedules.find((s) => s.id === pickLandingScheduleId(schedules)) ?? null;
+  const displayedPlan: { id: string; name: string } | null =
+    null === headerSchedule || isSeasonPlanType(headerSchedule.planType)
+      ? (me?.seasonPlan ?? null)
+      : ((allSchedulePlans ?? []).find((p) => p.id === headerSchedule.schedulePlanId) ?? null);
+  // Le TITRE tolère un plan non encore résolu (collection des plans en vol) : la photo
+  // `Schedule.name` porte le nom du plan à la création, donc un libellé juste dans l'immense
+  // majorité des cas — bien mieux que le générique « Planning ». Le STYLO, lui, reste
+  // conditionné au plan résolu : on ne propose pas un geste dont on n'a pas la cible.
+  const displayedPlanName = displayedPlan?.name ?? headerSchedule?.name ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   // Read-only = its plan points at it: this version IS the calendar in force.
   const isReadOnly = true === selectedSchedule?.isChosen;
@@ -295,10 +326,13 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     return <FullPageSpinner />;
   }
 
-  const planningTitle = me?.seasonPlan?.name ?? "Planning";
-  // Nom du fichier exporté = nom du PLANNING affiché : la période pour un overlay,
-  // le nom du plan de saison sinon (retour fondateur 2026-07-18).
-  const exportName = null !== selectedSchedule && !isSeasonPlanType(selectedSchedule.planType) ? selectedSchedule.name : (me?.seasonPlan?.name ?? null);
+  const planningTitle = displayedPlanName ?? "Planning";
+  // Nom du fichier exporté = nom du PLAN affiché (retour fondateur 2026-07-18).
+  // Il lisait `selectedSchedule.name`, c'est-à-dire le nom de la VERSION — que les
+  // clients inventaient : le fichier remis aux coachs s'appelait « Version de période ».
+  // Repli sur le nom de la version si le plan n'est pas encore résolu : un fichier au
+  // nom imparfait vaut mieux qu'un « planning.xlsx » anonyme (revue #339).
+  const exportName = displayedPlanName;
   const structureDiverged =
     null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType)
     && typeof selectedSchedule.generatedTeamCount === "number" && teams.length > 0
@@ -317,8 +351,11 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             onChange={(e) => setEditingPlanningName(e.target.value)}
             onKeyDown={(e) => {
               if ("Enter" === e.key) {
-                if (me?.seasonPlan) {
-                  renamePlanning.mutate({ planId: me.seasonPlan.id, name: editingPlanningName.trim() });
+                // Le plan AFFICHÉ (cf. displayedPlan) : c'était `me.seasonPlan.id` en dur,
+                // donc renommer un planning de période renommait celui de la saison.
+                // Un nom vidé n'écrase rien — un plan sans nom n'a plus d'identité à lire.
+                if (null !== displayedPlan && "" !== editingPlanningName.trim()) {
+                  renamePlanning.mutate({ planId: displayedPlan.id, name: editingPlanningName.trim() });
                 }
                 setEditingPlanningName(null);
               } else if ("Escape" === e.key) {
@@ -340,8 +377,11 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                 principal
               </span>
             ) : null}
-            {workingSeason && !workingSeason.isReadonly ? (
-              <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(me?.seasonPlan?.name ?? "")}>
+            {/* Pas de plan résolu = rien à renommer : proposer le geste enverrait
+                l'écriture sur un id qu'on n'a pas (c'est ce qui la faisait retomber
+                sur le plan de saison). */}
+            {null !== displayedPlan && workingSeason && !workingSeason.isReadonly ? (
+              <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(displayedPlan.name)}>
                 <Pencil className="size-4" />
               </Button>
             ) : null}
@@ -349,7 +389,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                 jamais pendant une génération en vol (la cascade emporterait la version
                 en cours de solve — revue B2 F3) → retour cockpit. */}
             {null !== overlayDeleteEntryId && workingSeason && !workingSeason.isReadonly && !isGenerating ? (
-              <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} schedulePlanId={selectedSchedule?.schedulePlanId ?? null} title={selectedSchedule?.name ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
+              <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} schedulePlanId={selectedSchedule?.schedulePlanId ?? null} title={displayedPlanName ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
             ) : null}
           </>
         )}

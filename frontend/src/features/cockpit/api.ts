@@ -31,6 +31,10 @@ export interface SchedulePlan {
   id: string;
   type: SchedulePlanType;
   name: string;
+  /** Sa fenêtre d'application (ADR-0002) — la SEULE clé de tri chronologique fiable :
+   *  le nom porte une date en toutes lettres, que `localeCompare` ordonne « 10 août »
+   *  avant « 3 août ». Déjà exposée par `SchedulePlanResource`. */
+  startDate: string;
   calendarEntryId: string | null;
   chosenScheduleId: string | null;
   /** Period-editable structure: has this plan's team selection been configured once (seed guard)? */

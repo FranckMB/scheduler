@@ -396,9 +396,13 @@ export async function validateConstraints(calendarEntryId?: string): Promise<Val
 }
 
 /** ADR-0002 C4 : crée une version SOUS un plan. Omis → le plan SEASON (socle) ;
- *  fourni → le plan d'une période (overlay). */
-export const createSchedule = (name: string, schedulePlanId?: string): Promise<{ id: string }> =>
-  api.post("schedules", { json: { name, status: "DRAFT", ...(schedulePlanId ? { schedulePlanId } : {}) } }).json();
+ *  fourni → le plan d'une période (overlay).
+ *
+ *  Aucun `name` n'est envoyé : le nom vit sur le PLAN (inv. 12) et le serveur en dérive
+ *  celui de la version. Les clients en inventaient un chacun de leur côté, et celui-ci
+ *  ressortait dans la liste des plannings et le nom du fichier exporté. */
+export const createSchedule = (schedulePlanId?: string): Promise<{ id: string }> =>
+  api.post("schedules", { json: { status: "DRAFT", ...(schedulePlanId ? { schedulePlanId } : {}) } }).json();
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
 
 export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";

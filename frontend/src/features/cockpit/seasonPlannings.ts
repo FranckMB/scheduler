@@ -6,6 +6,8 @@ import type { CalendarEntry, SchedulePlan } from "./api";
 export interface PlanningRow {
   id: string;
   label: string;
+  /** Clé de tri chronologique (fenêtre du plan) — `null` pour le socle, qui ne trie pas. */
+  startDate: string | null;
   status: Schedule["status"];
   /** Le plan de ce planning pointe cette version : il est en vigueur (≠ « principal »). */
   isChosen: boolean;
@@ -39,6 +41,7 @@ export function seasonPlannings(schedules: Schedule[], seasonPlanName: string | 
       isChosen: true === seasonShown.isChosen,
       isOverlay: false,
       isOpen: null === seasonMain,
+      startDate: null,
       schedulePlanId: seasonShown.schedulePlanId,
     });
   }
@@ -52,11 +55,19 @@ export function seasonPlannings(schedules: Schedule[], seasonPlanName: string | 
     if (null !== shown) {
       periods.push({
         id: shown.id,
-        label: shown.name,
+        // Le nom du PLAN, comme pour le socle ci-dessus (ADR-0002 inv. 12) — une
+        // ligne de cette liste EST un plan. C'était le nom de la VERSION affichée,
+        // que les clients inventaient (« Version de période ») : un planning renommé
+        // « Reprise d'été S1 » se relisait sous ce libellé générique. Le serveur nomme
+        // désormais les versions, mais les lignes ANCIENNES gardent leur nom inventé —
+        // raison de plus pour lire le plan. Fallback sur la version tant que les plans
+        // ne sont pas chargés (l'appelant peut ne pas les passer) : jamais de ligne muette.
+        label: plans.find((p) => p.id === planId)?.name ?? shown.name,
         status: shown.status,
         isChosen: true === shown.isChosen,
         isOverlay: true,
         isOpen: null === finished,
+        startDate: plans.find((p) => p.id === planId)?.startDate ?? null,
         schedulePlanId: planId,
       });
     }
@@ -85,11 +96,20 @@ export function seasonPlannings(schedules: Schedule[], seasonPlanName: string | 
         isChosen: false,
         isOverlay: true,
         isOpen: true,
+        startDate: plan.startDate ?? null,
         schedulePlanId: plan.id,
       });
     }
   }
-  periods.sort((a, b) => a.label.localeCompare(b.label));
+  // Tri CHRONOLOGIQUE, jamais alphabétique. Les libellés portent une date en toutes lettres
+  // (« Semaine du 6 juillet 2026 ») : les comparer listait 10 août avant 13 juillet avant
+  // 3 août. `startDate` est une date ISO, comparable telle quelle.
+  // ⚠ Le repli NE retombe PAS sur le libellé : les plans ne sont pas toujours chargés (query
+  // en vol ou en erreur), et depuis que les versions héritent du nom de leur plan, comparer
+  // les libellés dans cet état reproduirait exactement le désordre qu'on vient de corriger
+  // (revue #339 round 2). Une date absente trie en tête, à égalité entre elles — `Array.sort`
+  // étant stable, ces lignes gardent leur ordre d'arrivée au lieu d'en recevoir un faux.
+  periods.sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? ""));
 
   return [...rows, ...periods];
 }

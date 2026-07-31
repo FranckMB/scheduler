@@ -16322,12 +16322,20 @@
                 ],
                 "properties": {
                     "teamId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "venueId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
                         "type": [
                             "string",
                             "null"
@@ -16358,7 +16366,11 @@
                         ]
                     },
                     "schedulePlanId": {
+                        "format": "uuid",
                         "description": "NULL = base plan; set = a period overlay.",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
                         "type": [
                             "string",
                             "null"
@@ -16629,12 +16641,10 @@
             },
             "Schedule.ScheduleInput": {
                 "type": "object",
-                "required": [
-                    "name",
-                    "status"
-                ],
                 "properties": {
                     "name": {
+                        "maxLength": 180,
+                        "description": "ADR-0002 inv. 12 : le nom vit sur le PLAN, pas sur la version. ABSENT au POST = le\nserveur nomme la version d'apr\u00e8s son plan (source unique) ; absent au PUT = inchang\u00e9.",
                         "type": [
                             "string",
                             "null"
@@ -16660,13 +16670,20 @@
                         ]
                     },
                     "schedulePlanId": {
+                        "format": "uuid",
                         "description": "ADR-0002 C4 : POST cr\u00e9e une version SOUS un plan nomm\u00e9. Fourni \u2192 ce plan (overlay de\np\u00e9riode) ; omis \u2192 le plan SEASON de la saison (le socle). Ignor\u00e9 sur PUT. Le back valide\nque le plan appartient au club.",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
                         "type": [
                             "string",
                             "null"
                         ]
                     }
-                }
+                },
+                "required": [
+                    "status"
+                ]
             },
             "Schedule.html": {
                 "type": "object",

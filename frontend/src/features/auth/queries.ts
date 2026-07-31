@@ -33,12 +33,24 @@ export function useWorkingSeason(): authApi.MeSeason | null {
   );
 }
 
-/** ADR-0002: rename THE season plan (title next to the club logo). */
+/**
+ * ADR-0002 inv. 12 : renommer UN plan — celui de la saison comme celui d'une période.
+ * L'endpoint (`PUT /schedule_plans/{id}`) l'a toujours été ; seuls ses appelants
+ * visaient le plan de saison en dur.
+ *
+ * Deux caches à rafraîchir, et les deux comptent : `me` porte le nom du plan de
+ * SAISON (en-tête, liste des plannings), `calendar-entries` porte la collection des
+ * plans de PÉRIODE. N'invalider que `me` laissait un plan de période renommé
+ * afficher son ancien nom pendant 30 s (staleTime de `useSchedulePlans`).
+ */
 export function useRenamePlanning() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ planId, name }: { planId: string; name: string }) => authApi.renamePlanning(planId, name),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["me"] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
+    },
   });
 }
 

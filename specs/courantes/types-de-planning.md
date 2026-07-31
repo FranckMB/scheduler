@@ -1,6 +1,6 @@
 # Les 3 types de planning — référence produit
 
-Last verified @ 2026-07-29
+Last verified @ 2026-07-31 (gabarits de noms par défaut recalés, P4-41)
 
 > **Rôle de ce document** : la trace durable du modèle métier des plannings, validé avec le
 > fondateur le 2026-07-12. C'est LA référence à consulter avant tout travail sur la
@@ -24,7 +24,7 @@ Last verified @ 2026-07-29
 | **Structure** | Saisie complète (wizard) | **Verrouillée** : équipes, gymnases/créneaux, coachs non modifiables — **exception : les séances/équipe sont ajustables** (3→2, 0 = pas de créneau cette semaine) | Équipes **cochables/décochables** (défaut : **Fanion + importantes**), créneaux gym **redéfinissables** (prêts mairie), coachs lecture seule |
 | **Contraintes** | Toutes (permanentes) | **C'est ce qui bouge** : héritées + datées, ajustables pour la semaine | Héritées avec défaut intelligent (suit les équipes) + propres à la période |
 | **Ce que ça comble** | Le plan de base de l'année — le process **le mieux rodé** | **Réparer un souci ponctuel** (gym fermé, coach absent) sans toucher le socle | La **reprise progressive** semaine par semaine (vacances, effectif réduit) |
-| **Nom par défaut** | `Planning de la saison 20XX-20XX` | `Ajustement {NOM DU GYMNASE} du {début} au {fin}` | `Planning de vacances de la Toussaint du {début} au {fin}` |
+| **Nom par défaut** | `Planning de la saison 20XX-20XX` | `Ajustement {NOM DU GYMNASE} — {repère}` | `Vacances de la Toussaint — {repère}` |
 
 ## Règle transverse : la SEMAINE est l'unité
 
@@ -71,7 +71,7 @@ Last verified @ 2026-07-29
 - **État** : 🟢 rodé sur les axes livrés — découpage hebdo + granularité JOUR (E1/5b),
   contraintes héritées cochables (#211), **séances/équipe ajustables dans l'UI** (champ 1–7
   + toggle = 0 séance, E4 via `TeamPeriodOverride`), **défaut = tout le club actif** (E3,
-  structure verrouillée), **nom auto** `Ajustement {gymnase} du … au …` (E6). Reste la
+  structure verrouillée), **nom auto** `Ajustement {gymnase} — {repère}` (E6). Reste la
   notification multi-semaines (cadrage à venir). Voir « Écarts » ci-dessous.
 
 ## 3. Planning de reprise (vacances)
@@ -102,8 +102,8 @@ Last verified @ 2026-07-29
 - **État** : 🟢 rodé sur les axes livrés — héritage contraintes + défaut intelligent (#212),
   équipes on/off + séances, **grille de gymnases possédée par la période** (#8 — copie du
   modèle de saison, éditable gymnase par gymnase à l'écran), **choix des semaines** (E1), été inclus (E2),
-  **défaut équipes = Fanion + importantes** (E3), **nom auto** `Planning de vacances de … du …
-  au …` (E6), **collecte des doléances coachs** (E5 — C1/C2/C3, feature CLOSE). Reste
+  **défaut équipes = Fanion + importantes** (E3), **nom auto** `{label vacances} — {repère}` (E6),
+  **collecte des doléances coachs** (E5 — C1/C2/C3, feature CLOSE). Reste
   optionnel, non demandé : un flux guidé « reprise progressive » (bonus P2-1). Voir « Écarts ».
 
 ## Écarts implémentation ↔ cible (actés 2026-07-12)
@@ -115,7 +115,7 @@ Last verified @ 2026-07-29
 | E3 | ✅ **Livré (2026-07-19)** : défaut équipes reprise = **Fanion + importantes** (2 premiers rangs) pré-cochés ; **fermeture = tout le club actif** (structure verrouillée, équipes loisir décochables à la main). Le seed de `PeriodTeams` est désormais conscient du `periodType` | 3 | — |
 | E4 | ✅ **Livré (arrivé avec #262, tracé 2026-07-19)** : `PeriodTeams` expose l'ajustement des séances/équipe (champ 1–7) **et** le toggle actif/inactif (= 0 séance) dans le flux période — pour la **fermeture comme la reprise** (`TeamPeriodOverride`) | 2 | — |
 | E5 | ✅ **C1 livré (2026-07-25, #10)** : la modale **« Doléances des coachs »** est une todo-list par (équipe × semaine), ancrée à l'entrée MÈRE des vacances, ouverte de deux portes — bandeau du wizard (filtrée sur la semaine du plan courant) et carte de période au cockpit (toutes semaines). Filtres coach/équipe, coche « traité », saisie « au nom d'un coach ». ✅ **C2 livré (2026-07-25, #10)** : **collecte SANS email** — bouton « Solliciter les coachs » (campagne modifiable : semaines / équipes / deadline) → un **lien personnel par coach** (`/doleances/{token}`, token en clair, réutilisable/révisable jusqu'à la deadline) que le gestionnaire **copie dans WhatsApp** → **page publique sans login** pré-remplie, le coach saisit ses souhaits (n'envoie que les sections modifiées) → tombe dans la todo-list C1 (écrase + « à retraiter ») → **badge radar** « X/Y coachs ont répondu · N à traiter ». ✅ **C3 livré (2026-07-25, #10 — feature CLOSE)** : bouton « Envoyer les liens par email » (global + individuel, badge « pas d'email »/« envoyé le… »), **digest quotidien 7h** aux gestionnaires (seulement si nouvelle réponse ; récap final une fois après la deadline), **relance des silencieux** (1×/jour). Le dialog campagne porte un **filtre par équipe + statut** (répondu / en attente / pas d'email) sur la liste des coachs (n'affecte que la liste, pas les boutons d'envoi). | 3 | — |
-| E6 | ✅ **Livré (2026-07-19)** : noms par défaut des plans conformes (`SchedulePlanProvisioner`, source unique serveur, ADR-0002 inv. 12) — SEASON `Planning de la saison …`, CLOSURE `Ajustement {gymnase} du … au …`, HOLIDAY `Planning de vacances de … du … au …`. Le nom du PLAN (réponse) est distinct du `CalendarEntry.title` (fait déclencheur) ; renommable | 1 + 2 + 3 | — |
+| E6 | ✅ **Livré (2026-07-19), libellés recalés le 2026-07-31** : noms par défaut des plans (`SchedulePlanProvisioner`, source unique serveur, ADR-0002 inv. 12) — SEASON `Planning de la saison …`, CLOSURE `Ajustement {gymnase} — {repère}`, HOLIDAY `{label vacances} — {repère}`. **Le repère se lit en clair** : une fenêtre couvrant exactement une semaine calendaire (lundi→dimanche, le cas de toute semaine-enfant d'une période découpée) donne `Semaine du 17 août 2026` ; toute autre garde ses deux bornes `du 20 octobre 2025 au 2 novembre 2025` — la résumer à son lundi annoncerait 7 jours là où le plan en couvre 14. Le préfixe « Planning de » est tombé : dans une LISTE de plannings il ne distinguait rien. Le nom du PLAN (réponse) reste distinct du `CalendarEntry.title` (fait déclencheur) ; renommable | 1 + 2 + 3 | — |
 
 > **Décisions de conception figées de la collecte (fondateur, 2026-07-25/26)** — le *pourquoi*
 > derrière E5, à ne pas re-poser : **token stocké EN CLAIR** (« copier le lien » doit

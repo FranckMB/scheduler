@@ -11,7 +11,6 @@ use App\Service\GenerationComplexityGuard;
 use App\Service\ManagementAccessGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SocleGuard;
-use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -108,10 +107,16 @@ final class RegenerateController extends AbstractController implements SeasonSco
         // PENDING the watchdog reconciles — same trade-off as
         // GenerateScheduleController). No slot copy: the generation payload
         // re-pins the base versions' HARD locks on its own.
+        // ADR-0002 inv. 12 : le nom vit sur LE PLAN. Régénérer produit une V+1 du MÊME plan,
+        // elle en porte donc le nom — comme la création par POST depuis P4-41. Ce site
+        // fabriquait « Planning {date-heure} », un QUATRIÈME libellé inventé pour le même
+        // objet ; il ressortait dans le nom du fichier exporté quand le plan n'était pas
+        // encore résolu. Repli sobre si le plan a disparu (course avec un reset) : la
+        // transaction plus bas échouera de toute façon.
         $newSchedule = (new Schedule)
             ->setClubId($source->getClubId())
             ->setSeasonId($source->getSeasonId())
-            ->setName('Planning ' . (new DateTimeImmutable)->format('Y-m-d H:i'))
+            ->setName($this->schedulePlanProvisioner->versionNameFor($source->getSchedulePlanId()))
             ->setStatus(ScheduleStatus::PENDING)
             // ADR-0002 C4 : la nouvelle version rejoint LE MÊME plan que la source
             // (régénérer = une V+1 du même plan) ; linkSchedule ne fait que la numéroter.

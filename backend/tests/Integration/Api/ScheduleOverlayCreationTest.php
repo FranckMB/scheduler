@@ -71,6 +71,69 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         );
     }
 
+    /**
+     * NR P4-41 — ADR-0002 inv. 12 : le nom vit sur le PLAN, une version n'a pas d'identité
+     * produit. Un POST SANS `name` est donc légitime, et le serveur nomme la version d'après
+     * son plan. Avant : `name` était `NotBlank` sec, donc chaque client inventait un libellé
+     * (« Version de période », « Plan de période », « Planning {date} ») qui ressortait tel
+     * quel dans la liste des plannings et le nom du fichier exporté.
+     *
+     * PREUVE DE CHUTE : sans le correctif, ce POST est refusé en 422 par le validateur.
+     */
+    public function testAVersionCreatedWithoutANameInheritsItsPlansName(): void
+    {
+        [$user, $club, $season] = $this->seed('OVN');
+        $entry = $this->period($club, $season, CalendarEntryPeriodType::HOLIDAY);
+        $planId = $this->planIdOf($entry);
+        $this->scopeGucToClub($club->getId());
+        $planName = (string) $this->em->getConnection()->fetchOne('SELECT name FROM schedule_plan WHERE id = :id', ['id' => $planId]);
+        self::assertNotSame('', $planName);
+
+        $this->post($user, $club, ['status' => 'DRAFT', 'schedulePlanId' => $planId]);
+
+        self::assertResponseStatusCodeSame(201);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame($planName, $data['name'], 'la version hérite du nom de son plan — le client n’en invente plus');
+    }
+
+    /**
+     * Le pendant du test précédent : ABSENT ≠ VIDE. Omettre le nom laisse le serveur nommer ;
+     * envoyer une chaîne vide reste un refus (la colonne est NOT NULL, et « efface le nom »
+     * n'a pas de sens). C'est ce que `NotBlank(allowNull: true)` distingue, là où un
+     * `NotBlank` sec refusait les deux et un DTO sans contrainte les aurait acceptés tous deux.
+     */
+    public function testAnEmptyNameIsStillRefused(): void
+    {
+        [$user, $club, $season] = $this->seed('OVE');
+        $entry = $this->period($club, $season, CalendarEntryPeriodType::HOLIDAY);
+
+        $this->post($user, $club, ['name' => '', 'status' => 'DRAFT', 'schedulePlanId' => $this->planIdOf($entry)]);
+
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    /**
+     * NR P4-41 (revue #339 round 2) — le contrat du PUT après l'assouplissement de `name` :
+     * ABSENT = INCHANGÉ (patron « absent = on garde », le même que les 4 champs alignés par
+     * P2-7a). Rien ne l'épinglait, alors que la contrainte `NotBlank` sec le refusait AVANT.
+     */
+    public function testAPutOmittingTheNameLeavesItUnchanged(): void
+    {
+        [$user, $club, $season] = $this->seed('OVP');
+        $entry = $this->period($club, $season, CalendarEntryPeriodType::HOLIDAY);
+        $this->post($user, $club, ['name' => 'Nom à garder', 'status' => 'DRAFT', 'schedulePlanId' => $this->planIdOf($entry)]);
+        self::assertResponseStatusCodeSame(201);
+        $id = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        $this->client->request('PUT', '/api/schedules/' . $id, [], [], [
+            ...$this->authHeaders($user, $club),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['status' => 'DRAFT'], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        self::assertSame('Nom à garder', json_decode((string) $this->client->getResponse()->getContent(), true)['name']);
+    }
+
     public function testHolidayOverlayAllowed(): void
     {
         [$user, $club, $season] = $this->seed('OV2');

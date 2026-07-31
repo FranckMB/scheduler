@@ -219,14 +219,6 @@ export function useReopenSchedule() {
   });
 }
 
-export function useRenameSchedule() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, name, status }: { id: string; name: string; status: Schedule["status"] }) => planningApi.renameSchedule(id, name, status),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
-  });
-}
-
 /** planning-versions: delete a work version (guards live server-side). */
 export function useDeleteSchedule() {
   const queryClient = useQueryClient();

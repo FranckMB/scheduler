@@ -151,6 +151,29 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
     }
 
     /**
+     * NR P4-41 (revue #339 round 2) — le POST « de saison » (SANS `schedulePlanId`) est
+     * l'autre branche du nommage serveur : elle résout le plan SEASON puis en lit le nom.
+     * C'est le chemin du WIZARD, et rien ne le couvrait.
+     *
+     * Ce test vit ici et non près des overlays : la création d'un overlay exige un socle
+     * POINTÉ (inv. 13), or un socle pointé refuse justement tout POST de saison (P2-7, 409).
+     */
+    public function testASeasonVersionWithoutANameInheritsTheSeasonPlansName(): void
+    {
+        [$user, $club, $season] = $this->seed();
+
+        // Le plan SEASON naît AU POST (`ensureSeasonPlanId`) : on ne peut lire son nom qu'après.
+        $version = $this->postSchedule($user, ['status' => 'DRAFT']);
+
+        $planName = (string) $this->em->getConnection()->fetchOne(
+            'SELECT name FROM schedule_plan WHERE id = :pid',
+            ['pid' => (string) $version['schedulePlanId']],
+        );
+        self::assertNotSame('', $planName, 'le plan porte bien un nom par défaut');
+        self::assertSame($planName, $version['name'], 'la version de saison hérite du nom de son plan SEASON');
+    }
+
+    /**
      * NR PR2 (isolation saison) — nommer un plan d'une AUTRE saison est refusé (422). Sans ce
      * garde-fou, la sélection de saison par le corps du POST contournerait la garde archive :
      * la requête passe `assertWritable` sur la saison active, puis s'estampillait de la saison

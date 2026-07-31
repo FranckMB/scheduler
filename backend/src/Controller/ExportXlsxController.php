@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Schedule;
+use App\Service\SchedulePlanProvisioner;
 use App\Service\SpreadsheetGenerator;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -29,6 +30,7 @@ final class ExportXlsxController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly SpreadsheetGenerator $spreadsheetGenerator,
         private readonly RequestStack $requestStack,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     public function __invoke(string $id): Response
@@ -50,12 +52,20 @@ final class ExportXlsxController extends AbstractController
 
         $response = new Response($binary, Response::HTTP_OK);
         $response->headers->set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        // ADR-0002 inv. 12 : le nom VIVANT du plan, pas la photo `Schedule.name` (revue #339).
+        // ⚠ Les séparateurs de chemin sont retirés AVANT makeDisposition : le nom est saisi par
+        // le gestionnaire (« Vacances Noël 2026/2027 » est une forme naturelle) et Symfony LÈVE
+        // sur « / » ou « \ » — l'export partait en 500 générique, définitivement, sans que rien
+        // ne dise que le nom en était la cause. C'est bien la RÉPONSE qui échouait : l'app, elle,
+        // télécharge un blob et nomme le fichier côté client (`useScheduleExport`), donc cet
+        // en-tête ne sert qu'aux appels directs à l'API.
+        $planningName = str_replace(['/', '\\'], '-', $this->schedulePlanProvisioner->displayNameOf($schedule));
         // makeDisposition emits both an ASCII fallback and a RFC 5987 filename*,
         // so an accented schedule name survives instead of collapsing to dashes.
         $response->headers->set('Content-Disposition', HeaderUtils::makeDisposition(
             HeaderUtils::DISPOSITION_ATTACHMENT,
-            \sprintf('planning-%s.xlsx', $schedule->getName()),
-            \sprintf('planning-%s.xlsx', preg_replace('/[^a-zA-Z0-9_-]+/', '-', $schedule->getName()) ?: 'export'),
+            \sprintf('planning-%s.xlsx', $planningName),
+            \sprintf('planning-%s.xlsx', preg_replace('/[^a-zA-Z0-9_-]+/', '-', $planningName) ?: 'export'),
         ));
 
         return $response;

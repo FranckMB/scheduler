@@ -33,7 +33,7 @@ Plan                                    ← l'objet de premier ordre (nouveau)
   id, clubId, seasonId
   type              SEASON | CLOSURE | HOLIDAY
   name              le nom PUBLIC, éditable (pinceau) — « Planning de la saison 2025-2026 »,
-                    « Ajustement Barros du 21/10 au 27/10 », « Planning de vacances de Toussaint… »
+                    « Ajustement Barros — Semaine du 20 octobre 2025 », « Vacances de la Toussaint — … »
   startDate/endDate SA période d'application (SEASON = la saison ; sinon la semaine)
   calendarEntryId?  le DÉCLENCHEUR (l'indispo/les vacances du calendrier) — N plans possibles
                     par déclencheur (2 semaines ⇒ 2 plans) ; null pour SEASON
@@ -150,9 +150,17 @@ Schedule (= Version)                    ← existant, recentré
     **indisponibilité** supprime ses plans et leurs versions (cascade complète :
     slots, diagnostics, photos, réglages).
 11. **Exports** : nom de fichier = **nom du Plan**.
-12. **Défauts de nom** (à la création du plan) : SEASON `Planning de la saison {saison}` ·
-    CLOSURE `Ajustement {gymnase} du {début} au {fin}` · HOLIDAY
-    `Planning de vacances de {nom} du {début} au {fin}`.
+12. **Défauts de nom** (à la création du plan, `SchedulePlanProvisioner` — source unique) :
+    SEASON `Planning de la saison {saison}` · CLOSURE `Ajustement {gymnase} — {repère}` ·
+    HOLIDAY `{label vacances} — {repère}`. Le **repère** se lit en clair : une fenêtre couvrant
+    exactement une semaine calendaire (lundi→dimanche) donne `Semaine du 17 août 2026`, toute
+    autre garde ses deux bornes `du 20 octobre 2025 au 2 novembre 2025`. Le nom du plan est
+    ce que TOUT lit (titre, liste des plannings, export, renommage) — jamais celui d'une
+    version, qui n'a pas d'identité produit (le sélecteur l'étiquette « V2 — 20 oct. 14:32 »).
+    **Conséquence sur l'API** : `POST /api/schedules` n'exige pas de `name` — omis, le serveur
+    nomme la version d'après son plan. Un client qui en invente un rouvre exactement le défaut
+    que cet invariant ferme (trois le faisaient, et « Version de période » ressortait dans la
+    liste des plannings et le nom du PDF).
 
 ### Rôle de `CalendarEntry` (conservée, amincie)
 

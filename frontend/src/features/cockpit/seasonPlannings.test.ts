@@ -7,7 +7,7 @@ import { seasonPlannings } from "./seasonPlannings";
 
 const s = (over: Partial<Schedule>): Schedule => ({ id: "id", name: "Plan", status: "COMPLETED", score: null, createdAt: "2026-07-01T10:00:00+00:00", updatedAt: "", planType: "SEASON", schedulePlanId: "season-plan", ...over });
 
-const sp = (over: Partial<SchedulePlan>): SchedulePlan => ({ id: "pl", type: "HOLIDAY", name: "Plan", calendarEntryId: "e1", chosenScheduleId: null, teamSelectionInitialized: false, ...over });
+const sp = (over: Partial<SchedulePlan>): SchedulePlan => ({ id: "pl", type: "HOLIDAY", name: "Plan", startDate: "2026-07-06", calendarEntryId: "e1", chosenScheduleId: null, teamSelectionInitialized: false, ...over });
 
 describe("seasonPlannings — open plannings & plan name (founder feedback 2026-07-18)", () => {
   it("labels the season row with the plan's real name when provided", () => {
@@ -26,6 +26,53 @@ describe("seasonPlannings — open plannings & plan name (founder feedback 2026-
     ]);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: "o2", isOpen: true, isOverlay: true, schedulePlanId: "p2" });
+  });
+
+  // P4-41 (retour fondateur 2026-07-31) : une ligne de cette liste EST un plan, donc
+  // elle porte le nom du PLAN — exactement comme la ligne du socle juste au-dessus.
+  // Elle lisait le nom de la VERSION affichée, or toute version de période créée hors
+  // wizard naissait « Version de période » (nom inventé par le client, retiré depuis —
+  // les lignes créées avant gardent le leur) : un planning renommé
+  // « Reprise d'été S1 » se relisait sous ce libellé technique. PREUVE DE CHUTE : sans
+  // le correctif, `label` vaut "Version de période".
+  it("labels a period row with its PLAN's name, not the displayed version's", () => {
+    const rows = seasonPlannings(
+      [s({ id: "o1", name: "Version de période", status: "COMPLETED", planType: "HOLIDAY", schedulePlanId: "pl-ete" })],
+      null,
+      [sp({ id: "pl-ete", name: "Reprise d'été S1", calendarEntryId: "e-ete" })],
+    );
+    const periodRow = rows.find((r) => r.schedulePlanId === "pl-ete");
+    expect(periodRow?.label).toBe("Reprise d'été S1");
+  });
+
+  // Les plans ne sont pas toujours passés (appelants qui n'en ont pas besoin) : on
+  // dégrade sur le nom de la version plutôt que de rendre une ligne sans libellé.
+  it("falls back to the version name when the plans are not loaded yet", () => {
+    const rows = seasonPlannings([s({ id: "o1", name: "Vacances Noël", status: "COMPLETED", planType: "HOLIDAY", schedulePlanId: "pl-noel" })]);
+    expect(rows.find((r) => r.schedulePlanId === "pl-noel")?.label).toBe("Vacances Noël");
+  });
+
+  // Revue #339 : les libellés portent désormais une date EN TOUTES LETTRES, que le tri
+  // alphabétique ordonne « 10 août » avant « 13 juillet » avant « 3 août ». Les semaines
+  // d'une période découpée sortaient donc mélangées. PREUVE DE CHUTE : avec un tri sur
+  // `label`, l'ordre attendu ci-dessous est faux.
+  it("orders period rows CHRONOLOGICALLY, not alphabetically on their French label", () => {
+    // Ordre d'ENTRÉE volontairement mélangé : si la fixture arrivait déjà triée, le test
+    // passerait même en SUPPRIMANT le tri (revue #339 round 3 — il ne tuait que l'ancien
+    // tri alphabétique, pas une régression qui neutraliserait l'ordonnancement).
+    const weeks = [
+      { id: "pl-0308", name: "Vacances d'été — Semaine du 3 août 2026", startDate: "2026-08-03" },
+      { id: "pl-1307", name: "Vacances d'été — Semaine du 13 juillet 2026", startDate: "2026-07-13" },
+      { id: "pl-1008", name: "Vacances d'été — Semaine du 10 août 2026", startDate: "2026-08-10" },
+      { id: "pl-0706", name: "Vacances d'été — Semaine du 6 juillet 2026", startDate: "2026-07-06" },
+    ];
+    const rows = seasonPlannings(
+      [s({ id: "v1", status: "COMPLETED" }), ...weeks.map((w) => s({ id: `sched-${w.id}`, name: "x", status: "COMPLETED", planType: "HOLIDAY", schedulePlanId: w.id }))],
+      null,
+      weeks.map((w) => sp({ id: w.id, name: w.name, startDate: w.startDate, calendarEntryId: `e-${w.id}` })),
+    );
+
+    expect(rows.filter((r) => r.isOverlay).map((r) => r.schedulePlanId)).toEqual(["pl-0706", "pl-1307", "pl-0308", "pl-1008"]);
   });
 
   it("a planning with a finished version stays a closed row (isOpen false), even with newer in-flight versions", () => {
