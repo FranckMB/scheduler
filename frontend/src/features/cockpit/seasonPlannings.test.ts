@@ -7,7 +7,7 @@ import { seasonPlannings } from "./seasonPlannings";
 
 const s = (over: Partial<Schedule>): Schedule => ({ id: "id", name: "Plan", status: "COMPLETED", score: null, createdAt: "2026-07-01T10:00:00+00:00", updatedAt: "", planType: "SEASON", schedulePlanId: "season-plan", ...over });
 
-const sp = (over: Partial<SchedulePlan>): SchedulePlan => ({ id: "pl", type: "HOLIDAY", name: "Plan", calendarEntryId: "e1", chosenScheduleId: null, teamSelectionInitialized: false, ...over });
+const sp = (over: Partial<SchedulePlan>): SchedulePlan => ({ id: "pl", type: "HOLIDAY", name: "Plan", startDate: "2026-07-06", calendarEntryId: "e1", chosenScheduleId: null, teamSelectionInitialized: false, ...over });
 
 describe("seasonPlannings — open plannings & plan name (founder feedback 2026-07-18)", () => {
   it("labels the season row with the plan's real name when provided", () => {
@@ -50,6 +50,26 @@ describe("seasonPlannings — open plannings & plan name (founder feedback 2026-
   it("falls back to the version name when the plans are not loaded yet", () => {
     const rows = seasonPlannings([s({ id: "o1", name: "Vacances Noël", status: "COMPLETED", planType: "HOLIDAY", schedulePlanId: "pl-noel" })]);
     expect(rows.find((r) => r.schedulePlanId === "pl-noel")?.label).toBe("Vacances Noël");
+  });
+
+  // Revue #339 : les libellés portent désormais une date EN TOUTES LETTRES, que le tri
+  // alphabétique ordonne « 10 août » avant « 13 juillet » avant « 3 août ». Les semaines
+  // d'une période découpée sortaient donc mélangées. PREUVE DE CHUTE : avec un tri sur
+  // `label`, l'ordre attendu ci-dessous est faux.
+  it("orders period rows CHRONOLOGICALLY, not alphabetically on their French label", () => {
+    const weeks = [
+      { id: "pl-0706", name: "Vacances d'été — Semaine du 6 juillet 2026", startDate: "2026-07-06" },
+      { id: "pl-1307", name: "Vacances d'été — Semaine du 13 juillet 2026", startDate: "2026-07-13" },
+      { id: "pl-0308", name: "Vacances d'été — Semaine du 3 août 2026", startDate: "2026-08-03" },
+      { id: "pl-1008", name: "Vacances d'été — Semaine du 10 août 2026", startDate: "2026-08-10" },
+    ];
+    const rows = seasonPlannings(
+      [s({ id: "v1", status: "COMPLETED" }), ...weeks.map((w) => s({ id: `sched-${w.id}`, name: "x", status: "COMPLETED", planType: "HOLIDAY", schedulePlanId: w.id }))],
+      null,
+      weeks.map((w) => sp({ id: w.id, name: w.name, startDate: w.startDate, calendarEntryId: `e-${w.id}` })),
+    );
+
+    expect(rows.filter((r) => r.isOverlay).map((r) => r.schedulePlanId)).toEqual(["pl-0706", "pl-1307", "pl-0308", "pl-1008"]);
   });
 
   it("a planning with a finished version stays a closed row (isOpen false), even with newer in-flight versions", () => {

@@ -522,8 +522,14 @@ final class SchedulePlanProvisioner
     /**
      * E6 / correctif F2 : recale le nom d'un plan de FERMETURE une fois la datée `venue_closed`
      * connue (elle naît après l'entrée, 2 POST). Le nom n'est recalé QUE tant qu'il vaut ENCORE
-     * le générique de naissance (« Ajustement gymnase du … au … ») — comparé à l'octet près, pas
+     * le générique de naissance (« Ajustement gymnase — {repère} ») — comparé à l'octet près, pas
      * par gabarit : dès qu'il est résolu OU renommé par le gestionnaire (inv. 12), il est figé.
+     *
+     * ⚠ Le générique est RECALCULÉ ici par `closurePlanName(null, …)`. Changer le gabarit change
+     * donc la clé de comparaison : les plans nés sous un gabarit ANTÉRIEUR ne matchent plus et ne
+     * seront jamais recalés (constaté à la revue #339 lors du passage au repère en clair). Décision
+     * fondateur, cohérente avec P2-9bis : V0, pas de migration de données — les rares plans
+     * concernés se renomment à la main.
      *
      * Conséquence assumée : re-cibler le gymnase d'UNE MÊME fermeture ne renomme pas (le nom est
      * gelé à la 1re résolution) — un vrai changement de gymnase se fait en créant une nouvelle
@@ -806,9 +812,10 @@ final class SchedulePlanProvisioner
      * E6 (types-de-planning « Nom par défaut ») : le nom PUBLIC du plan de période
      * (ADR-0002 inv. 12) — la RÉPONSE, distincte du FAIT déclencheur (`CalendarEntry.title`,
      * ex. « Gymnase A — fermé »). Source unique côté serveur ; le gestionnaire renomme ensuite.
-     * - CLOSURE : « Ajustement {gymnase} du {début} au {fin} » (gymnase = la datée `venue_closed`).
-     * - HOLIDAY : « Planning de {label} du {début} au {fin} » (label = « Vacances de la Toussaint »
-     *   → « Planning de vacances de la Toussaint … »).
+     * - CLOSURE : « Ajustement {gymnase} — {repère} » (gymnase = la datée `venue_closed`).
+     * - HOLIDAY : « {label} — {repère} » (label du référentiel, ex. « Vacances de la Toussaint »).
+     * Le {repère} se lit en clair (windowSuffix) : « Semaine du 20 octobre 2025 » quand la fenêtre
+     * couvre exactement une semaine calendaire, sinon « du 20 octobre 2025 au 2 novembre 2025 ».
      * Fallback sobre si la donnée manque (gymnase inconnu / vacances hors référentiel) — jamais de crash.
      *
      * ⚠ CLOSURE : la datée `venue_closed` naît APRÈS l'entrée (le front fait 2 POST) ; à la
@@ -861,11 +868,13 @@ final class SchedulePlanProvisioner
         // « Vacances de la Toussaint — Semaine du 20 octobre 2025 ». Le préfixe
         // « Planning de » est tombé (retour fondateur 2026-07-31) : dans une LISTE de
         // plannings il ne distinguait rien, il ne faisait que décaler chaque libellé.
-        // R3-B (inchangé) : c'est le LABEL qu'on tronque, jamais le suffixe daté — le
-        // compare-and-set de refreshClosurePlanName compare le nom entier.
-        $name = mb_substr($label ?? 'Vacances', 0, 140) . ' — ' . $this->windowSuffix($start, $end);
+        // R3-B : c'est le LABEL qu'on tronque, jamais le suffixe daté. Budget CALCULÉ (même
+        // raison qu'en closurePlanName) : un plafond fixe laissait la phrase dépasser 180, et
+        // la troncature externe amputait la date.
+        $suffix = ' — ' . $this->windowSuffix($start, $end);
+        $budget = max(1, 180 - mb_strlen($suffix));
 
-        return mb_substr($name, 0, 180);
+        return mb_substr($label ?? 'Vacances', 0, $budget) . $suffix;
     }
 
     /**
@@ -890,13 +899,20 @@ final class SchedulePlanProvisioner
 
     private function closurePlanName(?string $venue, DateTimeImmutable $start, DateTimeImmutable $end): string
     {
-        // R3-B : tronquer le GYMNASE (pas la phrase entière) — le suffixe daté doit TOUJOURS
-        // survivre à la limite de 180 (SchedulePlan.name), sinon le nom ne serait plus comparable
-        // au générique et le compare-and-set ne recalerait plus jamais. « Ajustement » (11) +
-        // gymnase (≤140) + séparateur (3) + suffixe (~30) ≤ 184 → borné à 180 en sortie.
+        // R3-B : c'est le GYMNASE qu'on tronque, JAMAIS la phrase entière — le suffixe daté
+        // doit TOUJOURS survivre à la limite de 180 (`SchedulePlan.name`), sinon le nom cesse
+        // d'être comparable au générique et `refreshClosurePlanName` ne recale plus jamais ce
+        // plan. Le budget se CALCULE au lieu d'être estimé : le suffixe en toutes lettres peut
+        // atteindre ~42 caractères (« du 1er septembre 2026 au 30 septembre 2026 »), là où un
+        // plafond fixe de 140 sur le gymnase laissait la phrase dépasser 180 — et la troncature
+        // externe amputait alors la DATE, exactement ce que cette règle interdit (revue #339).
         // Le gymnase RESTE dans le libellé (arbitrage fondateur 2026-07-31) : c'est la seule
         // chose qui distingue deux fermetures de la même semaine.
-        return mb_substr('Ajustement ' . mb_substr($venue ?? 'gymnase', 0, 140) . ' — ' . $this->windowSuffix($start, $end), 0, 180);
+        $prefix = 'Ajustement ';
+        $suffix = ' — ' . $this->windowSuffix($start, $end);
+        $budget = max(1, 180 - mb_strlen($prefix) - mb_strlen($suffix));
+
+        return $prefix . mb_substr($venue ?? 'gymnase', 0, $budget) . $suffix;
     }
 
     /**

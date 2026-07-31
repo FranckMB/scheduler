@@ -188,6 +188,32 @@ describe("PlanningPage (integration)", () => {
     expect(renameSpy).toHaveBeenCalledWith({ planId: "plan-1", name: "Saison 26-27" });
   });
 
+  // Revue #339 : un club qui n'a JAMAIS généré n'a aucune version, donc aucun plan
+  // « affiché » — l'en-tête perdait le nom du planning de saison ET son stylo, si bien que
+  // le gestionnaire ne pouvait plus le nommer avant d'avoir généré. Le contexte par défaut
+  // EST la saison. PREUVE DE CHUTE : sans le repli, le titre vaut « Planning ».
+  it("garde le nom et le stylo du plan de saison quand le club n'a aucune version", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([]);
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByRole("heading", { name: "Planning A" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /renommer le planning/i })).toBeInTheDocument();
+  });
+
+  // Un nom vidé n'est pas un renommage : on n'écrase pas une identité par du vide (la
+  // colonne est NOT NULL). Le champ se referme, le titre reste — c'est le retour.
+  it("n'écrit rien quand on valide un nom vidé", async () => {
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByRole("heading", { name: "Planning A" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /renommer le planning/i }));
+    await userEvent.clear(screen.getByRole("textbox", { name: /nom du planning/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /nom du planning/i }), "{Enter}");
+
+    expect(renameSpy).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Planning A" })).toBeInTheDocument();
+  });
+
   // Le plan d'une période pas encore chargé (collection en vol) : on ne propose pas un
   // geste dont on n'a pas la cible — c'est cette absence de cible qui faisait retomber
   // l'écriture sur le plan de saison.

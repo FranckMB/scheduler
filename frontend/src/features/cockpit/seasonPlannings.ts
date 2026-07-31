@@ -6,6 +6,8 @@ import type { CalendarEntry, SchedulePlan } from "./api";
 export interface PlanningRow {
   id: string;
   label: string;
+  /** Clé de tri chronologique (fenêtre du plan) — `null` pour le socle, qui ne trie pas. */
+  startDate: string | null;
   status: Schedule["status"];
   /** Le plan de ce planning pointe cette version : il est en vigueur (≠ « principal »). */
   isChosen: boolean;
@@ -39,6 +41,7 @@ export function seasonPlannings(schedules: Schedule[], seasonPlanName: string | 
       isChosen: true === seasonShown.isChosen,
       isOverlay: false,
       isOpen: null === seasonMain,
+      startDate: null,
       schedulePlanId: seasonShown.schedulePlanId,
     });
   }
@@ -64,6 +67,7 @@ export function seasonPlannings(schedules: Schedule[], seasonPlanName: string | 
         isChosen: true === shown.isChosen,
         isOverlay: true,
         isOpen: null === finished,
+        startDate: plans.find((p) => p.id === planId)?.startDate ?? null,
         schedulePlanId: planId,
       });
     }
@@ -92,11 +96,22 @@ export function seasonPlannings(schedules: Schedule[], seasonPlanName: string | 
         isChosen: false,
         isOverlay: true,
         isOpen: true,
+        startDate: plan.startDate ?? null,
         schedulePlanId: plan.id,
       });
     }
   }
-  periods.sort((a, b) => a.label.localeCompare(b.label));
+  // Tri CHRONOLOGIQUE, pas alphabétique. Le libellé porte désormais une date en toutes
+  // lettres (« Semaine du 6 juillet 2026 ») : trier dessus listait 10 août avant 13 juillet
+  // avant 3 août — les semaines d'une période découpée sortaient mélangées. `startDate` est
+  // une date ISO, donc comparable telle quelle. Repli sur le libellé quand la date manque
+  // (plans non chargés), pour garder un ordre stable plutôt qu'aucun.
+  periods.sort((a, b) => {
+    if (null !== a.startDate && null !== b.startDate && a.startDate !== b.startDate) {
+      return a.startDate.localeCompare(b.startDate);
+    }
+    return a.label.localeCompare(b.label);
+  });
 
   return [...rows, ...periods];
 }

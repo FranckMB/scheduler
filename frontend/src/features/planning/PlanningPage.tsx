@@ -213,12 +213,17 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // planning de la SAISON, et l'en-tête affichait son nom sur toutes les périodes.
   // `null` = plan pas encore résolu (collection en vol, ou plan absent) : l'appelant
   // dégrade, il ne devine pas.
+  // AUCUNE version affichée (club qui n'a jamais généré, ou liste encore en vol) = on est
+  // dans le contexte SAISON par défaut : le plan de saison reste le sujet de l'en-tête.
+  // Sans ce cas, un club sans version perdait le nom de son planning ET son stylo — il ne
+  // pouvait plus le nommer avant d'avoir généré (revue #339).
+  // ⚠ Ce repli ne vaut QUE pour « pas de version affichée ». Une version de PÉRIODE dont le
+  // plan n'est pas résolu rend `null`, jamais le plan de saison : c'est exactement la
+  // confusion que cette PR corrige.
   const displayedPlan: { id: string; name: string } | null =
-    null === selectedSchedule
-      ? null
-      : isSeasonPlanType(selectedSchedule.planType)
-        ? (me?.seasonPlan ?? null)
-        : ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule.schedulePlanId) ?? null);
+    null === selectedSchedule || isSeasonPlanType(selectedSchedule.planType)
+      ? (me?.seasonPlan ?? null)
+      : ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule.schedulePlanId) ?? null);
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   // Read-only = its plan points at it: this version IS the calendar in force.
   const isReadOnly = true === selectedSchedule?.isChosen;
@@ -310,10 +315,11 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   const planningTitle = displayedPlan?.name ?? "Planning";
   // Nom du fichier exporté = nom du PLAN affiché (retour fondateur 2026-07-18).
-  // Il lisait `selectedSchedule.name` pour un overlay, c'est-à-dire le nom de la
-  // VERSION — or toute version de période créée hors wizard naît « Version de
-  // période » : le fichier remis aux coachs portait ce libellé technique.
-  const exportName = displayedPlan?.name ?? null;
+  // Il lisait `selectedSchedule.name`, c'est-à-dire le nom de la VERSION — que les
+  // clients inventaient : le fichier remis aux coachs s'appelait « Version de période ».
+  // Repli sur le nom de la version si le plan n'est pas encore résolu : un fichier au
+  // nom imparfait vaut mieux qu'un « planning.xlsx » anonyme (revue #339).
+  const exportName = displayedPlan?.name ?? selectedSchedule?.name ?? null;
   const structureDiverged =
     null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType)
     && typeof selectedSchedule.generatedTeamCount === "number" && teams.length > 0

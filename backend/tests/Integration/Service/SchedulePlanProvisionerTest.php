@@ -369,6 +369,43 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         self::assertStringNotContainsString('/', (string) $plan->getName(), 'le repère est en clair, jamais une plage en chiffres');
     }
 
+    /**
+     * NR R3-B (revue #339) — le suffixe DATÉ doit toujours survivre à la limite de 180
+     * caractères de `SchedulePlan.name` : c'est le GYMNASE qu'on tronque, jamais la date.
+     * Sinon le nom cesse d'être comparable au générique que `refreshClosurePlanName`
+     * recalcule, et le plan n'est plus jamais recalé — l'inverse exact du but.
+     *
+     * PREUVE DE CHUTE : avec un plafond FIXE de 140 sur le gymnase et une troncature
+     * externe `mb_substr(…, 0, 180)`, un nom de gymnase long sur une fenêtre non-pleine-
+     * semaine (suffixe le plus long : « du 1er septembre … au 30 septembre … ») dépasse 180
+     * et se fait amputer PAR LA FIN, donc sur la date.
+     */
+    public function testALongVenueNameIsTruncatedButTheDatedSuffixAlwaysSurvives(): void
+    {
+        $clubId = $this->seedClub();
+        $season = $this->makeSeason($clubId);
+        $entry = $this->makeClosureEntry($clubId, $season->getId());
+        // Fenêtre volontairement NON pleine-semaine : c'est le suffixe le plus long.
+        $entry->setStartDate(new DateTimeImmutable('2026-09-01'));
+        $entry->setEndDate(new DateTimeImmutable('2026-09-30'));
+        $this->em->flush();
+        // 180 = la limite de `venue.name` AUSSI : le gymnase le plus long qu'un club puisse
+        // saisir. Budget du libellé : 180 − « Ajustement » (11) − le suffixe le plus long (44)
+        // = 125 caractères de gymnase ⇒ celui-ci déborde bien.
+        $longVenue = mb_substr(str_repeat('Gymnase municipal intercommunal ', 8), 0, 180);
+        $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), $longVenue, 'venue_closed');
+
+        $this->provisioner->provisionPeriodPlan($entry->getId());
+        $this->provisioner->refreshClosurePlanName($entry->getId());
+        $this->em->clear();
+        $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]);
+
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+        $name = (string) $plan->getName();
+        self::assertLessThanOrEqual(180, mb_strlen($name), 'la colonne borne à 180');
+        self::assertStringEndsWith('du 1er septembre 2026 au 30 septembre 2026', $name, 'la DATE survit — c\'est le gymnase qui est tronqué');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
