@@ -381,7 +381,9 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         const impactCount = splitImpactCountByEntry.get(m.id) ?? 0;
         const coverageDetail = `${covered}/${slots.length} semaine${slots.length > 1 ? "s" : ""} couverte${covered > 1 ? "s" : ""}${impactCount > 0 ? ` · ${impactCount} séance${impactCount > 1 ? "s" : ""} touchée${impactCount > 1 ? "s" : ""}` : ""}`;
         return (
-          <RadarCard key={`split-${m.id}`} icon={<CalendarClock className="size-4 text-accent" />} title={m.title} detail={coverageDetail}>
+          // La SEULE carte repliée par défaut : ses N puces de semaine sont ce qui allonge
+          // vraiment le radar (P3-13 d, arbitrage fondateur 2026-08-01).
+          <RadarCard key={`split-${m.id}`} icon={<CalendarClock className="size-4 text-accent" />} title={m.title} detail={coverageDetail} collapsible>
             {"holiday" === m.periodType ? (
               <Button variant="ghost" size="sm" onClick={() => setWishesEntry(m)}>
                 <MessageSquare className="size-4" />
@@ -612,16 +614,18 @@ function ClosureRadarItem({ entry, activeScheduleId, inProgress = false, seasonU
 }
 
 /**
- * L'encart d'une ligne du radar — TOUTES les cartes passent par ici, y compris les
- * fermetures : c'est ce qui permet au repli d'exister en un seul endroit.
+ * L'encart d'une ligne du radar — toutes les cartes passent par ici.
  *
- * P3-13 (d) — « le radar devient très long » (fondateur). Les actions sont REPLIÉES par
- * défaut ; l'en-tête (icône, titre, détail) reste toujours visible, sinon le panneau ne
- * dirait plus rien d'un coup d'œil — or c'est précisément ce qu'on lui demande. Une carte
- * SANS action (événement, coupure, férié) n'a rien à replier : pas de bouton du tout.
+ * P3-13 (d) — « le radar devient très long » (fondateur). Le repli est CIBLÉ : seules les
+ * cartes à détail volumineux (`collapsible`, aujourd'hui la couverture d'une période
+ * découpée et ses N puces de semaine) démarrent repliées. Une carte à une action garde son
+ * bouton visible — mesuré à l'implémentation : tout replier mettait CHAQUE geste du radar
+ * à deux clics (13 tests d'action tombaient) sans raccourcir ce qui est réellement long.
+ * L'en-tête reste toujours lisible : c'est ce qu'on demande au panneau d'un coup d'œil.
  */
-function RadarCard({ icon, title, detail, children }: { icon: React.ReactNode; title: string; detail: string; children?: React.ReactNode }) {
+function RadarCard({ icon, title, detail, collapsible = false, children }: { icon: React.ReactNode; title: string; detail: string; collapsible?: boolean; children?: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const foldable = collapsible && undefined !== children && null !== children;
 
   return (
     <div className="rounded-md border border-border p-3">
@@ -631,7 +635,7 @@ function RadarCard({ icon, title, detail, children }: { icon: React.ReactNode; t
           <p className="truncate text-sm font-medium">{title}</p>
           <p className="text-xs text-muted-foreground">{detail}</p>
         </div>
-        {children ? (
+        {foldable ? (
           <button
             type="button"
             aria-expanded={open}
@@ -645,7 +649,7 @@ function RadarCard({ icon, title, detail, children }: { icon: React.ReactNode; t
       </div>
       {/* Empilées à droite (pas en ligne) : les chips par semaine d'une carte de
           couverture débordaient de l'encart en ligne (retour fondateur 2026-07-24). */}
-      {children && open ? <div className="mt-2 flex flex-col items-end gap-1">{children}</div> : null}
+      {children && (!foldable || open) ? <div className="mt-2 flex flex-col items-end gap-1">{children}</div> : null}
     </div>
   );
 }

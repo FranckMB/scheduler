@@ -2,9 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CalendarEntry, SchedulePlan, SchoolHoliday } from "./api";
+import { setTodayOverride } from "@/shared/lib/clock";
+
 import { addDays, mondayOf, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
@@ -86,8 +88,22 @@ function renderRadar(props: Partial<Parameters<typeof RadarPanel>[0]> = {}) {
   );
 }
 
+/**
+ * P3-13 (d) — la carte de COUVERTURE est la seule repliée par défaut (ses N puces de
+ * semaine sont ce qui allonge le radar). Ses puces se lisent donc après dépliage ; le
+ * titre et le compteur « x/y couvertes », eux, restent visibles sans un clic.
+ */
+const expandCard = async (user: ReturnType<typeof userEvent.setup>, title: string) => {
+  await user.click(screen.getByRole("button", { name: `Déplier ${title}` }));
+};
+
 describe("RadarPanel", () => {
+  // P3-13 — l'horloge injectable, dès son premier usage. Les fixtures sont ancrées en
+  // 2999 pour ne jamais périmer ; sans horloge pilotable, l'horizon 60 j les masquerait
+  // TOUTES et il faudrait repasser les dates en relatif — donc des tests dont on ne peut
+  // plus lire la situation. Ici on déplace « aujourd'hui » à 21 jours des vacances.
   beforeEach(() => {
+    setTodayOverride("2998-12-15");
     createHolidayMutate.mockReset();
     createHolidayMutateAsync.mockReset();
     createWeekChildrenMutate.mockReset();
@@ -97,6 +113,7 @@ describe("RadarPanel", () => {
     plansData = [];
     schedulesData = [];
   });
+  afterEach(() => setTodayOverride(null));
 
   it("a HOLIDAY period whose plan has versions but no validated one shows an always-on « en cours » card", async () => {
     const user = userEvent.setup();
@@ -175,7 +192,8 @@ describe("RadarPanel", () => {
   // Revue C F1 : une vacance démarrant vendredi écarte sa semaine partielle de
   // début — MAIS un enfant DÉJÀ créé sur cette semaine (données existantes / adapt
   // d'un bloc) doit rester visible/gérable (filet #262), jamais disparaître.
-  it("keeps an existing week-child on a holiday's skipped partial first week visible in the coverage card", () => {
+  it("keeps an existing week-child on a holiday's skipped partial first week visible in the coverage card", async () => {
+    const user = userEvent.setup();
     const w1s = mondayOf("2999-01-15"); // lundi
     const w2s = addDays(w1s, 7);
     const friday = addDays(w1s, 4); // vendredi de la 1ʳᵉ semaine
@@ -188,6 +206,7 @@ describe("RadarPanel", () => {
       ],
     });
     // Les DEUX semaines-enfants restent affichées (la partielle n'est pas masquée).
+    await expandCard(user, "Toussaint");
     expect(screen.getAllByRole("button", { name: /sem\. du/ })).toHaveLength(2);
   });
 
@@ -212,6 +231,7 @@ describe("RadarPanel", () => {
     });
     expect(screen.getByText("1/2 semaines couverte")).toBeInTheDocument();
     // Semaine validée → ✅ (Voir) ; à faire → Reprendre (adapt).
+    await expandCard(user, "Barros en travaux");
     expect(screen.getByRole("button", { name: /✅/ })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /· à faire/ }));
     // Une seule carte pour la mère : pas de ClosureRadarItem classique en plus.
@@ -220,7 +240,8 @@ describe("RadarPanel", () => {
 
   // Une semaine DÉCOCHÉE au picker (ou perdue sur échec partiel) reste
   // planifiable : chip « + créer » (dead-end de la revue #262 round 1).
-  it("a missing week shows a « + créer » chip on the coverage card", () => {
+  it("a missing week shows a « + créer » chip on the coverage card", async () => {
+    const user = userEvent.setup();
     const w1s = mondayOf("2999-01-15");
     plansData = [
       { id: "pl-w1", type: "CLOSURE", name: "S1", startDate: FUTURE, calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
@@ -233,6 +254,7 @@ describe("RadarPanel", () => {
       ],
     });
     expect(screen.getByText("1/2 semaines couverte")).toBeInTheDocument();
+    await expandCard(user, "Barros en travaux");
     expect(screen.getByRole("button", { name: /\+ sem\. du/ })).toBeInTheDocument();
   });
 

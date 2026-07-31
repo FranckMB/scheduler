@@ -1,9 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HTTPError } from "ky";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
+import { setTodayOverride } from "@/shared/lib/clock";
 
 import type { CoachWishCampaign } from "./campaignApi";
 
@@ -47,7 +48,12 @@ const entry: CalendarEntry = {
 const season = { startDate: "2025-09-01", endDate: "2026-06-30" };
 
 describe("CampaignDialog", () => {
+  // P3-13/P3-15 (c) — la campagne ne propose que les semaines À VENIR. Ces fixtures sont
+  // datées (fév. 2026) : sans horloge pilotable, elles deviennent du passé au fil du temps
+  // et le test se met à échouer tout seul — il l'était déjà devenu. On ancre « aujourd'hui »
+  // deux semaines avant la période plutôt que de repasser les dates en relatif.
   beforeEach(() => {
+    setTodayOverride("2026-02-01");
     createMut.mockReset();
     updateMut.mockReset();
     sendMut.mockReset();
@@ -58,6 +64,7 @@ describe("CampaignDialog", () => {
     remindState.isError = false;
     remindState.error = null;
   });
+  afterEach(() => setTodayOverride(null));
 
   it("crée une campagne avec les semaines et équipes choisies", async () => {
     render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
