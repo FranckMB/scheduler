@@ -206,6 +206,19 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     null !== selectedSchedule && !isSeasonPlanType(selectedSchedule.planType) && null !== selectedSchedule.schedulePlanId
       ? ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule.schedulePlanId)?.calendarEntryId ?? null)
       : null;
+  // ADR-0002 inv. 12 : LE nom vit sur le PLAN, jamais sur la version. Tout ce que
+  // l'en-tête montre ou modifie (titre, stylo, nom de fichier exporté, popup de
+  // suppression) doit donc désigner le plan de la version AFFICHÉE — pas le plan de
+  // saison. Il était codé en dur : renommer un planning de période renommait le
+  // planning de la SAISON, et l'en-tête affichait son nom sur toutes les périodes.
+  // `null` = plan pas encore résolu (collection en vol, ou plan absent) : l'appelant
+  // dégrade, il ne devine pas.
+  const displayedPlan: { id: string; name: string } | null =
+    null === selectedSchedule
+      ? null
+      : isSeasonPlanType(selectedSchedule.planType)
+        ? (me?.seasonPlan ?? null)
+        : ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule.schedulePlanId) ?? null);
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   // Read-only = its plan points at it: this version IS the calendar in force.
   const isReadOnly = true === selectedSchedule?.isChosen;
@@ -295,10 +308,12 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     return <FullPageSpinner />;
   }
 
-  const planningTitle = me?.seasonPlan?.name ?? "Planning";
-  // Nom du fichier exporté = nom du PLANNING affiché : la période pour un overlay,
-  // le nom du plan de saison sinon (retour fondateur 2026-07-18).
-  const exportName = null !== selectedSchedule && !isSeasonPlanType(selectedSchedule.planType) ? selectedSchedule.name : (me?.seasonPlan?.name ?? null);
+  const planningTitle = displayedPlan?.name ?? "Planning";
+  // Nom du fichier exporté = nom du PLAN affiché (retour fondateur 2026-07-18).
+  // Il lisait `selectedSchedule.name` pour un overlay, c'est-à-dire le nom de la
+  // VERSION — or toute version de période créée hors wizard naît « Version de
+  // période » : le fichier remis aux coachs portait ce libellé technique.
+  const exportName = displayedPlan?.name ?? null;
   const structureDiverged =
     null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType)
     && typeof selectedSchedule.generatedTeamCount === "number" && teams.length > 0
@@ -317,8 +332,11 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             onChange={(e) => setEditingPlanningName(e.target.value)}
             onKeyDown={(e) => {
               if ("Enter" === e.key) {
-                if (me?.seasonPlan) {
-                  renamePlanning.mutate({ planId: me.seasonPlan.id, name: editingPlanningName.trim() });
+                // Le plan AFFICHÉ (cf. displayedPlan) : c'était `me.seasonPlan.id` en dur,
+                // donc renommer un planning de période renommait celui de la saison.
+                // Un nom vidé n'écrase rien — un plan sans nom n'a plus d'identité à lire.
+                if (null !== displayedPlan && "" !== editingPlanningName.trim()) {
+                  renamePlanning.mutate({ planId: displayedPlan.id, name: editingPlanningName.trim() });
                 }
                 setEditingPlanningName(null);
               } else if ("Escape" === e.key) {
@@ -340,8 +358,11 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                 principal
               </span>
             ) : null}
-            {workingSeason && !workingSeason.isReadonly ? (
-              <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(me?.seasonPlan?.name ?? "")}>
+            {/* Pas de plan résolu = rien à renommer : proposer le geste enverrait
+                l'écriture sur un id qu'on n'a pas (c'est ce qui la faisait retomber
+                sur le plan de saison). */}
+            {null !== displayedPlan && workingSeason && !workingSeason.isReadonly ? (
+              <Button size="sm" variant="ghost" className="h-8 px-2" aria-label="Renommer le planning" title="Renommer le planning" onClick={() => setEditingPlanningName(displayedPlan.name)}>
                 <Pencil className="size-4" />
               </Button>
             ) : null}
@@ -349,7 +370,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                 jamais pendant une génération en vol (la cascade emporterait la version
                 en cours de solve — revue B2 F3) → retour cockpit. */}
             {null !== overlayDeleteEntryId && workingSeason && !workingSeason.isReadonly && !isGenerating ? (
-              <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} schedulePlanId={selectedSchedule?.schedulePlanId ?? null} title={selectedSchedule?.name ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
+              <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} schedulePlanId={selectedSchedule?.schedulePlanId ?? null} title={displayedPlan?.name ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
             ) : null}
           </>
         )}

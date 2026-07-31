@@ -28,6 +28,29 @@ describe("seasonPlannings — open plannings & plan name (founder feedback 2026-
     expect(rows[0]).toMatchObject({ id: "o2", isOpen: true, isOverlay: true, schedulePlanId: "p2" });
   });
 
+  // P4-41 (retour fondateur 2026-07-31) : une ligne de cette liste EST un plan, donc
+  // elle porte le nom du PLAN — exactement comme la ligne du socle juste au-dessus.
+  // Elle lisait le nom de la VERSION affichée, or toute version de période créée hors
+  // wizard naît « Version de période » (planning/api.ts) : un planning renommé
+  // « Reprise d'été S1 » se relisait sous ce libellé technique. PREUVE DE CHUTE : sans
+  // le correctif, `label` vaut "Version de période".
+  it("labels a period row with its PLAN's name, not the displayed version's", () => {
+    const rows = seasonPlannings(
+      [s({ id: "o1", name: "Version de période", status: "COMPLETED", planType: "HOLIDAY", schedulePlanId: "pl-ete" })],
+      null,
+      [sp({ id: "pl-ete", name: "Reprise d'été S1", calendarEntryId: "e-ete" })],
+    );
+    const periodRow = rows.find((r) => r.schedulePlanId === "pl-ete");
+    expect(periodRow?.label).toBe("Reprise d'été S1");
+  });
+
+  // Les plans ne sont pas toujours passés (appelants qui n'en ont pas besoin) : on
+  // dégrade sur le nom de la version plutôt que de rendre une ligne sans libellé.
+  it("falls back to the version name when the plans are not loaded yet", () => {
+    const rows = seasonPlannings([s({ id: "o1", name: "Vacances Noël", status: "COMPLETED", planType: "HOLIDAY", schedulePlanId: "pl-noel" })]);
+    expect(rows.find((r) => r.schedulePlanId === "pl-noel")?.label).toBe("Vacances Noël");
+  });
+
   it("a planning with a finished version stays a closed row (isOpen false), even with newer in-flight versions", () => {
     const rows = seasonPlannings([
       s({ id: "v1", status: "COMPLETED" }),

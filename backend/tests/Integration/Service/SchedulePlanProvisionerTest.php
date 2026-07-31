@@ -169,9 +169,9 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         ]);
         self::assertInstanceOf(SchedulePlan::class, $periodPlan);
         self::assertSame(SchedulePlanType::CLOSURE, $periodPlan->getType());
-        // E6 : le nom du PLAN est la RÉPONSE (« Ajustement … du … au … »), pas le FAIT
+        // E6 : le nom du PLAN est la RÉPONSE (« Ajustement … — Semaine du … »), pas le FAIT
         // déclencheur (`entry.title`). Aucune datée venue_closed seedée ici → fallback « gymnase ».
-        self::assertSame('Ajustement gymnase du 20/10/2025 au 26/10/2025', $periodPlan->getName());
+        self::assertSame('Ajustement gymnase — Semaine du 20 octobre 2025', $periodPlan->getName());
         self::assertSame($entry->getId(), $periodPlan->getCalendarEntryId());
         self::assertSame($periodPlan->getId(), $overlay->getSchedulePlanId());
         self::assertSame(1, $overlay->getVersionNumber());
@@ -241,14 +241,14 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $this->provisioner->provisionPeriodPlan($entry->getId());
         $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]);
         self::assertInstanceOf(SchedulePlan::class, $plan);
-        self::assertSame('Ajustement gymnase du 20/10/2025 au 26/10/2025', $plan->getName(), 'nom générique tant que le gymnase est inconnu');
+        self::assertSame('Ajustement gymnase — Semaine du 20 octobre 2025', $plan->getName(), 'nom générique tant que le gymnase est inconnu');
 
         $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Mauvais Gymnase', 'forced_venue'); // F5 : ne doit pas être pris
         $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase Barros', 'venue_closed');
         $this->provisioner->refreshClosurePlanName($entry->getId());
 
         $this->em->refresh($plan);
-        self::assertSame('Ajustement Gymnase Barros du 20/10/2025 au 26/10/2025', $plan->getName());
+        self::assertSame('Ajustement Gymnase Barros — Semaine du 20 octobre 2025', $plan->getName());
     }
 
     /**
@@ -265,14 +265,14 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]);
         self::assertInstanceOf(SchedulePlan::class, $plan);
         // Renommage qui ÉPOUSE le gabarit auto — piège de la regex du round 2.
-        $plan->setName('Ajustement Salle Léo du 20/10/2025 au 26/10/2025');
+        $plan->setName('Ajustement Salle Léo — Semaine du 20 octobre 2025');
         $this->em->flush();
 
         $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase Barros', 'venue_closed');
         $this->provisioner->refreshClosurePlanName($entry->getId());
 
         $this->em->refresh($plan);
-        self::assertSame('Ajustement Salle Léo du 20/10/2025 au 26/10/2025', $plan->getName(), 'inv. 12 : un nom renommé (même en forme de gabarit) n\'est jamais écrasé');
+        self::assertSame('Ajustement Salle Léo — Semaine du 20 octobre 2025', $plan->getName(), 'inv. 12 : un nom renommé (même en forme de gabarit) n\'est jamais écrasé');
     }
 
     /**
@@ -292,7 +292,7 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $closureA = $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase A', 'venue_closed');
         $this->provisioner->refreshClosurePlanName($entry->getId());
         $this->em->refresh($plan);
-        self::assertSame('Ajustement Gymnase A du 20/10/2025 au 26/10/2025', $plan->getName());
+        self::assertSame('Ajustement Gymnase A — Semaine du 20 octobre 2025', $plan->getName());
 
         // Re-ciblage sur la même entrée : le nom résolu est gelé (ce n'est plus le générique).
         $closureA->setIsActive(false);
@@ -300,7 +300,7 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $this->seedVenueConstraint($clubId, $season->getId(), $entry->getId(), 'Gymnase B', 'venue_closed');
         $this->provisioner->refreshClosurePlanName($entry->getId());
         $this->em->refresh($plan);
-        self::assertSame('Ajustement Gymnase A du 20/10/2025 au 26/10/2025', $plan->getName(), 'nom gelé à la 1re résolution — re-ciblage = nouvelle fermeture');
+        self::assertSame('Ajustement Gymnase A — Semaine du 20 octobre 2025', $plan->getName(), 'nom gelé à la 1re résolution — re-ciblage = nouvelle fermeture');
     }
 
     /**
@@ -319,12 +319,13 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $child->getId()]);
 
         self::assertInstanceOf(SchedulePlan::class, $plan);
-        self::assertSame('Planning de vacances de la Toussaint du 20/10/2025 au 26/10/2025', $plan->getName());
+        self::assertSame('Vacances de la Toussaint — Semaine du 20 octobre 2025', $plan->getName());
     }
 
     /**
-     * NR E6. Le plan de REPRISE porte « Planning de {label vacances} du … au … » — le label
-     * du référentiel (« Vacances de la Toussaint ») en minuscule d'attaque donne la phrase cible.
+     * NR E6 (gabarits recalés le 2026-07-31). Le plan de REPRISE porte « {label vacances} — {repère} » :
+     * le label du référentiel tel quel, et une fenêtre de PLUS d'une semaine garde ses deux bornes
+     * (la résumer à son lundi mentirait sur la durée).
      */
     public function testHolidayPlanIsNamedAfterTheHolidayLabelAndWindow(): void
     {
@@ -338,7 +339,34 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
 
         self::assertInstanceOf(SchedulePlan::class, $plan);
         self::assertSame(SchedulePlanType::HOLIDAY, $plan->getType());
-        self::assertSame('Planning de vacances de la Toussaint du 20/10/2025 au 02/11/2025', $plan->getName());
+        self::assertSame('Vacances de la Toussaint — du 20 octobre 2025 au 2 novembre 2025', $plan->getName());
+    }
+
+    /**
+     * NR P4-41 (retour fondateur 2026-07-31) — le repère temporel d'un plan se lit EN CLAIR.
+     * Une fenêtre qui couvre exactement une semaine calendaire (lundi → dimanche) se dit
+     * « Semaine du {jour} » ; c'est le cas de TOUTES les semaines-enfants d'une période
+     * découpée, donc le cas courant. PREUVE DE CHUTE : sans le correctif le nom porte
+     * « du 20/10/2025 au 26/10/2025 ».
+     *
+     * L'inverse compte autant et vit sur `testHolidayPlanIsNamedAfterTheHolidayLabelAndWindow` :
+     * une fenêtre PLUS LONGUE qu'une semaine garde ses deux bornes — la résumer à son lundi
+     * annoncerait 7 jours là où le plan en couvre 14.
+     */
+    public function testAFullCalendarWeekIsNamedByItsMondayRatherThanTwoBounds(): void
+    {
+        $clubId = $this->seedClub();
+        $season = $this->makeSeason($clubId);
+        $holiday = $this->seedSchoolHoliday('Vacances d\'été');
+        $mother = $this->makeHolidayEntry($clubId, $season->getId(), $holiday->getId());
+        $child = $this->makeHolidayWeekChild($clubId, $season->getId(), $mother->getId());
+
+        $this->provisioner->provisionPeriodPlan($child->getId());
+        $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $child->getId()]);
+
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+        self::assertSame('Vacances d\'été — Semaine du 20 octobre 2025', $plan->getName());
+        self::assertStringNotContainsString('/', (string) $plan->getName(), 'le repère est en clair, jamais une plage en chiffres');
     }
 
     protected function setUp(): void

@@ -281,7 +281,7 @@ final class PeriodPlanBirthTest extends WebTestCase
         $entryId = $this->postPeriod($user, 'holiday', 'Nom de naissance');
         $this->adaptPeriod($user, $entryId);
 
-        // Le nom de NAISSANCE du plan est la réponse générée (E6, « Planning de vacances … »),
+        // Le nom de NAISSANCE du plan est la réponse générée (E6, « Vacances … — Semaine du … »),
         // distincte du titre de la période — on le capture, puis on prouve qu'il ne bouge pas.
         $bornPlan = $this->planOf($club->getId(), $entryId);
         self::assertInstanceOf(SchedulePlan::class, $bornPlan);

@@ -854,10 +854,12 @@ final class SchedulePlanProvisioner
             );
             $label = \is_string($found) && '' !== $found ? $found : null;
         }
-        // « Vacances de la Toussaint » → « Planning de vacances de la Toussaint … ».
-        $name = null === $label
-            ? 'Planning de vacances ' . $this->windowSuffix($start, $end)
-            : 'Planning de ' . lcfirst($label) . ' ' . $this->windowSuffix($start, $end);
+        // « Vacances de la Toussaint — Semaine du 20 octobre 2025 ». Le préfixe
+        // « Planning de » est tombé (retour fondateur 2026-07-31) : dans une LISTE de
+        // plannings il ne distinguait rien, il ne faisait que décaler chaque libellé.
+        // R3-B (inchangé) : c'est le LABEL qu'on tronque, jamais le suffixe daté — le
+        // compare-and-set de refreshClosurePlanName compare le nom entier.
+        $name = mb_substr($label ?? 'Vacances', 0, 140) . ' — ' . $this->windowSuffix($start, $end);
 
         return mb_substr($name, 0, 180);
     }
@@ -887,12 +889,41 @@ final class SchedulePlanProvisioner
         // R3-B : tronquer le GYMNASE (pas la phrase entière) — le suffixe daté doit TOUJOURS
         // survivre à la limite de 180 (SchedulePlan.name), sinon le nom ne serait plus comparable
         // au générique et le compare-and-set ne recalerait plus jamais. « Ajustement » (11) +
-        // gymnase (≤140) + espace (1) + suffixe (~27) ≤ 179.
-        return 'Ajustement ' . mb_substr($venue ?? 'gymnase', 0, 140) . ' ' . $this->windowSuffix($start, $end);
+        // gymnase (≤140) + séparateur (3) + suffixe (~30) ≤ 184 → borné à 180 en sortie.
+        // Le gymnase RESTE dans le libellé (arbitrage fondateur 2026-07-31) : c'est la seule
+        // chose qui distingue deux fermetures de la même semaine.
+        return mb_substr('Ajustement ' . mb_substr($venue ?? 'gymnase', 0, 140) . ' — ' . $this->windowSuffix($start, $end), 0, 180);
     }
 
+    /**
+     * Le repère temporel d'un plan de période, en clair (retour fondateur 2026-07-31 :
+     * « Semaine du 17 août » plutôt qu'une plage en chiffres).
+     *
+     * Une fenêtre qui couvre EXACTEMENT une semaine calendaire (lundi → dimanche) se dit
+     * « Semaine du {jour} » — c'est le cas de toutes les semaines-enfants d'une période
+     * découpée (P2-5 E1), donc le cas courant. Toute autre fenêtre garde ses deux bornes :
+     * les résumer à leur lundi mentirait sur la durée.
+     */
     private function windowSuffix(DateTimeImmutable $start, DateTimeImmutable $end): string
     {
-        return 'du ' . $start->format('d/m/Y') . ' au ' . $end->format('d/m/Y');
+        $isFullWeek = '1' === $start->format('N') && '7' === $end->format('N')
+            && 6 === (int) $start->diff($end)->days;
+
+        return $isFullWeek
+            ? 'Semaine du ' . $this->frenchDate($start)
+            : 'du ' . $this->frenchDate($start) . ' au ' . $this->frenchDate($end);
+    }
+
+    /**
+     * « 17 août 2026 », et « 1er septembre 2026 » le premier du mois. Table locale plutôt
+     * qu'`IntlDateFormatter` : ext-intl n'est pas une dépendance du projet, et ces noms de
+     * mois ne bougeront jamais.
+     */
+    private function frenchDate(DateTimeImmutable $date): string
+    {
+        $months = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+        $day = (int) $date->format('j');
+
+        return (1 === $day ? '1er' : (string) $day) . ' ' . $months[(int) $date->format('n') - 1] . ' ' . $date->format('Y');
     }
 }
