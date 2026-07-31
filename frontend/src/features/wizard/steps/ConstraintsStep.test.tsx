@@ -21,7 +21,7 @@ const h = vi.hoisted(() => ({
 }));
 
 const { activeVenuesState } = vi.hoisted(() => ({
-  activeVenuesState: { venues: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] as { id: string; name: string; isActive: boolean }[] },
+  activeVenuesState: { venues: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] as { id: string; name: string; isActive: boolean }[], readFailed: false },
 }));
 
 vi.mock("../queries", () => ({
@@ -39,7 +39,7 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => ({ data: [] }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] }),
   // P2-15 : le sélecteur ne voit QUE les gymnases actifs de la couche courante.
-  useActiveVenues: () => ({ venues: activeVenuesState.venues, readFailed: false }),
+  useActiveVenues: () => ({ venues: activeVenuesState.venues, readFailed: activeVenuesState.readFailed }),
   useVenueSlots: () => ({ data: [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }] }),
   // #8 — la grille de la couche ÉDITÉE : le socle en mode saison, la grille que la
   // période POSSÈDE sinon. Les deux couches portent volontairement des créneaux
@@ -104,6 +104,16 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     h.tags = [];
     h.tagAssignments = [];
     activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }];
+    activeVenuesState.readFailed = false;
+  });
+
+  // Même règle qu'au récap : lecture ratée ⇒ on ne masque rien, mais on le DIT. Le silence
+  // aurait laissé relier une contrainte à un gymnase en fait désactivé (revue #342).
+  it("annonce que la liste est celle de la saison quand les réglages sont illisibles", () => {
+    activeVenuesState.readFailed = true;
+    renderWithProviders(<ConstraintsStep />);
+
+    expect(screen.getByText(/peut contenir un gymnase désactivé/)).toBeInTheDocument();
   });
 
   // P2-15 (retour fondateur) : « ça n'a pas de sens que le gymnase Mateo soit désactivé

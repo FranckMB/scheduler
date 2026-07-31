@@ -87,7 +87,7 @@ export function ConstraintsStep() {
   // « je ne veux voir que les gymnases actifs ». Un gymnase désactivé sort du payload
   // solveur : l'offrir ici invitait à un geste sans effet, et le récap devait ensuite
   // l'avertir. En mode socle, la liste est inchangée.
-  const { venues } = useActiveVenues("period" === anchor.state ? anchor.planId : null);
+  const { venues, readFailed: venuesReadFailed } = useActiveVenues("period" === anchor.state ? anchor.planId : null);
   const create = useCreateConstraint();
   const update = useUpdateConstraint();
   const del = useDeleteConstraint();
@@ -371,6 +371,15 @@ export function ConstraintsStep() {
         <strong> tout le club</strong>, un <strong>groupe</strong> (ex. les jeunes → pas de créneau après 19h50) ou une <strong>équipe</strong> précise. La capacité d'un gymnase se règle
         sur l'écran <strong>Gymnases</strong> (1 ou 2 équipes par créneau).
       </p>
+
+      {/* Même règle qu'au récap : quand les réglages de la période sont illisibles, on ne
+          masque RIEN — mais on ne laisse pas croire que la liste est celle de la période.
+          Le silence ici aurait laissé relier une contrainte à un gymnase désactivé. */}
+      {venuesReadFailed ? (
+        <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          Les réglages de gymnases de la période n'ont pas pu être lus — la liste ci-dessous est celle de la saison et peut contenir un gymnase désactivé.
+        </p>
+      ) : null}
 
       {/* Family + reservation tabs */}
       <div className="mb-3 flex flex-wrap gap-1 border-b border-border">

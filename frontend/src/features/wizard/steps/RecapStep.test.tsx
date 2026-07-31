@@ -10,7 +10,9 @@ type TeamRow = { id: string; name: string; sportCategoryId: string; priorityTier
 const team = (id: string, name: string, tier: number): TeamRow => ({ id, name, sportCategoryId: "c", priorityTierId: tier, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true });
 
 // P2-15 : la COUCHE que le récap décrit — période (équipes/gymnases actifs) ou socle.
-const { recapLayer } = vi.hoisted(() => ({
+const { recapLayer, anchorState, storeState } = vi.hoisted(() => ({
+  anchorState: { value: { state: "period", planId: "plan-1" } as { state: string; planId: string | null } },
+  storeState: { value: { mode: "season", calendarEntryId: null } as { mode: string; calendarEntryId: string | null } },
   recapLayer: {
     teams: [] as unknown[],
     pausedIds: [] as string[],
@@ -24,7 +26,7 @@ const { recapLayer } = vi.hoisted(() => ({
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
 vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
-  usePeriodAnchor: () => ({ state: "period", planId: "plan-1" }),
+  usePeriodAnchor: () => anchorState.value,
   anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
 }));
 vi.mock("../queries", () => ({
@@ -54,7 +56,7 @@ vi.mock("../queries", () => ({
   }),
 }));
 vi.mock("../lib/useStepValidation", () => ({ useStepValidation: () => ({ errors: [] }) }));
-vi.mock("../store", () => ({ useWizardStore: (sel: (s: { mode: string; calendarEntryId: string | null }) => unknown) => sel({ mode: "season", calendarEntryId: null }) }));
+vi.mock("../store", () => ({ useWizardStore: (sel: (s: { mode: string; calendarEntryId: string | null }) => unknown) => sel(storeState.value) }));
 
 import { RecapStep } from "./RecapStep";
 
@@ -68,6 +70,8 @@ describe("RecapStep — read-only summary", () => {
     recapLayer.slots = [];
     recapLayer.teamsFailed = false;
     recapLayer.venuesFailed = false;
+    anchorState.value = { state: "period", planId: "plan-1" };
+    storeState.value = { mode: "season", calendarEntryId: null };
   });
 
   // P2-15 (retour fondateur) — LE symptôme : « je sélectionne 6 équipes sur l'overlay, il
@@ -96,6 +100,17 @@ describe("RecapStep — read-only summary", () => {
     // L'équipe en pause y reste LISTÉE, barrée — on doit voir ce qu'on a mis de côté.
     expect(screen.getByText("Fanion")).toHaveClass("line-through");
     expect(screen.getByText(/en pause pour cette période/)).toBeInTheDocument();
+  });
+
+  // Mode période dont l'ancre n'est pas résolue : les listes lues sont celles de la
+  // SAISON. Les présenter comme celles de la période serait le mensonge que ce lot
+  // corrige — on l'annonce (revue #342, trouvé en appliquant la règle à TOUS ses sites).
+  it("annonce que les chiffres sont ceux de la saison tant que l'ancre n'est pas résolue", async () => {
+    storeState.value = { mode: "period", calendarEntryId: "entry-1" };
+    anchorState.value = { state: "loading", planId: null };
+    renderWithProviders(<RecapStep />);
+
+    expect(await screen.findByText(/ne sont pas encore chargés/)).toBeInTheDocument();
   });
 
   // FAIL-CLOSED (P4-20/P4-1) : sur une lecture ratée on ne masque RIEN, et on le DIT.

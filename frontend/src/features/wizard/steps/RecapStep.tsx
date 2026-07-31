@@ -46,6 +46,11 @@ export function RecapStep() {
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
   const periodAnchorEarly = usePeriodAnchor(periodEntryId);
   const layerPlanId = "period" === periodAnchorEarly.state ? periodAnchorEarly.planId : null;
+  // Mode période dont l'ancre n'est PAS encore résolue : `layerPlanId` vaut null, donc les
+  // listes lues sont celles de la SAISON. Les présenter comme celles de la période serait
+  // le mensonge exact que ce lot corrige — on l'annonce (`useStepValidation` bloque déjà
+  // la génération sur ces états ; ici c'est l'affichage qui doit cesser de mentir).
+  const periodLayerUnresolved = null !== periodEntryId && "period" !== periodAnchorEarly.state;
   const { teams, pausedIds, readFailed: teamsReadFailed } = useActiveTeams(layerPlanId);
   const { venues, readFailed: venuesReadFailed } = useActiveVenues(layerPlanId);
   const { data: allTeams = [] } = useWizardTeams();
@@ -67,6 +72,7 @@ export function RecapStep() {
   // FAIL-CLOSED (P4-20/P4-1) : sur une lecture d'overrides ratée, on ne masque RIEN et on
   // le DIT — annoncer des chiffres de saison sur une période serait le mensonge qu'on corrige.
   const layerWarnings = [
+    periodLayerUnresolved ? "Les réglages de cette période ne sont pas encore chargés — les chiffres ci-dessous sont ceux de la saison." : null,
     teamsReadFailed ? "La sélection d'équipes de la période n'a pas pu être lue — les chiffres ci-dessous sont ceux de la saison." : null,
     venuesReadFailed ? "Les réglages de gymnases de la période n'ont pas pu être lus — les chiffres ci-dessous sont ceux de la saison." : null,
   ].filter((m): m is string => null !== m);
@@ -120,7 +126,7 @@ export function RecapStep() {
 
   return (
     <div>
-      <p className="mb-4 text-sm text-muted-foreground">{null === layerPlanId ? "Cartographie de votre club avant génération." : "Cartographie de cette période avant génération."}</p>
+      <p className="mb-4 text-sm text-muted-foreground">{null === periodEntryId ? "Cartographie de votre club avant génération." : "Cartographie de cette période avant génération."}</p>
       {layerWarnings.map((message) => (
         <p key={message} className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
           {message}
