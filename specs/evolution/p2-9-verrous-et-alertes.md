@@ -61,9 +61,27 @@ Les deux portes actuelles écrivent ou sont indisponibles :
 - `buildForOverlay` exige un `Schedule`, qui **n'existe pas avant la génération** — donc
   aucun calcul de période n'est possible par cette voie.
 
-**À faire d'abord** : extraire du builder un chemin de sérialisation sans effet de bord
-(ou rendre `syncTeamTags` optionnel), et corriger la clé de cache. Tant que ce n'est pas
-fait, **ne pas retenter le calcul** : mieux vaut ne rien dire que dire faux.
+**À faire d'abord** : le lot **P2-9ter** (roadmap), cadré et arbitré le 2026-07-31. Tant
+qu'il n'est pas livré, **ne pas retenter le calcul** : mieux vaut ne rien dire que dire faux.
+
+Trois décisions y sont prises, et une découverte le rend plus petit qu'annoncé :
+
+1. `syncTeamTags` est **supprimé** du builder, pas rendu optionnel — `TeamTagSyncListener`
+   le fait déjà sur `postPersist`/`postUpdate` de `Team` au `postFlush`, et
+   `determineTagNames` ne dérive que du `sportCategoryId` : tout changement de tag passe
+   donc par un update de `Team`. L'appel dans `serializeTeam` est une re-synchro
+   défensive **en lecture** — c'est elle qui faisait perdre les tags.
+2. Le `seasonId` entre dans la clé de cache **dans le même lot**. ⚠ La même clé est
+   reconstruite dans `CacheInvalidationListener.php:82` : la changer d'un seul côté casse
+   l'invalidation **en silence**.
+3. 💡 `buildForOverlay` n'utilise le `Schedule` que pour **5 scalaires**, dont 4 sont
+   connus avant génération. Le 5ᵉ (`getId()`) ne sert qu'aux `ScheduleSlotTemplate`,
+   absents avant génération — et c'est **sémantiquement juste** : les verrous durables
+   sont les `Reservation`, portées par le `schedulePlanId`. La porte n'est donc pas
+   structurellement close, elle demande une signature scalaire et un adaptateur.
+
+Le lot livre **le prérequis SEUL** (décision fondateur A1) : c'est la taille qui a tué les
+trois tentatives. PR A suit immédiatement après.
 
 ### La règle, une fois la source disponible
 
