@@ -167,6 +167,10 @@ final class RecapCapacityWarningTest extends WebTestCase
         $this->slot($club, $season, $dup, '18:00', 2);
         // 2) Verrou HARD : le triplet est bloqué pour TOUS — 1 place, pas 3.
         $this->slot($club, $season, $locked, '20:00', 3);
+        // Un verrou couvre TOUTE sa durée (90 min = 6 pas de 15 min côté moteur) : ce créneau
+        // qui CHEVAUCHE est bloqué lui aussi — ne caper que l'heure de début le laissait
+        // compter à pleine capacité (revue #341 round 2).
+        $this->slot($club, $season, $locked, '20:30', 4);
         $this->reservation($club, $season, $locked, $team, '20:00');
         // 3) FACILITY_CAPACITY maxTeams=1 : min(3, 1) — 1 place, pas 3.
         $this->slot($club, $season, $capped, '21:30', 3);
@@ -174,11 +178,12 @@ final class RecapCapacityWarningTest extends WebTestCase
 
         $body = $this->validate($user, $club, null);
 
-        // Lecture BRUTE : 2+2+3+3 = 10 → « surplus » pour 8 séances : un mensonge qui
-        // conseillerait d'AJOUTER des séances. Lecture MOTEUR : 2 + 1 + 1 = 4 → sous-capacité.
+        // Lecture BRUTE : 2+2+3+4+3 = 14 → « surplus » pour 8 séances : un mensonge qui
+        // conseillerait d'AJOUTER des séances. Lecture MOTEUR : 2 (doublon écrasé) + 1 (20:00
+        // verrouillé) + 1 (20:30 CHEVAUCHÉ par le verrou) + 1 (rabot) = 5 → sous-capacité.
         $all = implode(' | ', array_map(strval(...), $body['warnings']));
-        self::assertStringContainsString('n\'en offrent que 4', $all, 'doublon écrasé, verrou à 1 place, capacité rabotée — la somme brute aurait dit 10 et annoncé un surplus');
-        self::assertStringContainsString('au moins 4 séances', $all);
+        self::assertStringContainsString('n\'en offrent que 5', $all, 'doublon écrasé, verrou couvrant SA DURÉE (20:30 chevauché), capacité rabotée — la somme brute aurait dit 14 et annoncé un surplus');
+        self::assertStringContainsString('au moins 3 séances', $all);
     }
 
     /**

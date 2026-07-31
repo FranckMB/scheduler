@@ -38,6 +38,9 @@ use Throwable;
  */
 final class ValidateConstraintsController extends AbstractController
 {
+    /** Granularité du solveur (`SLOT_MINUTES`, engine/app/solver/model.py) — un verrou s'y décline. */
+    private const SOLVER_SLOT_MINUTES = 15;
+
     public function __construct(
         private readonly ConstraintRepository $constraintRepository,
         private readonly CalendarEntryRepository $calendarEntryRepository,
@@ -263,10 +266,21 @@ final class ValidateConstraintsController extends AbstractController
             }
         }
 
+        // Un verrou couvre TOUTE sa durée, pas seulement son heure de début : l'engine
+        // décline le créneau en pas de 15 min (`_duration_slot_starts`, `SLOT_MINUTES`) et
+        // bloque CHACUN des triplets couverts. Ne caper que l'heure de début laissait un
+        // créneau qui CHEVAUCHE le verrou compter à pleine capacité (revue #341 round 2).
         $lockedKeys = [];
         foreach (\is_array($payload['slotTemplates'] ?? null) ? $payload['slotTemplates'] : [] as $row) {
-            if (\is_array($row) && LockLevel::HARD->value === ($row['lockLevel'] ?? null)) {
-                $lockedKeys[\sprintf('%s|%s|%s', $row['venueId'] ?? '', $row['dayOfWeek'] ?? '', substr((string) ($row['startTime'] ?? ''), 0, 5))] = true;
+            if (!\is_array($row) || LockLevel::HARD->value !== ($row['lockLevel'] ?? null)) {
+                continue;
+            }
+            $startMinutes = $this->timeToMinutes((string) ($row['startTime'] ?? ''));
+            $duration = max(self::SOLVER_SLOT_MINUTES, (int) ($row['durationMinutes'] ?? self::SOLVER_SLOT_MINUTES));
+            $steps = intdiv($duration + self::SOLVER_SLOT_MINUTES - 1, self::SOLVER_SLOT_MINUTES);
+            for ($step = 0; $step < $steps; ++$step) {
+                $covered = $startMinutes + $step * self::SOLVER_SLOT_MINUTES;
+                $lockedKeys[\sprintf('%s|%s|%02d:%02d', $row['venueId'] ?? '', $row['dayOfWeek'] ?? '', intdiv($covered, 60), $covered % 60)] = true;
             }
         }
 
@@ -291,6 +305,14 @@ final class ValidateConstraintsController extends AbstractController
         }
 
         return array_sum($byKey);
+    }
+
+    /** « 18:00 » / « 18:00:00 » → minutes depuis minuit (miroir de `_time_to_minutes`). */
+    private function timeToMinutes(string $time): int
+    {
+        $parts = explode(':', $time);
+
+        return 60 * (int) $parts[0] + (int) ($parts[1] ?? 0);
     }
 
     private function plural(int $count, string $singular, string $plural): string
