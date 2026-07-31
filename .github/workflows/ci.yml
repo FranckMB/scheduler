@@ -265,6 +265,12 @@ jobs:
       - name: SeasonPlanInForceTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SeasonPlanInForceTest.php --group phase1'
 
+      # P2-14 (axe constraint semantics) : le gate pré-solve valide EXACTEMENT le jeu de
+      # contraintes que le payload sérialise — parité tenue par la source unique
+      # PeriodConstraintSelector, plus par deux copies manuelles.
+      - name: PeriodGatePayloadParityTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/PeriodGatePayloadParityTest.php --group phase1'
+
       - name: CoachDoubleBookingTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/CoachDoubleBookingTest.php --group phase1'
 

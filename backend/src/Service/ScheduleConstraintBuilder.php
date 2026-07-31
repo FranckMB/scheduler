@@ -8,7 +8,6 @@ use App\Entity\CalendarEntry;
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
-use App\Entity\ConstraintPeriodOverride;
 use App\Entity\PriorityTier;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
@@ -17,19 +16,15 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
-use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
-use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
-use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Enum\SchedulePlanType;
-use App\Enum\VenuePeriodMode;
 use App\Repository\VenueTrainingSlotRepository;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
@@ -92,6 +87,11 @@ final class ScheduleConstraintBuilder
         #[Autowire(service: 'cache.schedule')]
         private readonly ?CacheItemPoolInterface $scheduleCachePool = null,
         private readonly ?VenueTrainingSlotRepository $venueTrainingSlotRepository = null,
+        // P2-14 : la résolution de tag et la sélection de période sont EXTERNES (sources
+        // uniques partagées avec le gate pré-solve). Nullables pour le même mode léger
+        // sans DB que les trois deps ci-dessus — le chemin overlay, lui, les exige.
+        private readonly ?TeamTagResolver $tagResolver = null,
+        private readonly ?PeriodConstraintSelector $periodConstraintSelector = null,
     ) {}
 
     /**
@@ -267,62 +267,30 @@ final class ScheduleConstraintBuilder
             throw new LogicException('ScheduleConstraintBuilder requires Doctrine for overlay builds.');
         }
 
-        $periodType = $entry->getPeriodType();
+        if (!$this->periodConstraintSelector instanceof PeriodConstraintSelector) {
+            throw new LogicException('ScheduleConstraintBuilder requires the period constraint selector for overlay builds.');
+        }
 
-        // P2-5 E1 : une semaine ENFANT hérite les contraintes datées de sa période
-        // MÈRE (source unique : CalendarEntry::datedConstraintSourceId).
-        $dated = $em->getRepository(Constraint::class)->findBy(['calendarEntryId' => $entry->datedConstraintSourceId()]);
+        // P2-14 — LA sélection (quelles entités partent au solveur, pourquoi les autres
+        // non) est calculée par la source UNIQUE partagée avec le gate pré-solve. Ce qui
+        // suit ne fait plus que SÉRIALISER cette sélection ; les post-filtres sur lignes
+        // sérialisées plus bas restent en défense en profondeur (ils attrapent les
+        // expansions par équipe, invisibles au niveau entité).
+        // Les équipes servent DEUX fois (la sélection dérive ses actives, le payload les
+        // sérialise) : une seule requête, passée à la sélection (revue #340 round 1).
+        $clubSeasonTeams = array_values($this->findByClubSeason(Team::class, $clubId, $seasonId, $em));
+        $selection = $this->periodConstraintSelector->selectForPeriodPlan($clubId, $seasonId, $schedulePlanId, $entry, $clubSeasonTeams);
+        $deactivatedTeamIds = $selection->deactivatedTeamIds;
+        $disabledVenueIds = $selection->disabledVenueIds;
+        $this->currentSessionOverrides = $selection->sessionOverrides;
+        $constraints = $selection->kept;
 
         // P2-5 5b — granularité JOUR des fermetures : les jours de semaine où chaque
-        // gymnase est réellement fermé dans CE plan (incident ∩ fenêtre du plan). Le
-        // gymnase perd ses créneaux ces jours-là (ci-dessous) — pas de créneau ⇒ pas
-        // de variable ⇒ le solveur ne peut pas l'y placer ; il PEUT les autres jours.
-        // Remplace le forbid tous-jours (l'engine forbidden_assignments est day-blind).
-        $closedWeekdaysByVenue = VenueClosureDays::closedWeekdaysByVenue($dated, $entry->getStartDate(), $entry->getEndDate());
-
-        // Period-editable structure: sparse per-team overrides for THIS period. Loaded
-        // BEFORE the constraint match — the reprise default follows the team selection
-        // (a constraint targeting a deactivated team is dropped by default).
-        $teamOverrides = $em->getRepository(TeamPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]);
-        $deactivatedTeamIds = [];
-        $this->currentSessionOverrides = [];
-        foreach ($teamOverrides as $teamOverride) {
-            if (!$teamOverride->isActive()) {
-                $deactivatedTeamIds[$teamOverride->getTeamId()] = true;
-            }
-            if (null !== $teamOverride->getSessionsPerWeek()) {
-                $this->currentSessionOverrides[$teamOverride->getTeamId()] = $teamOverride->getSessionsPerWeek();
-            }
-        }
-
-        // #8 (fondateur 2026-07-24) — une période POSSÈDE sa grille : ses créneaux ont été
-        // copiés depuis la saison à la naissance du plan. Le seul réglage lu ici est le
-        // gymnase DÉSACTIVÉ, qui sort entièrement du payload : « tout est lié au gymnase,
-        // donc son indisponibilité les impacte forcément ». Sparse : pas de ligne = le
-        // gymnase sert normalement.
-        $disabledVenueIds = [];
-        foreach ($em->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $venueOverride) {
-            if (VenuePeriodMode::DISABLED === $venueOverride->getMode()) {
-                $disabledVenueIds[$venueOverride->getVenueId()] = true;
-            }
-        }
-
-        $constraints = match ($periodType) {
-            // Fermeture: inherit ALL permanent constraints (kept by default), minus those
-            // the manager explicitly disabled for the window (sparse diff — base untouched).
-            CalendarEntryPeriodType::CLOSURE => array_merge(
-                $this->inheritedPermanents($clubId, $seasonId, $schedulePlanId, static fn (): bool => true, $em),
-                $dated,
-            ),
-            // Reprise: inherit the socle's permanent constraints with a SMART default that
-            // follows the team selection (CLUB/COACH/TEAM kept, FACILITY dropped) — an explicit
-            // override deviates ; the post-filter below drops a paused team's TEAM constraint.
-            CalendarEntryPeriodType::HOLIDAY => array_merge(
-                $this->inheritedPermanents($clubId, $seasonId, $schedulePlanId, static fn (Constraint $c): bool => ConstraintScope::FACILITY !== $c->getScope(), $em),
-                $dated,
-            ),
-            default => throw new LogicException('Overlay build supports only closure and holiday periods.'),
-        };
+        // gymnase est réellement fermé dans CE plan (incident ∩ fenêtre du plan). Calculée
+        // sur les datées BRUTES (drops compris : une datée `venue_closed` ne produit aucune
+        // ligne payload mais ferme des jours). Pas de créneau ⇒ pas de variable ⇒ le
+        // solveur ne peut pas placer là ; il PEUT les autres jours.
+        $closedWeekdaysByVenue = VenueClosureDays::closedWeekdaysByVenue($selection->dated, $entry->getStartDate(), $entry->getEndDate());
 
         // La grille de la PÉRIODE, et elle seule — aucune union avec les créneaux de
         // saison. C'est ce qui rend le modèle sûr : un gymnase n'a jamais deux jeux de
@@ -345,9 +313,9 @@ final class ScheduleConstraintBuilder
         }
         $this->currentAvailabilitiesByVenue = $availabilitiesByVenue;
 
-        // Deactivated teams (computed above) are dropped from the payload.
+        // Deactivated teams (computed by the selection) are dropped from the payload.
         $teams = array_values(array_filter(
-            $this->findByClubSeason(Team::class, $clubId, $seasonId, $em),
+            $clubSeasonTeams,
             static fn (Team $team): bool => !isset($deactivatedTeamIds[$team->getId()]),
         ));
 
@@ -550,32 +518,6 @@ final class ScheduleConstraintBuilder
             'constraints' => $serializedConstraints,
             'slotTemplates' => array_values($serializedSlots),
         ];
-    }
-
-    /**
-     * Permanent (seasonal) constraints inherited into a period overlay. A
-     * ConstraintPeriodOverride row is an EXPLICIT deviation (isActive wins); with no row,
-     * $keepByDefault decides. The base plan and the Constraint's own isActive are untouched.
-     *   - fermeture: keep all → $keepByDefault = static fn () => true.
-     *   - reprise:   FACILITY dropped, rest kept → static fn (c) => FACILITY !== c->getScope().
-     * The "a TEAM constraint of a DEACTIVATED team is dropped" rule lives in ONE place — the
-     * unconditional post-filter in buildForOverlay — so neither default handles it here.
-     *
-     * @param callable(Constraint): bool $keepByDefault
-     *
-     * @return array<Constraint>
-     */
-    private function inheritedPermanents(string $clubId, string $seasonId, string $schedulePlanId, callable $keepByDefault, EntityManagerInterface $em): array
-    {
-        $overrides = [];
-        foreach ($em->getRepository(ConstraintPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
-            $overrides[$override->getConstraintId()] = $override->isActive();
-        }
-
-        return array_values(array_filter(
-            $em->getRepository(Constraint::class)->findPermanentByClubSeason($clubId, $seasonId),
-            static fn (Constraint $c): bool => \array_key_exists($c->getId(), $overrides) ? $overrides[$c->getId()] : $keepByDefault($c),
-        ));
     }
 
     /**
@@ -917,7 +859,11 @@ final class ScheduleConstraintBuilder
                 // force the tag onto the venue engine-side, so exclusivity must
                 // cover both, else "impose" would be weaker than HARD "préfère".
                 $dedicatedVenueId = $config['forcedVenueId'] ?? $config['preferredVenueId'] ?? null;
-                if (ConstraintRuleType::HARD === $constraint->getRuleType() && null !== $dedicatedVenueId) {
+                // `is_string && '' !==` et non `null !==` (revue #340 round 2) : un
+                // `preferredVenueId` vidé en '' par un client émettait des lignes
+                // `forbiddenVenueId: ''` — un gymnase inexistant interdit à tout le club.
+                // Même garde que le verdict du sélecteur : les deux doivent coïncider.
+                if (ConstraintRuleType::HARD === $constraint->getRuleType() && \is_string($dedicatedVenueId) && '' !== $dedicatedVenueId) {
                     $tagTeamIdSet = array_flip($teamIds);
                     foreach ($teams as $team) {
                         if (isset($tagTeamIdSet[$team->getId()])) {
@@ -999,41 +945,10 @@ final class ScheduleConstraintBuilder
      */
     private function resolveTagToTeamIds(string $targetTag, string $seasonId, string $clubId): array
     {
-        if (!$this->entityManager instanceof EntityManagerInterface) {
-            return [];
-        }
-
-        // Find the tag by name
-        $tagRepo = $this->entityManager->getRepository(TeamTag::class);
-        $tag = $tagRepo->findOneBy(['name' => $targetTag, 'clubId' => $clubId]);
-
-        if (!$tag instanceof TeamTag) {
-            $this->logger->warning(
-                "Tag '{$targetTag}' not found for club {$clubId} — constraint will be ignored.",
-                ['targetTag' => $targetTag, 'clubId' => $clubId, 'seasonId' => $seasonId],
-            );
-
-            return [];
-        }
-
-        // Find all team IDs assigned to this tag in this season
-        $assignmentRepo = $this->entityManager->getRepository(TeamTagAssignment::class);
-        $assignments = $assignmentRepo->findBy([
-            'tagId' => $tag->getId(),
-            'seasonId' => $seasonId,
-        ]);
-
-        $teamIds = [];
-        foreach ($assignments as $assignment) {
-            $teamIds[] = $assignment->getTeamId();
-        }
-        // Même invariant que `serializeTeam` : cette liste ordonne l'expansion par équipe
-        // d'une contrainte CLUB+targetTag, donc l'ordre des lignes `constraints` du
-        // payload — et le hash calculé dessus. On trie sur le `teamId`, qui est STABLE
-        // (une équipe n'est pas recréée), contrairement à l'id de l'assignation.
-        sort($teamIds);
-
-        return $teamIds;
+        // P2-14 : la résolution vit dans TeamTagResolver (source unique, partagée avec la
+        // sélection de période — le gate en dépend transitivement). Le mode léger sans DB
+        // (ContractSchemaTest) n'a pas de résolveur : aucune ligne, comme avant.
+        return $this->tagResolver?->tagTeamIds($targetTag, $seasonId, $clubId) ?? [];
     }
 
     /** @param array<object> $entities */

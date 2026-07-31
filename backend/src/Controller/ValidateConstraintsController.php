@@ -6,15 +6,8 @@ namespace App\Controller;
 
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
-use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Reservation;
-use App\Entity\TeamPeriodOverride;
-use App\Entity\TeamTag;
-use App\Entity\TeamTagAssignment;
-use App\Entity\VenuePeriodOverride;
 use App\Enum\CalendarEntryPeriodType;
-use App\Enum\ConstraintScope;
-use App\Enum\VenuePeriodMode;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ConstraintRepository;
 use App\Repository\TeamRepository;
@@ -22,7 +15,8 @@ use App\Repository\VenueRepository;
 use App\Service\CoachDoubleBookingDetector;
 use App\Service\ConstraintValidationService;
 use App\Service\ManagementAccessGuard;
-use App\Service\ScheduleConstraintBuilder;
+use App\Service\PeriodConstraintSelection;
+use App\Service\PeriodConstraintSelector;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
@@ -52,6 +46,7 @@ final class ValidateConstraintsController extends AbstractController
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly VenueRepository $venueRepository,
         private readonly CoachDoubleBookingDetector $coachDoubleBookingDetector,
+        private readonly PeriodConstraintSelector $periodConstraintSelector,
     ) {}
 
     #[Route('/api/constraints/validate', name: 'api_constraints_validate', methods: ['POST'])]
@@ -73,6 +68,7 @@ final class ValidateConstraintsController extends AbstractController
         }
 
         $warnings = [];
+        $selection = null;
         $calendarEntryId = $this->requestedCalendarEntryId($request);
         if (null !== $calendarEntryId) {
             $calendarEntry = $this->calendarEntryRepository->find($calendarEntryId);
@@ -80,7 +76,7 @@ final class ValidateConstraintsController extends AbstractController
                 return $this->json(['error' => 'No active period.'], Response::HTTP_BAD_REQUEST);
             }
 
-            ['constraints' => $constraints, 'warnings' => $warnings] = $this->constraintsForPeriod($clubId, $seasonId, $calendarEntry);
+            ['constraints' => $constraints, 'warnings' => $warnings, 'selection' => $selection] = $this->constraintsForPeriod($clubId, $seasonId, $calendarEntry);
         } else {
             /** @var list<Constraint> $constraints */
             $constraints = $this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId);
@@ -124,7 +120,7 @@ final class ValidateConstraintsController extends AbstractController
         // n'a jamais choisi que son coach se dédouble. Décision fondateur : ça BLOQUE.
         $blockers = array_map(
             fn (array $conflict): string => $this->coachDoubleBookingDetector->describeForRecap($conflict),
-            $this->coachDoubleBookingDetector->detect($this->reservationsInScope($clubId, $seasonId, $calendarEntryId), $clubId, $seasonId),
+            $this->coachDoubleBookingDetector->detect($this->reservationsInScope($clubId, $seasonId, $calendarEntryId, $selection), $clubId, $seasonId),
         );
 
         // #8 (fondateur 2026-07-24) — un avertissement n'invalide RIEN : « SM1 va ailleurs,
@@ -152,98 +148,73 @@ final class ValidateConstraintsController extends AbstractController
     }
 
     /**
-     * @return array{constraints: list<Constraint>, warnings: list<string>}
+     * P2-14 — le gate ne recopie plus la sélection : il la DEMANDE à la source unique
+     * (`PeriodConstraintSelector`), la même que `buildForPeriodPlan`. Ce qui reste ici est
+     * l'habillage : transformer les drops en messages pour le gestionnaire.
+     *
+     * @return array{constraints: list<Constraint>, warnings: list<string>, selection: PeriodConstraintSelection|null}
      */
     private function constraintsForPeriod(string $clubId, string $seasonId, CalendarEntry $calendarEntry): array
     {
-        /** @var list<Constraint> $dated */
-        // P2-5 E1 : les datées d'une SEMAINE enfant vivent sur sa mère (source unique
-        // datedConstraintSourceId) — le gate pré-solve doit valider le MÊME jeu que
-        // celui que buildForOverlay enverra au solveur (revue #262 round 2).
-        $dated = $this->constraintRepository->findBy(['calendarEntryId' => $calendarEntry->datedConstraintSourceId(), 'clubId' => $clubId]);
+        // Sans plan à appliquer, le gate valide les datées brutes : période non génératrice
+        // (cutoff/event — inv. 9 : elles ne portent jamais de plan), ou période génératrice
+        // sur une donnée antérieure au lot C1 (le plan naît du geste).
+        $datedOnly = function () use ($clubId, $calendarEntry): array {
+            /** @var list<Constraint> $dated */
+            $dated = $this->constraintRepository->findBy(['calendarEntryId' => $calendarEntry->datedConstraintSourceId(), 'clubId' => $clubId]);
+
+            return ['constraints' => $dated, 'warnings' => [], 'selection' => null];
+        };
+
         $periodType = $calendarEntry->getPeriodType();
         if (!\in_array($periodType, [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
-            return ['constraints' => $dated, 'warnings' => []];
+            return $datedOnly();
         }
 
-        // Les réglages de la période pendent au PLAN (inv. 5, lot C2) : on part du
-        // déclencheur, on résout son plan. Une période génératrice en a toujours un
-        // (il naît du geste, lot C1) ; un null ne peut venir que d'une donnée antérieure
-        // au lot — sans réglage à appliquer, le récap reste juste.
         $schedulePlanId = $this->schedulePlanProvisioner->periodPlanId($calendarEntry->getId());
         if (null === $schedulePlanId) {
-            return ['constraints' => $dated, 'warnings' => []];
+            return $datedOnly();
         }
 
-        $periodOverrides = [];
-        foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
-            $periodOverrides[$override->getConstraintId()] = $override->isActive();
+        $selection = $this->periodConstraintSelector->selectForPeriodPlan($clubId, $seasonId, $schedulePlanId, $calendarEntry);
+
+        // Une contrainte sortie pour gymnase désactivé ne partira pas au solveur : elle
+        // sort donc aussi du gate (sinon le récap valide un jeu que le payload n'aura
+        // pas), et le dirigeant en est AVERTI plutôt que de la voir disparaître en silence.
+        $venueIds = array_values(array_unique(array_map(
+            static fn (array $drop): string => $drop['venueId'],
+            [...$selection->droppedForDisabledVenue, ...$selection->partiallyAppliedForDisabledVenue],
+        )));
+        $venueNames = $this->venueNames($venueIds);
+        $warnings = array_map(
+            static fn (array $drop): string => \sprintf(
+                '« %s » vise le gymnase %s, désactivé pour cette période : elle ne sera pas appliquée.',
+                $drop['constraint']->getName(),
+                $venueNames[$drop['venueId']] ?? $drop['venueId'],
+            ),
+            $selection->droppedForDisabledVenue,
+        );
+        // KEEP ne veut pas dire INTACTE : une CLUB+tag gardée pour sa seule exclusivité de
+        // gymnase dédié a perdu ses règles par équipe — l'ancien gate avertissait, on aussi.
+        foreach ($selection->partiallyAppliedForDisabledVenue as $partial) {
+            $warnings[] = \sprintf(
+                '« %s » vise le gymnase %s, désactivé pour cette période : ses règles par équipe ne seront pas appliquées (seule l\'exclusivité du gymnase dédié est conservée).',
+                $partial['constraint']->getName(),
+                $venueNames[$partial['venueId']] ?? $partial['venueId'],
+            );
+        }
+        // Une DATÉE dont le tag ne vise plus aucune équipe active est un geste explicite
+        // du gestionnaire pour CETTE période : elle est annoncée, jamais évaporée (#8).
+        foreach ($selection->droppedForInertTag as $inert) {
+            $warnings[] = \sprintf(
+                '« %s » ne vise plus aucune équipe active de la période : elle ne sera pas appliquée.',
+                $inert->getName(),
+            );
         }
 
-        $deactivatedTeamIds = [];
-        foreach ($this->entityManager->getRepository(TeamPeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
-            if (!$override->isActive()) {
-                $deactivatedTeamIds[$override->getTeamId()] = true;
-            }
-        }
-
-        $activeTeamIds = [];
-        foreach ($this->teamRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
-            if (!isset($deactivatedTeamIds[$team->getId()])) {
-                $activeTeamIds[$team->getId()] = true;
-            }
-        }
-
-        $activeTagTeamIds = $this->activeTagTeamIdsByName($clubId, $seasonId, $activeTeamIds);
-        $permanent = [];
-        foreach ($this->constraintRepository->findPermanentByClubSeason($clubId, $seasonId) as $constraint) {
-            $keepByDefault = CalendarEntryPeriodType::CLOSURE === $periodType || ConstraintScope::FACILITY !== $constraint->getScope();
-            $keep = \array_key_exists($constraint->getId(), $periodOverrides) ? $periodOverrides[$constraint->getId()] : $keepByDefault;
-            if (!$keep) {
-                continue;
-            }
-            if (ConstraintScope::TEAM === $constraint->getScope() && isset($deactivatedTeamIds[$constraint->getScopeTargetId() ?? ''])) {
-                continue;
-            }
-            $targetTag = $constraint->getConfig()['targetTag'] ?? null;
-            if (ConstraintScope::CLUB === $constraint->getScope() && \is_string($targetTag) && '' !== $targetTag && [] === ($activeTagTeamIds[$targetTag] ?? [])) {
-                continue;
-            }
-            $permanent[] = $constraint;
-        }
-
-        // #8 — miroir EXACT du filtre gymnases de ScheduleConstraintBuilder::buildForOverlay :
-        // une contrainte qui nomme un gymnase désactivé ne partira pas au solveur. Elle sort
-        // donc aussi du gate (sinon le récap valide un jeu que le payload n'aura pas), et le
-        // dirigeant en est AVERTI plutôt que de la voir disparaître en silence. Le filtre
-        // s'applique aux PERMANENTES **et** aux DATÉES — le builder filtre les deux.
-        $disabledVenueIds = $this->disabledVenueIds($schedulePlanId);
-        $venueNames = $this->venueNames($disabledVenueIds);
-
-        $constraints = [];
-        $warnings = [];
-        foreach ([...$permanent, ...$dated] as $constraint) {
-            $disabledVenueId = $this->disabledVenueNamedBy($constraint, $disabledVenueIds);
-            if (null !== $disabledVenueId) {
-                $warnings[] = \sprintf(
-                    '« %s » vise le gymnase %s, désactivé pour cette période : elle ne sera pas appliquée.',
-                    $constraint->getName(),
-                    $venueNames[$disabledVenueId] ?? $disabledVenueId,
-                );
-
-                continue;
-            }
-            $constraints[] = $constraint;
-        }
-
-        return ['constraints' => $constraints, 'warnings' => $warnings];
+        return ['constraints' => $selection->kept, 'warnings' => $warnings, 'selection' => $selection];
     }
 
-    /**
-     * Gymnases DÉSACTIVÉS pour ce plan de période (sparse : pas de ligne = le gymnase sert).
-     *
-     * @return array<string, true>
-     */
     /**
      * Les réservations qui partiront RÉELLEMENT au solveur — le même périmètre que
      * `ScheduleConstraintBuilder`, jamais un autre : le socle ne lit que les siennes
@@ -254,7 +225,7 @@ final class ValidateConstraintsController extends AbstractController
      *
      * @return list<Reservation>
      */
-    private function reservationsInScope(string $clubId, string $seasonId, ?string $calendarEntryId): array
+    private function reservationsInScope(string $clubId, string $seasonId, ?string $calendarEntryId, ?PeriodConstraintSelection $selection): array
     {
         $repository = $this->entityManager->getRepository(Reservation::class);
 
@@ -265,103 +236,35 @@ final class ValidateConstraintsController extends AbstractController
             );
         }
 
-        $schedulePlanId = $this->schedulePlanProvisioner->periodPlanId($calendarEntryId);
-        if (null === $schedulePlanId) {
-            return []; // période sans plan : rien ne partira au solveur
+        // P2-14 : le plan et ses gymnases désactivés viennent de la SÉLECTION déjà
+        // calculée — les re-résoudre ici était la 2e copie du même filtre. Pas de
+        // sélection (période sans plan, ou non génératrice) : rien ne partira au solveur.
+        if (!$selection instanceof PeriodConstraintSelection) {
+            return [];
         }
 
-        $disabledVenueIds = $this->disabledVenueIds($schedulePlanId);
-
         return array_values(array_filter(
-            $repository->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
-            static fn (Reservation $reservation): bool => !isset($disabledVenueIds[$reservation->getVenueId()]),
+            $repository->findBy(['schedulePlanId' => $selection->schedulePlanId], ['id' => 'ASC']),
+            static fn (Reservation $reservation): bool => !isset($selection->disabledVenueIds[$reservation->getVenueId()]),
         ));
     }
 
     /**
-     * @return array<string, true>
-     */
-    private function disabledVenueIds(string $schedulePlanId): array
-    {
-        $disabledVenueIds = [];
-        foreach ($this->entityManager->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
-            if (VenuePeriodMode::DISABLED === $override->getMode()) {
-                $disabledVenueIds[$override->getVenueId()] = true;
-            }
-        }
-
-        return $disabledVenueIds;
-    }
-
-    /**
-     * @param array<string, true> $disabledVenueIds
+     * @param list<string> $venueIds
      *
      * @return array<string, string>
      */
-    private function venueNames(array $disabledVenueIds): array
+    private function venueNames(array $venueIds): array
     {
-        if ([] === $disabledVenueIds) {
+        if ([] === $venueIds) {
             return [];
         }
 
         $names = [];
-        foreach ($this->venueRepository->findBy(['id' => array_keys($disabledVenueIds)]) as $venue) {
+        foreach ($this->venueRepository->findBy(['id' => $venueIds]) as $venue) {
             $names[$venue->getId()] = $venue->getName();
         }
 
         return $names;
-    }
-
-    /**
-     * L'id du gymnase désactivé que cette contrainte NOMME, ou null. Les deux façons de
-     * nommer un gymnase sont celles du builder : le scope FACILITY, et les clés de config
-     * de `ScheduleConstraintBuilder::VENUE_CONFIG_KEYS` (source unique — dupliquer la liste
-     * est exactement ce qui a produit la dérive gate/payload).
-     *
-     * @param array<string, true> $disabledVenueIds
-     */
-    private function disabledVenueNamedBy(Constraint $constraint, array $disabledVenueIds): ?string
-    {
-        $scopeTargetId = $constraint->getScopeTargetId();
-        if (ConstraintScope::FACILITY === $constraint->getScope() && \is_string($scopeTargetId) && isset($disabledVenueIds[$scopeTargetId])) {
-            return $scopeTargetId;
-        }
-
-        $config = $constraint->getConfig();
-        foreach (ScheduleConstraintBuilder::VENUE_CONFIG_KEYS as $venueKey) {
-            $venueId = $config[$venueKey] ?? null;
-            if (\is_string($venueId) && isset($disabledVenueIds[$venueId])) {
-                return $venueId;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param array<string, true> $activeTeamIds
-     *
-     * @return array<string, array<string, true>>
-     */
-    private function activeTagTeamIdsByName(string $clubId, string $seasonId, array $activeTeamIds): array
-    {
-        $tagNameById = [];
-        foreach ($this->entityManager->getRepository(TeamTag::class)->findBy(['clubId' => $clubId]) as $tag) {
-            $tagNameById[$tag->getId()] = $tag->getName();
-        }
-
-        $tagTeamIdsByName = [];
-        foreach ($this->entityManager->getRepository(TeamTagAssignment::class)->findBy(['seasonId' => $seasonId]) as $assignment) {
-            if (!isset($activeTeamIds[$assignment->getTeamId()])) {
-                continue;
-            }
-            $tagName = $tagNameById[$assignment->getTagId()] ?? null;
-            if (!\is_string($tagName) || '' === $tagName) {
-                continue;
-            }
-            $tagTeamIdsByName[$tagName][$assignment->getTeamId()] = true;
-        }
-
-        return $tagTeamIdsByName;
     }
 }

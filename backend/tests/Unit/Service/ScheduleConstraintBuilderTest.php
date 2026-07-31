@@ -15,6 +15,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Service\ScheduleConstraintBuilder;
+use App\Service\TeamTagResolver;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -81,10 +82,13 @@ final class ScheduleConstraintBuilderTest extends TestCase
         $clubId = 'club-1';
 
         $this->teamTagRepository->method('findOneBy')->willReturn(null);
+        // PSR-3 (revue #340 round 2) : le MESSAGE porte des placeholders stables — un
+        // message unique par tag/club casserait le regroupement des agrégateurs de logs.
+        // Les VALEURS vivent dans le contexte : c'est lui qu'on vérifie.
         $this->logger->expects(self::once())
             ->method('warning')
             ->with(
-                self::callback(static fn (string $message): bool => str_contains($message, 'JEUNE') && str_contains($message, $clubId)),
+                self::callback(static fn (string $message): bool => str_contains($message, '{targetTag}') && str_contains($message, '{clubId}')),
                 self::callback(static fn (array $context): bool => 'JEUNE' === ($context['targetTag'] ?? null)
                         && $clubId === ($context['clubId'] ?? null)
                         && $seasonId === ($context['seasonId'] ?? null)),
@@ -274,7 +278,10 @@ final class ScheduleConstraintBuilderTest extends TestCase
             [TeamTagAssignment::class, $this->teamTagAssignmentRepository],
         ]);
 
-        $this->builder = new ScheduleConstraintBuilder($this->logger, $this->entityManager);
+        // P2-14 : la résolution de tag vit dans TeamTagResolver (source unique) — le
+        // builder ne fait que déléguer. On lui passe un résolveur bâti sur le MÊME EM
+        // mocké : les attentes de repository ci-dessus restent le contrat testé.
+        $this->builder = new ScheduleConstraintBuilder($this->logger, $this->entityManager, null, null, new TeamTagResolver($this->entityManager, $this->logger));
     }
 
     private function team(string $id): Team
