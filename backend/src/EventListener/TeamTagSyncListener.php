@@ -59,7 +59,18 @@ final class TeamTagSyncListener
         //
         // Pas de récursion : `$pendingTeams` est vidé AVANT la boucle, donc le
         // `postFlush` déclenché par ce flush-ci ressort immédiatement. Flusher ici est
-        // par ailleurs déjà le régime en vigueur — `getOrCreateSystemTags` le fait.
+        // par ailleurs déjà le régime en vigueur — `getOrCreateSystemTags` le fait, et
+        // sans condition (donc N flushes pour N équipes importées ; ce coût préexiste,
+        // il est inscrit en dette). Celui-ci n'en ajoute qu'UN, en fin de lot.
+        //
+        // ⚠ Deux conséquences assumées. (1) Un échec d'écriture des tags remonte
+        // désormais dans le `flush()` appelant et peut annuler la transaction englobante
+        // — avant, il ne se produisait pas puisque rien n'était écrit ; échouer bruyamment
+        // vaut mieux que des tags silencieusement absents. (2) Après un
+        // `StructureRestorer::apply()`, les assignations restaurées depuis la photo d'une
+        // version sont re-dérivées des champs de l'équipe restaurée : mêmes NOMS de tags,
+        // ids neufs. Le payload est identique (il est trié par nom, cf. serializeTeam) et
+        // les tags sont de la donnée DÉRIVÉE — re-dériver est le comportement correct.
         $args->getObjectManager()->flush();
     }
 }

@@ -428,8 +428,12 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $team = $this->team($club, $season, 'SM1');
         $this->em->flush();
 
-        // Un tag que `determineTagNames` ne dériverait JAMAIS de la SportCategory de
-        // l'équipe : s'il survit, c'est que personne ne l'a resynchronisé.
+        // Un tag que `determineTagNames` ne dériverait JAMAIS de cette équipe : s'il
+        // survit, c'est que personne ne l'a resynchronisé.
+        // ⚠ Le fixture s'appuie sur le fait que `team()` ne pose ni genre ni niveau et
+        // pointe une SportCategory inexistante — l'équipe ne dérive donc AUCUN tag
+        // système, et l'assertion exacte plus bas est légitime. Ajouter un genre au
+        // helper ferait tomber ce test pour une raison sans rapport avec la règle gardée.
         $tag = (new TeamTag)->setClubId($club->getId())->setName('U13')->setIsSystem(true);
         $this->em->persist($tag);
         $this->em->flush();
@@ -458,6 +462,37 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
             }
         }
         self::assertSame(['U13'], $tags, 'le payload LIT les tags en base au lieu de les réécrire');
+    }
+
+    /**
+     * P2-9ter NR-1ter — l'ordre des `tags` du payload est déterministe.
+     *
+     * `snapshotHash` (gelé dans la version) et `currentStructureHash` (recalculé à chaque
+     * `/api/me`) sont deux sha256 du payload sérialisé : une simple PERMUTATION des tags
+     * les fait diverger, et le cockpit annonce « structure modifiée » sur un planning
+     * pourtant intact. ⚠ Trier la requête sur l'`id` de l'assignation ne suffirait PAS —
+     * c'est un UUID v4 tiré à la construction, et `TeamTagSyncListener` recrée les lignes
+     * à chaque écriture sur l'équipe. Seul le tri sur le NOM est stable.
+     */
+    public function testPayloadTagOrderIsDeterministicAcrossReinsertion(): void
+    {
+        [$club, $season] = $this->seed();
+        $team = $this->team($club, $season, 'SM1');
+        $this->em->flush();
+
+        // Trois tags insérés dans un ordre volontairement anti-alphabétique.
+        foreach (['ZULU', 'ALPHA', 'MIKE'] as $name) {
+            $tag = (new TeamTag)->setClubId($club->getId())->setName($name)->setIsSystem(true);
+            $this->em->persist($tag);
+            $this->em->flush();
+            $this->em->persist((new TeamTagAssignment)->setTagId($tag->getId())->setTeamId($team->getId())->setSeasonId($season->getId()));
+        }
+        $this->em->flush();
+
+        self::getContainer()->get('cache.schedule')->deleteItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $season->getId()));
+        $tags = $this->payloadTagsOf($this->builder->buildForClubSeason($club->getId(), $season->getId()), $team->getId());
+
+        self::assertSame(['ALPHA', 'MIKE', 'ZULU'], $tags, 'les tags du payload sortent triés par NOM, quel que soit l’ordre des lignes');
     }
 
     /**
@@ -833,6 +868,27 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         return $ids;
     }
 
+    /**
+     * Les `tags` d'une équipe dans un payload construit.
+     *
+     * @param array<string, mixed> $payload
+     *
+     * @return list<string>
+     */
+    private function payloadTagsOf(array $payload, string $teamId): array
+    {
+        foreach ($payload['teams'] ?? [] as $row) {
+            if (($row['id'] ?? null) === $teamId) {
+                /** @var list<string> $tags */
+                $tags = $row['tags'] ?? [];
+
+                return $tags;
+            }
+        }
+
+        return [];
+    }
+
     private function team(Club $club, Season $season, string $name): Team
     {
         $team = new Team;
@@ -923,6 +979,11 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Overlay');
         $schedule->setStatus(ScheduleStatus::DRAFT);
+        // ⚠ Graine NON DÉFAUT, délibérément. `Schedule::$solverSeed` vaut 42, exactement
+        // la valeur par défaut de `buildForPeriodPlan` : avec elle, un adaptateur qui
+        // OUBLIERAIT de passer la graine produirait le même payload et le test de parité
+        // resterait vert. 4242 rend cet oubli visible.
+        $schedule->setSolverSeed(4242);
         // Toute version est liée à son plan en prod (linkSchedule, au POST) : un overlay au
         // plan de sa période, une version de BASE au plan SEASON (le socle). buildForOverlay
         // l'exige (C2) et findBaseSlotTemplates ne prend QUE les versions du plan SEASON (C4).

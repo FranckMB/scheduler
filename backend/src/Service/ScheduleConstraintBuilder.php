@@ -691,14 +691,10 @@ final class ScheduleConstraintBuilder
         // assignations. Et sans flush ultérieur (le récap n'en fait aucun), les
         // suppressions restaient définitives — la perte de données de la 3e tentative.
         if ($this->entityManager instanceof EntityManagerInterface) {
-            // ORDER BY explicite : `snapshotHash` et `currentStructureHash` sont deux
-            // sha256 du payload sérialisé. Un ordre de lignes livré au hasard par
-            // PostgreSQL ferait diverger les deux hash sans qu'aucune structure n'ait
-            // bougé — et rallumerait « Régénérer » tout seul.
             $tagAssignments = $this->entityManager->getRepository(TeamTagAssignment::class)->findBy([
                 'teamId' => $team->getId(),
                 'seasonId' => $seasonId,
-            ], ['id' => 'ASC']);
+            ]);
 
             foreach ($tagAssignments as $assignment) {
                 $tag = $this->entityManager->getRepository(TeamTag::class)->find($assignment->getTagId());
@@ -706,6 +702,15 @@ final class ScheduleConstraintBuilder
                     $tags[] = $tag->getName();
                 }
             }
+            // Tri sur le NOM — la seule valeur qui parte réellement dans le payload.
+            // ⚠ Trier la REQUÊTE sur `id` ne suffirait pas : l'id d'une
+            // `TeamTagAssignment` est un UUID v4 tiré à la construction, et
+            // `TeamTagSyncListener` supprime puis recrée les lignes à CHAQUE écriture sur
+            // l'équipe — l'ordre changerait donc à chaque édition. Or `snapshotHash` et
+            // `currentStructureHash` sont deux sha256 du payload sérialisé : une simple
+            // permutation les ferait diverger sans qu'aucune structure n'ait bougé, et le
+            // cockpit annoncerait « structure modifiée » de façon permanente.
+            sort($tags);
         }
 
         return [
@@ -1022,6 +1027,11 @@ final class ScheduleConstraintBuilder
         foreach ($assignments as $assignment) {
             $teamIds[] = $assignment->getTeamId();
         }
+        // Même invariant que `serializeTeam` : cette liste ordonne l'expansion par équipe
+        // d'une contrainte CLUB+targetTag, donc l'ordre des lignes `constraints` du
+        // payload — et le hash calculé dessus. On trie sur le `teamId`, qui est STABLE
+        // (une équipe n'est pas recréée), contrairement à l'id de l'assignation.
+        sort($teamIds);
 
         return $teamIds;
     }

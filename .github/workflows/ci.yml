@@ -268,9 +268,12 @@ jobs:
       - name: CoachDoubleBookingTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/CoachDoubleBookingTest.php --group phase1'
 
-      # P2-9ter — le fichier portait déjà #[Group('phase1')] mais AUCUN step ne le
-      # lançait : il ne gardait donc rien. Il porte les NR « le build n'écrit pas »,
-      # « un seul chemin de calcul » et « cache scopé par saison ».
+      # P2-9ter — le fichier portait déjà #[Group('phase1')] sans qu'AUCUN step de CE job
+      # ne le lance : il tournait bien, mais dans `unit-tests` (qui exécute `phpunit
+      # tests/`) — c'est-à-dire APRÈS `blocking-tests` et sans gater `build-docker`. Il ne
+      # jouait donc pas le rôle de gate bloquant que son groupe annonçait. Il porte les NR
+      # « le build n'écrit pas », « le write-path écrit vraiment », « ordre des tags
+      # déterministe », « un seul chemin de calcul » et « cache scopé par saison ».
       - name: ScheduleConstraintBuilderOverlayTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Integration/ScheduleConstraintBuilderOverlayTest.php --group phase1'
 
