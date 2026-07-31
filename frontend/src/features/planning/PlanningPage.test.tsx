@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SchedulePlan } from "@/features/cockpit/api";
 import { renderWithProviders } from "@/test/utils";
 
-import { getTrainingSlots, listSchedules, OverlaysExistError, reopenSchedule } from "./api";
+import { getTrainingSlots, getVenues, listSchedules, OverlaysExistError, reopenSchedule } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -250,12 +250,29 @@ describe("PlanningPage (integration)", () => {
       { id: SID, name: "Période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
     ]);
     plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
+    // DEUX gymnases : sans un gymnase qui RESTE, la grille est vide et l'assertion
+    // négative passerait pour la mauvaise raison (rien ne s'affiche).
+    vi.mocked(getVenues).mockResolvedValue([
+      { id: "venue-1", name: "Gymnase Alpha", color: "#00aa00" },
+      { id: "venue-2", name: "Gymnase Beta", color: "#0000aa" },
+    ]);
+    vi.mocked(getTrainingSlots).mockResolvedValue([
+      { id: "ts-1", venueId: "venue-1", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, capacity: 1 },
+      { id: "ts-3", venueId: "venue-2", dayOfWeek: 3, startTime: "17:00:00", durationMinutes: 90, capacity: 1 },
+    ]);
     venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
     usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
     renderWithProviders(<PlanningPage />);
 
-    // Le seul gymnase du fixture est désactivé : ni sa colonne, ni son entrée de filtre.
-    await vi.waitFor(() => expect(screen.queryByText("Gymnase Alpha")).not.toBeInTheDocument());
+    // ⚠ On ATTEND d'abord que l'écran soit chargé (une assertion négative passe sinon dès
+    // le premier tick, sur le spinner — ce test était un FAUX VERT, il restait vert avec le
+    // filtre supprimé : constaté en revue #342). On s'ancre sur un contenu qui ne dépend
+    // PAS du gymnase, puis on affirme l'absence.
+    // Le gymnase ACTIF s'affiche — c'est lui qui prouve que l'écran a bien chargé (une
+    // assertion négative seule passerait dès le premier tick, sur le spinner : ce test
+    // était un FAUX VERT, vert même avec le filtre supprimé — constaté en revue #342).
+    expect(await screen.findByText("Gymnase Beta")).toBeInTheDocument();
+    expect(screen.queryByText("Gymnase Alpha")).not.toBeInTheDocument();
   });
 
   it("drops « Valider » on the version the plan points at (it is in force) and offers « Rouvrir »", async () => {

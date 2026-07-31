@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { readFailed } from "@/shared/lib/readState";
+import { readFailed, readLoading } from "@/shared/lib/readState";
 
 import { activeTeams, activeVenues, pausedTeamIds } from "./lib/activeLayer";
 
@@ -262,8 +262,9 @@ export function useDeletePeriodSlot(schedulePlanId: string | null) {
  *
  * `schedulePlanId` null = mode socle : la liste complète, inchangée.
  *
- * FAIL-CLOSED : si la lecture des overrides a échoué SANS rien en cache, on ne masque
- * RIEN et `readFailed` le dit à l'appelant. Masquer sur une lecture ratée ferait croire à
+ * FAIL-CLOSED : tant que les overrides ne sont pas LUS (chargement OU échec sans cache),
+ * on ne masque RIEN et `readFailed` le dit à l'appelant — l'écran annonce alors que ses
+ * chiffres sont ceux de la saison plutôt que de les faire passer pour ceux de la période. Masquer sur une lecture ratée ferait croire à
  * une période plus petite qu'elle n'est — le travers exact que P4-20/P4-1 ont soldé.
  */
 export function useActiveVenues(schedulePlanId: string | null): { venues: Venue[]; readFailed: boolean } {
@@ -274,7 +275,10 @@ export function useActiveVenues(schedulePlanId: string | null): { venues: Venue[
   if (null === schedulePlanId) {
     return { venues, readFailed: false };
   }
-  if (readFailed(overrides)) {
+  // `loading` compte comme « pas encore lu » : sans ce cas, `data ?? []` fabriquait un
+  // « aucun override » CRÉDIBLE et le premier rendu montrait les listes de SAISON sous
+  // l'étiquette de la période (revue #342 — c'est le vide crédible que readState combat).
+  if (readFailed(overrides) || readLoading(overrides)) {
     return { venues, readFailed: true };
   }
   return { venues: activeVenues(venues, overrides.data ?? []), readFailed: false };
@@ -289,7 +293,7 @@ export function useActiveTeams(schedulePlanId: string | null): { teams: Team[]; 
   if (null === schedulePlanId) {
     return { teams, pausedIds: new Set(), readFailed: false };
   }
-  if (readFailed(overrides)) {
+  if (readFailed(overrides) || readLoading(overrides)) {
     return { teams, pausedIds: new Set(), readFailed: true };
   }
   const pausedIds = pausedTeamIds(overrides.data ?? []);

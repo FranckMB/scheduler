@@ -10,7 +10,7 @@ import { usePriorityTiers } from "@/features/matches/queries";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { useSchedulePlans } from "@/features/cockpit/queries";
 import { useVenuePeriodOverrides } from "@/features/wizard/queries";
-import { readFailed } from "@/shared/lib/readState";
+import { readFailed, readLoading } from "@/shared/lib/readState";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Modal } from "@/shared/components/ui/modal";
@@ -120,7 +120,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const slotLayerId = null !== displayed && !isSeasonPlanType(displayed.planType) ? (displayed.schedulePlanId ?? null) : null;
 
   const { data: slots = [] } = useSlots(validScheduleId);
-  const { data: diagnostics = [] } = useDiagnostics(validScheduleId);
+  const { data: allDiagnostics = [] } = useDiagnostics(validScheduleId);
   const { data: trainingSlots = [] } = useTrainingSlots(slotLayerId);
   const { data: teams = [] } = useTeams();
   const { data: venues = [] } = useVenues();
@@ -300,21 +300,36 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // FAIL-CLOSED : lecture ratée sans cache ⇒ on ne masque rien (P4-20).
   const venueOverrides = useVenuePeriodOverrides(slotLayerId);
   const disabledVenueIds = useMemo(
-    () => new Set(readFailed(venueOverrides) ? [] : (venueOverrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId)),
+    () => new Set(readFailed(venueOverrides) || readLoading(venueOverrides) ? [] : (venueOverrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId)),
     [venueOverrides],
   );
   const layerSlots = useMemo(
     () => (0 === disabledVenueIds.size ? trainingSlots : trainingSlots.filter((ts) => !disabledVenueIds.has(ts.venueId))),
     [trainingSlots, disabledVenueIds],
   );
-  const emptySlots = useMemo(() => computeEmptySlots(layerSlots, slots, validScheduleId ?? ""), [layerSlots, slots, validScheduleId]);
-  const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...slots, ...emptySlots] : slots), [viewMode, slots, emptySlots]);
+  // ⚠ Les séances PLACÉES se filtrent aussi (revue #342) : ne retirer que les fenêtres
+  // laissait au gymnase désactivé une colonne PLEINE de séances et vide de créneaux
+  // libres — le symptôme d'origine survivait, sous une forme encore plus trompeuse
+  // (un gymnase qui existe à l'écran et nulle part ailleurs).
+  const layerPlacedSlots = useMemo(
+    () => (0 === disabledVenueIds.size ? slots : slots.filter((s) => !disabledVenueIds.has(s.venueId))),
+    [slots, disabledVenueIds],
+  );
+  const emptySlots = useMemo(() => computeEmptySlots(layerSlots, layerPlacedSlots, validScheduleId ?? ""), [layerSlots, layerPlacedSlots, validScheduleId]);
+  const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...layerPlacedSlots, ...emptySlots] : layerPlacedSlots), [viewMode, layerPlacedSlots, emptySlots]);
 
   // From gridSlots (incl. empty windows in gymnase view) so a venue that has ONLY
   // empty slots still appears in the ResourceFilter picker — otherwise focusVenue
   // could filter to a venue the picker cannot show/clear.
   const resourceGroups = useMemo(() => availableResourceGroups(gridSlots, viewMode, lookups, tiers), [gridSlots, viewMode, lookups, tiers]);
   const model = useMemo(() => buildGrid(gridSlots, viewMode, lookups, new Set(resourceFilter)), [gridSlots, viewMode, lookups, resourceFilter]);
+
+  // Un diagnostic qui NOMME un gymnase masqué proposerait un focus vers une colonne
+  // inexistante — un clic qui vide l'écran (revue #342). Il sort avec son gymnase.
+  const diagnostics = useMemo(
+    () => (0 === disabledVenueIds.size ? allDiagnostics : allDiagnostics.filter((d) => null === d.venueId || !disabledVenueIds.has(d.venueId))),
+    [allDiagnostics, disabledVenueIds],
+  );
 
   // Clicking the solver's "unused_slot" warning brings its venue column on screen
   // (venue view, filtered to that venue) so the concerned `vide` cell is visible.

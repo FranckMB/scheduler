@@ -14,7 +14,7 @@ import { BlockerList } from "./BlockerList";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 
 import { SectionCountTitle, SummaryRow, TeamTierAccordion } from "./StructureSummary";
-import { useActiveTeams, useActiveVenues, useGridSlots, usePriorityTiers, useReservations, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags } from "../queries";
+import { useActiveTeams, useActiveVenues, useGridSlots, usePriorityTiers, useReservations, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { groupTeamsByTier } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
@@ -54,6 +54,7 @@ export function RecapStep() {
   const { teams, pausedIds, readFailed: teamsReadFailed } = useActiveTeams(layerPlanId);
   const { venues, readFailed: venuesReadFailed } = useActiveVenues(layerPlanId);
   const { data: allTeams = [] } = useWizardTeams();
+  const { data: allVenues = [] } = useWizardVenues();
   const { data: slots = [] } = useGridSlots(layerPlanId);
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   // Les réservations pendent au PLAN (inv. 5, lot C3) — les contraintes, elles, restent
@@ -82,8 +83,13 @@ export function RecapStep() {
   const hardConstraints = constraints.filter((c) => c.ruleType === "HARD").length;
   const slotsByVenue = countSlotsByVenue(slots);
 
-  const teamName = new Map(teams.map((t) => [t.id, t.name]));
-  const venueName = new Map(venues.map((v) => [v.id, v.name]));
+  // ⚠ NOMMER ≠ CHOISIR (revue #342). Les libellés se construisent sur les listes
+  // COMPLÈTES : une réservation ou une contrainte peut viser une équipe en pause ou un
+  // gymnase désactivé, et elle doit rester LISIBLE — sinon le récap affiche « ? » ou
+  // « undefined » précisément là où le gestionnaire doit comprendre quoi corriger.
+  // Les listes ACTIVES ne servent qu'aux compteurs et aux offres de choix.
+  const teamName = new Map(allTeams.map((t) => [t.id, t.name]));
+  const venueName = new Map(allVenues.map((v) => [v.id, v.name]));
   const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
   // Reservations ordered by team rank (fanion S → A → B → C → D), then day + time.
   const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
@@ -99,12 +105,14 @@ export function RecapStep() {
   // (coach→staffing, gymnase→venue, horaire/jours→axis) — same as each tab.
   const constraintFamilies = useMemo(() => {
     const ctx = {
-      teams,
+      // Groupement = NOMMAGE : une contrainte visant une équipe en pause doit rester
+      // listée (le compteur, lui, ne la compte pas). La filtrer la faisait disparaître.
+      teams: allTeams,
       tiers,
       tags,
       coaches,
       coachPlayerIds: new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId)),
-      venues,
+      venues: allVenues,
       coachName: (id: string) => coachName.get(id) ?? "Coach",
       venueName: (id: string) => venueName.get(id) ?? "Gymnase",
     };
@@ -142,7 +150,7 @@ export function RecapStep() {
 
       <div className="mb-4 flex flex-col gap-1.5">
         <AccordionSection title={<SectionCountTitle label="Équipes" count={teams.length} />}>
-          {0 === teams.length ? (
+          {0 === teams.length && 0 === pausedTeams.length ? (
             empty
           ) : (
             <TeamTierAccordion

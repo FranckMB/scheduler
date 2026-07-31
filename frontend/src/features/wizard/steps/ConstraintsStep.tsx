@@ -16,7 +16,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
 import { DAYS, dayLabel } from "../lib/days";
-import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useActiveVenues } from "../queries";
+import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useActiveVenues, useWizardVenues, useReservations } from "../queries";
 import { usePeriodAnchor } from "@/features/cockpit/queries";
 import { useWizardStore } from "../store";
 import { PeriodConstraints } from "./PeriodStructure";
@@ -88,6 +88,10 @@ export function ConstraintsStep() {
   // solveur : l'offrir ici invitait à un geste sans effet, et le récap devait ensuite
   // l'avertir. En mode socle, la liste est inchangée.
   const { venues, readFailed: venuesReadFailed } = useActiveVenues("period" === anchor.state ? anchor.planId : null);
+  const { data: allVenues = [] } = useWizardVenues();
+  // Les réservations de la couche courante, lues ici pour savoir quel gymnase désactivé
+  // doit rester atteignable (cf. `reservationVenues`). Même ancre que le panneau.
+  const { data: reservationsForPanel = [] } = useReservations("period" === anchor.state ? anchor.planId : null, true);
   const create = useCreateConstraint();
   const update = useUpdateConstraint();
   const del = useDeleteConstraint();
@@ -128,7 +132,17 @@ export function ConstraintsStep() {
   const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
   // Group the coach picker: Salariés, then Coachs-joueurs, then Bénévoles (batch item 1).
   const coachGroups = useMemo(() => groupedCoaches(coaches, new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId))), [coaches, coachPlayers]);
-  const venueName = new Map(venues.map((v) => [v.id, v.name]));
+  // NOMMER ≠ CHOISIR (revue #342) : le nom auto d'une contrainte et la ré-édition d'une
+  // contrainte existante visent parfois un gymnase désactivé — construire les libellés sur
+  // la liste filtrée y écrivait littéralement « undefined ».
+  const venueName = new Map(allVenues.map((v) => [v.id, v.name]));
+  // ⚠ ATTEINDRE ≠ CHOISIR (revue #342). Un gymnase désactivé qui porte ENCORE une
+  // réservation reste offert à l'écran « Réserver » — sinon le gestionnaire est PIÉGÉ :
+  // `OrphanPinGuard` refuse la génération à cause de cet épinglage (422 nommant le
+  // gymnase et le jour), et l'écran qui permet de l'enlever ne le montre plus.
+  // Le picker de CONTRAINTES, lui, reste filtré : rien n'y est bloquant.
+  const reservedVenueIds = new Set(reservationsForPanel.map((r) => r.venueId));
+  const reservationVenues = allVenues.filter((v) => venues.some((a) => a.id === v.id) || reservedVenueIds.has(v.id));
 
   // Resolve the target into scope + optional tag (CLUB+targetTag → N team constraints backend-side).
   const isTag = target.startsWith("tag:");
@@ -445,10 +459,10 @@ export function ConstraintsStep() {
             loadingLabel="Chargement du planning de la période…"
             errorLabel="Impossible de charger le planning de la période."
           >
-            {(schedulePlanId) => <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={schedulePlanId} />}
+            {(schedulePlanId) => <ReservationPanel teams={teams} tiers={tiers} venues={reservationVenues} schedulePlanId={schedulePlanId} />}
           </PeriodAnchorGate>
         ) : (
-          <ReservationPanel teams={teams} tiers={tiers} venues={venues} schedulePlanId={null} />
+          <ReservationPanel teams={teams} tiers={tiers} venues={reservationVenues} schedulePlanId={null} />
         )
       ) : (
         <>
