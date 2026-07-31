@@ -15,6 +15,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Service\ScheduleConstraintBuilder;
+use App\Service\TeamTagResolver;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -274,7 +275,10 @@ final class ScheduleConstraintBuilderTest extends TestCase
             [TeamTagAssignment::class, $this->teamTagAssignmentRepository],
         ]);
 
-        $this->builder = new ScheduleConstraintBuilder($this->logger, $this->entityManager);
+        // P2-14 : la résolution de tag vit dans TeamTagResolver (source unique) — le
+        // builder ne fait que déléguer. On lui passe un résolveur bâti sur le MÊME EM
+        // mocké : les attentes de repository ci-dessus restent le contrat testé.
+        $this->builder = new ScheduleConstraintBuilder($this->logger, $this->entityManager, null, null, new TeamTagResolver($this->entityManager, $this->logger));
     }
 
     private function team(string $id): Team
