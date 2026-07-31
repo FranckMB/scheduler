@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
   resCreate: vi.fn(),
   resDelete: vi.fn(),
   reservations: [] as { id: string; calendarEntryId: string | null; teamId: string; venueId: string; dayOfWeek: number; startTime: string; durationMinutes: number }[],
+  teamCoaches: [] as { id: string; teamId: string; coachId: string; role: string }[],
   tags: [] as { id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }[],
   tagAssignments: [] as { id: string; teamId: string; tagId: string; seasonId: string }[],
 }));
@@ -45,8 +46,12 @@ vi.mock("../queries", () => ({
   useUpdateConstraint: () => ({ mutate: h.updateMut, isPending: false }),
   useDeleteConstraint: () => ({ mutate: vi.fn() }),
   useReservations: () => ({ data: h.reservations }),
-  useCreateReservation: () => ({ mutate: h.resCreate, isPending: false }),
-  useDeleteReservation: () => ({ mutate: h.resDelete }),
+  // P2-9 PR C : la modale est transactionnelle (on compose, on valide) — elle appelle
+  // donc mutateAsync et non mutate, et lit le lien équipe→coach pour refuser au clic une
+  // affectation qui dédoublerait un coach.
+  useWizardTeamCoaches: () => ({ data: h.teamCoaches }),
+  useCreateReservation: () => ({ mutateAsync: h.resCreate, isPending: false }),
+  useDeleteReservation: () => ({ mutateAsync: h.resDelete, isPending: false }),
 }));
 
 // Contrat réel de usePeriodAnchor : sans entrée (mode saison) l'ancre est la BASE
@@ -425,6 +430,7 @@ describe("ConstraintsStep — Réserver tab (slot grid + modal)", () => {
     h.resCreate.mockClear();
     h.resDelete.mockClear();
     h.reservations = [];
+    h.teamCoaches = []; // sans ça le cas « coach déjà ailleurs » contaminerait les suivants
   });
 
   const openSlot = async (user: ReturnType<typeof userEvent.setup>) => {
@@ -440,6 +446,11 @@ describe("ConstraintsStep — Réserver tab (slot grid + modal)", () => {
     await openSlot(user);
     const remove = screen.getByRole("button", { name: "Retirer SM1" });
     await user.click(remove);
+    // Le retrait attend la validation lui aussi (décision fondateur) : une modale à
+    // moitié transactionnelle serait plus déroutante que les deux options pures.
+    expect(h.resDelete).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Valider" }));
     expect(h.resDelete).toHaveBeenCalledWith("r1");
   });
 
@@ -452,7 +463,40 @@ describe("ConstraintsStep — Réserver tab (slot grid + modal)", () => {
     await openSlot(user);
     // Picker is rank-ordered (Fanion=S before SM1=B); pick the fanion.
     await user.selectOptions(screen.getByLabelText("Ajouter une équipe"), "t2");
+    // P2-9 PR C : sélectionner ne réserve plus — la modale est transactionnelle, rien ne
+    // part avant « Valider ». C'est ce qui laisse le contrôle s'interposer entre le choix
+    // et l'écriture (décision fondateur : « le validator intervient au moment du ok »).
+    expect(h.resCreate).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Valider" }));
     expect(h.resCreate).toHaveBeenCalledWith(expect.objectContaining({ teamId: "t2", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, schedulePlanId: null }));
+  });
+
+  // P2-9 PR C — le cœur du lot : affecter une équipe dont le coach MAIN est déjà ailleurs
+  // à la même heure est une impossibilité PHYSIQUE que le solveur ne peut pas rattraper (un
+  // verrou HARD est pré-placé hors modèle). On le dit AU CLIC, avec le motif, plutôt que de
+  // laisser le récap refuser plus tard sans que le gestionnaire comprenne pourquoi.
+  it("refuse au clic une équipe dont le coach MAIN est déjà ailleurs, en disant pourquoi", async () => {
+    // SM1 (t1) est déjà réservée le même jour, à la même heure, dans un AUTRE gymnase (v2),
+    // et partage son coach MAIN avec Fanion (t2).
+    h.reservations = [{ id: "rx", calendarEntryId: null, teamId: "t1", venueId: "v2", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120 }];
+    h.teamCoaches = [
+      { id: "tc1", teamId: "t1", coachId: "c1", role: "MAIN" },
+      { id: "tc2", teamId: "t2", coachId: "c1", role: "MAIN" },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await openSlot(user);
+    await user.selectOptions(screen.getByLabelText("Ajouter une équipe"), "t2");
+
+    // Le message nomme l'équipe déjà coachée et l'heure : sans ça le gestionnaire sait
+    // qu'on refuse, pas ce qu'il doit changer.
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/SM1/);
+    expect(alert).toHaveTextContent(/20:30/);
+    // Et rien n'est mis au brouillon : « Valider » reste inerte.
+    expect(screen.getByRole("button", { name: "Valider" })).toBeDisabled();
   });
 
   it("hides a team that reached its sessionsPerWeek from the picker", async () => {

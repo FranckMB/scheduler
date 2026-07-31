@@ -6,7 +6,7 @@ import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 
 import type { PriorityTier, Team, Venue, VenueTrainingSlot } from "../api";
 import { reservedTeamsBySlot, effectiveSlotCapacity, slotKey } from "../lib/reservationSlots";
-import { useGridSlots, useReservations } from "../queries";
+import { useGridSlots, useReservations, useWizardTeamCoaches } from "../queries";
 import { ReservationGrid } from "./ReservationGrid";
 import { SlotReservationModal } from "./SlotReservationModal";
 
@@ -22,6 +22,9 @@ export function ReservationPanel({ teams, tiers, venues, schedulePlanId }: { tea
   // une réservation hors de la grille servie bloquerait la génération (#8).
   const { data: slots = [] } = useGridSlots(schedulePlanId);
   const { data: reservations = [] } = useReservations(schedulePlanId);
+  // P2-9 PR C : le lien équipe→coach permet à la modale de refuser au clic une affectation
+  // qui dédoublerait un coach — même règle que le blocage du récap (PR B).
+  const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const [venueId, setVenueId] = useState("");
   const [activeSlot, setActiveSlot] = useState<VenueTrainingSlot | null>(null);
 
@@ -78,6 +81,8 @@ export function ReservationPanel({ teams, tiers, venues, schedulePlanId }: { tea
           teams={teams}
           tiers={tiers}
           reservations={reservations}
+          teamCoaches={teamCoaches}
+          venues={venues}
           venueCanSplit={venueCanSplit}
           schedulePlanId={schedulePlanId}
           onClose={() => setActiveSlot(null)}
