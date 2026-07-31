@@ -406,6 +406,40 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         self::assertStringEndsWith('du 1er septembre 2026 au 30 septembre 2026', $name, 'la DATE survit — c\'est le gymnase qui est tronqué');
     }
 
+    /**
+     * NR P4-41 (revue #339 round 2) — `Schedule.name` n'est qu'une PHOTO du nom du plan prise
+     * à la création de la version. Les exports serveur (PDF, XLSX) la lisaient, tandis que
+     * l'écran lit le nom VIVANT : après un renommage, le coach recevait un fichier nommé
+     * « reprise-aout.pdf » dont la PAGE portait « Vacances d'été — … ». `displayNameOf` est la
+     * source unique qui ferme cet écart.
+     *
+     * PREUVE DE CHUTE : en lisant `Schedule::getName()`, l'assertion rend l'ancien nom.
+     */
+    public function testDisplayNameOfFollowsThePlanNotTheVersionsFrozenCopy(): void
+    {
+        $clubId = $this->seedClub();
+        $season = $this->makeSeason($clubId);
+        $entry = $this->makeClosureEntry($clubId, $season->getId());
+        $this->provisioner->provisionPeriodPlan($entry->getId());
+        $plan = $this->em->getRepository(SchedulePlan::class)->findOneBy(['calendarEntryId' => $entry->getId()]);
+        self::assertInstanceOf(SchedulePlan::class, $plan);
+
+        // Une version née avec le nom du plan, puis le gestionnaire renomme LE PLAN (inv. 12).
+        $version = (new Schedule)
+            ->setClubId($clubId)
+            ->setSeasonId($season->getId())
+            ->setName($plan->getName())
+            ->setStatus(ScheduleStatus::COMPLETED)
+            ->setSchedulePlanId($plan->getId());
+        $this->em->persist($version);
+        $this->em->flush();
+        $plan->setName('Reprise d\'été S1');
+        $this->em->flush();
+
+        self::assertSame('Reprise d\'été S1', $this->provisioner->displayNameOf($version));
+        self::assertNotSame($version->getName(), $this->provisioner->displayNameOf($version), 'la photo de la version est périmée — on ne la sert plus');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();

@@ -138,10 +138,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         // « Version de période », « Plan de période », « Planning {date} » — et le
         // premier ressortait tel quel dans la liste des plannings et le nom du PDF.
         if (null === $input->name) {
-            $planContext = $plan ?? $this->schedulePlanProvisioner->fetchPlanContext($resolvedPlanId);
-            // Plan introuvable ici = course avec un reset : la transaction plus bas
-            // échouera de toute façon (linkSchedule lève). On ne fabrique pas un nom.
-            $schedule->setName($planContext['name'] ?? 'Planning');
+            $schedule->setName($this->schedulePlanProvisioner->versionNameFor($resolvedPlanId));
         }
 
         // Atomic (like RegenerateController): the row and its version number commit

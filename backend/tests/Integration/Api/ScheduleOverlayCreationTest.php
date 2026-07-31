@@ -112,6 +112,28 @@ final class ScheduleOverlayCreationTest extends WebTestCase
         self::assertResponseStatusCodeSame(422);
     }
 
+    /**
+     * NR P4-41 (revue #339 round 2) — le contrat du PUT après l'assouplissement de `name` :
+     * ABSENT = INCHANGÉ (patron « absent = on garde », le même que les 4 champs alignés par
+     * P2-7a). Rien ne l'épinglait, alors que la contrainte `NotBlank` sec le refusait AVANT.
+     */
+    public function testAPutOmittingTheNameLeavesItUnchanged(): void
+    {
+        [$user, $club, $season] = $this->seed('OVP');
+        $entry = $this->period($club, $season, CalendarEntryPeriodType::HOLIDAY);
+        $this->post($user, $club, ['name' => 'Nom à garder', 'status' => 'DRAFT', 'schedulePlanId' => $this->planIdOf($entry)]);
+        self::assertResponseStatusCodeSame(201);
+        $id = json_decode((string) $this->client->getResponse()->getContent(), true)['id'];
+
+        $this->client->request('PUT', '/api/schedules/' . $id, [], [], [
+            ...$this->authHeaders($user, $club),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode(['status' => 'DRAFT'], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful();
+        self::assertSame('Nom à garder', json_decode((string) $this->client->getResponse()->getContent(), true)['name']);
+    }
+
     public function testHolidayOverlayAllowed(): void
     {
         [$user, $club, $season] = $this->seed('OV2');

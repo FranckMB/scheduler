@@ -213,17 +213,23 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // planning de la SAISON, et l'en-tête affichait son nom sur toutes les périodes.
   // `null` = plan pas encore résolu (collection en vol, ou plan absent) : l'appelant
   // dégrade, il ne devine pas.
-  // AUCUNE version affichée (club qui n'a jamais généré, ou liste encore en vol) = on est
-  // dans le contexte SAISON par défaut : le plan de saison reste le sujet de l'en-tête.
-  // Sans ce cas, un club sans version perdait le nom de son planning ET son stylo — il ne
-  // pouvait plus le nommer avant d'avoir généré (revue #339).
-  // ⚠ Ce repli ne vaut QUE pour « pas de version affichée ». Une version de PÉRIODE dont le
-  // plan n'est pas résolu rend `null`, jamais le plan de saison : c'est exactement la
-  // confusion que cette PR corrige.
+  // Le club n'a AUCUNE version : on est dans le contexte SAISON par défaut, le plan de
+  // saison reste le sujet de l'en-tête. Sans ce cas, un club qui n'a jamais généré perdait
+  // le nom de son planning ET son stylo — il ne pouvait plus le nommer (revue #339 round 1).
+  // ⚠ La condition porte sur « le club n'a aucune version » (`schedules.length`), PAS sur
+  // « aucune version RÉSOLUE » : entre deux refetch, la sélection du store peut ne pas se
+  // retrouver dans la liste, et un repli sur ce signal-là ré-armerait le plan de SAISON comme
+  // cible du stylo alors que le gestionnaire est sur une période — le bug d'origine, de retour
+  // par une porte transitoire (revue #339 round 2).
   const displayedPlan: { id: string; name: string } | null =
-    null === selectedSchedule || isSeasonPlanType(selectedSchedule.planType)
+    0 === schedules.length || (null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType))
       ? (me?.seasonPlan ?? null)
-      : ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule.schedulePlanId) ?? null);
+      : ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule?.schedulePlanId) ?? null);
+  // Le TITRE tolère un plan non encore résolu (collection en vol) : la photo `Schedule.name`
+  // porte le nom du plan à la création, donc un libellé juste dans l'immense majorité des cas
+  // — bien mieux que le générique « Planning ». Le STYLO, lui, reste conditionné au plan
+  // résolu : on ne propose pas un geste dont on n'a pas la cible.
+  const displayedPlanName = displayedPlan?.name ?? selectedSchedule?.name ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   // Read-only = its plan points at it: this version IS the calendar in force.
   const isReadOnly = true === selectedSchedule?.isChosen;
@@ -313,13 +319,13 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     return <FullPageSpinner />;
   }
 
-  const planningTitle = displayedPlan?.name ?? "Planning";
+  const planningTitle = displayedPlanName ?? "Planning";
   // Nom du fichier exporté = nom du PLAN affiché (retour fondateur 2026-07-18).
   // Il lisait `selectedSchedule.name`, c'est-à-dire le nom de la VERSION — que les
   // clients inventaient : le fichier remis aux coachs s'appelait « Version de période ».
   // Repli sur le nom de la version si le plan n'est pas encore résolu : un fichier au
   // nom imparfait vaut mieux qu'un « planning.xlsx » anonyme (revue #339).
-  const exportName = displayedPlan?.name ?? selectedSchedule?.name ?? null;
+  const exportName = displayedPlanName;
   const structureDiverged =
     null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType)
     && typeof selectedSchedule.generatedTeamCount === "number" && teams.length > 0
@@ -376,7 +382,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                 jamais pendant une génération en vol (la cascade emporterait la version
                 en cours de solve — revue B2 F3) → retour cockpit. */}
             {null !== overlayDeleteEntryId && workingSeason && !workingSeason.isReadonly && !isGenerating ? (
-              <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} schedulePlanId={selectedSchedule?.schedulePlanId ?? null} title={displayedPlan?.name ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
+              <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} schedulePlanId={selectedSchedule?.schedulePlanId ?? null} title={displayedPlanName ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
             ) : null}
           </>
         )}

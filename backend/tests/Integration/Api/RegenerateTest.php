@@ -70,6 +70,32 @@ final class RegenerateTest extends WebTestCase
         self::assertCount(2, $this->em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $source->getId()]));
     }
 
+    /**
+     * NR P4-41 (revue #339 round 2) — ADR-0002 inv. 12 : le nom vit sur LE PLAN. Régénérer
+     * produit une V+1 du MÊME plan, la nouvelle version en porte donc le nom. Ce site
+     * fabriquait « Planning {date-heure} » : un QUATRIÈME libellé inventé pour le même objet,
+     * alors que la création par POST venait d'être alignée sur le plan.
+     *
+     * PREUVE DE CHUTE : sans le correctif le nom vaut « Planning 2026-07-31 15:47 ».
+     */
+    public function testTheRegeneratedVersionIsNamedAfterItsPlanNotTheClock(): void
+    {
+        $source = $this->seedSchedule(ScheduleStatus::COMPLETED);
+        $this->em->flush();
+        $planName = (string) $this->em->getConnection()->fetchOne(
+            'SELECT name FROM schedule_plan WHERE id = :id',
+            ['id' => $source->getSchedulePlanId()],
+        );
+        self::assertNotSame('', $planName);
+
+        $this->post($source->getId());
+        self::assertResponseStatusCodeSame(202);
+        $newId = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR)['id'];
+
+        $this->em->clear();
+        self::assertSame($planName, $this->em->getRepository(Schedule::class)->find($newId)?->getName());
+    }
+
     public function testTheChosenVersionIsRefused(): void
     {
         $source = $this->seedSchedule(ScheduleStatus::COMPLETED);

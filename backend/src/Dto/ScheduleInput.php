@@ -17,6 +17,7 @@ class ScheduleInput
      * devient légitime, ce qui laisse le serveur être le seul à nommer.
      */
     #[Assert\NotBlank(allowNull: true)]
+    #[Assert\Length(max: 180)]
     #[Groups(['write'])]
     public ?string $name = null;
 

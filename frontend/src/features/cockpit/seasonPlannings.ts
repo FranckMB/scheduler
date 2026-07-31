@@ -101,17 +101,15 @@ export function seasonPlannings(schedules: Schedule[], seasonPlanName: string | 
       });
     }
   }
-  // Tri CHRONOLOGIQUE, pas alphabétique. Le libellé porte désormais une date en toutes
-  // lettres (« Semaine du 6 juillet 2026 ») : trier dessus listait 10 août avant 13 juillet
-  // avant 3 août — les semaines d'une période découpée sortaient mélangées. `startDate` est
-  // une date ISO, donc comparable telle quelle. Repli sur le libellé quand la date manque
-  // (plans non chargés), pour garder un ordre stable plutôt qu'aucun.
-  periods.sort((a, b) => {
-    if (null !== a.startDate && null !== b.startDate && a.startDate !== b.startDate) {
-      return a.startDate.localeCompare(b.startDate);
-    }
-    return a.label.localeCompare(b.label);
-  });
+  // Tri CHRONOLOGIQUE, jamais alphabétique. Les libellés portent une date en toutes lettres
+  // (« Semaine du 6 juillet 2026 ») : les comparer listait 10 août avant 13 juillet avant
+  // 3 août. `startDate` est une date ISO, comparable telle quelle.
+  // ⚠ Le repli NE retombe PAS sur le libellé : les plans ne sont pas toujours chargés (query
+  // en vol ou en erreur), et depuis que les versions héritent du nom de leur plan, comparer
+  // les libellés dans cet état reproduirait exactement le désordre qu'on vient de corriger
+  // (revue #339 round 2). Une date absente trie en tête, à égalité entre elles — `Array.sort`
+  // étant stable, ces lignes gardent leur ordre d'arrivée au lieu d'en recevoir un faux.
+  periods.sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? ""));
 
   return [...rows, ...periods];
 }

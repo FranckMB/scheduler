@@ -412,6 +412,35 @@ final class SchedulePlanProvisioner
     }
 
     /**
+     * ADR-0002 inv. 12 — LE nom d'un planning, vu depuis une de ses versions : celui de son
+     * PLAN, toujours. SOURCE UNIQUE de la règle et de son repli.
+     *
+     * `Schedule.name` n'est qu'une PHOTO prise à la création de la version : elle se périme
+     * dès que le gestionnaire renomme le plan, ou dès que `refreshClosurePlanName` y pose le
+     * gymnase. La lire pour afficher, exporter ou nommer un fichier fait diverger le document
+     * remis aux coachs du nom que l'écran affiche (constaté en revue #339 round 2 : le PDF
+     * portait « Vacances d'été — … » dans un fichier nommé « reprise-aout.pdf »).
+     *
+     * Repli sur la photo si le plan a disparu — un export doit rendre un document, pas une erreur.
+     */
+    public function displayNameOf(Schedule $schedule): string
+    {
+        $plan = $this->fetchPlanContext($schedule->getSchedulePlanId());
+
+        return $plan['name'] ?? $schedule->getName();
+    }
+
+    /**
+     * Le nom qu'une NOUVELLE version doit porter : celui de son plan. Les deux sites de
+     * création (POST et Régénérer) l'appellent — la règle et son littéral de repli ne vivent
+     * qu'ici, avec tous les autres noms de plan.
+     */
+    public function versionNameFor(string $schedulePlanId): string
+    {
+        return $this->fetchPlanContext($schedulePlanId)['name'] ?? 'Planning';
+    }
+
+    /**
      * ADR-0002 C4 — LA SEULE VÉRITÉ du « est-ce le socle ? » : plan.type === SEASON.
      * Remplace le doublon d'ancre nullable `null === schedule.calendarEntryId`.
      *

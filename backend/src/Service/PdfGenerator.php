@@ -37,6 +37,7 @@ class PdfGenerator
         private readonly EntityManagerInterface $entityManager,
         private readonly HttpClientInterface $httpClient,
         private readonly ScheduleExportDataProvider $exportData,
+        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
     ) {}
 
     /**
@@ -143,13 +144,17 @@ class PdfGenerator
         $header = $this->buildHeader($columns, $venues);
 
         $scopeLabel = null === $venueId ? 'Tous les gymnases' : ($venues[$venueId]['name'] ?? 'Gymnase');
-        $title = htmlspecialchars($club?->getName() ?? $schedule->getName());
+        // ADR-0002 inv. 12 : le nom VIVANT du plan, jamais la photo `Schedule.name` prise à
+        // la création de la version — sinon le document remis aux coachs contredit le nom que
+        // l'écran affiche et celui du fichier qui le porte (revue #339 round 2).
+        $planningName = $this->schedulePlanProvisioner->displayNameOf($schedule);
+        $title = htmlspecialchars($club?->getName() ?? $planningName);
 
         $body = [] === $columns
             ? '<p class="empty">Aucun créneau planifié.</p>'
             : \sprintf('<table><thead>%s</thead><tbody>%s</tbody></table>', $header, $rows);
 
-        return $this->wrapDocument($title, htmlspecialchars($scopeLabel), htmlspecialchars($schedule->getName()), $body);
+        return $this->wrapDocument($title, htmlspecialchars($scopeLabel), htmlspecialchars($planningName), $body);
     }
 
     /**
