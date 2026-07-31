@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
+use App\Entity\Reservation;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
@@ -18,6 +19,7 @@ use App\Repository\CalendarEntryRepository;
 use App\Repository\ConstraintRepository;
 use App\Repository\TeamRepository;
 use App\Repository\VenueRepository;
+use App\Service\CoachDoubleBookingDetector;
 use App\Service\ConstraintValidationService;
 use App\Service\ManagementAccessGuard;
 use App\Service\ScheduleConstraintBuilder;
@@ -49,6 +51,7 @@ final class ValidateConstraintsController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly VenueRepository $venueRepository,
+        private readonly CoachDoubleBookingDetector $coachDoubleBookingDetector,
     ) {}
 
     #[Route('/api/constraints/validate', name: 'api_constraints_validate', methods: ['POST'])]
@@ -115,13 +118,23 @@ final class ValidateConstraintsController extends AbstractController
             $this->validationService->detectConflicts($constraints),
         );
 
+        // P2-9 PR B — IMPOSSIBILITÉ PHYSIQUE : un verrou qui met un coach à deux endroits
+        // en même temps. Le solveur ne peut PAS l'attraper (un verrou HARD est pré-placé
+        // hors modèle, ALIGN-07), et ce n'est pas une préférence bafouée — le gestionnaire
+        // n'a jamais choisi que son coach se dédouble. Décision fondateur : ça BLOQUE.
+        $blockers = array_map(
+            fn (array $conflict): string => $this->coachDoubleBookingDetector->describeForRecap($conflict),
+            $this->coachDoubleBookingDetector->detect($this->reservationsInScope($clubId, $seasonId, $calendarEntryId), $clubId, $seasonId),
+        );
+
         // #8 (fondateur 2026-07-24) — un avertissement n'invalide RIEN : « SM1 va ailleurs,
         // on ignore la contrainte, mais on AVERTIT ». `valid` et le code HTTP restent
-        // calculés sur les seules erreurs et conflits.
-        $valid = [] === $errors && [] === $conflicts;
+        // calculés sur les seules erreurs et conflits… et désormais les bloqueurs, qui
+        // sont l'exact contraire d'un avertissement.
+        $valid = [] === $errors && [] === $conflicts && [] === $blockers;
 
         return $this->json(
-            ['valid' => $valid, 'errors' => $errors, 'conflicts' => $conflicts, 'warnings' => $warnings],
+            ['valid' => $valid, 'errors' => $errors, 'conflicts' => $conflicts, 'warnings' => $warnings, 'blockers' => $blockers],
             $valid ? Response::HTTP_OK : Response::HTTP_UNPROCESSABLE_ENTITY,
         );
     }
@@ -229,6 +242,43 @@ final class ValidateConstraintsController extends AbstractController
     /**
      * Gymnases DÉSACTIVÉS pour ce plan de période (sparse : pas de ligne = le gymnase sert).
      *
+     * @return array<string, true>
+     */
+    /**
+     * Les réservations qui partiront RÉELLEMENT au solveur — le même périmètre que
+     * `ScheduleConstraintBuilder`, jamais un autre : le socle ne lit que les siennes
+     * (`schedulePlanId IS NULL`) et une période que les siennes, gymnases désactivés
+     * retirés. Mélanger les deux inventerait des conflits entre mondes disjoints ;
+     * bloquer sur une réservation qui ne part pas au solveur enfermerait le
+     * gestionnaire sur un problème qui n'existe pas.
+     *
+     * @return list<Reservation>
+     */
+    private function reservationsInScope(string $clubId, string $seasonId, ?string $calendarEntryId): array
+    {
+        $repository = $this->entityManager->getRepository(Reservation::class);
+
+        if (null === $calendarEntryId) {
+            return $repository->findBy(
+                ['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null],
+                ['id' => 'ASC'],
+            );
+        }
+
+        $schedulePlanId = $this->schedulePlanProvisioner->periodPlanId($calendarEntryId);
+        if (null === $schedulePlanId) {
+            return []; // période sans plan : rien ne partira au solveur
+        }
+
+        $disabledVenueIds = $this->disabledVenueIds($schedulePlanId);
+
+        return array_values(array_filter(
+            $repository->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
+            static fn (Reservation $reservation): bool => !isset($disabledVenueIds[$reservation->getVenueId()]),
+        ));
+    }
+
+    /**
      * @return array<string, true>
      */
     private function disabledVenueIds(string $schedulePlanId): array

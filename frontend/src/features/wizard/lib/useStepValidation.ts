@@ -233,6 +233,10 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
       for (const conflict of constraintValidation.conflicts) {
         errors.push(humanizeConstraintError(conflict.reason));
       }
+      // P2-9 PR B — impossibilités physiques (un coach à deux endroits en même temps).
+      // Déjà formulées par le serveur, avec le gymnase et l'heure : pas de humanize, il
+      // effacerait l'information qui dit QUELLE réservation retirer.
+      errors.push(...(constraintValidation.blockers ?? []));
     }
     // Until the pre-solve check resolves, report pending so the generate gate
     // stays closed rather than briefly allowing a launch on an invalid setup.
