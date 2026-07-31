@@ -24,6 +24,26 @@ final class RlsIsolationTest extends KernelTestCase
     private const CLUB_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     private const CLUB_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
+    /**
+     * SQL prédicat identifiant les tables portant une colonne club_id, PARTAGÉ par
+     * les deux tests de portée RLS (SEC-12 #4 : une seule source d'énumération,
+     * sinon un correctif appliqué d'un côté laisse l'autre aveugle). Suppose les
+     * alias `c` (pg_class) et `n` (pg_namespace) en portée.
+     *
+     * relkind IN ('r', 'p') : table ORDINAIRE + table PARTITIONNÉE parente — cette
+     * dernière porte les policies héritées par ses enfants. Les VUES ('v'/'m')
+     * n'ont PAS de RLS propre (la RLS s'applique aux tables sous-jacentes) : ne pas
+     * les inclure ici, ce n'est pas un oubli.
+     */
+    private const CLUB_ID_TABLE_PREDICATE = <<<'SQL'
+        n.nspname = 'public'
+        AND c.relkind IN ('r', 'p')
+        AND EXISTS (
+            SELECT 1 FROM pg_attribute a
+            WHERE a.attrelid = c.oid AND a.attname = 'club_id' AND NOT a.attisdropped
+        )
+        SQL;
+
     private Connection $connection;
 
     private TenantConnectionContext $guc;
@@ -43,23 +63,17 @@ final class RlsIsolationTest extends KernelTestCase
     {
         // Coverage guard: the migration hardcodes the table list — a future
         // migration adding a club_id table without RLS would silently open a
-        // tenant hole. Enumerate club_id tables dynamically and require
-        // ENABLE + FORCE + at least one policy on each.
+        // tenant hole. Enumerate club_id tables dynamically (shared predicate,
+        // SEC-12 #4) and require ENABLE + FORCE + at least one policy on each.
         /** @var list<array<string, mixed>> $rows */
-        $rows = $this->connection->fetchAllAssociative(<<<'SQL'
-            SELECT c.relname AS table_name,
-                   c.relrowsecurity AS rls_enabled,
-                   c.relforcerowsecurity AS rls_forced,
-                   (SELECT count(*) FROM pg_policies p WHERE p.schemaname = 'public' AND p.tablename = c.relname) AS policies
-            FROM pg_class c
-            JOIN pg_namespace n ON n.oid = c.relnamespace
-            WHERE n.nspname = 'public'
-              AND c.relkind = 'r'
-              AND EXISTS (
-                  SELECT 1 FROM pg_attribute a
-                  WHERE a.attrelid = c.oid AND a.attname = 'club_id' AND NOT a.attisdropped
-              )
-            SQL);
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT c.relname AS table_name, '
+            . 'c.relrowsecurity AS rls_enabled, '
+            . 'c.relforcerowsecurity AS rls_forced, '
+            . '(SELECT count(*) FROM pg_policies p WHERE p.schemaname = \'public\' AND p.tablename = c.relname) AS policies '
+            . 'FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace '
+            . 'WHERE ' . self::CLUB_ID_TABLE_PREDICATE,
+        );
 
         self::assertNotEmpty($rows, 'expected club_id tables to exist');
         foreach ($rows as $row) {
@@ -95,17 +109,27 @@ final class RlsIsolationTest extends KernelTestCase
         self::assertIsString($canon, 'canon policy team_tag.tenant_isolation must exist');
         self::assertNotSame('', $canon, 'canon predicate must not be empty — sinon le test se compare à du néant');
         self::assertNotSame('true', $canon, 'canon predicate must not be USING (true) — sinon le test ne prouve plus rien');
+        // Le canon doit RÉELLEMENT scoper sur le GUC. Sans ça il pourrait dégénérer
+        // en un prédicat permissif autre que le littéral 'true' (1=1,
+        // club_id IS NOT NULL, …) et tout deviendrait « conforme » à du vide.
+        self::assertStringContainsString('current_setting', $canon, 'canon must reference the GUC via current_setting — sinon il a dégénéré');
+        self::assertStringContainsString('app.club_id', $canon, 'canon must key on the app.club_id GUC');
 
-        // D2 : allowlist en paires (table, commande) dont le SELECT ouvert (USING true)
-        // est DÉLIBÉRÉ et JUSTIFIÉ. Ces tables restent soumises au canon pour
-        // INSERT/UPDATE/DELETE (vérifié automatiquement par le balayage ci-dessous).
+        // Dérogations indexées sur table.policyname.cmd (SEC-12 : la clé DOIT porter
+        // le nom de la policy — sinon une policy pirate USING (true) partageant la
+        // paire table.cmd d'une entrée légitime emprunterait sa branche et
+        // consommerait son entrée, neutralisant à la fois la garde ET la
+        // bidirectionnalité). Une policy au nom inattendu tombe donc dans le fail.
+
+        // D2 : SELECT ouvert (USING true) DÉLIBÉRÉ et JUSTIFIÉ. Ces tables restent
+        // soumises au canon pour INSERT/UPDATE/DELETE (vérifié par le balayage).
         $openSelectAllowlist = [
             // Bootstrap du tenant depuis les memberships AVANT de connaître le club
             // (listener, register, /api/me) → SELECT ouvert requis.
-            'club_user.SELECT' => 'true',
+            'club_user.club_user_read.SELECT' => 'true',
             // Route publique sans JWT : le token porte le club, il faut le lire AVANT
             // de poser le GUC app.club_id → SELECT ouvert requis.
-            'coach_wish_token.SELECT' => 'true',
+            'coach_wish_token.coach_wish_token_read.SELECT' => 'true',
         ];
 
         // D4 : audit_log INSERT n'est PAS ouvert mais s'écarte du canon par FORME —
@@ -114,25 +138,19 @@ final class RlsIsolationTest extends KernelTestCase
         // policy UPDATE/DELETE sur audit_log ne demande rien : sous FORCE, pas de
         // policy = deny (append-only tenu par la base).
         $insertPredicateOverrides = [
-            'audit_log.INSERT' => \sprintf('((club_id IS NULL) OR %s)', $canon),
+            'audit_log.audit_log_insert.INSERT' => \sprintf('((club_id IS NULL) OR %s)', $canon),
         ];
 
-        // D6 : réutilise l'énumération dynamique des tables portant club_id (cf.
-        // testEveryClubIdTableIsUnderForcedRls), jointe à pg_policies.
+        // D6 / SEC-12 #4 : même énumération des tables club_id que le test FORCE
+        // (constante partagée), jointe à pg_policies.
         /** @var list<array<string, mixed>> $rows */
-        $rows = $this->connection->fetchAllAssociative(<<<'SQL'
-            SELECT c.relname AS table_name, p.policyname, p.cmd, p.qual, p.with_check, p.permissive
-            FROM pg_class c
-            JOIN pg_namespace n ON n.oid = c.relnamespace
-            JOIN pg_policies p ON p.schemaname = 'public' AND p.tablename = c.relname
-            WHERE n.nspname = 'public'
-              AND c.relkind = 'r'
-              AND EXISTS (
-                  SELECT 1 FROM pg_attribute a
-                  WHERE a.attrelid = c.oid AND a.attname = 'club_id' AND NOT a.attisdropped
-              )
-            ORDER BY c.relname, p.policyname
-            SQL);
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT c.relname AS table_name, p.policyname, p.cmd, p.qual, p.with_check, p.permissive '
+            . 'FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace '
+            . 'JOIN pg_policies p ON p.schemaname = \'public\' AND p.tablename = c.relname '
+            . 'WHERE ' . self::CLUB_ID_TABLE_PREDICATE
+            . ' ORDER BY c.relname, p.policyname',
+        );
         self::assertNotEmpty($rows, 'expected policies on club_id tables');
 
         $consumedAllowlist = [];
@@ -148,12 +166,12 @@ final class RlsIsolationTest extends KernelTestCase
             // Une policy RESTRICTIVE ne fait que RESTREINDRE (sémantique ET) : elle ne
             // peut pas ouvrir une table. Seules les policies PERMISSIVE participent au
             // OU qui peut accorder l'accès — ce sont elles qu'on juge. (Aucune
-            // restrictive aujourd'hui ; garde défensive, cf. le OU permissif de D0.)
+            // restrictive aujourd'hui ; garde défensive.)
             if ('PERMISSIVE' !== (string) $row['permissive']) {
                 continue;
             }
 
-            $key = $table . '.' . $cmd;
+            $key = $table . '.' . $policy . '.' . $cmd;
             $where = \sprintf('%s.%s (%s)', $table, $policy, $cmd);
 
             // Tenant-scopée contre le canon → correct, rien de plus à vérifier. On
@@ -166,7 +184,12 @@ final class RlsIsolationTest extends KernelTestCase
             }
 
             // À partir d'ici la policy S'ÉCARTE du canon → acceptable UNIQUEMENT si
-            // explicitement justifiée. D4 : override de FORME sur audit_log INSERT.
+            // explicitement justifiée. Chaque branche vérifie les DEUX moitiés du
+            // prédicat (USING et WITH CHECK) : la moitié non concernée doit être
+            // explicitement vide, sinon une future dérogation ALL/UPDATE verrait sa
+            // seconde moitié ignorée en silence (SEC-12 #3).
+
+            // D4 : override de FORME sur l'INSERT (with_check porté, qual NULL).
             if (isset($insertPredicateOverrides[$key])) {
                 self::assertSame(
                     $insertPredicateOverrides[$key],
@@ -177,6 +200,11 @@ final class RlsIsolationTest extends KernelTestCase
                         $insertPredicateOverrides[$key],
                         '' === $withCheck ? '<none>' : $withCheck,
                     ),
+                );
+                self::assertSame(
+                    '',
+                    $qual,
+                    \sprintf('%s : dérogation INSERT mais USING non vide (%s) — la seconde moitié du prédicat échapperait au contrôle.', $where, $qual),
                 );
                 $consumedOverrides[$key] = true;
 
@@ -195,12 +223,17 @@ final class RlsIsolationTest extends KernelTestCase
                         $openSelectAllowlist[$key],
                     ),
                 );
+                self::assertSame(
+                    '',
+                    $withCheck,
+                    \sprintf('%s : dérogation SELECT ouvert mais WITH CHECK non vide (%s) — la seconde moitié du prédicat échapperait au contrôle.', $where, $withCheck),
+                );
                 $consumedAllowlist[$key] = true;
 
                 continue;
             }
 
-            // Écart non justifié → la fuite que D0 garde.
+            // Écart non justifié → la fuite que ce test garde.
             self::fail(\sprintf(
                 '%s N\'EST PAS tenant-scopée : USING=%s WITH CHECK=%s, canon attendu %s. Une policy permissive hors-canon OUVRE la table (PostgreSQL fait un OU entre policies permissives). Correctif : scoper au GUC app.club_id, ou ajouter une dérogation JUSTIFIÉE dans ce test.',
                 $where,
@@ -212,7 +245,8 @@ final class RlsIsolationTest extends KernelTestCase
 
         // D3 : allowlist BIDIRECTIONNELLE — une entrée qui n'a été consommée par
         // aucune policy réellement ouverte est périmée (le durcissement a été fait,
-        // ou la table a disparu). Une allowlist qui ne peut pas se périmer ment.
+        // ou la table/policy a disparu ou été renommée). Une allowlist qui ne peut
+        // pas se périmer ment.
         foreach (array_keys($openSelectAllowlist) as $key) {
             self::assertArrayHasKey(
                 $key,
