@@ -370,6 +370,12 @@ final class ScheduleConstraintBuilder
             // absent du payload. Un verrou ORPHELIN (plus aucun créneau à cet horaire) est,
             // lui, une ERREUR annoncée AVANT la génération (GenerateScheduleController) —
             // on ne l'escamote pas en silence.
+            // ⚠ Court-circuit d'INTENTION et d'économie, pas une branche de comportement :
+            // `scheduleId` est NOT NULL sur l'entité, donc `findBy(['scheduleId' => null])`
+            // rendrait `[]` de toute façon. Le retirer ne changerait aucun résultat — il
+            // évite une requête inutile à chaque appel pré-génération et dit au lecteur
+            // que « pas de version » n'est pas un cas dégradé. Aucun test ne peut donc le
+            // faire tomber : ne pas en écrire un qui prétendrait le contraire.
             slotTemplates: null === $scheduleId ? [] : array_values(array_filter(
                 $em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $scheduleId], ['id' => 'ASC']),
                 static fn (ScheduleSlotTemplate $template): bool => !isset($disabledVenueIds[$template->getVenueId()]),
@@ -673,8 +679,10 @@ final class ScheduleConstraintBuilder
         }
         // P2-9ter — LECTURE SEULE. Les tags sont LUS ici, jamais resynchronisés : c'est
         // `TeamTagSyncListener` (postPersist/postUpdate sur Team, resync au postFlush) qui
-        // les maintient au write-path, et `determineTagNames` ne dérive que du
-        // `sportCategoryId` — tout changement de tag passe donc par un update de Team.
+        // les maintient au write-path. `determineTagNames` dérive des champs de l'équipe
+        // — sa `SportCategory`, son genre et son niveau — donc tout changement de tag
+        // passe par un update de `Team`… SAUF l'édition de la `SportCategory` elle-même,
+        // que le listener n'écoute pas (dette inscrite en roadmap, ligne `team_tags`).
         // ⚠ L'appel à `syncTeamTags` qui vivait ici SUPPRIMAIT puis recréait les
         // assignations avec un flush INTERMÉDIAIRE (TeamTagService : le flush de
         // getOrCreateSystemTags commit les remove, les persist restent en attente). La
@@ -683,10 +691,14 @@ final class ScheduleConstraintBuilder
         // assignations. Et sans flush ultérieur (le récap n'en fait aucun), les
         // suppressions restaient définitives — la perte de données de la 3e tentative.
         if ($this->entityManager instanceof EntityManagerInterface) {
+            // ORDER BY explicite : `snapshotHash` et `currentStructureHash` sont deux
+            // sha256 du payload sérialisé. Un ordre de lignes livré au hasard par
+            // PostgreSQL ferait diverger les deux hash sans qu'aucune structure n'ait
+            // bougé — et rallumerait « Régénérer » tout seul.
             $tagAssignments = $this->entityManager->getRepository(TeamTagAssignment::class)->findBy([
                 'teamId' => $team->getId(),
                 'seasonId' => $seasonId,
-            ]);
+            ], ['id' => 'ASC']);
 
             foreach ($tagAssignments as $assignment) {
                 $tag = $this->entityManager->getRepository(TeamTag::class)->find($assignment->getTagId());

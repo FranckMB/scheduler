@@ -25,6 +25,7 @@ use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Enum\Gender;
 use App\Enum\ScheduleStatus;
 use App\Enum\VenuePeriodMode;
 use App\Service\ScheduleConstraintBuilder;
@@ -52,6 +53,8 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
     use TenantGucTrait;
 
     private const VENUE_CLOSED = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+    private const VENUE_OPEN = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
     private EntityManagerInterface $em;
 
@@ -458,6 +461,32 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
     }
 
     /**
+     * P2-9ter NR-1bis — le write-path écrit VRAIMENT les tags.
+     *
+     * ⚠ Ce test est le pendant obligatoire de NR-1. Rendre le build en lecture seule
+     * fait de `TeamTagSyncListener` le SEUL writer des `TeamTagAssignment` : si ce
+     * listener n'écrit pas, plus aucune équipe n'a de tags et toute contrainte CLUB
+     * ciblant un tag cesse silencieusement de viser qui que ce soit (axe constraint
+     * semantics). Le défaut existait réellement — `syncTeamTags` ne flushe pas ses
+     * `persist`, et en `postFlush` le flush appelant est déjà terminé : créer une équipe
+     * produisait 21 `team_tag` et 0 `team_tag_assignment`. Il était masqué parce que le
+     * builder rappelait `syncTeamTags` à chaque génération.
+     */
+    public function testCreatingATeamActuallyWritesItsTagAssignments(): void
+    {
+        [$club, $season] = $this->seed();
+        $team = $this->team($club, $season, 'U13F');
+        $team->setGender(Gender::F);
+        $this->em->flush();
+
+        self::assertNotSame(
+            [],
+            $this->assignmentIdsOf($team->getId(), $season->getId()),
+            'créer une équipe doit lui poser ses tags système — sinon le build en lecture seule n’a plus rien à lire',
+        );
+    }
+
+    /**
      * P2-9ter NR-2 — le chemin scalaire et `buildForOverlay` sont UNE SEULE source.
      *
      * C'est la garantie qui manquait : trois tentatives ont recopié à la main ce que le
@@ -475,10 +504,14 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $this->venue($club, $season, self::VENUE_CLOSED, 'Gym désactivé');
         $this->venueMode($club, $season, $entry, self::VENUE_CLOSED, VenuePeriodMode::DISABLED);
         $this->venueSlot($club, $season, self::VENUE_CLOSED, null, 2);
+        // Un gymnase ACTIF, pour y poser le verrou de version. ⚠ Le poser sur
+        // VENUE_CLOSED (désactivé juste au-dessus) le ferait filtrer par
+        // `disabledVenueIds` : les deux `slotTemplates` seraient vides et l'assertion du
+        // court-circuit `scheduleId null` serait satisfaite POUR UNE AUTRE RAISON.
+        $this->venue($club, $season, self::VENUE_OPEN, 'Gym actif');
+        $this->venueSlot($club, $season, self::VENUE_OPEN, null, 2);
         $schedule = $this->overlaySchedule($club, $season, $entry);
-        // Un verrou porté par CETTE version : sans lui, l'assertion sur `slotTemplates`
-        // comparerait deux tableaux vides et ne garderait rien.
-        $this->slot($schedule, self::VENUE_CLOSED);
+        $this->slot($schedule, self::VENUE_OPEN);
         $this->em->flush();
 
         $viaSchedule = $this->builder->buildForOverlay($schedule, $entry);
@@ -503,6 +536,13 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
             $entry,
             $schedule->getSolverSeed(),
         );
+        // Garde réelle : le verrou DOIT survivre au filtre gymnases quand on passe un
+        // scheduleId. C'est CETTE assertion qui a du mordant — la poser sur un gymnase
+        // désactivé (première version de ce test) donnait deux tableaux vides et une
+        // comparaison satisfaite pour une tout autre raison.
+        self::assertCount(1, $viaScalars['slotTemplates'] ?? [], 'le verrou de version doit survivre au filtre gymnases');
+        // Celle-ci DOCUMENTE le mode pré-génération sans pouvoir tomber : `scheduleId`
+        // étant NOT NULL sur l'entité, la requête rendrait `[]` même sans court-circuit.
         self::assertSame([], $preGeneration['slotTemplates'] ?? null, 'pas de version ⇒ pas de verrou de version');
 
         unset($viaScalars['slotTemplates'], $preGeneration['slotTemplates']);
@@ -544,6 +584,20 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertSame($seasonB->getId(), $payloadB['seasonId'] ?? null, 'la 2e saison ne doit pas resservir le payload de la 1re');
         self::assertCount(1, $payloadA['teams'] ?? [], 'saison A : une équipe');
         self::assertCount(2, $payloadB['teams'] ?? [], 'saison B : deux équipes');
+
+        // Le BUILDER doit taguer ce qu'il écrit — sinon `CacheInvalidationListener`, qui
+        // ne purge plus que par tag, ne pourrait plus rien invalider et tous les tests
+        // resteraient verts. NR-4 pose les tags à la main : lui ne garde que le listener.
+        self::assertTrue($pool->hasItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $seasonA->getId())), 'garde : le build doit avoir peuplé le cache');
+        $pool->invalidateTags([ScheduleConstraintBuilder::cacheTag($club->getId())]);
+        self::assertFalse(
+            $pool->hasItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $seasonA->getId())),
+            'les entrées écrites par le builder doivent porter le tag du club',
+        );
+        self::assertFalse(
+            $pool->hasItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $seasonB->getId())),
+            'toutes les saisons du club partent avec le tag',
+        );
     }
 
     public function testRepriseDropsTagExpandedRowForPausedTeam(): void

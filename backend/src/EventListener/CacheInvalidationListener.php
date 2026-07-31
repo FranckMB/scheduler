@@ -93,6 +93,12 @@ class CacheInvalidationListener
         $this->pendingInvalidations[$clubId] = [
             \sprintf('club.%s.tenant_data', $clubId),
             \sprintf('club.%s.schedule_snapshot', $clubId),
+            // TRANSITION DE DÉPLOIEMENT — l'ANCIENNE clé du payload (sans saison, écrite
+            // par le code d'avant P2-9ter). Elle n'est plus produite, mais des entrées
+            // survivent jusqu'à 4 h (TTL) : sans ce purge, un conteneur encore sur
+            // l'ancien code (déploiement en cours, ou rollback) servirait un payload
+            // périmé que plus rien n'invaliderait. Supprimable un déploiement plus tard.
+            \sprintf('club.%s.schedule_input', $clubId),
         ];
     }
 
