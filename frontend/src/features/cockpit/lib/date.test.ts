@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addDays, mondayOf, periodAdjustWeeks, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
+import { addDays, isUpcomingWeek, mondayOf, periodAdjustWeeks, upcomingWeeks, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
 
 describe("cockpit date utils", () => {
   it("builds a 42-cell Monday-first grid", () => {
@@ -121,5 +121,46 @@ describe("periodAdjustWeeks — vacances démarrant Ven/Sam/Dim (PR C)", () => {
     expect(periodAdjustWeeks("2026-08-07", "2026-08-25", boundarySeason, "holiday")).toEqual(
       weeksCovering("2026-08-07", "2026-08-25", boundarySeason),
     );
+  });
+});
+
+/**
+ * P3-13 — « on écarte les semaines passées ET les semaines en cours. Le radar c'est pour
+ * gérer les tâches à venir » (fondateur 2026-08-01). Règle PURE : les écrans qui la
+ * consomment mockent leurs hooks, seul ce fichier peut réellement l'épingler.
+ */
+describe("isUpcomingWeek / upcomingWeeks — le radar gère l'avenir", () => {
+  const week = (monday: string, startDate = monday) => ({ startDate, endDate: addDays(monday, 6), monday });
+
+  it("écarte une semaine révolue", () => {
+    expect(isUpcomingWeek(week("2026-01-05"), "2026-02-01")).toBe(false);
+  });
+
+  it("écarte la semaine EN COURS — y compris le lundi même", () => {
+    // Mercredi de la semaine du 5 : elle a commencé, elle ne se gère plus ici.
+    expect(isUpcomingWeek(week("2026-01-05"), "2026-01-07")).toBe(false);
+    // Aujourd'hui EST le lundi : la semaine commence, donc elle est en cours.
+    expect(isUpcomingWeek(week("2026-01-05"), "2026-01-05")).toBe(false);
+  });
+
+  it("garde une semaine qui n'a pas commencé", () => {
+    expect(isUpcomingWeek(week("2026-01-12"), "2026-01-07")).toBe(true);
+  });
+
+  // Le piège : `startDate` peut être rogné par la fenêtre de saison (vacance à cheval sur
+  // la frontière) alors que `monday` identifie la semaine calendaire. Comparer `startDate`
+  // ferait passer pour « à venir » une semaine déjà entamée dont la saison rogne le début.
+  it("compare le LUNDI, pas le startDate rogné par la saison", () => {
+    const clamped = week("2026-01-05", "2026-01-08"); // saison démarrant le jeudi
+    expect(isUpcomingWeek(clamped, "2026-01-06")).toBe(false);
+  });
+
+  it("upcomingWeeks ne garde que l'avenir, dans l'ordre", () => {
+    const weeks = [week("2026-01-05"), week("2026-01-12"), week("2026-01-19")];
+    expect(upcomingWeeks(weeks, "2026-01-07").map((w) => w.monday)).toEqual(["2026-01-12", "2026-01-19"]);
+  });
+
+  it("rend une liste vide quand tout est derrière (et non la liste entière)", () => {
+    expect(upcomingWeeks([week("2026-01-05"), week("2026-01-12")], "2026-03-01")).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -273,6 +273,108 @@ describe("RadarPanel", () => {
     });
     expect(screen.queryByText(/semaines? couverte/)).not.toBeInTheDocument();
     expect(screen.getByText(/Rien à l'horizon/)).toBeInTheDocument();
+  });
+
+  // ── P3-13 (retour terrain 2026-07-31) : le radar ne montre que l'avenir ACTIONNABLE ──
+
+  // (a) « En été, Noël et la Toussaint apparaissent alors que c'est TROP loin pour que je
+  // m'en occupe de suite. » Les fériés avaient un horizon depuis toujours, les vacances non.
+  it("masque une vacance au-delà de l'horizon, garde celle qui approche", () => {
+    setTodayOverride("2998-10-01"); // à 96 j des vacances fixture
+    renderRadar({ holidays: [holiday] });
+    expect(screen.queryByText("Vacances de Noël")).not.toBeInTheDocument();
+    expect(screen.getByText(/Rien à l'horizon/)).toBeInTheDocument();
+
+    cleanup();
+    setTodayOverride("2998-12-15"); // à 21 j
+    renderRadar({ holidays: [holiday] });
+    expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
+  });
+
+  // La non-régression qui compte : l'horizon ne masque que les vacances INTACTES. Dès
+  // qu'un plan existe, la période est un travail commencé — la cacher ferait perdre au
+  // gestionnaire ce qu'il a déjà entamé, ce qui serait bien pire que le bruit corrigé.
+  it("garde une vacance lointaine dès que son planning est commencé", () => {
+    setTodayOverride("2998-10-01"); // hors horizon
+    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false }];
+    schedulesData = [{ schedulePlanId: "pl-h1" }];
+    renderRadar({
+      holidays: [holiday],
+      entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", schoolHolidayId: "h1", startDate: FUTURE, endDate: FUTURE_END })],
+    });
+
+    expect(screen.getByText("Planning en cours — à finaliser")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reprendre" })).toBeInTheDocument();
+  });
+
+  // (b) « 0/7 semaines couvertes alors que 3 sont derrière — on gère l'avenir, pas le
+  // présent. » Les semaines révolues ne comptent plus au dénominateur.
+  it("ne compte que les semaines à venir dans la couverture", async () => {
+    const user = userEvent.setup();
+    const w1s = mondayOf("2999-01-04"); // lundi
+    const weeks = [0, 1, 2, 3].map((i) => addDays(w1s, 7 * i));
+    // « Aujourd'hui » = mercredi de la 2ᵉ semaine : S1 est révolue, S2 en cours,
+    // S3 et S4 à venir → 2 semaines gérables, pas 4.
+    setTodayOverride(addDays(weeks[1], 2));
+    renderRadar({
+      entries: [
+        closure({ id: "m1", title: "Barros en travaux", startDate: w1s, endDate: addDays(weeks[3], 6) }),
+        ...weeks.map((monday, i) => closure({ id: `w${i}`, title: `S${i}`, parentEntryId: "m1", startDate: monday, endDate: addDays(monday, 6) })),
+      ],
+    });
+
+    expect(screen.getByText("0/2 semaines couverte")).toBeInTheDocument();
+    await expandCard(user, "Barros en travaux");
+    expect(screen.getAllByRole("button", { name: /sem\. du/ })).toHaveLength(2);
+  });
+
+  it("efface la carte de couverture quand toutes ses semaines sont derrière", () => {
+    const w1s = mondayOf("2999-01-04");
+    setTodayOverride(addDays(w1s, 21)); // trois semaines plus tard
+    renderRadar({
+      entries: [
+        closure({ id: "m1", title: "Barros en travaux", startDate: w1s, endDate: addDays(w1s, 13) }),
+        closure({ id: "w0", title: "S0", parentEntryId: "m1", startDate: w1s, endDate: addDays(w1s, 6) }),
+      ],
+    });
+
+    expect(screen.queryByText(/semaines? couverte/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Rien à l'horizon/)).toBeInTheDocument();
+  });
+
+  // (d) « Le radar devient très long » — repli CIBLÉ (arbitrage fondateur 2026-08-01) :
+  // seule la carte à détail volumineux démarre repliée ; une carte à une action garde son
+  // bouton, sinon chaque geste du radar coûterait un clic de plus.
+  it("replie la carte de couverture par défaut, mais pas l'action d'une carte simple", async () => {
+    const user = userEvent.setup();
+    const w1s = mondayOf("2999-01-15");
+    renderRadar({
+      holidays: [holiday],
+      entries: [
+        closure({ id: "m1", title: "Barros en travaux", startDate: addDays(w1s, 3), endDate: addDays(w1s, 8) }),
+        closure({ id: "w1", title: "S1", parentEntryId: "m1", startDate: w1s, endDate: addDays(w1s, 6) }),
+      ],
+    });
+
+    // Carte simple : son action est là, sans clic.
+    expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
+    // Carte de couverture : l'en-tête parle, les puces attendent.
+    expect(screen.getByText(/semaines? couverte/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sem\. du/ })).toBeNull();
+
+    await expandCard(user, "Barros en travaux");
+    expect(screen.getAllByRole("button", { name: /sem\. du/ }).length).toBeGreaterThan(0);
+  });
+
+  // P3-11 : le panneau restait NU pendant que les plans arrivaient — un cadre « À traiter »
+  // vide se lit comme « rien à faire ». Le squelette dit la seule chose vraie : on ne sait
+  // pas encore. Et il ne coexiste JAMAIS avec « Tout roule ».
+  it("montre un squelette tant que les lectures sont en vol, jamais « Tout roule »", () => {
+    plansData = undefined;
+    renderRadar({});
+
+    expect(screen.getByRole("status", { name: /Chargement des éléments à traiter/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Rien à l'horizon/)).not.toBeInTheDocument();
   });
 
   it("asks for the school zone when unknown", () => {
