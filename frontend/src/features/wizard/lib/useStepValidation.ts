@@ -162,17 +162,31 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // Sans ça, `periodGridReady` faux vidait simplement `emptyVenues` : verdict vert et
   // « Générer » cliquable pendant la fenêtre de chargement d'une grille peut-être vide —
   // la faille exacte que la règle « gymnase sans créneau » existe pour fermer.
-  if (periodMode && "period" === periodAnchor.state && (readLoading(periodSlotsQuery) || readLoading(periodOverridesQuery))) {
+  if (periodMode && "period" === periodAnchor.state && (readLoading(periodSlotsQuery) || readLoading(periodOverridesQuery) || readLoading(periodTeamOverridesQuery))) {
     return { errors: [], warnings: [], pending: true };
   }
 
+  // P2-15 — le VERDICT compte ce que le récap AFFICHE : les actifs de la période. Sans ça
+  // (revue #342 round 2), une période dont toutes les équipes sont en pause annonçait
+  // « Équipes 0 » et « Tout est prêt » dans la même vue, bouton « Générer » ouvert — la
+  // génération partait et rendait un planning vide. Un écran qui compte autrement que sa
+  // porte, ce sont deux vérités : le défaut que ce lot corrige partout ailleurs.
+  // Passé les retours ci-dessus, les deux lectures d'overrides sont RÉSOLUES en période.
+  const disabledVenueIds = new Set(periodOverrides.filter((o) => "DISABLED" === o.mode).map((o) => o.venueId));
+  const pausedIds = new Set((periodTeamOverridesQuery.data ?? []).filter((o) => !o.isActive).map((o) => o.teamId));
+  const layerTeams = periodMode ? teams.filter((t) => !pausedIds.has(t.id)) : teams;
+  const layerVenues = periodMode ? venues.filter((v) => !disabledVenueIds.has(v.id)) : venues;
+  // Le message doit dire QUOI FAIRE : « ajoutez une équipe » sur une période dont les
+  // équipes existent mais sont toutes en pause enverrait le gestionnaire au mauvais écran.
+  const noTeamError = periodMode && teams.length > 0 ? "Aucune équipe n'est active pour cette période — cochez-en au moins une." : "Ajoutez au moins une équipe.";
+  const noVenueError = periodMode && venues.length > 0 ? "Aucun gymnase n'est actif pour cette période — réactivez-en au moins un." : "Ajoutez au moins un gymnase.";
+
   if ("teams" === stepId) {
-    return { errors: 0 === teams.length ? ["Ajoutez au moins une équipe."] : [], warnings: [] };
+    return { errors: 0 === layerTeams.length ? [noTeamError] : [], warnings: [] };
   }
   // Les gymnases qui bloquent : sur le socle, tout gymnase sans créneau ; en période,
   // tout gymnase ACTIF (non désactivé) sans créneau de la période — un gymnase désactivé
   // n'a volontairement rien à servir.
-  const disabledVenueIds = new Set(periodOverrides.filter((o) => "DISABLED" === o.mode).map((o) => o.venueId));
   // En période, on n'évalue la règle QUE lorsque le plan est résolu : sans lui les
   // créneaux de la période ne sont pas encore lus (query désactivée → []), et bloquer là
   // dessus serait un faux « sans créneau » pendant le chargement. Un gymnase désactivé est
@@ -188,13 +202,13 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   const periodGridReady =
     "period" === periodAnchor.state && !readLoading(periodSlotsQuery) && !readLoading(periodOverridesQuery);
   const emptyVenues = periodMode
-    ? (periodGridReady ? venuesWithoutSlot(venues, periodSlots).filter((v) => !disabledVenueIds.has(v.id)) : [])
+    ? (periodGridReady ? venuesWithoutSlot(layerVenues, periodSlots) : [])
     : venuesWithoutSlot(venues, slots);
 
   if ("venues" === stepId) {
     const errors: string[] = [];
-    if (0 === venues.length) {
-      errors.push("Ajoutez au moins un gymnase.");
+    if (0 === layerVenues.length) {
+      errors.push(noVenueError);
     }
     if (emptyVenues.length > 0) {
       errors.push(`Gymnase(s) sans créneau : ${emptyVenues.map((v) => v.name).join(", ")}.`);
@@ -214,14 +228,14 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   }
   if ("recap" === stepId) {
     const errors: string[] = [];
-    if (0 === teams.length) {
-      errors.push("Ajoutez au moins une équipe.");
+    if (0 === layerTeams.length) {
+      errors.push(noTeamError);
     }
     if (0 === coaches.length) {
       errors.push("Ajoutez au moins un coach.");
     }
-    if (0 === venues.length) {
-      errors.push("Ajoutez au moins un gymnase.");
+    if (0 === layerVenues.length) {
+      errors.push(noVenueError);
     }
     if (emptyVenues.length > 0) {
       errors.push(`Gymnase(s) sans créneau : ${emptyVenues.map((v) => v.name).join(", ")}.`);

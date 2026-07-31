@@ -9,6 +9,8 @@ import { useWizardStore } from "@/features/wizard/store";
 import { usePriorityTiers } from "@/features/matches/queries";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { useSchedulePlans } from "@/features/cockpit/queries";
+import { useVenuePeriodOverrides } from "@/features/wizard/queries";
+import { readFailed, readLoading } from "@/shared/lib/readState";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Modal } from "@/shared/components/ui/modal";
@@ -118,7 +120,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const slotLayerId = null !== displayed && !isSeasonPlanType(displayed.planType) ? (displayed.schedulePlanId ?? null) : null;
 
   const { data: slots = [] } = useSlots(validScheduleId);
-  const { data: diagnostics = [] } = useDiagnostics(validScheduleId);
+  const { data: allDiagnostics = [] } = useDiagnostics(validScheduleId);
   const { data: trainingSlots = [] } = useTrainingSlots(slotLayerId);
   const { data: teams = [] } = useTeams();
   const { data: venues = [] } = useVenues();
@@ -291,14 +293,59 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // Defined venue windows the solver left unfilled ("créneaux vides"). Injected
   // into the grid in the GYMNASE view only (they have no team/coach) so they
   // show as `vide` cells even without a click; also listed as warnings below.
-  const emptySlots = useMemo(() => computeEmptySlots(trainingSlots, slots, validScheduleId ?? ""), [trainingSlots, slots, validScheduleId]);
+  // P2-15 — un gymnase DÉSACTIVÉ pour la période garde ses créneaux en base (le backend
+  // les écarte du payload, il ne les supprime pas) : sans ce filtre, l'écran de génération
+  // affichait TOUS les gymnases du club alors qu'un seul sert — « du bruit pour rien ».
+  // On filtre à la SOURCE : la grille, ses fenêtres vides et le sélecteur en dérivent tous.
+  // FAIL-CLOSED : lecture ratée sans cache ⇒ on ne masque rien (P4-20).
+  const venueOverrides = useVenuePeriodOverrides(slotLayerId);
+  const disabledVenueIds = useMemo(
+    () => new Set(readFailed(venueOverrides) || readLoading(venueOverrides) ? [] : (venueOverrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId)),
+    [venueOverrides],
+  );
+  const layerSlots = useMemo(
+    () => (0 === disabledVenueIds.size ? trainingSlots : trainingSlots.filter((ts) => !disabledVenueIds.has(ts.venueId))),
+    [trainingSlots, disabledVenueIds],
+  );
+  // ⚠ On filtre ce qui est OFFERT (les fenêtres libres), JAMAIS ce qui EXISTE (les séances
+  // placées) — revue #342 round 2. Le premier jet filtrait aussi les séances : l'écran
+  // cessait alors de montrer des séances que l'EXPORT, rendu côté serveur par scheduleId,
+  // contenait toujours — le PDF remis aux coachs et l'écran se contredisaient, et une
+  // version entièrement placée dans un gymnase désactivé rendait une grille blanche sans
+  // un mot. Une version est un FAIT DÉJÀ ARRIVÉ ; la composition de la période est un
+  // réglage pour la PROCHAINE génération. Cacher le fait ne le supprime pas : on l'annonce
+  // (`staleVenueSessions`) et on invite à régénérer.
+  const emptySlots = useMemo(() => computeEmptySlots(layerSlots, slots, validScheduleId ?? ""), [layerSlots, slots, validScheduleId]);
   const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...slots, ...emptySlots] : slots), [viewMode, slots, emptySlots]);
+  // Les séances de cette version que la période ne servirait plus : elles restent à
+  // l'écran (et dans l'export), mais le gestionnaire doit savoir qu'elles sont périmées.
+  const staleVenueSessions = useMemo(
+    () => (0 === disabledVenueIds.size ? 0 : slots.filter((s) => disabledVenueIds.has(s.venueId)).length),
+    [slots, disabledVenueIds],
+  );
 
   // From gridSlots (incl. empty windows in gymnase view) so a venue that has ONLY
   // empty slots still appears in the ResourceFilter picker — otherwise focusVenue
   // could filter to a venue the picker cannot show/clear.
   const resourceGroups = useMemo(() => availableResourceGroups(gridSlots, viewMode, lookups, tiers), [gridSlots, viewMode, lookups, tiers]);
   const model = useMemo(() => buildGrid(gridSlots, viewMode, lookups, new Set(resourceFilter)), [gridSlots, viewMode, lookups, resourceFilter]);
+
+  // Un diagnostic qui NOMME une colonne absente de l'écran proposerait un focus vers rien —
+  // un clic qui vide la grille (revue #342). Seul sort le diagnostic d'un gymnase désactivé
+  // dont il ne reste AUCUNE séance : s'il en porte encore, sa colonne existe et son
+  // diagnostic reste actionnable.
+  const hiddenVenueIds = useMemo(() => {
+    if (0 === disabledVenueIds.size) {
+      return disabledVenueIds;
+    }
+    const placed = new Set(slots.map((s) => s.venueId));
+
+    return new Set([...disabledVenueIds].filter((id) => !placed.has(id)));
+  }, [disabledVenueIds, slots]);
+  const diagnostics = useMemo(
+    () => (0 === hiddenVenueIds.size ? allDiagnostics : allDiagnostics.filter((d) => null === d.venueId || !hiddenVenueIds.has(d.venueId))),
+    [allDiagnostics, hiddenVenueIds],
+  );
 
   // Clicking the solver's "unused_slot" warning brings its venue column on screen
   // (venue view, filtered to that venue) so the concerned `vide` cell is visible.
@@ -443,6 +490,15 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               }
             />
           </div>
+
+          {/* Ce planning a été généré quand un gymnase servait encore la période : ses
+              séances restent affichées ET exportées, mais elles ne décrivent plus la
+              période telle qu'elle est réglée. On le dit plutôt que de les escamoter. */}
+          {!isGenerating && staleVenueSessions > 0 ? (
+            <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+              {staleVenueSessions} séance(s) de ce planning sont placées dans un gymnase désactivé depuis pour cette période — régénérez-la pour qu'elles en sortent.
+            </p>
+          ) : null}
 
           {isGenerating ? (
             <GenerationWaiting initial={clubInitial} logoUrl={me?.club?.logoUrl ?? null} />

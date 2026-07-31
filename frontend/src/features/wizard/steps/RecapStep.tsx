@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { anchorIsWritable, usePeriodAnchor } from "@/features/cockpit/queries";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
+import { cn } from "@/shared/lib/utils";
 
 import { FAMILY_LABEL, FAMILY_ORDER, groupConstraints } from "../lib/constraintOrder";
 import { LEVEL_LABEL } from "../lib/labels";
@@ -13,7 +14,7 @@ import { BlockerList } from "./BlockerList";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 
 import { SectionCountTitle, SummaryRow, TeamTierAccordion } from "./StructureSummary";
-import { usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags, useWizardVenues } from "../queries";
+import { useActiveTeams, useActiveVenues, useGridSlots, usePriorityTiers, useReservations, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { groupTeamsByTier } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
@@ -34,32 +35,64 @@ function Counter({ label, value, sub }: { label: string; value: number; sub?: st
 const empty = <p className="py-1.5 text-sm text-muted-foreground">—</p>;
 
 export function RecapStep() {
-  const { data: teams = [] } = useWizardTeams();
-  const { data: venues = [] } = useWizardVenues();
-  const { data: slots = [] } = useVenueSlots();
+  // P2-15 — le récap décrit LA PÉRIODE, pas le club : il annonçait « 49 équipes » quand 6
+  // étaient cochées, et listait des gymnases désactivés. Les compteurs comptent donc les
+  // ACTIFS ; les équipes en pause restent visibles, BARRÉES, dans le détail dépliable —
+  // le récap sert à vérifier ce qu'on va générer, y compris ce qu'on a mis en pause.
+  // (Le `planId` vient de l'ancre plus bas ; l'ordre des hooks impose de la lire d'abord.)
   const { data: coaches = [] } = useWizardCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
+  const periodAnchorEarly = usePeriodAnchor(periodEntryId);
+  const layerPlanId = "period" === periodAnchorEarly.state ? periodAnchorEarly.planId : null;
+  // Mode période dont l'ancre n'est PAS encore résolue : `layerPlanId` vaut null, donc les
+  // listes lues sont celles de la SAISON. Les présenter comme celles de la période serait
+  // le mensonge exact que ce lot corrige — on l'annonce (`useStepValidation` bloque déjà
+  // la génération sur ces états ; ici c'est l'affichage qui doit cesser de mentir).
+  const periodLayerUnresolved = null !== periodEntryId && "period" !== periodAnchorEarly.state;
+  const { teams, pausedIds, layerRead: teamsRead } = useActiveTeams(layerPlanId);
+  const { venues, layerRead: venuesRead } = useActiveVenues(layerPlanId);
+  const { data: allTeams = [] } = useWizardTeams();
+  const { data: allVenues = [] } = useWizardVenues();
+  const { data: slots = [] } = useGridSlots(layerPlanId);
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   // Les réservations pendent au PLAN (inv. 5, lot C3) — les contraintes, elles, restent
   // lues par l'entrée (elles décrivent le FAIT).
   // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
-  const periodAnchor = usePeriodAnchor(periodEntryId);
-  const { data: reservations = [] } = useReservations(periodAnchor.planId, anchorIsWritable(periodAnchor));
+  const { data: reservations = [] } = useReservations(periodAnchorEarly.planId, anchorIsWritable(periodAnchorEarly));
   const { data: tiers = [] } = usePriorityTiers();
   const { data: tags = [] } = useWizardTeamTags();
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
   // génération" button is gated by the same rules (single source of truth).
   const { errors: blockers } = useStepValidation("recap");
 
+  // Les équipes en pause : hors des compteurs (elles ne seront pas générées) mais
+  // VISIBLES et barrées dans le détail — on doit voir ce qu'on a mis en pause.
+  const pausedTeams = allTeams.filter((t) => pausedIds.has(t.id));
+  // FAIL-CLOSED (P4-20/P4-1) : tant que les overrides ne sont pas lus, on ne masque RIEN et
+  // on le DIT — annoncer des chiffres de saison sur une période serait le mensonge qu'on
+  // corrige. ⚠ Mais CHARGER n'est pas ÉCHOUER (revue #342 round 2) : le premier jet criait
+  // « n'a pas pu être lu » sur chaque lecture en vol, donc à chaque ouverture. Un bandeau
+  // d'alerte qui se déclenche en régime normal n'alerte plus de rien.
+  const layerNotices = [
+    periodLayerUnresolved ? { message: "Les réglages de cette période ne sont pas encore chargés — les chiffres ci-dessous sont ceux de la saison.", pending: true } : null,
+    "ready" === teamsRead ? null : { message: `La sélection d'équipes de la période ${"loading" === teamsRead ? "est en cours de lecture" : "n'a pas pu être lue"} — les chiffres ci-dessous sont ceux de la saison.`, pending: "loading" === teamsRead },
+    "ready" === venuesRead ? null : { message: `Les réglages de gymnases de la période ${"loading" === venuesRead ? "sont en cours de lecture" : "n'ont pas pu être lus"} — les chiffres ci-dessous sont ceux de la saison.`, pending: "loading" === venuesRead },
+  ].filter((n): n is { message: string; pending: boolean } => null !== n);
+
   const salaried = coaches.filter((c) => c.isEmployee).length;
   const coachPlayerIds = new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId));
   const hardConstraints = constraints.filter((c) => c.ruleType === "HARD").length;
   const slotsByVenue = countSlotsByVenue(slots);
 
-  const teamName = new Map(teams.map((t) => [t.id, t.name]));
-  const venueName = new Map(venues.map((v) => [v.id, v.name]));
+  // ⚠ NOMMER ≠ CHOISIR (revue #342). Les libellés se construisent sur les listes
+  // COMPLÈTES : une réservation ou une contrainte peut viser une équipe en pause ou un
+  // gymnase désactivé, et elle doit rester LISIBLE — sinon le récap affiche « ? » ou
+  // « undefined » précisément là où le gestionnaire doit comprendre quoi corriger.
+  // Les listes ACTIVES ne servent qu'aux compteurs et aux offres de choix.
+  const teamName = new Map(allTeams.map((t) => [t.id, t.name]));
+  const venueName = new Map(allVenues.map((v) => [v.id, v.name]));
   const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
   // Reservations ordered by team rank (fanion S → A → B → C → D), then day + time.
   const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
@@ -75,12 +108,14 @@ export function RecapStep() {
   // (coach→staffing, gymnase→venue, horaire/jours→axis) — same as each tab.
   const constraintFamilies = useMemo(() => {
     const ctx = {
-      teams,
+      // Groupement = NOMMAGE : une contrainte visant une équipe en pause doit rester
+      // listée (le compteur, lui, ne la compte pas). La filtrer la faisait disparaître.
+      teams: allTeams,
       tiers,
       tags,
       coaches,
       coachPlayerIds: new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId)),
-      venues,
+      venues: allVenues,
       coachName: (id: string) => coachName.get(id) ?? "Coach",
       venueName: (id: string) => venueName.get(id) ?? "Gymnase",
     };
@@ -91,7 +126,7 @@ export function RecapStep() {
     ].filter((g) => g.sections.length > 0);
     // coachName/venueName are fresh Maps each render; the real inputs are the data.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [constraints, teams, tiers, tags, coaches, coachPlayers, venues]);
+  }, [constraints, allTeams, tiers, tags, coaches, coachPlayers, allVenues]);
   // A team's main coach (fallback: its first linked coach) — shown inline in italic.
   const mainCoachName = (teamId: string): string | null => {
     const links = teamCoaches.filter((tc) => tc.teamId === teamId);
@@ -102,7 +137,15 @@ export function RecapStep() {
 
   return (
     <div>
-      <p className="mb-4 text-sm text-muted-foreground">Cartographie de votre club avant génération.</p>
+      <p className="mb-4 text-sm text-muted-foreground">{null === periodEntryId ? "Cartographie de votre club avant génération." : "Cartographie de cette période avant génération."}</p>
+      {layerNotices.map((notice) => (
+        <p
+          key={notice.message}
+          className={cn("mb-3 rounded-md px-3 py-2 text-sm", notice.pending ? "text-muted-foreground" : "border border-warning/40 bg-warning/10 text-foreground")}
+        >
+          {notice.message}
+        </p>
+      ))}
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Counter label="Équipes" value={teams.length} />
@@ -113,22 +156,24 @@ export function RecapStep() {
 
       <div className="mb-4 flex flex-col gap-1.5">
         <AccordionSection title={<SectionCountTitle label="Équipes" count={teams.length} />}>
-          {0 === teams.length ? (
+          {0 === teams.length && 0 === pausedTeams.length ? (
             empty
           ) : (
             <TeamTierAccordion
-              teams={teams}
+              teams={pausedTeams.length > 0 ? [...teams, ...pausedTeams] : teams}
               // Tiers open by default: the ranks (S · Fanion → D · Bonus) must be
               // visible at first glance — collapsed inner accordions read as an
               // unsorted flat list to the manager.
               renderRow={(t) => {
                 const coach = mainCoachName(t.id);
+                const paused = pausedIds.has(t.id);
                 return (
                   <SummaryRow
                     key={t.id}
                     label={
-                      <span className="flex flex-wrap items-baseline gap-x-2">
-                        <span>{t.name}</span>
+                      <span className={cn("flex flex-wrap items-baseline gap-x-2", paused && "text-muted-foreground")}>
+                        <span className={cn(paused && "line-through")}>{t.name}</span>
+                        {paused ? <span className="text-xs italic">en pause pour cette période</span> : null}
                         {coach ? <span className="text-xs italic text-muted-foreground">{coach}</span> : null}
                         {t.level ? <span className="text-xs italic text-muted-foreground">· {LEVEL_LABEL[t.level]}</span> : null}
                       </span>

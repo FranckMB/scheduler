@@ -6,10 +6,27 @@ import { renderWithProviders } from "@/test/utils";
 
 const h = { reservations: [] as Array<Record<string, unknown>> };
 
+type TeamRow = { id: string; name: string; sportCategoryId: string; priorityTierId: number; tierOrder: number; gender: null; level: null; sessionsPerWeek: number; isActive: boolean };
+const team = (id: string, name: string, tier: number): TeamRow => ({ id, name, sportCategoryId: "c", priorityTierId: tier, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true });
+
+// P2-15 : la COUCHE que le récap décrit — période (équipes/gymnases actifs) ou socle.
+const { recapLayer, anchorState, storeState } = vi.hoisted(() => ({
+  anchorState: { value: { state: "period", planId: "plan-1" } as { state: string; planId: string | null } },
+  storeState: { value: { mode: "season", calendarEntryId: null } as { mode: string; calendarEntryId: string | null } },
+  recapLayer: {
+    teams: [] as unknown[],
+    pausedIds: [] as string[],
+    venues: [] as unknown[],
+    slots: [] as unknown[],
+    teamsRead: "ready" as "loading" | "failed" | "ready",
+    venuesRead: "ready" as "loading" | "failed" | "ready",
+  },
+}));
+
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
 vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
-  usePeriodAnchor: () => ({ state: "period", planId: "plan-1" }),
+  usePeriodAnchor: () => anchorState.value,
   anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
 }));
 vi.mock("../queries", () => ({
@@ -20,6 +37,10 @@ vi.mock("../queries", () => ({
     ],
   }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, isActive: true }] }),
+  // P2-15 : le récap compte la COUCHE courante (période ou socle).
+  useActiveVenues: () => ({ venues: recapLayer.venues, disabledIds: new Set<string>(), layerRead: recapLayer.venuesRead }),
+  useActiveTeams: () => ({ teams: recapLayer.teams, pausedIds: new Set(recapLayer.pausedIds), layerRead: recapLayer.teamsRead }),
+  useGridSlots: () => ({ data: recapLayer.slots }),
   useVenueSlots: () => ({ data: [] }),
   useWizardCoaches: () => ({ data: [] }),
   useWizardCoachPlayers: () => ({ data: [] }),
@@ -35,13 +56,82 @@ vi.mock("../queries", () => ({
   }),
 }));
 vi.mock("../lib/useStepValidation", () => ({ useStepValidation: () => ({ errors: [] }) }));
-vi.mock("../store", () => ({ useWizardStore: (sel: (s: { mode: string; calendarEntryId: string | null }) => unknown) => sel({ mode: "season", calendarEntryId: null }) }));
+vi.mock("../store", () => ({ useWizardStore: (sel: (s: { mode: string; calendarEntryId: string | null }) => unknown) => sel(storeState.value) }));
 
 import { RecapStep } from "./RecapStep";
 
 describe("RecapStep — read-only summary", () => {
   beforeEach(() => {
     h.reservations = [];
+    // Défaut : la couche décrit les mêmes équipes que la liste de saison, aucune en pause.
+    recapLayer.teams = [team("t1", "SM1", 3), team("t2", "Fanion", 1)];
+    recapLayer.pausedIds = [];
+    recapLayer.venues = [{ id: "v1", name: "Gymnase A", color: null, isActive: true }];
+    recapLayer.slots = [];
+    recapLayer.teamsRead = "ready";
+    recapLayer.venuesRead = "ready";
+    anchorState.value = { state: "period", planId: "plan-1" };
+    storeState.value = { mode: "season", calendarEntryId: null };
+  });
+
+  // P2-15 (retour fondateur) — LE symptôme : « je sélectionne 6 équipes sur l'overlay, il
+  // me dit 49 équipes ». Le compteur décrit ce qui sera GÉNÉRÉ, donc la couche courante.
+  it("compte les équipes de la PÉRIODE, pas celles du club", async () => {
+    recapLayer.teams = [team("t1", "SM1", 3)];
+    recapLayer.pausedIds = ["t2"];
+    renderWithProviders(<RecapStep />);
+
+    // La carte compteur du haut : sa valeur est le nombre qui sera GÉNÉRÉ.
+    const card = (await screen.findAllByText("Équipes"))[0];
+    expect(card.previousElementSibling).toHaveTextContent("1");
+  });
+
+  // … et une équipe en pause reste VISIBLE, barrée : le récap sert à vérifier ce qu'on va
+  // générer, y compris ce qu'on a délibérément mis de côté (décision fondateur).
+  it("montre une équipe en pause, barrée, sans la compter", async () => {
+    recapLayer.teams = [team("t1", "SM1", 3)];
+    recapLayer.pausedIds = ["t2"];
+    renderWithProviders(<RecapStep />);
+
+    const card = (await screen.findAllByText("Équipes"))[0];
+    expect(card.previousElementSibling).toHaveTextContent("1");
+    // Le détail est dans un accordéon FERMÉ par défaut : on l'ouvre pour lire la liste.
+    await userEvent.click(screen.getAllByRole("button", { name: /Équipes/ })[0]);
+    // L'équipe en pause y reste LISTÉE, barrée — on doit voir ce qu'on a mis de côté.
+    expect(screen.getByText("Fanion")).toHaveClass("line-through");
+    expect(screen.getByText(/en pause pour cette période/)).toBeInTheDocument();
+  });
+
+  // Mode période dont l'ancre n'est pas résolue : les listes lues sont celles de la
+  // SAISON. Les présenter comme celles de la période serait le mensonge que ce lot
+  // corrige — on l'annonce (revue #342, trouvé en appliquant la règle à TOUS ses sites).
+  it("annonce que les chiffres sont ceux de la saison tant que l'ancre n'est pas résolue", async () => {
+    storeState.value = { mode: "period", calendarEntryId: "entry-1" };
+    anchorState.value = { state: "loading", planId: null };
+    renderWithProviders(<RecapStep />);
+
+    expect(await screen.findByText(/ne sont pas encore chargés/)).toBeInTheDocument();
+  });
+
+  // FAIL-CLOSED (P4-20/P4-1) : sur une lecture ratée on ne masque RIEN, et on le DIT.
+  // Masquer en silence ferait croire à une période plus petite qu'elle n'est.
+  it("ne masque rien et l'annonce quand les réglages de la période sont illisibles", async () => {
+    recapLayer.teamsRead = "failed";
+    renderWithProviders(<RecapStep />);
+
+    expect(await screen.findByText(/n'a pas pu être lue/)).toBeInTheDocument();
+  });
+
+  // CHARGER ≠ ÉCHOUER (revue #342 round 2). Le premier jet repliait `loading` sur `failed` :
+  // le récap d'une période affichait « n'a pas pu être lue » à CHAQUE ouverture, sur une
+  // requête simplement en vol. Un bandeau d'alerte qui se déclenche en régime normal
+  // apprend au gestionnaire à l'ignorer — précisément le jour où la lecture échoue.
+  it("dit « en cours de lecture » — pas « échec » — pendant le premier chargement", async () => {
+    recapLayer.teamsRead = "loading";
+    renderWithProviders(<RecapStep />);
+
+    expect(await screen.findByText(/est en cours de lecture/)).toBeInTheDocument();
+    expect(screen.queryByText(/n'a pas pu être lue/)).not.toBeInTheDocument();
   });
 
   it("lists reservations by team rank (fanion before B) with NO delete button (read-only)", async () => {

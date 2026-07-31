@@ -24,6 +24,8 @@ interface Props {
   onRetryCoaches: () => void;
   venues: Venue[];
   disabledVenueIds?: ReadonlySet<string>;
+  /** Équipes en pause pour la période : nommées sur un épinglage existant, jamais proposées. */
+  pausedTeamIds?: ReadonlySet<string>;
   venueCanSplit: Map<string, boolean>;
   schedulePlanId: string | null;
   onClose: () => void;
@@ -59,6 +61,7 @@ export function SlotReservationModal({
   onRetryCoaches,
   venues,
   disabledVenueIds,
+  pausedTeamIds,
   venueCanSplit,
   schedulePlanId,
   onClose,
@@ -101,7 +104,14 @@ export function SlotReservationModal({
       durationMinutes: slot.durationMinutes,
     })),
   ];
-  const pickable = assignableTeams(teams, tiers, slot, draftReservations, venueCanSplit);
+  // ATTEINDRE n'est pas AUTORISER (revue #342 round 2). Un gymnase désactivé reste
+  // accessible pour qu'on puisse RETIRER l'épinglage qui bloque la génération ; y AJOUTER
+  // en recréerait un — même 422, même impasse. Une équipe en pause suit la même logique :
+  // son nom reste lisible sur un épinglage existant, mais elle n'est plus proposée (le
+  // solveur ne la verra pas, l'épingler serait un geste sans effet).
+  const venueDisabled = true === disabledVenueIds?.has(slot.venueId);
+  const offerable = undefined === pausedTeamIds ? teams : teams.filter((t) => !pausedTeamIds.has(t.id));
+  const pickable = venueDisabled ? [] : assignableTeams(offerable, tiers, slot, draftReservations, venueCanSplit);
 
   const pick = (teamId: string) => {
     if ("" === teamId) {
@@ -228,7 +238,11 @@ export function SlotReservationModal({
         </ul>
       ) : null}
 
-      {!guardReady ? (
+      {venueDisabled ? (
+        <p role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+          {venue.name} est désactivé pour cette période : on ne peut plus y ajouter d'équipe. Retirez les réservations ci-dessus pour débloquer la génération.
+        </p>
+      ) : !guardReady ? (
         <p role="status" className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           {coachesPending ? (
             "Vérification des coachs en cours…"

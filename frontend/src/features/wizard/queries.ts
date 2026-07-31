@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { CoachPayload, ConstraintPayload, SlotPayload, TeamCoachRole, TeamPayload, VenuePayload } from "./api";
+import { readState, type ReadState } from "@/shared/lib/readState";
+
+import { activeTeams, activeVenues, disabledVenueIds, pausedTeamIds } from "./lib/activeLayer";
+
+import type { CoachPayload, ConstraintPayload, SlotPayload, Team, TeamCoachRole, TeamPayload, Venue, VenuePayload } from "./api";
 import * as wizardApi from "./api";
 
 export function useWizardTeams() {
@@ -237,6 +241,69 @@ export function useDeletePeriodSlot(schedulePlanId: string | null) {
       void queryClient.invalidateQueries({ queryKey: ["wizard", "reservations", schedulePlanId] });
     },
   });
+}
+
+/**
+ * P2-15 — CE QUE LA PÉRIODE CONTIENT, pour l'UI.
+ *
+ * Le backend filtre déjà correctement (`PeriodConstraintSelector`, #340) : le solveur ne
+ * voit ni les équipes mises en pause, ni les gymnases désactivés. L'UI, elle, lisait les
+ * listes de SAISON — d'où « 49 équipes » annoncées au récap quand 6 sont cochées, et des
+ * gymnases désactivés encore proposés dans les sélecteurs.
+ *
+ * ⚠ Ces hooks n'implémentent AUCUNE règle métier : ils APPLIQUENT un override déjà chargé
+ * (`isActive` d'un `TeamPeriodOverride`, `mode DISABLED` d'un `VenuePeriodOverride`). Les
+ * vraies règles — défauts par type de période, résolution des tags, héritage des
+ * contraintes — restent côté serveur, et doivent y rester : c'est ce qui les distingue
+ * d'un quatrième miroir (cf. P2-14, P3-19).
+ *
+ * La RÈGLE elle-même vit dans `lib/activeLayer.ts` (fonctions pures, testables sans
+ * React — les tests d'écran mockent ces hooks et ne gardent donc que le câblage).
+ *
+ * `schedulePlanId` null = mode socle : la liste complète, inchangée.
+ *
+ * FAIL-CLOSED : tant que les overrides ne sont pas LUS, on ne masque RIEN — masquer sur une
+ * lecture ratée ferait croire à une période plus petite qu'elle n'est (P4-20/P4-1).
+ *
+ * ⚠ `layerRead` rend les TROIS états de `readState`, pas un booléen (revue #342 round 2) :
+ * le premier jet repliait `loading` sur `failed`, et l'écran criait « n'a pas pu être lu »
+ * à CHAQUE ouverture d'une période, sur une lecture simplement en vol. Un faux rapport
+ * d'erreur récurrent apprend au gestionnaire à ignorer le bandeau — exactement le jour où
+ * la lecture échoue vraiment. Charger et échouer ne se disent pas de la même façon.
+ */
+export function useActiveVenues(schedulePlanId: string | null): { venues: Venue[]; disabledIds: Set<string>; layerRead: ReadState } {
+  const all = useWizardVenues();
+  const overrides = useVenuePeriodOverrides(schedulePlanId);
+  const venues = all.data ?? [];
+
+  if (null === schedulePlanId) {
+    return { venues, disabledIds: new Set(), layerRead: "ready" };
+  }
+  const layerRead = readState(overrides);
+  if ("ready" !== layerRead) {
+    return { venues, disabledIds: new Set(), layerRead };
+  }
+  const disabledIds = disabledVenueIds(overrides.data ?? []);
+
+  return { venues: activeVenues(venues, overrides.data ?? []), disabledIds, layerRead };
+}
+
+/** Le pendant équipes — même contrat, même fail-closed. @see useActiveVenues */
+export function useActiveTeams(schedulePlanId: string | null): { teams: Team[]; pausedIds: Set<string>; layerRead: ReadState } {
+  const all = useWizardTeams();
+  const overrides = useTeamPeriodOverrides(schedulePlanId);
+  const teams = all.data ?? [];
+
+  if (null === schedulePlanId) {
+    return { teams, pausedIds: new Set(), layerRead: "ready" };
+  }
+  const layerRead = readState(overrides);
+  if ("ready" !== layerRead) {
+    return { teams, pausedIds: new Set(), layerRead };
+  }
+  const pausedIds = pausedTeamIds(overrides.data ?? []);
+
+  return { teams: activeTeams(teams, pausedIds), pausedIds, layerRead };
 }
 
 export function useTeamPeriodOverrides(schedulePlanId: string | null) {

@@ -20,20 +20,37 @@ const h = vi.hoisted(() => ({
   tagAssignments: [] as { id: string; teamId: string; tagId: string; seasonId: string }[],
 }));
 
+const SEASON_TEAMS = [
+  { id: "t1", name: "SM1", sportCategoryId: "cat", priorityTierId: 3, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true },
+  { id: "t2", name: "Fanion", sportCategoryId: "cat", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true },
+];
+
+const { activeVenuesState, activeTeamsState, reservationArgs } = vi.hoisted(() => ({
+  activeVenuesState: {
+    venues: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] as { id: string; name: string; isActive: boolean }[],
+    disabledIds: new Set<string>(),
+    layerRead: "ready" as "loading" | "failed" | "ready",
+  },
+  activeTeamsState: { pausedIds: new Set<string>(), layerRead: "ready" as "loading" | "failed" | "ready" },
+  // ⚠ Le mock HONORE ses arguments : `useReservations(planId, enabled)` porte la garde qui
+  // empêche une période non résolue de servir les réservations du SOCLE. Un mock qui rend
+  // une constante rendait cette garde inobservable — c'est ainsi que l'issue de secours
+  // « gymnase réservé » a pu être ajoutée sans un seul test (revue #342 round 2).
+  reservationArgs: { planId: undefined as string | null | undefined, enabled: undefined as boolean | undefined },
+}));
+
 vi.mock("../queries", () => ({
   useWizardConstraints: () => ({ data: h.list }),
-  useWizardTeams: () => ({
-    data: [
-      { id: "t1", name: "SM1", sportCategoryId: "cat", priorityTierId: 3, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true },
-      { id: "t2", name: "Fanion", sportCategoryId: "cat", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true },
-    ],
-  }),
+  useWizardTeams: () => ({ data: SEASON_TEAMS }),
   usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 3, label: "B", name: "Moyenne", color: null }] }),
   useWizardTeamTags: () => ({ data: h.tags }),
   useWizardTeamTagAssignments: () => ({ data: h.tagAssignments }),
   useWizardCoaches: () => ({ data: [{ id: "co1", firstName: "Jean", lastName: "Dupont", isEmployee: false, isActive: true, email: null }] }),
   useWizardCoachPlayers: () => ({ data: [] }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] }),
+  // P2-15 : les sélecteurs ne voient QUE les gymnases et les équipes actifs de la couche.
+  useActiveVenues: () => ({ venues: activeVenuesState.venues, disabledIds: activeVenuesState.disabledIds, layerRead: activeVenuesState.layerRead }),
+  useActiveTeams: () => ({ teams: SEASON_TEAMS.filter((t) => !activeTeamsState.pausedIds.has(t.id)), pausedIds: activeTeamsState.pausedIds, layerRead: activeTeamsState.layerRead }),
   useVenueSlots: () => ({ data: [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }] }),
   // #8 — la grille de la couche ÉDITÉE : le socle en mode saison, la grille que la
   // période POSSÈDE sinon. Les deux couches portent volontairement des créneaux
@@ -47,7 +64,11 @@ vi.mock("../queries", () => ({
   useCreateConstraint: () => ({ mutate: h.createMut, isPending: false }),
   useUpdateConstraint: () => ({ mutate: h.updateMut, isPending: false }),
   useDeleteConstraint: () => ({ mutate: vi.fn() }),
-  useReservations: () => ({ data: h.reservations }),
+  useReservations: (planId: string | null, enabled?: boolean) => {
+    reservationArgs.planId = planId;
+    reservationArgs.enabled = enabled;
+    return { data: false === enabled ? [] : h.reservations };
+  },
   // P2-9 PR C : la modale est transactionnelle (on compose, on valide) — elle appelle
   // donc mutateAsync et non mutate, et lit le lien équipe→coach pour refuser au clic une
   // affectation qui dédoublerait un coach.
@@ -97,6 +118,48 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     h.list = [];
     h.tags = [];
     h.tagAssignments = [];
+    activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }];
+    activeVenuesState.disabledIds = new Set();
+    activeVenuesState.layerRead = "ready";
+    activeTeamsState.pausedIds = new Set();
+    activeTeamsState.layerRead = "ready";
+    h.reservations = [];
+  });
+
+  // Même règle qu'au récap : lecture ratée ⇒ on ne masque rien, mais on le DIT. Le silence
+  // aurait laissé relier une contrainte à un gymnase en fait désactivé (revue #342).
+  it("annonce que la liste est celle de la saison quand les réglages sont illisibles", () => {
+    activeVenuesState.layerRead = "failed";
+    renderWithProviders(<ConstraintsStep />);
+
+    expect(screen.getByText(/n'ont pas pu être lus.*peut contenir un gymnase désactivé/)).toBeInTheDocument();
+  });
+
+  // CHARGER ≠ ÉCHOUER (revue #342 round 2) : replier `loading` sur `failed` faisait crier
+  // « n'a pas pu être lu » à chaque ouverture. Un bandeau d'alerte qui se déclenche en
+  // régime normal n'alerte plus de rien.
+  it("dit « en cours de lecture » — pas « échec » — pendant le chargement des réglages", () => {
+    activeVenuesState.layerRead = "loading";
+    renderWithProviders(<ConstraintsStep />);
+
+    expect(screen.getByText(/sont en cours de lecture/)).toBeInTheDocument();
+    expect(screen.queryByText(/n'ont pas pu être lus/)).not.toBeInTheDocument();
+  });
+
+  // P2-15 (retour fondateur) : « ça n'a pas de sens que le gymnase Mateo soit désactivé
+  // mais que je puisse encore y relier des contraintes ». Un gymnase désactivé sort du
+  // payload solveur : l'offrir invitait à un geste sans effet, que le récap devait ensuite
+  // avertir. Décision : dans les sélecteurs, on ne voit QUE les gymnases actifs.
+  it("n'offre que les gymnases ACTIFS de la période", async () => {
+    const user = userEvent.setup();
+    activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }];
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    const picker = screen.getByLabelText("Gymnase");
+    const options = Array.from(picker.querySelectorAll("option")).map((o) => o.textContent);
+    expect(options).toContain("Gymnase A");
+    expect(options).not.toContain("Gymnase B");
   });
 
   it("only offers groups (tags) that have at least one assigned team", () => {
@@ -629,5 +692,107 @@ describe("ConstraintsStep — inherited section lives inside the family tabs (pe
     useWizardStore.getState().exitPeriodMode();
     renderWithProviders(<ConstraintsStep />);
     expect(screen.queryByTestId("inherited-section")).toBeNull();
+  });
+});
+
+/**
+ * P2-15 round 2 — les trois usages d'une liste, en mode PÉRIODE.
+ *
+ * CHOISIR n'offre que l'actif · NOMMER garde la liste complète · ATTEINDRE laisse arriver
+ * jusqu'au geste correctif SANS rouvrir le geste fautif. Le round 1 avait posé la porte de
+ * sortie « gymnase réservé » sans un seul test : la retirer laissait la suite verte.
+ */
+describe("ConstraintsStep — période : choisir, nommer, atteindre", () => {
+  beforeEach(() => {
+    h.list = [];
+    h.reservations = [];
+    periodAnchorReady.value = true;
+    activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }];
+    activeVenuesState.disabledIds = new Set();
+    activeTeamsState.pausedIds = new Set();
+    useWizardStore.getState().startPeriodMode("entry-15");
+  });
+  afterEach(() => {
+    useWizardStore.getState().exitPeriodMode();
+  });
+
+  // CHOISIR — une équipe en pause sort du payload solveur : l'épingler est un geste sans
+  // effet que RIEN n'attrape (OrphanPinGuard ne regarde que salle/jour/heure), donc la
+  // génération PASSE et l'équipe n'a de séance nulle part.
+  it("n'offre pas une équipe en pause, ni en cible de contrainte ni en réservation", async () => {
+    const user = userEvent.setup();
+    activeTeamsState.pausedIds = new Set(["t2"]);
+    renderWithProviders(<ConstraintsStep />);
+
+    const target = screen.getByRole("combobox", { name: "Cible" });
+    expect(within(target).queryByRole("option", { name: "Fanion" })).toBeNull();
+    expect(within(target).getByRole("option", { name: "SM1" })).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v2");
+    await user.click(screen.getByRole("button", { name: /Gymnase B.*cliquer pour gérer/ }));
+    const picker = screen.getByLabelText("Ajouter une équipe");
+    expect(within(picker).queryByRole("option", { name: "Fanion" })).toBeNull();
+  });
+
+  // ATTEINDRE — un gymnase désactivé qui porte ENCORE une réservation reste joignable,
+  // sinon `OrphanPinGuard` refuse la génération (422) en nommant un gymnase que l'écran
+  // capable d'enlever l'épinglage ne montre plus. La porte doit s'ouvrir dans UN sens.
+  it("laisse joindre un gymnase désactivé qui porte encore une réservation, marqué", async () => {
+    const user = userEvent.setup();
+    activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }];
+    activeVenuesState.disabledIds = new Set(["v2"]);
+    h.reservations = [{ id: "r9", calendarEntryId: null, teamId: "t1", venueId: "v2", dayOfWeek: 4, startTime: "19:00", durationMinutes: 90 }];
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+    const venuePicker = screen.getByLabelText("Gymnase");
+    expect(within(venuePicker).getByRole("option", { name: /Gymnase B \(désactivé pour cette période\)/ })).toBeInTheDocument();
+  });
+
+  // …et PAS dans l'autre : le round 1 réadmettait une grille pleinement éditable, donc on
+  // pouvait y créer un NOUVEL épinglage orphelin et repartir en 422.
+  it("ferme l'ajout sur un gymnase désactivé — on ne peut qu'y retirer", async () => {
+    const user = userEvent.setup();
+    activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }];
+    activeVenuesState.disabledIds = new Set(["v2"]);
+    h.reservations = [{ id: "r9", calendarEntryId: null, teamId: "t1", venueId: "v2", dayOfWeek: 4, startTime: "19:00", durationMinutes: 90 }];
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v2");
+    await user.click(screen.getByRole("button", { name: /Gymnase B.*cliquer pour gérer/ }));
+
+    expect(screen.queryByLabelText("Ajouter une équipe")).toBeNull();
+    expect(screen.getByText(/on ne peut plus y ajouter d'équipe/)).toBeInTheDocument();
+    // Retirer reste possible : c'est la raison d'être de la porte.
+    expect(screen.getByRole("button", { name: "Retirer SM1" })).toBeInTheDocument();
+  });
+
+  // La lecture qui alimente cette porte suit la MÊME garde que le panneau : `null` est à la
+  // fois l'ancre base légitime et un plan non résolu. Un `enabled` codé en dur allait
+  // chercher les réservations du SOCLE et les publiait dans le cache partagé « base ».
+  it("ne lit pas les réservations tant que l'ancre de la période n'est pas résolue", () => {
+    periodAnchorReady.value = false;
+    renderWithProviders(<ConstraintsStep />);
+
+    expect(reservationArgs.enabled).toBe(false);
+  });
+
+  // NOMMER — un picker doit toujours pouvoir afficher SA PROPRE valeur : sans ça le select
+  // rend blanc sur une contrainte qui nomme pourtant un gymnase, et « combler le trou »
+  // repointe une règle HARD ailleurs.
+  it("garde le gymnase d'une contrainte en édition dans le select, même désactivé", async () => {
+    const user = userEvent.setup();
+    activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }];
+    activeVenuesState.disabledIds = new Set(["v2"]);
+    h.list = [{ id: "c1", name: "SM1 · impose Gymnase B", scope: "TEAM", scopeTargetId: "t1", family: "FACILITY", ruleType: "HARD", config: { forcedVenueId: "v2" }, isActive: true } as unknown as Constraint];
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    await user.click(screen.getByRole("button", { name: /modifier/i }));
+    const picker = screen.getByLabelText("Gymnase");
+    expect((picker as HTMLSelectElement).value).toBe("v2");
+    expect(within(picker).getByRole("option", { name: /Gymnase B \(désactivé pour cette période\)/ })).toBeInTheDocument();
   });
 });
