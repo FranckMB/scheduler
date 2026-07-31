@@ -1,20 +1,14 @@
 /** Cockpit calendar date helpers — pure, no date library. All dates are ISO Y-m-d. */
 
+// « Aujourd'hui » vit désormais dans `shared/lib/clock` (une seule source pour tout le
+// front, pilotable en dev). Ré-exporté ici pour que les 9 fichiers qui l'importent depuis
+// ce module restent inchangés — P4-16 migrera les appelants quand elle traitera le serveur.
+export { toISODate, todayISO } from "@/shared/lib/clock";
+import { toISODate } from "@/shared/lib/clock";
+
 const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
 export const monthLabel = (month: number): string => MONTH_LABELS[month] ?? "";
-
-/** Local Y-m-d (avoids the UTC shift of toISOString). */
-export function toISODate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-export function todayISO(): string {
-  return toISODate(new Date());
-}
 
 /** First and last ISO date covering the calendar grid for a given month (Monday-first, 6 weeks). */
 export function monthWindow(year: number, month: number): { from: string; to: string } {
@@ -140,6 +134,30 @@ function startsLateInWeek(iso: string): boolean {
  * Règle réservée aux vacances : fermetures/coupures gardent weeksCovering. La garde
  * `length > 1` évite de renvoyer vide (un week-end de vacances isolé garde sa semaine).
  */
+/**
+ * P3-13 — UNE SEMAINE ACTIONNABLE EST UNE SEMAINE QUI N'A PAS COMMENCÉ.
+ *
+ * Décision fondateur 2026-08-01 : « on écarte les semaines passées ET les semaines en
+ * cours. S'il veut voir le planning de la semaine, on a d'autres moyens de le voir. Le
+ * radar c'est pour gérer les tâches/événements À VENIR. » Le radar comptait « 0/7 semaines
+ * couvertes » quand 3 étaient derrière, et la campagne coachs sollicitait pour du passé.
+ *
+ * ⚠ On compare `monday`, PAS `startDate` : `startDate` peut être rogné par la fenêtre de
+ * saison (vacances à cheval sur la frontière) alors que `monday` identifie la semaine
+ * calendaire — c'est lui qui répond à « quelle semaine est-ce ? ».
+ *
+ * Fonctions PURES, hors React : les tests d'écran mockent les hooks et ne garderaient que
+ * le câblage (leçon P2-15 / CLAUDE.md §7.2).
+ */
+export function isUpcomingWeek(week: WeekWindow, today: string): boolean {
+  return week.monday > today;
+}
+
+/** Les semaines de `weeks` qui n'ont pas encore commencé. @see isUpcomingWeek */
+export function upcomingWeeks(weeks: WeekWindow[], today: string): WeekWindow[] {
+  return weeks.filter((w) => isUpcomingWeek(w, today));
+}
+
 export function periodAdjustWeeks(start: string, end: string, season: { startDate: string; endDate: string }, periodType: string | null): WeekWindow[] {
   const weeks = weeksCovering(start, end, season);
   // Garde `weeks[0].startDate === monday` (revue C F3) : on n'écarte QUE si la 1ʳᵉ

@@ -3,7 +3,7 @@ import { HTTPError } from "ky";
 import { Check, Copy, Send } from "lucide-react";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
-import { periodAdjustWeeks } from "@/features/cockpit/lib/date";
+import { isUpcomingWeek, periodAdjustWeeks, todayISO } from "@/features/cockpit/lib/date";
 import { useUpdateCoach, useWizardTeamCoaches, useWizardTeams } from "@/features/wizard/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -44,7 +44,24 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   // Campagne courante (après enregistrement, on garde la réponse pour afficher les liens).
   const [campaign, setCampaign] = useState<CoachWishCampaign | null>(existing);
 
-  const availableWeeks = useMemo(() => (null === season ? [] : periodAdjustWeeks(entry.startDate, entry.endDate, season, entry.periodType)), [entry, season]);
+  // P3-13/P3-15 (c) — on ne sollicite un coach que pour l'AVENIR : les semaines révolues et
+  // la semaine en cours étaient proposées ET cochées par défaut. Même règle et même foyer
+  // que le radar (`isUpcomingWeek`), pas une seconde implémentation (CLAUDE.md §7.2).
+  //
+  // ⚠ Une campagne EXISTANTE peut porter une semaine devenue révolue : elle reste LISTÉE
+  // et marquée, jamais offerte à une nouvelle sélection. La masquer laisserait `weeks`
+  // porter un lundi invisible que `save()` renverrait — un état que l'écran ne montre pas
+  // (CHOISIR n'offre que l'avenir, NOMMER garde le reste lisible).
+  const today = todayISO();
+  const availableWeeks = useMemo(() => {
+    if (null === season) {
+      return [];
+    }
+    const all = periodAdjustWeeks(entry.startDate, entry.endDate, season, entry.periodType);
+    const kept = new Set(existing?.weeks ?? []);
+
+    return all.filter((w) => isUpcomingWeek(w, today) || kept.has(w.monday));
+  }, [entry, season, existing, today]);
 
   // Équipes ayant AU MOINS un coach — cocher une équipe sans coach ne crée aucun lien.
   const coachCountByTeam = useMemo(() => {
@@ -56,7 +73,9 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   }, [teamCoachesQuery.data]);
   const teams = (teamsQuery.data ?? []).filter((t) => t.isActive && (coachCountByTeam.get(t.id) ?? 0) > 0);
 
-  const [weeks, setWeeks] = useState<Set<string>>(() => new Set(existing ? existing.weeks : availableWeeks.map((w) => w.monday)));
+  // Défaut : les semaines À VENIR seulement — cocher d'office une semaine révolue partait
+  // solliciter les coachs pour du passé.
+  const [weeks, setWeeks] = useState<Set<string>>(() => new Set(existing ? existing.weeks : availableWeeks.filter((w) => isUpcomingWeek(w, today)).map((w) => w.monday)));
   const [teamIds, setTeamIds] = useState<Set<string>>(() => new Set(existing ? existing.teamIds : []));
   const [deadline, setDeadline] = useState<string>(existing?.deadline ?? entry.startDate);
 
@@ -98,6 +117,7 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
               <label key={w.monday} className="flex items-center gap-2 text-sm">
                 <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={weeks.has(w.monday)} onChange={() => toggle(weeks, w.monday, setWeeks)} aria-label={`Semaine du ${frDate(w.startDate)}`} />
                 Semaine du {frDate(w.startDate)} au {frDate(w.endDate)}
+                {isUpcomingWeek(w, today) ? null : <span className="text-xs italic text-muted-foreground">déjà commencée</span>}
               </label>
             ))
           )}

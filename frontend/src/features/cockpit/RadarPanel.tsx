@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarClock, CalendarOff, MapPin, MessageSquare, OctagonX, PartyPopper, Pencil } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarOff, ChevronDown, MapPin, MessageSquare, OctagonX, PartyPopper, Pencil } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 
 import { useWorkingSeason } from "@/features/auth/queries";
@@ -6,10 +6,11 @@ import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
+import { cn } from "@/shared/lib/utils";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
 import { useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
-import { clampRangeToSeason, daysUntil, frDateShort, periodAdjustWeeks, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { clampRangeToSeason, daysUntil, frDateShort, isUpcomingWeek, mondayOf, periodAdjustWeeks, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
 import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
@@ -20,6 +21,13 @@ import { useState } from "react";
 
 /** Public holidays further out than this are noise, not a to-do. */
 export const PUBLIC_HOLIDAY_HORIZON_DAYS = 30;
+/**
+ * P3-13 — au-delà, une vacance scolaire est « TROP loin pour que je m'en occupe de suite »
+ * (fondateur 2026-08-01) : en été, Toussaint et Noël s'affichaient. Valeur choisie par le
+ * fondateur. ⚠ Ne masque QUE les vacances intactes : dès qu'un plan existe, la période est
+ * rendue en carte « en cours », qui échappe à cet horizon (voir `inProgressEntries`).
+ */
+export const SCHOOL_HOLIDAY_HORIZON_DAYS = 60;
 
 interface RadarPanelProps {
   entries: CalendarEntry[];
@@ -143,10 +151,14 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // que la DERNIÈRE fenêtre (mère ou enfants — une semaine pleine déborde la
   // mère) n'est pas passée ; tout couvert → la carte s'efface (to-do).
   const motherWeekSlots = (m: CalendarEntry): { week: WeekWindow; child: CalendarEntry | null }[] => {
+    // P3-13 (b) — les semaines RÉVOLUES et la semaine EN COURS ne comptent ni ne
+    // s'offrent : « 0/7 couvertes » quand 3 étaient derrière décrivait un travail
+    // impossible. Filtre appliqué en SORTIE, donc aux deux branches ci-dessous.
+    const upcoming = (slots: { week: WeekWindow; child: CalendarEntry | null }[]) => slots.filter(({ week }) => isUpcomingWeek(week, today));
     const children = childrenByParent.get(m.id) ?? [];
     if (null === workingSeason) {
       // Saison inconnue : pas de calcul des manquantes — les enfants existants font foi.
-      return children.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c }));
+      return upcoming(children.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: mondayOf(c.startDate) }, child: c })));
     }
     // Filet #262 + revue C F1 : on itère TOUTES les semaines calendaires et on garde
     // une semaine si elle porte un enfant EXISTANT (toujours visible/gérable) OU si
@@ -154,29 +166,27 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     // d'une vacance démarrant Ven/Sam/Dim). Une semaine partielle SANS enfant
     // disparaît (pas de chip « + créer ») ; AVEC enfant, elle reste (jamais orpheline).
     const offeredMondays = new Set(periodAdjustWeeks(m.startDate, m.endDate, workingSeason, m.periodType).map((w) => w.monday));
-    return weeksCovering(m.startDate, m.endDate, workingSeason)
-      .map((week) => ({ week, child: children.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null }))
-      .filter(({ week, child }) => null !== child || offeredMondays.has(week.monday));
+    return upcoming(
+      weeksCovering(m.startDate, m.endDate, workingSeason)
+        .map((week) => ({ week, child: children.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null }))
+        .filter(({ week, child }) => null !== child || offeredMondays.has(week.monday)),
+    );
   };
-  const splitMothers = roots.filter((e) => {
-    const children = childrenByParent.get(e.id);
-    if (undefined === children) {
-      return false;
-    }
-    const lastEnd = children.reduce((mx, c) => (c.endDate > mx ? c.endDate : mx), e.endDate);
-    if (lastEnd < today) {
-      return false;
-    }
-    return motherWeekSlots(e).some(({ child }) => null === child || !activeByEntry.has(child.id));
-  });
+  // La carte de couverture vit tant qu'il RESTE une semaine à venir non couverte. Le
+  // garde-fou `lastEnd < today` d'avant est devenu redondant : une mère entièrement
+  // passée n'a plus aucun slot, donc plus aucun `some` vrai.
+  const splitMothers = roots.filter((e) => childrenByParent.has(e.id) && motherWeekSlots(e).some(({ child }) => null === child || !activeByEntry.has(child.id)));
 
   // Semaines ORPHELINES D'AFFICHAGE : une semaine dont la mère ne porte AUCUNE
   // carte de couverture — mère sortie de la fenêtre radar (finie), OU écartée
   // (ignorée) : dans les deux cas, sans surface, la semaine encore courante et
   // non validée serait implanifiable (revue #262 rounds 2-3). Carte dédiée.
   const renderedMotherIds = new Set(splitMothers.map((m) => m.id));
+  // Même règle que la couverture (P3-13 b) : une semaine ORPHELINE encore à venir. Une
+  // semaine en cours reste consultable au calendrier et au DayDialog — elle sort de la
+  // to-do, pas de l'application (décision fondateur).
   const orphanWeekChildren = active.filter(
-    (e) => null !== e.parentEntryId && !renderedMotherIds.has(e.parentEntryId) && e.endDate >= today && !activeByEntry.has(e.id),
+    (e) => null !== e.parentEntryId && !renderedMotherIds.has(e.parentEntryId) && mondayOf(e.startDate) > today && !activeByEntry.has(e.id),
   );
 
   // Adapter une période qui COUVRE PLUSIEURS SEMAINES = les choisir — sauf déjà
@@ -204,6 +214,10 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
 
   const upcomingHolidays = holidays
     .filter((h) => h.startDate >= today)
+    // P3-13 (a) : horizon, comme les fériés en ont un depuis toujours. Sans lui, `.slice(0, 3)`
+    // laissait passer Noël en plein été — trois vacances, mais pas les trois PROCHAINES au
+    // sens où le gestionnaire peut agir dessus.
+    .filter((h) => daysUntil(today, h.startDate) <= SCHOOL_HOLIDAY_HORIZON_DAYS)
     .filter((h) => entryByHoliday.get(h.id)?.status !== "ignored")
     // Entièrement hors de la fenêtre de saison → rien à bâtir, pas de carte.
     // (Saison inconnue = on garde la carte ; le bouton Adapter, lui, est gardé.)
@@ -272,6 +286,13 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   const upcomingPublicHolidays = publicHolidays
     .filter((h) => h.date >= today && daysUntil(today, h.date) <= PUBLIC_HOLIDAY_HORIZON_DAYS)
     .sort((a, b) => a.date.localeCompare(b.date));
+
+  // P3-11 — le panneau reste NU tant que ces lectures sont en vol : ni carte, ni « Rien à
+  // l'horizon » (le masquage est voulu — ne pas faire clignoter une carte qui va
+  // disparaître), donc un cadre « À traiter » vide pendant quelques centaines de ms, qui
+  // se lit comme « rien à faire ». Un squelette dit la seule chose vraie : on ne sait pas
+  // encore. Mêmes drapeaux que `isEmpty` ci-dessous — une seule liste, pas deux.
+  const stillLoading = plansUnresolved || schedulesUnresolved || closureImpactsPending || zoneLoading || publicHolidaysLoading;
 
   const isEmpty =
     inProgressEntries.length === 0 &&
@@ -482,6 +503,19 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         <RadarCard key={h.id} icon={<CalendarOff className="size-4 text-destructive" />} title={h.label} detail={`Dans ${daysUntil(today, h.date)} j · jour férié`} />
       ))}
 
+      {/* P3-11 : squelette tant qu'on ne sait pas — jamais en même temps que « Tout roule »
+          (`isEmpty` exige déjà que ces mêmes lectures soient résolues). */}
+      {stillLoading ? (
+        <div role="status" aria-label="Chargement des éléments à traiter" className="space-y-2">
+          {[0, 1].map((i) => (
+            <div key={i} className="animate-pulse rounded-md border border-border p-3">
+              <div className="h-3 w-2/5 rounded bg-muted" />
+              <div className="mt-2 h-2 w-3/5 rounded bg-muted" />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {isEmpty ? <p className="text-sm text-muted-foreground">Rien à l'horizon. Tout roule.</p> : null}
 
       {/* Vacance PAS encore matérialisée : picker sur une mère synthétique (aucune
@@ -577,7 +611,18 @@ function ClosureRadarItem({ entry, activeScheduleId, inProgress = false, seasonU
   );
 }
 
+/**
+ * L'encart d'une ligne du radar — TOUTES les cartes passent par ici, y compris les
+ * fermetures : c'est ce qui permet au repli d'exister en un seul endroit.
+ *
+ * P3-13 (d) — « le radar devient très long » (fondateur). Les actions sont REPLIÉES par
+ * défaut ; l'en-tête (icône, titre, détail) reste toujours visible, sinon le panneau ne
+ * dirait plus rien d'un coup d'œil — or c'est précisément ce qu'on lui demande. Une carte
+ * SANS action (événement, coupure, férié) n'a rien à replier : pas de bouton du tout.
+ */
 function RadarCard({ icon, title, detail, children }: { icon: React.ReactNode; title: string; detail: string; children?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="rounded-md border border-border p-3">
       <div className="flex items-start gap-2">
@@ -586,10 +631,21 @@ function RadarCard({ icon, title, detail, children }: { icon: React.ReactNode; t
           <p className="truncate text-sm font-medium">{title}</p>
           <p className="text-xs text-muted-foreground">{detail}</p>
         </div>
+        {children ? (
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={`${open ? "Replier" : "Déplier"} ${title}`}
+            className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+            onClick={() => setOpen((prev) => !prev)}
+          >
+            <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} />
+          </button>
+        ) : null}
       </div>
       {/* Empilées à droite (pas en ligne) : les chips par semaine d'une carte de
           couverture débordaient de l'encart en ligne (retour fondateur 2026-07-24). */}
-      {children ? <div className="mt-2 flex flex-col items-end gap-1">{children}</div> : null}
+      {children && open ? <div className="mt-2 flex flex-col items-end gap-1">{children}</div> : null}
     </div>
   );
 }
