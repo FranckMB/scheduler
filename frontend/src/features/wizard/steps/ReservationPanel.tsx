@@ -17,7 +17,23 @@ import { SlotReservationModal } from "./SlotReservationModal";
  * épuré). Server-backed via the Reservation entity; base plan vs period overlay by
  * `schedulePlanId` (ADR-0002 inv. 5 : la réservation est une RÉPONSE, elle pend au plan).
  */
-export function ReservationPanel({ teams, tiers, venues, schedulePlanId }: { teams: Team[]; tiers: PriorityTier[]; venues: Venue[]; schedulePlanId: string | null }) {
+export function ReservationPanel({
+  teams,
+  tiers,
+  venues,
+  schedulePlanId,
+  pausedTeamIds,
+  disabledVenueIds,
+}: {
+  teams: Team[];
+  tiers: PriorityTier[];
+  venues: Venue[];
+  schedulePlanId: string | null;
+  /** Équipes en pause pour la période : NOMMÉES (un épinglage existant reste lisible) mais jamais proposées. */
+  pausedTeamIds?: ReadonlySet<string>;
+  /** Gymnases désactivés pour la période : ATTEIGNABLES (pour retirer un épinglage) mais marqués, et fermés à l'ajout. */
+  disabledVenueIds?: ReadonlySet<string>;
+}) {
   // La grille de la couche éditée — jamais celle de la saison depuis une période :
   // une réservation hors de la grille servie bloquerait la génération (#8).
   const { data: slots = [] } = useGridSlots(schedulePlanId);
@@ -64,10 +80,20 @@ export function ReservationPanel({ teams, tiers, venues, schedulePlanId }: { tea
           {venues.map((v) => (
             <option key={v.id} value={v.id}>
               {v.name}
+              {disabledVenueIds?.has(v.id) ? " (désactivé pour cette période)" : ""}
             </option>
           ))}
         </Select>
       </div>
+
+      {/* Ce gymnase ne sert plus la période : il reste ici pour qu'on puisse RETIRER
+          l'épinglage qui bloque la génération (`OrphanPinGuard`, 422), pas pour en poser
+          un nouveau — la modale ferme l'ajout. */}
+      {disabledVenueIds?.has(selected.id) ? (
+        <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          {selected.name} est désactivé pour cette période : ses réservations empêchent la génération. Retirez-les — on ne peut plus en ajouter ici.
+        </p>
+      ) : null}
 
       <ReservationGrid
         venue={selected}
@@ -90,6 +116,8 @@ export function ReservationPanel({ teams, tiers, venues, schedulePlanId }: { tea
           coachesFailed={coachesFailed}
           onRetryCoaches={() => void refetchCoaches()}
           venues={venues}
+          disabledVenueIds={disabledVenueIds}
+          pausedTeamIds={pausedTeamIds}
           venueCanSplit={venueCanSplit}
           schedulePlanId={schedulePlanId}
           onClose={() => setActiveSlot(null)}

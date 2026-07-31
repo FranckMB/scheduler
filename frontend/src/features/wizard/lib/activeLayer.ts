@@ -20,8 +20,12 @@ import type { Team, TeamPeriodOverride, Venue, VenuePeriodOverride } from "../ap
  * Seul `DISABLED` retire un gymnase. `BLANK` (« vierge ») vide sa grille mais le gymnase
  * sert toujours — les confondre retirerait de l'écran un gymnase que le solveur voit.
  */
+export function disabledVenueIds(overrides: VenuePeriodOverride[]): Set<string> {
+  return new Set(overrides.filter((o) => "DISABLED" === o.mode).map((o) => o.venueId));
+}
+
 export function activeVenues(venues: Venue[], overrides: VenuePeriodOverride[]): Venue[] {
-  const disabled = new Set(overrides.filter((o) => "DISABLED" === o.mode).map((o) => o.venueId));
+  const disabled = disabledVenueIds(overrides);
 
   return 0 === disabled.size ? venues : venues.filter((v) => !disabled.has(v.id));
 }

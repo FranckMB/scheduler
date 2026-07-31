@@ -307,16 +307,22 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     () => (0 === disabledVenueIds.size ? trainingSlots : trainingSlots.filter((ts) => !disabledVenueIds.has(ts.venueId))),
     [trainingSlots, disabledVenueIds],
   );
-  // ⚠ Les séances PLACÉES se filtrent aussi (revue #342) : ne retirer que les fenêtres
-  // laissait au gymnase désactivé une colonne PLEINE de séances et vide de créneaux
-  // libres — le symptôme d'origine survivait, sous une forme encore plus trompeuse
-  // (un gymnase qui existe à l'écran et nulle part ailleurs).
-  const layerPlacedSlots = useMemo(
-    () => (0 === disabledVenueIds.size ? slots : slots.filter((s) => !disabledVenueIds.has(s.venueId))),
+  // ⚠ On filtre ce qui est OFFERT (les fenêtres libres), JAMAIS ce qui EXISTE (les séances
+  // placées) — revue #342 round 2. Le premier jet filtrait aussi les séances : l'écran
+  // cessait alors de montrer des séances que l'EXPORT, rendu côté serveur par scheduleId,
+  // contenait toujours — le PDF remis aux coachs et l'écran se contredisaient, et une
+  // version entièrement placée dans un gymnase désactivé rendait une grille blanche sans
+  // un mot. Une version est un FAIT DÉJÀ ARRIVÉ ; la composition de la période est un
+  // réglage pour la PROCHAINE génération. Cacher le fait ne le supprime pas : on l'annonce
+  // (`staleVenueSessions`) et on invite à régénérer.
+  const emptySlots = useMemo(() => computeEmptySlots(layerSlots, slots, validScheduleId ?? ""), [layerSlots, slots, validScheduleId]);
+  const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...slots, ...emptySlots] : slots), [viewMode, slots, emptySlots]);
+  // Les séances de cette version que la période ne servirait plus : elles restent à
+  // l'écran (et dans l'export), mais le gestionnaire doit savoir qu'elles sont périmées.
+  const staleVenueSessions = useMemo(
+    () => (0 === disabledVenueIds.size ? 0 : slots.filter((s) => disabledVenueIds.has(s.venueId)).length),
     [slots, disabledVenueIds],
   );
-  const emptySlots = useMemo(() => computeEmptySlots(layerSlots, layerPlacedSlots, validScheduleId ?? ""), [layerSlots, layerPlacedSlots, validScheduleId]);
-  const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...layerPlacedSlots, ...emptySlots] : layerPlacedSlots), [viewMode, layerPlacedSlots, emptySlots]);
 
   // From gridSlots (incl. empty windows in gymnase view) so a venue that has ONLY
   // empty slots still appears in the ResourceFilter picker — otherwise focusVenue
@@ -324,11 +330,21 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const resourceGroups = useMemo(() => availableResourceGroups(gridSlots, viewMode, lookups, tiers), [gridSlots, viewMode, lookups, tiers]);
   const model = useMemo(() => buildGrid(gridSlots, viewMode, lookups, new Set(resourceFilter)), [gridSlots, viewMode, lookups, resourceFilter]);
 
-  // Un diagnostic qui NOMME un gymnase masqué proposerait un focus vers une colonne
-  // inexistante — un clic qui vide l'écran (revue #342). Il sort avec son gymnase.
+  // Un diagnostic qui NOMME une colonne absente de l'écran proposerait un focus vers rien —
+  // un clic qui vide la grille (revue #342). Seul sort le diagnostic d'un gymnase désactivé
+  // dont il ne reste AUCUNE séance : s'il en porte encore, sa colonne existe et son
+  // diagnostic reste actionnable.
+  const hiddenVenueIds = useMemo(() => {
+    if (0 === disabledVenueIds.size) {
+      return disabledVenueIds;
+    }
+    const placed = new Set(slots.map((s) => s.venueId));
+
+    return new Set([...disabledVenueIds].filter((id) => !placed.has(id)));
+  }, [disabledVenueIds, slots]);
   const diagnostics = useMemo(
-    () => (0 === disabledVenueIds.size ? allDiagnostics : allDiagnostics.filter((d) => null === d.venueId || !disabledVenueIds.has(d.venueId))),
-    [allDiagnostics, disabledVenueIds],
+    () => (0 === hiddenVenueIds.size ? allDiagnostics : allDiagnostics.filter((d) => null === d.venueId || !hiddenVenueIds.has(d.venueId))),
+    [allDiagnostics, hiddenVenueIds],
   );
 
   // Clicking the solver's "unused_slot" warning brings its venue column on screen
@@ -474,6 +490,15 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               }
             />
           </div>
+
+          {/* Ce planning a été généré quand un gymnase servait encore la période : ses
+              séances restent affichées ET exportées, mais elles ne décrivent plus la
+              période telle qu'elle est réglée. On le dit plutôt que de les escamoter. */}
+          {!isGenerating && staleVenueSessions > 0 ? (
+            <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+              {staleVenueSessions} séance(s) de ce planning sont placées dans un gymnase désactivé depuis pour cette période — régénérez-la pour qu'elles en sortent.
+            </p>
+          ) : null}
 
           {isGenerating ? (
             <GenerationWaiting initial={clubInitial} logoUrl={me?.club?.logoUrl ?? null} />

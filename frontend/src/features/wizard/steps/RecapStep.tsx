@@ -51,8 +51,8 @@ export function RecapStep() {
   // le mensonge exact que ce lot corrige — on l'annonce (`useStepValidation` bloque déjà
   // la génération sur ces états ; ici c'est l'affichage qui doit cesser de mentir).
   const periodLayerUnresolved = null !== periodEntryId && "period" !== periodAnchorEarly.state;
-  const { teams, pausedIds, readFailed: teamsReadFailed } = useActiveTeams(layerPlanId);
-  const { venues, readFailed: venuesReadFailed } = useActiveVenues(layerPlanId);
+  const { teams, pausedIds, layerRead: teamsRead } = useActiveTeams(layerPlanId);
+  const { venues, layerRead: venuesRead } = useActiveVenues(layerPlanId);
   const { data: allTeams = [] } = useWizardTeams();
   const { data: allVenues = [] } = useWizardVenues();
   const { data: slots = [] } = useGridSlots(layerPlanId);
@@ -70,13 +70,16 @@ export function RecapStep() {
   // Les équipes en pause : hors des compteurs (elles ne seront pas générées) mais
   // VISIBLES et barrées dans le détail — on doit voir ce qu'on a mis en pause.
   const pausedTeams = allTeams.filter((t) => pausedIds.has(t.id));
-  // FAIL-CLOSED (P4-20/P4-1) : sur une lecture d'overrides ratée, on ne masque RIEN et on
-  // le DIT — annoncer des chiffres de saison sur une période serait le mensonge qu'on corrige.
-  const layerWarnings = [
-    periodLayerUnresolved ? "Les réglages de cette période ne sont pas encore chargés — les chiffres ci-dessous sont ceux de la saison." : null,
-    teamsReadFailed ? "La sélection d'équipes de la période n'a pas pu être lue — les chiffres ci-dessous sont ceux de la saison." : null,
-    venuesReadFailed ? "Les réglages de gymnases de la période n'ont pas pu être lus — les chiffres ci-dessous sont ceux de la saison." : null,
-  ].filter((m): m is string => null !== m);
+  // FAIL-CLOSED (P4-20/P4-1) : tant que les overrides ne sont pas lus, on ne masque RIEN et
+  // on le DIT — annoncer des chiffres de saison sur une période serait le mensonge qu'on
+  // corrige. ⚠ Mais CHARGER n'est pas ÉCHOUER (revue #342 round 2) : le premier jet criait
+  // « n'a pas pu être lu » sur chaque lecture en vol, donc à chaque ouverture. Un bandeau
+  // d'alerte qui se déclenche en régime normal n'alerte plus de rien.
+  const layerNotices = [
+    periodLayerUnresolved ? { message: "Les réglages de cette période ne sont pas encore chargés — les chiffres ci-dessous sont ceux de la saison.", pending: true } : null,
+    "ready" === teamsRead ? null : { message: `La sélection d'équipes de la période ${"loading" === teamsRead ? "est en cours de lecture" : "n'a pas pu être lue"} — les chiffres ci-dessous sont ceux de la saison.`, pending: "loading" === teamsRead },
+    "ready" === venuesRead ? null : { message: `Les réglages de gymnases de la période ${"loading" === venuesRead ? "sont en cours de lecture" : "n'ont pas pu être lus"} — les chiffres ci-dessous sont ceux de la saison.`, pending: "loading" === venuesRead },
+  ].filter((n): n is { message: string; pending: boolean } => null !== n);
 
   const salaried = coaches.filter((c) => c.isEmployee).length;
   const coachPlayerIds = new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId));
@@ -123,7 +126,7 @@ export function RecapStep() {
     ].filter((g) => g.sections.length > 0);
     // coachName/venueName are fresh Maps each render; the real inputs are the data.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [constraints, teams, tiers, tags, coaches, coachPlayers, venues]);
+  }, [constraints, allTeams, tiers, tags, coaches, coachPlayers, allVenues]);
   // A team's main coach (fallback: its first linked coach) — shown inline in italic.
   const mainCoachName = (teamId: string): string | null => {
     const links = teamCoaches.filter((tc) => tc.teamId === teamId);
@@ -135,9 +138,12 @@ export function RecapStep() {
   return (
     <div>
       <p className="mb-4 text-sm text-muted-foreground">{null === periodEntryId ? "Cartographie de votre club avant génération." : "Cartographie de cette période avant génération."}</p>
-      {layerWarnings.map((message) => (
-        <p key={message} className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
-          {message}
+      {layerNotices.map((notice) => (
+        <p
+          key={notice.message}
+          className={cn("mb-3 rounded-md px-3 py-2 text-sm", notice.pending ? "text-muted-foreground" : "border border-warning/40 bg-warning/10 text-foreground")}
+        >
+          {notice.message}
         </p>
       ))}
 

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { readFailed, readLoading } from "@/shared/lib/readState";
+import { readState, type ReadState } from "@/shared/lib/readState";
 
-import { activeTeams, activeVenues, pausedTeamIds } from "./lib/activeLayer";
+import { activeTeams, activeVenues, disabledVenueIds, pausedTeamIds } from "./lib/activeLayer";
 
 import type { CoachPayload, ConstraintPayload, SlotPayload, Team, TeamCoachRole, TeamPayload, Venue, VenuePayload } from "./api";
 import * as wizardApi from "./api";
@@ -262,43 +262,48 @@ export function useDeletePeriodSlot(schedulePlanId: string | null) {
  *
  * `schedulePlanId` null = mode socle : la liste complète, inchangée.
  *
- * FAIL-CLOSED : tant que les overrides ne sont pas LUS (chargement OU échec sans cache),
- * on ne masque RIEN et `readFailed` le dit à l'appelant — l'écran annonce alors que ses
- * chiffres sont ceux de la saison plutôt que de les faire passer pour ceux de la période. Masquer sur une lecture ratée ferait croire à
- * une période plus petite qu'elle n'est — le travers exact que P4-20/P4-1 ont soldé.
+ * FAIL-CLOSED : tant que les overrides ne sont pas LUS, on ne masque RIEN — masquer sur une
+ * lecture ratée ferait croire à une période plus petite qu'elle n'est (P4-20/P4-1).
+ *
+ * ⚠ `layerRead` rend les TROIS états de `readState`, pas un booléen (revue #342 round 2) :
+ * le premier jet repliait `loading` sur `failed`, et l'écran criait « n'a pas pu être lu »
+ * à CHAQUE ouverture d'une période, sur une lecture simplement en vol. Un faux rapport
+ * d'erreur récurrent apprend au gestionnaire à ignorer le bandeau — exactement le jour où
+ * la lecture échoue vraiment. Charger et échouer ne se disent pas de la même façon.
  */
-export function useActiveVenues(schedulePlanId: string | null): { venues: Venue[]; readFailed: boolean } {
+export function useActiveVenues(schedulePlanId: string | null): { venues: Venue[]; disabledIds: Set<string>; layerRead: ReadState } {
   const all = useWizardVenues();
   const overrides = useVenuePeriodOverrides(schedulePlanId);
   const venues = all.data ?? [];
 
   if (null === schedulePlanId) {
-    return { venues, readFailed: false };
+    return { venues, disabledIds: new Set(), layerRead: "ready" };
   }
-  // `loading` compte comme « pas encore lu » : sans ce cas, `data ?? []` fabriquait un
-  // « aucun override » CRÉDIBLE et le premier rendu montrait les listes de SAISON sous
-  // l'étiquette de la période (revue #342 — c'est le vide crédible que readState combat).
-  if (readFailed(overrides) || readLoading(overrides)) {
-    return { venues, readFailed: true };
+  const layerRead = readState(overrides);
+  if ("ready" !== layerRead) {
+    return { venues, disabledIds: new Set(), layerRead };
   }
-  return { venues: activeVenues(venues, overrides.data ?? []), readFailed: false };
+  const disabledIds = disabledVenueIds(overrides.data ?? []);
+
+  return { venues: activeVenues(venues, overrides.data ?? []), disabledIds, layerRead };
 }
 
 /** Le pendant équipes — même contrat, même fail-closed. @see useActiveVenues */
-export function useActiveTeams(schedulePlanId: string | null): { teams: Team[]; pausedIds: Set<string>; readFailed: boolean } {
+export function useActiveTeams(schedulePlanId: string | null): { teams: Team[]; pausedIds: Set<string>; layerRead: ReadState } {
   const all = useWizardTeams();
   const overrides = useTeamPeriodOverrides(schedulePlanId);
   const teams = all.data ?? [];
 
   if (null === schedulePlanId) {
-    return { teams, pausedIds: new Set(), readFailed: false };
+    return { teams, pausedIds: new Set(), layerRead: "ready" };
   }
-  if (readFailed(overrides) || readLoading(overrides)) {
-    return { teams, pausedIds: new Set(), readFailed: true };
+  const layerRead = readState(overrides);
+  if ("ready" !== layerRead) {
+    return { teams, pausedIds: new Set(), layerRead };
   }
   const pausedIds = pausedTeamIds(overrides.data ?? []);
 
-  return { teams: activeTeams(teams, pausedIds), pausedIds, readFailed: false };
+  return { teams: activeTeams(teams, pausedIds), pausedIds, layerRead };
 }
 
 export function useTeamPeriodOverrides(schedulePlanId: string | null) {
