@@ -22,6 +22,8 @@ final readonly class PeriodConstraintSelection
     /**
      * @param list<Constraint>                                     $kept                    les entités qui partent au solveur — LE jeu que le gate valide
      * @param list<array{constraint: Constraint, venueId: string}> $droppedForDisabledVenue sorties car elles nomment un gymnase désactivé — le gate en fait ses warnings
+     * @param list<Constraint>                                     $droppedForInertTag      DATÉES CLUB+tag sorties car leur tag ne vise plus aucune équipe active — un geste
+     *                                                                                      explicite du gestionnaire POUR la période ne disparaît jamais en silence (#8)
      * @param list<Constraint>                                     $dated                   les datées BRUTES de la période (avant sélection) — la granularité JOUR des
      *                                                                                      fermetures (`VenueClosureDays`) se calcule dessus, drops compris : une datée
      *                                                                                      `venue_closed` ne produit aucune ligne payload mais ferme des jours
@@ -33,6 +35,7 @@ final readonly class PeriodConstraintSelection
         public string $schedulePlanId,
         public array $kept,
         public array $droppedForDisabledVenue,
+        public array $droppedForInertTag,
         public array $dated,
         public array $disabledVenueIds,
         public array $deactivatedTeamIds,

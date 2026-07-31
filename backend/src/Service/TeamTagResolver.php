@@ -18,6 +18,9 @@ use Psr\Log\LoggerInterface;
  */
 final class TeamTagResolver
 {
+    /** @var array<string, list<string>> mémo par requête — la sélection ET la sérialisation résolvent les mêmes tags */
+    private array $memo = [];
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly LoggerInterface $logger,
@@ -36,6 +39,10 @@ final class TeamTagResolver
      */
     public function tagTeamIds(string $targetTag, string $seasonId, string $clubId): array
     {
+        $memoKey = $clubId . '|' . $seasonId . '|' . $targetTag;
+        if (isset($this->memo[$memoKey])) {
+            return $this->memo[$memoKey];
+        }
         $tag = $this->entityManager->getRepository(TeamTag::class)->findOneBy(['name' => $targetTag, 'clubId' => $clubId]);
         if (!$tag instanceof TeamTag) {
             $this->logger->warning(
@@ -43,7 +50,7 @@ final class TeamTagResolver
                 ['targetTag' => $targetTag, 'clubId' => $clubId, 'seasonId' => $seasonId],
             );
 
-            return [];
+            return $this->memo[$memoKey] = [];
         }
 
         $teamIds = [];
@@ -52,6 +59,6 @@ final class TeamTagResolver
         }
         sort($teamIds);
 
-        return $teamIds;
+        return $this->memo[$memoKey] = $teamIds;
     }
 }

@@ -276,7 +276,10 @@ final class ScheduleConstraintBuilder
         // suit ne fait plus que SÉRIALISER cette sélection ; les post-filtres sur lignes
         // sérialisées plus bas restent en défense en profondeur (ils attrapent les
         // expansions par équipe, invisibles au niveau entité).
-        $selection = $this->periodConstraintSelector->selectForPeriodPlan($clubId, $seasonId, $schedulePlanId, $entry);
+        // Les équipes servent DEUX fois (la sélection dérive ses actives, le payload les
+        // sérialise) : une seule requête, passée à la sélection (revue #340 round 1).
+        $clubSeasonTeams = array_values($this->findByClubSeason(Team::class, $clubId, $seasonId, $em));
+        $selection = $this->periodConstraintSelector->selectForPeriodPlan($clubId, $seasonId, $schedulePlanId, $entry, $clubSeasonTeams);
         $deactivatedTeamIds = $selection->deactivatedTeamIds;
         $disabledVenueIds = $selection->disabledVenueIds;
         $this->currentSessionOverrides = $selection->sessionOverrides;
@@ -310,9 +313,9 @@ final class ScheduleConstraintBuilder
         }
         $this->currentAvailabilitiesByVenue = $availabilitiesByVenue;
 
-        // Deactivated teams (computed above) are dropped from the payload.
+        // Deactivated teams (computed by the selection) are dropped from the payload.
         $teams = array_values(array_filter(
-            $this->findByClubSeason(Team::class, $clubId, $seasonId, $em),
+            $clubSeasonTeams,
             static fn (Team $team): bool => !isset($deactivatedTeamIds[$team->getId()]),
         ));
 

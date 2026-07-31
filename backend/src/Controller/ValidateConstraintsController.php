@@ -156,24 +156,24 @@ final class ValidateConstraintsController extends AbstractController
      */
     private function constraintsForPeriod(string $clubId, string $seasonId, CalendarEntry $calendarEntry): array
     {
+        // Sans plan à appliquer, le gate valide les datées brutes : période non génératrice
+        // (cutoff/event — inv. 9 : elles ne portent jamais de plan), ou période génératrice
+        // sur une donnée antérieure au lot C1 (le plan naît du geste).
+        $datedOnly = function () use ($clubId, $calendarEntry): array {
+            /** @var list<Constraint> $dated */
+            $dated = $this->constraintRepository->findBy(['calendarEntryId' => $calendarEntry->datedConstraintSourceId(), 'clubId' => $clubId]);
+
+            return ['constraints' => $dated, 'warnings' => [], 'selection' => null];
+        };
+
         $periodType = $calendarEntry->getPeriodType();
         if (!\in_array($periodType, [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
-            // Période non génératrice : seules ses datées existent, aucun réglage de plan.
-            /** @var list<Constraint> $dated */
-            $dated = $this->constraintRepository->findBy(['calendarEntryId' => $calendarEntry->datedConstraintSourceId(), 'clubId' => $clubId]);
-
-            return ['constraints' => $dated, 'warnings' => [], 'selection' => null];
+            return $datedOnly();
         }
 
-        // Les réglages de la période pendent au PLAN (inv. 5, lot C2). Une période
-        // génératrice en a toujours un (il naît du geste, lot C1) ; un null ne peut venir
-        // que d'une donnée antérieure au lot — sans réglage à appliquer, le récap reste juste.
         $schedulePlanId = $this->schedulePlanProvisioner->periodPlanId($calendarEntry->getId());
         if (null === $schedulePlanId) {
-            /** @var list<Constraint> $dated */
-            $dated = $this->constraintRepository->findBy(['calendarEntryId' => $calendarEntry->datedConstraintSourceId(), 'clubId' => $clubId]);
-
-            return ['constraints' => $dated, 'warnings' => [], 'selection' => null];
+            return $datedOnly();
         }
 
         $selection = $this->periodConstraintSelector->selectForPeriodPlan($clubId, $seasonId, $schedulePlanId, $calendarEntry);
@@ -191,6 +191,14 @@ final class ValidateConstraintsController extends AbstractController
             ),
             $selection->droppedForDisabledVenue,
         );
+        // Une DATÉE dont le tag ne vise plus aucune équipe active est un geste explicite
+        // du gestionnaire pour CETTE période : elle est annoncée, jamais évaporée (#8).
+        foreach ($selection->droppedForInertTag as $inert) {
+            $warnings[] = \sprintf(
+                '« %s » ne vise plus aucune équipe active de la période : elle ne sera pas appliquée.',
+                $inert->getName(),
+            );
+        }
 
         return ['constraints' => $selection->kept, 'warnings' => $warnings, 'selection' => $selection];
     }

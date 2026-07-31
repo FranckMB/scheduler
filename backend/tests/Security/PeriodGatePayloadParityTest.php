@@ -110,6 +110,17 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         sort($payloadRootIds);
         self::assertSame($expectedKept, $payloadRootIds, 'le payload sérialise EXACTEMENT les entités que le gate a validées');
 
+        // Blindage du filtre UUID (revue #340 round 1) : quel que soit le FORMAT d'id d'une
+        // future voie d'expansion, aucune ligne du payload ne doit CONTENIR l'id d'une
+        // entité sortie de la sélection — sinon le filtre par racine masquerait la fuite.
+        $excludedIds = [$ids['teamDeactivated'], $ids['prefDisabledVenue'], $ids['facilityDefault'], $ids['datedInertTag'], $ids['datedDeactivated']];
+        foreach ($payload['constraints'] as $row) {
+            self::assertIsArray($row);
+            foreach ($excludedIds as $excludedId) {
+                self::assertStringNotContainsString($excludedId, (string) $row['id'], 'une entité sortie de la sélection ne produit AUCUNE ligne, sous aucun format d\'id');
+            }
+        }
+
         // 3) Le GATE HTTP consomme la même sélection : l'erreur de la datée sur équipe
         //    désactivée (config invalide À DESSEIN) ne remonte pas — elle ne partira pas au
         //    solveur ; et le gymnase désactivé est annoncé, pas passé sous silence.
@@ -123,8 +134,10 @@ final class PeriodGatePayloadParityTest extends WebTestCase
 
         self::assertTrue($body['valid'], 'aucune erreur sur le jeu qui part réellement au solveur');
         self::assertArrayNotHasKey($ids['datedDeactivated'], $body['errors'], 'la datée d\'une équipe désactivée ne part pas au solveur : son invalidité ne bloque pas le récap (divergence n° 1 alignée)');
-        self::assertCount(1, $body['warnings']);
-        self::assertStringContainsString('Gymnase fermé pour période', (string) $body['warnings'][0], 'le drop pour gymnase désactivé est ANNONCÉ');
+        self::assertCount(2, $body['warnings']);
+        $allWarnings = implode(' | ', array_map(strval(...), $body['warnings']));
+        self::assertStringContainsString('Gymnase fermé pour période', $allWarnings, 'le drop pour gymnase désactivé est ANNONCÉ');
+        self::assertStringContainsString('ne vise plus aucune équipe active', $allWarnings, 'la DATÉE au tag inerte est ANNONCÉE, jamais évaporée (revue #340)');
     }
 
     protected function setUp(): void
@@ -269,9 +282,17 @@ final class PeriodGatePayloadParityTest extends WebTestCase
             'facilityDefault' => $this->constraint($club, $season, ConstraintScope::FACILITY, $venueOpen->getId(), ConstraintFamily::FACILITY_CAPACITY, ['maxTeams' => 1], null)->getId(),
             // GARDÉE malgré « toutes taguées en pause » : HARD + gymnase dédié émet encore
             // ses lignes « interdit hors tag » (divergence n° 2 alignée).
-            'tagHardVenue' => $this->constraint($club, $season, ConstraintScope::CLUB, null, ConstraintFamily::TIME, ['targetTag' => 'PARITE', 'maxStartTime' => '19:00', 'forcedVenueId' => $venueOpen->getId()], null)->getId(),
+            // … y compris quand une clé SECONDAIRE vise le gymnase désactivé (revue #340
+            // round 1) : les lignes « interdit hors tag » remplacent la config par le seul
+            // gymnase DÉDIÉ — un drop entité aveugle les effaçait, le post-filtre par ligne
+            // les préservait.
+            'tagHardVenue' => $this->constraint($club, $season, ConstraintScope::CLUB, null, ConstraintFamily::TIME, ['targetTag' => 'PARITE', 'maxStartTime' => '19:00', 'forcedVenueId' => $venueOpen->getId(), 'preferredVenueId' => $venueDisabled->getId()], null)->getId(),
             // Gardée : datée valide de l'équipe active.
             'datedOk' => $this->constraint($club, $season, ConstraintScope::TEAM, $teamActive->getId(), ConstraintFamily::TIME, ['maxStartTime' => '21:00'], $entry->getId())->getId(),
+            // Sortie AVEC warning (revue #340 round 1) : DATÉE CLUB+tag dont le tag ne vise
+            // plus aucune équipe active, sans gymnase dédié (PREFERRED) — un geste explicite
+            // du gestionnaire pour la période ne s'évapore jamais en silence (#8).
+            'datedInertTag' => $this->constraint($club, $season, ConstraintScope::CLUB, null, ConstraintFamily::TIME, ['targetTag' => 'PARITE', 'maxStartTime' => '18:00'], $entry->getId(), ConstraintRuleType::PREFERRED)->getId(),
             // Sortie (divergence n° 1 alignée) : datée de l'équipe EN PAUSE, config invalide
             // À DESSEIN (famille TIME sans clé) — si le gate la validait encore, son erreur
             // ferait échouer le récap sur une règle que le solveur ne verra jamais.
@@ -314,7 +335,7 @@ final class PeriodGatePayloadParityTest extends WebTestCase
     /**
      * @param array<string, mixed> $config
      */
-    private function constraint(Club $club, Season $season, ConstraintScope $scope, ?string $target, ConstraintFamily $family, array $config, ?string $calendarEntryId): Constraint
+    private function constraint(Club $club, Season $season, ConstraintScope $scope, ?string $target, ConstraintFamily $family, array $config, ?string $calendarEntryId, ConstraintRuleType $ruleType = ConstraintRuleType::HARD): Constraint
     {
         $constraint = new Constraint;
         $constraint->setClubId($club->getId());
@@ -322,7 +343,7 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         $constraint->setScope($scope);
         $constraint->setScopeTargetId($target);
         $constraint->setFamily($family);
-        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setRuleType($ruleType);
         $constraint->setName('Parité ' . $family->value . ' ' . uniqid());
         $constraint->setConfig($config);
         $constraint->setIsActive(true);

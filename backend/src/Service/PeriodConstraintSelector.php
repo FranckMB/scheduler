@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
+use App\Entity\Team;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\VenuePeriodOverride;
 use App\Enum\CalendarEntryPeriodType;
@@ -17,6 +18,7 @@ use App\Repository\ConstraintRepository;
 use App\Repository\TeamRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use LogicException;
+use Psr\Log\LoggerInterface;
 
 /**
  * P2-14 — LA source unique de « quelles contraintes partent au solveur pour cette
@@ -41,14 +43,26 @@ use LogicException;
  */
 final class PeriodConstraintSelector
 {
+    private const TAG_KEEP = 'keep';
+
+    private const TAG_DROP_DISABLED_VENUE = 'drop_disabled_venue';
+
+    private const TAG_DROP_INERT = 'drop_inert';
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly ConstraintRepository $constraintRepository,
         private readonly TeamRepository $teamRepository,
         private readonly TeamTagResolver $tagResolver,
+        private readonly LoggerInterface $logger,
     ) {}
 
-    public function selectForPeriodPlan(string $clubId, string $seasonId, string $schedulePlanId, CalendarEntry $entry): PeriodConstraintSelection
+    /**
+     * @param list<Team>|null $clubSeasonTeams les équipes du club/saison si l'appelant
+     *                                         les a DÉJÀ chargées (le builder les charge
+     *                                         pour le payload) — évite une requête doublon
+     */
+    public function selectForPeriodPlan(string $clubId, string $seasonId, string $schedulePlanId, CalendarEntry $entry, ?array $clubSeasonTeams = null): PeriodConstraintSelection
     {
         $periodType = $entry->getPeriodType();
         if (!\in_array($periodType, [CalendarEntryPeriodType::CLOSURE, CalendarEntryPeriodType::HOLIDAY], true)) {
@@ -84,7 +98,7 @@ final class PeriodConstraintSelector
         }
 
         $activeTeamIds = [];
-        foreach ($this->teamRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
+        foreach ($clubSeasonTeams ?? $this->teamRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
             if (!isset($deactivatedTeamIds[$team->getId()])) {
                 $activeTeamIds[$team->getId()] = true;
             }
@@ -103,15 +117,48 @@ final class PeriodConstraintSelector
 
         $kept = [];
         $droppedForDisabledVenue = [];
+        $droppedForInertTag = [];
         foreach ([...$permanent, ...$dated] as $constraint) {
             // Équipe désactivée : sa contrainte TEAM ne produit aucune ligne — permanente
             // OU datée (le gate ne filtrait que les permanentes : divergence alignée ici).
             if (ConstraintScope::TEAM === $constraint->getScope() && isset($deactivatedTeamIds[$constraint->getScopeTargetId() ?? ''])) {
                 continue;
             }
-            if (!$this->clubTagConstraintProducesRows($constraint, $clubId, $seasonId, $activeTeamIds)) {
+
+            // Une CLUB+targetTag a son propre verdict : ses LIGNES ne portent pas toutes
+            // la config d'origine (les « interdit hors tag » la remplacent), donc ni le
+            // filtre gymnase ni le filtre équipe ci-dessus ne disent seuls si elle émet
+            // encore quelque chose (revue #340 round 1 — un drop entité aveugle effaçait
+            // l'exclusivité de gymnase dédié quand une clé SECONDAIRE visait un gymnase
+            // désactivé, un cas que le post-filtre par ligne préservait).
+            $targetTag = $constraint->getConfig()['targetTag'] ?? null;
+            if (ConstraintScope::CLUB === $constraint->getScope() && null !== $targetTag && '' !== $targetTag) {
+                switch ($this->clubTagVerdict($constraint, (string) $targetTag, $clubId, $seasonId, $activeTeamIds, $disabledVenueIds)) {
+                    case self::TAG_KEEP:
+                        $kept[] = $constraint;
+                        break;
+                    case self::TAG_DROP_DISABLED_VENUE:
+                        $droppedForDisabledVenue[] = ['constraint' => $constraint, 'venueId' => (string) $this->disabledVenueNamedBy($constraint, $disabledVenueIds)];
+                        break;
+                    default: // TAG_DROP_INERT
+                        // Miroir du log que le builder émettait à la sérialisation — l'entité
+                        // ne l'atteignant plus, le silence reviendrait sans lui (revue #340).
+                        $this->logger->warning('Tag "{tag}" resolves to no active team — constraint {id} dropped from the period selection.', [
+                            'tag' => (string) $targetTag,
+                            'id' => $constraint->getId(),
+                        ]);
+                        // Une DATÉE inerte est un geste explicite du gestionnaire POUR cette
+                        // période : la faire disparaître en silence est le motif que le gate
+                        // combat (#8, « avertir plutôt que disparaître »). Une permanente
+                        // héritée reste silencieuse — comme le gate l'a toujours fait.
+                        if (null !== $constraint->getCalendarEntryId()) {
+                            $droppedForInertTag[] = $constraint;
+                        }
+                }
+
                 continue;
             }
+
             // Gymnase désactivé nommé (scope FACILITY, ou une clé de config) : la
             // contrainte ne partira pas — le gestionnaire en est AVERTI, pas mis devant
             // un silence (raison exposée, le gate en fait son warning).
@@ -128,6 +175,7 @@ final class PeriodConstraintSelector
             schedulePlanId: $schedulePlanId,
             kept: $kept,
             droppedForDisabledVenue: $droppedForDisabledVenue,
+            droppedForInertTag: $droppedForInertTag,
             dated: $dated,
             disabledVenueIds: $disabledVenueIds,
             deactivatedTeamIds: $deactivatedTeamIds,
@@ -136,35 +184,50 @@ final class PeriodConstraintSelector
     }
 
     /**
-     * Une CLUB+targetTag produit-elle ENCORE une ligne de payload ? Miroir exact de
-     * l'expansion du builder : tag inconnu/vide → aucune ligne (skip complet) ; sinon des
-     * lignes par équipe taguée ACTIVE ; et même toutes taguées en pause, une HARD à
-     * gymnase dédié émet encore ses lignes « interdit hors tag » pour les autres équipes.
-     * (Le gate sortait cette dernière — c'est la divergence n° 2 que P2-14 aligne.).
+     * Le verdict d'une CLUB+targetTag, calqué sur les LIGNES que le builder émettrait —
+     * pas sur l'entité, car ses lignes n'ont pas toutes la même config :
+     *
+     * - lignes PAR ÉQUIPE (config d'origine, moins le tag) : elles survivent s'il reste
+     *   une équipe taguée ACTIVE et qu'aucune clé de config ne vise un gymnase désactivé ;
+     * - lignes « INTERDIT HORS TAG » (HARD + gymnase dédié ; config REMPLACÉE par
+     *   `forbiddenVenueId` = le dédié) : elles survivent si le gymnase DÉDIÉ n'est pas
+     *   désactivé — même si une clé secondaire l'est, ou si toutes les taguées sont en
+     *   pause (divergence n° 2 alignée).
+     *
+     * Tag inconnu ou vide : le builder saute la contrainte entière (aucune ligne).
      *
      * @param array<string, true> $activeTeamIds
+     * @param array<string, true> $disabledVenueIds
      */
-    private function clubTagConstraintProducesRows(Constraint $constraint, string $clubId, string $seasonId, array $activeTeamIds): bool
+    private function clubTagVerdict(Constraint $constraint, string $targetTag, string $clubId, string $seasonId, array $activeTeamIds, array $disabledVenueIds): string
     {
-        $targetTag = $constraint->getConfig()['targetTag'] ?? null;
-        if (ConstraintScope::CLUB !== $constraint->getScope() || !\is_string($targetTag) || '' === $targetTag) {
-            return true; // pas une CLUB+tag : la règle ne s'applique pas
-        }
-
         $tagTeamIds = $this->tagResolver->tagTeamIds($targetTag, $seasonId, $clubId);
-        if ([] === $tagTeamIds) {
-            return false; // tag inconnu ou sans équipe : le builder saute la contrainte entière
-        }
+        $hasActiveTagged = false;
         foreach ($tagTeamIds as $teamId) {
             if (isset($activeTeamIds[$teamId])) {
-                return true;
+                $hasActiveTagged = true;
+                break;
             }
         }
 
         $config = $constraint->getConfig();
+        $perTeamRowsSurvive = [] !== $tagTeamIds && $hasActiveTagged && null === $this->disabledVenueNamedBy($constraint, $disabledVenueIds);
 
-        return ConstraintRuleType::HARD === $constraint->getRuleType()
-            && null !== ($config['forcedVenueId'] ?? $config['preferredVenueId'] ?? null);
+        $dedicatedVenueId = $config['forcedVenueId'] ?? $config['preferredVenueId'] ?? null;
+        $forbiddenRowsSurvive = [] !== $tagTeamIds
+            && ConstraintRuleType::HARD === $constraint->getRuleType()
+            && \is_string($dedicatedVenueId) && '' !== $dedicatedVenueId
+            && !isset($disabledVenueIds[$dedicatedVenueId]);
+
+        if ($perTeamRowsSurvive || $forbiddenRowsSurvive) {
+            return self::TAG_KEEP;
+        }
+
+        // Plus aucune ligne. La raison à annoncer : un gymnase désactivé nommé (le gate
+        // avertissait déjà ce cas), sinon l'inertie du tag.
+        return null !== $this->disabledVenueNamedBy($constraint, $disabledVenueIds)
+            ? self::TAG_DROP_DISABLED_VENUE
+            : self::TAG_DROP_INERT;
     }
 
     /**
