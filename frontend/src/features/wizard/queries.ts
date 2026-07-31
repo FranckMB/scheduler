@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { readFailed } from "@/shared/lib/readState";
 
+import { activeTeams, activeVenues, pausedTeamIds } from "./lib/activeLayer";
+
 import type { CoachPayload, ConstraintPayload, SlotPayload, Team, TeamCoachRole, TeamPayload, Venue, VenuePayload } from "./api";
 import * as wizardApi from "./api";
 
@@ -255,6 +257,9 @@ export function useDeletePeriodSlot(schedulePlanId: string | null) {
  * contraintes — restent côté serveur, et doivent y rester : c'est ce qui les distingue
  * d'un quatrième miroir (cf. P2-14, P3-19).
  *
+ * La RÈGLE elle-même vit dans `lib/activeLayer.ts` (fonctions pures, testables sans
+ * React — les tests d'écran mockent ces hooks et ne gardent donc que le câblage).
+ *
  * `schedulePlanId` null = mode socle : la liste complète, inchangée.
  *
  * FAIL-CLOSED : si la lecture des overrides a échoué SANS rien en cache, on ne masque
@@ -272,9 +277,7 @@ export function useActiveVenues(schedulePlanId: string | null): { venues: Venue[
   if (readFailed(overrides)) {
     return { venues, readFailed: true };
   }
-  const disabled = new Set((overrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId));
-
-  return { venues: venues.filter((v) => !disabled.has(v.id)), readFailed: false };
+  return { venues: activeVenues(venues, overrides.data ?? []), readFailed: false };
 }
 
 /** Le pendant équipes — même contrat, même fail-closed. @see useActiveVenues */
@@ -289,9 +292,9 @@ export function useActiveTeams(schedulePlanId: string | null): { teams: Team[]; 
   if (readFailed(overrides)) {
     return { teams, pausedIds: new Set(), readFailed: true };
   }
-  const pausedIds = new Set((overrides.data ?? []).filter((o) => !o.isActive).map((o) => o.teamId));
+  const pausedIds = pausedTeamIds(overrides.data ?? []);
 
-  return { teams: teams.filter((t) => !pausedIds.has(t.id)), pausedIds, readFailed: false };
+  return { teams: activeTeams(teams, pausedIds), pausedIds, readFailed: false };
 }
 
 export function useTeamPeriodOverrides(schedulePlanId: string | null) {
