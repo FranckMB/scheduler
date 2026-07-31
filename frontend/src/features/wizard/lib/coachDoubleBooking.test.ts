@@ -4,12 +4,18 @@ import type { Reservation, TeamCoach } from "../api";
 import { conflictingReservation, mainCoachByTeam } from "./coachDoubleBooking";
 
 /**
- * ⚠️ TEST DE PARITÉ — ces cas sont le MIROIR EXACT de
- * `backend/tests/Security/CoachDoubleBookingTest.php` (P2-9 PR B). Deux implémentations
- * de la règle existent forcément (la modale doit répondre sans aller-retour réseau) ;
- * elles ne restent alignées que parce que les deux suites exercent les mêmes situations.
- * Ajouter un cas ici sans l'ajouter là-bas — ou l'inverse — laisse la modale autoriser ce
- * que le récap refusera. C'est le motif de dérive que le cadrage P2-9 interdit.
+ * ⚠️ TEST DE PARITÉ — les six premiers cas sont le miroir de
+ * `backend/tests/Security/CoachDoubleBookingTest.php` (P2-9 PR B), un pour un. Deux
+ * implémentations de la règle existent forcément (la modale doit répondre sans
+ * aller-retour réseau) ; elles ne restent alignées que parce que les deux suites exercent
+ * les mêmes situations. **Modifier une RÈGLE d'un seul côté** laisse la modale autoriser
+ * ce que le récap refusera (ou l'inverse, pire : interdire un geste légitime) — c'est le
+ * motif de dérive que le cadrage P2-9 interdit.
+ *
+ * Les cas au-delà des six couvrent des spécificités du CLIENT que le backend ne rencontre
+ * pas (il reçoit un périmètre déjà filtré). Ils sont donc légitimement asymétriques — mais
+ * ils ne doivent jamais porter sur une règle partagée : dans ce cas, le jumeau est
+ * obligatoire.
  */
 
 const COACH_MAXIME = "coach-maxime";

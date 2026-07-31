@@ -17,8 +17,13 @@ interface Props {
   teams: Team[];
   tiers: PriorityTier[];
   reservations: Reservation[];
-  teamCoaches: TeamCoach[];
+  /** null = les liens ne sont pas connus (chargement ou échec) — surtout PAS un tableau vide. */
+  teamCoaches: TeamCoach[] | null;
+  coachesPending: boolean;
+  coachesFailed: boolean;
+  onRetryCoaches: () => void;
   venues: Venue[];
+  disabledVenueIds?: ReadonlySet<string>;
   venueCanSplit: Map<string, boolean>;
   schedulePlanId: string | null;
   onClose: () => void;
@@ -42,7 +47,22 @@ interface Props {
  * Fermer sans valider ABANDONNE le brouillon (décision fondateur) : comportement standard
  * d'un dialogue OK/Annuler, et les changements en attente sont visibles à l'écran.
  */
-export function SlotReservationModal({ slot, venue, teams, tiers, reservations, teamCoaches, venues, venueCanSplit, schedulePlanId, onClose }: Props) {
+export function SlotReservationModal({
+  slot,
+  venue,
+  teams,
+  tiers,
+  reservations,
+  teamCoaches,
+  coachesPending,
+  coachesFailed,
+  onRetryCoaches,
+  venues,
+  disabledVenueIds,
+  venueCanSplit,
+  schedulePlanId,
+  onClose,
+}: Props) {
   const create = useCreateReservation();
   const del = useDeleteReservation();
 
@@ -50,10 +70,11 @@ export function SlotReservationModal({ slot, venue, teams, tiers, reservations, 
   const [added, setAdded] = useState<string[]>([]);
   const [removed, setRemoved] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const venueName = new Map(venues.map((v) => [v.id, v.name]));
-  const coachByTeam = mainCoachByTeam(teamCoaches);
+  const coachByTeam = mainCoachByTeam(teamCoaches ?? []);
   const key = slotKey(slot.venueId, slot.dayOfWeek, slot.startTime);
   const capacity = effectiveSlotCapacity(slot, venueCanSplit);
 
@@ -62,8 +83,14 @@ export function SlotReservationModal({ slot, venue, teams, tiers, reservations, 
 
   // Le picker doit refléter le BROUILLON, pas l'état serveur : une équipe ajoutée à
   // l'instant ne doit plus être proposée, une équipe retirée doit redevenir choisissable.
+  // Le backend écarte les réservations d'un gymnase DÉSACTIVÉ pour la période (elles ne
+  // partiront pas au solveur) — la modale doit faire pareil, sinon elle refuse un geste que
+  // le récap accepte, en citant un gymnase qui ne sert plus. La parité doit tenir dans les
+  // DEUX sens : ni plus permissive, ni plus stricte.
+  const inScope = (r: Reservation): boolean => undefined === disabledVenueIds || !disabledVenueIds.has(r.venueId);
+
   const draftReservations: Reservation[] = [
-    ...reservations.filter((r) => !removed.includes(r.id)),
+    ...reservations.filter((r) => !removed.includes(r.id) && inScope(r)),
     ...added.map((teamId) => ({
       id: `draft-${teamId}`,
       schedulePlanId,
@@ -95,22 +122,48 @@ export function SlotReservationModal({ slot, venue, teams, tiers, reservations, 
     setAdded((prev) => [...prev, teamId]);
   };
 
+  /**
+   * Les écritures partent une par une, et le brouillon est PURGÉ AU FUR ET À MESURE. C'est
+   * ce qui rend une reprise sûre : après un échec, « Valider » ne rejoue que ce qui reste
+   * — sinon une suppression déjà passée repartirait en 404 (lot bloqué), ou une création
+   * déjà passée se dupliquerait, `reservation` ne portant aucune contrainte d'unicité.
+   * Le lot n'est pas atomique côté serveur (pas de transaction HTTP) : on ne peut donc pas
+   * promettre le tout-ou-rien, mais on peut garantir qu'on ne perd ni ne double rien.
+   */
   const submit = async () => {
-    // Les retraits d'abord : ils libèrent de la capacité pour les ajouts du même lot.
-    for (const id of removed) {
-      await del.mutateAsync(id);
+    setSubmitError(null);
+    try {
+      // Les retraits d'abord : ils libèrent de la capacité pour les ajouts du même lot.
+      for (const id of [...removed]) {
+        await del.mutateAsync(id);
+        setRemoved((prev) => prev.filter((pending) => pending !== id));
+      }
+      for (const teamId of [...added]) {
+        await create.mutateAsync({ teamId, venueId: slot.venueId, dayOfWeek: slot.dayOfWeek, startTime: hhmm(slot.startTime), durationMinutes: slot.durationMinutes, schedulePlanId });
+        setAdded((prev) => prev.filter((pending) => pending !== teamId));
+      }
+      onClose();
+    } catch {
+      // La modale RESTE ouverte, avec ce qui n'est pas passé : sans ce message le
+      // gestionnaire ne saurait pas qu'une partie de son lot est partie et l'autre non.
+      setSubmitError("Une partie des modifications n'a pas pu être enregistrée. Ce qui reste affiché n'est pas encore appliqué — réessayez.");
     }
-    for (const teamId of added) {
-      await create.mutateAsync({ teamId, venueId: slot.venueId, dayOfWeek: slot.dayOfWeek, startTime: hhmm(slot.startTime), durationMinutes: slot.durationMinutes, schedulePlanId });
-    }
-    onClose();
   };
 
   const busy = create.isPending || del.isPending;
   const dirty = added.length > 0 || removed.length > 0;
+  // La règle ne peut pas s'appliquer sans les liens équipe→coach : une Map vide ne trouve
+  // AUCUN conflit. Plutôt que d'autoriser en aveugle (fail-open), on ferme la saisie.
+  const guardReady = null !== teamCoaches;
+  // Fermer pendant l'envoi laisserait des mutations en vol s'appliquer sans trace à l'écran.
+  const dismiss = () => {
+    if (!busy) {
+      onClose();
+    }
+  };
 
   return (
-    <Modal label="Réserver ce créneau" title={`${venue.name} · ${dayLabel(slot.dayOfWeek)} ${hhmm(slot.startTime)}`} onClose={onClose}>
+    <Modal label="Réserver ce créneau" title={`${venue.name} · ${dayLabel(slot.dayOfWeek)} ${hhmm(slot.startTime)}`} onClose={dismiss}>
       <p className="mb-3 text-xs text-muted-foreground">
         Fixe une équipe sur ce créneau (verrou pris en compte à chaque génération). Ce créneau accepte {capacity} équipe{capacity > 1 ? "s" : ""}.
       </p>
@@ -125,12 +178,35 @@ export function SlotReservationModal({ slot, venue, teams, tiers, reservations, 
                 type="button"
                 aria-label={`Retirer ${teamName.get(r.teamId) ?? "l'équipe"}`}
                 className="text-muted-foreground hover:text-destructive"
-                onClick={() => setRemoved((prev) => [...prev, r.id])}
+                onClick={() => {
+                  setError(null); // le refus affiché peut devenir caduc en libérant la place
+                  setRemoved((prev) => [...prev, r.id]);
+                }}
               >
                 <Trash2 className="size-4" />
               </button>
             </li>
           ))}
+          {/* Un retrait en attente reste NOMMÉ et annulable : le remplacer par un compteur
+              anonyme empêchait de savoir quelle équipe on avait retirée, et de revenir en
+              arrière autrement qu'en fermant la modale — ce qui abandonnait aussi les ajouts. */}
+          {reservations
+            .filter((r) => removed.includes(r.id))
+            .map((r) => (
+              <li key={`removed-${r.id}`} className="flex items-center gap-2 rounded-md border border-dashed border-destructive/50 bg-destructive/5 px-3 py-1.5 text-sm">
+                <Trash2 className="size-3.5 text-destructive" />
+                <span className="flex-1 font-medium line-through">{teamName.get(r.teamId) ?? "?"}</span>
+                <span className="text-xs text-muted-foreground">retrait à valider</span>
+                <button
+                  type="button"
+                  aria-label={`Annuler le retrait de ${teamName.get(r.teamId) ?? "l'équipe"}`}
+                  className="text-muted-foreground hover:text-foreground"
+                  onClick={() => setRemoved((prev) => prev.filter((id) => id !== r.id))}
+                >
+                  <Undo2 className="size-4" />
+                </button>
+              </li>
+            ))}
           {added.map((teamId) => (
             <li key={`draft-${teamId}`} className="flex items-center gap-2 rounded-md border border-dashed border-accent/60 bg-accent/5 px-3 py-1.5 text-sm">
               <Lock className="size-3.5 text-accent" />
@@ -140,7 +216,10 @@ export function SlotReservationModal({ slot, venue, teams, tiers, reservations, 
                 type="button"
                 aria-label={`Annuler l'ajout de ${teamName.get(teamId) ?? "l'équipe"}`}
                 className="text-muted-foreground hover:text-destructive"
-                onClick={() => setAdded((prev) => prev.filter((id) => id !== teamId))}
+                onClick={() => {
+                  setError(null);
+                  setAdded((prev) => prev.filter((id) => id !== teamId));
+                }}
               >
                 <Undo2 className="size-4" />
               </button>
@@ -149,13 +228,20 @@ export function SlotReservationModal({ slot, venue, teams, tiers, reservations, 
         </ul>
       ) : null}
 
-      {removed.length > 0 ? (
-        <p className="mb-3 text-xs text-muted-foreground">
-          {removed.length} retrait{removed.length > 1 ? "s" : ""} en attente de validation.
+      {!guardReady ? (
+        <p role="status" className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          {coachesPending ? (
+            "Vérification des coachs en cours…"
+          ) : (
+            <>
+              {coachesFailed ? "Impossible de vérifier les coachs" : "Vérification des coachs indisponible"} — la saisie est bloquée pour ne pas créer un conflit sans le voir.{" "}
+              <button type="button" className="underline" onClick={onRetryCoaches}>
+                Réessayer
+              </button>
+            </>
+          )}
         </p>
-      ) : null}
-
-      {occupied < capacity ? (
+      ) : occupied < capacity ? (
         pickable.length > 0 ? (
           <Select aria-label="Ajouter une équipe" className="h-9 w-full" value="" onChange={(e) => pick(e.target.value)} disabled={busy}>
             <option value="">— ajouter une équipe —</option>
@@ -174,15 +260,15 @@ export function SlotReservationModal({ slot, venue, teams, tiers, reservations, 
         </p>
       )}
 
-      {null !== error ? (
+      {null !== error || null !== submitError ? (
         <p role="alert" className="mt-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-          <span>{error}</span>
+          <span>{submitError ?? error}</span>
         </p>
       ) : null}
 
       <div className="mt-4 flex justify-end gap-2">
-        <Button variant="ghost" onClick={onClose} disabled={busy}>
+        <Button variant="ghost" onClick={dismiss} disabled={busy}>
           Annuler
         </Button>
         <Button onClick={() => void submit()} disabled={busy || !dirty}>

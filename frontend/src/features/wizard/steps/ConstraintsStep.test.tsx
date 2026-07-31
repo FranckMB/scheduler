@@ -13,7 +13,9 @@ const h = vi.hoisted(() => ({
   resCreate: vi.fn(),
   resDelete: vi.fn(),
   reservations: [] as { id: string; calendarEntryId: string | null; teamId: string; venueId: string; dayOfWeek: number; startTime: string; durationMinutes: number }[],
-  teamCoaches: [] as { id: string; teamId: string; coachId: string; role: string }[],
+  teamCoaches: [] as { id: string; teamId: string; coachId: string; role: string }[] | undefined,
+  coachesPending: false,
+  coachesFailed: false,
   tags: [] as { id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }[],
   tagAssignments: [] as { id: string; teamId: string; tagId: string; seasonId: string }[],
 }));
@@ -49,7 +51,7 @@ vi.mock("../queries", () => ({
   // P2-9 PR C : la modale est transactionnelle (on compose, on valide) — elle appelle
   // donc mutateAsync et non mutate, et lit le lien équipe→coach pour refuser au clic une
   // affectation qui dédoublerait un coach.
-  useWizardTeamCoaches: () => ({ data: h.teamCoaches }),
+  useWizardTeamCoaches: () => ({ data: h.teamCoaches, isPending: h.coachesPending, isError: h.coachesFailed, refetch: vi.fn() }),
   useCreateReservation: () => ({ mutateAsync: h.resCreate, isPending: false }),
   useDeleteReservation: () => ({ mutateAsync: h.resDelete, isPending: false }),
 }));
@@ -431,6 +433,8 @@ describe("ConstraintsStep — Réserver tab (slot grid + modal)", () => {
     h.resDelete.mockClear();
     h.reservations = [];
     h.teamCoaches = []; // sans ça le cas « coach déjà ailleurs » contaminerait les suivants
+    h.coachesPending = false;
+    h.coachesFailed = false;
   });
 
   const openSlot = async (user: ReturnType<typeof userEvent.setup>) => {
@@ -497,6 +501,45 @@ describe("ConstraintsStep — Réserver tab (slot grid + modal)", () => {
     expect(alert).toHaveTextContent(/20:30/);
     // Et rien n'est mis au brouillon : « Valider » reste inerte.
     expect(screen.getByRole("button", { name: "Valider" })).toBeDisabled();
+  });
+
+  // Revue #334 — FAIL-OPEN : sans les liens équipe→coach, la règle ne trouve AUCUN conflit
+  // (Map vide ⇒ aucun coach MAIN). Un repli `= []` éteignait donc le contrôle en silence
+  // pendant le chargement. On ferme la saisie plutôt que d'autoriser en aveugle.
+  it("ferme la saisie tant que les liens coach ne sont pas connus (jamais de fail-open)", async () => {
+    h.teamCoaches = undefined;
+    h.coachesPending = true;
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await openSlot(user);
+    expect(screen.queryByLabelText("Ajouter une équipe")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/Vérification des coachs/);
+  });
+
+  // Revue #334 — un lot à moitié appliqué ne doit ni se taire, ni se rejouer : la
+  // suppression déjà passée repartirait en 404, ou une création se dupliquerait
+  // (reservation n'a aucune contrainte d'unicité).
+  it("sur échec partiel : le dit, garde la modale ouverte, et ne rejoue pas ce qui est passé", async () => {
+    h.reservations = [{ id: "r1", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120 }];
+    h.resDelete.mockResolvedValueOnce(undefined); // le retrait passe…
+    h.resCreate.mockRejectedValueOnce(new Error("réseau")); // …la création échoue
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await openSlot(user);
+    await user.click(screen.getByRole("button", { name: "Retirer SM1" }));
+    await user.selectOptions(screen.getByLabelText("Ajouter une équipe"), "t2");
+    await user.click(screen.getByRole("button", { name: "Valider" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/n'a pas pu être enregistrée/);
+    expect(screen.getByRole("button", { name: "Valider" })).toBeInTheDocument(); // reste ouverte
+
+    // Reprise : seule la création restante repart, le retrait déjà passé n'est PAS rejoué.
+    h.resCreate.mockResolvedValueOnce(undefined);
+    await user.click(screen.getByRole("button", { name: "Valider" }));
+    expect(h.resDelete).toHaveBeenCalledTimes(1);
+    expect(h.resCreate).toHaveBeenCalledTimes(2);
   });
 
   it("hides a team that reached its sessionsPerWeek from the picker", async () => {

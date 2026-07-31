@@ -21,11 +21,19 @@ import { hhmm } from "./days";
  *     refuserait une réservation légitime.
  */
 
-/** Minutes depuis minuit — `startTime` peut porter les secondes selon la source. */
-function minutes(time: string): number {
+/**
+ * Minutes depuis minuit — `startTime` peut porter les secondes selon la source.
+ * Rend `null` si l'heure est illisible : un `?? 0` ne protégerait de rien (`Number("x")`
+ * vaut NaN, pas `undefined`) et toute comparaison avec NaN étant fausse, la garde
+ * s'éteindrait en silence. L'appelant traite explicitement ce cas.
+ */
+function minutes(time: string): number | null {
   const [h, m] = hhmm(time).split(":").map(Number);
+  if (undefined === h || undefined === m || Number.isNaN(h) || Number.isNaN(m)) {
+    return null;
+  }
 
-  return (h ?? 0) * 60 + (m ?? 0);
+  return h * 60 + m;
 }
 
 /** teamId → coachId du coach MAIN (les ASSISTANT sont ignorés, règle 3). */
@@ -59,6 +67,9 @@ export function conflictingReservation(candidate: Candidate, reservations: Reser
     return null; // pas de coach MAIN : personne à dédoubler
   }
   const start = minutes(candidate.startTime);
+  if (null === start) {
+    return null; // heure illisible : on ne peut rien affirmer, le récap tranchera (PR B)
+  }
 
   return (
     reservations.find((other) => {
@@ -79,6 +90,9 @@ export function conflictingReservation(candidate: Candidate, reservations: Reser
       // Règle 1 : intervalles demi-ouverts — deux créneaux qui se touchent (fin de l'un =
       // début de l'autre) ne se chevauchent pas.
       const otherStart = minutes(other.startTime);
+      if (null === otherStart) {
+        return false;
+      }
 
       return start < otherStart + other.durationMinutes && otherStart < start + candidate.durationMinutes;
     }) ?? null
