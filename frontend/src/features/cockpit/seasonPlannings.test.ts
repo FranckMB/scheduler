@@ -31,7 +31,8 @@ describe("seasonPlannings — open plannings & plan name (founder feedback 2026-
   // P4-41 (retour fondateur 2026-07-31) : une ligne de cette liste EST un plan, donc
   // elle porte le nom du PLAN — exactement comme la ligne du socle juste au-dessus.
   // Elle lisait le nom de la VERSION affichée, or toute version de période créée hors
-  // wizard naît « Version de période » (planning/api.ts) : un planning renommé
+  // wizard naissait « Version de période » (nom inventé par le client, retiré depuis —
+  // les lignes créées avant gardent le leur) : un planning renommé
   // « Reprise d'été S1 » se relisait sous ce libellé technique. PREUVE DE CHUTE : sans
   // le correctif, `label` vaut "Version de période".
   it("labels a period row with its PLAN's name, not the displayed version's", () => {

@@ -136,13 +136,12 @@ export function GenerateStep() {
       const id = await launch.mutateAsync(
         periodMode
           ? {
-              name: periodEntry?.title ?? "Plan de période",
               schedulePlanId: periodPlanId ?? undefined,
               // Reprendre la version en vol (anti-double-lancement) ; sinon créer une
               // version neuve sous le plan (lot D-b — plus de pointeur overlay sur l'entrée).
               existingScheduleId: overlaySchedule?.id ?? undefined,
             }
-          : { name: `Planning ${new Date().toLocaleDateString("fr-FR")}` },
+          : {},
       );
       setScheduleId(id);
     } catch (error) {

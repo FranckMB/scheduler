@@ -54,10 +54,11 @@ export function seasonPlannings(schedules: Schedule[], seasonPlanName: string | 
         id: shown.id,
         // Le nom du PLAN, comme pour le socle ci-dessus (ADR-0002 inv. 12) — une
         // ligne de cette liste EST un plan. C'était le nom de la VERSION affichée,
-        // or une version de période créée hors wizard naît « Version de période » :
-        // un planning renommé « Reprise d'été S1 » se relisait sous ce libellé
-        // générique. Fallback sur la version tant que les plans ne sont pas chargés
-        // (l'appelant peut ne pas les passer) — jamais de ligne sans libellé.
+        // que les clients inventaient (« Version de période ») : un planning renommé
+        // « Reprise d'été S1 » se relisait sous ce libellé générique. Le serveur nomme
+        // désormais les versions, mais les lignes ANCIENNES gardent leur nom inventé —
+        // raison de plus pour lire le plan. Fallback sur la version tant que les plans
+        // ne sont pas chargés (l'appelant peut ne pas les passer) : jamais de ligne muette.
         label: plans.find((p) => p.id === planId)?.name ?? shown.name,
         status: shown.status,
         isChosen: true === shown.isChosen,

@@ -131,6 +131,19 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         }
         $schedule->setSchedulePlanId($resolvedPlanId);
 
+        // ADR-0002 inv. 12 — le nom vit sur LE PLAN ; une version n'a pas d'identité
+        // produit (le sélecteur l'étiquette « V2 — 20 oct. 14:32 »). Le client n'a donc
+        // rien à nommer : quand il ne fournit pas de nom, la version hérite de celui de
+        // son plan. Les trois appelants frontend en inventaient un chacun de leur côté —
+        // « Version de période », « Plan de période », « Planning {date} » — et le
+        // premier ressortait tel quel dans la liste des plannings et le nom du PDF.
+        if (null === $input->name) {
+            $planContext = $plan ?? $this->schedulePlanProvisioner->fetchPlanContext($resolvedPlanId);
+            // Plan introuvable ici = course avec un reset : la transaction plus bas
+            // échouera de toute façon (linkSchedule lève). On ne fabrique pas un nom.
+            $schedule->setName($planContext['name'] ?? 'Planning');
+        }
+
         // Atomic (like RegenerateController): the row and its version number commit
         // together. A linkSchedule failure must never leave a committed-but-unnumbered
         // schedule occupying the period slot.

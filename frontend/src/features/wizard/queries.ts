@@ -497,17 +497,15 @@ export function useLaunchGeneration() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({
-      name,
       schedulePlanId,
       existingScheduleId,
     }: {
-      name: string;
       schedulePlanId?: string;
       existingScheduleId?: string;
     }) => {
       // Period mode reuses the entry's existing overlay schedule (regenerate);
       // otherwise create a fresh version under its plan (base plan, or first overlay).
-      const scheduleId = existingScheduleId ?? (await wizardApi.createSchedule(name, schedulePlanId)).id;
+      const scheduleId = existingScheduleId ?? (await wizardApi.createSchedule(schedulePlanId)).id;
       await wizardApi.generateSchedule(scheduleId);
       return scheduleId;
     },

@@ -156,7 +156,11 @@ Schedule (= Version)                    ← existant, recentré
     exactement une semaine calendaire (lundi→dimanche) donne `Semaine du 17 août 2026`, toute
     autre garde ses deux bornes `du 20 octobre 2025 au 2 novembre 2025`. Le nom du plan est
     ce que TOUT lit (titre, liste des plannings, export, renommage) — jamais celui d'une
-    version, qui n'a pas d'identité produit.
+    version, qui n'a pas d'identité produit (le sélecteur l'étiquette « V2 — 20 oct. 14:32 »).
+    **Conséquence sur l'API** : `POST /api/schedules` n'exige pas de `name` — omis, le serveur
+    nomme la version d'après son plan. Un client qui en invente un rouvre exactement le défaut
+    que cet invariant ferme (trois le faisaient, et « Version de période » ressortait dans la
+    liste des plannings et le nom du PDF).
 
 ### Rôle de `CalendarEntry` (conservée, amincie)
 

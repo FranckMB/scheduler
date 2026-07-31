@@ -463,16 +463,16 @@ final class SchedulePlanProvisioner
 
     /**
      * ADR-0002 C4 : le contexte d'un plan pour VALIDER une création (POST /api/schedules
-     * nomme le plan). Rend club/saison/type/déclencheur, ou null si le plan n'existe pas.
+     * nomme le plan). Rend club/saison/type/déclencheur/nom, ou null si le plan n'existe pas.
      * SQL brut : filter-free (la saison du plan n'est pas forcément l'active) ; RLS scope le
      * club (un plan d'un autre club rend null), et l'appelant re-check le club en défense.
      *
-     * @return array{clubId: string, seasonId: string, type: SchedulePlanType, calendarEntryId: string|null}|null
+     * @return array{clubId: string, seasonId: string, type: SchedulePlanType, calendarEntryId: string|null, name: string}|null
      */
     public function fetchPlanContext(string $planId): ?array
     {
         $row = $this->entityManager->getConnection()->fetchAssociative(
-            'SELECT club_id, season_id, type, calendar_entry_id FROM schedule_plan WHERE id = :pid',
+            'SELECT club_id, season_id, type, calendar_entry_id, name FROM schedule_plan WHERE id = :pid',
             ['pid' => $planId],
         );
         if (false === $row) {
@@ -484,6 +484,10 @@ final class SchedulePlanProvisioner
             'seasonId' => (string) $row['season_id'],
             'type' => SchedulePlanType::from((string) $row['type']),
             'calendarEntryId' => null === $row['calendar_entry_id'] ? null : (string) $row['calendar_entry_id'],
+            // inv. 12 : le nom PUBLIC vit ici. Exposé pour que la création d'une version
+            // puisse en dériver son libellé technique au lieu de laisser le client
+            // l'inventer — trois clients le faisaient, chacun à sa façon.
+            'name' => (string) $row['name'],
         ];
     }
 

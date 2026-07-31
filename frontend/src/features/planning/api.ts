@@ -256,10 +256,6 @@ export async function reopenSchedule(id: string, opts?: { confirmDeleteOverlays?
   }
 }
 
-/** Rename a version (status echoed as required by the input DTO; refused server-side once its plan points at it). */
-export const renameSchedule = (id: string, name: string, status: ScheduleStatus): Promise<unknown> =>
-  api.put(`schedules/${id}`, { json: { name, status } }).json();
-
 /** Delete a work version (server refuses the chosen version / in-flight with 409). */
 export const deleteSchedule = (id: string): Promise<void> => api.delete(`schedules/${id}`).then(() => undefined);
 
@@ -276,7 +272,7 @@ export const regenerate = (id: string): Promise<{ id: string }> => api.post(`sch
  *  period's plan (ADR-0002 C4: a version names its plan) — the caller then generates it.
  *  A period's plan may hold several versions. */
 export const createOverlayVersion = (schedulePlanId: string): Promise<{ id: string }> =>
-  api.post("schedules", { json: { schedulePlanId, name: "Version de période", status: "DRAFT" } }).json();
+  api.post("schedules", { json: { schedulePlanId, status: "DRAFT" } }).json();
 
 // API Platform 4 OMITS null fields from JSON, so a plan's null nullable fields
 // arrive ABSENT (undefined), not null. planType/schedulePlanId → every
