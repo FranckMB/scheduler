@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SchedulePlan } from "@/features/cockpit/api";
 import { renderWithProviders } from "@/test/utils";
 
-import { getTrainingSlots, getVenues, listSchedules, OverlaysExistError, reopenSchedule } from "./api";
+import { getSlots, getTrainingSlots, getVenues, listSchedules, OverlaysExistError, reopenSchedule } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -112,6 +112,17 @@ beforeEach(() => {
   plansState.plans = [];
   venueOverridesState.rows = [];
   venueOverridesState.isError = false;
+  // Ré-armement explicite : ces trois-là sont réécrits par des cas (couche de période,
+  // gymnase désactivé) et `mockResolvedValue` SURVIT au test suivant — une fuite qui
+  // rendrait un échec ultérieur incompréhensible.
+  vi.mocked(getSlots).mockResolvedValue([
+    { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", temporaryLock: false },
+  ]);
+  vi.mocked(getVenues).mockResolvedValue([{ id: "venue-1", name: "Gymnase Alpha", color: "#00aa00" }]);
+  vi.mocked(getTrainingSlots).mockResolvedValue([
+    { id: "ts-1", venueId: "venue-1", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, capacity: 1 },
+    { id: "ts-2", venueId: "venue-1", dayOfWeek: 2, startTime: "19:00:00", durationMinutes: 90, capacity: 1 },
+  ]);
   // Default: an editable work version. Re-armed per test so a case that swaps in
   // an in-force version (read-only → panels hidden) cannot leak into the next.
   vi.mocked(listSchedules).mockResolvedValue(workVersion);
@@ -245,6 +256,26 @@ describe("PlanningPage (integration)", () => {
   // travaille qu'avec un seul, ça fait du bruit pour rien ». Un gymnase désactivé pour la
   // période garde ses créneaux en base — le backend les écarte du payload, il ne les
   // supprime pas — donc l'écran doit filtrer à la SOURCE.
+  // P2-15 round 2 — on filtre ce qui est OFFERT, jamais ce qui EXISTE. Une séance déjà
+  // placée dans un gymnase depuis désactivé reste à l'écran ET dans l'export (rendu côté
+  // serveur, il ne connaît pas ce filtre) : la cacher faisait diverger le PDF remis aux
+  // coachs de ce que le gestionnaire voyait, et rendait une grille blanche sans un mot
+  // quand toute la version y était placée. On l'annonce, on n'escamote pas.
+  it("garde les séances déjà placées dans un gymnase désactivé, et le dit", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
+    ]);
+    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
+    // La séance par défaut (slot-1) est placée dans venue-1, que l'on désactive ensuite.
+    venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
+    usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText(/1 séance\(s\) de ce planning sont placées dans un gymnase désactivé/)).toBeInTheDocument();
+    // La séance est TOUJOURS là : l'export la contient, l'écran ne doit pas la nier.
+    expect(screen.getByText("Gymnase Alpha")).toBeInTheDocument();
+  });
+
   it("n'affiche pas un gymnase désactivé pour la période", async () => {
     vi.mocked(listSchedules).mockResolvedValue([
       { id: SID, name: "Période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
@@ -259,6 +290,12 @@ describe("PlanningPage (integration)", () => {
     vi.mocked(getTrainingSlots).mockResolvedValue([
       { id: "ts-1", venueId: "venue-1", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, capacity: 1 },
       { id: "ts-3", venueId: "venue-2", dayOfWeek: 3, startTime: "17:00:00", durationMinutes: 90, capacity: 1 },
+    ]);
+    // La séance placée est déplacée sur le gymnase qui RESTE : ce test épingle le sort des
+    // FENÊTRES LIBRES d'un gymnase désactivé (le bruit du retour terrain), pas celui des
+    // séances déjà placées — c'est le test au-dessus qui les garde.
+    vi.mocked(getSlots).mockResolvedValue([
+      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-2", coachId: null, dayOfWeek: 3, startTime: "17:00:00", durationMinutes: 90, lockLevel: "NONE", temporaryLock: false },
     ]);
     venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
     usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });

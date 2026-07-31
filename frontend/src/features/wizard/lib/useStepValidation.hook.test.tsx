@@ -9,6 +9,10 @@ let venues: ReturnType<typeof q>;
 let slots: ReturnType<typeof q>;
 let coaches: ReturnType<typeof q>;
 let constraintValidation: ReturnType<typeof q>;
+let teamOverrides: ReturnType<typeof q>;
+let venueOverrides: ReturnType<typeof q>;
+let periodSlots: ReturnType<typeof q>;
+const store = { reservations: [], mode: "season", calendarEntryId: null as string | null, stepId: "recap" };
 
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
 vi.mock("@/features/cockpit/queries", () => ({
@@ -25,12 +29,12 @@ vi.mock("../queries", () => ({
   useWizardCoachPlayers: () => q([]),
   useConstraintValidation: () => constraintValidation,
   useReservations: () => q([]),
-  useTeamPeriodOverrides: () => ({ data: [] }),
-  usePeriodSlots: () => q([]),
-  useVenuePeriodOverrides: () => q([]),
+  useTeamPeriodOverrides: () => teamOverrides,
+  usePeriodSlots: () => periodSlots,
+  useVenuePeriodOverrides: () => venueOverrides,
 }));
 vi.mock("../store", () => ({
-  useWizardStore: (selector: (s: unknown) => unknown) => selector({ reservations: [], mode: "season", calendarEntryId: null, stepId: "recap" }),
+  useWizardStore: (selector: (s: unknown) => unknown) => selector(store),
 }));
 
 import { useStepValidation } from "./useStepValidation";
@@ -42,6 +46,11 @@ describe("useStepValidation — no false blocking error during load", () => {
     slots = q([]);
     coaches = q([]);
     constraintValidation = q(undefined);
+    teamOverrides = q([]);
+    venueOverrides = q([]);
+    periodSlots = q([]);
+    store.mode = "season";
+    store.calendarEntryId = null;
   });
 
   it("stays neutral while a query is still loading (no 'add a team' flash)", () => {
@@ -70,6 +79,11 @@ describe("useStepValidation — les avertissements du serveur remontent au réca
     slots = q([{ venueId: "v1" }]);
     coaches = q([{ id: "c1" }]);
     constraintValidation = q(undefined);
+    teamOverrides = q([]);
+    venueOverrides = q([]);
+    periodSlots = q([]);
+    store.mode = "season";
+    store.calendarEntryId = null;
   });
 
   it("remonte les warnings alors que la validation est VALIDE", () => {
@@ -98,5 +112,63 @@ describe("useStepValidation — les avertissements du serveur remontent au réca
     const { result } = renderHook(() => useStepValidation("recap"));
 
     expect(result.current.warnings).toEqual([]);
+  });
+});
+
+/**
+ * P2-15 round 2 — LE VERDICT COMPTE CE QUE L'ÉCRAN AFFICHE.
+ *
+ * Le récap est passé aux listes ACTIVES de la période ; le verdict, lui, comptait encore
+ * les listes de SAISON. Une période dont toutes les équipes sont en pause affichait donc
+ * « Équipes 0 » et « Tout est prêt » dans la même vue, bouton « Générer » ouvert — la
+ * génération partait et rendait un planning vide.
+ */
+describe("useStepValidation — période : le verdict compte les ACTIFS", () => {
+  beforeEach(() => {
+    teams = q([{ id: "t1" }, { id: "t2" }]);
+    venues = q([{ id: "v1" }, { id: "v2" }]);
+    slots = q([{ venueId: "v1" }, { venueId: "v2" }]);
+    coaches = q([{ id: "c1" }]);
+    constraintValidation = q(undefined);
+    teamOverrides = q([]);
+    venueOverrides = q([]);
+    periodSlots = q([{ venueId: "v1" }, { venueId: "v2" }]);
+    store.mode = "period";
+    store.calendarEntryId = "entry-1";
+  });
+
+  it("bloque quand TOUTES les équipes de la période sont en pause, en disant quoi faire", () => {
+    teamOverrides = q([{ teamId: "t1", isActive: false }, { teamId: "t2", isActive: false }]);
+    const { result } = renderHook(() => useStepValidation("recap"));
+
+    // Le message envoie au bon écran : « ajoutez une équipe » enverrait re-saisir des
+    // équipes qui existent déjà.
+    expect(result.current.errors).toContain("Aucune équipe n'est active pour cette période — cochez-en au moins une.");
+  });
+
+  it("bloque quand TOUS les gymnases de la période sont désactivés", () => {
+    venueOverrides = q([{ venueId: "v1", mode: "DISABLED" }, { venueId: "v2", mode: "DISABLED" }]);
+    const { result } = renderHook(() => useStepValidation("recap"));
+
+    expect(result.current.errors).toContain("Aucun gymnase n'est actif pour cette période — réactivez-en au moins un.");
+  });
+
+  it("laisse passer tant qu'il reste une équipe et un gymnase actifs", () => {
+    teamOverrides = q([{ teamId: "t1", isActive: false }]);
+    venueOverrides = q([{ venueId: "v1", mode: "DISABLED" }]);
+    const { result } = renderHook(() => useStepValidation("recap"));
+
+    expect(result.current.errors).toEqual([]);
+  });
+
+  // La sélection d'équipes est la TROISIÈME lecture qui porte la couche : sans elle dans
+  // la garde de chargement, `data ?? []` passait pour « aucune pause » et le verdict
+  // sortait vert sur une période peut-être vide — la fenêtre exacte que cette règle ferme.
+  it("reste PENDING tant que la sélection d'équipes n'est pas lue", () => {
+    teamOverrides = q(undefined);
+    const { result } = renderHook(() => useStepValidation("recap"));
+
+    expect(result.current.pending).toBe(true);
+    expect(result.current.errors).toEqual([]);
   });
 });

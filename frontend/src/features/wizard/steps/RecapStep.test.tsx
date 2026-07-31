@@ -18,8 +18,8 @@ const { recapLayer, anchorState, storeState } = vi.hoisted(() => ({
     pausedIds: [] as string[],
     venues: [] as unknown[],
     slots: [] as unknown[],
-    teamsFailed: false,
-    venuesFailed: false,
+    teamsRead: "ready" as "loading" | "failed" | "ready",
+    venuesRead: "ready" as "loading" | "failed" | "ready",
   },
 }));
 
@@ -38,8 +38,8 @@ vi.mock("../queries", () => ({
   }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, isActive: true }] }),
   // P2-15 : le récap compte la COUCHE courante (période ou socle).
-  useActiveVenues: () => ({ venues: recapLayer.venues, readFailed: recapLayer.venuesFailed }),
-  useActiveTeams: () => ({ teams: recapLayer.teams, pausedIds: new Set(recapLayer.pausedIds), readFailed: recapLayer.teamsFailed }),
+  useActiveVenues: () => ({ venues: recapLayer.venues, disabledIds: new Set<string>(), layerRead: recapLayer.venuesRead }),
+  useActiveTeams: () => ({ teams: recapLayer.teams, pausedIds: new Set(recapLayer.pausedIds), layerRead: recapLayer.teamsRead }),
   useGridSlots: () => ({ data: recapLayer.slots }),
   useVenueSlots: () => ({ data: [] }),
   useWizardCoaches: () => ({ data: [] }),
@@ -68,8 +68,8 @@ describe("RecapStep — read-only summary", () => {
     recapLayer.pausedIds = [];
     recapLayer.venues = [{ id: "v1", name: "Gymnase A", color: null, isActive: true }];
     recapLayer.slots = [];
-    recapLayer.teamsFailed = false;
-    recapLayer.venuesFailed = false;
+    recapLayer.teamsRead = "ready";
+    recapLayer.venuesRead = "ready";
     anchorState.value = { state: "period", planId: "plan-1" };
     storeState.value = { mode: "season", calendarEntryId: null };
   });
@@ -116,10 +116,22 @@ describe("RecapStep — read-only summary", () => {
   // FAIL-CLOSED (P4-20/P4-1) : sur une lecture ratée on ne masque RIEN, et on le DIT.
   // Masquer en silence ferait croire à une période plus petite qu'elle n'est.
   it("ne masque rien et l'annonce quand les réglages de la période sont illisibles", async () => {
-    recapLayer.teamsFailed = true;
+    recapLayer.teamsRead = "failed";
     renderWithProviders(<RecapStep />);
 
     expect(await screen.findByText(/n'a pas pu être lue/)).toBeInTheDocument();
+  });
+
+  // CHARGER ≠ ÉCHOUER (revue #342 round 2). Le premier jet repliait `loading` sur `failed` :
+  // le récap d'une période affichait « n'a pas pu être lue » à CHAQUE ouverture, sur une
+  // requête simplement en vol. Un bandeau d'alerte qui se déclenche en régime normal
+  // apprend au gestionnaire à l'ignorer — précisément le jour où la lecture échoue.
+  it("dit « en cours de lecture » — pas « échec » — pendant le premier chargement", async () => {
+    recapLayer.teamsRead = "loading";
+    renderWithProviders(<RecapStep />);
+
+    expect(await screen.findByText(/est en cours de lecture/)).toBeInTheDocument();
+    expect(screen.queryByText(/n'a pas pu être lue/)).not.toBeInTheDocument();
   });
 
   it("lists reservations by team rank (fanion before B) with NO delete button (read-only)", async () => {
