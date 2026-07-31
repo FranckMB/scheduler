@@ -37,7 +37,9 @@ use LogicException;
 use Psr\Cache\CacheItemInterface;
 use Psr\Cache\CacheItemPoolInterface;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Cache\Adapter\TagAwareAdapterInterface;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Contracts\Cache\ItemInterface;
 
 final class ScheduleConstraintBuilder
 {
@@ -70,26 +72,47 @@ final class ScheduleConstraintBuilder
     private array $currentSessionOverrides = [];
 
     /**
-     * BCK-04 (assumed by design): the four enrichment deps are nullable ON
+     * BCK-04 (assumed by design): the three enrichment deps are nullable ON
      * PURPOSE, not by omission. In production the container always autowires
      * them (no runtime null risk). Nullability enables the **light, DB-free
      * mode**: passing only the logger lets a caller build a payload purely from
-     * the entities handed to `buildPayload(...)`, skipping cache / tag-sync /
+     * the entities handed to `buildPayload(...)`, skipping cache / tag /
      * sport-category / venue-slot enrichment via the `instanceof` guards below.
      * The blocking `CrossStack/ContractSchemaTest` relies on this to assert the
      * backend↔engine payload SHAPE without a database. Forcing them non-nullable
      * would only push mocks into that critical test for zero prod benefit.
+     *
+     * P2-9ter : `TeamTagService` a été RETIRÉ d'ici — le builder ne synchronise
+     * plus les tags, il les lit (cf. serializeTeam). Le service reste injecté
+     * dans `TeamTagSyncListener`, qui les maintient au write-path.
      */
     public function __construct(
         private readonly LoggerInterface $logger,
         private readonly ?EntityManagerInterface $entityManager = null,
         #[Autowire(service: 'cache.schedule')]
         private readonly ?CacheItemPoolInterface $scheduleCachePool = null,
-        private readonly ?TeamTagService $teamTagService = null,
         private readonly ?VenueTrainingSlotRepository $venueTrainingSlotRepository = null,
     ) {}
 
-    public static function cacheKey(string $clubId): string
+    /**
+     * P2-9ter — la clé porte la SAISON : `buildForClubSeason` en reçoit une, et sans elle
+     * un club à deux saisons se voyait resservir le payload de l'autre.
+     */
+    public static function cacheKey(string $clubId, string $seasonId): string
+    {
+        return \sprintf('club.%s.season.%s.schedule_input', $clubId, $seasonId);
+    }
+
+    /**
+     * Le tag porté par TOUTES les entrées payload d'un club, saisons confondues.
+     *
+     * ⚠ C'est ce qui rend la clé par saison SÛRE. `CacheInvalidationListener` purge par
+     * CLUB, or deux entités du payload (`SportCategory`, `TeamTag`) portent un `clubId`
+     * mais AUCUN `seasonId` : les éditer ne pourrait plus viser aucune clé. Le listener
+     * invalide donc ce tag plutôt que de reconstruire une clé — d'où source unique, et
+     * plus de « changer la clé d'un seul côté casse l'invalidation en silence ».
+     */
+    public static function cacheTag(string $clubId): string
     {
         return \sprintf('club.%s.schedule_input', $clubId);
     }
@@ -109,7 +132,7 @@ final class ScheduleConstraintBuilder
 
         $cacheItem = null;
         if ($this->scheduleCachePool instanceof CacheItemPoolInterface) {
-            $cacheItem = $this->scheduleCachePool->getItem(self::cacheKey($clubId));
+            $cacheItem = $this->scheduleCachePool->getItem(self::cacheKey($clubId, $seasonId));
             if ($cacheItem->isHit()) {
                 $cached = $cacheItem->get();
                 if (\is_array($cached)) {
@@ -162,6 +185,13 @@ final class ScheduleConstraintBuilder
         if ($cacheItem instanceof CacheItemInterface) {
             $cacheItem->set($payload);
             $cacheItem->expiresAfter(self::CACHE_TTL_SECONDS);
+            // Taguer par CLUB : c'est le tag, et non la clé, que le listener invalide.
+            // ⚠ La garde porte sur le POOL, pas sur l'item : `CacheItem::tag()` lève une
+            // LogicException si l'item ne vient pas d'un pool tag-aware, et son drapeau
+            // `isTaggable` est protected — un `instanceof ItemInterface` ne dirait rien.
+            if ($this->scheduleCachePool instanceof TagAwareAdapterInterface && $cacheItem instanceof ItemInterface) {
+                $cacheItem->tag(self::cacheTag($clubId));
+            }
             $this->scheduleCachePool->save($cacheItem);
         }
 
@@ -194,18 +224,50 @@ final class ScheduleConstraintBuilder
      */
     public function buildForOverlay(Schedule $schedule, CalendarEntry $entry): array
     {
+        // Adaptateur STRICT sur le chemin scalaire — aucune logique ici. Le `Schedule`
+        // n'apportait que ces cinq scalaires ; les extraire est ce qui rend le payload
+        // d'une période calculable AVANT toute génération (P2-9ter).
+        return $this->buildForPeriodPlan(
+            $schedule->getClubId(),
+            $schedule->getSeasonId(),
+            // ADR-0002 inv. 5 — les réglages de période (coches équipes/contraintes,
+            // créneaux prêtés) s'ancrent au PLAN. Le plan est non-nullable (lot D) : une
+            // version a toujours le sien.
+            $schedule->getSchedulePlanId(),
+            $entry,
+            $schedule->getSolverSeed(),
+            $schedule->getId(),
+        );
+    }
+
+    /**
+     * Le payload d'une période à partir de ses SEULS scalaires — aucun `Schedule` requis.
+     *
+     * Chemin de calcul UNIQUE de l'overlay : `buildForOverlay` n'en est qu'un adaptateur.
+     * C'est ce qui permet à un appelant PRÉ-GÉNÉRATION (le récap) d'obtenir les nombres
+     * exacts du solveur au lieu de les recalculer à la main — les trois tentatives qui
+     * ont recopié cette logique ont toutes divergé (P2-9ter).
+     *
+     * `$scheduleId` null = avant génération : aucun `ScheduleSlotTemplate` n'existe encore,
+     * et c'est SÉMANTIQUEMENT JUSTE — les verrous durables sont les `Reservation`, portées
+     * par le `schedulePlanId`, qui sont lues dans les deux cas.
+     *
+     * @return array<string, mixed>
+     */
+    public function buildForPeriodPlan(
+        string $clubId,
+        string $seasonId,
+        string $schedulePlanId,
+        CalendarEntry $entry,
+        int $solverSeed = self::DEFAULT_SOLVER_SEED,
+        ?string $scheduleId = null,
+    ): array {
         $em = $this->entityManager;
         if (!$em instanceof EntityManagerInterface) {
             throw new LogicException('ScheduleConstraintBuilder requires Doctrine for overlay builds.');
         }
 
-        $clubId = $schedule->getClubId();
-        $seasonId = $schedule->getSeasonId();
         $periodType = $entry->getPeriodType();
-
-        // ADR-0002 inv. 5 — les réglages de période (coches équipes/contraintes, créneaux
-        // prêtés) s'ancrent au PLAN. Le plan est non-nullable (lot D) : une version a toujours le sien.
-        $schedulePlanId = $schedule->getSchedulePlanId();
 
         // P2-5 E1 : une semaine ENFANT hérite les contraintes datées de sa période
         // MÈRE (source unique : CalendarEntry::datedConstraintSourceId).
@@ -308,12 +370,12 @@ final class ScheduleConstraintBuilder
             // absent du payload. Un verrou ORPHELIN (plus aucun créneau à cet horaire) est,
             // lui, une ERREUR annoncée AVANT la génération (GenerateScheduleController) —
             // on ne l'escamote pas en silence.
-            slotTemplates: array_values(array_filter(
-                $em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $schedule->getId()], ['id' => 'ASC']),
+            slotTemplates: null === $scheduleId ? [] : array_values(array_filter(
+                $em->getRepository(ScheduleSlotTemplate::class)->findBy(['scheduleId' => $scheduleId], ['id' => 'ASC']),
                 static fn (ScheduleSlotTemplate $template): bool => !isset($disabledVenueIds[$template->getVenueId()]),
             )),
             priorityTiers: $em->getRepository(PriorityTier::class)->findBy([], ['id' => 'ASC']),
-            solverSeed: $schedule->getSolverSeed(),
+            solverSeed: $solverSeed,
             constraints: $constraints,
             // Overlay reservations: this period's own pins (base ones don't leak in,
             // mirroring how HOLIDAY overlays use only dated constraints).
@@ -609,9 +671,18 @@ final class ScheduleConstraintBuilder
         if ($this->entityManager instanceof EntityManagerInterface) {
             $sportCategory = $this->entityManager->getRepository(SportCategory::class)->find($team->getSportCategoryId());
         }
-        if ($this->teamTagService instanceof TeamTagService && $this->entityManager instanceof EntityManagerInterface) {
-            $this->teamTagService->syncTeamTags($team, $seasonId);
-            // Get tags from database
+        // P2-9ter — LECTURE SEULE. Les tags sont LUS ici, jamais resynchronisés : c'est
+        // `TeamTagSyncListener` (postPersist/postUpdate sur Team, resync au postFlush) qui
+        // les maintient au write-path, et `determineTagNames` ne dérive que du
+        // `sportCategoryId` — tout changement de tag passe donc par un update de Team.
+        // ⚠ L'appel à `syncTeamTags` qui vivait ici SUPPRIMAIT puis recréait les
+        // assignations avec un flush INTERMÉDIAIRE (TeamTagService : le flush de
+        // getOrCreateSystemTags commit les remove, les persist restent en attente). La
+        // relecture ci-dessous tombait donc sur une table vidée : `tags` sortait VIDE pour
+        // les 49 équipes des générations réelles, alors que la base portait 160
+        // assignations. Et sans flush ultérieur (le récap n'en fait aucun), les
+        // suppressions restaient définitives — la perte de données de la 3e tentative.
+        if ($this->entityManager instanceof EntityManagerInterface) {
             $tagAssignments = $this->entityManager->getRepository(TeamTagAssignment::class)->findBy([
                 'teamId' => $team->getId(),
                 'seasonId' => $seasonId,

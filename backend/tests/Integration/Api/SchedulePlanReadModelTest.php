@@ -76,7 +76,7 @@ final class SchedulePlanReadModelTest extends WebTestCase
         $team->setPriorityTierId(1);
         $this->em->persist($team);
         $this->em->flush();
-        self::getContainer()->get('cache.schedule')->deleteItem(ScheduleConstraintBuilder::cacheKey($season->getClubId()));
+        self::getContainer()->get('cache.schedule')->deleteItem(ScheduleConstraintBuilder::cacheKey($season->getClubId(), $season->getId()));
 
         $plan = $this->me($user)['seasonPlan'];
         self::assertNotSame($baselineHash, $plan['currentStructureHash'], 'une modification structurelle doit faire bouger le hash');

@@ -6,6 +6,8 @@ namespace App\Tests\Unit\Service;
 
 use App\Entity\SportCategory;
 use App\Entity\Team;
+use App\Entity\TeamTag;
+use App\Entity\TeamTagAssignment;
 use App\Service\ScheduleConstraintBuilder;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -84,8 +86,17 @@ final class ScheduleConstraintBuilderAgeFieldsTest extends TestCase
         $this->sportCategoryRepository = $this->createMock(EntityRepository::class);
         $this->logger = $this->createMock(LoggerInterface::class);
 
+        // P2-9ter — la lecture des tags est désormais gardée par la seule présence de
+        // l'EntityManager (avant, elle exigeait aussi un TeamTagService, que ce test ne
+        // passait pas : la branche était donc sautée). Le mock doit servir les deux repos
+        // de tags, sinon `getRepository` rend null et le build lève un TypeError.
+        $tagRepository = $this->createMock(EntityRepository::class);
+        $tagRepository->method('findBy')->willReturn([]);
+
         $this->entityManager->method('getRepository')->willReturnMap([
             [SportCategory::class, $this->sportCategoryRepository],
+            [TeamTagAssignment::class, $tagRepository],
+            [TeamTag::class, $tagRepository],
         ]);
 
         $this->builder = new ScheduleConstraintBuilder($this->logger, $this->entityManager);

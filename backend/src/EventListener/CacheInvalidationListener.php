@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\EventListener;
 
+use App\Service\ScheduleConstraintBuilder;
 use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\ORM\Event\PostPersistEventArgs;
 use Doctrine\ORM\Event\PostRemoveEventArgs;
 use Doctrine\ORM\Event\PostUpdateEventArgs;
 use Doctrine\ORM\Events;
 use Psr\Cache\CacheItemPoolInterface;
+use Symfony\Component\Cache\Adapter\TagAwareAdapterInterface;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpKernel\Event\TerminateEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -31,7 +33,8 @@ class CacheInvalidationListener
 
     public function __construct(
         private readonly CacheItemPoolInterface $tenantCachePool,
-        private readonly CacheItemPoolInterface $scheduleCachePool,
+        // Tag-aware : le payload solveur est purgé par TAG (cf. flushInvalidations).
+        private readonly TagAwareAdapterInterface $scheduleCachePool,
     ) {}
 
     public function postUpdate(PostUpdateEventArgs $args): void
@@ -66,6 +69,11 @@ class CacheInvalidationListener
                 $this->tenantCachePool->deleteItem($key);
                 $this->scheduleCachePool->deleteItem($key);
             }
+            // Le payload solveur : purgé par TAG, toutes saisons du club d'un coup.
+            // Indispensable — `SportCategory` et `TeamTag` alimentent le payload mais ne
+            // portent PAS de `seasonId`, donc aucune clé par saison ne serait devinable
+            // depuis l'entité éditée.
+            $this->scheduleCachePool->invalidateTags([ScheduleConstraintBuilder::cacheTag((string) $clubId)]);
         }
 
         $this->pendingInvalidations = [];
@@ -78,8 +86,11 @@ class CacheInvalidationListener
             return;
         }
 
+        // P2-9ter — `schedule_input` a QUITTÉ cette liste : sa clé porte désormais la
+        // saison (`ScheduleConstraintBuilder::cacheKey`), donc une clé écrite à la main
+        // ici ne viserait plus rien. Il est purgé par TAG dans flushInvalidations(), ce
+        // qui supprime la possibilité même de désynchroniser les deux côtés.
         $this->pendingInvalidations[$clubId] = [
-            \sprintf('club.%s.schedule_input', $clubId),
             \sprintf('club.%s.tenant_data', $clubId),
             \sprintf('club.%s.schedule_snapshot', $clubId),
         ];
