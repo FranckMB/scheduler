@@ -9,6 +9,8 @@ import { useWizardStore } from "@/features/wizard/store";
 import { usePriorityTiers } from "@/features/matches/queries";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { useSchedulePlans } from "@/features/cockpit/queries";
+import { useVenuePeriodOverrides } from "@/features/wizard/queries";
+import { readFailed } from "@/shared/lib/readState";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Modal } from "@/shared/components/ui/modal";
@@ -291,7 +293,21 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // Defined venue windows the solver left unfilled ("créneaux vides"). Injected
   // into the grid in the GYMNASE view only (they have no team/coach) so they
   // show as `vide` cells even without a click; also listed as warnings below.
-  const emptySlots = useMemo(() => computeEmptySlots(trainingSlots, slots, validScheduleId ?? ""), [trainingSlots, slots, validScheduleId]);
+  // P2-15 — un gymnase DÉSACTIVÉ pour la période garde ses créneaux en base (le backend
+  // les écarte du payload, il ne les supprime pas) : sans ce filtre, l'écran de génération
+  // affichait TOUS les gymnases du club alors qu'un seul sert — « du bruit pour rien ».
+  // On filtre à la SOURCE : la grille, ses fenêtres vides et le sélecteur en dérivent tous.
+  // FAIL-CLOSED : lecture ratée sans cache ⇒ on ne masque rien (P4-20).
+  const venueOverrides = useVenuePeriodOverrides(slotLayerId);
+  const disabledVenueIds = useMemo(
+    () => new Set(readFailed(venueOverrides) ? [] : (venueOverrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId)),
+    [venueOverrides],
+  );
+  const layerSlots = useMemo(
+    () => (0 === disabledVenueIds.size ? trainingSlots : trainingSlots.filter((ts) => !disabledVenueIds.has(ts.venueId))),
+    [trainingSlots, disabledVenueIds],
+  );
+  const emptySlots = useMemo(() => computeEmptySlots(layerSlots, slots, validScheduleId ?? ""), [layerSlots, slots, validScheduleId]);
   const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...slots, ...emptySlots] : slots), [viewMode, slots, emptySlots]);
 
   // From gridSlots (incl. empty windows in gymnase view) so a venue that has ONLY

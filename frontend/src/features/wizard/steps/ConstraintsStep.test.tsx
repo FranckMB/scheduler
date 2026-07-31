@@ -20,6 +20,10 @@ const h = vi.hoisted(() => ({
   tagAssignments: [] as { id: string; teamId: string; tagId: string; seasonId: string }[],
 }));
 
+const { activeVenuesState } = vi.hoisted(() => ({
+  activeVenuesState: { venues: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] as { id: string; name: string; isActive: boolean }[] },
+}));
+
 vi.mock("../queries", () => ({
   useWizardConstraints: () => ({ data: h.list }),
   useWizardTeams: () => ({
@@ -34,6 +38,8 @@ vi.mock("../queries", () => ({
   useWizardCoaches: () => ({ data: [{ id: "co1", firstName: "Jean", lastName: "Dupont", isEmployee: false, isActive: true, email: null }] }),
   useWizardCoachPlayers: () => ({ data: [] }),
   useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] }),
+  // P2-15 : le sélecteur ne voit QUE les gymnases actifs de la couche courante.
+  useActiveVenues: () => ({ venues: activeVenuesState.venues, readFailed: false }),
   useVenueSlots: () => ({ data: [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }] }),
   // #8 — la grille de la couche ÉDITÉE : le socle en mode saison, la grille que la
   // période POSSÈDE sinon. Les deux couches portent volontairement des créneaux
@@ -97,6 +103,23 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     h.list = [];
     h.tags = [];
     h.tagAssignments = [];
+    activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }];
+  });
+
+  // P2-15 (retour fondateur) : « ça n'a pas de sens que le gymnase Mateo soit désactivé
+  // mais que je puisse encore y relier des contraintes ». Un gymnase désactivé sort du
+  // payload solveur : l'offrir invitait à un geste sans effet, que le récap devait ensuite
+  // avertir. Décision : dans les sélecteurs, on ne voit QUE les gymnases actifs.
+  it("n'offre que les gymnases ACTIFS de la période", async () => {
+    const user = userEvent.setup();
+    activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }];
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    const picker = screen.getByLabelText("Gymnase");
+    const options = Array.from(picker.querySelectorAll("option")).map((o) => o.textContent);
+    expect(options).toContain("Gymnase A");
+    expect(options).not.toContain("Gymnase B");
   });
 
   it("only offers groups (tags) that have at least one assigned team", () => {

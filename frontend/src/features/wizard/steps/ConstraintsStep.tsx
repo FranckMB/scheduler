@@ -16,7 +16,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
 import { DAYS, dayLabel } from "../lib/days";
-import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useWizardVenues } from "../queries";
+import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useActiveVenues } from "../queries";
 import { usePeriodAnchor } from "@/features/cockpit/queries";
 import { useWizardStore } from "../store";
 import { PeriodConstraints } from "./PeriodStructure";
@@ -82,7 +82,12 @@ export function ConstraintsStep() {
   const { data: tagAssignments = [] } = useWizardTeamTagAssignments();
   const { data: coaches = [] } = useWizardCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
-  const { data: venues = [] } = useWizardVenues();
+  // P2-15 : les sélecteurs d'une période (contraintes ET réservations, tous deux
+  // alimentés par cette liste) ne proposent QUE les gymnases ACTIFS — décision fondateur :
+  // « je ne veux voir que les gymnases actifs ». Un gymnase désactivé sort du payload
+  // solveur : l'offrir ici invitait à un geste sans effet, et le récap devait ensuite
+  // l'avertir. En mode socle, la liste est inchangée.
+  const { venues } = useActiveVenues("period" === anchor.state ? anchor.planId : null);
   const create = useCreateConstraint();
   const update = useUpdateConstraint();
   const del = useDeleteConstraint();

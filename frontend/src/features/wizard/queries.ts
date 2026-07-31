@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { CoachPayload, ConstraintPayload, SlotPayload, TeamCoachRole, TeamPayload, VenuePayload } from "./api";
+import { readFailed } from "@/shared/lib/readState";
+
+import type { CoachPayload, ConstraintPayload, SlotPayload, Team, TeamCoachRole, TeamPayload, Venue, VenuePayload } from "./api";
 import * as wizardApi from "./api";
 
 export function useWizardTeams() {
@@ -237,6 +239,59 @@ export function useDeletePeriodSlot(schedulePlanId: string | null) {
       void queryClient.invalidateQueries({ queryKey: ["wizard", "reservations", schedulePlanId] });
     },
   });
+}
+
+/**
+ * P2-15 — CE QUE LA PÉRIODE CONTIENT, pour l'UI.
+ *
+ * Le backend filtre déjà correctement (`PeriodConstraintSelector`, #340) : le solveur ne
+ * voit ni les équipes mises en pause, ni les gymnases désactivés. L'UI, elle, lisait les
+ * listes de SAISON — d'où « 49 équipes » annoncées au récap quand 6 sont cochées, et des
+ * gymnases désactivés encore proposés dans les sélecteurs.
+ *
+ * ⚠ Ces hooks n'implémentent AUCUNE règle métier : ils APPLIQUENT un override déjà chargé
+ * (`isActive` d'un `TeamPeriodOverride`, `mode DISABLED` d'un `VenuePeriodOverride`). Les
+ * vraies règles — défauts par type de période, résolution des tags, héritage des
+ * contraintes — restent côté serveur, et doivent y rester : c'est ce qui les distingue
+ * d'un quatrième miroir (cf. P2-14, P3-19).
+ *
+ * `schedulePlanId` null = mode socle : la liste complète, inchangée.
+ *
+ * FAIL-CLOSED : si la lecture des overrides a échoué SANS rien en cache, on ne masque
+ * RIEN et `readFailed` le dit à l'appelant. Masquer sur une lecture ratée ferait croire à
+ * une période plus petite qu'elle n'est — le travers exact que P4-20/P4-1 ont soldé.
+ */
+export function useActiveVenues(schedulePlanId: string | null): { venues: Venue[]; readFailed: boolean } {
+  const all = useWizardVenues();
+  const overrides = useVenuePeriodOverrides(schedulePlanId);
+  const venues = all.data ?? [];
+
+  if (null === schedulePlanId) {
+    return { venues, readFailed: false };
+  }
+  if (readFailed(overrides)) {
+    return { venues, readFailed: true };
+  }
+  const disabled = new Set((overrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId));
+
+  return { venues: venues.filter((v) => !disabled.has(v.id)), readFailed: false };
+}
+
+/** Le pendant équipes — même contrat, même fail-closed. @see useActiveVenues */
+export function useActiveTeams(schedulePlanId: string | null): { teams: Team[]; pausedIds: Set<string>; readFailed: boolean } {
+  const all = useWizardTeams();
+  const overrides = useTeamPeriodOverrides(schedulePlanId);
+  const teams = all.data ?? [];
+
+  if (null === schedulePlanId) {
+    return { teams, pausedIds: new Set(), readFailed: false };
+  }
+  if (readFailed(overrides)) {
+    return { teams, pausedIds: new Set(), readFailed: true };
+  }
+  const pausedIds = new Set((overrides.data ?? []).filter((o) => !o.isActive).map((o) => o.teamId));
+
+  return { teams: teams.filter((t) => !pausedIds.has(t.id)), pausedIds, readFailed: false };
 }
 
 export function useTeamPeriodOverrides(schedulePlanId: string | null) {

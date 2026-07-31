@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { anchorIsWritable, usePeriodAnchor } from "@/features/cockpit/queries";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
+import { cn } from "@/shared/lib/utils";
 
 import { FAMILY_LABEL, FAMILY_ORDER, groupConstraints } from "../lib/constraintOrder";
 import { LEVEL_LABEL } from "../lib/labels";
@@ -13,7 +14,7 @@ import { BlockerList } from "./BlockerList";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 
 import { SectionCountTitle, SummaryRow, TeamTierAccordion } from "./StructureSummary";
-import { usePriorityTiers, useReservations, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags, useWizardVenues } from "../queries";
+import { useActiveTeams, useActiveVenues, useGridSlots, usePriorityTiers, useReservations, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags } from "../queries";
 import { useWizardStore } from "../store";
 import { groupTeamsByTier } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
@@ -34,24 +35,41 @@ function Counter({ label, value, sub }: { label: string; value: number; sub?: st
 const empty = <p className="py-1.5 text-sm text-muted-foreground">—</p>;
 
 export function RecapStep() {
-  const { data: teams = [] } = useWizardTeams();
-  const { data: venues = [] } = useWizardVenues();
-  const { data: slots = [] } = useVenueSlots();
+  // P2-15 — le récap décrit LA PÉRIODE, pas le club : il annonçait « 49 équipes » quand 6
+  // étaient cochées, et listait des gymnases désactivés. Les compteurs comptent donc les
+  // ACTIFS ; les équipes en pause restent visibles, BARRÉES, dans le détail dépliable —
+  // le récap sert à vérifier ce qu'on va générer, y compris ce qu'on a mis en pause.
+  // (Le `planId` vient de l'ancre plus bas ; l'ordre des hooks impose de la lire d'abord.)
   const { data: coaches = [] } = useWizardCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const periodEntryId = useWizardStore((s) => (s.mode === "period" ? s.calendarEntryId : null));
+  const periodAnchorEarly = usePeriodAnchor(periodEntryId);
+  const layerPlanId = "period" === periodAnchorEarly.state ? periodAnchorEarly.planId : null;
+  const { teams, pausedIds, readFailed: teamsReadFailed } = useActiveTeams(layerPlanId);
+  const { venues, readFailed: venuesReadFailed } = useActiveVenues(layerPlanId);
+  const { data: allTeams = [] } = useWizardTeams();
+  const { data: slots = [] } = useGridSlots(layerPlanId);
   const { data: constraints = [] } = useWizardConstraints(periodEntryId);
   // Les réservations pendent au PLAN (inv. 5, lot C3) — les contraintes, elles, restent
   // lues par l'entrée (elles décrivent le FAIT).
   // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
-  const periodAnchor = usePeriodAnchor(periodEntryId);
-  const { data: reservations = [] } = useReservations(periodAnchor.planId, anchorIsWritable(periodAnchor));
+  const { data: reservations = [] } = useReservations(periodAnchorEarly.planId, anchorIsWritable(periodAnchorEarly));
   const { data: tiers = [] } = usePriorityTiers();
   const { data: tags = [] } = useWizardTeamTags();
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
   // génération" button is gated by the same rules (single source of truth).
   const { errors: blockers } = useStepValidation("recap");
+
+  // Les équipes en pause : hors des compteurs (elles ne seront pas générées) mais
+  // VISIBLES et barrées dans le détail — on doit voir ce qu'on a mis en pause.
+  const pausedTeams = allTeams.filter((t) => pausedIds.has(t.id));
+  // FAIL-CLOSED (P4-20/P4-1) : sur une lecture d'overrides ratée, on ne masque RIEN et on
+  // le DIT — annoncer des chiffres de saison sur une période serait le mensonge qu'on corrige.
+  const layerWarnings = [
+    teamsReadFailed ? "La sélection d'équipes de la période n'a pas pu être lue — les chiffres ci-dessous sont ceux de la saison." : null,
+    venuesReadFailed ? "Les réglages de gymnases de la période n'ont pas pu être lus — les chiffres ci-dessous sont ceux de la saison." : null,
+  ].filter((m): m is string => null !== m);
 
   const salaried = coaches.filter((c) => c.isEmployee).length;
   const coachPlayerIds = new Set(coachPlayers.filter((cp) => cp.isActive).map((cp) => cp.coachId));
@@ -102,7 +120,12 @@ export function RecapStep() {
 
   return (
     <div>
-      <p className="mb-4 text-sm text-muted-foreground">Cartographie de votre club avant génération.</p>
+      <p className="mb-4 text-sm text-muted-foreground">{null === layerPlanId ? "Cartographie de votre club avant génération." : "Cartographie de cette période avant génération."}</p>
+      {layerWarnings.map((message) => (
+        <p key={message} className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          {message}
+        </p>
+      ))}
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Counter label="Équipes" value={teams.length} />
@@ -117,18 +140,20 @@ export function RecapStep() {
             empty
           ) : (
             <TeamTierAccordion
-              teams={teams}
+              teams={pausedTeams.length > 0 ? [...teams, ...pausedTeams] : teams}
               // Tiers open by default: the ranks (S · Fanion → D · Bonus) must be
               // visible at first glance — collapsed inner accordions read as an
               // unsorted flat list to the manager.
               renderRow={(t) => {
                 const coach = mainCoachName(t.id);
+                const paused = pausedIds.has(t.id);
                 return (
                   <SummaryRow
                     key={t.id}
                     label={
-                      <span className="flex flex-wrap items-baseline gap-x-2">
-                        <span>{t.name}</span>
+                      <span className={cn("flex flex-wrap items-baseline gap-x-2", paused && "text-muted-foreground")}>
+                        <span className={cn(paused && "line-through")}>{t.name}</span>
+                        {paused ? <span className="text-xs italic">en pause pour cette période</span> : null}
                         {coach ? <span className="text-xs italic text-muted-foreground">{coach}</span> : null}
                         {t.level ? <span className="text-xs italic text-muted-foreground">· {LEVEL_LABEL[t.level]}</span> : null}
                       </span>

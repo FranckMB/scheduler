@@ -69,12 +69,20 @@ vi.mock("./api", () => {
 const navigate = vi.fn();
 vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
 
-const { meState, renameSpy, plansState } = vi.hoisted(() => ({
+const { meState, renameSpy, plansState, venueOverridesState } = vi.hoisted(() => ({
   meState: { chosenScheduleId: null as string | null },
   renameSpy: vi.fn(),
   // Typé sur le VRAI contrat : un type inline recopié laisserait passer un champ ajouté à
   // `SchedulePlan` sans que ces fixtures soient recalées (revue #339 round 3).
   plansState: { plans: [] as SchedulePlan[] },
+  venueOverridesState: { rows: [] as { id: string; venueId: string; mode: string }[], isError: false },
+}));
+
+// P2-15 : les réglages de gymnases de la période — un gymnase DÉSACTIVÉ garde ses
+// créneaux en base, l'écran doit malgré tout cesser de l'afficher.
+vi.mock("@/features/wizard/queries", async (orig) => ({
+  ...(await orig<typeof import("@/features/wizard/queries")>()),
+  useVenuePeriodOverrides: () => ({ data: venueOverridesState.rows, isError: venueOverridesState.isError }),
 }));
 
 // Partiel : seul `useSchedulePlans` est simulé (l'en-tête y lit le nom du plan
@@ -102,6 +110,8 @@ beforeEach(() => {
   meState.chosenScheduleId = null;
   renameSpy.mockClear();
   plansState.plans = [];
+  venueOverridesState.rows = [];
+  venueOverridesState.isError = false;
   // Default: an editable work version. Re-armed per test so a case that swaps in
   // an in-force version (read-only → panels hidden) cannot leak into the next.
   vi.mocked(listSchedules).mockResolvedValue(workVersion);
@@ -229,6 +239,23 @@ describe("PlanningPage (integration)", () => {
 
     expect(await screen.findByText("U11")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /renommer le planning/i })).not.toBeInTheDocument();
+  });
+
+  // P2-15 (retour fondateur) : « à la génération je vois TOUS les gymnases alors que je ne
+  // travaille qu'avec un seul, ça fait du bruit pour rien ». Un gymnase désactivé pour la
+  // période garde ses créneaux en base — le backend les écarte du payload, il ne les
+  // supprime pas — donc l'écran doit filtrer à la SOURCE.
+  it("n'affiche pas un gymnase désactivé pour la période", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
+    ]);
+    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
+    venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
+    usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
+    renderWithProviders(<PlanningPage />);
+
+    // Le seul gymnase du fixture est désactivé : ni sa colonne, ni son entrée de filtre.
+    await vi.waitFor(() => expect(screen.queryByText("Gymnase Alpha")).not.toBeInTheDocument());
   });
 
   it("drops « Valider » on the version the plan points at (it is in force) and offers « Rouvrir »", async () => {
