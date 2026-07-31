@@ -17,15 +17,18 @@ use App\Service\ConstraintValidationService;
 use App\Service\ManagementAccessGuard;
 use App\Service\PeriodConstraintSelection;
 use App\Service\PeriodConstraintSelector;
+use App\Service\ScheduleConstraintBuilder;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Throwable;
 
 /**
  * BW3 — pre-solve gate. Runs the (previously unwired) ConstraintValidationService
@@ -47,6 +50,8 @@ final class ValidateConstraintsController extends AbstractController
         private readonly VenueRepository $venueRepository,
         private readonly CoachDoubleBookingDetector $coachDoubleBookingDetector,
         private readonly PeriodConstraintSelector $periodConstraintSelector,
+        private readonly ScheduleConstraintBuilder $scheduleConstraintBuilder,
+        private readonly LoggerInterface $logger,
     ) {}
 
     #[Route('/api/constraints/validate', name: 'api_constraints_validate', methods: ['POST'])]
@@ -114,6 +119,38 @@ final class ValidateConstraintsController extends AbstractController
             $this->validationService->detectConflicts($constraints),
         );
 
+        // P2-9 PR A — LE VOLET CAPACITÉ, dans les deux sens (décision fondateur 2026-07-31).
+        // Les nombres viennent du PAYLOAD que le solveur recevra (`buildForClubSeason` /
+        // `buildForPeriodPlan`, en lecture seule depuis P2-9ter) — JAMAIS d'un recalcul à la
+        // main : trois tentatives sont mortes exactement là-dessus, dont une en perdant des
+        // données. Une période sans plan (non génératrice, ou antérieure au lot C1) n'a pas
+        // de payload : rien à mesurer.
+        // ⚠ Le build ne doit JAMAIS faire tomber le récap : c'est l'écran où le gestionnaire
+        // vient corriger les données douteuses, et un 500 l'y enfermerait (même garde que
+        // `SchedulePlanProvisioner::currentStructureHash`, seul autre appelant interactif du
+        // builder). La capacité est un CONFORT : sans elle, le récap reste utile.
+        try {
+            $capacityPayload = null;
+            if (null !== $calendarEntryId) {
+                if ($selection instanceof PeriodConstraintSelection) {
+                    // La sélection est déjà calculée pour les warnings : on la PASSE au
+                    // builder plutôt que de la lui faire recalculer (revue #341).
+                    $capacityPayload = $this->scheduleConstraintBuilder->buildForPeriodPlan($clubId, $seasonId, $selection->schedulePlanId, $calendarEntry, selection: $selection);
+                }
+            } else {
+                $capacityPayload = $this->scheduleConstraintBuilder->buildForClubSeason($clubId, $seasonId);
+            }
+            if (null !== $capacityPayload) {
+                $warnings = [...$warnings, ...$this->capacityWarnings($capacityPayload)];
+            }
+        } catch (Throwable $exception) {
+            // Le silence serait indiscernable d'un « la capacité est juste » : on le DIT.
+            // `error` et non `warning` : un build qui échoue est une anomalie, pas un cas
+            // métier — c'est le seul endroit où on l'apprendra (revue #341 round 2).
+            $this->logger->error('Capacity recap skipped: payload build failed.', ['exception' => $exception]);
+            $warnings[] = 'La capacité des gymnases n\'a pas pu être vérifiée — les autres contrôles du récap restent valables.';
+        }
+
         // P2-9 PR B — IMPOSSIBILITÉ PHYSIQUE : un verrou qui met un coach à deux endroits
         // en même temps. Le solveur ne peut PAS l'attraper (un verrou HARD est pré-placé
         // hors modèle, ALIGN-07), et ce n'est pas une préférence bafouée — le gestionnaire
@@ -133,6 +170,149 @@ final class ValidateConstraintsController extends AbstractController
             ['valid' => $valid, 'errors' => $errors, 'conflicts' => $conflicts, 'warnings' => $warnings, 'blockers' => $blockers],
             $valid ? Response::HTTP_OK : Response::HTTP_UNPROCESSABLE_ENTITY,
         );
+    }
+
+    /**
+     * P2-9 PR A — demande vs offre, lues sur le PAYLOAD que le solveur recevra.
+     *
+     * ⚠ L'offre n'est PAS la somme brute des capacités : le moteur lit ce même payload
+     * autrement, et trois lectures naïves annonceraient des places qui n'existent pas
+     * (revue #341) —
+     *
+     * 1. `model.slot_capacities` est un **dict** clé `(gymnase, jour, heure)`
+     *    (`model.py:54-56`) : deux créneaux au même triplet s'ÉCRASENT, ils ne
+     *    s'additionnent pas ;
+     * 2. un **verrou HARD** (réservation ou slot épinglé, présents dans `slotTemplates`)
+     *    met le triplet dans `blocked_venue_slots` et le moteur ne crée alors AUCUNE
+     *    variable pour ce créneau, quelle que soit sa capacité (`model.py:62-63`) — un
+     *    créneau verrouillé sert UNE équipe, pas `capacity` ;
+     * 3. une contrainte **FACILITY_CAPACITY** rabote la capacité à `min(capacity,
+     *    maxTeams)` (`main.py:288-293`, clé sur `config.venueId`).
+     *
+     * Même après ces trois lectures, l'offre reste un **MAJORANT** : le moteur réduit
+     * encore par les indispos coach, les fenêtres horaires, les gymnases interdits… D'où
+     * l'asymétrie ASSUMÉE des deux messages, qui est ce qui les rend honnêtes :
+     *
+     * - **sous-capacité** (`offre < demande`) : l'offre réelle étant ≤ ce majorant, la
+     *   conclusion est SÛRE — jamais de fausse alerte. Elle peut sous-avertir, jamais mentir.
+     *   Message en « au moins X » : condition nécessaire, jamais suffisante.
+     * - **surplus** (`offre > demande`) : la conclusion inverse ne se déduit PAS d'un
+     *   majorant. Le message dit donc « jusqu'à » et « pourraient », jamais un fait —
+     *   sinon il inviterait à ajouter des séances à un club en réalité sous-capacitaire
+     *   (le scénario exact remonté en revue).
+     *
+     * @param array<string, mixed> $payload
+     *
+     * @return list<string>
+     */
+    private function capacityWarnings(array $payload): array
+    {
+        $demand = 0;
+        foreach (\is_array($payload['teams'] ?? null) ? $payload['teams'] : [] as $team) {
+            $demand += (int) ($team['sessionsPerWeek'] ?? 0);
+        }
+
+        // Aucune équipe : la demande vaut 0 et tout « surplus » serait du bruit sur un club
+        // vide — le récap bloque déjà en amont sur « Ajoutez au moins une équipe ».
+        if (0 === $demand) {
+            return [];
+        }
+
+        $offer = $this->payloadOffer($payload);
+
+        if ($offer < $demand) {
+            return [\sprintf(
+                'Vos équipes demandent %s par semaine, vos gymnases n\'en offrent que %d : au moins %s ne %s pas être placée%s. Ajoutez des créneaux, augmentez leur capacité, ou réduisez des séances.',
+                $this->plural($demand, 'séance', 'séances'),
+                $offer,
+                $this->plural($demand - $offer, 'séance', 'séances'),
+                1 === $demand - $offer ? 'pourra' : 'pourront',
+                1 === $demand - $offer ? '' : 's',
+            )];
+        }
+
+        if ($offer > $demand) {
+            return [\sprintf(
+                'Vos gymnases offrent jusqu\'à %s pour %s demandée%s : %s %s rester libre%s. Vous pouvez agrandir des créneaux (capacité), en ajouter, ou augmenter les séances de certaines équipes.',
+                $this->plural($offer, 'place de créneau', 'places de créneau'),
+                $this->plural($demand, 'séance', 'séances'),
+                1 === $demand ? '' : 's',
+                $this->plural($offer - $demand, 'place', 'places'),
+                1 === $offer - $demand ? 'pourrait' : 'pourraient',
+                1 === $offer - $demand ? '' : 's',
+            )];
+        }
+
+        return [];
+    }
+
+    /**
+     * L'offre du payload — un MAJORANT de ce que le solveur peut réellement placer.
+     *
+     * ⚠ HISTOIRE, à lire avant d'y toucher (revue #341, deux rounds). La version d'origine
+     * sommait les capacités brutes. La revue a montré trois écarts avec le moteur ; je les ai
+     * « corrigés » en répliquant son algèbre de créneaux ici (verrous, durées couvertes,
+     * rabots). Le round suivant en a trouvé QUATRE autres — et surtout, deux de mes
+     * corrections faisaient tomber la propriété qui justifiait tout l'exercice : elles
+     * SOUS-estimaient l'offre, donc produisaient de FAUSSES ALERTES sur la branche dont le
+     * contrat est de ne jamais mentir.
+     *
+     * Conclusion tirée : ne répliquer QUE les réductions dont on peut prouver qu'elles
+     * laissent l'offre AU-DESSUS du réel. Il en reste deux, toutes deux exactes :
+     *
+     * 1. **déduplication** par `(gymnase, jour, heure)` — `model.slot_capacities` est un dict
+     *    sur ce triplet (`model.py:54-56`) : deux lignes au même triplet s'écrasent. Réduire
+     *    ne peut qu'approcher le réel par le haut.
+     * 2. **`FACILITY_CAPACITY` ACTIVE** → `min(capacité, maxTeams)` (`main.py:288-293`), clé
+     *    sur `config.venueId`. Le filtre `isActive` n'est PAS optionnel : le moteur saute
+     *    toute contrainte inactive (`constraints.py:1729-1730`), et l'oublier appliquait un
+     *    rabot que le solveur n'applique pas — une fausse alerte.
+     *
+     * Ce qui n'est délibérément PAS répliqué : les verrous HARD. Le moteur y émet un créneau
+     * verrouillé PAR ÉQUIPE épinglée, décline la durée en pas de 15 min, et place même les
+     * épinglages hors grille — trois comportements que mes tentatives ont ratés dans les deux
+     * sens. Ne rien faire est SÛR : un créneau verrouillé compte alors sa capacité pleine,
+     * donc ≥ ce que le solveur y placera. On sous-avertit, on ne ment pas.
+     *
+     * La vraie sortie de ce miroir est un calcul CÔTÉ MOTEUR (roadmap P3-19).
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function payloadOffer(array $payload): int
+    {
+        $caps = [];
+        foreach (\is_array($payload['constraints'] ?? null) ? $payload['constraints'] : [] as $row) {
+            if (!\is_array($row) || 'FACILITY_CAPACITY' !== ($row['family'] ?? null) || false === ($row['isActive'] ?? true)) {
+                continue;
+            }
+            $config = \is_array($row['config'] ?? null) ? $row['config'] : [];
+            // Clé STRICTEMENT sur `config.venueId`, comme l'engine : un `scopeTargetId` sous
+            // scope TEAM est un id d'équipe et ne désignerait aucun gymnase.
+            if (isset($config['venueId'], $config['maxTeams'])) {
+                $venueId = (string) $config['venueId'];
+                $caps[$venueId] = min($caps[$venueId] ?? \PHP_INT_MAX, (int) $config['maxTeams']);
+            }
+        }
+
+        $byKey = [];
+        foreach (\is_array($payload['venues'] ?? null) ? $payload['venues'] : [] as $venue) {
+            $venueId = (string) ($venue['id'] ?? '');
+            foreach (\is_array($venue['trainingSlots'] ?? null) ? $venue['trainingSlots'] : [] as $slot) {
+                $capacity = (int) ($slot['capacity'] ?? 0);
+                if (isset($caps[$venueId])) {
+                    $capacity = min($capacity, $caps[$venueId]);
+                }
+                // Écrasement, pas addition : le moteur clé un DICT sur ce triplet.
+                $byKey[\sprintf('%s|%s|%s', $venueId, $slot['dayOfWeek'] ?? '', substr((string) ($slot['startTime'] ?? ''), 0, 5))] = $capacity;
+            }
+        }
+
+        return array_sum($byKey);
+    }
+
+    private function plural(int $count, string $singular, string $plural): string
+    {
+        return \sprintf('%d %s', $count, 1 === $count ? $singular : $plural);
     }
 
     private function requestedCalendarEntryId(?Request $request): ?string

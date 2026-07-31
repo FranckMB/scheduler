@@ -261,6 +261,7 @@ final class ScheduleConstraintBuilder
         CalendarEntry $entry,
         int $solverSeed = self::DEFAULT_SOLVER_SEED,
         ?string $scheduleId = null,
+        ?PeriodConstraintSelection $selection = null,
     ): array {
         $em = $this->entityManager;
         if (!$em instanceof EntityManagerInterface) {
@@ -279,7 +280,16 @@ final class ScheduleConstraintBuilder
         // Les équipes servent DEUX fois (la sélection dérive ses actives, le payload les
         // sérialise) : une seule requête, passée à la sélection (revue #340 round 1).
         $clubSeasonTeams = array_values($this->findByClubSeason(Team::class, $clubId, $seasonId, $em));
-        $selection = $this->periodConstraintSelector->selectForPeriodPlan($clubId, $seasonId, $schedulePlanId, $entry, $clubSeasonTeams);
+        // Sélection RÉUTILISÉE quand l'appelant la tient déjà (le gate pré-solve la calcule
+        // pour ses warnings) : la recalculer coûtait ~7 requêtes par ouverture de récap pour
+        // une valeur en main (revue #341).
+        // Une sélection fournie DOIT être celle de ce plan : sinon on mélangerait deux
+        // périodes en silence (revue #341 round 2). Une incohérence ici est une faute de
+        // programmation, pas une donnée douteuse — on lève.
+        if ($selection instanceof PeriodConstraintSelection && $selection->schedulePlanId !== $schedulePlanId) {
+            throw new LogicException('The provided period selection belongs to another schedule plan.');
+        }
+        $selection ??= $this->periodConstraintSelector->selectForPeriodPlan($clubId, $seasonId, $schedulePlanId, $entry, $clubSeasonTeams);
         $deactivatedTeamIds = $selection->deactivatedTeamIds;
         $disabledVenueIds = $selection->disabledVenueIds;
         $this->currentSessionOverrides = $selection->sessionOverrides;
