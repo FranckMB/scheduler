@@ -247,7 +247,12 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
       errors.push("La vérification des contraintes n'a pas pu être effectuée — réessayez avant de générer.");
     }
 
-    return { errors, warnings: [], pending: constraintNeeded && constraintQuery.isLoading };
+    // Les avertissements du serveur — une contrainte écartée du payload parce qu'elle
+    // nomme un gymnase désactivé. ⚠ LUS HORS du `if (!valid)` ci-dessus : ils n'invalident
+    // rien (règle #8), donc ils arrivent précisément avec `valid: true`. Pas de
+    // `humanizeConstraintError` : le serveur nomme déjà la contrainte ET le gymnase,
+    // l'humaniser effacerait ce qui permet d'agir. `WizardLayout` les rend déjà.
+    return { errors, warnings: constraintValidation?.warnings ?? [], pending: constraintNeeded && constraintQuery.isLoading };
   }
   return okValidation();
 }
