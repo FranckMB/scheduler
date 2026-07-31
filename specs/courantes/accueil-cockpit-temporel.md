@@ -328,6 +328,44 @@ période). Le jour courant est **entouré**.
 et ce qui manque (plan de période non généré, planning modifié non régénéré). **Chaque item
 a un CTA.** C'est la version généralisée des alertes J-14 de la vision d'origine (§8.2).
 
+### 5.1 Le radar ne montre que l'AVENIR ACTIONNABLE (P3-13, retour terrain 2026-07-31)
+
+Une to-do n'est pas un inventaire. Trois règles, décidées par le fondateur le 2026-08-01 :
+
+- **Horizon des vacances : 60 jours** (`SCHOOL_HOLIDAY_HORIZON_DAYS`). Sans lui, en été, la
+  Toussaint et Noël s'affichaient : « c'est TROP loin pour que je m'en occupe de suite ».
+  Les jours fériés avaient déjà le leur (30 j). ⚠ L'horizon ne masque que les vacances
+  **intactes** : dès qu'un plan existe, la période devient une carte « en cours » qui y
+  échappe — cacher un travail commencé serait bien pire que le bruit corrigé.
+- **Les semaines révolues ET la semaine en cours sont écartées** — de la couverture d'une
+  période découpée (« 0/7 couvertes » alors que 3 étaient derrière), des semaines offertes
+  à la création, et des semaines proposées à la sollicitation des coachs. « On gère
+  l'avenir, pas le présent. » La règle vit en un seul endroit, `isUpcomingWeek` /
+  `upcomingWeeks` (`features/cockpit/lib/date.ts`), à côté de `periodAdjustWeeks` qui est
+  déjà la source unique des semaines qu'une période offre — radar et campagne coachs la
+  lisent tous deux, il ne peut donc pas y en avoir deux versions.
+  **Conséquence assumée** : une semaine-enfant en cours et non validée quitte le radar.
+  Elle reste atteignable au **calendrier** et dans la **modale du jour**, qui n'ont aucun
+  filtre de date — elle sort de la to-do, pas de l'application.
+  ⚠ Le critère est le **lundi** de la semaine, jamais son `startDate` : celui-ci peut être
+  rogné par la fenêtre de saison alors que le lundi identifie la semaine calendaire.
+- **La carte de couverture est repliée par défaut** ; les autres gardent leur action
+  visible. Arbitrage pris à l'implémentation : tout replier mettait **chaque** geste du
+  radar à deux clics sans raccourcir ce qui est réellement long (les N puces de semaine).
+  L'en-tête — titre, dates, compteur « x/y couvertes » — reste toujours lisible.
+
+**Chargement** (P3-11) : tant que les plans, les versions, les impacts de fermeture ou la
+zone scolaire sont en vol, le radar affiche un **squelette**. Il restait nu — et un cadre
+« À traiter » vide se lit comme « rien à faire ». Le squelette et « Rien à l'horizon. Tout
+roule. » ne coexistent jamais : `isEmpty` exige que ces mêmes lectures soient résolues.
+
+**Horloge de démo** (amorce de P4-16, côté front) : `shared/lib/clock.ts` est le point de
+passage unique du « aujourd'hui » du front. En **dev uniquement**, `?today=2026-12-20` le
+décale, ce qui permet de rejouer une situation datée — sans quoi ces règles ne seraient
+observables qu'en attendant la bonne date. La lecture de l'URL est derrière
+`import.meta.env.DEV` : le bundle de production ne contient aucun chemin capable de décaler
+l'horloge. Le **serveur** garde l'heure réelle (P4-16 reste ouverte pour lui).
+
 ---
 
 ## 5bis. Interaction : cliquer une date (modale légère vs écran)
