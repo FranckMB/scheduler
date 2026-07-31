@@ -181,7 +181,10 @@ final class ValidateConstraintsController extends AbstractController
         // Une contrainte sortie pour gymnase désactivé ne partira pas au solveur : elle
         // sort donc aussi du gate (sinon le récap valide un jeu que le payload n'aura
         // pas), et le dirigeant en est AVERTI plutôt que de la voir disparaître en silence.
-        $venueIds = array_values(array_unique(array_map(static fn (array $drop): string => $drop['venueId'], $selection->droppedForDisabledVenue)));
+        $venueIds = array_values(array_unique(array_map(
+            static fn (array $drop): string => $drop['venueId'],
+            [...$selection->droppedForDisabledVenue, ...$selection->partiallyAppliedForDisabledVenue],
+        )));
         $venueNames = $this->venueNames($venueIds);
         $warnings = array_map(
             static fn (array $drop): string => \sprintf(
@@ -191,6 +194,15 @@ final class ValidateConstraintsController extends AbstractController
             ),
             $selection->droppedForDisabledVenue,
         );
+        // KEEP ne veut pas dire INTACTE : une CLUB+tag gardée pour sa seule exclusivité de
+        // gymnase dédié a perdu ses règles par équipe — l'ancien gate avertissait, on aussi.
+        foreach ($selection->partiallyAppliedForDisabledVenue as $partial) {
+            $warnings[] = \sprintf(
+                '« %s » vise le gymnase %s, désactivé pour cette période : ses règles par équipe ne seront pas appliquées (seule l\'exclusivité du gymnase dédié est conservée).',
+                $partial['constraint']->getName(),
+                $venueNames[$partial['venueId']] ?? $partial['venueId'],
+            );
+        }
         // Une DATÉE dont le tag ne vise plus aucune équipe active est un geste explicite
         // du gestionnaire pour CETTE période : elle est annoncée, jamais évaporée (#8).
         foreach ($selection->droppedForInertTag as $inert) {

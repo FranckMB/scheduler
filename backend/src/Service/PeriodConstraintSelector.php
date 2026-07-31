@@ -118,6 +118,7 @@ final class PeriodConstraintSelector
         $kept = [];
         $droppedForDisabledVenue = [];
         $droppedForInertTag = [];
+        $partiallyAppliedForDisabledVenue = [];
         foreach ([...$permanent, ...$dated] as $constraint) {
             // Équipe désactivée : sa contrainte TEAM ne produit aucune ligne — permanente
             // OU datée (le gate ne filtrait que les permanentes : divergence alignée ici).
@@ -136,6 +137,14 @@ final class PeriodConstraintSelector
                 switch ($this->clubTagVerdict($constraint, (string) $targetTag, $clubId, $seasonId, $activeTeamIds, $disabledVenueIds)) {
                     case self::TAG_KEEP:
                         $kept[] = $constraint;
+                        // KEEP ne veut pas dire INTACTE (revue #340 round 2) : si ses lignes
+                        // PAR ÉQUIPE meurent parce qu'une clé de config vise un gymnase
+                        // désactivé, seule l'exclusivité du gymnase dédié survit — l'ancien
+                        // gate avertissait ce cas, on ne le laisse pas redevenir muet.
+                        $partialVenueId = $this->disabledVenueNamedBy($constraint, $disabledVenueIds);
+                        if (null !== $partialVenueId) {
+                            $partiallyAppliedForDisabledVenue[] = ['constraint' => $constraint, 'venueId' => $partialVenueId];
+                        }
                         break;
                     case self::TAG_DROP_DISABLED_VENUE:
                         $droppedForDisabledVenue[] = ['constraint' => $constraint, 'venueId' => (string) $this->disabledVenueNamedBy($constraint, $disabledVenueIds)];
@@ -176,6 +185,7 @@ final class PeriodConstraintSelector
             kept: $kept,
             droppedForDisabledVenue: $droppedForDisabledVenue,
             droppedForInertTag: $droppedForInertTag,
+            partiallyAppliedForDisabledVenue: $partiallyAppliedForDisabledVenue,
             dated: $dated,
             disabledVenueIds: $disabledVenueIds,
             deactivatedTeamIds: $deactivatedTeamIds,
@@ -213,8 +223,21 @@ final class PeriodConstraintSelector
         $config = $constraint->getConfig();
         $perTeamRowsSurvive = [] !== $tagTeamIds && $hasActiveTagged && null === $this->disabledVenueNamedBy($constraint, $disabledVenueIds);
 
+        // Les lignes « interdit hors tag » n'existent que s'il reste une équipe active HORS
+        // du tag (le builder itère les actives en sautant les taguées — revue #340 round 2 :
+        // un tag couvrant TOUTES les actives gardait une entité à zéro ligne).
+        $tagTeamIdSet = array_flip($tagTeamIds);
+        $hasActiveNonTagged = false;
+        foreach (array_keys($activeTeamIds) as $teamId) {
+            if (!isset($tagTeamIdSet[$teamId])) {
+                $hasActiveNonTagged = true;
+                break;
+            }
+        }
+
         $dedicatedVenueId = $config['forcedVenueId'] ?? $config['preferredVenueId'] ?? null;
         $forbiddenRowsSurvive = [] !== $tagTeamIds
+            && $hasActiveNonTagged
             && ConstraintRuleType::HARD === $constraint->getRuleType()
             && \is_string($dedicatedVenueId) && '' !== $dedicatedVenueId
             && !isset($disabledVenueIds[$dedicatedVenueId]);

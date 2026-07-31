@@ -83,10 +83,17 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         $expectedKept = [$ids['teamOk'], $ids['tagHardVenue'], $ids['datedOk']];
         sort($expectedKept);
         self::assertSame($expectedKept, $keptIds, 'la sélection retient le jeu attendu');
+        $droppedVenueIds = array_map(static fn (array $d): string => $d['constraint']->getId(), $selection->droppedForDisabledVenue);
+        sort($droppedVenueIds);
+        $expectedDroppedVenue = [$ids['prefDisabledVenue'], $ids['tagAllActive']];
+        sort($expectedDroppedVenue);
+        self::assertSame($expectedDroppedVenue, $droppedVenueIds, 'les contraintes visant le gymnase désactivé sortent AVEC leur raison — y compris la CLUB+tag qui couvre toutes les actives (zéro ligne possible, revue #340 round 2)');
+        // KEEP ne veut pas dire INTACTE : tagHardVenue est gardée pour son exclusivité de
+        // gymnase dédié, mais sa clé secondaire désactivée tue ses règles par équipe — annoncé.
         self::assertSame(
-            [$ids['prefDisabledVenue']],
-            array_map(static fn (array $d): string => $d['constraint']->getId(), $selection->droppedForDisabledVenue),
-            'la contrainte visant le gymnase désactivé sort AVEC sa raison (le gate en fait son warning)',
+            [$ids['tagHardVenue']],
+            array_map(static fn (array $d): string => $d['constraint']->getId(), $selection->partiallyAppliedForDisabledVenue),
+            'une CLUB+tag gardée pour sa seule exclusivité est signalée PARTIELLE (revue #340 round 2)',
         );
 
         // 2) PARITÉ : chaque ligne payload remonte à une entité retenue, et chaque entité
@@ -113,7 +120,7 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         // Blindage du filtre UUID (revue #340 round 1) : quel que soit le FORMAT d'id d'une
         // future voie d'expansion, aucune ligne du payload ne doit CONTENIR l'id d'une
         // entité sortie de la sélection — sinon le filtre par racine masquerait la fuite.
-        $excludedIds = [$ids['teamDeactivated'], $ids['prefDisabledVenue'], $ids['facilityDefault'], $ids['datedInertTag'], $ids['datedDeactivated']];
+        $excludedIds = [$ids['teamDeactivated'], $ids['prefDisabledVenue'], $ids['facilityDefault'], $ids['tagAllActive'], $ids['datedInertTag'], $ids['datedDeactivated']];
         foreach ($payload['constraints'] as $row) {
             self::assertIsArray($row);
             foreach ($excludedIds as $excludedId) {
@@ -134,10 +141,11 @@ final class PeriodGatePayloadParityTest extends WebTestCase
 
         self::assertTrue($body['valid'], 'aucune erreur sur le jeu qui part réellement au solveur');
         self::assertArrayNotHasKey($ids['datedDeactivated'], $body['errors'], 'la datée d\'une équipe désactivée ne part pas au solveur : son invalidité ne bloque pas le récap (divergence n° 1 alignée)');
-        self::assertCount(2, $body['warnings']);
+        self::assertCount(4, $body['warnings']);
         $allWarnings = implode(' | ', array_map(strval(...), $body['warnings']));
         self::assertStringContainsString('Gymnase fermé pour période', $allWarnings, 'le drop pour gymnase désactivé est ANNONCÉ');
         self::assertStringContainsString('ne vise plus aucune équipe active', $allWarnings, 'la DATÉE au tag inerte est ANNONCÉE, jamais évaporée (revue #340)');
+        self::assertStringContainsString('ses règles par équipe ne seront pas appliquées', $allWarnings, 'une CLUB+tag gardée pour sa seule exclusivité est annoncée PARTIELLE (revue #340 round 2)');
     }
 
     protected function setUp(): void
@@ -238,6 +246,20 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         $assignment->setSeasonId($season->getId());
         $this->em->persist($assignment);
 
+        // Second tag : il couvre TOUTES les équipes actives (la seule active du club).
+        // Le cas revue #340 round 2 : sans équipe active HORS du tag, les lignes
+        // « interdit hors tag » n'existent pas — l'entité ne doit PAS être gardée.
+        $allTag = new TeamTag;
+        $allTag->setClubId($club->getId());
+        $allTag->setName('TOUTES');
+        $this->em->persist($allTag);
+        $this->em->flush();
+        $allAssignment = new TeamTagAssignment;
+        $allAssignment->setTeamId($teamActive->getId());
+        $allAssignment->setTagId($allTag->getId());
+        $allAssignment->setSeasonId($season->getId());
+        $this->em->persist($allAssignment);
+
         $entry = new CalendarEntry;
         $entry->setClubId($club->getId());
         $entry->setSeasonId($season->getId());
@@ -289,6 +311,10 @@ final class PeriodGatePayloadParityTest extends WebTestCase
             'tagHardVenue' => $this->constraint($club, $season, ConstraintScope::CLUB, null, ConstraintFamily::TIME, ['targetTag' => 'PARITE', 'maxStartTime' => '19:00', 'forcedVenueId' => $venueOpen->getId(), 'preferredVenueId' => $venueDisabled->getId()], null)->getId(),
             // Gardée : datée valide de l'équipe active.
             'datedOk' => $this->constraint($club, $season, ConstraintScope::TEAM, $teamActive->getId(), ConstraintFamily::TIME, ['maxStartTime' => '21:00'], $entry->getId())->getId(),
+            // Sortie AVEC warning gymnase (revue #340 round 2) : tag couvrant TOUTES les
+            // actives (aucune ligne « interdit hors tag » possible) ET clé secondaire sur le
+            // gymnase désactivé (les lignes par équipe meurent) → ZÉRO ligne, drop annoncé.
+            'tagAllActive' => $this->constraint($club, $season, ConstraintScope::CLUB, null, ConstraintFamily::TIME, ['targetTag' => 'TOUTES', 'maxStartTime' => '20:30', 'forcedVenueId' => $venueOpen->getId(), 'minAtVenueId' => $venueDisabled->getId()], null)->getId(),
             // Sortie AVEC warning (revue #340 round 1) : DATÉE CLUB+tag dont le tag ne vise
             // plus aucune équipe active, sans gymnase dédié (PREFERRED) — un geste explicite
             // du gestionnaire pour la période ne s'évapore jamais en silence (#8).

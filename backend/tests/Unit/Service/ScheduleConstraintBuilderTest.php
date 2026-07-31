@@ -82,10 +82,13 @@ final class ScheduleConstraintBuilderTest extends TestCase
         $clubId = 'club-1';
 
         $this->teamTagRepository->method('findOneBy')->willReturn(null);
+        // PSR-3 (revue #340 round 2) : le MESSAGE porte des placeholders stables — un
+        // message unique par tag/club casserait le regroupement des agrégateurs de logs.
+        // Les VALEURS vivent dans le contexte : c'est lui qu'on vérifie.
         $this->logger->expects(self::once())
             ->method('warning')
             ->with(
-                self::callback(static fn (string $message): bool => str_contains($message, 'JEUNE') && str_contains($message, $clubId)),
+                self::callback(static fn (string $message): bool => str_contains($message, '{targetTag}') && str_contains($message, '{clubId}')),
                 self::callback(static fn (array $context): bool => 'JEUNE' === ($context['targetTag'] ?? null)
                         && $clubId === ($context['clubId'] ?? null)
                         && $seasonId === ($context['seasonId'] ?? null)),

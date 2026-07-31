@@ -859,7 +859,11 @@ final class ScheduleConstraintBuilder
                 // force the tag onto the venue engine-side, so exclusivity must
                 // cover both, else "impose" would be weaker than HARD "préfère".
                 $dedicatedVenueId = $config['forcedVenueId'] ?? $config['preferredVenueId'] ?? null;
-                if (ConstraintRuleType::HARD === $constraint->getRuleType() && null !== $dedicatedVenueId) {
+                // `is_string && '' !==` et non `null !==` (revue #340 round 2) : un
+                // `preferredVenueId` vidé en '' par un client émettait des lignes
+                // `forbiddenVenueId: ''` — un gymnase inexistant interdit à tout le club.
+                // Même garde que le verdict du sélecteur : les deux doivent coïncider.
+                if (ConstraintRuleType::HARD === $constraint->getRuleType() && \is_string($dedicatedVenueId) && '' !== $dedicatedVenueId) {
                     $tagTeamIdSet = array_flip($teamIds);
                     foreach ($teams as $team) {
                         if (isset($tagTeamIdSet[$team->getId()])) {
