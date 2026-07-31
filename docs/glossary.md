@@ -64,7 +64,7 @@ Clés racine : `version` · `clubId` · `seasonId` · `scheduleName` · `solverS
 |-----|------|
 | `venues[].trainingSlots[]` | Créneaux ouverts du gymnase (jour/heure/durée/capacité). |
 | `teams[].sessionsPerWeek` | Cible de séances (soft — ENG-18, pas un plancher dur). |
-| `teams[].tags` | Tags système matérialisés à la génération (`ScheduleConstraintBuilder`). |
+| `teams[].tags` | Tags système **lus** en base (`TeamTagAssignment`) par `ScheduleConstraintBuilder`. Ils sont maintenus au write-path par `TeamTagSyncListener` (postPersist/postUpdate sur `Team`) — le builder ne les matérialise PAS : il l'a fait jusqu'à P2-9ter, et l'écriture au milieu de la sérialisation les rendait paradoxalement **toujours vides** dans le payload. |
 | `coaches[].isEmployee` | Salarié (distribution équitable dédiée). |
 | `constraints[]` | `{scope, scopeTargetId, family, ruleType, config}` — familles TIME/DAY/FACILITY/COACH_AVAILABILITY/FACILITY_CAPACITY. **Toute clé de `config` absente de `engine/docs/constraint-vocabulary.md` est ignorée sans erreur.** |
 | `ruleType` | `HARD`/`LOCK` = dur (jamais violé) · `PREFERRED`/`BONUS` = soft (objectif). |

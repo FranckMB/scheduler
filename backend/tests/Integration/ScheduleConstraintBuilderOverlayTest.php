@@ -25,6 +25,7 @@ use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Enum\Gender;
 use App\Enum\ScheduleStatus;
 use App\Enum\VenuePeriodMode;
 use App\Service\ScheduleConstraintBuilder;
@@ -52,6 +53,8 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
     use TenantGucTrait;
 
     private const VENUE_CLOSED = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+    private const VENUE_OPEN = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
     private EntityManagerInterface $em;
 
@@ -141,12 +144,12 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
 
         /** @var CacheItemPoolInterface&CacheInterface $pool */
         $pool = self::getContainer()->get('cache.schedule');
-        $pool->deleteItem(ScheduleConstraintBuilder::cacheKey($club->getId()));
+        $pool->deleteItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $season->getId()));
 
         $this->builder->buildForOverlay($schedule, $entry);
 
         self::assertFalse(
-            $pool->getItem(ScheduleConstraintBuilder::cacheKey($club->getId()))->isHit(),
+            $pool->getItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $season->getId()))->isHit(),
             'overlay build must not populate the base schedule-input cache',
         );
     }
@@ -406,6 +409,232 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         self::assertNotContains('Paused team perm', $names, 'a TEAM constraint targeting a paused team never ships (no ghost teamId), even if explicitly kept');
     }
 
+    /**
+     * P2-9ter NR-1 — LE garde du lot : construire un payload ne DOIT rien écrire.
+     *
+     * Le builder appelait `TeamTagService::syncTeamTags` en pleine sérialisation : il
+     * SUPPRIMAIT les `TeamTagAssignment` de l'équipe puis les recréait, avec un `flush()`
+     * intermédiaire qui rendait les suppressions définitives. Ouvrir le récap (qui ne
+     * flushe jamais) effaçait donc les tags de la dernière équipe — la perte de données
+     * qui a fait échouer la 3e tentative du volet capacité.
+     *
+     * ⚠ L'assertion porte sur les **id**, pas sur un décompte : une suppression suivie
+     * d'une recréation laisse le compte à 1 tout en changeant l'UUID. Un `assertCount`
+     * serait donc vert alors que la donnée d'origine a bien été détruite.
+     */
+    public function testBuildNeverWritesTeamTagAssignments(): void
+    {
+        [$club, $season] = $this->seed();
+        $team = $this->team($club, $season, 'SM1');
+        $this->em->flush();
+
+        // Un tag que `determineTagNames` ne dériverait JAMAIS de cette équipe : s'il
+        // survit, c'est que personne ne l'a resynchronisé.
+        // ⚠ Le fixture s'appuie sur le fait que `team()` ne pose ni genre ni niveau et
+        // pointe une SportCategory inexistante — l'équipe ne dérive donc AUCUN tag
+        // système, et l'assertion exacte plus bas est légitime. Ajouter un genre au
+        // helper ferait tomber ce test pour une raison sans rapport avec la règle gardée.
+        $tag = (new TeamTag)->setClubId($club->getId())->setName('U13')->setIsSystem(true);
+        $this->em->persist($tag);
+        $this->em->flush();
+        $this->em->persist((new TeamTagAssignment)->setTagId($tag->getId())->setTeamId($team->getId())->setSeasonId($season->getId()));
+        $this->em->flush();
+
+        $before = $this->assignmentIdsOf($team->getId(), $season->getId());
+        self::assertCount(1, $before, 'garde du test lui-même : l’assignation semée doit exister');
+
+        // Le cache est servi AVANT tout calcul : sans ce purge, un hit rendrait le test
+        // creux — vert sans avoir jamais exécuté serializeTeam.
+        self::getContainer()->get('cache.schedule')->deleteItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $season->getId()));
+
+        $payload = $this->builder->buildForClubSeason($club->getId(), $season->getId());
+
+        // Reproduit le flush que fait GenerateScheduleHandler après le build : si le
+        // build avait laissé des remove/persist en attente, ils partiraient ICI.
+        $this->em->flush();
+
+        self::assertSame($before, $this->assignmentIdsOf($team->getId(), $season->getId()), 'construire un payload ne doit RIEN écrire');
+
+        $tags = [];
+        foreach ($payload['teams'] ?? [] as $row) {
+            if (($row['id'] ?? null) === $team->getId()) {
+                $tags = $row['tags'] ?? [];
+            }
+        }
+        self::assertSame(['U13'], $tags, 'le payload LIT les tags en base au lieu de les réécrire');
+    }
+
+    /**
+     * P2-9ter NR-1ter — l'ordre des `tags` du payload est déterministe.
+     *
+     * `snapshotHash` (gelé dans la version) et `currentStructureHash` (recalculé à chaque
+     * `/api/me`) sont deux sha256 du payload sérialisé : une simple PERMUTATION des tags
+     * les fait diverger, et le cockpit annonce « structure modifiée » sur un planning
+     * pourtant intact. ⚠ Trier la requête sur l'`id` de l'assignation ne suffirait PAS —
+     * c'est un UUID v4 tiré à la construction, et `TeamTagSyncListener` recrée les lignes
+     * à chaque écriture sur l'équipe. Seul le tri sur le NOM est stable.
+     */
+    public function testPayloadTagOrderIsDeterministicAcrossReinsertion(): void
+    {
+        [$club, $season] = $this->seed();
+        $team = $this->team($club, $season, 'SM1');
+        $this->em->flush();
+
+        // Trois tags insérés dans un ordre volontairement anti-alphabétique.
+        foreach (['ZULU', 'ALPHA', 'MIKE'] as $name) {
+            $tag = (new TeamTag)->setClubId($club->getId())->setName($name)->setIsSystem(true);
+            $this->em->persist($tag);
+            $this->em->flush();
+            $this->em->persist((new TeamTagAssignment)->setTagId($tag->getId())->setTeamId($team->getId())->setSeasonId($season->getId()));
+        }
+        $this->em->flush();
+
+        self::getContainer()->get('cache.schedule')->deleteItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $season->getId()));
+        $tags = $this->payloadTagsOf($this->builder->buildForClubSeason($club->getId(), $season->getId()), $team->getId());
+
+        self::assertSame(['ALPHA', 'MIKE', 'ZULU'], $tags, 'les tags du payload sortent triés par NOM, quel que soit l’ordre des lignes');
+    }
+
+    /**
+     * P2-9ter NR-1bis — le write-path écrit VRAIMENT les tags.
+     *
+     * ⚠ Ce test est le pendant obligatoire de NR-1. Rendre le build en lecture seule
+     * fait de `TeamTagSyncListener` le SEUL writer des `TeamTagAssignment` : si ce
+     * listener n'écrit pas, plus aucune équipe n'a de tags et toute contrainte CLUB
+     * ciblant un tag cesse silencieusement de viser qui que ce soit (axe constraint
+     * semantics). Le défaut existait réellement — `syncTeamTags` ne flushe pas ses
+     * `persist`, et en `postFlush` le flush appelant est déjà terminé : créer une équipe
+     * produisait 21 `team_tag` et 0 `team_tag_assignment`. Il était masqué parce que le
+     * builder rappelait `syncTeamTags` à chaque génération.
+     */
+    public function testCreatingATeamActuallyWritesItsTagAssignments(): void
+    {
+        [$club, $season] = $this->seed();
+        $team = $this->team($club, $season, 'U13F');
+        $team->setGender(Gender::F);
+        $this->em->flush();
+
+        self::assertNotSame(
+            [],
+            $this->assignmentIdsOf($team->getId(), $season->getId()),
+            'créer une équipe doit lui poser ses tags système — sinon le build en lecture seule n’a plus rien à lire',
+        );
+    }
+
+    /**
+     * P2-9ter NR-2 — le chemin scalaire et `buildForOverlay` sont UNE SEULE source.
+     *
+     * C'est la garantie qui manquait : trois tentatives ont recopié à la main ce que le
+     * builder calcule, et ont divergé. Si quelqu'un ajoute un filtre d'un seul côté (ou
+     * en oublie un en déplaçant le corps), l'égalité stricte le dit.
+     */
+    public function testScalarPathMatchesBuildForOverlay(): void
+    {
+        [$club, $season] = $this->seed();
+        $active = $this->team($club, $season, 'SM1');
+        $paused = $this->team($club, $season, 'U11');
+        $entry = $this->closurePeriod($club, $season);
+        $this->teamOverride($club, $season, $entry, $paused, false, null);
+        $this->permanentConstraint($club, $season);
+        $this->venue($club, $season, self::VENUE_CLOSED, 'Gym désactivé');
+        $this->venueMode($club, $season, $entry, self::VENUE_CLOSED, VenuePeriodMode::DISABLED);
+        $this->venueSlot($club, $season, self::VENUE_CLOSED, null, 2);
+        // Un gymnase ACTIF, pour y poser le verrou de version. ⚠ Le poser sur
+        // VENUE_CLOSED (désactivé juste au-dessus) le ferait filtrer par
+        // `disabledVenueIds` : les deux `slotTemplates` seraient vides et l'assertion du
+        // court-circuit `scheduleId null` serait satisfaite POUR UNE AUTRE RAISON.
+        $this->venue($club, $season, self::VENUE_OPEN, 'Gym actif');
+        $this->venueSlot($club, $season, self::VENUE_OPEN, null, 2);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->slot($schedule, self::VENUE_OPEN);
+        $this->em->flush();
+
+        $viaSchedule = $this->builder->buildForOverlay($schedule, $entry);
+        $viaScalars = $this->builder->buildForPeriodPlan(
+            $schedule->getClubId(),
+            $schedule->getSeasonId(),
+            $this->planIdOf($entry),
+            $entry,
+            $schedule->getSolverSeed(),
+            $schedule->getId(),
+        );
+        self::assertSame($viaSchedule, $viaScalars, 'un seul chemin de calcul : l’adaptateur ne doit rien ajouter');
+        self::assertNotSame([], $viaScalars['teams'] ?? [], 'garde : le seed doit produire un payload non vide');
+        self::assertContains($active->getId(), array_map(static fn (array $t): string => $t['id'], $viaScalars['teams']));
+
+        // Avant génération : aucun `Schedule`, donc aucun ScheduleSlotTemplate — et TOUT
+        // le reste du payload est identique. C'est ce qui rend le récap calculable.
+        $preGeneration = $this->builder->buildForPeriodPlan(
+            $schedule->getClubId(),
+            $schedule->getSeasonId(),
+            $this->planIdOf($entry),
+            $entry,
+            $schedule->getSolverSeed(),
+        );
+        // Garde réelle : le verrou DOIT survivre au filtre gymnases quand on passe un
+        // scheduleId. C'est CETTE assertion qui a du mordant — la poser sur un gymnase
+        // désactivé (première version de ce test) donnait deux tableaux vides et une
+        // comparaison satisfaite pour une tout autre raison.
+        self::assertCount(1, $viaScalars['slotTemplates'] ?? [], 'le verrou de version doit survivre au filtre gymnases');
+        // Celle-ci DOCUMENTE le mode pré-génération sans pouvoir tomber : `scheduleId`
+        // étant NOT NULL sur l'entité, la requête rendrait `[]` même sans court-circuit.
+        self::assertSame([], $preGeneration['slotTemplates'] ?? null, 'pas de version ⇒ pas de verrou de version');
+
+        unset($viaScalars['slotTemplates'], $preGeneration['slotTemplates']);
+        self::assertSame($viaScalars, $preGeneration, 'seuls les slotTemplates distinguent le mode pré-génération');
+    }
+
+    /**
+     * P2-9ter NR-3 — le cache du payload est scopé PAR SAISON.
+     *
+     * La clé ne portait que le `clubId` alors que `buildForClubSeason` reçoit un
+     * `seasonId` : un club à deux saisons se voyait resservir le payload de l'autre.
+     */
+    public function testCacheIsScopedPerSeason(): void
+    {
+        [$club, $seasonA] = $this->seed();
+        $this->team($club, $seasonA, 'SM1');
+        $this->em->flush();
+
+        $seasonB = new Season;
+        $seasonB->setClubId($club->getId());
+        $seasonB->setName('2026-2027');
+        $seasonB->setStartDate(new DateTimeImmutable('2026-09-01'));
+        $seasonB->setEndDate(new DateTimeImmutable('2027-06-30'));
+        $seasonB->setStatus('active');
+        $this->em->persist($seasonB);
+        $this->em->flush();
+        $this->team($club, $seasonB, 'U11');
+        $this->team($club, $seasonB, 'U13');
+        $this->em->flush();
+
+        $pool = self::getContainer()->get('cache.schedule');
+        $pool->deleteItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $seasonA->getId()));
+        $pool->deleteItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $seasonB->getId()));
+
+        $payloadA = $this->builder->buildForClubSeason($club->getId(), $seasonA->getId());
+        $payloadB = $this->builder->buildForClubSeason($club->getId(), $seasonB->getId());
+
+        self::assertSame($seasonA->getId(), $payloadA['seasonId'] ?? null);
+        self::assertSame($seasonB->getId(), $payloadB['seasonId'] ?? null, 'la 2e saison ne doit pas resservir le payload de la 1re');
+        self::assertCount(1, $payloadA['teams'] ?? [], 'saison A : une équipe');
+        self::assertCount(2, $payloadB['teams'] ?? [], 'saison B : deux équipes');
+
+        // Le BUILDER doit taguer ce qu'il écrit — sinon `CacheInvalidationListener`, qui
+        // ne purge plus que par tag, ne pourrait plus rien invalider et tous les tests
+        // resteraient verts. NR-4 pose les tags à la main : lui ne garde que le listener.
+        self::assertTrue($pool->hasItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $seasonA->getId())), 'garde : le build doit avoir peuplé le cache');
+        $pool->invalidateTags([ScheduleConstraintBuilder::cacheTag($club->getId())]);
+        self::assertFalse(
+            $pool->hasItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $seasonA->getId())),
+            'les entrées écrites par le builder doivent porter le tag du club',
+        );
+        self::assertFalse(
+            $pool->hasItem(ScheduleConstraintBuilder::cacheKey($club->getId(), $seasonB->getId())),
+            'toutes les saisons du club partent avec le tag',
+        );
+    }
+
     public function testRepriseDropsTagExpandedRowForPausedTeam(): void
     {
         [$club, $season] = $this->seed();
@@ -619,6 +848,47 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $this->em->persist($slot);
     }
 
+    /**
+     * Les id des assignations de tags d'une équipe, en SQL brut et triés.
+     *
+     * Lecture hors ORM délibérée : l'UnitOfWork rendrait des entités déjà chargées, donc
+     * un test vert alors que la base a bougé. `team_tag_assignment` ne porte pas de
+     * policy RLS, la lecture est directe.
+     *
+     * @return list<string>
+     */
+    private function assignmentIdsOf(string $teamId, string $seasonId): array
+    {
+        /** @var list<string> $ids */
+        $ids = $this->em->getConnection()->executeQuery(
+            'SELECT id FROM team_tag_assignment WHERE team_id = :team AND season_id = :season ORDER BY id',
+            ['team' => $teamId, 'season' => $seasonId],
+        )->fetchFirstColumn();
+
+        return $ids;
+    }
+
+    /**
+     * Les `tags` d'une équipe dans un payload construit.
+     *
+     * @param array<string, mixed> $payload
+     *
+     * @return list<string>
+     */
+    private function payloadTagsOf(array $payload, string $teamId): array
+    {
+        foreach ($payload['teams'] ?? [] as $row) {
+            if (($row['id'] ?? null) === $teamId) {
+                /** @var list<string> $tags */
+                $tags = $row['tags'] ?? [];
+
+                return $tags;
+            }
+        }
+
+        return [];
+    }
+
     private function team(Club $club, Season $season, string $name): Team
     {
         $team = new Team;
@@ -709,6 +979,11 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('Overlay');
         $schedule->setStatus(ScheduleStatus::DRAFT);
+        // ⚠ Graine NON DÉFAUT, délibérément. `Schedule::$solverSeed` vaut 42, exactement
+        // la valeur par défaut de `buildForPeriodPlan` : avec elle, un adaptateur qui
+        // OUBLIERAIT de passer la graine produirait le même payload et le test de parité
+        // resterait vert. 4242 rend cet oubli visible.
+        $schedule->setSolverSeed(4242);
         // Toute version est liée à son plan en prod (linkSchedule, au POST) : un overlay au
         // plan de sa période, une version de BASE au plan SEASON (le socle). buildForOverlay
         // l'exige (C2) et findBaseSlotTemplates ne prend QUE les versions du plan SEASON (C4).

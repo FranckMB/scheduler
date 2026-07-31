@@ -61,8 +61,12 @@ Les deux portes actuelles écrivent ou sont indisponibles :
 - `buildForOverlay` exige un `Schedule`, qui **n'existe pas avant la génération** — donc
   aucun calcul de période n'est possible par cette voie.
 
-**À faire d'abord** : le lot **P2-9ter** (roadmap), cadré et arbitré le 2026-07-31. Tant
-qu'il n'est pas livré, **ne pas retenter le calcul** : mieux vaut ne rien dire que dire faux.
+**Le préalable est LEVÉ** — lot **P2-9ter** livré le 2026-07-31 (PR #336). Le chemin de
+lecture existe : `buildForPeriodPlan(clubId, seasonId, schedulePlanId, entry, solverSeed,
+?scheduleId)`, dont `buildForOverlay` n'est plus qu'un adaptateur. Il **n'écrit rien** et
+n'exige **aucun `Schedule`** : appelé sans `scheduleId`, il rend le payload exact d'une
+période AVANT toute génération. **PR A peut donc partir** — en consommant ce chemin, jamais
+en recalculant à la main.
 
 Trois décisions y sont prises, et une découverte le rend plus petit qu'annoncé :
 
@@ -80,8 +84,10 @@ Trois décisions y sont prises, et une découverte le rend plus petit qu'annonc�
    sont les `Reservation`, portées par le `schedulePlanId`. La porte n'est donc pas
    structurellement close, elle demande une signature scalaire et un adaptateur.
 
-Le lot livre **le prérequis SEUL** (décision fondateur A1) : c'est la taille qui a tué les
-trois tentatives. PR A suit immédiatement après.
+Le lot a livré **le prérequis SEUL** (décision fondateur A1) : c'est la taille qui a tué les
+trois tentatives. ⚑ Au passage il a corrigé un défaut que personne n'avait vu : `teams[].tags`
+sortait **toujours vide** du payload (49/49 équipes), la relecture tombant sur la table que
+`syncTeamTags` venait de vider.
 
 ### La règle, une fois la source disponible
 
