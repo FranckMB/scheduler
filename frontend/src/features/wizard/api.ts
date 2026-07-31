@@ -349,6 +349,15 @@ export interface ValidateResult {
    * PR B ne renvoie pas la clé.
    */
   blockers?: string[];
+  /**
+   * Avertissements formulés par le serveur — « "X" vise le gymnase Y, désactivé pour
+   * cette période : elle ne sera pas appliquée ». Ils n'invalident RIEN (règle #8) et
+   * arrivent donc **avec `valid: true`** : les lire dans une branche `if (!valid)` ne
+   * remonterait jamais rien. Le backend les produit depuis #8 ; rien ne les affichait
+   * jusqu'ici, si bien qu'une contrainte écartée disparaissait en silence.
+   * Optionnel : un serveur plus ancien ne renvoie pas la clé.
+   */
+  warnings?: string[];
 }
 
 /**
