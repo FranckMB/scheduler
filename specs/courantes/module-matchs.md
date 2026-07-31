@@ -8,17 +8,17 @@ Last verified @ 2026-07-29
 > grille week-end ne dépendent pas du solveur d'entraînement, et rien de ce module n'entre dans le payload
 > solveur.
 
-> ⚠ **DOC-1 — divergence connue, arbitrage ouvert (constat au 2026-07-29, ne pas coder « comme si »).**
-> L'intention produit écrite dans [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md)
-> §10 est un **gating découplé** de la validation du socle. **Le code livré fait l'inverse** : créer un match
-> (`FixtureStateProcessor`) comme importer un fichier FBI (`ImportFixturesController`) appellent
-> `App\Service\SocleGuard::assertSeasonPlanChosen`, qui rend **409** tant que le plan SEASON ne **pointe**
-> aucune version (ADR-0002 inv. 13, seuil 2 du cockpit — voir
-> [`planning-lifecycle-validated.md`](planning-lifecycle-validated.md) §0). Le front verrouille l'entrée
-> « matchs » sur le même critère (`chosenScheduleId`).
-> **Cette page décrit le CODE.** Laquelle des deux lectures fait foi est une **décision du fondateur**,
-> non tranchée à ce jour : soit la spec d'évolution s'aligne sur le couplage, soit les deux appels de garde
-> sautent. Tant que ce n'est pas arbitré, ne pas « corriger » l'un des deux côtés en silence.
+> ⚠ **Le module est autonome dans ses DONNÉES, pas dans son OUVERTURE.** Décision fondateur du
+> 2026-07-31 (arbitrage DOC-1) : le couplage livré fait foi, la spec d'évolution a été alignée
+> dessus — **le gating reste**. Créer un match (`FixtureStateProcessor`) comme importer un fichier
+> FBI (`ImportFixturesController`) appellent `App\Service\SocleGuard::assertSeasonPlanChosen`, qui
+> rend **409** tant que le plan SEASON ne **pointe** aucune version (ADR-0002 inv. 13, seuil 2 du
+> cockpit — voir [`planning-lifecycle-validated.md`](planning-lifecycle-validated.md) §0). Le front
+> verrouille l'entrée « matchs » sur le même critère (`chosenScheduleId`).
+> **Le motif** : un match se *place* dans un calendrier — le radar de conflits compare la rencontre
+> aux séances d'entraînement. Sans socle en vigueur, il n'a rien à comparer. L'autonomie promise en
+> évolution porte sur le **modèle** (entités séparées, rien dans le payload solveur) et sur l'**UI**
+> (workspace « Compétition » distinct), pas sur la porte d'entrée.
 
 ## Palier A — PR-1 (socle backend, 2026-07-06)
 

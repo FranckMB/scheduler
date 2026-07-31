@@ -1,10 +1,20 @@
 # P2-9 — Verrous, alertes et garde-fous : ce qui reste
 
-> Reprise à froid. Le **volet 1 est livré** (PR #317, 2026-07-28) : le solveur ne ment
-> plus sur ce qu'un verrou HARD a écrasé. Restent **trois PR**, décidées avec le
-> fondateur le 2026-07-27 et détaillées ici pour être reprises sans relire l'historique.
+> Reprise à froid. **Il ne reste que la PR A**, et elle est BLOQUÉE par un prérequis
+> technique (§PR A) — pas par son message.
 >
-> Ordre voulu : chaque PR rend la suivante moins risquée, et chacune tient debout seule.
+> | Volet | État |
+> |---|---|
+> | Volet 1 — le solveur ne se tait plus | ✅ livré (PR #317, 2026-07-28) |
+> | **PR B** — erreur bloquante au récap | ✅ **livré (PR #332, 2026-07-31)** |
+> | **PR C** — prévention au clic | ✅ **livré (PR #334, 2026-07-31)** |
+> | **PR A** — volet capacité | ⬜ **bloquée** : il n'existe toujours pas de source de payload en LECTURE SEULE |
+>
+> **L'ordre a été inversé à l'exécution** (décision fondateur 2026-07-31) : B → C → A, et
+> non A → B → C. Le document numérote A en premier parce que c'est le besoin d'origine,
+> mais A est la seule qui exige d'abord un chantier technique. Faire B et C d'abord a livré
+> la valeur sans toucher au builder — et C a pu réutiliser la règle écrite en B, ce qui
+> était précisément l'intention.
 
 ---
 
@@ -51,9 +61,27 @@ Les deux portes actuelles écrivent ou sont indisponibles :
 - `buildForOverlay` exige un `Schedule`, qui **n'existe pas avant la génération** — donc
   aucun calcul de période n'est possible par cette voie.
 
-**À faire d'abord** : extraire du builder un chemin de sérialisation sans effet de bord
-(ou rendre `syncTeamTags` optionnel), et corriger la clé de cache. Tant que ce n'est pas
-fait, **ne pas retenter le calcul** : mieux vaut ne rien dire que dire faux.
+**À faire d'abord** : le lot **P2-9ter** (roadmap), cadré et arbitré le 2026-07-31. Tant
+qu'il n'est pas livré, **ne pas retenter le calcul** : mieux vaut ne rien dire que dire faux.
+
+Trois décisions y sont prises, et une découverte le rend plus petit qu'annoncé :
+
+1. `syncTeamTags` est **supprimé** du builder, pas rendu optionnel — `TeamTagSyncListener`
+   le fait déjà sur `postPersist`/`postUpdate` de `Team` au `postFlush`, et
+   `determineTagNames` ne dérive que du `sportCategoryId` : tout changement de tag passe
+   donc par un update de `Team`. L'appel dans `serializeTeam` est une re-synchro
+   défensive **en lecture** — c'est elle qui faisait perdre les tags.
+2. Le `seasonId` entre dans la clé de cache **dans le même lot**. ⚠ La même clé est
+   reconstruite dans `CacheInvalidationListener.php:82` : la changer d'un seul côté casse
+   l'invalidation **en silence**.
+3. 💡 `buildForOverlay` n'utilise le `Schedule` que pour **5 scalaires**, dont 4 sont
+   connus avant génération. Le 5ᵉ (`getId()`) ne sert qu'aux `ScheduleSlotTemplate`,
+   absents avant génération — et c'est **sémantiquement juste** : les verrous durables
+   sont les `Reservation`, portées par le `schedulePlanId`. La porte n'est donc pas
+   structurellement close, elle demande une signature scalaire et un adaptateur.
+
+Le lot livre **le prérequis SEUL** (décision fondateur A1) : c'est la taille qui a tué les
+trois tentatives. PR A suit immédiatement après.
 
 ### La règle, une fois la source disponible
 
@@ -74,10 +102,11 @@ avertissements (« contrainte visant un gymnase désactivé ») que **rien n'aff
 branche `recap` de `lib/useStepValidation.ts` renvoie `warnings: []` en dur. ⚠ Les lire
 **hors** du `if (!valid)` : ils arrivent précisément avec `valid: true`.
 
-**Un garde de forme sur le corps d'erreur** — `validateConstraints` transtype **tout**
-corps JSON en `ValidateResult`. Un 403 (membre sans rôle de gestion) arrive donc avec
-`errors` à `undefined`, et `Object.values(undefined)` fait **planter le récap** en écran
-blanc.
+~~**Un garde de forme sur le corps d'erreur**~~ — ✅ **parti avec la PR B**
+(`isValidateResult`, `frontend/src/features/wizard/api.ts`) : `validateConstraints`
+transtypait **tout** corps JSON en `ValidateResult`, si bien qu'un 403 (membre sans rôle
+de gestion) arrivait avec `errors` à `undefined` et faisait **planter le récap** en écran
+blanc. Plus rien à faire ici.
 
 ### NR attendus
 
@@ -87,7 +116,20 @@ de l'API) — et en `--group phase1`, sinon le gate bloquant ne l'exécute jamai
 
 ---
 
-## PR B — L'erreur bloquante sur impossibilité physique
+## PR B — L'erreur bloquante sur impossibilité physique — ✅ LIVRÉ (#332, 2026-07-31)
+
+> **Ce qui a été livré**, au-delà du cadrage ci-dessous : la règle vit dans
+> `App\Service\CoachDoubleBookingDetector`, appelée par `ValidateConstraintsController`,
+> qui expose une clé **`blockers`** (et non `errors`, indexé par `constraintId` — ici il
+> n'y a pas de contrainte, ce sont des réservations). Le périmètre de réservations suit
+> EXACTEMENT celui du builder : socle = `schedulePlanId IS NULL`, période = son plan,
+> gymnases désactivés retirés. Mélanger les deux inventerait des conflits entre mondes
+> disjoints. **Les trois règles tranchées** : intervalles réels `[début, début+durée[`,
+> gymnases DIFFÉRENTS seulement (même gymnase = mutualisation voulue), coachs `MAIN`
+> seulement. Le frontend a dû suivre (`useStepValidation` ne lisait que
+> `valid`/`errors`/`conflicts` — une clé ignorée aurait bloqué côté serveur sans que
+> l'écran dise rien), et le garde de forme réclamé plus bas est passé au même moment.
+> NR : `Security/CoachDoubleBookingTest` (phase1, step CI ajouté dans le même commit).
 
 ### La décision fondateur
 
@@ -122,7 +164,28 @@ génération.
 
 ---
 
-## PR C — La prévention au clic
+## PR C — La prévention au clic — ✅ LIVRÉ (#334, 2026-07-31)
+
+> **Une découverte a changé le lot.** Le cadrage supposait qu'il suffisait d'interdire les
+> créneaux incompatibles ; en lisant le code on a vu que **sélectionner une équipe créait la
+> réservation IMMÉDIATEMENT** (`onChange` → `mutate`), sans bouton de validation. Rien ne
+> pouvait donc s'interposer entre le choix et l'écriture — et une option désactivée dans un
+> `<select>` n'étant pas cliquable, le message n'aurait jamais pu s'afficher. **Décision
+> fondateur : la modale devient TRANSACTIONNELLE** — on compose ajouts et retraits, on
+> valide ; les retraits suivent la même logique ; fermer sans valider abandonne.
+>
+> **La parité PHP/TS est tenue par des cas de test identiques** (`coachDoubleBooking.test.ts`
+> ⇄ `CoachDoubleBookingTest`), la duplication étant inévitable : la modale doit répondre
+> sans aller-retour réseau.
+>
+> ⚠️ **Ce que la bascule transactionnelle a coûté, à ne pas réapprendre** : la revue adverse
+> a trouvé 10 défauts, dont 5 nés du choix lui-même — perte de données sur échec partiel
+> (`submit()` sans try/catch), rejeu des opérations déjà passées (brouillon non purgé →
+> verrous HARD dupliqués, `reservation` n'ayant aucune contrainte d'unicité), Échap actif
+> pendant l'envoi. Plus un **fail-open** : `useWizardTeamCoaches` étant une `useQuery` nue,
+> un repli `= []` pendant le chargement vidait la Map des coachs et éteignait la garde EN
+> SILENCE. Leçon : rendre une écriture différée n'est pas un détail d'UX — c'est un
+> changement de garanties, et il faut traiter l'échec partiel dès la conception.
 
 ### La décision fondateur
 
