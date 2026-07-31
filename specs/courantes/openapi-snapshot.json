@@ -16643,6 +16643,7 @@
                 "type": "object",
                 "properties": {
                     "name": {
+                        "maxLength": 180,
                         "description": "ADR-0002 inv. 12 : le nom vit sur le PLAN, pas sur la version. ABSENT au POST = le\nserveur nomme la version d'apr\u00e8s son plan (source unique) ; absent au PUT = inchang\u00e9.",
                         "type": [
                             "string",

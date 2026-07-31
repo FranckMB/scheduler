@@ -221,15 +221,22 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // retrouver dans la liste, et un repli sur ce signal-là ré-armerait le plan de SAISON comme
   // cible du stylo alors que le gestionnaire est sur une période — le bug d'origine, de retour
   // par une porte transitoire (revue #339 round 2).
+  // Entre deux refetch, la sélection du store peut ne plus être dans la liste (suppression
+  // d'une version, sélection persistée d'une autre saison) : `selectedSchedule` est alors null
+  // UNE passe de rendu, le temps que l'effet d'atterrissage rejoue. Plutôt que de laisser
+  // l'en-tête retomber sur un générique — ou pire, sur le plan de SAISON alors qu'on regarde
+  // une période —, on lit dès maintenant la version que cet effet va choisir : la MÊME
+  // fonction, donc le même résultat, sans flash et sans deviner (revue #339 round 3).
+  const headerSchedule = selectedSchedule ?? schedules.find((s) => s.id === pickLandingScheduleId(schedules)) ?? null;
   const displayedPlan: { id: string; name: string } | null =
-    0 === schedules.length || (null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType))
+    null === headerSchedule || isSeasonPlanType(headerSchedule.planType)
       ? (me?.seasonPlan ?? null)
-      : ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule?.schedulePlanId) ?? null);
-  // Le TITRE tolère un plan non encore résolu (collection en vol) : la photo `Schedule.name`
-  // porte le nom du plan à la création, donc un libellé juste dans l'immense majorité des cas
-  // — bien mieux que le générique « Planning ». Le STYLO, lui, reste conditionné au plan
-  // résolu : on ne propose pas un geste dont on n'a pas la cible.
-  const displayedPlanName = displayedPlan?.name ?? selectedSchedule?.name ?? null;
+      : ((allSchedulePlans ?? []).find((p) => p.id === headerSchedule.schedulePlanId) ?? null);
+  // Le TITRE tolère un plan non encore résolu (collection des plans en vol) : la photo
+  // `Schedule.name` porte le nom du plan à la création, donc un libellé juste dans l'immense
+  // majorité des cas — bien mieux que le générique « Planning ». Le STYLO, lui, reste
+  // conditionné au plan résolu : on ne propose pas un geste dont on n'a pas la cible.
+  const displayedPlanName = displayedPlan?.name ?? headerSchedule?.name ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
   // Read-only = its plan points at it: this version IS the calendar in force.
   const isReadOnly = true === selectedSchedule?.isChosen;

@@ -422,6 +422,11 @@ final class SchedulePlanProvisioner
      * portait « Vacances d'été — … » dans un fichier nommé « reprise-aout.pdf »).
      *
      * Repli sur la photo si le plan a disparu — un export doit rendre un document, pas une erreur.
+     *
+     * ⚠ Portée exacte : « le nom d'un planning vu depuis UNE DE SES VERSIONS ». `OverlayManager::
+     * periodLabelOf` nomme délibérément autrement (le titre de la `CalendarEntry`, c'est-à-dire le
+     * FAIT déclencheur) dans la popup de suppression — le gestionnaire y reconnaît son incident.
+     * Écart assumé, tracé en roadmap plutôt que rendu uniforme dans cette PR.
      */
     public function displayNameOf(Schedule $schedule): string
     {

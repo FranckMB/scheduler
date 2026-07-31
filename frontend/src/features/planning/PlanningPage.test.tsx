@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SchedulePlan } from "@/features/cockpit/api";
 import { renderWithProviders } from "@/test/utils";
 
 import { getTrainingSlots, listSchedules, OverlaysExistError, reopenSchedule } from "./api";
@@ -71,7 +72,9 @@ vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-r
 const { meState, renameSpy, plansState } = vi.hoisted(() => ({
   meState: { chosenScheduleId: null as string | null },
   renameSpy: vi.fn(),
-  plansState: { plans: [] as { id: string; type: string; name: string; calendarEntryId: string | null; chosenScheduleId: string | null; teamSelectionInitialized: boolean }[] },
+  // Typé sur le VRAI contrat : un type inline recopié laisserait passer un champ ajouté à
+  // `SchedulePlan` sans que ces fixtures soient recalées (revue #339 round 3).
+  plansState: { plans: [] as SchedulePlan[] },
 }));
 
 // Partiel : seul `useSchedulePlans` est simulé (l'en-tête y lit le nom du plan
@@ -160,7 +163,7 @@ describe("PlanningPage (integration)", () => {
     vi.mocked(listSchedules).mockResolvedValue([
       { id: SID, name: "Version de période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
     ]);
-    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Reprise d'été S1", calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: true }];
+    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Reprise d'été S1", startDate: "2026-08-17", calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: true }];
     usePlanningStore.setState({ selectedScheduleId: SID });
     renderWithProviders(<PlanningPage />);
 

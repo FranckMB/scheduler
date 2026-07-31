@@ -56,7 +56,9 @@ final class ExportXlsxController extends AbstractController
         // ⚠ Les séparateurs de chemin sont retirés AVANT makeDisposition : le nom est saisi par
         // le gestionnaire (« Vacances Noël 2026/2027 » est une forme naturelle) et Symfony LÈVE
         // sur « / » ou « \ » — l'export partait en 500 générique, définitivement, sans que rien
-        // ne dise que le nom en était la cause.
+        // ne dise que le nom en était la cause. C'est bien la RÉPONSE qui échouait : l'app, elle,
+        // télécharge un blob et nomme le fichier côté client (`useScheduleExport`), donc cet
+        // en-tête ne sert qu'aux appels directs à l'API.
         $planningName = str_replace(['/', '\\'], '-', $this->schedulePlanProvisioner->displayNameOf($schedule));
         // makeDisposition emits both an ASCII fallback and a RFC 5987 filename*,
         // so an accented schedule name survives instead of collapsing to dashes.

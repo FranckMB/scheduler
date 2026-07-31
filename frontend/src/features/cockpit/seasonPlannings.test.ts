@@ -57,11 +57,14 @@ describe("seasonPlannings — open plannings & plan name (founder feedback 2026-
   // d'une période découpée sortaient donc mélangées. PREUVE DE CHUTE : avec un tri sur
   // `label`, l'ordre attendu ci-dessous est faux.
   it("orders period rows CHRONOLOGICALLY, not alphabetically on their French label", () => {
+    // Ordre d'ENTRÉE volontairement mélangé : si la fixture arrivait déjà triée, le test
+    // passerait même en SUPPRIMANT le tri (revue #339 round 3 — il ne tuait que l'ancien
+    // tri alphabétique, pas une régression qui neutraliserait l'ordonnancement).
     const weeks = [
-      { id: "pl-0706", name: "Vacances d'été — Semaine du 6 juillet 2026", startDate: "2026-07-06" },
-      { id: "pl-1307", name: "Vacances d'été — Semaine du 13 juillet 2026", startDate: "2026-07-13" },
       { id: "pl-0308", name: "Vacances d'été — Semaine du 3 août 2026", startDate: "2026-08-03" },
+      { id: "pl-1307", name: "Vacances d'été — Semaine du 13 juillet 2026", startDate: "2026-07-13" },
       { id: "pl-1008", name: "Vacances d'été — Semaine du 10 août 2026", startDate: "2026-08-10" },
+      { id: "pl-0706", name: "Vacances d'été — Semaine du 6 juillet 2026", startDate: "2026-07-06" },
     ];
     const rows = seasonPlannings(
       [s({ id: "v1", status: "COMPLETED" }), ...weeks.map((w) => s({ id: `sched-${w.id}`, name: "x", status: "COMPLETED", planType: "HOLIDAY", schedulePlanId: w.id }))],

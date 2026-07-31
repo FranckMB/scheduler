@@ -7,7 +7,12 @@ Changements récents :
 - **P4-41 (2026-07-31)** : `Schedule.ScheduleInput` — `name` **quitte les champs requis**
   (`required` ne garde que `status`). ADR-0002 inv. 12 : le nom vit sur le PLAN, une version
   n'a pas d'identité produit ; un POST sans nom laisse le serveur nommer la version d'après
-  son plan. Une chaîne **vide** reste refusée (`NotBlank(allowNull: true)`) — absent ≠ vide.
+  son plan. Une chaîne **vide ou blanche** reste refusée en 422 (`NotBlank(allowNull: true,
+  normalizer: 'trim')`) — absent ≠ vide — et `maxLength: 180` borne le champ, aligné sur la
+  colonne. ⚠ Le JSON a dû être **régénéré une seconde fois** : la première passe précédait
+  l'ajout de `Assert\Length`, donc le contrat publié annonçait un `name` non borné alors que
+  le serveur le refusait déjà (revue #339 round 3 — le déclencheur « changement d'API ⇒
+  régénérer » vaut pour CHAQUE modification, pas une fois par PR).
 - ⚠ **Dérive antérieure ramassée au passage** : la régénération a aussi fait apparaître les
   `format: uuid` + `externalDocs` de `Reservation.ReservationInput` (`teamId`, `venueId`,
   `schedulePlanId`) et de `Schedule.ScheduleInput.schedulePlanId`. Ils viennent des

@@ -137,8 +137,11 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         // son plan. Les trois appelants frontend en inventaient un chacun de leur côté —
         // « Version de période », « Plan de période », « Planning {date} » — et le
         // premier ressortait tel quel dans la liste des plannings et le nom du PDF.
+        // Le chemin overlay a DÉJÀ la ligne du plan en main (validée plus haut) : la relire
+        // ferait deux SELECT identiques par POST. Seul le chemin « de saison », qui résout son
+        // plan à l'instant, doit interroger la base.
         if (null === $input->name) {
-            $schedule->setName($this->schedulePlanProvisioner->versionNameFor($resolvedPlanId));
+            $schedule->setName($plan['name'] ?? $this->schedulePlanProvisioner->versionNameFor($resolvedPlanId));
         }
 
         // Atomic (like RegenerateController): the row and its version number commit

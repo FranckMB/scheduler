@@ -105,29 +105,6 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
      * un plan étranger/inconnu est refusé (422, validation tenant) ; sans plan ⇒ le plan
      * SEASON (le socle). Et le champ redondant `calendarEntryId` a disparu de la sortie API.
      */
-    /**
-     * NR P4-41 (revue #339 round 2) — le POST « de saison » (SANS `schedulePlanId`) est
-     * l'autre branche du nommage serveur : elle résout le plan SEASON puis en lit le nom.
-     * C'est le chemin du WIZARD, et rien ne le couvrait.
-     *
-     * Ce test vit ici et non près des overlays : la création d'un overlay exige un socle
-     * POINTÉ (inv. 13), or un socle pointé refuse justement tout POST de saison (P2-7, 409).
-     */
-    public function testASeasonVersionWithoutANameInheritsTheSeasonPlansName(): void
-    {
-        [$user, $club, $season] = $this->seed();
-
-        // Le plan SEASON naît AU POST (`ensureSeasonPlanId`) : on ne peut lire son nom qu'après.
-        $version = $this->postSchedule($user, ['status' => 'DRAFT']);
-
-        $planName = (string) $this->em->getConnection()->fetchOne(
-            'SELECT name FROM schedule_plan WHERE id = :pid',
-            ['pid' => (string) $version['schedulePlanId']],
-        );
-        self::assertNotSame('', $planName, 'le plan porte bien un nom par défaut');
-        self::assertSame($planName, $version['name'], 'la version de saison hérite du nom de son plan SEASON');
-    }
-
     public function testAVersionIsCreatedUnderANamedPlanWhichLinksAndTypesIt(): void
     {
         [$user, $club, $season] = $this->seed();
@@ -171,6 +148,29 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
             'name' => 'x', 'status' => 'DRAFT', 'schedulePlanId' => '99999999-9999-4999-8999-999999999999',
         ], \JSON_THROW_ON_ERROR));
         self::assertResponseStatusCodeSame(422, 'un plan inconnu/étranger au club est refusé');
+    }
+
+    /**
+     * NR P4-41 (revue #339 round 2) — le POST « de saison » (SANS `schedulePlanId`) est
+     * l'autre branche du nommage serveur : elle résout le plan SEASON puis en lit le nom.
+     * C'est le chemin du WIZARD, et rien ne le couvrait.
+     *
+     * Ce test vit ici et non près des overlays : la création d'un overlay exige un socle
+     * POINTÉ (inv. 13), or un socle pointé refuse justement tout POST de saison (P2-7, 409).
+     */
+    public function testASeasonVersionWithoutANameInheritsTheSeasonPlansName(): void
+    {
+        [$user, $club, $season] = $this->seed();
+
+        // Le plan SEASON naît AU POST (`ensureSeasonPlanId`) : on ne peut lire son nom qu'après.
+        $version = $this->postSchedule($user, ['status' => 'DRAFT']);
+
+        $planName = (string) $this->em->getConnection()->fetchOne(
+            'SELECT name FROM schedule_plan WHERE id = :pid',
+            ['pid' => (string) $version['schedulePlanId']],
+        );
+        self::assertNotSame('', $planName, 'le plan porte bien un nom par défaut');
+        self::assertSame($planName, $version['name'], 'la version de saison hérite du nom de son plan SEASON');
     }
 
     /**
