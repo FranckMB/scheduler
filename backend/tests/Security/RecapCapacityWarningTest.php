@@ -7,7 +7,9 @@ namespace App\Tests\Security;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Constraint;
 use App\Entity\PriorityTier;
+use App\Entity\Reservation;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
@@ -19,6 +21,9 @@ use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -68,8 +73,8 @@ final class RecapCapacityWarningTest extends WebTestCase
         $this->team($club, $season, 3);
         $this->team($club, $season, 2);
         $venue = $this->venue($club, $season);
-        $this->slot($club, $season, $venue, '18:00', 2, null);
-        $this->slot($club, $season, $venue, '19:30', 1, null);
+        $this->slot($club, $season, $venue, '18:00', 2);
+        $this->slot($club, $season, $venue, '19:30', 1);
 
         $body = $this->validate($user, $club, null);
 
@@ -77,7 +82,7 @@ final class RecapCapacityWarningTest extends WebTestCase
         $all = implode(' | ', array_map(strval(...), $body['warnings']));
         self::assertStringContainsString('demandent 5 séances', $all);
         self::assertStringContainsString('n\'en offrent que 3', $all);
-        self::assertStringContainsString('au moins 2 séance(s) ne pourront pas être placées', $all);
+        self::assertStringContainsString('au moins 2 séances ne pourront pas être placées', $all);
     }
 
     /**
@@ -89,8 +94,8 @@ final class RecapCapacityWarningTest extends WebTestCase
         [$user, $club, $season] = $this->seedClubSeason('CAPE');
         $this->team($club, $season, 3);
         $venue = $this->venue($club, $season);
-        $this->slot($club, $season, $venue, '18:00', 2, null);
-        $this->slot($club, $season, $venue, '19:30', 1, null);
+        $this->slot($club, $season, $venue, '18:00', 2);
+        $this->slot($club, $season, $venue, '19:30', 1);
 
         $body = $this->validate($user, $club, null);
 
@@ -106,16 +111,74 @@ final class RecapCapacityWarningTest extends WebTestCase
         [$user, $club, $season] = $this->seedClubSeason('CAPS');
         $this->team($club, $season, 2);
         $venue = $this->venue($club, $season);
-        $this->slot($club, $season, $venue, '18:00', 2, null);
-        $this->slot($club, $season, $venue, '19:30', 2, null);
+        $this->slot($club, $season, $venue, '18:00', 2);
+        $this->slot($club, $season, $venue, '19:30', 2);
 
         $body = $this->validate($user, $club, null);
 
         self::assertTrue($body['valid']);
         $all = implode(' | ', array_map(strval(...), $body['warnings']));
-        self::assertStringContainsString('offrent 4 places de créneau pour 2 séances demandées', $all);
-        self::assertStringContainsString('2 resteront libres', $all);
+        self::assertStringContainsString('offrent jusqu\'à 4 places de créneau pour 2 séances demandées', $all);
+        self::assertStringContainsString('2 places pourraient rester libres', $all, 'le surplus se déduit d\'un MAJORANT : « pourraient », jamais un fait (revue #341)');
         self::assertStringContainsString('augmenter les séances', $all, 'le surplus est une INFORMATION actionnable, pas une alarme');
+    }
+
+    /**
+     * SINGULIER (revue #341) : « 1 séance », « 1 place » — les messages interpolaient des
+     * entiers dans une formulation au pluriel seul (« 1 séances »). Cas COURANT sur un
+     * petit club ou une période à une seule équipe, pas un cas limite.
+     */
+    public function testSingularWordingAgrees(): void
+    {
+        [$user, $club, $season] = $this->seedClubSeason('CAP1');
+        $this->team($club, $season, 2);
+        $venue = $this->venue($club, $season);
+        $this->slot($club, $season, $venue, '18:00', 1);
+
+        $body = $this->validate($user, $club, null);
+
+        $all = implode(' | ', array_map(strval(...), $body['warnings']));
+        self::assertStringContainsString('au moins 1 séance ne pourra pas être placée', $all);
+        self::assertStringNotContainsString('1 séances', $all);
+    }
+
+    /**
+     * Les trois lectures du moteur que la somme BRUTE ignorait (revue #341) — chacune
+     * gonflait l'offre annoncée, donc pouvait taire une sous-capacité RÉELLE ou, pire,
+     * conseiller d'ajouter des séances à un club qui en manque :
+     *
+     * 1. deux créneaux au même `(gymnase, jour, heure)` s'ÉCRASENT (dict côté moteur) ;
+     * 2. un verrou HARD bloque le triplet pour TOUT LE MONDE : il vaut 1 place, pas sa capacité ;
+     * 3. `FACILITY_CAPACITY` rabote à `min(capacity, maxTeams)`.
+     */
+    public function testOfferIsReadTheWayTheEngineReadsIt(): void
+    {
+        [$user, $club, $season] = $this->seedClubSeason('CAPM');
+        $team = $this->team($club, $season, 8);
+        // ⚠ Trois gymnases SÉPARÉS : `FACILITY_CAPACITY` est clé PAR GYMNASE, donc sur un
+        // gymnase unique son rabot MASQUE la réduction du verrou — le test restait vert en
+        // retirant celle-ci (constaté en falsifiant). Chaque lecture doit s'isoler.
+        $dup = $this->venue($club, $season, 'Doublon');
+        $locked = $this->venue($club, $season, 'Verrouillé');
+        $capped = $this->venue($club, $season, 'Rabotté');
+
+        // 1) Doublon exact (gymnase, jour, heure) : le moteur ÉCRASE — 2 places, pas 4.
+        $this->slot($club, $season, $dup, '18:00', 2);
+        $this->slot($club, $season, $dup, '18:00', 2);
+        // 2) Verrou HARD : le triplet est bloqué pour TOUS — 1 place, pas 3.
+        $this->slot($club, $season, $locked, '20:00', 3);
+        $this->reservation($club, $season, $locked, $team, '20:00');
+        // 3) FACILITY_CAPACITY maxTeams=1 : min(3, 1) — 1 place, pas 3.
+        $this->slot($club, $season, $capped, '21:30', 3);
+        $this->facilityCapacity($club, $season, $capped, 1);
+
+        $body = $this->validate($user, $club, null);
+
+        // Lecture BRUTE : 2+2+3+3 = 10 → « surplus » pour 8 séances : un mensonge qui
+        // conseillerait d'AJOUTER des séances. Lecture MOTEUR : 2 + 1 + 1 = 4 → sous-capacité.
+        $all = implode(' | ', array_map(strval(...), $body['warnings']));
+        self::assertStringContainsString('n\'en offrent que 4', $all, 'doublon écrasé, verrou à 1 place, capacité rabotée — la somme brute aurait dit 10 et annoncé un surplus');
+        self::assertStringContainsString('au moins 4 séances', $all);
     }
 
     /**
@@ -131,8 +194,8 @@ final class RecapCapacityWarningTest extends WebTestCase
         [$user, $club, $season] = $this->seedClubSeason('CAPP');
         $team = $this->team($club, $season, 3);
         $venue = $this->venue($club, $season);
-        $this->slot($club, $season, $venue, '18:00', 1, null);
-        $this->slot($club, $season, $venue, '19:30', 1, null);
+        $this->slot($club, $season, $venue, '18:00', 1);
+        $this->slot($club, $season, $venue, '19:30', 1);
 
         $entry = new CalendarEntry;
         $entry->setClubId($club->getId());
@@ -264,12 +327,12 @@ final class RecapCapacityWarningTest extends WebTestCase
         return $team;
     }
 
-    private function venue(Club $club, Season $season): Venue
+    private function venue(Club $club, Season $season, string $name = 'Gymnase capacité'): Venue
     {
         $venue = new Venue;
         $venue->setClubId($club->getId());
         $venue->setSeasonId($season->getId());
-        $venue->setName('Gymnase capacité');
+        $venue->setName($name);
         $venue->setSource('manual');
         // canSplit : les capacités > 1 des créneaux comptent (sinon bridées à 1 — c'est
         // exactement le réglage que la tentative n° 2 avait raté en recalculant à la main).
@@ -280,7 +343,7 @@ final class RecapCapacityWarningTest extends WebTestCase
         return $venue;
     }
 
-    private function slot(Club $club, Season $season, Venue $venue, string $start, int $capacity, ?string $schedulePlanId): void
+    private function slot(Club $club, Season $season, Venue $venue, string $start, int $capacity): void
     {
         $slot = new VenueTrainingSlot;
         $slot->setClubId($club->getId());
@@ -290,8 +353,42 @@ final class RecapCapacityWarningTest extends WebTestCase
         $slot->setStartTime(new DateTimeImmutable($start));
         $slot->setDurationMinutes(90);
         $slot->setCapacity($capacity);
-        $slot->setSchedulePlanId($schedulePlanId);
+        // Toujours SAISONNIER : la grille d'une période est la COPIE que `planIdOf` prend à
+        // la naissance du plan — en fabriquer une ici produirait un créneau que ce geste n'a
+        // pas créé, donc un état impossible en production (revue #341).
+        $slot->setSchedulePlanId(null);
         $this->em->persist($slot);
+        $this->em->flush();
+    }
+
+    private function reservation(Club $club, Season $season, Venue $venue, Team $team, string $start): void
+    {
+        $reservation = new Reservation;
+        $reservation->setClubId($club->getId());
+        $reservation->setSeasonId($season->getId());
+        $reservation->setVenueId($venue->getId());
+        $reservation->setTeamId($team->getId());
+        $reservation->setDayOfWeek(1);
+        $reservation->setStartTime(new DateTimeImmutable($start));
+        $reservation->setDurationMinutes(90);
+        $this->em->persist($reservation);
+        $this->em->flush();
+    }
+
+    private function facilityCapacity(Club $club, Season $season, Venue $venue, int $maxTeams): void
+    {
+        $constraint = new Constraint;
+        $constraint->setClubId($club->getId());
+        $constraint->setSeasonId($season->getId());
+        $constraint->setScope(ConstraintScope::FACILITY);
+        $constraint->setScopeTargetId($venue->getId());
+        $constraint->setFamily(ConstraintFamily::FACILITY_CAPACITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setName('Capacité ' . $venue->getName());
+        $constraint->setConfig(['venueId' => $venue->getId(), 'maxTeams' => $maxTeams]);
+        $constraint->setIsActive(true);
+        $constraint->setSortOrder(0);
+        $this->em->persist($constraint);
         $this->em->flush();
     }
 

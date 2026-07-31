@@ -141,9 +141,10 @@ final class PeriodGatePayloadParityTest extends WebTestCase
 
         self::assertTrue($body['valid'], 'aucune erreur sur le jeu qui part réellement au solveur');
         self::assertArrayNotHasKey($ids['datedDeactivated'], $body['errors'], 'la datée d\'une équipe désactivée ne part pas au solveur : son invalidité ne bloque pas le récap (divergence n° 1 alignée)');
-        // 4 warnings de sélection + le volet capacité (P2-9 PR A — la grille de la période
-        // est vide dans ce seed, la sous-capacité parle ; son contenu a son propre NR).
-        self::assertCount(5, $body['warnings']);
+        // Ce test porte sur la PARITÉ gate↔payload, pas sur la capacité : on vérifie que les
+        // warnings de SÉLECTION sont là, sans compter ceux des autres volets (revue #341 —
+        // un décompte exact le rendait rouge à chaque évolution du volet capacité, pour une
+        // raison étrangère à son sujet). Le volet capacité a son propre NR.
         $allWarnings = implode(' | ', array_map(strval(...), $body['warnings']));
         self::assertStringContainsString('Gymnase fermé pour période', $allWarnings, 'le drop pour gymnase désactivé est ANNONCÉ');
         self::assertStringContainsString('ne vise plus aucune équipe active', $allWarnings, 'la DATÉE au tag inerte est ANNONCÉE, jamais évaporée (revue #340)');

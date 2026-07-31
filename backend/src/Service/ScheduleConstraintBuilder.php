@@ -261,6 +261,7 @@ final class ScheduleConstraintBuilder
         CalendarEntry $entry,
         int $solverSeed = self::DEFAULT_SOLVER_SEED,
         ?string $scheduleId = null,
+        ?PeriodConstraintSelection $selection = null,
     ): array {
         $em = $this->entityManager;
         if (!$em instanceof EntityManagerInterface) {
@@ -279,7 +280,10 @@ final class ScheduleConstraintBuilder
         // Les équipes servent DEUX fois (la sélection dérive ses actives, le payload les
         // sérialise) : une seule requête, passée à la sélection (revue #340 round 1).
         $clubSeasonTeams = array_values($this->findByClubSeason(Team::class, $clubId, $seasonId, $em));
-        $selection = $this->periodConstraintSelector->selectForPeriodPlan($clubId, $seasonId, $schedulePlanId, $entry, $clubSeasonTeams);
+        // Sélection RÉUTILISÉE quand l'appelant la tient déjà (le gate pré-solve la calcule
+        // pour ses warnings) : la recalculer coûtait ~7 requêtes par ouverture de récap pour
+        // une valeur en main (revue #341).
+        $selection ??= $this->periodConstraintSelector->selectForPeriodPlan($clubId, $seasonId, $schedulePlanId, $entry, $clubSeasonTeams);
         $deactivatedTeamIds = $selection->deactivatedTeamIds;
         $disabledVenueIds = $selection->disabledVenueIds;
         $this->currentSessionOverrides = $selection->sessionOverrides;
