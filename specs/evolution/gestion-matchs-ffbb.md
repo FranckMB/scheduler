@@ -305,15 +305,23 @@ au bonus « repos après match » du solveur et sera **superseded** par ce modul
 
 ---
 
-## 10. Positionnement produit : module AUTONOME, découplé de l'entraînement
+## 10. Positionnement produit : module AUTONOME en données, ouvert APRÈS le socle
 
 Signal marché fort (terrain 2026-07-06) : un gestionnaire **peu intéressé par l'entraînement** (peu de
 gymnases, tous les créneaux tiennent sans solveur) a eu **« les yeux qui brillent » pour les matchs**. → Les
 matchs sont peut-être le **meilleur wedge de vente**.
 
 > **Deux modules indépendants sur les mêmes entités club.** Un club peut vouloir la gestion des matchs sans
-> le solveur d'entraînement, **et inversement**. Gating **indépendant** de la validation du socle
-> d'entraînement.
+> se soucier du solveur d'entraînement, **et inversement**. Indépendance de **modèle** (entités séparées,
+> rien de ce module n'entre dans le payload solveur) et d'**UI** (workspace « Compétition » distinct).
+
+⚠ **Mais l'ouverture du module reste gatée sur le socle** — arbitrage fondateur du 2026-07-31 (DOC-1) en
+faveur du code livré. Créer ou importer un match exige que le plan SEASON **pointe** une version
+(`SocleGuard::assertSeasonPlanChosen` → **409** sinon ; le front verrouille l'entrée sur le même critère).
+**Le motif** : un match se *place* dans un calendrier, et le radar de conflits (§8) le compare aux séances
+d'entraînement — sans socle en vigueur, il n'a rien à comparer. Un club matchs-only génère donc **une fois**
+son planning d'entraînement, même trivial, avant d'ouvrir la compétition. Cadrage vérifié :
+[`../courantes/module-matchs.md`](../courantes/module-matchs.md).
 
 ⚠ **« Découplé » ≠ zéro setup (piège à éviter)** : un club matchs-only a **quand même** besoin d'équipes,
 coachs, **liens coach↔équipe** (sinon pas de détection de conflit personne) et gymnases. C'est-à-dire **les
@@ -373,8 +381,9 @@ l'entraînement* ; le calendrier compétition montre *la vie des championnats*.
   page blanche). 3 couches : base fédé → correction ligue → règles club. Ligue dérivée du `ffbbClubCode`.
   Genre dans la clé pour certaines lignes (U18 Région Garçon).
 - Calendrier match = **week-end-centrique** (réintroduit le dimanche, distinct du canevas entraînement).
-- **Module autonome, gating découplé** de la validation du socle ; mais **réutilise la saisie structure**
-  (un club matchs-only fait quand même les étapes équipes/coachs/gymnases).
+- **Module autonome en modèle et en UI**, mais **gaté sur la validation du socle** (arbitrage 2026-07-31,
+  §10) ; il **réutilise la saisie structure** (un club matchs-only fait quand même les étapes
+  équipes/coachs/gymnases, puis génère une fois son planning).
 - Dérogation = **tracker + rédacteur**, **pas** un connecteur ligue (aucune soumission FFBB automatique).
 - Le **trajet** est une infra **partagée** avec l'entraînement (FF#5) — une pierre, deux coups.
 
