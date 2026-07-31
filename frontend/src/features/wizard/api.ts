@@ -342,6 +342,28 @@ export interface ValidateResult {
   valid: boolean;
   errors: Record<string, string[]>;
   conflicts: { constraint1Id: string; constraint2Id: string; reason: string }[];
+  /**
+   * P2-9 PR B — impossibilités PHYSIQUES déjà formulées par le serveur (un coach à deux
+   * endroits en même temps). Elles BLOQUENT la génération, contrairement aux `warnings`
+   * (règle #8 : un avertissement n'invalide rien). Optionnel : un serveur antérieur à
+   * PR B ne renvoie pas la clé.
+   */
+  blockers?: string[];
+}
+
+/**
+ * Le corps d'un 422 de validation, et lui seul. Sans cette garde, `data as ValidateResult`
+ * transtypait N'IMPORTE QUEL objet JSON : un 403 (rôle insuffisant) ou un 500 devenait un
+ * résultat de validation aux champs `undefined`, et le récap s'affichait comme si tout
+ * allait bien. On ne peut pas distinguer « invalide » de « pas pu valider » sans ça.
+ */
+function isValidateResult(data: unknown): data is ValidateResult {
+  if (null === data || typeof data !== "object") {
+    return false;
+  }
+  const candidate = data as Partial<ValidateResult>;
+
+  return typeof candidate.valid === "boolean" && null !== candidate.errors && typeof candidate.errors === "object" && Array.isArray(candidate.conflicts);
 }
 
 /** Pre-solve gate (BW3). Returns the body whether valid (200) or not (422). Period mode scopes to a calendar entry. */
@@ -353,8 +375,11 @@ export async function validateConstraints(calendarEntryId?: string): Promise<Val
       // ky 2.x parses the 422 body into error.data — re-reading the response
       // throws "body stream already read".
       const data = (error as { data?: unknown }).data;
-      if (null !== data && typeof data === "object") {
-        return data as ValidateResult;
+      // Garde de forme : seul un VRAI corps de validation est rendu. Tout autre objet
+      // (403, 500, page d'erreur JSON) relève le HTTPError — l'appelant saura qu'il n'a
+      // pas pu valider, au lieu de croire à un récap valide.
+      if (isValidateResult(data)) {
+        return data;
       }
     }
     throw error;
