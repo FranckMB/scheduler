@@ -183,11 +183,13 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid']);
         self::assertSame([], $data['errors'], 'la datée visant le gymnase désactivé est retirée, donc plus rien à valider');
-        // P2-9 PR A ajoute le volet capacité aux warnings — ce test garde LE SIEN (le drop
-        // gymnase désactivé), la capacité a son propre NR (RecapCapacityWarningTest).
-        self::assertContains(
-            '« SM1 exige 2 séances à Barros » vise le gymnase Barros, désactivé pour cette période : elle ne sera pas appliquée.',
-            $data['warnings'],
+        // P2-9 PR A ajoute le volet capacité : ce test garde son assertion EXACTE sur SES
+        // warnings (revue #341 round 2 — `assertContains` avait relâché la garantie « un
+        // seul warning », qui est précisément ce que ce test épingle).
+        self::assertSame(
+            ['« SM1 exige 2 séances à Barros » vise le gymnase Barros, désactivé pour cette période : elle ne sera pas appliquée.'],
+            array_values(array_filter($data['warnings'], static fn (string $w): bool => !str_contains($w, 'gymnases'))),
+            'exactement UN warning de sélection ; ceux de capacité sont filtrés, ils ont leur propre NR',
         );
     }
 

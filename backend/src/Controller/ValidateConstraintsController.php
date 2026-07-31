@@ -8,7 +8,6 @@ use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
 use App\Entity\Reservation;
 use App\Enum\CalendarEntryPeriodType;
-use App\Enum\LockLevel;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ConstraintRepository;
 use App\Repository\TeamRepository;
@@ -38,9 +37,6 @@ use Throwable;
  */
 final class ValidateConstraintsController extends AbstractController
 {
-    /** Granularité du solveur (`SLOT_MINUTES`, engine/app/solver/model.py) — un verrou s'y décline. */
-    private const SOLVER_SLOT_MINUTES = 15;
-
     public function __construct(
         private readonly ConstraintRepository $constraintRepository,
         private readonly CalendarEntryRepository $calendarEntryRepository,
@@ -148,7 +144,11 @@ final class ValidateConstraintsController extends AbstractController
                 $warnings = [...$warnings, ...$this->capacityWarnings($capacityPayload)];
             }
         } catch (Throwable $exception) {
-            $this->logger->warning('Capacity recap skipped: payload build failed.', ['exception' => $exception]);
+            // Le silence serait indiscernable d'un « la capacité est juste » : on le DIT.
+            // `error` et non `warning` : un build qui échoue est une anomalie, pas un cas
+            // métier — c'est le seul endroit où on l'apprendra (revue #341 round 2).
+            $this->logger->error('Capacity recap skipped: payload build failed.', ['exception' => $exception]);
+            $warnings[] = 'La capacité des gymnases n\'a pas pu être vérifiée — les autres contrôles du récap restent valables.';
         }
 
         // P2-9 PR B — IMPOSSIBILITÉ PHYSIQUE : un verrou qui met un coach à deux endroits
@@ -233,11 +233,13 @@ final class ValidateConstraintsController extends AbstractController
 
         if ($offer > $demand) {
             return [\sprintf(
-                'Vos gymnases offrent jusqu\'à %s pour %s demandée%s : %s pourraient rester libres. Vous pouvez agrandir des créneaux (capacité), en ajouter, ou augmenter les séances de certaines équipes.',
+                'Vos gymnases offrent jusqu\'à %s pour %s demandée%s : %s %s rester libre%s. Vous pouvez agrandir des créneaux (capacité), en ajouter, ou augmenter les séances de certaines équipes.',
                 $this->plural($offer, 'place de créneau', 'places de créneau'),
                 $this->plural($demand, 'séance', 'séances'),
                 1 === $demand ? '' : 's',
                 $this->plural($offer - $demand, 'place', 'places'),
+                1 === $offer - $demand ? 'pourrait' : 'pourraient',
+                1 === $offer - $demand ? '' : 's',
             )];
         }
 
@@ -245,9 +247,34 @@ final class ValidateConstraintsController extends AbstractController
     }
 
     /**
-     * L'offre du payload, lue comme le moteur la lit (cf. `capacityWarnings`) : créneaux
-     * dédupliqués par `(gymnase, jour, heure)`, capacité rabotée par `FACILITY_CAPACITY`,
-     * et un triplet verrouillé HARD compte pour UNE place — pas pour sa capacité.
+     * L'offre du payload — un MAJORANT de ce que le solveur peut réellement placer.
+     *
+     * ⚠ HISTOIRE, à lire avant d'y toucher (revue #341, deux rounds). La version d'origine
+     * sommait les capacités brutes. La revue a montré trois écarts avec le moteur ; je les ai
+     * « corrigés » en répliquant son algèbre de créneaux ici (verrous, durées couvertes,
+     * rabots). Le round suivant en a trouvé QUATRE autres — et surtout, deux de mes
+     * corrections faisaient tomber la propriété qui justifiait tout l'exercice : elles
+     * SOUS-estimaient l'offre, donc produisaient de FAUSSES ALERTES sur la branche dont le
+     * contrat est de ne jamais mentir.
+     *
+     * Conclusion tirée : ne répliquer QUE les réductions dont on peut prouver qu'elles
+     * laissent l'offre AU-DESSUS du réel. Il en reste deux, toutes deux exactes :
+     *
+     * 1. **déduplication** par `(gymnase, jour, heure)` — `model.slot_capacities` est un dict
+     *    sur ce triplet (`model.py:54-56`) : deux lignes au même triplet s'écrasent. Réduire
+     *    ne peut qu'approcher le réel par le haut.
+     * 2. **`FACILITY_CAPACITY` ACTIVE** → `min(capacité, maxTeams)` (`main.py:288-293`), clé
+     *    sur `config.venueId`. Le filtre `isActive` n'est PAS optionnel : le moteur saute
+     *    toute contrainte inactive (`constraints.py:1729-1730`), et l'oublier appliquait un
+     *    rabot que le solveur n'applique pas — une fausse alerte.
+     *
+     * Ce qui n'est délibérément PAS répliqué : les verrous HARD. Le moteur y émet un créneau
+     * verrouillé PAR ÉQUIPE épinglée, décline la durée en pas de 15 min, et place même les
+     * épinglages hors grille — trois comportements que mes tentatives ont ratés dans les deux
+     * sens. Ne rien faire est SÛR : un créneau verrouillé compte alors sa capacité pleine,
+     * donc ≥ ce que le solveur y placera. On sous-avertit, on ne ment pas.
+     *
+     * La vraie sortie de ce miroir est un calcul CÔTÉ MOTEUR (roadmap P3-19).
      *
      * @param array<string, mixed> $payload
      */
@@ -255,32 +282,15 @@ final class ValidateConstraintsController extends AbstractController
     {
         $caps = [];
         foreach (\is_array($payload['constraints'] ?? null) ? $payload['constraints'] : [] as $row) {
-            if (!\is_array($row) || 'FACILITY_CAPACITY' !== ($row['family'] ?? null)) {
+            if (!\is_array($row) || 'FACILITY_CAPACITY' !== ($row['family'] ?? null) || false === ($row['isActive'] ?? true)) {
                 continue;
             }
             $config = \is_array($row['config'] ?? null) ? $row['config'] : [];
-            // Clé STRICTEMENT sur `config.venueId`, comme l'engine : un `scopeTargetId`
-            // sous scope TEAM est un id d'équipe et ne désignerait aucun gymnase.
+            // Clé STRICTEMENT sur `config.venueId`, comme l'engine : un `scopeTargetId` sous
+            // scope TEAM est un id d'équipe et ne désignerait aucun gymnase.
             if (isset($config['venueId'], $config['maxTeams'])) {
-                $caps[(string) $config['venueId']] = (int) $config['maxTeams'];
-            }
-        }
-
-        // Un verrou couvre TOUTE sa durée, pas seulement son heure de début : l'engine
-        // décline le créneau en pas de 15 min (`_duration_slot_starts`, `SLOT_MINUTES`) et
-        // bloque CHACUN des triplets couverts. Ne caper que l'heure de début laissait un
-        // créneau qui CHEVAUCHE le verrou compter à pleine capacité (revue #341 round 2).
-        $lockedKeys = [];
-        foreach (\is_array($payload['slotTemplates'] ?? null) ? $payload['slotTemplates'] : [] as $row) {
-            if (!\is_array($row) || LockLevel::HARD->value !== ($row['lockLevel'] ?? null)) {
-                continue;
-            }
-            $startMinutes = $this->timeToMinutes((string) ($row['startTime'] ?? ''));
-            $duration = max(self::SOLVER_SLOT_MINUTES, (int) ($row['durationMinutes'] ?? self::SOLVER_SLOT_MINUTES));
-            $steps = intdiv($duration + self::SOLVER_SLOT_MINUTES - 1, self::SOLVER_SLOT_MINUTES);
-            for ($step = 0; $step < $steps; ++$step) {
-                $covered = $startMinutes + $step * self::SOLVER_SLOT_MINUTES;
-                $lockedKeys[\sprintf('%s|%s|%02d:%02d', $row['venueId'] ?? '', $row['dayOfWeek'] ?? '', intdiv($covered, 60), $covered % 60)] = true;
+                $venueId = (string) $config['venueId'];
+                $caps[$venueId] = min($caps[$venueId] ?? \PHP_INT_MAX, (int) $config['maxTeams']);
             }
         }
 
@@ -288,31 +298,16 @@ final class ValidateConstraintsController extends AbstractController
         foreach (\is_array($payload['venues'] ?? null) ? $payload['venues'] : [] as $venue) {
             $venueId = (string) ($venue['id'] ?? '');
             foreach (\is_array($venue['trainingSlots'] ?? null) ? $venue['trainingSlots'] : [] as $slot) {
-                $key = \sprintf('%s|%s|%s', $venueId, $slot['dayOfWeek'] ?? '', substr((string) ($slot['startTime'] ?? ''), 0, 5));
                 $capacity = (int) ($slot['capacity'] ?? 0);
                 if (isset($caps[$venueId])) {
                     $capacity = min($capacity, $caps[$venueId]);
                 }
-                // Verrouillé : le moteur ne crée aucune variable pour ce triplet — il sert
-                // l'équipe épinglée, et elle seule (ALIGN-07 : un verrou prend le créneau
-                // entier, même divisible).
-                if (isset($lockedKeys[$key])) {
-                    $capacity = min($capacity, 1);
-                }
                 // Écrasement, pas addition : le moteur clé un DICT sur ce triplet.
-                $byKey[$key] = $capacity;
+                $byKey[\sprintf('%s|%s|%s', $venueId, $slot['dayOfWeek'] ?? '', substr((string) ($slot['startTime'] ?? ''), 0, 5))] = $capacity;
             }
         }
 
         return array_sum($byKey);
-    }
-
-    /** « 18:00 » / « 18:00:00 » → minutes depuis minuit (miroir de `_time_to_minutes`). */
-    private function timeToMinutes(string $time): int
-    {
-        $parts = explode(':', $time);
-
-        return 60 * (int) $parts[0] + (int) ($parts[1] ?? 0);
     }
 
     private function plural(int $count, string $singular, string $plural): string

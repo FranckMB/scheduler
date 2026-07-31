@@ -283,6 +283,12 @@ final class ScheduleConstraintBuilder
         // Sélection RÉUTILISÉE quand l'appelant la tient déjà (le gate pré-solve la calcule
         // pour ses warnings) : la recalculer coûtait ~7 requêtes par ouverture de récap pour
         // une valeur en main (revue #341).
+        // Une sélection fournie DOIT être celle de ce plan : sinon on mélangerait deux
+        // périodes en silence (revue #341 round 2). Une incohérence ici est une faute de
+        // programmation, pas une donnée douteuse — on lève.
+        if ($selection instanceof PeriodConstraintSelection && $selection->schedulePlanId !== $schedulePlanId) {
+            throw new LogicException('The provided period selection belongs to another schedule plan.');
+        }
         $selection ??= $this->periodConstraintSelector->selectForPeriodPlan($clubId, $seasonId, $schedulePlanId, $entry, $clubSeasonTeams);
         $deactivatedTeamIds = $selection->deactivatedTeamIds;
         $disabledVenueIds = $selection->disabledVenueIds;

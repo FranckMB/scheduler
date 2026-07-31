@@ -143,50 +143,50 @@ final class RecapCapacityWarningTest extends WebTestCase
     }
 
     /**
-     * Les trois lectures du moteur que la somme BRUTE ignorait (revue #341) — chacune
-     * gonflait l'offre annoncée, donc pouvait taire une sous-capacité RÉELLE ou, pire,
-     * conseiller d'ajouter des séances à un club qui en manque :
+     * Les DEUX réductions que le récap réplique — et SEULEMENT elles (revue #341 round 2) :
      *
-     * 1. deux créneaux au même `(gymnase, jour, heure)` s'ÉCRASENT (dict côté moteur) ;
-     * 2. un verrou HARD bloque le triplet pour TOUT LE MONDE : il vaut 1 place, pas sa capacité ;
-     * 3. `FACILITY_CAPACITY` rabote à `min(capacity, maxTeams)`.
+     * 1. deux créneaux au même `(gymnase, jour, heure)` s'ÉCRASENT (le moteur clé un dict) ;
+     * 2. `FACILITY_CAPACITY` **active** rabote à `min(capacity, maxTeams)`.
+     *
+     * Un verrou HARD n'est délibérément PAS réduit : le moteur y émet un créneau verrouillé
+     * PAR ÉQUIPE épinglée, décline la durée, et place même les épinglages hors grille — trois
+     * comportements ratés dans les DEUX sens par les tentatives précédentes. Compter la
+     * capacité pleine reste un MAJORANT : on sous-avertit, on ne ment pas.
      */
-    public function testOfferIsReadTheWayTheEngineReadsIt(): void
+    public function testOfferAppliesOnlyTheReductionsItCanProveSafe(): void
     {
         [$user, $club, $season] = $this->seedClubSeason('CAPM');
         $team = $this->team($club, $season, 8);
-        // ⚠ Trois gymnases SÉPARÉS : `FACILITY_CAPACITY` est clé PAR GYMNASE, donc sur un
-        // gymnase unique son rabot MASQUE la réduction du verrou — le test restait vert en
-        // retirant celle-ci (constaté en falsifiant). Chaque lecture doit s'isoler.
+        // ⚠ Gymnases SÉPARÉS : `FACILITY_CAPACITY` est clé PAR GYMNASE, donc sur un gymnase
+        // unique son rabot masquerait les autres cas (constaté en falsifiant au round 1).
         $dup = $this->venue($club, $season, 'Doublon');
         $locked = $this->venue($club, $season, 'Verrouillé');
         $capped = $this->venue($club, $season, 'Rabotté');
+        $inactive = $this->venue($club, $season, 'Rabot inactif');
 
-        // 1) Doublon exact (gymnase, jour, heure) : le moteur ÉCRASE — 2 places, pas 4.
+        // 1) Doublon exact : le moteur ÉCRASE — 2 places, pas 4.
         $this->slot($club, $season, $dup, '18:00', 2);
         $this->slot($club, $season, $dup, '18:00', 2);
-        // 2) Verrou HARD : le triplet est bloqué pour TOUS — 1 place, pas 3.
+        // 2) Verrouillé : capacité PLEINE conservée (3) — majorant assumé.
         $this->slot($club, $season, $locked, '20:00', 3);
-        // Un verrou couvre TOUTE sa durée (90 min = 6 pas de 15 min côté moteur) : ce créneau
-        // qui CHEVAUCHE est bloqué lui aussi — ne caper que l'heure de début le laissait
-        // compter à pleine capacité (revue #341 round 2).
-        $this->slot($club, $season, $locked, '20:30', 4);
         $this->reservation($club, $season, $locked, $team, '20:00');
-        // 3) FACILITY_CAPACITY maxTeams=1 : min(3, 1) — 1 place, pas 3.
+        // 3) FACILITY_CAPACITY ACTIVE : min(3, 1) — 1 place.
         $this->slot($club, $season, $capped, '21:30', 3);
-        $this->facilityCapacity($club, $season, $capped, 1);
+        $this->facilityCapacity($club, $season, $capped, 1, true);
+        // 4) FACILITY_CAPACITY INACTIVE : le moteur la saute, nous aussi — 3 places, pas 1.
+        //    L'appliquer produisait une FAUSSE ALERTE sur la branche censée ne jamais mentir.
+        $this->slot($club, $season, $inactive, '19:00', 3);
+        $this->facilityCapacity($club, $season, $inactive, 1, false);
 
         $body = $this->validate($user, $club, null);
 
-        // Lecture BRUTE : 2+2+3+4+3 = 14 → « surplus » pour 8 séances : un mensonge qui
-        // conseillerait d'AJOUTER des séances. Lecture MOTEUR : 2 (doublon écrasé) + 1 (20:00
-        // verrouillé) + 1 (20:30 CHEVAUCHÉ par le verrou) + 1 (rabot) = 5 → sous-capacité.
+        // 2 (doublon écrasé) + 3 (verrou non réduit) + 1 (rabot actif) + 3 (rabot inactif ignoré) = 9.
         $all = implode(' | ', array_map(strval(...), $body['warnings']));
-        self::assertStringContainsString('n\'en offrent que 5', $all, 'doublon écrasé, verrou couvrant SA DURÉE (20:30 chevauché), capacité rabotée — la somme brute aurait dit 14 et annoncé un surplus');
-        self::assertStringContainsString('au moins 3 séances', $all);
+        self::assertStringContainsString('jusqu\'à 9 places de créneau', $all, 'doublon écrasé, rabot ACTIF seul appliqué, verrou laissé à capacité pleine');
     }
 
     /**
+     * PÉRIODE : les nombres viennent du payload de LA PÉRIODE    /**
      * PÉRIODE : les nombres viennent du payload de LA PÉRIODE — demande modifiée par la
      * surcharge de séances (3 → 2), offre lue dans la grille POSSÉDÉE par le plan (la
      * COPIE de la saison prise à sa naissance : 2 places). Demande 2 = offre 2 → silence,
@@ -380,7 +380,7 @@ final class RecapCapacityWarningTest extends WebTestCase
         $this->em->flush();
     }
 
-    private function facilityCapacity(Club $club, Season $season, Venue $venue, int $maxTeams): void
+    private function facilityCapacity(Club $club, Season $season, Venue $venue, int $maxTeams, bool $isActive = true): void
     {
         $constraint = new Constraint;
         $constraint->setClubId($club->getId());
@@ -391,7 +391,7 @@ final class RecapCapacityWarningTest extends WebTestCase
         $constraint->setRuleType(ConstraintRuleType::HARD);
         $constraint->setName('Capacité ' . $venue->getName());
         $constraint->setConfig(['venueId' => $venue->getId(), 'maxTeams' => $maxTeams]);
-        $constraint->setIsActive(true);
+        $constraint->setIsActive($isActive);
         $constraint->setSortOrder(0);
         $this->em->persist($constraint);
         $this->em->flush();
