@@ -1,11 +1,11 @@
 # Gestion des matchs (FFBB) — besoin spécifié
 
-> **Statut** : **besoin spécifié** (exploration terrain 2026-07-06) — **référence de `roadmap.md` §8 (FF#21)**.
+> **Statut** : **besoin spécifié** (exploration terrain 2026-07-06) — **référence de la ligne roadmap P1-4 (FF#21)**.
 > **Pas un plan** — pas de tâches, pas d'effort chiffré ; l'exécution se planifiera palier par palier (§9).
 > **Nature** : ce document cadre un **module produit à part entière** (placement des matchs, radar de
 > conflits, demandes de dérogation), distinct du module d'entraînement, et **challenge** le classement
 > d'origine `🔴 lourd / V2` de la roadmap : le cœur n'est **pas** un solveur.
-> **Rattachement roadmap** : `roadmap.md` §8 (Imports & intégrations — FF#21 « Planification des matchs »,
+> **Rattachement roadmap** : **P1-4** (FF#21 « Planification des matchs »,
 > FF#19 « Import calendrier de matchs FFBB »). **Vision d'origine** : `initiales/ClubScheduler_v3.md` §1.4.
 
 ---

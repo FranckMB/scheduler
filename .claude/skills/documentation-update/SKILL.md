@@ -1,11 +1,19 @@
 ---
 name: documentation-update
-description: After a feature, selectively refresh the docs so a human dev and an agent both understand the current state and how it evolved — general + per-subproject READMEs, CLAUDE.md index, per-zone docs/, ADRs, and specs/ reconciliation. Verifies claims against code (no drift), bans volatile counts, enforces evolution→courantes graduation. No filler. Invoke manually.
+description: Refresh the living docs before opening a PR — general + per-subproject READMEs, CLAUDE.md index, per-zone docs/, ADRs, and specs/ reconciliation (roadmap = open only, etat-des-lieux = delivered). Verifies claims against code (no drift), bans volatile counts, enforces evolution→courantes graduation. No filler.
 ---
 
 ## Documentation Update
 
-Run **only when the user asks**, after work whose **business behaviour, architecture, conventions, public APIs, or subproject scope actually changed**. Goal: a developer landing in `backend/` vs `engine/` vs `frontend/` grasps the scope, how work is done *there* (each zone works differently), and where the core-business docs live — and the evolution stays legible.
+**Run before opening EVERY PR** (CLAUDE.md §7 step 6 — both lanes). The docs are alive: a PR that fixes, adds or removes something has documentation to update **somewhere**. Finding nothing is a conclusion you reach by looking, not an assumption you start from — and if you truly find nothing, say which files you checked and why they are unaffected.
+
+Goal: a developer landing in `backend/` vs `engine/` vs `frontend/` grasps the scope, how work is done *there* (each zone works differently), and where the core-business docs live — and the evolution stays legible.
+
+**The two-file rule (refonte 2026-07-31) — never blur it:**
+- [`specs/evolution/roadmap.md`](../../../specs/evolution/roadmap.md) holds **ONLY what is still open** (bugs, evolutions, technical debt, parking, vision). Nothing delivered stays there.
+- [`specs/courantes/etat-des-lieux.md`](../../../specs/courantes/etat-des-lieux.md) holds **what is delivered**: the capability map, the **closed decisions** (deliberate abandons — they are what stops a settled question from being re-opened every three months), and the dated delivery traces.
+
+A delivered item **moves**: it is deleted from the roadmap and gains a trace line in the état des lieux, with its behaviour documented in the receiving `courantes/` spec. Never both. Never neither.
 
 **Prime directive: a doc that lies is worse than no doc.** This project is agent-driven; a false fact in CLAUDE.md/AGENTS.md/project-map is injected into every future plan. Accuracy beats completeness.
 
@@ -19,7 +27,8 @@ Run **only when the user asks**, after work whose **business behaviour, architec
 | `CLAUDE.md` (root) | agent | short operational index (< ~200 lines), facts not obvious from filenames |
 | `<zone>/docs/` | both | deep-dives (business rules, how-to guides, structuring mechanisms). **Single dir per zone** — `doc/` merged into `docs/` 2026-07-11; never recreate a `doc/` |
 | `docs/` (root) | both | cross-cutting: project-map, glossary, testing, architecture/ADRs |
-| `specs/evolution/roadmap.md` | both | **single tracking doc**: vision map (§1-§10) + prioritized backlog (P0-P4) + living technical debt (§Dette) + delivered traces (§Livrés) |
+| `specs/evolution/roadmap.md` | both | **the OPEN only**: prioritized backlog (P1-P4), deliberate-keep debt, parking, unpriced vision. A delivered line does not live here |
+| `specs/courantes/etat-des-lieux.md` | both | **the DELIVERED**: capability map (pointers, not behaviour), **closed decisions**, dated delivery traces |
 | `specs/` | both | living product specs (see reconciliation below) |
 
 Rule: **README points, it does not recopy.** If a fact is in `docs/` or `AGENTS.md`, the README links to it. Every added line must carry a fact a future reader would otherwise get wrong.
@@ -58,31 +67,39 @@ Three buckets, distinct meaning — keep them true:
 - **`courantes/`** — what the app does **today**. Must reflect reality: if a courante spec no longer matches the code, **update it**; if the feature was removed, **delete it**. When an `evolution` item ships, its behaviour lands here.
 - **`evolution/`** — what the app will do **later** (future/vision). When an item is delivered, **remove it from evolution** (it has graduated into `courantes`).
 
-**Purge des items livrés (mandatory each run):** `specs/evolution/roadmap.md` is the single tracking doc (map + backlog P0-P4 + debt). For every item delivered since the last pass:
-1. **Backlog line (P*x-y*)** — delete it from the P0-P4 tables; the id is never reused (a numbering hole = delivered, by design).
-2. **Trace** — add one line to roadmap **§Livrés** (date · id · subject · pointer to the courantes file / doc that now holds the behaviour). A delivered item MUST leave a dated trace — deletion without trace is the failure mode this step blocks.
-3. **Map line (§1-§10)** — flip to ✅ with a pointer (a line, not a spec — behavioural detail goes to `courantes/`).
-4. **Detail file** — if a `specs/evolution/*.md` detail file is now fully delivered, delete it (history lives in git) and keep the roadmap pointer updated.
+**Purge des items livrés (mandatory each run) — the MOVE, in four steps.** For every item delivered since the last pass:
+1. **Delete the backlog line** (P*x-y*, DOC-n, SEC-n…) from `roadmap.md`. Do **not** flip it to ✅ and leave it there — the roadmap holds no ✅. The id is never reused: a numbering hole means delivered, by design.
+2. **Add one trace line** to `etat-des-lieux.md` §3 (date · id · subject · pointer to the `courantes/` file that now holds the behaviour). A delivered item MUST leave a dated trace — deletion without trace is the failure mode this step blocks.
+3. **Update the capability map** (`etat-des-lieux.md` §1) if the delivery changed what the app can do. It is a **map**: pointers and one-liners, never behavioural detail.
+4. **Detail file** — if a `specs/evolution/*.md` detail file is now fully delivered, delete it (history lives in git) and drop its entry from the roadmap header's active-files list.
 
-**Dette technique (same pipeline):** actionable debt lives as **P4-x backlog lines** (proof `file:line` required); deliberate "won't fix" keeps live in roadmap **§Dette** with their rationale. When a debt is resolved: same purge ritual (drop the P4 line, trace in §Livrés). New debt found during any pass → new P4 line, never a separate file.
+**Closed decisions (`etat-des-lieux.md` §2).** When work settles a question **against** an obvious-looking option ("abandoned", "assumed as-is", "deliberately not done"), record it there with its *why*. This is not bookkeeping: an undocumented abandon gets re-proposed every few months. A closed decision is worth as much as a delivery.
 
-**Graduation check (mandatory each run, opposable):** for **every roadmap line whose status flips to ✅ (or gains a "Livré" note) in this run**, either **name the `courantes/` file that receives the behaviour** (create or extend it in the same pass) or **state in the change summary why no graduation applies**. Silence is not an option — "updated the roadmap line" alone is the failure mode this check blocks (2026-07-06: school-holidays + public-holidays imports fully specced in roadmap ✅ notes, nothing in courantes, snapshot stale across 2 PRs). Then also sweep `specs/evolution/` for older delivered items (roadmap ✅, merged PR, code present) and graduate them. The audit found shipped features still sitting in evolution/ months later (DOC-04).
+**Dette technique (same pipeline):** actionable debt lives as **P4-x backlog lines in the roadmap** (proof `file:line` required); deliberate "won't fix" keeps live in roadmap **§Dette — keeps délibérés** with their rationale. When a debt is resolved: same MOVE ritual. New debt found during any pass → new P4 line, never a separate file.
 
-**Roadmap note = a line, not a spec.** A ✅ note holds status + PR ref + a pointer to the courante spec + the still-open remainder (⬜). If you are writing behavioural detail (filters, natural keys, endpoints, edge cases) into a roadmap note, stop: that content belongs in `courantes/`; the roadmap keeps the pointer.
+**Graduation check (mandatory each run, opposable):** for **every item delivered this run**, either **name the `courantes/` file that receives the behaviour** (create or extend it in the same pass) or **state in the change summary why no graduation applies**. Silence is not an option — "updated the roadmap line" alone is the failure mode this check blocks (2026-07-06: school-holidays + public-holidays imports fully specced in roadmap notes, nothing in courantes, snapshot stale across 2 PRs). Then also sweep `specs/evolution/` for older delivered items (merged PR, code present) and graduate them. The audit found shipped features still sitting in evolution/ months later (DOC-04).
+
+**A roadmap line is a line, not a spec.** It holds the problem, its proof (`file:line`), the decision if one was taken, and the traps a future implementer would step into. If you are writing the *solution's* behavioural detail (filters, natural keys, endpoints, edge cases) into a roadmap line, stop: that content belongs in a `specs/evolution/` detail file while open, and in `courantes/` once delivered.
+
+**New open items.** A bug or a need surfaced by the founder or by a review gets a roadmap line **in the right bucket**, with a **verified** proof (`file:line`, read the code — never from memory), an impact and an effort. If the need is not yet framed, say so in the line rather than inventing a solution.
 
 **API-change trigger:** if the work changed any API Platform resource, custom controller route, or DTO exposed over HTTP, regenerate `specs/courantes/openapi-snapshot.json` from the running backend and update `openapi-snapshot.meta.md` (SHA + date). A stale snapshot silently poisons the frontend type-gen pipeline. ⚠ A custom Symfony `#[Route]` is **invisible to the export** unless declared in `App\OpenApi\CustomRoutesOpenApiFactory` — a new custom route means a factory entry **plus** the regen; regenerating alone silently misses it.
 
 No `archive/` bucket — nothing is lost (git + `initiales` hold the history). When reconciling, flag files that are neither current nor future (e.g. one-off process/handoff notes) and propose removing them; do not silently delete large specs — surface the list first.
 
 ### Steps
-1. **Decide what genuinely changed** among: business behaviour, architecture, conventions, public APIs, subproject scope. If nothing, say so and write nothing.
+1. **Decide what genuinely changed** among: business behaviour, architecture, conventions, public APIs, subproject scope. **Look before concluding** — list the docs you checked. "Nothing changed" is a finding to justify, not a default.
 2. **Drift sweep** on every doc you will touch + affected zone `AGENTS.md` (see above).
 3. **READMEs** — refresh the root README and any affected `<zone>/README.md` per the required sections above.
 4. **CLAUDE.md** — update only non-obvious facts; keep it a short index (< ~200 lines).
 5. **Zone docs** (`<zone>/docs`, `docs/project-map.md`, `docs/testing/`, `docs/technique/`) — update the affected deep-dives; add a how-to/business doc if a new structuring mechanism appeared.
 6. **ADR** — if a structural decision was made, add one and reference it in `docs/architecture/adr-index.md`.
-7. **specs/** — reconcile per the rules above: update stale `courantes`, **run the graduation check**, **run the delivered-items purge** (backlog P-lines dropped + §Livrés traces + debt lines), apply the API-change trigger, delete removed features, surface dead process notes for confirmation.
-8. **Change summary** — list files touched, facts corrected by the drift sweep, and **one line per roadmap item marked delivered this run: → receiving courantes file, or the explicit reason no graduation applies**.
+7. **specs/** — reconcile per the rules above: update stale `courantes`, **run the graduation check**, **run the MOVE** (roadmap line deleted + trace in `etat-des-lieux.md` §3 + map §1 refreshed), record any **closed decision** in §2, add roadmap lines for newly found open items, apply the API-change trigger, delete removed features, surface dead process notes for confirmation.
+8. **Change summary** — list files touched, facts corrected by the drift sweep, and **one line per item delivered this run: → receiving courantes file, or the explicit reason no graduation applies**.
+
+### Doc-only PRs
+
+A PR that touches no code gets no `/code-review` (it would have nothing to review). It gets a **completeness check** instead, written into the PR description: what moved, where it landed, and the proof that nothing was lost. `/code-review` stays mandatory on every PR that touches code.
 
 ### Rules
 - **No filler.** A future agent must get something wrong without the line.

@@ -2,12 +2,11 @@
 
 Last verified @ 2026-07-29
 
-> **Statut** : **approche arrêtée** (décisions tranchées §9) — **référence de `roadmap.md` §2**.
+> **Statut** : **approche arrêtée** (décisions tranchées §9) — **livrée** ; cf. [`etat-des-lieux.md`](etat-des-lieux.md) §1.2.
 > **Pas un plan** — pas de tâches, pas d'effort chiffré ; l'exécution se planifiera palier par palier (§8).
 > **Nature** : ce document fixe une **idée claire et maligne d'UX + d'architecture** pour
 > remplacer l'écran d'accueil, et pose la fondation des **calendriers secondaires**.
-> **Rattachement roadmap** : `roadmap.md` §2 (Modèle temporel & périodes d'exception — la
-> plus grosse zone 🔴). **Vision d'origine** : `initiales/ClubScheduler_v3.md` §3.5, §3.6, §8.
+> **Statut** : livré (cf. [`etat-des-lieux.md`](etat-des-lieux.md) §1.2) ; les restes ouverts sont en roadmap (**P3-3**, **P3-2**, **P3-13**). **Vision d'origine** : `initiales/ClubScheduler_v3.md` §3.5, §3.6, §8.
 > **Ce doc challenge la vision d'origine** là où elle est trop lourde (voir §3).
 > **Modèle métier des 3 types de planning** (socle / overlay / reprise — déclenchement,
 > manipulation, règle « semaine = unité hors socle ») : [`types-de-planning.md`](types-de-planning.md).

@@ -173,8 +173,8 @@ Changements récents :
   `GET /api/public-holidays` (contrôleurs Symfony custom) ajoutés à
   `App\OpenApi\CustomRoutesOpenApiFactory` puis au snapshot — ils manquaient aux deux.
   ⚠ Le même gap subsiste pour la plupart des autres routes `#[Route]` custom — liste
-  exhaustive + suivi dans `specs/evolution/roadmap.md` §9.
-- **G4/G5 (ex `backend-gaps`, absorbé dans `specs/evolution/roadmap.md`)** : les routes Symfony custom `/api/register`, `/api/me`
+  exhaustive + suivi en roadmap sous **P4-47**.
+- **G4/G5 (ex `backend-gaps`, livrés — cf. [`etat-des-lieux.md`](etat-des-lieux.md) §Réf historiques)** : les routes Symfony custom `/api/register`, `/api/me`
   (AuthController) et `/api/schedule-slots/{id}/manual-edit/{constraint,lock,one-time}`
   (ManualEditController) sont documentées dans l'OpenAPI via
   `App\OpenApi\CustomRoutesOpenApiFactory` (décorateur de `api_platform.openapi.factory`).

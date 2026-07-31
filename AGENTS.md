@@ -24,4 +24,4 @@ Other context files:
 - [`docs/ops/`](docs/ops/) — prod stack (`docker-compose.prod.yml`) · deploy runbook · backups & restore.
 - [`docs/technique/DEVELOPMENT.md`](docs/technique/DEVELOPMENT.md) — human quick-start.
 
-Debt, backlog and safe deletions have a **single home**: [`specs/evolution/roadmap.md`](specs/evolution/roadmap.md) (§Backlog · §Dette). Point-in-time documents that no longer describe the product live in [`docs/archive/`](docs/archive/) — historical trace only, never a source of truth.
+Debt, backlog and safe deletions have a **single home**: [`specs/evolution/roadmap.md`](specs/evolution/roadmap.md) — which holds **only what is still open**. What is already delivered, and the decisions deliberately closed against an obvious-looking option, live in [`specs/courantes/etat-des-lieux.md`](specs/courantes/etat-des-lieux.md). Asking "is X done?" is answered there, never by the roadmap. Point-in-time documents that no longer describe the product live in [`docs/archive/`](docs/archive/) — historical trace only, never a source of truth.

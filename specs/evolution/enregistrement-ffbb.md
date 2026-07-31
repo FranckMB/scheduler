@@ -2,7 +2,7 @@
 
 > **Statut** : **besoin à spécifier** (discovery **ouverte** — options posées, décisions à trancher avec l'utilisateur). **Pas un plan.**
 > **Nature** : refond le point d'entrée du produit — comment un gestionnaire prouve qu'il gère bien *ce* club, et comment on empêche les doublons / l'usurpation. Business + sécurité (anti-squatting de club).
-> **Rattachement roadmap** : `roadmap.md` §3 (onboarding) — croise §8 (import FFBB, FF#19).
+> **Rattachement roadmap** : **P3-4** — croise **P1-4** et **P2-19** (API FFBB).
 > **Réutilise l'existant** : `Club.ffbbClubCode` · membership `ClubUser` + approbation (`MembershipController`) · mailer (déjà câblé pour le reset mot de passe) · `FfbbExcelImporter` (import équipes).
 
 ---

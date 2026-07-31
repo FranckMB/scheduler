@@ -2,7 +2,7 @@
 
 > **Statut** : **besoin spécifié** (discovery close, décisions tranchées §5) — **pas un plan**.
 > **Nature** : fixe le modèle de bridage du plan gratuit (Découverte / freemium), business-critique — pas de SaaS sans verrou de conversion.
-> **Rattachement roadmap** : `roadmap.md` §6 (pricing & bridage). Concrétise le bridage Découverte + l'enforcement `generation_count`.
+> **Rattachement roadmap** : **P1-3**. Concrétise le bridage Découverte + l'enforcement `generation_count`.
 > **Réutilise l'existant** : `Club.planId` · `billing_cycle`/`plan_expires_at` · `generation_count_season` · le **verrou read-only serveur** des 4 chemins d'édition (patron de la version choisie, ADR-0002). **Zéro changement engine.**
 
 ---

@@ -272,4 +272,4 @@ atteindre PostgreSQL. `GET /api/admin/health` a par ailleurs été étendu de fa
 
 ⚠ Ces trois routes sont des **contrôleurs purs** : elles ne sont pas déclarées dans
 `CustomRoutesOpenApiFactory`, donc **absentes de l'export OpenAPI** — même gap que les
-autres routes `#[Route]` custom, suivi dans `specs/evolution/roadmap.md` §9.
+autres routes `#[Route]` custom, suivi en roadmap sous **P4-47**.

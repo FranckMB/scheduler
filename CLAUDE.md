@@ -67,7 +67,7 @@ All custom agents/skills are **manual / user-triggered**. No hidden automation, 
 
 **Two lanes.** Pick the lane BEFORE starting and say which one applies:
 - **Full lane** (default for any feature, behaviour change, API/schema change, or anything touching a structuring axis §7.1).
-- **Light lane** — only if ALL true: ≤2 files, no behaviour/API/schema change, no structuring axis touched (typo, label, doc, tiny fix). Cycle: implement → relevant tests green locally → doc check declaration → `/code-review` → PR → user go.
+- **Light lane** — only if ALL true: ≤2 files, no behaviour/API/schema change, no structuring axis touched (typo, label, doc, tiny fix). Cycle: implement → relevant tests green locally → `documentation-update` → `/code-review` → PR → user go.
 
 **Full lane cycle:**
 0. **Lire le CODE avant d'analyser (non négociable, précède tout le reste).** Tout constat sur l'existant — « ça n'existe pas », « c'est déjà fait », « ce champ vaut X », « ce fichier dit Y » — se **vérifie dans le code** (grep/read/test), jamais de mémoire ni par déduction depuis un doc. La doc et les mémoires d'agent **retardent toujours** sur le code. Coût observé du raccourci : un besoin cadré sur une prémisse fausse part à contresens et se découvre 3 rounds de revue plus tard. Corollaire : ne jamais écrire « vérifié » sur un balayage partiel, et citer `fichier:ligne` quand on affirme un fait sur l'existant.
@@ -76,8 +76,8 @@ All custom agents/skills are **manual / user-triggered**. No hidden automation, 
 3. Implement **strictly in scope** (no opportunistic refactor).
 4. **Non-regression (mandatory if a structuring axis §7.1 is touched):** add/extend a test guarding the axis in the same PR (`--group phase1`, engine invariant/golden, or e2e).
 5. **Tests green locally before proposing merge** — run `/validation-runner` (selects the changed zone's targeted suite + cross-zone contract test + the mandatory smoke-solver when engine/backend is touched, and justifies any suite it could not run); it must be green on blocking tests + the new NR tests + zone suite. CI is a double-check and does NOT block the merge.
-6. Change summary + **doc check (mandatory):** either run `documentation-update`, or state explicitly "no doc impacted because …". Never skip silently.
-7. **`/code-review` on every PR** (+ `/security-review` if the change touches auth/data/external integrations). **Cadrer la revue sur le PÉRIMÈTRE DE LA PR** — le diff et ce qu'il casse (appelants, tests, contrats) : une revue qui part auditer le reste du dépôt noie le vrai défaut sous des remarques hors sujet et fait exploser les rounds. Un défaut réel repéré hors diff ne se corrige pas dans la PR : il devient une ligne de dette en roadmap.
+6. Change summary + **`documentation-update` (mandatory, EXÉCUTÉ — avant chaque PR, les deux lanes).** La doc est **vivante** : une PR qui corrige, ajoute ou retire quelque chose a de la doc à mettre à jour **quelque part**. « Rien d'impacté » est une conclusion qu'on atteint en regardant (et en disant quels fichiers ont été regardés), jamais une hypothèse de départ. Le skill porte la règle des deux fichiers : `specs/evolution/roadmap.md` = **l'ouvert seulement**, `specs/courantes/etat-des-lieux.md` = **le livré + les décisions fermées**. Un item livré **quitte** la roadmap ; il n'y passe jamais en ✅.
+7. **`/code-review` on every PR qui touche du CODE** (+ `/security-review` if the change touches auth/data/external integrations). **PR doc-only** → pas de `/code-review` (il n'aurait rien à relire) mais un **check de complétude** écrit dans la description : ce qui a bougé, où c'est atterri, la preuve que rien n'est perdu. **Cadrer la revue sur le PÉRIMÈTRE DE LA PR** — le diff et ce qu'il casse (appelants, tests, contrats) : une revue qui part auditer le reste du dépôt noie le vrai défaut sous des remarques hors sujet et fait exploser les rounds. Un défaut réel repéré hors diff ne se corrige pas dans la PR : il devient une ligne de dette en roadmap.
 8. PR → **user's explicit go** → merge.
 
 ### 7.1 Structuring axes (closed list — NR test required when touched)
@@ -88,7 +88,9 @@ tenant isolation (filter/listener/voters) · generation pipeline (controller→m
 
 ## 8. Documentation rules
 
-`CLAUDE.md` = short index; `docs/` = detail; **one canonical home, no duplication**. Root `AGENTS.md` is a pointer to this file; nested `backend/AGENTS.md` & `engine/AGENTS.md` hold package-level detail. Update only via the `documentation-update` skill when behaviour / architecture / conventions / APIs actually changed. Structural decisions → ADR in `docs/architecture/adr-index.md`. Update `specs/courantes/` per the triggers in `specs/README.md`.
+`CLAUDE.md` = short index; `docs/` = detail; **one canonical home, no duplication**. Root `AGENTS.md` is a pointer to this file; nested `backend/AGENTS.md` & `engine/AGENTS.md` hold package-level detail. Update via the `documentation-update` skill, **exécuté avant chaque PR** (§7 étape 6). Structural decisions → ADR in `docs/architecture/adr-index.md`. Update `specs/courantes/` per the triggers in `specs/README.md`.
+
+**Les deux fichiers de suivi (refonte 2026-07-31) — ne jamais les confondre :** `specs/evolution/roadmap.md` ne tient que **ce qui reste à faire** (bugs, évolutions, dette, parking, vision) ; `specs/courantes/etat-des-lieux.md` tient **ce qui est livré**, les **décisions fermées** (abandons tranchés — sans elles le sujet se re-pose tous les trois mois) et les traces datées. Un item livré **quitte** la roadmap et atterrit dans l'état des lieux, jamais les deux, jamais aucun. « Est-ce que X est fait ? » se répond dans l'état des lieux, pas dans la roadmap.
 
 ## 9. Scope checklist — inject verbatim into every `/plan`; the produced plan must fill these literally
 
@@ -110,7 +112,7 @@ tenant isolation (filter/listener/voters) · generation pipeline (controller→m
 3. `contracts/` and the top-level `tests/` dir are empty placeholders (cross-stack tests live in `backend/tests/`).
 4. Frontend is rebuilt + **active** — indexed by the graph (only its build artifacts `dist`/`node_modules`/`storybook-static` are ignored). Tenant is resolved server-side from the JWT: the frontend sends **no** `X-Club-Id` header.
 
-**Pointers:** `docs/project-map.md` · `docs/glossary.md` (termes & clés de payload) · `docs/testing/testing-strategy.md` · `specs/evolution/roadmap.md` (suivi unique : carte + backlog priorisé + dette) · `docs/architecture/adr-index.md` · `specs/README.md` · commandes backend : `backend/docs/commands.md` · routes FFBB : `backend/docs/ffbb-api.md` · **ops (backups `pg_dump`/restore-check + activation Sentry 3 zones)** : `docs/ops/backup-restore.md` · **stack prod (`docker-compose.prod.yml`, images immuables, INF-03)** : `docs/ops/prod-stack.md` · **déployer (tag `v*` → ghcr.io → SSH, runbook fondateur)** : `docs/ops/deploy.md` · **sécurité** : `docs/security/` (`rls.md` · `mercure.md` · `rgpd.md`) · docs sorties du périmètre actif : `docs/archive/`
+**Pointers:** `docs/project-map.md` · `docs/glossary.md` (termes & clés de payload) · `docs/testing/testing-strategy.md` · `specs/evolution/roadmap.md` (**l'ouvert** : backlog priorisé + dette + parking + vision) · `specs/courantes/etat-des-lieux.md` (**le livré** : carte des capacités + décisions fermées + traces datées) · `docs/architecture/adr-index.md` · `specs/README.md` · commandes backend : `backend/docs/commands.md` · routes FFBB : `backend/docs/ffbb-api.md` · **ops (backups `pg_dump`/restore-check + activation Sentry 3 zones)** : `docs/ops/backup-restore.md` · **stack prod (`docker-compose.prod.yml`, images immuables, INF-03)** : `docs/ops/prod-stack.md` · **déployer (tag `v*` → ghcr.io → SSH, runbook fondateur)** : `docs/ops/deploy.md` · **sécurité** : `docs/security/` (`rls.md` · `mercure.md` · `rgpd.md`) · docs sorties du périmètre actif : `docs/archive/`
 
 <!-- rtk-instructions v2 -->
 # RTK (Rust Token Killer) - Token-Optimized Commands

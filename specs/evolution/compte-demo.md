@@ -2,7 +2,7 @@
 
 > **Statut** : **besoin à spécifier** (discovery **ouverte** — options posées, décisions à trancher). **Pas un plan.**
 > **Nature** : levier de **vente**. Montrer en quelques secondes le « wow » du solveur (un vrai planning de club résolu) sans que le prospect saisisse quoi que ce soit.
-> **Rattachement roadmap** : `roadmap.md` §3 (onboarding) — concrétise la ligne existante **« Mode démo »** (fort levier de vente).
+> **Rattachement roadmap** : **P2-4** (fort levier de vente). ⚠ Dépend en pratique de **P4-16** — sans horloge simulée pilotant le « aujourd'hui » de l'UI, la démo montre la mauvaise date.
 > **Réutilise l'existant** : fixtures **`BasketballInit`** (déjà un club réaliste, BCCL, 40+ équipes, contraintes, réservations, couleurs) · plan **Découverte** · `ResetSeasonController` / `app:seasons:purge` · seed superadmin (reset).
 
 ---
