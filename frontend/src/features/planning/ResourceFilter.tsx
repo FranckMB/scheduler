@@ -57,8 +57,14 @@ export function ResourceFilter({ viewMode, groups, selected, onToggle, onClear }
         aria-controls={panelId}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex h-8 items-center gap-2 rounded-md border px-3 text-sm",
-          active ? "border-accent bg-accent/10 font-medium text-accent hover:bg-accent/20" : "border-border bg-background text-foreground hover:bg-muted",
+          "flex h-8 items-center gap-2 rounded-md border bg-background px-3 text-sm",
+          // ⚠ L'état actif ne porte AUCUN fond teinté, et son survol n'en pose pas non plus.
+          // Mesuré : `text-accent` sur `bg-accent/10` tombe à 4.18:1 en thème clair, sur
+          // `bg-muted` à 4.37:1 — sous les 4.5:1 que WCAG 1.4.3 exige d'un texte normal
+          // (14 px medium n'est pas du « grand texte »). Même `accent/05` échoue (4.47:1).
+          // Sur le fond nu : 4.77:1 en clair, 7.41:1 en sombre. La distinction se fait donc
+          // par la bordure, la couleur du texte, la graisse — et le libellé lui-même.
+          active ? "border-accent font-medium text-accent hover:ring-1 hover:ring-accent/50" : "border-border text-foreground hover:bg-muted",
         )}
       >
         <span className={cn("font-medium", active ? "" : "text-muted-foreground")}>{LABELS[viewMode]} :</span>

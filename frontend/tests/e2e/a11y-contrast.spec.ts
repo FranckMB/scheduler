@@ -99,7 +99,11 @@ for (const mode of MODES) {
       const bg = of("bg-background", "backgroundColor");
       const card = of("bg-card", "backgroundColor");
       const out: Record<string, number> = {};
-      for (const token of ["text-warning", "text-success"]) {
+      // `text-accent` rejoint la liste avec P4-43 : le filtre de ressources actif écrit son
+      // libellé en accent. La mesure a valu son prix — le fond teinté qu'on lui destinait
+      // (`bg-accent/10`) tombait à 4.18:1 en clair, et `bg-muted` au survol à 4.37:1. Sur
+      // le fond nu il passe (4.77:1). Ce jeton est désormais du TEXTE : il se garde ici.
+      for (const token of ["text-warning", "text-success", "text-accent"]) {
         const fg = of(token, "color");
         out[`${token} on background`] = ratio(fg, bg);
         out[`${token} on card`] = ratio(fg, card);
