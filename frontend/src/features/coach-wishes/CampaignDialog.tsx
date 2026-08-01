@@ -3,7 +3,7 @@ import { HTTPError } from "ky";
 import { Check, Copy, Send } from "lucide-react";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
-import { isActionableWeek, periodAdjustWeeks, todayISO } from "@/features/cockpit/lib/date";
+import { addDays, isActionableWeek, periodAdjustWeeks, todayISO } from "@/features/cockpit/lib/date";
 import { useUpdateCoach, useWizardTeamCoaches, useWizardTeams } from "@/features/wizard/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -62,8 +62,17 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
     }
     const all = periodAdjustWeeks(entry.startDate, entry.endDate, season, entry.periodType);
     const kept = new Set(existing?.weeks ?? []);
+    const offered = all.filter((w) => isActionableWeek(w, today) || kept.has(w.monday));
+    // ⚠ Une semaine retenue par la campagne peut ne PLUS être émise du tout — la période
+    // a été redimensionnée, ou la fenêtre de saison a bougé. Se contenter de filtrer `all`
+    // la laissait invisible tout en la gardant dans l'état, que `save()` renvoyait : le
+    // gestionnaire confirme ce qu'il voit et sollicite pour une semaine que l'écran ne lui
+    // a jamais montrée (revue #344 round 2 — le défaut même que le round 1 prétendait
+    // clore). On la reconstruit depuis son lundi pour qu'elle reste sous les yeux.
+    const shown = new Set(offered.map((w) => w.monday));
+    const orphans = [...kept].filter((monday) => !shown.has(monday)).map((monday) => ({ monday, startDate: monday, endDate: addDays(monday, 6) }));
 
-    return all.filter((w) => isActionableWeek(w, today) || kept.has(w.monday));
+    return [...offered, ...orphans].sort((a, b) => a.monday.localeCompare(b.monday));
   }, [entry, season, existing, today]);
 
   // Équipes ayant AU MOINS un coach — cocher une équipe sans coach ne crée aucun lien.
@@ -80,7 +89,11 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   // solliciter les coachs pour du passé.
   const [weeks, setWeeks] = useState<Set<string>>(() => new Set(existing ? existing.weeks : availableWeeks.filter((w) => isActionableWeek(w, today)).map((w) => w.monday)));
   const [teamIds, setTeamIds] = useState<Set<string>>(() => new Set(existing ? existing.teamIds : []));
-  const [deadline, setDeadline] = useState<string>(existing?.deadline ?? entry.startDate);
+  // La date limite par défaut était `entry.startDate`, donc DANS LE PASSÉ dès que la
+  // période a commencé — cas que ce lot vient précisément de rendre légitime. Les liens
+  // partaient morts : le serveur répond 410 « deadline dépassée », et le gestionnaire ne
+  // l'apprenait qu'en voyant les coachs ne pas répondre (revue #344 round 2).
+  const [deadline, setDeadline] = useState<string>(existing?.deadline ?? (entry.startDate > today ? entry.startDate : today));
 
   const toggle = (set: Set<string>, value: string, apply: (next: Set<string>) => void) => {
     const next = new Set(set);
@@ -154,7 +167,7 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
 
       <label className="mt-4 flex items-center gap-2 text-sm font-medium">
         À renvoyer avant le
-        <Input type="date" className="h-8 w-40" value={deadline} onChange={(e) => setDeadline(e.target.value)} aria-label="Date limite" />
+        <Input type="date" min={today} className="h-8 w-40" value={deadline} onChange={(e) => setDeadline(e.target.value)} aria-label="Date limite" />
       </label>
 
       {failed ? <p className="mt-3 text-sm text-destructive">Enregistrement impossible. Vérifiez les semaines et équipes choisies.</p> : null}

@@ -170,6 +170,28 @@ export function actionableWeeks(weeks: WeekWindow[], today: string): WeekWindow[
   return weeks.filter((w) => isActionableWeek(w, today));
 }
 
+/**
+ * LES SEMAINES QU'UNE PÉRIODE OFFRE ENCORE — le seul point d'entrée pour OFFRIR une
+ * semaine, partout (radar, modale du jour, picker).
+ *
+ * `periodAdjustWeeks` répond à la GÉOMÉTRIE (« quelles semaines cette période couvre-t-elle,
+ * la partielle du vendredi écartée »), pas au TEMPS. Les avoir gardées séparées a coûté
+ * (revue #344 round 2) : le picker proposait — et cochait — des semaines révolues, dont la
+ * création produisait un plan de semaine que le radar filtrait ensuite partout. Un
+ * artefact sans carte, sans puce et sans retour possible.
+ *
+ * Une règle vaut à TOUS ses sites, sinon les écrans se contredisent (CLAUDE.md §7.2 pt 1).
+ */
+export function periodWeeksToAdjust(
+  start: string,
+  end: string,
+  season: { startDate: string; endDate: string },
+  periodType: string | null,
+  today: string,
+): WeekWindow[] {
+  return actionableWeeks(periodAdjustWeeks(start, end, season, periodType), today);
+}
+
 export function periodAdjustWeeks(start: string, end: string, season: { startDate: string; endDate: string }, periodType: string | null): WeekWindow[] {
   const weeks = weeksCovering(start, end, season);
   // Garde `weeks[0].startDate === monday` (revue C F3) : on n'écarte QUE si la 1ʳᵉ

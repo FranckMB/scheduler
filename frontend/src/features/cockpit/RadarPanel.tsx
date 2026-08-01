@@ -6,11 +6,12 @@ import { useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
+import { readFailed, readLoading } from "@/shared/lib/readState";
 import { cn } from "@/shared/lib/utils";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
 import { useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
-import { clampRangeToSeason, daysUntil, frDateShort, isActionableWeek, periodAdjustWeeks, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { clampRangeToSeason, daysUntil, frDateShort, isActionableWeek, periodWeeksToAdjust, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
 import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
@@ -178,7 +179,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     // elle est OFFERTE à la création (periodAdjustWeeks écarte la semaine partielle
     // d'une vacance démarrant Ven/Sam/Dim). Une semaine partielle SANS enfant
     // disparaît (pas de chip « + créer ») ; AVEC enfant, elle reste (jamais orpheline).
-    const offeredMondays = new Set(periodAdjustWeeks(m.startDate, m.endDate, workingSeason, m.periodType).map((w) => w.monday));
+    const offeredMondays = new Set(periodWeeksToAdjust(m.startDate, m.endDate, workingSeason, m.periodType, today).map((w) => w.monday));
     return stillOpen(
       weeksCovering(m.startDate, m.endDate, workingSeason)
         .map((week) => ({ week, child: children.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null }))
@@ -212,7 +213,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   const requestAdapt = (entry: CalendarEntry) => {
     const planId = (plans ?? []).find((p) => p.calendarEntryId === entry.id)?.id ?? null;
     const blockGenerated = null !== planId && plansWithVersions.has(planId);
-    const multiWeek = null !== workingSeason && periodAdjustWeeks(entry.startDate, entry.endDate, workingSeason, entry.periodType).length > 1;
+    const multiWeek = null !== workingSeason && periodWeeksToAdjust(entry.startDate, entry.endDate, workingSeason, entry.periodType, today).length > 1;
     if (multiWeek && !childrenByParent.has(entry.id) && !schedulesUnresolved && !blockGenerated) {
       setPickerFor(entry);
       return;
@@ -226,8 +227,12 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // Ignored ones stay in the map so a dismissed holiday is skipped below, not re-proposed.
   const entryByHoliday = new Map(entries.filter((e) => null !== e.schoolHolidayId).map((e) => [e.schoolHolidayId as string, e]));
 
-  const upcomingHolidays = holidays
-    .filter((h) => h.startDate >= today)
+  const holidaysInScope = holidays
+    // ⚠ `endDate`, pas `startDate` (revue #344 round 2) : une vacance DÉJÀ COMMENCÉE dont
+    // les jours restent devant doit garder sa carte — c'est la même règle qu'au niveau
+    // semaine (`isActionableWeek`), et la laisser diverger ici faisait disparaître, dès le
+    // samedi de son début, le seul point d'entrée vers « Adapter » et « Solliciter ».
+    .filter((h) => h.endDate >= today)
     // P3-13 (a) : horizon, comme les fériés en ont un depuis toujours. Sans lui, `.slice(0, 3)`
     // laissait passer Noël en plein été — trois vacances, mais pas les trois PROCHAINES au
     // sens où le gestionnaire peut agir dessus.
@@ -249,8 +254,19 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       const e = entryByHoliday.get(h.id);
       return undefined === e || (!pendingEntryIds.has(e.id) && !childrenByParent.has(e.id));
     })
-    .sort((a, b) => a.startDate.localeCompare(b.startDate))
-    .slice(0, 3);
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  // Le cap borne le BRUIT, pas les cartes qu'on a décidé de garder : trié par date, une
+  // vacance lointaine exemptée est toujours la dernière, donc la première coupée — le cap
+  // annulait silencieusement l'exemption qu'il côtoie (revue #344 round 2).
+  const exemptFromCap = (h: SchoolHoliday): boolean => {
+    const e = entryByHoliday.get(h.id);
+
+    return undefined !== e && campaignByEntry.has(e.id);
+  };
+  const upcomingHolidays = [...holidaysInScope.filter((h) => !exemptFromCap(h)).slice(0, 3), ...holidaysInScope.filter(exemptFromCap)].sort((a, b) =>
+    a.startDate.localeCompare(b.startDate),
+  );
 
   const disruptiveEvents = roots
     .filter((e) => e.kind === "event" && e.isDisruptive && e.endDate >= today)
@@ -313,8 +329,16 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // l'horizon » (le masquage est voulu — ne pas faire clignoter une carte qui va
   // disparaître), donc un cadre « À traiter » vide pendant quelques centaines de ms, qui
   // se lit comme « rien à faire ». Un squelette dit la seule chose vraie : on ne sait pas
-  // encore. Mêmes drapeaux que `isEmpty` ci-dessous — une seule liste, pas deux.
-  const stillLoading = plansUnresolved || schedulesUnresolved || closureImpactsPending || zoneLoading || publicHolidaysLoading;
+  // encore.
+  //
+  // ⚠ CHARGER ≠ ÉCHOUER (revue #344 round 2, et c'est la doctrine `shared/lib/readState`) :
+  // `plansUnresolved` veut dire « pas de donnée », donc il reste VRAI pour toujours après
+  // un premier chargement en échec. Bâtir le squelette dessus transformait une erreur de
+  // lecture en « Chargement… » perpétuel — l'écran affirmait qu'il travaillait alors qu'il
+  // avait renoncé. On distingue donc les deux, et l'échec se DIT.
+  const stillLoading =
+    readLoading(plansQuery) || readLoading(schedulesQuery) || readLoading(campaignsQuery) || closureImpactsPending || zoneLoading || publicHolidaysLoading;
+  const readsFailed = readFailed(plansQuery) || readFailed(schedulesQuery) || readFailed(campaignsQuery);
 
   const isEmpty =
     inProgressEntries.length === 0 &&
@@ -328,6 +352,10 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     // Même règle que plansUnresolved : schedules en vol = une carte « en cours »
     // peut encore apparaître — « Tout roule » serait un silence menteur.
     !schedulesUnresolved &&
+    // L'exemption d'horizon fait dépendre l'EXISTENCE d'une carte de cette lecture : sans
+    // elle, une vacance lointaine qui porte une campagne disparaît et « Tout roule »
+    // deviendrait un vide crédible (revue #344 round 2).
+    undefined !== campaignsQuery.data &&
     cutoffs.length === 0 &&
     upcomingPublicHolidays.length === 0 &&
     zone !== null &&
@@ -506,7 +534,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                   const pending = { schoolHolidayId: h.id, label: h.label, startDate: range.startDate, endDate: range.endDate };
                   // Vacances couvrant PLUSIEURS semaines → picker SANS création (la
                   // mère naît à la confirmation) ; 1 semaine → création + wizard direct.
-                  const multiWeek = null !== workingSeason && periodAdjustWeeks(range.startDate, range.endDate, workingSeason, "holiday").length > 1;
+                  const multiWeek = null !== workingSeason && periodWeeksToAdjust(range.startDate, range.endDate, workingSeason, "holiday", today).length > 1;
                   if (multiWeek) {
                     openPendingPicker(pending);
                     return;
@@ -563,6 +591,14 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         </div>
       ) : null}
 
+      {/* Une lecture ratée n'est ni « ça charge » ni « tout roule » : on le dit, sinon
+          l'écran renonce en silence (doctrine `readState`). */}
+      {readsFailed ? (
+        <p role="alert" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          Impossible de charger les éléments à traiter — cette liste est peut-être incomplète.
+        </p>
+      ) : null}
+
       {isEmpty ? <p className="text-sm text-muted-foreground">Rien à l'horizon. Tout roule.</p> : null}
 
       {/* Vacance PAS encore matérialisée : picker sur une mère synthétique (aucune
@@ -572,7 +608,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           title={pendingHoliday.label}
           startDate={pendingHoliday.startDate}
           endDate={pendingHoliday.endDate}
-          weeks={periodAdjustWeeks(pendingHoliday.startDate, pendingHoliday.endDate, workingSeason, "holiday")}
+          weeks={periodWeeksToAdjust(pendingHoliday.startDate, pendingHoliday.endDate, workingSeason, "holiday", today)}
           busy={createHoliday.isPending || createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeksPending(pendingHoliday, weeks)}
           onAdaptWhole={() => adaptWholePending(pendingHoliday)}
@@ -585,7 +621,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           title={pickerFor.title}
           startDate={pickerFor.startDate}
           endDate={pickerFor.endDate}
-          weeks={periodAdjustWeeks(pickerFor.startDate, pickerFor.endDate, workingSeason, pickerFor.periodType)}
+          weeks={periodWeeksToAdjust(pickerFor.startDate, pickerFor.endDate, workingSeason, pickerFor.periodType, today)}
           busy={createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
           onAdaptWhole={() => {
