@@ -139,7 +139,7 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
         <label className="text-xs text-muted-foreground">
           Durée
           <Select aria-label="Durée" className="mt-0.5 h-9 w-28" value={duration} onChange={(e) => (setDuration(Number(e.target.value)), setError(null))}>
-            {durationOptions(duration).map((d) => (
+            {durationOptions(duration, slot.durationMinutes).map((d) => (
               <option key={d} value={d}>
                 {formatDuration(d)}
               </option>

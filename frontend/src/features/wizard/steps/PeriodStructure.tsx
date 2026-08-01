@@ -20,7 +20,7 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
 import { DAYS, durationOptions, hhmm } from "../lib/days";
-import { findSlotConflict, pastMidnightMessage, slotPlacementError } from "../lib/slotOverlap";
+import { slotPlacementError } from "../lib/slotOverlap";
 import {
   useCreatePeriodConstraintOverride,
   useClearVenuePeriodGrid,
@@ -544,16 +544,13 @@ function PeriodVenuePanel({
             // (22:00–23:30) est légitime, et l'y interdire rendait la période plus stricte
             // que la saison (revue #8 PR-B round 2). La seule borne est MINUIT (P4-37).
             // ⚠ Ici la durée est FIXE (90 min) : ce panneau n'a pas de barre « À poser ».
-            // Renvoyer le message générique désignerait une durée que l'utilisateur ne peut
-            // pas changer avant de poser, et la dernière rangée de la grille (22:45) serait
-            // définitivement inutilisable sans qu'aucun écran ne dise comment faire. On
-            // nomme donc le chemin : poser plus tôt, puis ajuster dans l'éditeur.
-            if (null !== pastMidnightMessage(startTime, 90)) {
-              toast.error(`Posé à ${startTime}, un créneau de 1h30 finirait après minuit. Posez-le plus tôt, puis ajustez son horaire dans l'éditeur.`);
-              return;
-            }
-            if (null !== findSlotConflict(slots, dayOfWeek, startTime, 90)) {
-              toast.error("Ce créneau en chevauche un autre sur ce gymnase.");
+            // Le message générique désignerait une durée que l'utilisateur ne peut pas
+            // régler avant de poser. Il nomme donc le chemin réel — et il nomme les DEUX
+            // gestes : avancer l'heure sans raccourcir la durée ne suffit pas toujours,
+            // conseiller « ajustez l'horaire » seul envoyait vers un éditeur qui refuse.
+            const invalid = slotPlacementError(slots, dayOfWeek, startTime, 90, (start) => `Posé à ${start}, un créneau de 1h30 finirait après minuit. Posez-le plus tôt, puis ajustez son horaire et sa durée dans l'éditeur.`);
+            if (null !== invalid) {
+              toast.error(invalid);
               return;
             }
             createSlot.mutate({ venueId: venue.id, dayOfWeek, startTime, durationMinutes: 90, capacity: 1 });
@@ -672,9 +669,10 @@ function PeriodSlotEditor({
   const reservationCount = reservationsHere.length;
 
   const doSave = () => {
-    // Pas de borne de fin de journée : la saison n'en a pas, un créneau du soir
-    // (21:00–22:30) y est légitime. Ne referme qu'au succès — une écriture rejetée garde
-    // l'éditeur ouvert plutôt que de disparaître en donnant l'illusion d'être enregistrée.
+    // La période n'est pas plus stricte que la saison : un créneau du soir (22:00–23:30)
+    // reste légitime, la seule borne est MINUIT — posée en amont par `slotPlacementError`
+    // dans `save`, pas ici. Ne referme qu'au succès : une écriture rejetée garde l'éditeur
+    // ouvert plutôt que de disparaître en donnant l'illusion d'être enregistrée.
     update.mutate(
       { id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } },
       {
@@ -727,7 +725,7 @@ function PeriodSlotEditor({
         <label className="text-xs text-muted-foreground">
           Durée
           <Select aria-label="Durée" className="mt-0.5 h-9 w-28" value={duration} onChange={(e) => (setDuration(Number(e.target.value)), setError(null))}>
-            {durationOptions(duration).map((d) => (
+            {durationOptions(duration, slot.durationMinutes).map((d) => (
               <option key={d} value={d}>
                 {formatDuration(d)}
               </option>

@@ -37,6 +37,12 @@ export const DURATIONS = [45, 60, 75, 90, 105, 120, 135, 150];
  * VIDE, exactement comme le select « Jour » face à un dimanche. CHOISIR se restreint,
  * NOMMER jamais : la liste offerte se complète de ce qui est déjà là.
  */
-export function durationOptions(current: number): number[] {
-  return DURATIONS.includes(current) ? DURATIONS : [...DURATIONS, current].sort((a, b) => a - b);
+export function durationOptions(...present: number[]): number[] {
+  // ⚠ Variadique, et non « la valeur courante » : appelée avec le seul état du select, elle
+  // retirait l'option d'origine dès le premier changement — le gestionnaire ouvrait un
+  // créneau de 30 min, déroulait pour comparer, et ne pouvait PLUS revenir à 30. Il faut
+  // donc lui passer la valeur STOCKÉE autant que la valeur éditée.
+  const extra = present.filter((d) => Number.isFinite(d) && d > 0 && !DURATIONS.includes(d));
+
+  return 0 === extra.length ? DURATIONS : [...new Set([...DURATIONS, ...extra])].sort((a, b) => a - b);
 }

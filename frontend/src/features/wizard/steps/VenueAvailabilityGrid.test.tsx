@@ -36,16 +36,24 @@ describe("VenueAvailabilityGrid — les bornes de ce qu'on peut poser", () => {
     expect(onAdd).toHaveBeenCalledWith(2, "22:45");
   });
 
-  it("garde un créneau HORS plage sur une ligne qui existe, sans mentir sur son heure", () => {
-    // `startRow` n'était borné par rien. À 07:00 il valait -2 : en CSS une ligne négative
-    // se compte depuis la FIN de la grille explicite, donc le bloc s'affichait à 22:45 en
-    // portant le libellé « 07:00 » — un créneau du matin lu comme un créneau du soir.
-    // L'API ne borne pas `startTime` (`Regex('/^\d{2}:\d{2}$/')` seul).
-    render(<VenueAvailabilityGrid venue={venue} slots={[slot({ startTime: "07:00:00" })]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} />);
+  it("ÉTEND la grille vers le haut plutôt que de reloger un créneau matinal", async () => {
+    // Trois comportements se sont succédé ici, et les deux premiers mentaient.
+    //  (1) Ligne libre : 07:00 donnait `grid-row: -2`, compté depuis la FIN de la grille —
+    //      le bloc s'affichait à 22:45 sous le libellé « 07:00 ».
+    //  (2) Ligne BORNÉE (round 2) : le bloc venait se poser sur la ligne 08:00, recouvrant
+    //      des cellules vides qui ne répondaient plus au clic et masquant un créneau de
+    //      08:00 légitime. Ce test épinglait alors ce relogement, donc il le PROTÉGEAIT.
+    //  (3) Grille ÉTENDUE : la plage suit les données, le bloc tombe où il est.
+    const onAdd = vi.fn();
+    const user = userEvent.setup();
+    render(<VenueAvailabilityGrid venue={venue} slots={[slot({ startTime: "07:00:00" })]} selectedSlotId={null} onAdd={onAdd} onSelect={vi.fn()} />);
 
-    const block = screen.getByRole("button", { name: /07:00/ });
-    // Première ligne de créneaux = 2 (la 1 porte les en-têtes de jours).
-    expect(block).toHaveStyle({ gridRow: "2 / span 6" });
+    // La grille commence à 07:00 : le créneau est sur SA ligne, la toute première.
+    expect(screen.getByRole("button", { name: /^07:00 ·/ })).toHaveStyle({ gridRow: "2 / span 6" });
+
+    // …et surtout la cellule de 08:00 reste POSABLE — c'est ce que le relogement cassait.
+    await user.click(screen.getByRole("button", { name: "Lun 08:00" }));
+    expect(onAdd).toHaveBeenCalledWith(1, "08:00");
   });
 
   it("affiche un créneau du dimanche déjà posé", () => {

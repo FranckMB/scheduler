@@ -829,6 +829,15 @@ sans le verrouiller de façon permanente :
 
 ## 7. Reference Day Anchoring
 
+> ⚠ **Section OBSOLÈTE dans son implémentation (constaté le 2026-08-01, P4-37).** Elle décrit
+> une pile — **FullCalendar 6** et une validation **Zod** (`VenueSlotSchema`) — dont on ne trouve
+> **aucune trace** dans le dépôt : ni dans `frontend/package.json`, ni dans `frontend/src/`. Elle
+> date d'avant la reconstruction du frontend. Le **concept** d'ancrage reste juste ; les extraits
+> de configuration et les bornes qu'ils citent (`hiddenDays: [0]`, `slotMaxTime: '22:00:00'`,
+> `z.number().min(1).max(6)`) ne décrivent **rien de ce qui tourne** — et ils contredisent
+> désormais la géométrie réelle, qui vit dans **`frontend/src/features/wizard/lib/weekGrid.ts`**
+> (sept jours, 08h→23h) et n'a pas de validation Zod. Ne pas s'y fier sans lire ce fichier.
+
 ### Concept
 
 Le planning ClubScheduler est une **semaine type** de **sept jours** (lundi à

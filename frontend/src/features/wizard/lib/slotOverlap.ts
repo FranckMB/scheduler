@@ -42,12 +42,10 @@ const DAY_END = 24 * 60;
  */
 export function pastMidnightMessage(startTime: string, durationMinutes: number): string | null {
   const start = toMinutes(startTime);
-  // ⚠ `startTime` vient d'un `<input type="time">` que l'utilisateur peut VIDER en cours
-  // de frappe : `toMinutes("")` rend NaN, et `NaN <= DAY_END` étant faux, la garde criait
-  // « un créneau qui commence à ⟨rien⟩ ne peut pas durer 1h30 » — en désignant la durée,
-  // que l'utilisateur n'avait pas touchée, et en court-circuitant le contrôle de
-  // chevauchement placé après elle. Une heure illisible n'est pas une heure tardive :
-  // elle se signale là où elle est saisie (champ requis, 422 serveur), pas ici.
+  // ⚠ Une heure ILLISIBLE n'est pas une heure tardive : `toMinutes("")` rend NaN et
+  // `NaN <= DAY_END` est faux, si bien que la garde annonçait « un créneau qui commence à
+  // ⟨rien⟩ ne peut pas durer 1h30 » en désignant la durée, que personne n'avait touchée.
+  // Elle est signalée par `slotPlacementError`, qui nomme le CHAMP fautif.
   if (!Number.isFinite(start) || start + durationMinutes <= DAY_END) {
     return null;
   }
@@ -59,19 +57,33 @@ export const conflictMessage = (c: VenueTrainingSlot): string =>
   `Chevauchement avec le créneau ${dayLabel(c.dayOfWeek)} ${hhmm(c.startTime)}–${fmtMinutes(toMinutes(c.startTime) + c.durationMinutes)}. Les créneaux ne peuvent pas se superposer.`;
 
 /**
- * LA validation de pose d'un créneau — minuit, puis chevauchement, dans cet ordre.
+ * LA validation de pose d'un créneau — heure lisible, puis minuit, puis chevauchement.
  *
  * La séquence était recopiée sur les quatre sites qui posent ou déplacent un créneau
  * (création au clic et édition, en saison et en période). Quatre copies d'une règle, c'est
  * quatre occasions qu'elles divergent : la revue de P4-37 a précisément trouvé un site où
- * la borne de minuit manquait encore. Un seul foyer, appelé partout.
+ * la borne de minuit manquait encore. Un seul foyer, appelé par les quatre.
+ *
+ * `midnightMessage` remplace le message de minuit là où le contexte le rend faux : la pose
+ * au clic en période impose 90 min sans offrir de sélecteur, donc y désigner « la durée »
+ * enverrait l'utilisateur vers un réglage que son écran n'a pas.
  *
  * Rend le message à afficher, ou null si la pose est valide.
  */
-export function slotPlacementError(others: VenueTrainingSlot[], day: number, startTime: string, durationMinutes: number): string | null {
-  const tooLate = pastMidnightMessage(startTime, durationMinutes);
-  if (null !== tooLate) {
-    return tooLate;
+export function slotPlacementError(others: VenueTrainingSlot[], day: number, startTime: string, durationMinutes: number, midnightMessage?: (startTime: string, durationMinutes: number) => string): string | null {
+  // L'heure d'ABORD : le champ « Début » est un `<input type="time">` sans `required`,
+  // dans une modale sans `<form>` — rien ne l'exige. Vidé en cours de frappe, il rendait
+  // NaN, et NaN traversait tout : la borne de minuit se taisait (correctement), puis
+  // `findSlotConflict` comparait des NaN — toute comparaison avec NaN étant fausse, aucun
+  // chevauchement n'était détecté — et l'écriture partait avec `startTime: ""`, que l'API
+  // rejette par un 422 générique sans désigner le champ. Le contrôle se fait ici, où le
+  // geste a lieu.
+  if (!Number.isFinite(toMinutes(startTime))) {
+    return "Renseignez une heure de début (format HH:MM).";
+  }
+
+  if (null !== pastMidnightMessage(startTime, durationMinutes)) {
+    return midnightMessage?.(startTime, durationMinutes) ?? pastMidnightMessage(startTime, durationMinutes);
   }
 
   const conflict = findSlotConflict(others, day, startTime, durationMinutes);
