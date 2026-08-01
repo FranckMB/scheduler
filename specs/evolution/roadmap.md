@@ -35,7 +35,7 @@
 > que l'outil s'est donnés à lui-même. P1-1 et P1-3 sont des lignes anciennes, légitimes, mais
 > elles ne viennent d'aucune demande d'usage — elles attendent que le terrain soit servi.
 
-1. **Les lots du retour terrain 2026-07-31** *(P2-9, P2-15, P3-13, P3-14 et P3-15 sont SOLDÉS — le retour terrain 2026-07-31 ne laisse plus que deux lots UI.)* — P4-42 (tag BABY) et P4-43 (overlay : heure des créneaux depuis Gymnases, visibilité du sélecteur de ressources). *(P4-36, wizard Équipes ; P4-37, wizard Gymnases ; et P4-38/P4-39/P4-40, bandeau de période/score/diagnostics, sont soldés.)*
+1. **Les lots du retour terrain 2026-07-31** — il ne reste que **P4-42** (tag BABY) et **P4-43** (overlay : heure des créneaux depuis Gymnases, visibilité du sélecteur de ressources). *(Ce qui a été livré de ce retour se lit dans [`etat-des-lieux.md`](../courantes/etat-des-lieux.md) §3 — cette ligne ne liste plus les ids soldés : elle en accumulait huit, et une de plus à chaque PR.)*
 3. **P1-4 (module matchs)** — la feature qui décide de la mise en prod, selon le fondateur. Gros lot, à phaser ; **P2-19** (reconnaissance `api.ffbb.app`) le précède, elle peut changer son cadrage.
 4. **P2-16 / P2-17 / P2-18** — contraintes de base à la création d'un club, mutualisation lisible, resynchronisation FFBB (également issus du terrain).
 5. Ensuite seulement **P1-1 (rôles)** puis **P1-3 (bridage freemium)** — structurants pour la suite du produit, mais aucun club ne les a demandés.

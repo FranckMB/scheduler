@@ -277,8 +277,9 @@ export const createOverlayVersion = (schedulePlanId: string): Promise<{ id: stri
 // API Platform 4 OMITS null fields from JSON, so a plan's null nullable fields
 // arrive ABSENT (undefined), not null. planType/schedulePlanId → every
 // `"SEASON" === planType` / grouping-by-plan check silently fails (UX-02 journey
-// regression); score → a null-score plan (DRAFT/in-flight) renders the literal
-// "score undefined". Normalise them at the boundary so the type is honest and
+// regression); score → historiquement, un plan sans score (DRAFT/en vol) affichait le
+// littéral « score undefined » — plus aucun écran ne l'affiche depuis P4-39, mais le champ
+// reste servi et comparé, donc la normalisation reste due. Normalise them at the boundary so the type is honest and
 // every consumer sees a real null.
 export const listSchedules = (): Promise<Schedule[]> =>
   collectionAll<Schedule>("schedules").then((rows) =>
