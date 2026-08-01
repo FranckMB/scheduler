@@ -163,10 +163,17 @@ describe("buildGrid", () => {
     expect(filtered.cells).toHaveLength(1);
   });
 
-  it("drops slots outside Mon-Sat", () => {
-    const model = buildGrid([slot({ id: "sun", dayOfWeek: 7 })], "gymnase", lookups);
-    expect(model.columns).toHaveLength(0);
-    expect(model.cells).toHaveLength(0);
+  it("drops slots on an ABERRANT day, but no longer on Sunday", () => {
+    // ⚠ Ce test épinglait « hors Lun-Sam » : il gardait précisément le défaut que la revue
+    // de P4-37 a levé (une séance du dimanche escamotée alors qu'elle est placée par le
+    // solveur et imprimée par l'export). Re-visé sur ce qui reste vrai : la garde protège
+    // d'un jour hors semaine ISO, pas du dimanche.
+    const aberrant = buildGrid([slot({ id: "day9", dayOfWeek: 9 })], "gymnase", lookups);
+    expect(aberrant.columns).toHaveLength(0);
+    expect(aberrant.cells).toHaveLength(0);
+
+    const sunday = buildGrid([slot({ id: "sun", dayOfWeek: 7 })], "gymnase", lookups);
+    expect(sunday.cells).toHaveLength(1);
   });
 
   it("coach filter shows the slot only under the selected coach (no co-player columns)", () => {
@@ -257,5 +264,26 @@ describe("concernedSlots", () => {
     const result = concernedSlots({ teamId: null, venueId: "v1", coachId: null }, slots, lookups);
     expect(result.map((r) => r.slotId)).toEqual(["x", "y"]);
     expect(result[0]).toMatchObject({ dayLabel: "Lun", timeLabel: "18:00", teamLabel: "U11", venueLabel: "Alpha" });
+  });
+});
+
+describe("le dimanche dans la boucle de travail (revue P4-37)", () => {
+  it("rend une séance du dimanche au lieu de l'escamoter", () => {
+    // `buildGrid` filtrait `dayOfWeek <= 6` : une séance du dimanche — que le backend
+    // accepte, que le solveur place et que l'export serveur imprime — disparaissait de
+    // l'écran où le planning se travaille. Le gestionnaire lisait un planning à six
+    // colonnes qui se donnait pour complet.
+    const grid = buildGrid([slot({ id: "dim", dayOfWeek: 7, startTime: "10:00:00" })], "team", lookups);
+
+    expect(grid.dayGroups.map((g) => g.label)).toEqual(["Dim"]);
+    expect(grid.cells.map((c) => c.slotId)).toEqual(["dim"]);
+  });
+
+  it("n'ajoute AUCUNE colonne quand personne ne s'entraîne le dimanche", () => {
+    // Le 7ᵉ jour ne coûte rien aux ≈95 % de clubs qui ne l'utilisent pas : un jour sans
+    // séance reste masqué. C'est ce qui rend la règle applicable sans arbitrage.
+    const grid = buildGrid([slot({ dayOfWeek: 2 })], "team", lookups);
+
+    expect(grid.dayGroups.map((g) => g.label)).toEqual(["Mar"]);
   });
 });

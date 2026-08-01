@@ -20,7 +20,7 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
 import { DAYS, DURATIONS, hhmm } from "../lib/days";
-import { conflictMessage, findSlotConflict } from "../lib/slotOverlap";
+import { conflictMessage, findSlotConflict, pastMidnightMessage } from "../lib/slotOverlap";
 import {
   useCreatePeriodConstraintOverride,
   useClearVenuePeriodGrid,
@@ -539,10 +539,15 @@ function PeriodVenuePanel({
           slots={slots}
           selectedSlotId={editingSlot?.id ?? null}
           onAdd={(dayOfWeek, startTime) => {
-            // Ajout par clic : 90 min par défaut, ajustables ensuite dans l'éditeur. Pas de
-            // borne de fin de journée — la grille de saison n'en a pas et un créneau du soir
-            // (21:00–22:30) y est légitime ; l'y interdire rendait la période plus stricte
-            // que la saison (revue #8 PR-B round 2).
+            // Ajout par clic : 90 min par défaut, ajustables ensuite dans l'éditeur. Un
+            // créneau peut finir APRÈS la dernière ligne de la grille — un créneau du soir
+            // (22:00–23:30) est légitime, et l'y interdire rendait la période plus stricte
+            // que la saison (revue #8 PR-B round 2). La seule borne est MINUIT (P4-37).
+            const tooLate = pastMidnightMessage(startTime, 90);
+            if (null !== tooLate) {
+              toast.error(tooLate);
+              return;
+            }
             if (null !== findSlotConflict(slots, dayOfWeek, startTime, 90)) {
               toast.error("Ce créneau en chevauche un autre sur ce gymnase.");
               return;
@@ -682,6 +687,13 @@ function PeriodSlotEditor({
   };
 
   const save = () => {
+    // Un créneau doit finir dans sa journée — P4-37 a ouvert les deux bouts (22:45 + 2h30
+    // se posait en un clic et ressortait en « 25:15 »).
+    const tooLate = pastMidnightMessage(time, duration);
+    if (null !== tooLate) {
+      setError(tooLate);
+      return;
+    }
     const conflict = findSlotConflict(otherSlots, day, time, duration);
     if (null !== conflict) {
       setError(conflictMessage(conflict));

@@ -24,18 +24,23 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
       <div className="grid text-xs" style={{ gridTemplateColumns, gridTemplateRows }}>
         {/* Coin figé sur les DEUX axes : il masque la gouttière quand elle défile sous
             l'en-tête, sinon les heures passeraient par-dessus les noms de jours. */}
-        <div className="sticky left-0 top-0 z-30 border-b border-r border-border bg-card" style={{ gridColumn: 1, gridRow: 1 }} />
+        <div className="sticky left-0 top-0 z-40 border-b border-r border-border bg-card" style={{ gridColumn: 1, gridRow: 1 }} />
         {WEEK.map((d, i) => (
-          <div key={d.n} className="sticky top-0 z-20 border-b border-l border-border bg-card py-0.5 text-center font-medium" style={{ gridColumn: 2 + i, gridRow: 1 }}>
+          <div key={d.n} className="sticky top-0 z-30 border-b border-l border-border bg-card py-0.5 text-center font-medium" style={{ gridColumn: 2 + i, gridRow: 1 }}>
             {d.label}
           </div>
         ))}
 
         {/* Time gutter — label on the hour */}
         {rows.map((m, i) => (
+          // Empilement STRICT, sans égalité : créneaux (z-10) < gouttière (z-20) <
+          // en-têtes de jours (z-30) < coin (z-40). À égalité, c'est l'ordre du DOM qui
+          // tranche — la gouttière était à z-10 comme les créneaux, rendus APRÈS elle,
+          // donc ils repeignaient par-dessus les heures pendant le défilement horizontal
+          // que la 7ᵉ colonne rend maintenant courant sur petit écran.
           // La gouttière reste lisible pendant le défilement HORIZONTAL : sans `sticky`,
           // les heures disparaissaient sous les colonnes dès qu'on faisait défiler.
-          <div key={`t${m}`} className="sticky left-0 z-10 border-r border-border bg-card pr-1 text-right text-[10px] text-muted-foreground" style={{ gridColumn: 1, gridRow: 2 + i }}>
+          <div key={`t${m}`} className="sticky left-0 z-20 border-r border-border bg-card pr-1 text-right text-[10px] text-muted-foreground" style={{ gridColumn: 1, gridRow: 2 + i }}>
             {0 === m % 60 ? fmt(m) : ""}
           </div>
         ))}
@@ -61,7 +66,15 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
             return null;
           }
           const startRow = 2 + Math.round((startMinutes(slot.startTime) - START_MIN) / STEP);
-          const span = Math.max(1, Math.round(slot.durationMinutes / STEP));
+          // Le span est BORNÉ par la dernière ligne déclarée. Un créneau qui finit après
+          // 23:00 est légitime (22:00 + 2h30) mais son bloc demanderait des lignes que
+          // `gridTemplateRows` ne déclare pas : CSS en crée alors d'implicites, en `auto`,
+          // hors gouttière — une bande sans heure ni bordure de jour poussait sous la
+          // grille, et le conteneur défilant ajouté par P4-37 la rendait atteignable au
+          // lieu de la signaler. Tronqué, le bloc dit moins que la vérité ; son `title`
+          // porte la durée réelle.
+          const maxSpan = Math.max(1, rows.length + 2 - startRow);
+          const span = Math.min(maxSpan, Math.max(1, Math.round(slot.durationMinutes / STEP)));
           return (
             <button
               key={slot.id}

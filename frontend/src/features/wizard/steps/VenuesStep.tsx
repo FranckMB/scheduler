@@ -14,7 +14,7 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { Venue, VenueTrainingSlot } from "../api";
 import { DAYS, DURATIONS, hhmm } from "../lib/days";
-import { conflictMessage, findSlotConflict } from "../lib/slotOverlap";
+import { conflictMessage, findSlotConflict, pastMidnightMessage } from "../lib/slotOverlap";
 import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodVenues } from "./PeriodStructure";
@@ -101,6 +101,13 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
   const reservationCount = reservations.filter((r) => r.venueId === slot.venueId && r.dayOfWeek === slot.dayOfWeek && hhmm(r.startTime) === hhmm(slot.startTime)).length;
 
   const save = () => {
+    // Un créneau doit finir dans sa journée — P4-37 a ouvert les deux bouts (22:45 + 2h30
+    // se posait en un clic et ressortait en « 25:15 »).
+    const tooLate = pastMidnightMessage(time, duration);
+    if (null !== tooLate) {
+      setError(tooLate);
+      return;
+    }
     // Never let an edit overlap another slot of the same gym/day (self excluded).
     const conflict = findSlotConflict(otherSlots, day, time, duration);
     if (null !== conflict) {
@@ -378,6 +385,11 @@ function VenuesEditor() {
             slots={venueSlots}
             selectedSlotId={editingSlot?.id ?? null}
             onAdd={(dayOfWeek, startTime) => {
+              const tooLate = pastMidnightMessage(startTime, duration);
+              if (null !== tooLate) {
+                toast.error(tooLate);
+                return;
+              }
               // Forbid dropping a slot that overlaps an existing one (same gym/day).
               const conflict = findSlotConflict(venueSlots, dayOfWeek, startTime, duration);
               if (null !== conflict) {
