@@ -273,7 +273,7 @@ describe("le dimanche dans la boucle de travail (revue P4-37)", () => {
     // accepte, que le solveur place et que l'export serveur imprime — disparaissait de
     // l'écran où le planning se travaille. Le gestionnaire lisait un planning à six
     // colonnes qui se donnait pour complet.
-    const grid = buildGrid([slot({ id: "dim", dayOfWeek: 7, startTime: "10:00:00" })], "team", lookups);
+    const grid = buildGrid([slot({ id: "dim", dayOfWeek: 7, startTime: "10:00:00" })], "equipe", lookups);
 
     expect(grid.dayGroups.map((g) => g.label)).toEqual(["Dim"]);
     expect(grid.cells.map((c) => c.slotId)).toEqual(["dim"]);
@@ -282,7 +282,7 @@ describe("le dimanche dans la boucle de travail (revue P4-37)", () => {
   it("n'ajoute AUCUNE colonne quand personne ne s'entraîne le dimanche", () => {
     // Le 7ᵉ jour ne coûte rien aux ≈95 % de clubs qui ne l'utilisent pas : un jour sans
     // séance reste masqué. C'est ce qui rend la règle applicable sans arbitrage.
-    const grid = buildGrid([slot({ dayOfWeek: 2 })], "team", lookups);
+    const grid = buildGrid([slot({ dayOfWeek: 2 })], "equipe", lookups);
 
     expect(grid.dayGroups.map((g) => g.label)).toEqual(["Mar"]);
   });

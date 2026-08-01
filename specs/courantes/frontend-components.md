@@ -831,15 +831,17 @@ sans le verrouiller de façon permanente :
 
 ### Concept
 
-Le planning ClubScheduler est une **semaine type** (lundi à samedi, pas de
-dimanche). Le "jour de référence" (reference day) est le point d'ancrage qui
-définit le début de cette semaine type dans le calendrier.
+Le planning ClubScheduler est une **semaine type** de **sept jours** (lundi à
+dimanche, depuis P4-37 / 2026-08-01 — la semaine s'arrêtait au samedi côté écran
+alors que l'API acceptait `dayOfWeek` jusqu'à 7 et que l'export l'imprimait). Le
+"jour de référence" (reference day) est le point d'ancrage qui définit le début
+de cette semaine type dans le calendrier.
 
 ### Configuration
 
 | Paramètre | Source | Valeur par défaut | Impact |
 |-----------|--------|-------------------|--------|
-| `dayOfWeek` | `ScheduleSlotTemplate.dayOfWeek` (integer) | 0 | 1=lundi, 2=mardi, ..., 6=samedi. 0 = non assigné |
+| `dayOfWeek` | `ScheduleSlotTemplate.dayOfWeek` (integer) | 0 | 1=lundi, 2=mardi, ..., 7=dimanche. 0 = non assigné |
 | Premier jour calendrier | FullCalendar `firstDay` config | 1 (lundi) | La colonne la plus à gauche est lundi |
 | Timezone club | `Club.timezone` | `Europe/Paris` | Détermine l'heure locale affichée |
 | Locale club | `Club.locale` | `fr_FR` | Formatage des dates et heures |

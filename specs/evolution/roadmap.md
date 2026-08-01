@@ -185,6 +185,8 @@
 
 | Item | Décision | Preuve / raison |
 |------|----------|-----------------|
+| **Pas de durée maximale côté API pour un créneau** | 🟧 **à corriger, non fait ici** | `backend/src/Dto/VenueTrainingSlotInput.php:28` ne porte qu'un `Assert\Range(min: 15)` : l'API accepte encore `22:45 + 150 min`, que l'engine restitue « 25:15 » (`_format_time`, pas de modulo). Le geste fautif est fermé côté front (`pastMidnightMessage`, revue #349) mais l'invariant n'est pas gardé là où il devrait l'être. Corriger = changement d'API + NR + smoke-solver : lot backend à part, pas un correctif de revue |
+| **Filet `offGridSlots` inatteignable par l'API** | 🟩 **keep délibéré** | `VenueTrainingSlotInput:18` valide `Range(min: 1, max: 7)` : depuis que la grille rend les sept jours (P4-37), aucun appel API ne peut produire le jour aberrant que le filet rattrape (`PeriodStructure.tsx:503`). Gardé quand même — il défend contre ce qui s'écrit HORS API (fixtures, import, SQL direct), et c'est exactement le cas rencontré en #8. Une ligne, un test |
 | **Ambre codé en dur dans `MonthCalendar.tsx`** (pas le token `--warning`) | 🟩 **keep délibéré** | `--warning` clair = 2.9:1 sur fond (A11Y-06) → l'utiliser sur le label vacances **échouerait WCAG AA** ; `amber-700` passe. Migrer = régression a11y contre un résidu de cohérence |
 | **Publish Mercure dupliqué** | 🟩 defer (ligne P4-7) | 2 handlers, payloads distincts — extraire au 3ᵉ publisher |
 | **`buildForOverlay` gardé comme adaptateur de `buildForPeriodPlan`** | 🟩 keep | Le court-circuit `scheduleId === null ⇒ []` est une économie d'intention, pas une branche de comportement (`scheduleId` est NOT NULL sur l'entité) — aucun test ne peut le faire tomber, ne pas en écrire un qui prétendrait le contraire |
