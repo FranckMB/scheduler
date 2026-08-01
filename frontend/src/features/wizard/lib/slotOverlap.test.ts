@@ -65,6 +65,16 @@ describe("pastMidnightMessage", () => {
     expect(pastMidnightMessage("22:00", 120)).toBeNull();
   });
 
+  it("se TAIT sur une heure illisible plutôt que de crier une heure tardive", () => {
+    // Le champ « Début » est un `<input type="time">` que l'utilisateur vide en cours de
+    // frappe. `toMinutes("")` rend NaN et `NaN <= DAY_END` est faux : la garde annonçait
+    // « un créneau qui commence à ⟨rien⟩ ne peut pas durer 1h30 », désignait la durée que
+    // personne n'avait touchée, et court-circuitait le contrôle de chevauchement placé
+    // après elle. Une heure illisible se signale là où elle se saisit.
+    expect(pastMidnightMessage("", 90)).toBeNull();
+    expect(pastMidnightMessage("2", 90)).toBeNull();
+  });
+
   it("refuse le créneau qui franchit minuit, en nommant l'heure et la durée", () => {
     const message = pastMidnightMessage("22:45", 150);
 

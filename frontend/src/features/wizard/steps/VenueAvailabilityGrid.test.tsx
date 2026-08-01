@@ -36,6 +36,18 @@ describe("VenueAvailabilityGrid — les bornes de ce qu'on peut poser", () => {
     expect(onAdd).toHaveBeenCalledWith(2, "22:45");
   });
 
+  it("garde un créneau HORS plage sur une ligne qui existe, sans mentir sur son heure", () => {
+    // `startRow` n'était borné par rien. À 07:00 il valait -2 : en CSS une ligne négative
+    // se compte depuis la FIN de la grille explicite, donc le bloc s'affichait à 22:45 en
+    // portant le libellé « 07:00 » — un créneau du matin lu comme un créneau du soir.
+    // L'API ne borne pas `startTime` (`Regex('/^\d{2}:\d{2}$/')` seul).
+    render(<VenueAvailabilityGrid venue={venue} slots={[slot({ startTime: "07:00:00" })]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} />);
+
+    const block = screen.getByRole("button", { name: /07:00/ });
+    // Première ligne de créneaux = 2 (la 1 porte les en-têtes de jours).
+    expect(block).toHaveStyle({ gridRow: "2 / span 6" });
+  });
+
   it("affiche un créneau du dimanche déjà posé", () => {
     render(<VenueAvailabilityGrid venue={venue} slots={[slot({ dayOfWeek: 7, startTime: "22:00:00" })]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} />);
 
