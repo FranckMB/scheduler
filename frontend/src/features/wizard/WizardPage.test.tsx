@@ -171,7 +171,9 @@ describe("Wizard (integration)", () => {
     renderWithProviders(<WizardPage />, { route: "/wizard" });
     await screen.findByDisplayValue("SF1");
 
-    await user.click(await screen.findByRole("button", { name: /trier/i }));
+    // Nom EXACT : les en-têtes de colonne s'appellent « Trier par catégorie », « Trier par
+    // rang »… depuis P4-36 — un `/trier/i` en attrapait sept (revue #347).
+    await user.click(await screen.findByRole("button", { name: "Trier" }));
     expect(await screen.findByRole("button", { name: /terminer le tri/i })).toBeInTheDocument();
     expect(screen.getByText(/par sa poignée/i)).toBeInTheDocument();
   });

@@ -6,6 +6,7 @@ namespace App\Tests\Api;
 
 use App\Service\Basketball\CategoryCatalog;
 use App\Tests\VerifiesRegistration;
+use DoctrineMigrations\Version20260801120000;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -53,6 +54,30 @@ final class SportCategoryOrderTest extends WebTestCase
         self::assertSame('Vétéran', $names[0], 'le plus âgé en tête');
         self::assertSame('U5', $names[9], 'puis l\'axe des âges jusqu\'au plus jeune');
         self::assertSame(['Baby basket', 'Loisir'], \array_slice($names, 10), 'les catégories sans âge ferment la liste');
+    }
+
+    /**
+     * La MIGRATION est la seule pièce irréversible du lot, et le test ci-dessus ne
+     * l'exerçait pas : il inscrit un club NEUF, dont les catégories sont semées depuis le
+     * catalogue — supprimer la migration l'aurait laissé vert pendant que tout club
+     * préexistant gardait l'ancienne numérotation (revue #347).
+     *
+     * Ce qu'on garde ici est la DÉRIVE, le vrai risque de régression : la table de
+     * renumérotation de la migration et le catalogue doivent dire la même chose. Réordonner
+     * l'un sans l'autre laisserait les clubs existants et les nouveaux dans deux ordres
+     * différents — le désordre même que le lot supprime.
+     *
+     * ⚠ Ce que ce test ne garde PAS, et qui reste à la charge du contrôle manuel : que la
+     * migration ait réellement tourné sur un environnement donné.
+     */
+    public function testMigrationRenumberingMatchesTheCatalogue(): void
+    {
+        $expected = [];
+        foreach (CategoryCatalog::categories() as $category) {
+            $expected[$category['name']] = $category['sortOrder'];
+        }
+
+        self::assertSame($expected, Version20260801120000::ORDER, 'la migration et le catalogue doivent numéroter à l\'identique');
     }
 
     protected function setUp(): void

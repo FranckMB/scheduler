@@ -24,6 +24,7 @@ const CATEGORIES = [
 const createMut = vi.fn();
 const updateMut = vi.fn();
 const reorderMut = vi.fn();
+const reorderPending = { value: false };
 const deleteMut = vi.fn();
 
 vi.mock("../queries", () => ({
@@ -38,7 +39,7 @@ vi.mock("../queries", () => ({
   useCreateTeam: () => ({ mutate: createMut, isPending: false }),
   useUpdateTeam: () => ({ mutate: updateMut }),
   useDeleteTeam: () => ({ mutate: deleteMut }),
-  useReorderTeams: () => ({ mutate: reorderMut }),
+  useReorderTeams: () => ({ mutate: reorderMut, isPending: reorderPending.value }),
   useReservations: () => ({ data: [{ id: "r1", teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 90, calendarEntryId: null }] }),
   useWizardTeamCoaches: () => ({ data: [] }),
   useWizardCoachPlayers: () => ({ data: [] }),
@@ -51,6 +52,7 @@ describe("TeamsStep", () => {
     team = baseTeam;
     teamsState.data = null;
     reorderMut.mockClear();
+    reorderPending.value = false;
     createMut.mockClear();
     updateMut.mockClear();
     deleteMut.mockClear();
@@ -225,13 +227,13 @@ describe("TeamsStep", () => {
     // Par défaut : sections de rang, une par rang présent.
     expect(screen.getByRole("heading", { name: "S · Fanion" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Catégorie/ }));
+    await user.click(screen.getByRole("button", { name: /Trier par catégorie/ }));
     expect(screen.queryByRole("heading", { name: "S · Fanion" })).toBeNull();
     // Vétéran (sortOrder 0) passe devant U11 (6) : c'est l'ordre SERVI, pas l'alphabet.
     const names = screen.getAllByLabelText("Nom").map((input) => (input as HTMLInputElement).value);
     expect(names).toEqual(["Bravo", "Alpha"]);
 
-    await user.click(screen.getByRole("button", { name: /Rang/ }));
+    await user.click(screen.getByRole("button", { name: /Trier par rang/ }));
     expect(screen.getByRole("heading", { name: "S · Fanion" })).toBeInTheDocument();
   });
 
@@ -241,9 +243,81 @@ describe("TeamsStep", () => {
     const user = userEvent.setup();
     renderWithProviders(<TeamsStep />);
 
-    await user.click(screen.getByRole("button", { name: /Catégorie/ }));
+    await user.click(screen.getByRole("button", { name: /Trier par catégorie/ }));
     expect(screen.queryByRole("button", { name: /Monter SM3/ })).toBeNull();
     // …mais le rang reste LISIBLE sur la ligne, sinon la bascule perdrait l'information.
     expect(screen.getByTitle("D · Bonus")).toHaveTextContent("D");
+  });
+
+  // ── Revue #347 ──
+
+  // Le défaut valait `categories[0]`, que le catalogue réordonné transforme en « Vétéran »
+  // pour TOUS les clubs : vingt équipes de jeunes saisies d'affilée y tombaient toutes.
+  it("exige une catégorie explicite au lieu d'en présumer une", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TeamsStep />);
+
+    // [0] = le formulaire d'ajout, [1] = la ligne de l'équipe fixture (même nom accessible).
+    expect((screen.getAllByLabelText("Catégorie")[0] as HTMLSelectElement).value).toBe("");
+    await user.type(screen.getByLabelText("Nom de l'équipe"), "SF1");
+    await user.click(screen.getByRole("button", { name: "Ajouter l'équipe" }));
+
+    expect(createMut).not.toHaveBeenCalled();
+    expect(screen.getByText(/Choisissez la catégorie/i)).toBeInTheDocument();
+  });
+
+  // Le niveau se trie sur la HIÉRARCHIE affichée, pas sur le code de l'enum : l'alphabet
+  // plaçait Départemental avant Élite, et les équipes sans niveau en tête.
+  it("trie le niveau sur la hiérarchie sportive, sans niveau en fin", async () => {
+    teamsState.data = [
+      { ...baseTeam, id: "a", name: "Depart", level: "DEPARTEMENTAL" },
+      { ...baseTeam, id: "b", name: "Elite", level: "ELITE" },
+      { ...baseTeam, id: "c", name: "Vide", level: null },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<TeamsStep />);
+
+    await user.click(screen.getByRole("button", { name: /Trier par niveau de jeu/ }));
+    const names = screen.getAllByLabelText("Nom").map((input) => (input as HTMLInputElement).value);
+    expect(names).toEqual(["Elite", "Depart", "Vide"]);
+  });
+
+  // Un second clic sur « Rang » peignait une flèche descendante et n'inversait RIEN :
+  // l'écran affirmait avoir obéi.
+  it("inverse aussi les sections au second clic sur Rang", async () => {
+    teamsState.data = [
+      { ...baseTeam, id: "a", name: "Fanion", priorityTierId: 1 },
+      { ...baseTeam, id: "b", name: "Bonus", priorityTierId: 5 },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<TeamsStep />);
+
+    const headings = () => screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings()).toEqual(["S · Fanion", "D · Bonus"]);
+
+    await user.click(screen.getByRole("button", { name: /Trier par rang/ }));
+    expect(headings()).toEqual(["D · Bonus", "S · Fanion"]);
+  });
+
+  // Une équipe au rang DÉRIVÉ était visible en liste plate puis s'évanouissait au retour
+  // sur « Rang » — ni supprimable ni reclassable depuis l'écran qui en a la charge.
+  it("ne perd jamais une équipe dont le rang est inconnu", () => {
+    teamsState.data = [{ ...baseTeam, id: "x", name: "Orpheline", priorityTierId: 99 }];
+    renderWithProviders(<TeamsStep />);
+
+    expect(screen.getByDisplayValue("Orpheline")).toBeInTheDocument();
+  });
+
+  // Les flèches se taisent pendant qu'un ordre est en vol : sinon un clic juste après
+  // « Terminer le tri » repart d'un cache périmé et annule le glisser-déposer.
+  it("désarme les flèches tant qu'un ordre est en vol", () => {
+    reorderPending.value = true;
+    teamsState.data = [
+      { ...baseTeam, id: "a", name: "Alpha", tierOrder: 0 },
+      { ...baseTeam, id: "b", name: "Bravo", tierOrder: 1 },
+    ];
+    renderWithProviders(<TeamsStep />);
+
+    expect(screen.getByRole("button", { name: /Descendre Alpha/ })).toBeDisabled();
   });
 });

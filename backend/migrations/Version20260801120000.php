@@ -30,7 +30,7 @@ use Doctrine\Migrations\AbstractMigration;
 final class Version20260801120000 extends AbstractMigration
 {
     /** Ordre d'affichage retenu — miroir exact de `CategoryCatalog::categories()`. */
-    private const ORDER = [
+    public const ORDER = [
         'Vétéran' => 0,
         'Senior' => 1,
         'U21' => 2,

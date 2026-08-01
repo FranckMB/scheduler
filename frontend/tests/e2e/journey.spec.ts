@@ -17,8 +17,12 @@ test("full journey: wizard → generation → validated planning → cockpit", a
   await registerAndVerify(page, { email: `journey-${ara}@e2e.fr`, ara, firstName: "Flo", lastName: "Journey", clubName: "E2E Journey Club" });
   await expect(page.getByRole("heading", { name: /Étape 1\/6/ })).toBeVisible({ timeout: 15_000 });
 
-  // --- Step 1 · team (defaults: first category, 2 sessions/week).
+  // --- Step 1 · team (2 sessions/week by default ; la CATÉGORIE se choisit).
+  // Plus de catégorie par défaut depuis la revue #347 : `categories[0]` valait « Vétéran »
+  // pour tous les clubs depuis que le catalogue est ordonné, et un club de jeunes y
+  // classait toute sa saison. Le choix persiste d'un ajout au suivant.
   await page.getByLabel("Nom de l'équipe").fill("SM1");
+  await page.getByLabel("Catégorie").selectOption({ label: "Senior" });
   await page.getByRole("button", { name: "Ajouter l'équipe" }).click();
   await expect(page.locator('input[value="SM1"]')).toBeVisible();
   await page.getByRole("button", { name: "Suivant" }).click();

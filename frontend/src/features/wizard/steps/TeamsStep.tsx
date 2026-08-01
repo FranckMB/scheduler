@@ -2,19 +2,19 @@ import { closestCorners, DndContext, type DragEndEvent, DragOverlay, KeyboardSen
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from "lucide-react";
-import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
-import { TIER_MEANING, tierGroupLabel } from "@/shared/lib/teamTiers";
+import { groupTeamsByTier, TIER_MEANING, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
 import type { Gender, PriorityTier, SportCategory, Team, TeamLevel, TeamPayload } from "../api";
 import { useWizardFooter } from "../lib/footerSlot";
-import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
+import { orderedTeams, teamsOfTier } from "../lib/ranking";
 import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useReservations, useSportCategories, useUpdateTeam, useWizardCoachPlayers, useWizardTeamCoaches, useWizardTeams } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodTeams } from "./PeriodStructure";
@@ -77,7 +77,8 @@ const nextOrder = (teams: Team[], tierId: number): number => {
 
 interface RowProps {
   team: Team;
-  number: number;
+  /** Position dans l'ordre par rang — absente en liste plate, où elle n'aurait pas de sens. */
+  number?: number;
   categories: SportCategory[];
   tiers: PriorityTier[];
   onField: (team: Team, patch: Partial<TeamPayload>) => void;
@@ -104,7 +105,7 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete, rankLabel
   return (
     <div className="border-t border-border py-1.5">
       <div className="flex items-center gap-2">
-        <span className="w-6 shrink-0 text-center text-xs text-muted-foreground">{number}</span>
+        {undefined === number ? null : <span className="w-6 shrink-0 text-center text-xs text-muted-foreground">{number}</span>}
         {/* P4-36 (b) — le rang n'existait que comme TITRE de section : invisible dès qu'on
             trie autrement, et illisible quand on cherche une équipe précise. Décision
             fondateur : un badge par ligne, et les flèches sorties du mode « Trier ». */}
@@ -197,6 +198,13 @@ type SortColumn = "rang" | "name" | "category" | "gender" | "level" | "sessions"
  * `sortOrder` du catalogue), jamais sur son nom : trier « U11 » avant « U9 » alphabétiquement
  * donnerait un second ordre de catégories dans la même application.
  */
+/** Rang d'un niveau dans la hiérarchie FFBB affichée ; sans niveau ⇒ en fin. */
+function levelRank(level: TeamLevel | null): number {
+  const index = LEVELS.findIndex((l) => l.value === level);
+
+  return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+}
+
 function compareOn(column: SortColumn, a: Team, b: Team, categoryRank: Map<string, number>): number {
   const byName = a.name.localeCompare(b.name, "fr");
   switch (column) {
@@ -207,7 +215,10 @@ function compareOn(column: SortColumn, a: Team, b: Team, categoryRank: Map<strin
     case "gender":
       return (a.gender ?? "").localeCompare(b.gender ?? "", "fr") || byName;
     case "level":
-      return (a.level ?? "").localeCompare(b.level ?? "", "fr") || byName;
+      // ⚠ Sur la HIÉRARCHIE déclarée (`LEVELS`), pas sur l'alphabet : comparer les codes
+      // de l'enum plaçait Départemental avant Élite, et les équipes sans niveau en tête
+      // (revue #347). Sans niveau = en fin de liste, là où on va les compléter.
+      return levelRank(a.level) - levelRank(b.level) || byName;
     case "sessions":
       return a.sessionsPerWeek - b.sessionsPerWeek || byName;
     default:
@@ -224,24 +235,35 @@ function SortHeader({
   sort,
   onSort,
   className,
-  children,
+  label,
 }: {
   column: SortColumn;
   sort: { column: SortColumn; dir: 1 | -1 };
   onSort: (next: { column: SortColumn; dir: 1 | -1 }) => void;
   className?: string;
-  children: ReactNode;
+  /** Libellé TEXTE (et non `children`) : il entre dans le nom accessible avec l'état. */
+  label: string;
 }) {
   const active = sort.column === column;
+  // ⚠ `aria-sort` n'est reconnu que sur un `columnheader` — sur un span nu il est retiré de
+  // l'arbre d'accessibilité (revue #347), et la flèche visible est `aria-hidden`. L'état
+  // vit donc dans le NOM du bouton : sans lui, un lecteur d'écran entend « Rang, bouton »
+  // avant et après le clic, et pour la colonne active comme pour les autres.
+  // ⚠ Le nom dit l'ACTION, pas seulement la colonne : « Niveau de jeu » tout court entrait
+  // en collision avec le champ du formulaire qui porte déjà ce nom — deux contrôles
+  // différents, un seul nom, et un lecteur d'écran n'a plus de quoi les distinguer. Le test
+  // l'a montré en trouvant deux éléments là où il en attendait un.
+  const state = active ? (1 === sort.dir ? ", trié croissant" : ", trié décroissant") : "";
 
   return (
-    <span className={className} aria-sort={active ? (1 === sort.dir ? "ascending" : "descending") : "none"}>
+    <span className={className}>
       <button
         type="button"
+        aria-label={`Trier par ${label.toLocaleLowerCase("fr")}${state}`}
         className={cn("inline-flex items-center gap-1 hover:text-foreground", active && "text-foreground")}
         onClick={() => onSort({ column, dir: active && 1 === sort.dir ? -1 : 1 })}
       >
-        {children}
+        {label}
         {active ? <span aria-hidden="true">{1 === sort.dir ? "\u2191" : "\u2193"}</span> : null}
       </button>
     </span>
@@ -336,17 +358,23 @@ function TeamsEditor() {
 
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState(false);
+  const [catError, setCatError] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const [catId, setCatId] = useState("");
   const [tierId, setTierId] = useState(1);
   const [gender, setGender] = useState<Gender | "">("");
   const [level, setLevel] = useState<TeamLevel | "">("");
   const [sessions, setSessions] = useState("2");
-  // Default to the first category until the user picks one (no effect needed).
-  const effectiveCat = catId || categories[0]?.id || "";
+  // ⚠ PLUS de catégorie par défaut (revue #347). Le défaut valait `categories[0]`, ce que
+  // le catalogue réordonné transforme en « Vétéran » pour TOUS les clubs : un club de jeunes
+  // qui saisit ses vingt équipes d'affilée — le flux que ce lot optimise justement — les
+  // classait toutes en vétéran, et la catégorie pilote les contraintes d'âge. L'ordre
+  // précédent étant aléatoire, ce n'était pas une régression stricte : c'était un mauvais
+  // défaut par hasard, que ce lot rendait mauvais par construction. On demande donc un
+  // choix explicite, refusé à la soumission comme l'est déjà un nom vide.
+  const effectiveCat = catId;
 
   const numberOf = new Map(orderedTeams(teams).map((r) => [r.team.id, r.globalNumber]));
-  const tierGroups = usedTiers(teams, tiers);
 
   // P4-36 (c) — trier par une AUTRE colonne que le rang est incompatible avec un affichage
   // en sections : « trié par catégorie » donnerait cinq listes triées séparément, ce qui ne
@@ -355,17 +383,31 @@ function TeamsEditor() {
   // perdre l'information que les titres de section portaient.
   const [sort, setSort] = useState<{ column: SortColumn; dir: 1 | -1 }>({ column: "rang", dir: 1 });
   const byRank = "rang" === sort.column;
+  // ⚠ `groupTeamsByTier` et non `usedTiers`/`teamsOfTier` (revue #347) : le helper partagé
+  // range les équipes au rang DÉRIVÉ dans un seau « Autres » et documente qu'aucune n'est
+  // jamais perdue. Sans lui, une telle équipe était visible en liste plate et s'évanouissait
+  // au retour sur « Rang » — ni supprimable ni reclassable depuis l'écran qui en a la charge.
+  const rankGroups = -1 === sort.dir ? [...groupTeamsByTier(teams, tiers)].reverse() : groupTeamsByTier(teams, tiers);
   const rankLabelOf = (team: Team): { short: string; full: string } => {
     const tier = tiers.find((t) => t.id === team.priorityTierId) ?? null;
 
-    return { short: tier?.label ?? "?", full: tierGroupLabel(tier) };
+    return { short: tier?.label ?? "?", full: tierGroupLabel(tier ?? null) };
   };
   const categoryRank = new Map(categories.map((c, index) => [c.id, index]));
   const flatTeams = [...teams].sort((a, b) => sort.dir * compareOn(sort.column, a, b, categoryRank));
 
   // Déplacer d'un rang : on renvoie l'ordre COMPLET, comme le mode « Trier » à sa sortie —
   // un envoi partiel laisserait les équipes sans `tierOrder` explicite là où elles sont.
+  // ⚠ Les flèches se TAISENT tant qu'un ordre est en vol (revue #347). Deux pièges
+  // sinon : juste après « Terminer le tri », la liste normale se réaffiche avec un `teams`
+  // encore PÉRIMÉ (l'invalidation n'a lieu qu'au `onSuccess`), et un clic y reconstruirait
+  // l'ordre complet depuis l'état d'AVANT le glisser-déposer — annulant en silence le
+  // reclassement qu'on venait de faire. Le double-clic rapide a la même racine.
+  const reorderBusy = reorder.isPending;
   const moveInTier = (team: Team, dir: -1 | 1) => {
+    if (reorderBusy) {
+      return;
+    }
     const group = teamsOfTier(teams, team.priorityTierId);
     const from = group.findIndex((t) => t.id === team.id);
     const to = from + dir;
@@ -393,10 +435,15 @@ function TeamsEditor() {
       nameRef.current?.focus();
       return;
     }
+    if ("" === effectiveCat) {
+      setCatError(true);
+      return;
+    }
     setNameError(false);
+    setCatError(false);
     create.mutate({
       name: name.trim(),
-      sportCategoryId: effectiveCat || undefined,
+      sportCategoryId: effectiveCat,
       priorityTierId: tierId,
       tierOrder: nextOrder(teams, tierId),
       gender: gender || null,
@@ -604,7 +651,7 @@ function TeamsEditor() {
               neuf saisissait sa première équipe à l'aveugle. Il nomme donc les champs DU
               FORMULAIRE, dont les colonnes diffèrent de celles de la liste (rang ici,
               numéro et suppression là-bas). */}
-          <div aria-hidden="true" className="mb-1 hidden flex-wrap items-end gap-2 px-3 text-xs font-medium text-muted-foreground sm:flex">
+          <div aria-hidden="true" className="mb-1 flex flex-wrap items-end gap-2 px-3 text-xs font-medium text-muted-foreground">
             <span className="min-w-0 flex-1">Nom de l'équipe</span>
             <span className="w-28">Catégorie</span>
             <span className="w-24">Genre</span>
@@ -628,7 +675,17 @@ function TeamsEditor() {
                 }
               }}
             />
-            <Select aria-label="Catégorie" className="h-8 w-28" value={effectiveCat} onChange={(e) => setCatId(e.target.value)}>
+            <Select
+              aria-label="Catégorie"
+              aria-invalid={catError}
+              className={cn("h-8 w-28", catError ? "border-destructive focus-visible:ring-destructive" : "")}
+              value={effectiveCat}
+              onChange={(e) => {
+                setCatId(e.target.value);
+                setCatError(false);
+              }}
+            >
+              <option value="">— catégorie —</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -668,6 +725,11 @@ function TeamsEditor() {
               Le nom de l'équipe est obligatoire.
             </p>
           ) : null}
+          {catError ? (
+            <p role="alert" className="-mt-4 mb-4 text-sm text-destructive">
+              Choisissez la catégorie de l'équipe.
+            </p>
+          ) : null}
 
           {0 === teams.length ? (
             <EmptyHint>Aucune équipe pour le moment.</EmptyHint>
@@ -682,69 +744,51 @@ function TeamsEditor() {
                 </p>
               )}
               <div className="flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground">
-                <span className="w-6 text-center">#</span>
-                <SortHeader column="rang" sort={sort} onSort={setSort} className="w-6 text-center">
-                  Rang
-                </SortHeader>
+                {/* Le « # » est la position dans l'ordre par RANG : en liste plate il se
+                    lirait 7, 3, 14, 1… soit comme un défaut d'affichage (revue #347). Il
+                    sort avec les sections ; le badge, lui, garde le rang sur chaque ligne. */}
+                {byRank ? <span className="w-6 text-center">#</span> : null}
+                <SortHeader column="rang" sort={sort} onSort={setSort} className="w-6 text-center" label="Rang" />
                 {byRank ? <span className="w-14" /> : null}
-                <SortHeader column="name" sort={sort} onSort={setSort} className="min-w-0 flex-1">
-                  Nom de l'équipe
-                </SortHeader>
-                <SortHeader column="category" sort={sort} onSort={setSort} className="w-28">
-                  Catégorie
-                </SortHeader>
-                <SortHeader column="gender" sort={sort} onSort={setSort} className="w-20">
-                  Genre
-                </SortHeader>
-                <SortHeader column="level" sort={sort} onSort={setSort} className="w-32">
-                  Niveau de jeu
-                </SortHeader>
-                <SortHeader column="sessions" sort={sort} onSort={setSort} className="w-16">
-                  Séances
-                </SortHeader>
+                <SortHeader column="name" sort={sort} onSort={setSort} className="min-w-0 flex-1" label="Nom de l'équipe" />
+                <SortHeader column="category" sort={sort} onSort={setSort} className="w-28" label="Catégorie" />
+                <SortHeader column="gender" sort={sort} onSort={setSort} className="w-20" label="Genre" />
+                <SortHeader column="level" sort={sort} onSort={setSort} className="w-32" label="Niveau de jeu" />
+                <SortHeader column="sessions" sort={sort} onSort={setSort} className="w-16" label="Séances" />
                 <span className="w-8 text-right">Suppr.</span>
               </div>
               {byRank ? (
-                tierGroups.map((tier) => {
-                  const group = teamsOfTier(teams, tier.id);
-                  return (
-                    <section key={tier.id}>
-                      <h3 className="mb-1 text-sm font-semibold">{tierGroupLabel(tier)}</h3>
-                      <div className="rounded-lg border border-border bg-card px-2">
-                        {group.map((team, index) => (
-                          <TeamRow
-                            key={team.id}
-                            team={team}
-                            number={numberOf.get(team.id) ?? 0}
-                            categories={categories}
-                            tiers={tiers}
-                            onField={onField}
-                            onDelete={setToDelete}
-                            rankLabel={rankLabelOf(team)}
-                            canUp={index > 0}
-                            canDown={index < group.length - 1}
-                            onMove={(dir) => moveInTier(team, dir)}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  );
-                })
+                // Le SENS s'applique aussi au rang (revue #347) : sans ça, un second clic
+                // peignait une flèche descendante et n'inversait rien — l'écran affirmait
+                // avoir obéi, et le lecteur d'écran annonçait un tri inexistant.
+                rankGroups.map(({ tier, teams: group }) => (
+                  <section key={tier?.id ?? "orphan"}>
+                    <h3 className="mb-1 text-sm font-semibold">{tierGroupLabel(tier)}</h3>
+                    <div className="rounded-lg border border-border bg-card px-2">
+                      {group.map((team, index) => (
+                        <TeamRow
+                          key={team.id}
+                          team={team}
+                          number={numberOf.get(team.id) ?? 0}
+                          categories={categories}
+                          tiers={tiers}
+                          onField={onField}
+                          onDelete={setToDelete}
+                          rankLabel={rankLabelOf(team)}
+                          canUp={index > 0 && !reorderBusy}
+                          canDown={index < group.length - 1 && !reorderBusy}
+                          onMove={null === tier ? undefined : (dir) => moveInTier(team, dir)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))
               ) : (
                 // Liste PLATE : les sections n'auraient plus de sens (le tri les traverserait),
                 // et le badge de rang par ligne porte l'information qu'elles donnaient.
                 <div className="rounded-lg border border-border bg-card px-2">
                   {flatTeams.map((team) => (
-                    <TeamRow
-                      key={team.id}
-                      team={team}
-                      number={numberOf.get(team.id) ?? 0}
-                      categories={categories}
-                      tiers={tiers}
-                      onField={onField}
-                      onDelete={setToDelete}
-                      rankLabel={rankLabelOf(team)}
-                    />
+                    <TeamRow key={team.id} team={team} categories={categories} tiers={tiers} onField={onField} onDelete={setToDelete} rankLabel={rankLabelOf(team)} />
                   ))}
                 </div>
               )}
