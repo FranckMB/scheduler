@@ -139,9 +139,12 @@ describe("PlanningPage (integration)", () => {
 
     expect(await screen.findByText("U11")).toBeInTheDocument();
     expect(await screen.findByText("Jean Dupont")).toBeInTheDocument();
-    // Standalone /planning (consultation) hides the toolbar's version selector,
-    // status badge and score — see PlanningToolbar.test.
-    expect(screen.queryByText(/score 9051/i)).not.toBeInTheDocument();
+    // Standalone /planning (consultation) hides the toolbar's version selector and
+    // status badge — see PlanningToolbar.test. ⚠ L'assertion sur le score a été retirée
+    // ici : P4-39 l'ayant supprimé partout, elle ne distinguait plus rien (elle serait
+    // restée verte même si le standalone se mettait à tout afficher). Le score est gardé
+    // là où il vivait, dans PlanningToolbar.test.
+    expect(screen.queryByRole("combobox", { name: /version du planning/i })).not.toBeInTheDocument();
     // « principal » qualifie LE planning de la saison — il s'affiche donc aussi sur
     // une version de travail, qui reste offerte à la validation.
     expect(screen.getByText("principal")).toBeInTheDocument();
@@ -350,6 +353,26 @@ describe("PlanningPage (integration)", () => {
     await user.click(await screen.findByRole("button", { name: /Diagnostics du solveur/ }));
     const group = await screen.findByRole("button", { name: /Erreurs/ });
     expect(within(group).getByText("1")).toBeInTheDocument();
+  });
+
+  it("ouvre les diagnostics au sortir du WIZARD, et les laisse repliés en boucle de travail (P4-40)", async () => {
+    // Retour terrain : « sinon on risque de ne pas le voir si on n'est pas familier avec
+    // l'écran génération ». La règle est CONTEXTUELLE — elle ne contredit pas la demande
+    // d'origine (replié par défaut), elle nomme un contexte qu'elle n'avait pas distingué.
+    // ⚠ On teste le CÂBLAGE : `DiagnosticsPanel` a ses propres tests, mais rien ne
+    // garantissait que `PlanningPage` lui passe bien le contexte.
+    renderWithProviders(<PlanningPage embedded />);
+
+    // Panneau déplié : son titre est un en-tête, pas le bouton de la barre repliée.
+    expect(await screen.findByRole("heading", { name: "Diagnostics du solveur" })).toBeInTheDocument();
+  });
+
+  it("laisse les diagnostics REPLIÉS en boucle de travail", async () => {
+    renderWithProviders(<PlanningPage />);
+
+    // Barre compacte : un bouton qui rouvre, pas le panneau lui-même.
+    expect(await screen.findByRole("button", { name: /Diagnostics du solveur/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Diagnostics du solveur" })).not.toBeInTheDocument();
   });
 
   it("renders defined-but-unfilled windows as 'vide' cells alongside the solver's unused_slot warning", async () => {

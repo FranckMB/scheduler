@@ -1,15 +1,33 @@
 import { HTTPError } from "ky";
-import { AlertTriangle, CalendarClock, ChevronsDown, ChevronsUp, Lock, MessageSquare, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarClock,
+  ChevronsDown,
+  ChevronsUp,
+  Lock,
+  MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
+  X,
+} from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate } from "react-router";
 
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useMe } from "@/features/auth/queries";
-import { useCalendarEntry, useDeleteEntry, usePeriodAnchor } from "@/features/cockpit/queries";
+import {
+  useCalendarEntry,
+  useDeleteEntry,
+  usePeriodAnchor,
+} from "@/features/cockpit/queries";
 import { frDateNumeric } from "@/features/cockpit/lib/date";
 import { CoachWishesModal } from "@/features/coach-wishes/CoachWishesModal";
-import { canOpenWishes, wishesMotherId, wishesWeekFilter } from "@/features/coach-wishes/wishesTarget";
+import {
+  canOpenWishes,
+  wishesMotherId,
+  wishesWeekFilter,
+} from "@/features/coach-wishes/wishesTarget";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { listSchedules } from "@/features/planning/api";
 import { useSchedules } from "@/features/planning/queries";
@@ -22,7 +40,12 @@ import { toast } from "@/shared/stores/toastStore";
 import { WizardFooterContext } from "./lib/footerSlot";
 import { WIZARD_STEPS, type WizardStepId } from "./lib/steps";
 import { useStepValidation } from "./lib/useStepValidation";
-import { useVenueSlots, useWizardCoaches, useWizardTeams, useWizardVenues } from "./queries";
+import {
+  useVenueSlots,
+  useWizardCoaches,
+  useWizardTeams,
+  useWizardVenues,
+} from "./queries";
 import { CoachesStep } from "./steps/CoachesStep";
 import { ConstraintsStep } from "./steps/ConstraintsStep";
 import { GenerateStep } from "./steps/GenerateStep";
@@ -56,7 +79,10 @@ function ScrollJumpButtons({ suppressed }: { suppressed: boolean }) {
   const [scrollable, setScrollable] = useState(false);
 
   useEffect(() => {
-    const check = () => setScrollable(document.documentElement.scrollHeight > window.innerHeight + 48);
+    const check = () =>
+      setScrollable(
+        document.documentElement.scrollHeight > window.innerHeight + 48,
+      );
     check();
     const observer = new ResizeObserver(check);
     observer.observe(document.body);
@@ -72,10 +98,25 @@ function ScrollJumpButtons({ suppressed }: { suppressed: boolean }) {
   }
   return (
     <div className="fixed right-4 top-1/2 z-40 hidden -translate-y-1/2 flex-col gap-1 sm:flex">
-      <Button size="icon" variant="outline" aria-label="Haut de page" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+      <Button
+        size="icon"
+        variant="outline"
+        aria-label="Haut de page"
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      >
         <ChevronsUp className="size-4" />
       </Button>
-      <Button size="icon" variant="outline" aria-label="Bas de page" onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}>
+      <Button
+        size="icon"
+        variant="outline"
+        aria-label="Bas de page"
+        onClick={() =>
+          window.scrollTo({
+            top: document.body.scrollHeight,
+            behavior: "smooth",
+          })
+        }
+      >
         <ChevronsDown className="size-4" />
       </Button>
     </div>
@@ -83,11 +124,23 @@ function ScrollJumpButtons({ suppressed }: { suppressed: boolean }) {
 }
 
 export function WizardPage() {
-  const { stepId, maxIndex, mode, calendarEntryId, setStep, jumpTo, next, prev, exitPeriodMode } = useWizardStore();
+  const {
+    stepId,
+    maxIndex,
+    mode,
+    calendarEntryId,
+    setStep,
+    jumpTo,
+    next,
+    prev,
+    exitPeriodMode,
+  } = useWizardStore();
   const { data: me } = useMe();
   const navigate = useNavigate();
   const periodMode = "period" === mode;
-  const { data: periodEntry, error: periodEntryError } = useCalendarEntry(periodMode ? calendarEntryId : null);
+  const { data: periodEntry, error: periodEntryError } = useCalendarEntry(
+    periodMode ? calendarEntryId : null,
+  );
   // #10 — les doléances vivent sur l'entrée MÈRE des vacances ; le store peut porter une
   // SEMAINE enfant. On résout la mère et on filtre la todo-list sur la semaine du plan
   // courant (plan de bloc → parentEntryId null → toutes les semaines).
@@ -95,20 +148,24 @@ export function WizardPage() {
   // Ne JAMAIS retomber sur l'ENFANT tant que la mère charge : la modale s'ancrerait à
   // l'id enfant → liste vide + ajout refusé en 422 (revue #10 C1). On n'utilise periodEntry
   // directement que s'il EST la mère (pas de parent) ; sinon on attend motherEntry.
-  const wishesMother = periodEntry?.parentEntryId ? (motherEntry ?? null) : periodEntry ?? null;
+  const wishesMother = periodEntry?.parentEntryId
+    ? (motherEntry ?? null)
+    : (periodEntry ?? null);
   const wishesFilter = wishesWeekFilter(periodEntry);
   const [wishesOpen, setWishesOpen] = useState(false);
   // Le bouton n'apparaît QUE quand la mère est résolue : sur une semaine enfant, wishesMother
   // reste null un instant le temps du fetch ; l'afficher avant rendrait le clic mort (la
   // modale est gardée sur wishesMother non-null) sans retour (revue #10 C1 round 2).
-  const canWishes = periodMode && canOpenWishes(periodEntry) && null !== wishesMother;
+  const canWishes =
+    periodMode && canOpenWishes(periodEntry) && null !== wishesMother;
   const validation = useStepValidation(stepId);
   // The generation step is gated by the SAME blockers as the Récap "Continuer"
   // button — otherwise the left nav lets an onboarded club (nav never locked)
   // jump straight to génération and bypass the gate. Lock it here too, and keep
   // it locked while the verdict is still loading (fail-closed).
   const recapValidation = useStepValidation("recap");
-  const generateBlocked = recapValidation.errors.length > 0 || true === recapValidation.pending;
+  const generateBlocked =
+    recapValidation.errors.length > 0 || true === recapValidation.pending;
 
   // « On part » — lu par le prédicat du blocker au moment de la navigation (les
   // valeurs de render y sont STALE : react-router enregistre le prédicat en
@@ -119,7 +176,11 @@ export function WizardPage() {
   // meantime, exit cleanly instead of leaving a dead wizard (404 + disabled CTA).
   // The query is meta.silent404 — this toast is the only, explicit, feedback.
   useEffect(() => {
-    if (periodMode && periodEntryError instanceof HTTPError && 404 === periodEntryError.response.status) {
+    if (
+      periodMode &&
+      periodEntryError instanceof HTTPError &&
+      404 === periodEntryError.response.status
+    ) {
       toast.error("Cette période n'existe plus — retour à l'accueil.");
       leavingRef.current = true;
       exitPeriodMode();
@@ -133,7 +194,10 @@ export function WizardPage() {
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [footerExtra, setFooterExtra] = useState<ReactNode>(null);
   const [suppressScrollJump, setSuppressScrollJump] = useState(false);
-  const footerCtx = useMemo(() => ({ setFooterExtra, setSuppressScrollJump }), []);
+  const footerCtx = useMemo(
+    () => ({ setFooterExtra, setSuppressScrollJump }),
+    [],
+  );
   // Onboarding (the club has never generated) → guided: forward steps stay locked
   // until reached via "Suivant". Existing clubs edit freely. Period mode is never
   // guided (structure is inherited read-only; nav is open).
@@ -147,7 +211,8 @@ export function WizardPage() {
   const slots = useVenueSlots();
   const coaches = useWizardCoaches();
   const positioned = useRef(false);
-  const ready = teams.isSuccess && venues.isSuccess && slots.isSuccess && coaches.isSuccess;
+  const ready =
+    teams.isSuccess && venues.isSuccess && slots.isSuccess && coaches.isSuccess;
   useEffect(() => {
     if (positioned.current || !guided || !ready) {
       return;
@@ -159,20 +224,35 @@ export function WizardPage() {
     let gap: WizardStepId | null = null;
     if (0 === (teams.data ?? []).length) {
       gap = "teams";
-    } else if (0 === venueList.length || venueList.some((v) => !withSlot.has(v.id))) {
+    } else if (
+      0 === venueList.length ||
+      venueList.some((v) => !withSlot.has(v.id))
+    ) {
       gap = "venues";
     } else if (0 === (coaches.data ?? []).length) {
       gap = "coaches";
     }
     if (null !== gap) {
       jumpTo(gap); // pull back to the first incomplete step
-    } else if (WIZARD_STEPS.findIndex((s) => s.id === stepId) < WIZARD_STEPS.findIndex((s) => "recap" === s.id)) {
+    } else if (
+      WIZARD_STEPS.findIndex((s) => s.id === stepId) <
+      WIZARD_STEPS.findIndex((s) => "recap" === s.id)
+    ) {
       // Everything filled and the user is before Récap → land on Récap. Do NOT
       // pull a user already ON/AFTER Récap back (e.g. mid first-generation on the
       // génération step — a remount must not yank them off the progress view).
       jumpTo("recap");
     }
-  }, [guided, ready, stepId, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
+  }, [
+    guided,
+    ready,
+    stepId,
+    teams.data,
+    venues.data,
+    slots.data,
+    coaches.data,
+    jumpTo,
+  ]);
 
   // ── Abandon d'un ajustement de période jamais généré (retour fondateur 2026-07-18) ──
   // « Adapter » crée la période AVANT le wizard (ADR-0002 : le plan naît du geste) ;
@@ -187,9 +267,9 @@ export function WizardPage() {
   const periodPlanId = periodAnchor.planId;
   const wizardSchedules = useSchedules(periodMode);
   const periodHasKnownVersion =
-    null !== periodPlanId
-    && undefined !== wizardSchedules.data
-    && wizardSchedules.data.some((s) => s.schedulePlanId === periodPlanId);
+    null !== periodPlanId &&
+    undefined !== wizardSchedules.data &&
+    wizardSchedules.data.some((s) => s.schedulePlanId === periodPlanId);
   const periodMaybeEmpty = periodMode && !periodHasKnownVersion;
   const deleteEntry = useDeleteEntry();
   const queryClient = useQueryClient();
@@ -206,7 +286,12 @@ export function WizardPage() {
     guardArmedRef.current = periodMaybeEmpty;
   });
   const abandoningRef = useRef(false);
-  const blocker = useBlocker(({ nextLocation }) => guardArmedRef.current && !leavingRef.current && "/wizard" !== nextLocation.pathname);
+  const blocker = useBlocker(
+    ({ nextLocation }) =>
+      guardArmedRef.current &&
+      !leavingRef.current &&
+      "/wizard" !== nextLocation.pathname,
+  );
   const abandonOpen = quitAsked || "blocked" === blocker.state;
 
   const finishQuit = () => {
@@ -237,9 +322,15 @@ export function WizardPage() {
     // irrésolu) → conservation SANS affirmer qu'une génération existe.
     let verdict: "empty" | "has-version" | "unknown" = "unknown";
     try {
-      const fresh = await queryClient.fetchQuery({ queryKey: ["schedules"], queryFn: listSchedules, staleTime: 0 });
+      const fresh = await queryClient.fetchQuery({
+        queryKey: ["schedules"],
+        queryFn: listSchedules,
+        staleTime: 0,
+      });
       if (null !== planId) {
-        verdict = fresh.some((s) => s.schedulePlanId === planId) ? "has-version" : "empty";
+        verdict = fresh.some((s) => s.schedulePlanId === planId)
+          ? "has-version"
+          : "empty";
       }
     } catch {
       // Fetch muet → verdict reste "unknown" : on ne supprime jamais sur donnée inconnue.
@@ -256,9 +347,13 @@ export function WizardPage() {
       deleteEntry
         .mutateAsync(entryId)
         .then(() => toast.success("Période retirée du calendrier"))
-        .catch(() => { /* toasté par le filet global (queryClient.ts) */ });
+        .catch(() => {
+          /* toasté par le filet global (queryClient.ts) */
+        });
     } else if ("has-version" === verdict) {
-      toast.success("Une génération existe pour cette période — elle est conservée.");
+      toast.success(
+        "Une génération existe pour cette période — elle est conservée.",
+      );
     } else {
       toast.info("Période conservée — son contenu n'a pas pu être vérifié.");
     }
@@ -279,38 +374,72 @@ export function WizardPage() {
   return (
     <WizardFooterContext.Provider value={footerCtx}>
       {periodMode ? (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm">
-          <span className="flex items-center gap-2">
-            <CalendarClock className="size-4 text-accent" />
-            <span className="font-medium">Mode période — {periodEntry?.title ?? "…"}</span>
-            {periodEntry ? (
-              <span className="text-muted-foreground">
-                du {frDateNumeric(periodEntry.startDate)} au {frDateNumeric(periodEntry.endDate)}
+        // P4-38 — DEUX lignes plutôt qu'une. La forme d'origine accolait les dates au titre
+        // et alignait quatre actions à droite : sur un titre long (« Vacances d'Été —
+        // semaine du 17 août »), la ligne débordait et les dates passaient sous les
+        // boutons. Ligne 1 = QUOI (titre) + les gestes qui sortent du mode ; ligne 2 = QUAND
+        // (les dates) + le geste qui reste dans le mode (Doléances).
+        //
+        // ⚠ Le titre porte DÉJÀ le repère de semaine : `cockpit/queries.ts:349` nomme une
+        // semaine enfant « {mère} — semaine du {lundi} ». Rien à ajouter ici, sous peine de
+        // l'écrire deux fois.
+        <div className="mb-4 flex flex-col gap-1 rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <CalendarClock className="size-4 text-accent" />
+              <span className="font-medium">
+                Mode période — {periodEntry?.title ?? "…"}
               </span>
-            ) : null}
-          </span>
-          <span className="flex items-center gap-1">
-            {/* Supprimer ce planning secondaire (cascade plan + versions) → retour cockpit.
+            </span>
+            <span className="flex items-center gap-1">
+              {/* Supprimer ce planning secondaire (cascade plan + versions) → retour cockpit.
                 On ARME leavingRef comme finishQuit, sinon le useBlocker d'abandon
                 intercepte le navigate et ré-ouvre « Abandonner ? » sur une entrée déjà
                 supprimée (revue B2 F1). Masqué sur l'étape GÉNÉRATION : une génération
                 lancée à l'instant n'est pas encore dans le cache — supprimer là
                 détruirait la version en vol (revue B2 F4 ; l'abandon relit le serveur,
                 pas ce bouton). */}
-            {null !== calendarEntryId && "generate" !== stepId ? (
-              <DeletePlanningButton calendarEntryId={calendarEntryId} title={periodEntry?.title ?? "ce planning"} onDeleted={() => { leavingRef.current = true; exitPeriodMode(); navigate("/"); }} />
-            ) : null}
-            {canWishes ? (
-              <Button variant="ghost" size="sm" onClick={() => setWishesOpen(true)}>
-                <MessageSquare className="size-4" />
-                Doléances
+              {null !== calendarEntryId && "generate" !== stepId ? (
+                <DeletePlanningButton
+                  calendarEntryId={calendarEntryId}
+                  title={periodEntry?.title ?? "ce planning"}
+                  onDeleted={() => {
+                    leavingRef.current = true;
+                    exitPeriodMode();
+                    navigate("/");
+                  }}
+                />
+              ) : null}
+              {/* « Quitter » se lisait comme « abandonner ma saisie » alors que le geste
+                  ramène simplement au cockpit — le nom dit maintenant où l'on va. */}
+              <Button variant="ghost" size="sm" onClick={quitPeriod}>
+                <X className="size-4" />
+                Retour à l'accueil
               </Button>
-            ) : null}
-            <Button variant="ghost" size="sm" onClick={quitPeriod}>
-              <X className="size-4" />
-              Quitter
-            </Button>
-          </span>
+            </span>
+          </div>
+
+          {/* Ligne 2 seulement si elle a quelque chose à dire : sans dates chargées ni
+              accès aux doléances, elle laisserait une bande vide sous le titre. */}
+          {periodEntry || canWishes ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-muted-foreground">
+                {periodEntry
+                  ? `du ${frDateNumeric(periodEntry.startDate)} au ${frDateNumeric(periodEntry.endDate)}`
+                  : ""}
+              </span>
+              {canWishes ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setWishesOpen(true)}
+                >
+                  <MessageSquare className="size-4" />
+                  Doléances
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {/* Texte CONDITIONNEL : la vérité se lit au serveur À LA CONFIRMATION (une
@@ -326,105 +455,132 @@ export function WizardPage() {
         onCancel={keepPeriod}
       />
       <div className="flex flex-col gap-6 md:flex-row">
-      {/* Left step navigation — collapsible (W8/N4) so any step (incl. génération) can go full-width */}
-      {navCollapsed ? null : (
-        <nav className="shrink-0 md:w-44">
-          <ol className="flex flex-col gap-1">
-            {WIZARD_STEPS.map((step, i) => {
-              const locked = (guided && i > maxIndex) || ("generate" === step.id && generateBlocked);
-              return (
-                <li key={step.id}>
-                  <button
-                    type="button"
-                    disabled={locked}
-                    onClick={() => setStep(step.id)}
-                    aria-current={step.id === stepId ? "step" : undefined}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition",
-                      step.id === stepId ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60",
-                      locked ? "cursor-not-allowed opacity-40 hover:bg-transparent" : "",
-                    )}
-                  >
-                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-xs">{i + 1}</span>
-                    <span className="flex-1">{step.label}</span>
-                    {locked ? <Lock className="size-3" /> : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </nav>
-      )}
+        {/* Left step navigation — collapsible (W8/N4) so any step (incl. génération) can go full-width */}
+        {navCollapsed ? null : (
+          <nav className="shrink-0 md:w-44">
+            <ol className="flex flex-col gap-1">
+              {WIZARD_STEPS.map((step, i) => {
+                const locked =
+                  (guided && i > maxIndex) ||
+                  ("generate" === step.id && generateBlocked);
+                return (
+                  <li key={step.id}>
+                    <button
+                      type="button"
+                      disabled={locked}
+                      onClick={() => setStep(step.id)}
+                      aria-current={step.id === stepId ? "step" : undefined}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition",
+                        step.id === stepId
+                          ? "bg-muted font-medium text-foreground"
+                          : "text-muted-foreground hover:bg-muted/60",
+                        locked
+                          ? "cursor-not-allowed opacity-40 hover:bg-transparent"
+                          : "",
+                      )}
+                    >
+                      <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-xs">
+                        {i + 1}
+                      </span>
+                      <span className="flex-1">{step.label}</span>
+                      {locked ? <Lock className="size-3" /> : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        )}
 
-      {/* Current step — fills the viewport height so the sticky footer sits at
+        {/* Current step — fills the viewport height so the sticky footer sits at
           the real bottom (no floating gap on short steps) yet stays pinned on scroll. */}
-      <div className="flex min-h-[calc(100vh-5.5rem)] min-w-0 flex-1 flex-col">
-        {/* Sticky step title + collapse toggle (W7 title, W8/N4 collapse) */}
-        <div className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-2 border-b border-border bg-background py-3">
-          <h2 className="text-lg font-semibold">
-            <span className="text-muted-foreground">
-              Étape {index + 1}/{WIZARD_STEPS.length} ·{" "}
-            </span>
-            {currentStep?.label}
-          </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setNavCollapsed((c) => !c)}
-            aria-label={navCollapsed ? "Afficher les étapes" : "Masquer les étapes"}
-          >
-            {navCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
-            {navCollapsed ? "Étapes" : "Plein écran"}
-          </Button>
-        </div>
+        <div className="flex min-h-[calc(100vh-5.5rem)] min-w-0 flex-1 flex-col">
+          {/* Sticky step title + collapse toggle (W7 title, W8/N4 collapse) */}
+          <div className="sticky top-0 z-20 mb-4 flex items-center justify-between gap-2 border-b border-border bg-background py-3">
+            <h2 className="text-lg font-semibold">
+              <span className="text-muted-foreground">
+                Étape {index + 1}/{WIZARD_STEPS.length} ·{" "}
+              </span>
+              {currentStep?.label}
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setNavCollapsed((c) => !c)}
+              aria-label={
+                navCollapsed ? "Afficher les étapes" : "Masquer les étapes"
+              }
+            >
+              {navCollapsed ? (
+                <PanelLeftOpen className="size-4" />
+              ) : (
+                <PanelLeftClose className="size-4" />
+              )}
+              {navCollapsed ? "Étapes" : "Plein écran"}
+            </Button>
+          </div>
 
-        <StepContent stepId={stepId} />
+          <StepContent stepId={stepId} />
 
-        {/* Récap renders its own grouped blocker panel, so skip the generic alerts there. */}
-        {"recap" === stepId
-          ? null
-          : validation.errors.map((error) => (
-              <p key={error} role="alert" className="mt-3 flex items-center gap-2 text-sm text-destructive">
-                <AlertTriangle className="size-4 shrink-0" />
-                {error}
-              </p>
-            ))}
-        {validation.warnings.map((warning) => (
-          <p key={warning} className="mt-3 flex items-center gap-2 text-sm text-warning">
-            <AlertTriangle className="size-4 shrink-0" />
-            {warning}
-          </p>
-        ))}
+          {/* Récap renders its own grouped blocker panel, so skip the generic alerts there. */}
+          {"recap" === stepId
+            ? null
+            : validation.errors.map((error) => (
+                <p
+                  key={error}
+                  role="alert"
+                  className="mt-3 flex items-center gap-2 text-sm text-destructive"
+                >
+                  <AlertTriangle className="size-4 shrink-0" />
+                  {error}
+                </p>
+              ))}
+          {validation.warnings.map((warning) => (
+            <p
+              key={warning}
+              className="mt-3 flex items-center gap-2 text-sm text-warning"
+            >
+              <AlertTriangle className="size-4 shrink-0" />
+              {warning}
+            </p>
+          ))}
 
-        {/* Prev/Next footer (W7). Sticky on the data-entry steps; NOT sticky on
+          {/* Prev/Next footer (W7). Sticky on the data-entry steps; NOT sticky on
             Génération — there the embedded planning stack is taller than the
             viewport on short screens and a pinned bar would overlay the grid,
             so the footer sits in the flow below it instead. On Récap "Suivant"
             becomes the gated "Continuer vers la génération". A step can inject
             an action (footerExtra), e.g. "Trier" on the Teams step. */}
-        <div
-          className={cn(
-            "z-20 mt-auto flex items-center justify-between gap-2 border-t border-border bg-background pt-4 pb-4",
-            "generate" === stepId ? "" : "sticky bottom-0",
-          )}
-        >
-          <Button variant="outline" disabled={0 === index} onClick={prev}>
-            Précédent
-          </Button>
-          <div className="flex items-center gap-2">
-            {footerExtra}
-            {isLast ? null : (
-              <Button disabled={blocked} onClick={next}>
-                {"recap" === stepId ? "Continuer vers la génération" : "Suivant"}
-              </Button>
+          <div
+            className={cn(
+              "z-20 mt-auto flex items-center justify-between gap-2 border-t border-border bg-background pt-4 pb-4",
+              "generate" === stepId ? "" : "sticky bottom-0",
             )}
+          >
+            <Button variant="outline" disabled={0 === index} onClick={prev}>
+              Précédent
+            </Button>
+            <div className="flex items-center gap-2">
+              {footerExtra}
+              {isLast ? null : (
+                <Button disabled={blocked} onClick={next}>
+                  {"recap" === stepId
+                    ? "Continuer vers la génération"
+                    : "Suivant"}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </div>
-      </div>
       <ScrollJumpButtons suppressed={suppressScrollJump} />
       {wishesOpen && null !== wishesMother ? (
-        <CoachWishesModal mother={wishesMother} weekFilter={wishesFilter} onClose={() => setWishesOpen(false)} />
+        <CoachWishesModal
+          mother={wishesMother}
+          weekFilter={wishesFilter}
+          onClose={() => setWishesOpen(false)}
+        />
       ) : null}
     </WizardFooterContext.Provider>
   );

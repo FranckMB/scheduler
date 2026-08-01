@@ -28,13 +28,30 @@ interface DiagnosticsPanelProps {
   onFocusVenue?: (venueId: string) => void;
   /** Collapse the panel back to the compact bar (frees grid width). */
   onCollapse?: () => void;
+  /** Ouvre d'emblée le groupe le PLUS SÉVÈRE présent (P4-40, contexte wizard). */
+  openMostSevere?: boolean;
 }
 
-export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups, onHighlight, onFocusVenue, onCollapse }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups, onHighlight, onFocusVenue, onCollapse, openMostSevere = false }: DiagnosticsPanelProps) {
   const [openSeverity, setOpenSeverity] = useState<DiagnosticSeverity | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const groups = ORDER.map((severity) => ({ severity, items: diagnostics.filter((d) => d.severity === severity) })).filter((g) => g.items.length > 0);
+
+  // Second repli (P4-40) : panneau ouvert, les groupes restaient TOUS fermés — un
+  // diagnostic était donc encore à deux clics, ce qui vidait de son sens le fait d'ouvrir
+  // le panneau. Au sortir du wizard, le groupe le plus sévère présent est déplié.
+  // `ORDER` étant trié du plus grave au moins grave, c'est le PREMIER groupe non vide.
+  //
+  // Ajustement pendant le rendu plutôt qu'un effet : `setState` dans un effet est interdit
+  // par le lint React Compiler du dépôt (`react-hooks/set-state-in-effect`), et un
+  // `useState(initial)` ne suffirait pas — les diagnostics arrivent APRÈS le premier
+  // rendu, quand l'état initial est déjà figé.
+  const [seeded, setSeeded] = useState(false);
+  if (openMostSevere && !seeded && groups.length > 0) {
+    setSeeded(true);
+    setOpenSeverity(groups[0].severity);
+  }
 
   function toggleGroup(severity: DiagnosticSeverity) {
     setOpenSeverity((current) => (current === severity ? null : severity));

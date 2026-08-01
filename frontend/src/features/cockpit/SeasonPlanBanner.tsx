@@ -70,7 +70,6 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false, e
           {chosen ? (
             <>
               {STATUS_LABELS[chosen.status]}
-              {chosen.score !== null ? ` · score ${chosen.score}` : ""}
               {overlayCount > 0 ? ` · ${overlayCount} planning${overlayCount > 1 ? "s" : ""} secondaire${overlayCount > 1 ? "s" : ""}${openOverlayCount > 0 ? ` (${openOverlayCount} en cours)` : ""}` : ""}
             </>
           ) : loading ? (

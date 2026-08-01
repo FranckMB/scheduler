@@ -32,8 +32,8 @@ interface PlanningToolbarProps {
   /** Export + resource filter, rendered right-aligned on the actions row (owned by the page). */
   rightSlot?: ReactNode;
   /** Wizard-embedded (generation step) vs standalone /planning consultation. The
-   *  standalone view hides the version selector, the status badge and the score
-   *  — version management lives in the wizard, /planning is for consulting. */
+   *  standalone view hides the version selector and the status badge — version
+   *  management lives in the wizard, /planning is for consulting. */
   embedded?: boolean;
 }
 
@@ -121,8 +121,8 @@ export function PlanningToolbar({
   return (
     <div className="flex w-full flex-col gap-2">
       {/* Row 1 — which version, its state, and how to view it. Standalone /planning
-          (consultation) hides the version selector, status badge and score:
-          version management lives in the wizard's generation step (embedded). */}
+          (consultation) hides the version selector and the status badge: version
+          management lives in the wizard's generation step (embedded). */}
       <div className="flex flex-wrap items-center gap-2">
         {embedded ? (
           <select
@@ -157,7 +157,6 @@ export function PlanningToolbar({
               {isChosen ? <Lock className="size-3" /> : null}
               {STATUS_LABELS[selected.status]}
             </span>
-            {null !== selected.score ? <span>score {selected.score}</span> : null}
             {!isSeasonPlanType(selected.planType) ? (
               <span className="rounded-full border border-accent/50 px-2 py-0.5 font-medium text-accent">Période</span>
             ) : null}

@@ -143,9 +143,13 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [regenerateFromOpen, setRegenerateFromOpen] = useState(false);
   const renamePlanning = useRenamePlanning();
   const [editingPlanningName, setEditingPlanningName] = useState<string | null>(null);
-  // Diagnostics panel collapsed by default (user request): the grid gets the
-  // full width for verification, a compact bar re-opens the aside on demand.
-  const [diagnosticsCollapsed, setDiagnosticsCollapsed] = useState(true);
+  // Repli CONTEXTUEL (P4-40). En boucle de travail, replié par défaut : la grille prend
+  // toute la largeur pour vérifier, une barre compacte rouvre l'aside — c'est la demande
+  // utilisateur d'origine, inchangée. Au sortir d'une génération lancée DEPUIS LE WIZARD
+  // (`embedded`), ouvert : « sinon on risque de ne pas le voir si on n'est pas familier
+  // avec l'écran génération » (retour terrain). Les deux règles ne se contredisent pas —
+  // la seconde nomme un contexte que la première n'avait pas distingué.
+  const [diagnosticsCollapsed, setDiagnosticsCollapsed] = useState(!embedded);
   const [validateOpen, setValidateOpen] = useState(false);
   // Reopening the baseline with period overlays → 409; confirm to delete them.
   const [reopenOverlayCount, setReopenOverlayCount] = useState<number | null>(null);
@@ -562,7 +566,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                       ) : null}
                       {showDiagnostics ? (
                         <div className="min-h-[12rem] flex-1">
-                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} onCollapse={() => setDiagnosticsCollapsed(true)} />
+                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} onCollapse={() => setDiagnosticsCollapsed(true)} openMostSevere={embedded} />
                         </div>
                       ) : null}
                     </div>

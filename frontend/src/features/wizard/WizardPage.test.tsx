@@ -115,7 +115,7 @@ describe("Wizard (integration)", () => {
     useWizardStore.setState({ mode: "period", calendarEntryId: "entry-x", stepId: "constraints" });
     renderWithProviders(<WizardPage />, { route: "/wizard" });
 
-    await user.click(await screen.findByRole("button", { name: /Quitter/ }));
+    await user.click(await screen.findByRole("button", { name: /Retour à l'accueil/ }));
     // Rien n'est supprimé sans confirmation explicite.
     expect(deleteEntryMutateAsync).not.toHaveBeenCalled();
     expect(await screen.findByRole("dialog")).toHaveTextContent("Abandonner l'ajustement ?");
@@ -134,7 +134,7 @@ describe("Wizard (integration)", () => {
     useWizardStore.setState({ mode: "period", calendarEntryId: "entry-x", stepId: "constraints" });
     renderWithProviders(<WizardPage />, { route: "/wizard" });
 
-    await user.click(await screen.findByRole("button", { name: /Quitter/ }));
+    await user.click(await screen.findByRole("button", { name: /Retour à l'accueil/ }));
     await user.click(await screen.findByRole("button", { name: "Retirer la période" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(deleteEntryMutateAsync).not.toHaveBeenCalled();
@@ -149,7 +149,7 @@ describe("Wizard (integration)", () => {
     useWizardStore.setState({ mode: "period", calendarEntryId: "entry-x", stepId: "constraints" });
     renderWithProviders(<WizardPage />, { route: "/wizard" });
 
-    await user.click(await screen.findByRole("button", { name: /Quitter/ }));
+    await user.click(await screen.findByRole("button", { name: /Retour à l'accueil/ }));
     expect(await screen.findByRole("dialog")).toHaveTextContent("Abandonner l'ajustement ?");
     await user.click(screen.getByRole("button", { name: "Retirer la période" }));
     await waitFor(() => expect(deleteEntryMutateAsync).toHaveBeenCalledWith("entry-x"));
@@ -161,7 +161,7 @@ describe("Wizard (integration)", () => {
     useWizardStore.setState({ mode: "period", calendarEntryId: "entry-x", stepId: "constraints" });
     renderWithProviders(<WizardPage />, { route: "/wizard" });
 
-    await user.click(await screen.findByRole("button", { name: /Quitter/ }));
+    await user.click(await screen.findByRole("button", { name: /Retour à l'accueil/ }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(deleteEntryMutateAsync).not.toHaveBeenCalled();
   });
@@ -176,5 +176,21 @@ describe("Wizard (integration)", () => {
     await user.click(await screen.findByRole("button", { name: "Trier" }));
     expect(await screen.findByRole("button", { name: /terminer le tri/i })).toBeInTheDocument();
     expect(screen.getByText(/par sa poignée/i)).toBeInTheDocument();
+  });
+});
+
+describe("bandeau de période — la forme (P4-38)", () => {
+  it("porte le titre et les dates, et nomme la SORTIE plutôt que l'abandon", async () => {
+    // Retour fondateur : « Quitter » se lisait comme « abandonner ma saisie » alors que le
+    // geste ramène au cockpit. Les dates descendent sur une seconde ligne, sinon un titre
+    // long (« Vacances d'Été — semaine du 17 août ») poussait la fenêtre sous les boutons.
+    useWizardStore.setState({ mode: "period", calendarEntryId: "entry-x", stepId: "constraints" });
+    renderWithProviders(<WizardPage />, { route: "/wizard" });
+
+    expect(await screen.findByRole("button", { name: /Retour à l'accueil/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Quitter$/ })).not.toBeInTheDocument();
+    // ⚠ Le titre porte DÉJÀ le repère de semaine (`cockpit/queries.ts:349`) : le bandeau ne
+    // le réécrit pas, sous peine de l'afficher deux fois.
+    expect(screen.getByText(/Mode période —/)).toBeInTheDocument();
   });
 });
