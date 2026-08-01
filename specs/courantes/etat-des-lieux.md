@@ -155,6 +155,7 @@ golden fixtures + invariants Hypothesis côté engine, Vitest + RTL côté front
 
 | Sujet | Décision | Pourquoi |
 |---|---|---|
+| **Solliciter les coachs au-delà de 60 j** | **Abandonné** (fondateur 2026-08-01) | « On ne les sollicite pas au-delà de 60 j — en général ça se fait 3 semaines avant les vacances. » Soulevé par la revue #344 : l'horizon 60 j du radar masque aussi les doléances, `RadarCoachWishAction` n'étant rendu nulle part ailleurs. Le cas n'existe pas dans l'usage réel : **aucun second point d'entrée à créer**. Seul demeure le filet qui empêche de faire disparaître un travail ENGAGÉ — une vacance qui porte déjà une campagne garde sa carte, son badge « x à traiter » n'ayant pas d'autre surface |
 | **Relaxation automatique** (D4) | **Abandonnée** | Un plan aux contraintes relâchées en douce est pire qu'un échec expliqué (ADR-0001) |
 | **`allow_shared_court` par équipe** | **Abandonné** | Le partage passe par `canSplit` + capacité créneau. ⚠ Conséquence assumée : la capacité dit *combien*, jamais *avec qui* — le besoin est rouvert sous une **autre forme** (roadmap P3-8) |
 | **Verrou HARD sur créneau divisible** | **Comportement assumé** | Une réservation HARD prend le créneau entier même si `capacity>1` ; partager = co-épingler explicitement les N équipes (ALIGN-07) |

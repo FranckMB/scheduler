@@ -358,13 +358,16 @@ Une to-do n'est pas un inventaire. Trois règles, décidées par le fondateur le
   radar à deux clics sans raccourcir ce qui est réellement long (les N puces de semaine).
   L'en-tête — titre, dates, compteur « x/y couvertes » — reste toujours lisible.
 
-⚠ **L'horizon ne s'applique pas à une vacance qui porte déjà une campagne de doléances**
-(revue #344) : cette carte est le **seul** endroit de l'application qui rende le badge de
-suivi (« 5 à traiter ») et le bouton « Solliciter les coachs ». L'horizon effaçait donc,
-avec le bruit, la seule surface capable de dire qu'il y a des souhaits en attente. Pour la
-même raison, ces deux actions restent **hors du repli** de la carte de couverture : un
-compteur dont la raison d'être est d'être lu d'un coup d'œil ne peut pas vivre derrière un
-clic.
+⚠ **L'horizon masque aussi les doléances** — `RadarCoachWishAction` n'est rendu nulle part
+ailleurs dans l'application. Soulevé par la revue #344, **tranché par le fondateur le
+2026-08-01** : « on ne les sollicite pas au-delà de 60 j, en général ça se fait 3 semaines
+avant les vacances ». Le cas n'existe pas dans l'usage réel, **aucun second point d'entrée
+n'est à créer** (décision fermée — [`etat-des-lieux.md`](etat-des-lieux.md) §2).
+Demeure un filet : une vacance qui porte **déjà** une campagne garde sa carte quelle que
+soit sa distance, son badge « x à traiter » n'ayant pas d'autre surface — on ne fait jamais
+disparaître un travail engagé. Pour la même raison, « Doléances » et « Solliciter les
+coachs » restent **hors du repli** de la carte de couverture : un compteur dont la raison
+d'être est d'être lu d'un coup d'œil ne peut pas vivre derrière un clic.
 
 **Chargement** (P3-11) : tant que les plans, les versions, les impacts de fermeture ou la
 zone scolaire sont en vol, le radar affiche un **squelette** (avec un texte lu par les
