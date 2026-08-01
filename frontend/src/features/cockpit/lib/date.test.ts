@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { addDays, mondayOf, periodAdjustWeeks, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
+import { actionableWeeks, addDays, isActionableWeek, mondayOf, periodAdjustWeeks, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
 
 describe("cockpit date utils", () => {
   it("builds a 42-cell Monday-first grid", () => {
@@ -121,5 +121,55 @@ describe("periodAdjustWeeks — vacances démarrant Ven/Sam/Dim (PR C)", () => {
     expect(periodAdjustWeeks("2026-08-07", "2026-08-25", boundarySeason, "holiday")).toEqual(
       weeksCovering("2026-08-07", "2026-08-25", boundarySeason),
     );
+  });
+});
+
+/**
+ * P3-13 — UNE SEMAINE EST ACTIONNABLE TANT QU'IL LUI RESTE DES JOURS DEVANT.
+ *
+ * Le premier jet lisait le besoin comme « la semaine n'a pas COMMENCÉ » (`monday > today`).
+ * La revue #344 l'a démonté : « commencé » n'est pas « fini », et confondre les deux rendait
+ * une fermeture du mercredi implanifiable dès le lundi. Le critère est la FIN de la semaine
+ * — exactement le test que le radar applique déjà aux périodes (`endDate >= today`).
+ *
+ * Règle PURE : les écrans qui la consomment mockent leurs hooks, seul ce fichier peut
+ * réellement l'épingler.
+ */
+describe("isActionableWeek / actionableWeeks — ce qu'il reste à traiter", () => {
+  const week = (monday: string, startDate = monday) => ({ startDate, endDate: addDays(monday, 6), monday });
+
+  it("écarte une semaine RÉVOLUE", () => {
+    expect(isActionableWeek(week("2026-01-05"), "2026-02-01")).toBe(false);
+    // Le lendemain de sa fin : le dernier jour est passé.
+    expect(isActionableWeek(week("2026-01-05"), "2026-01-12")).toBe(false);
+  });
+
+  // Le défaut du premier jet, épinglé à l'envers : une semaine ENTAMÉE porte encore du
+  // travail. La retirer rendait une fermeture du mercredi implanifiable dès le lundi.
+  it("GARDE une semaine entamée dont il reste des jours", () => {
+    expect(isActionableWeek(week("2026-01-05"), "2026-01-05")).toBe(true); // le lundi même
+    expect(isActionableWeek(week("2026-01-05"), "2026-01-07")).toBe(true); // le mercredi
+    expect(isActionableWeek(week("2026-01-05"), "2026-01-11")).toBe(true); // son dernier jour
+  });
+
+  it("garde une semaine qui n'a pas commencé", () => {
+    expect(isActionableWeek(week("2026-01-12"), "2026-01-07")).toBe(true);
+  });
+
+  // Le piège inverse de celui du premier jet : comparer le LUNDI déclarait « commencée »
+  // une semaine rognée par le début de saison (saison démarrant un mardi) alors que rien
+  // n'en était passé. C'est la FIN qui dit s'il reste quelque chose à faire.
+  it("juge sur la FIN, pas sur le lundi rogné par la saison", () => {
+    const clamped = week("2026-01-05", "2026-01-08"); // saison démarrant le jeudi
+    expect(isActionableWeek(clamped, "2026-01-06")).toBe(true);
+  });
+
+  it("actionableWeeks ne garde que ce qui reste, dans l'ordre", () => {
+    const weeks = [week("2026-01-05"), week("2026-01-12"), week("2026-01-19")];
+    expect(actionableWeeks(weeks, "2026-01-14").map((w: { monday: string }) => w.monday)).toEqual(["2026-01-12", "2026-01-19"]);
+  });
+
+  it("rend une liste vide quand tout est derrière (et non la liste entière)", () => {
+    expect(actionableWeeks([week("2026-01-05"), week("2026-01-12")], "2026-03-01")).toEqual([]);
   });
 });

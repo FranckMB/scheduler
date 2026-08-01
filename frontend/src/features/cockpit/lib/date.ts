@@ -1,20 +1,14 @@
 /** Cockpit calendar date helpers — pure, no date library. All dates are ISO Y-m-d. */
 
+// « Aujourd'hui » vit désormais dans `shared/lib/clock` (une seule source pour tout le
+// front, pilotable en dev). Ré-exporté ici pour que les 9 fichiers qui l'importent depuis
+// ce module restent inchangés — P4-16 migrera les appelants quand elle traitera le serveur.
+export { toISODate, todayISO } from "@/shared/lib/clock";
+import { toISODate } from "@/shared/lib/clock";
+
 const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
 export const monthLabel = (month: number): string => MONTH_LABELS[month] ?? "";
-
-/** Local Y-m-d (avoids the UTC shift of toISOString). */
-export function toISODate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-export function todayISO(): string {
-  return toISODate(new Date());
-}
 
 /** First and last ISO date covering the calendar grid for a given month (Monday-first, 6 weeks). */
 export function monthWindow(year: number, month: number): { from: string; to: string } {
@@ -140,6 +134,64 @@ function startsLateInWeek(iso: string): boolean {
  * Règle réservée aux vacances : fermetures/coupures gardent weeksCovering. La garde
  * `length > 1` évite de renvoyer vide (un week-end de vacances isolé garde sa semaine).
  */
+/**
+ * P3-13 — UNE SEMAINE EST ACTIONNABLE TANT QU'IL LUI RESTE DES JOURS DEVANT.
+ *
+ * Besoin fondateur 2026-08-01 : le radar comptait « 0/7 semaines couvertes » alors que 3
+ * étaient DERRIÈRE, et la campagne coachs sollicitait pour du passé. « On gère l'avenir,
+ * pas le présent. »
+ *
+ * ⚠ Le premier jet lisait ça comme « la semaine n'a pas COMMENCÉ » (`monday > today`), et
+ * la revue #344 a montré que c'est faux et dangereux — « commencé » n'est pas « fini » :
+ *  - une fermeture du MERCREDI 11 devenait implanifiable dès le lundi 9, parce que la
+ *    puce « + créer » de sa semaine disparaissait alors que la fermeture était encore
+ *    entièrement devant (et le DayDialog ne reproduit ces puces que pour les vacances) ;
+ *  - une vacance démarrant un samedi ne pouvait plus faire l'objet d'une collecte le lundi
+ *    suivant, pour des séances pourtant toutes à venir ;
+ *  - une semaine rognée par le début de saison (saison démarrant un mardi) était déclarée
+ *    « commencée » le lundi d'avant, alors que la saison n'existait pas encore.
+ *
+ * D'où le critère : `endDate >= today` — la semaine reste tant qu'un de ses jours n'est pas
+ * passé. C'est EXACTEMENT le test que le radar applique déjà au niveau période
+ * (`e.endDate >= today`) : une seule notion de « c'est derrière », à deux échelles.
+ *
+ * On lit donc `endDate` et non `monday` : le lundi dit QUELLE semaine c'est (clé stable),
+ * la fin dit s'il reste quelque chose à y faire. Ce sont deux questions différentes.
+ *
+ * Fonctions PURES, hors React : les tests d'écran mockent les hooks et ne garderaient que
+ * le câblage (leçon P2-15 / CLAUDE.md §7.2).
+ */
+export function isActionableWeek(week: WeekWindow, today: string): boolean {
+  return week.endDate >= today;
+}
+
+/** Les semaines de `weeks` qu'il reste quelque chose à traiter. @see isActionableWeek */
+export function actionableWeeks(weeks: WeekWindow[], today: string): WeekWindow[] {
+  return weeks.filter((w) => isActionableWeek(w, today));
+}
+
+/**
+ * LES SEMAINES QU'UNE PÉRIODE OFFRE ENCORE — le seul point d'entrée pour OFFRIR une
+ * semaine, partout (radar, modale du jour, picker).
+ *
+ * `periodAdjustWeeks` répond à la GÉOMÉTRIE (« quelles semaines cette période couvre-t-elle,
+ * la partielle du vendredi écartée »), pas au TEMPS. Les avoir gardées séparées a coûté
+ * (revue #344 round 2) : le picker proposait — et cochait — des semaines révolues, dont la
+ * création produisait un plan de semaine que le radar filtrait ensuite partout. Un
+ * artefact sans carte, sans puce et sans retour possible.
+ *
+ * Une règle vaut à TOUS ses sites, sinon les écrans se contredisent (CLAUDE.md §7.2 pt 1).
+ */
+export function periodWeeksToAdjust(
+  start: string,
+  end: string,
+  season: { startDate: string; endDate: string },
+  periodType: string | null,
+  today: string,
+): WeekWindow[] {
+  return actionableWeeks(periodAdjustWeeks(start, end, season, periodType), today);
+}
+
 export function periodAdjustWeeks(start: string, end: string, season: { startDate: string; endDate: string }, periodType: string | null): WeekWindow[] {
   const weeks = weeksCovering(start, end, season);
   // Garde `weeks[0].startDate === monday` (revue C F3) : on n'écarte QUE si la 1ʳᵉ

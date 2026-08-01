@@ -3,7 +3,7 @@ import { HTTPError } from "ky";
 import { Check, Copy, Send } from "lucide-react";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
-import { periodAdjustWeeks } from "@/features/cockpit/lib/date";
+import { addDays, isActionableWeek, periodAdjustWeeks, todayISO } from "@/features/cockpit/lib/date";
 import { useUpdateCoach, useWizardTeamCoaches, useWizardTeams } from "@/features/wizard/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -44,7 +44,36 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   // Campagne courante (après enregistrement, on garde la réponse pour afficher les liens).
   const [campaign, setCampaign] = useState<CoachWishCampaign | null>(existing);
 
-  const availableWeeks = useMemo(() => (null === season ? [] : periodAdjustWeeks(entry.startDate, entry.endDate, season, entry.periodType)), [entry, season]);
+  // P3-13/P3-15 (c) — on ne sollicite un coach que pour ce qu'il reste à vivre : les
+  // semaines RÉVOLUES étaient proposées ET cochées par défaut. Même règle et même foyer
+  // que le radar (`isActionableWeek`), pas une seconde implémentation (CLAUDE.md §7.2).
+  // ⚠ Une semaine ENTAMÉE reste offerte (revue #344) : une vacance qui démarre un samedi
+  // n'aurait plus pu faire l'objet d'aucune collecte dès le lundi suivant, pour des
+  // séances pourtant toutes à venir — et rien d'autre dans l'app ne crée une campagne.
+  //
+  // ⚠ Une campagne EXISTANTE peut porter une semaine devenue révolue : elle reste LISTÉE
+  // et marquée, jamais offerte à une nouvelle sélection. La masquer laisserait `weeks`
+  // porter un lundi invisible que `save()` renverrait — un état que l'écran ne montre pas
+  // (CHOISIR n'offre que l'avenir, NOMMER garde le reste lisible).
+  const today = todayISO();
+  const availableWeeks = useMemo(() => {
+    if (null === season) {
+      return [];
+    }
+    const all = periodAdjustWeeks(entry.startDate, entry.endDate, season, entry.periodType);
+    const kept = new Set(existing?.weeks ?? []);
+    const offered = all.filter((w) => isActionableWeek(w, today) || kept.has(w.monday));
+    // ⚠ Une semaine retenue par la campagne peut ne PLUS être émise du tout — la période
+    // a été redimensionnée, ou la fenêtre de saison a bougé. Se contenter de filtrer `all`
+    // la laissait invisible tout en la gardant dans l'état, que `save()` renvoyait : le
+    // gestionnaire confirme ce qu'il voit et sollicite pour une semaine que l'écran ne lui
+    // a jamais montrée (revue #344 round 2 — le défaut même que le round 1 prétendait
+    // clore). On la reconstruit depuis son lundi pour qu'elle reste sous les yeux.
+    const shown = new Set(offered.map((w) => w.monday));
+    const orphans = [...kept].filter((monday) => !shown.has(monday)).map((monday) => ({ monday, startDate: monday, endDate: addDays(monday, 6) }));
+
+    return [...offered, ...orphans].sort((a, b) => a.monday.localeCompare(b.monday));
+  }, [entry, season, existing, today]);
 
   // Équipes ayant AU MOINS un coach — cocher une équipe sans coach ne crée aucun lien.
   const coachCountByTeam = useMemo(() => {
@@ -56,9 +85,15 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   }, [teamCoachesQuery.data]);
   const teams = (teamsQuery.data ?? []).filter((t) => t.isActive && (coachCountByTeam.get(t.id) ?? 0) > 0);
 
-  const [weeks, setWeeks] = useState<Set<string>>(() => new Set(existing ? existing.weeks : availableWeeks.map((w) => w.monday)));
+  // Défaut : les semaines À VENIR seulement — cocher d'office une semaine révolue partait
+  // solliciter les coachs pour du passé.
+  const [weeks, setWeeks] = useState<Set<string>>(() => new Set(existing ? existing.weeks : availableWeeks.filter((w) => isActionableWeek(w, today)).map((w) => w.monday)));
   const [teamIds, setTeamIds] = useState<Set<string>>(() => new Set(existing ? existing.teamIds : []));
-  const [deadline, setDeadline] = useState<string>(existing?.deadline ?? entry.startDate);
+  // La date limite par défaut était `entry.startDate`, donc DANS LE PASSÉ dès que la
+  // période a commencé — cas que ce lot vient précisément de rendre légitime. Les liens
+  // partaient morts : le serveur répond 410 « deadline dépassée », et le gestionnaire ne
+  // l'apprenait qu'en voyant les coachs ne pas répondre (revue #344 round 2).
+  const [deadline, setDeadline] = useState<string>(existing?.deadline ?? (entry.startDate > today ? entry.startDate : today));
 
   const toggle = (set: Set<string>, value: string, apply: (next: Set<string>) => void) => {
     const next = new Set(set);
@@ -96,8 +131,18 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
           ) : (
             availableWeeks.map((w) => (
               <label key={w.monday} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={weeks.has(w.monday)} onChange={() => toggle(weeks, w.monday, setWeeks)} aria-label={`Semaine du ${frDate(w.startDate)}`} />
+                {/* Le marqueur vit DANS le nom accessible : `aria-label` écrase le
+                    contenu du label, donc un marqueur posé à côté n'est jamais annoncé et
+                    un lecteur d'écran entend des semaines indistinctes (revue #344). */}
+                <input
+                  type="checkbox"
+                  className="size-4 accent-[var(--accent)]"
+                  checked={weeks.has(w.monday)}
+                  onChange={() => toggle(weeks, w.monday, setWeeks)}
+                  aria-label={`Semaine du ${frDate(w.startDate)}${isActionableWeek(w, today) ? "" : " (révolue)"}`}
+                />
                 Semaine du {frDate(w.startDate)} au {frDate(w.endDate)}
+                {isActionableWeek(w, today) ? null : <span className="text-xs italic text-muted-foreground">révolue</span>}
               </label>
             ))
           )}
@@ -122,7 +167,7 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
 
       <label className="mt-4 flex items-center gap-2 text-sm font-medium">
         À renvoyer avant le
-        <Input type="date" className="h-8 w-40" value={deadline} onChange={(e) => setDeadline(e.target.value)} aria-label="Date limite" />
+        <Input type="date" min={today} className="h-8 w-40" value={deadline} onChange={(e) => setDeadline(e.target.value)} aria-label="Date limite" />
       </label>
 
       {failed ? <p className="mt-3 text-sm text-destructive">Enregistrement impossible. Vérifiez les semaines et équipes choisies.</p> : null}

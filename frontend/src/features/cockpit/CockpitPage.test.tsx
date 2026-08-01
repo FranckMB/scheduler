@@ -1,7 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { setTodayOverride } from "@/shared/lib/clock";
 
 import { CockpitPage } from "./CockpitPage";
 import { addDays, monthWindow, todayISO } from "./lib/date";
@@ -56,6 +58,19 @@ describe("CockpitPage state machine", () => {
   beforeEach(() => {
     meData = null;
     publicHolidayWindows.length = 0;
+  });
+  afterEach(() => setTodayOverride(null));
+
+  // Revue #344 round 2 — l'horloge de dev décalait tous les filtres mais pas le mois
+  // d'ouverture du calendrier : `?today=2026-12-20` ouvrait sur le mois RÉEL, où chaque
+  // case est « passé (non modifiable) ». Le scénario que l'horloge existe pour rejouer
+  // devenait injouable sans naviguer quatre mois à la main.
+  it("ouvre le calendrier sur le mois de l'horloge, override de dev compris", () => {
+    setTodayOverride("2026-12-20");
+    meData = { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "s1", hasFinishedVersion: true } };
+    renderCockpit();
+
+    expect(screen.getByText(/Décembre 2026/i)).toBeInTheDocument();
   });
 
   it("state 1 — no main plan (baseline null) → redirects to the wizard", () => {

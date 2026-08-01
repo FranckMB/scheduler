@@ -328,6 +328,75 @@ période). Le jour courant est **entouré**.
 et ce qui manque (plan de période non généré, planning modifié non régénéré). **Chaque item
 a un CTA.** C'est la version généralisée des alertes J-14 de la vision d'origine (§8.2).
 
+### 5.1 Le radar ne montre que l'AVENIR ACTIONNABLE (P3-13, retour terrain 2026-07-31)
+
+Une to-do n'est pas un inventaire. Trois règles, décidées par le fondateur le 2026-08-01 :
+
+- **Horizon des vacances : 60 jours** (`SCHOOL_HOLIDAY_HORIZON_DAYS`). Sans lui, en été, la
+  Toussaint et Noël s'affichaient : « c'est TROP loin pour que je m'en occupe de suite ».
+  Les jours fériés avaient déjà le leur (30 j). ⚠ L'horizon ne masque que les vacances
+  **intactes** : dès qu'un plan existe, la période devient une carte « en cours » qui y
+  échappe — cacher un travail commencé serait bien pire que le bruit corrigé.
+- **Les semaines RÉVOLUES sont écartées** — de la couverture d'une période découpée
+  (« 0/7 couvertes » alors que 3 étaient derrière), des semaines offertes à la création, et
+  des semaines proposées à la sollicitation des coachs. « On gère l'avenir, pas le
+  présent. » La règle vit en un seul endroit, `isActionableWeek` / `actionableWeeks`
+  (`features/cockpit/lib/date.ts`), à côté de `periodAdjustWeeks` qui est déjà la source
+  unique des semaines qu'une période offre — radar et campagne coachs la lisent tous deux,
+  il ne peut donc pas y en avoir deux versions.
+  ⚠ **RÉVOLUE, pas « commencée »** — le critère est `endDate >= today`, exactement le test
+  que le radar applique déjà aux périodes (`e.endDate >= today`) : une seule notion de
+  « c'est derrière », à deux échelles. Le premier jet lisait « la semaine n'a pas commencé »
+  (`monday > today`) et la revue #344 l'a démonté : une fermeture démarrant le **mercredi**
+  devenait implanifiable dès le lundi (sa puce « + créer » disparaissait, et la modale du
+  jour ne reproduit ces puces que pour les vacances) ; une vacance démarrant un **samedi**
+  ne pouvait plus faire l'objet d'aucune collecte dès le lundi suivant ; et une semaine
+  rognée par un début de saison un mardi était déclarée commencée le lundi d'avant.
+  Le lundi dit QUELLE semaine c'est (clé stable) ; la fin dit s'il reste à y faire.
+  ⚠ **La règle vaut à TOUS ses sites** : la liste des semaines OFFERTES passe par
+  `periodWeeksToAdjust` — radar, modale du jour et picker compris. Les avoir laissés
+  diverger (revue #344 round 2) faisait cocher une semaine révolue au picker, dont la
+  création produisait un plan de semaine que le radar filtrait ensuite partout : un
+  artefact sans carte, sans puce et sans retour possible. Même critère au niveau
+  **période** (`h.endDate >= today` sur les vacances) : une vacance commencée dont les
+  jours restent devant garde son point d'entrée.
+- **La carte de couverture est repliée par défaut** ; les autres gardent leur action
+  visible. Arbitrage pris à l'implémentation : tout replier mettait **chaque** geste du
+  radar à deux clics sans raccourcir ce qui est réellement long (les N puces de semaine).
+  L'en-tête — titre, dates, compteur « x/y couvertes » — reste toujours lisible.
+
+⚠ **L'horizon masque aussi les doléances** — `RadarCoachWishAction` n'est rendu nulle part
+ailleurs dans l'application. Soulevé par la revue #344, **tranché par le fondateur le
+2026-08-01** : « on ne les sollicite pas au-delà de 60 j, en général ça se fait 3 semaines
+avant les vacances ». Le cas n'existe pas dans l'usage réel, **aucun second point d'entrée
+n'est à créer** (décision fermée — [`etat-des-lieux.md`](etat-des-lieux.md) §2).
+Demeure un filet : une vacance qui porte **déjà** une campagne garde sa carte quelle que
+soit sa distance, son badge « x à traiter » n'ayant pas d'autre surface — on ne fait jamais
+disparaître un travail engagé. Pour la même raison, « Doléances » et « Solliciter les
+coachs » restent **hors du repli** de la carte de couverture : un compteur dont la raison
+d'être est d'être lu d'un coup d'œil ne peut pas vivre derrière un clic.
+
+**Chargement** (P3-11) : tant que les plans, les versions, les campagnes, les impacts de
+fermeture ou la zone scolaire sont en vol, le radar affiche un **squelette** (avec un texte
+lu par les lecteurs d'écran : une région live annonce son contenu, pas son `aria-label`).
+⚠ **Charger n'est pas échouer** — le squelette s'appuie sur `readLoading`, pas sur
+« pas de donnée » : bâti sur le second, un premier chargement en échec restait « Chargement… »
+pour toujours, l'écran affirmant qu'il travaillait alors qu'il avait renoncé. Une lecture
+ratée le **dit** (« Impossible de charger les éléments à traiter »), et la lecture des
+campagnes entre dans `isEmpty` puisque l'exemption d'horizon fait dépendre d'elle
+l'existence d'une carte. Il restait nu — et un cadre
+« À traiter » vide se lit comme « rien à faire ». Le squelette et « Rien à l'horizon. Tout
+roule. » ne coexistent jamais : `isEmpty` exige que ces mêmes lectures soient résolues.
+
+**Horloge de démo** (amorce de P4-16, côté front) : `shared/lib/clock.ts` est le point de
+passage unique du « aujourd'hui » du front. En **dev uniquement**, `?today=2026-12-20` le
+décale, ce qui permet de rejouer une situation datée — la valeur est vérifiée comme une
+date RÉELLE, pas seulement dans sa forme (`2026-13-01` triait après toute date et vidait le
+radar en affirmant « Tout roule ») — sans quoi ces règles ne seraient
+observables qu'en attendant la bonne date. La lecture de l'URL est derrière
+`import.meta.env.DEV` : le bundle de production ne contient aucun chemin capable de décaler
+l'horloge. Le **serveur** garde l'heure réelle (P4-16 reste ouverte pour lui).
+
 ---
 
 ## 5bis. Interaction : cliquer une date (modale légère vs écran)

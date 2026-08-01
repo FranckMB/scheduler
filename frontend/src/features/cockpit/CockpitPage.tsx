@@ -17,8 +17,12 @@ import { addDays, monthWindow, todayISO } from "./lib/date";
  *  Before that, the work-loop is home. */
 export function CockpitPage() {
   const { data: me, isLoading } = useMe();
-  const now = new Date();
-  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() });
+  // Le mois d'ouverture suit le « aujourd'hui » du front, horloge de dev comprise (revue
+  // #344 round 2) : avec un `new Date()` nu, `?today=2026-12-20` décalait tous les filtres
+  // mais laissait le calendrier sur le mois RÉEL — 42 cases grisées « passé », aucune
+  // journée ouvrable, et le scénario que l'horloge existe pour rejouer devenait injouable.
+  const [openingYear, openingMonth] = todayISO().split("-").map(Number);
+  const [cursor, setCursor] = useState({ year: openingYear, month: openingMonth - 1 });
 
   const { from, to } = monthWindow(cursor.year, cursor.month);
   const { data: entries = [] } = useCalendarEntries(from, to);

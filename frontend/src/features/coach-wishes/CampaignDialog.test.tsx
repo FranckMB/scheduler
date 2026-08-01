@@ -1,9 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HTTPError } from "ky";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
+import { setTodayOverride } from "@/shared/lib/clock";
 
 import type { CoachWishCampaign } from "./campaignApi";
 
@@ -47,7 +48,12 @@ const entry: CalendarEntry = {
 const season = { startDate: "2025-09-01", endDate: "2026-06-30" };
 
 describe("CampaignDialog", () => {
+  // P3-13/P3-15 (c) — la campagne ne propose que les semaines À VENIR. Ces fixtures sont
+  // datées (fév. 2026) : sans horloge pilotable, elles deviennent du passé au fil du temps
+  // et le test se met à échouer tout seul — il l'était déjà devenu. On ancre « aujourd'hui »
+  // deux semaines avant la période plutôt que de repasser les dates en relatif.
   beforeEach(() => {
+    setTodayOverride("2026-02-01");
     createMut.mockReset();
     updateMut.mockReset();
     sendMut.mockReset();
@@ -58,6 +64,7 @@ describe("CampaignDialog", () => {
     remindState.isError = false;
     remindState.error = null;
   });
+  afterEach(() => setTodayOverride(null));
 
   it("crée une campagne avec les semaines et équipes choisies", async () => {
     render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
@@ -75,6 +82,98 @@ describe("CampaignDialog", () => {
     expect(body.teamIds).toEqual(["t1"]);
     expect(body.weeks.length).toBeGreaterThan(0);
     expect(body.deadline).toBe("2026-02-16");
+  });
+
+  // ── P3-15 (c) : on ne sollicite un coach que pour ce qu'il RESTE (retour 2026-07-31) ──
+
+  // « Les semaines passées et la semaine en cours sont proposées ET cochées par défaut » :
+  // le gestionnaire envoyait à ses coachs un lien pour dire leurs souhaits sur du révolu.
+  // ⚠ RÉVOLU, pas « entamé » (revue #344) : une vacance qui démarre un samedi n'aurait
+  // plus pu faire l'objet d'aucune collecte dès le lundi suivant, pour des séances
+  // pourtant toutes à venir — et rien d'autre dans l'app ne crée une campagne.
+  it("n'offre ni ne coche une semaine révolue, garde celle qui est entamée", () => {
+    // Période du 16/02 au 01/03 = deux semaines (16 et 23). « Aujourd'hui » = lundi 23 :
+    // la semaine du 16 est finie, celle du 23 court encore.
+    setTodayOverride("2026-02-23");
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    expect(screen.queryByLabelText(/Semaine du 16/)).toBeNull();
+    const current = screen.getByLabelText(/Semaine du 23/);
+    expect(current).toBeInTheDocument();
+    expect(current).toBeChecked();
+  });
+
+  // Le cas qui rendait la collecte IMPOSSIBLE avec le premier critère : la période
+  // n'a plus qu'une semaine, entamée, mais ses jours utiles sont devant.
+  it("laisse créer une collecte sur une semaine entamée aux jours encore à venir", () => {
+    setTodayOverride("2026-02-25"); // mercredi de la dernière semaine, qui finit le 01/03
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    expect(screen.queryByText(/Aucune semaine disponible/)).toBeNull();
+    expect(screen.getByLabelText(/Semaine du 23/)).toBeChecked();
+  });
+
+  // ATTEINDRE ≠ CHOISIR : une campagne EXISTANTE peut porter une semaine devenue révolue.
+  // La masquer laisserait l'état porter un lundi que l'écran ne montre pas et que
+  // l'enregistrement renverrait — un état invisible est un état faux. Le marqueur vit
+  // DANS le nom accessible, sinon un lecteur d'écran ne l'entend jamais (revue #344).
+  it("garde visible et marquée une semaine déjà retenue devenue révolue", () => {
+    setTodayOverride("2026-02-25");
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2026-03-01",
+      weeks: ["2026-02-16"],
+      teamIds: ["t1"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    const past = screen.getByLabelText("Semaine du 16/02/2026 (révolue)");
+    expect(past).toBeInTheDocument();
+    expect(past).toBeChecked();
+  });
+
+  // ── Revue #344 round 2 ──
+
+  // La date limite par défaut valait `entry.startDate`, donc DANS LE PASSÉ dès que la
+  // période a commencé — le cas que ce lot vient de rendre légitime. Les liens partaient
+  // morts (410 « deadline dépassée ») et rien ne le disait au gestionnaire.
+  it("ne propose jamais une date limite déjà passée", () => {
+    setTodayOverride("2026-02-25"); // la période a commencé le 16
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    const deadline = screen.getByLabelText("Date limite") as HTMLInputElement;
+    expect(deadline.value).toBe("2026-02-25");
+    expect(deadline.min).toBe("2026-02-25");
+  });
+
+  // Une semaine retenue par la campagne peut ne PLUS être émise (période redimensionnée,
+  // saison déplacée). La filtrer la laissait invisible tout en la gardant dans l'état, que
+  // l'enregistrement renvoyait : on sollicite pour une semaine jamais montrée.
+  it("montre une semaine retenue que la période n'émet plus", () => {
+    setTodayOverride("2026-02-01");
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2026-03-01",
+      weeks: ["2026-02-02"], // hors de la période 16/02 → 01/03 : plus émise du tout
+      teamIds: ["t1"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    const orphan = screen.getByLabelText(/Semaine du 02\/02\/2026/);
+    expect(orphan).toBeInTheDocument();
+    expect(orphan).toBeChecked();
   });
 
   it("copie le lien personnel d'un coach", async () => {
