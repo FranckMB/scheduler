@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SchedulePlan } from "@/features/cockpit/api";
 import { renderWithProviders } from "@/test/utils";
 
-import { getSlots, getTrainingSlots, getVenues, listSchedules, OverlaysExistError, reopenSchedule } from "./api";
+import { getDiagnostics, getSlots, getTrainingSlots, getVenues, listSchedules, OverlaysExistError, reopenSchedule } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -371,6 +371,19 @@ describe("PlanningPage (integration)", () => {
     // qu'il arrive, donc il ne prouvait que le repli de l'aside, pas le câblage qu'il
     // prétendait garder (revue #350). C'est le message d'un diagnostic qui le prouve.
     expect(await screen.findByText("Conflit de gymnase.")).toBeInTheDocument();
+  });
+
+  it("laisse l'aside REPLIÉ en embedded quand la génération est PROPRE", async () => {
+    // Ouvrir l'aside sans rien à montrer volait 20rem de largeur à la grille, dans une
+    // hauteur embarquée déjà courte, pour afficher « le planning est propre » (revue #350).
+    // ⚠ L'amorce est indexée sur la VERSION : elle referme aussi bien qu'elle ouvre.
+    vi.mocked(getDiagnostics).mockResolvedValueOnce([]);
+    renderWithProviders(<PlanningPage embedded />);
+
+    // La grille est bien là — donc la page a fini de charger…
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    // …et l'aside est resté la barre compacte, pas le panneau.
+    expect(screen.queryByRole("heading", { name: "Diagnostics du solveur" })).not.toBeInTheDocument();
   });
 
   it("laisse les diagnostics REPLIÉS en boucle de travail", async () => {

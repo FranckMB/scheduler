@@ -97,3 +97,21 @@ describe("DiagnosticsPanel — ouverture contextuelle", () => {
     expect(screen.queryByText("erreur lisible")).not.toBeInTheDocument();
   });
 });
+
+describe("DiagnosticsPanel — l'état vide ne ment pas", () => {
+  it("dit qu'il LIT tant que la lecture est en vol, jamais que le planning est propre", () => {
+    // Le panneau étant ouvert d'emblée au sortir du wizard, son état vide est ce qu'on lit
+    // PENDANT le chargement d'une version. « Le planning est propre » y serait une
+    // affirmation fausse — et rassurante (revue #350 round 2, doctrine `readState`).
+    render(panel({ diagnostics: [], pending: true }));
+
+    expect(screen.getByText(/Lecture des diagnostics/)).toBeInTheDocument();
+    expect(screen.queryByText(/planning est propre/)).not.toBeInTheDocument();
+  });
+
+  it("annonce un planning propre une fois la lecture faite", () => {
+    render(panel({ diagnostics: [] }));
+
+    expect(screen.getByText(/planning est propre/)).toBeInTheDocument();
+  });
+});
