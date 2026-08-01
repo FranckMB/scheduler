@@ -19,8 +19,8 @@ import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
-import { DAYS, DURATIONS, hhmm } from "../lib/days";
-import { conflictMessage, findSlotConflict } from "../lib/slotOverlap";
+import { DAYS, durationOptions, hhmm } from "../lib/days";
+import { slotPlacementError } from "../lib/slotOverlap";
 import {
   useCreatePeriodConstraintOverride,
   useClearVenuePeriodGrid,
@@ -492,10 +492,14 @@ function PeriodVenuePanel({
   const modeBusy = setMode.isPending || clearMode.isPending || syncing;
   const gridBusy = resetGrid.isPending || clearGrid.isPending;
   const reservationCount = reservations.filter((r) => r.venueId === venue.id).length;
-  // #8 round 2 finding #6 — un creneau sur un jour que la grille ne montre pas (dimanche,
-  // jour 7, herite de l ancien formulaire ; ni la saison ni la nouvelle grille ne le
-  // proposent) resterait INVISIBLE tout en etant SERVI au solveur. On le rend visible et
-  // supprimable plutot que de le laisser agir en silence.
+  // #8 round 2 finding #6 — un créneau sur un jour que la grille ne montre pas resterait
+  // INVISIBLE tout en étant SERVI au solveur. On le rend visible et supprimable plutôt que
+  // de le laisser agir en silence.
+  //
+  // ⚠ Le cas d'origine était le DIMANCHE, que la grille s'arrêtant au samedi ne pouvait pas
+  // afficher. P4-37 a traité la cause : les sept jours sont désormais rendus, et ce filet
+  // ne rattrape plus qu'un jour ABERRANT (donnée importée, dérive). On le garde pour ça —
+  // il coûte une ligne et son absence rendrait le créneau muet.
   const offGridSlots = slots.filter((sl) => !WEEK.some((d) => d.n === sl.dayOfWeek));
 
   const toggleActive = () => {
@@ -535,12 +539,18 @@ function PeriodVenuePanel({
           slots={slots}
           selectedSlotId={editingSlot?.id ?? null}
           onAdd={(dayOfWeek, startTime) => {
-            // Ajout par clic : 90 min par défaut, ajustables ensuite dans l'éditeur. Pas de
-            // borne de fin de journée — la grille de saison n'en a pas et un créneau du soir
-            // (21:00–22:30) y est légitime ; l'y interdire rendait la période plus stricte
-            // que la saison (revue #8 PR-B round 2).
-            if (null !== findSlotConflict(slots, dayOfWeek, startTime, 90)) {
-              toast.error("Ce créneau en chevauche un autre sur ce gymnase.");
+            // Ajout par clic : 90 min par défaut, ajustables ensuite dans l'éditeur. Un
+            // créneau peut finir APRÈS la dernière ligne de la grille — un créneau du soir
+            // (22:00–23:30) est légitime, et l'y interdire rendait la période plus stricte
+            // que la saison (revue #8 PR-B round 2). La seule borne est MINUIT (P4-37).
+            // ⚠ Ici la durée est FIXE (90 min) : ce panneau n'a pas de barre « À poser ».
+            // Le message générique désignerait une durée que l'utilisateur ne peut pas
+            // régler avant de poser. Il nomme donc le chemin réel — et il nomme les DEUX
+            // gestes : avancer l'heure sans raccourcir la durée ne suffit pas toujours,
+            // conseiller « ajustez l'horaire » seul envoyait vers un éditeur qui refuse.
+            const invalid = slotPlacementError(slots, dayOfWeek, startTime, 90, (start) => `Posé à ${start}, un créneau de 1h30 finirait après minuit. Posez-le plus tôt, puis ajustez son horaire et sa durée dans l'éditeur.`);
+            if (null !== invalid) {
+              toast.error(invalid);
               return;
             }
             createSlot.mutate({ venueId: venue.id, dayOfWeek, startTime, durationMinutes: 90, capacity: 1 });
@@ -552,7 +562,7 @@ function PeriodVenuePanel({
       {offGridSlots.length > 0 && !isDisabled ? (
         <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-2">
           <p role="alert" className="mb-1 text-xs font-medium text-destructive">
-            Créneau(x) sur un jour non affichable (dimanche) — servi au solveur mais invisible sur la grille. Supprimez-le pour ne pas planifier ce jour-là.
+            Créneau(x) sur un jour non affichable — servi au solveur mais invisible sur la grille. Supprimez-le pour ne pas planifier ce jour-là.
           </p>
           <ul className="flex flex-col gap-1">
             {offGridSlots.map((sl) => (
@@ -659,9 +669,10 @@ function PeriodSlotEditor({
   const reservationCount = reservationsHere.length;
 
   const doSave = () => {
-    // Pas de borne de fin de journée : la saison n'en a pas, un créneau du soir
-    // (21:00–22:30) y est légitime. Ne referme qu'au succès — une écriture rejetée garde
-    // l'éditeur ouvert plutôt que de disparaître en donnant l'illusion d'être enregistrée.
+    // La période n'est pas plus stricte que la saison : un créneau du soir (22:00–23:30)
+    // reste légitime, la seule borne est MINUIT — posée en amont par `slotPlacementError`
+    // dans `save`, pas ici. Ne referme qu'au succès : une écriture rejetée garde l'éditeur
+    // ouvert plutôt que de disparaître en donnant l'illusion d'être enregistrée.
     update.mutate(
       { id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } },
       {
@@ -678,9 +689,9 @@ function PeriodSlotEditor({
   };
 
   const save = () => {
-    const conflict = findSlotConflict(otherSlots, day, time, duration);
-    if (null !== conflict) {
-      setError(conflictMessage(conflict));
+    const invalid = slotPlacementError(otherSlots, day, time, duration);
+    if (null !== invalid) {
+      setError(invalid);
       return;
     }
     // Déplacer un créneau réservé retire ses réservations : on le confirme d'abord.
@@ -697,7 +708,10 @@ function PeriodSlotEditor({
         <label className="text-xs text-muted-foreground">
           Jour
           <Select aria-label="Jour" className="mt-0.5 h-9 w-28" value={day} onChange={(e) => (setDay(Number(e.target.value)), setError(null))}>
-            {DAYS.filter((d) => d.n <= 6).map((d) => (
+            {/* Idem `VenuesStep` : ce select filtrait le dimanche pour son compte, alors
+                que la grille le rend désormais (P4-37). Un créneau du dimanche s'y ouvrait
+                sur un champ vide. */}
+            {WEEK.map((d) => (
               <option key={d.n} value={d.n}>
                 {d.label}
               </option>
@@ -711,7 +725,7 @@ function PeriodSlotEditor({
         <label className="text-xs text-muted-foreground">
           Durée
           <Select aria-label="Durée" className="mt-0.5 h-9 w-28" value={duration} onChange={(e) => (setDuration(Number(e.target.value)), setError(null))}>
-            {DURATIONS.map((d) => (
+            {durationOptions(duration, slot.durationMinutes).map((d) => (
               <option key={d} value={d}>
                 {formatDuration(d)}
               </option>

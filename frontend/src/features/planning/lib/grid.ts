@@ -3,7 +3,18 @@ import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel, type TierLike } f
 import type { Coach, Slot, Team, Venue } from "../api";
 import type { ViewMode } from "../store";
 
-/** Monday→Saturday. dayOfWeek is 1..7 (ISO); the training week shown is 1..6. */
+/**
+ * Les SEPT jours ISO. Un jour sans séance est masqué plus bas (`continue`), donc la
+ * colonne du dimanche n'apparaît que pour les clubs qui s'entraînent ce jour-là.
+ *
+ * ⚠ Ce tableau s'arrêtait au samedi, comme la grille du wizard — troisième miroir de la
+ * même règle, trouvé en revue de P4-37. La conséquence n'était pas cosmétique : le
+ * backend accepte `dayOfWeek` jusqu'à 7 (`VenueTrainingSlotInput`), le solveur place la
+ * séance et l'export serveur l'imprime « Dimanche » (`ScheduleExportData::DAY_LABELS`)
+ * — mais l'écran où le planning se TRAVAILLE l'escamotait, `dayLabelOf` la libellait
+ * « ? » dans les diagnostics, et le select « Jour » de `SlotDetail` (qui lit ce même
+ * tableau) la rendait non déplaçable. Un planning à six colonnes se donnait pour complet.
+ */
 export const DAYS: { n: number; label: string }[] = [
   { n: 1, label: "Lun" },
   { n: 2, label: "Mar" },
@@ -11,6 +22,7 @@ export const DAYS: { n: number; label: string }[] = [
   { n: 4, label: "Jeu" },
   { n: 5, label: "Ven" },
   { n: 6, label: "Sam" },
+  { n: 7, label: "Dim" },
 ];
 
 export const NO_COACH = "__none__";
@@ -297,7 +309,7 @@ export interface GridModel {
  */
 export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, filter: Set<string> = new Set(), stepMin = 15): GridModel {
   const visible = slots.filter(
-    (s) => s.dayOfWeek >= 1 && s.dayOfWeek <= 6 && (0 === filter.size || resourceKeysForSlot(s, viewMode, lookups).some((k) => filter.has(k))),
+    (s) => s.dayOfWeek >= 1 && s.dayOfWeek <= 7 && (0 === filter.size || resourceKeysForSlot(s, viewMode, lookups).some((k) => filter.has(k))),
   );
 
   // When a filter is active, a slot shows ONLY under the selected columns — not

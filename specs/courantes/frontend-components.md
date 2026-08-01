@@ -829,17 +829,28 @@ sans le verrouiller de façon permanente :
 
 ## 7. Reference Day Anchoring
 
+> ⚠ **Section OBSOLÈTE dans son implémentation (constaté le 2026-08-01, P4-37).** Elle décrit
+> une pile — **FullCalendar 6** et une validation **Zod** (`VenueSlotSchema`) — dont on ne trouve
+> **aucune trace** dans le dépôt : ni dans `frontend/package.json`, ni dans `frontend/src/`. Elle
+> date d'avant la reconstruction du frontend. Le **concept** d'ancrage reste juste ; les extraits
+> de configuration et les bornes qu'ils citent (`hiddenDays: [0]`, `slotMaxTime: '22:00:00'`,
+> `z.number().min(1).max(6)`) ne décrivent **rien de ce qui tourne** — et ils contredisent
+> désormais la géométrie réelle, qui vit dans **`frontend/src/features/wizard/lib/weekGrid.ts`**
+> (sept jours, 08h→23h) et n'a pas de validation Zod. Ne pas s'y fier sans lire ce fichier.
+
 ### Concept
 
-Le planning ClubScheduler est une **semaine type** (lundi à samedi, pas de
-dimanche). Le "jour de référence" (reference day) est le point d'ancrage qui
-définit le début de cette semaine type dans le calendrier.
+Le planning ClubScheduler est une **semaine type** de **sept jours** (lundi à
+dimanche, depuis P4-37 / 2026-08-01 — la semaine s'arrêtait au samedi côté écran
+alors que l'API acceptait `dayOfWeek` jusqu'à 7 et que l'export l'imprimait). Le
+"jour de référence" (reference day) est le point d'ancrage qui définit le début
+de cette semaine type dans le calendrier.
 
 ### Configuration
 
 | Paramètre | Source | Valeur par défaut | Impact |
 |-----------|--------|-------------------|--------|
-| `dayOfWeek` | `ScheduleSlotTemplate.dayOfWeek` (integer) | 0 | 1=lundi, 2=mardi, ..., 6=samedi. 0 = non assigné |
+| `dayOfWeek` | `ScheduleSlotTemplate.dayOfWeek` (integer) | 0 | 1=lundi, 2=mardi, ..., 7=dimanche. 0 = non assigné |
 | Premier jour calendrier | FullCalendar `firstDay` config | 1 (lundi) | La colonne la plus à gauche est lundi |
 | Timezone club | `Club.timezone` | `Europe/Paris` | Détermine l'heure locale affichée |
 | Locale club | `Club.locale` | `fr_FR` | Formatage des dates et heures |

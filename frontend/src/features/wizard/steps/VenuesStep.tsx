@@ -13,15 +13,14 @@ import { formatDuration } from "@/shared/lib/duration";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { Venue, VenueTrainingSlot } from "../api";
-import { DAYS, DURATIONS, hhmm } from "../lib/days";
-import { conflictMessage, findSlotConflict } from "../lib/slotOverlap";
+import { DAYS, durationOptions, DURATIONS, hhmm } from "../lib/days";
+import { slotPlacementError } from "../lib/slotOverlap";
 import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodVenues } from "./PeriodStructure";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 import { CapacitySelect } from "./slotFields";
-
-const WEEK = DAYS.filter((d) => d.n <= 6);
+import { WEEK } from "../lib/weekGrid";
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -102,10 +101,11 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
   const reservationCount = reservations.filter((r) => r.venueId === slot.venueId && r.dayOfWeek === slot.dayOfWeek && hhmm(r.startTime) === hhmm(slot.startTime)).length;
 
   const save = () => {
-    // Never let an edit overlap another slot of the same gym/day (self excluded).
-    const conflict = findSlotConflict(otherSlots, day, time, duration);
-    if (null !== conflict) {
-      setError(conflictMessage(conflict));
+    // Minuit puis chevauchement — même foyer que la pose au clic (`slotPlacementError`),
+    // `otherSlots` excluant déjà le créneau édité.
+    const invalid = slotPlacementError(otherSlots, day, time, duration);
+    if (null !== invalid) {
+      setError(invalid);
       return;
     }
     // Close ONLY once the write succeeds. If the backend rejects it (e.g. a stale
@@ -122,6 +122,9 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
         <label className="text-xs text-muted-foreground">
           Jour
           <Select aria-label="Jour" className="mt-0.5 h-9 w-28" value={day} onChange={(e) => (setDay(Number(e.target.value)), setError(null))}>
+            {/* Les SEPT jours, lus de la géométrie partagée. Ce select portait sa PROPRE
+                copie amputée du dimanche : un créneau du dimanche — désormais posable —
+                s'y ouvrait sur un champ VIDE, et le jour n'était pas rattrapable (P4-37). */}
             {WEEK.map((d) => (
               <option key={d.n} value={d.n}>
                 {d.label}
@@ -136,7 +139,7 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
         <label className="text-xs text-muted-foreground">
           Durée
           <Select aria-label="Durée" className="mt-0.5 h-9 w-28" value={duration} onChange={(e) => (setDuration(Number(e.target.value)), setError(null))}>
-            {DURATIONS.map((d) => (
+            {durationOptions(duration, slot.durationMinutes).map((d) => (
               <option key={d} value={d}>
                 {formatDuration(d)}
               </option>
@@ -365,6 +368,10 @@ function VenuesEditor() {
                 </option>
               ))}
             </Select>
+            {/* L'indice manquait : la barre annonçait une durée sans dire ce qu'on en fait
+                (retour terrain). Il vit ICI, là où le regard est déjà au moment où la
+                question se pose. */}
+            <span className="text-xs text-muted-foreground">— cliquez la grille pour ajouter un créneau</span>
           </div>
 
           <VenueAvailabilityGrid
@@ -372,10 +379,9 @@ function VenuesEditor() {
             slots={venueSlots}
             selectedSlotId={editingSlot?.id ?? null}
             onAdd={(dayOfWeek, startTime) => {
-              // Forbid dropping a slot that overlaps an existing one (same gym/day).
-              const conflict = findSlotConflict(venueSlots, dayOfWeek, startTime, duration);
-              if (null !== conflict) {
-                toast.error(conflictMessage(conflict));
+              const invalid = slotPlacementError(venueSlots, dayOfWeek, startTime, duration);
+              if (null !== invalid) {
+                toast.error(invalid);
                 return;
               }
               addSlot.mutate({ venueId: selected.id, dayOfWeek, startTime, durationMinutes: duration, capacity: 1 });
