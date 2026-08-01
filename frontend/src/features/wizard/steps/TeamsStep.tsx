@@ -2,7 +2,7 @@ import { closestCorners, DndContext, type DragEndEvent, DragOverlay, KeyboardSen
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from "lucide-react";
-import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
@@ -77,7 +77,8 @@ const nextOrder = (teams: Team[], tierId: number): number => {
 
 interface RowProps {
   team: Team;
-  number: number;
+  /** Position dans l'ordre par rang — absente en liste plate, où elle n'aurait pas de sens. */
+  number?: number;
   categories: SportCategory[];
   tiers: PriorityTier[];
   onField: (team: Team, patch: Partial<TeamPayload>) => void;
@@ -104,7 +105,7 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete, rankLabel
   return (
     <div className="border-t border-border py-1.5">
       <div className="flex items-center gap-2">
-        <span className="w-6 shrink-0 text-center text-xs text-muted-foreground">{number}</span>
+        {undefined === number ? null : <span className="w-6 shrink-0 text-center text-xs text-muted-foreground">{number}</span>}
         {/* P4-36 (b) — le rang n'existait que comme TITRE de section : invisible dès qu'on
             trie autrement, et illisible quand on cherche une équipe précise. Décision
             fondateur : un badge par ligne, et les flèches sorties du mode « Trier ». */}
@@ -234,24 +235,35 @@ function SortHeader({
   sort,
   onSort,
   className,
-  children,
+  label,
 }: {
   column: SortColumn;
   sort: { column: SortColumn; dir: 1 | -1 };
   onSort: (next: { column: SortColumn; dir: 1 | -1 }) => void;
   className?: string;
-  children: ReactNode;
+  /** Libellé TEXTE (et non `children`) : il entre dans le nom accessible avec l'état. */
+  label: string;
 }) {
   const active = sort.column === column;
+  // ⚠ `aria-sort` n'est reconnu que sur un `columnheader` — sur un span nu il est retiré de
+  // l'arbre d'accessibilité (revue #347), et la flèche visible est `aria-hidden`. L'état
+  // vit donc dans le NOM du bouton : sans lui, un lecteur d'écran entend « Rang, bouton »
+  // avant et après le clic, et pour la colonne active comme pour les autres.
+  // ⚠ Le nom dit l'ACTION, pas seulement la colonne : « Niveau de jeu » tout court entrait
+  // en collision avec le champ du formulaire qui porte déjà ce nom — deux contrôles
+  // différents, un seul nom, et un lecteur d'écran n'a plus de quoi les distinguer. Le test
+  // l'a montré en trouvant deux éléments là où il en attendait un.
+  const state = active ? (1 === sort.dir ? ", trié croissant" : ", trié décroissant") : "";
 
   return (
-    <span className={className} aria-sort={active ? (1 === sort.dir ? "ascending" : "descending") : "none"}>
+    <span className={className}>
       <button
         type="button"
+        aria-label={`Trier par ${label.toLocaleLowerCase("fr")}${state}`}
         className={cn("inline-flex items-center gap-1 hover:text-foreground", active && "text-foreground")}
         onClick={() => onSort({ column, dir: active && 1 === sort.dir ? -1 : 1 })}
       >
-        {children}
+        {label}
         {active ? <span aria-hidden="true">{1 === sort.dir ? "\u2191" : "\u2193"}</span> : null}
       </button>
     </span>
@@ -346,14 +358,21 @@ function TeamsEditor() {
 
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState(false);
+  const [catError, setCatError] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const [catId, setCatId] = useState("");
   const [tierId, setTierId] = useState(1);
   const [gender, setGender] = useState<Gender | "">("");
   const [level, setLevel] = useState<TeamLevel | "">("");
   const [sessions, setSessions] = useState("2");
-  // Default to the first category until the user picks one (no effect needed).
-  const effectiveCat = catId || categories[0]?.id || "";
+  // ⚠ PLUS de catégorie par défaut (revue #347). Le défaut valait `categories[0]`, ce que
+  // le catalogue réordonné transforme en « Vétéran » pour TOUS les clubs : un club de jeunes
+  // qui saisit ses vingt équipes d'affilée — le flux que ce lot optimise justement — les
+  // classait toutes en vétéran, et la catégorie pilote les contraintes d'âge. L'ordre
+  // précédent étant aléatoire, ce n'était pas une régression stricte : c'était un mauvais
+  // défaut par hasard, que ce lot rendait mauvais par construction. On demande donc un
+  // choix explicite, refusé à la soumission comme l'est déjà un nom vide.
+  const effectiveCat = catId;
 
   const numberOf = new Map(orderedTeams(teams).map((r) => [r.team.id, r.globalNumber]));
 
@@ -416,10 +435,15 @@ function TeamsEditor() {
       nameRef.current?.focus();
       return;
     }
+    if ("" === effectiveCat) {
+      setCatError(true);
+      return;
+    }
     setNameError(false);
+    setCatError(false);
     create.mutate({
       name: name.trim(),
-      sportCategoryId: effectiveCat || undefined,
+      sportCategoryId: effectiveCat,
       priorityTierId: tierId,
       tierOrder: nextOrder(teams, tierId),
       gender: gender || null,
@@ -627,7 +651,7 @@ function TeamsEditor() {
               neuf saisissait sa première équipe à l'aveugle. Il nomme donc les champs DU
               FORMULAIRE, dont les colonnes diffèrent de celles de la liste (rang ici,
               numéro et suppression là-bas). */}
-          <div aria-hidden="true" className="mb-1 hidden flex-wrap items-end gap-2 px-3 text-xs font-medium text-muted-foreground sm:flex">
+          <div aria-hidden="true" className="mb-1 flex flex-wrap items-end gap-2 px-3 text-xs font-medium text-muted-foreground">
             <span className="min-w-0 flex-1">Nom de l'équipe</span>
             <span className="w-28">Catégorie</span>
             <span className="w-24">Genre</span>
@@ -651,7 +675,17 @@ function TeamsEditor() {
                 }
               }}
             />
-            <Select aria-label="Catégorie" className="h-8 w-28" value={effectiveCat} onChange={(e) => setCatId(e.target.value)}>
+            <Select
+              aria-label="Catégorie"
+              aria-invalid={catError}
+              className={cn("h-8 w-28", catError ? "border-destructive focus-visible:ring-destructive" : "")}
+              value={effectiveCat}
+              onChange={(e) => {
+                setCatId(e.target.value);
+                setCatError(false);
+              }}
+            >
+              <option value="">— catégorie —</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -691,6 +725,11 @@ function TeamsEditor() {
               Le nom de l'équipe est obligatoire.
             </p>
           ) : null}
+          {catError ? (
+            <p role="alert" className="-mt-4 mb-4 text-sm text-destructive">
+              Choisissez la catégorie de l'équipe.
+            </p>
+          ) : null}
 
           {0 === teams.length ? (
             <EmptyHint>Aucune équipe pour le moment.</EmptyHint>
@@ -705,26 +744,17 @@ function TeamsEditor() {
                 </p>
               )}
               <div className="flex items-center gap-2 px-2 text-xs font-medium text-muted-foreground">
-                <span className="w-6 text-center">#</span>
-                <SortHeader column="rang" sort={sort} onSort={setSort} className="w-6 text-center">
-                  Rang
-                </SortHeader>
+                {/* Le « # » est la position dans l'ordre par RANG : en liste plate il se
+                    lirait 7, 3, 14, 1… soit comme un défaut d'affichage (revue #347). Il
+                    sort avec les sections ; le badge, lui, garde le rang sur chaque ligne. */}
+                {byRank ? <span className="w-6 text-center">#</span> : null}
+                <SortHeader column="rang" sort={sort} onSort={setSort} className="w-6 text-center" label="Rang" />
                 {byRank ? <span className="w-14" /> : null}
-                <SortHeader column="name" sort={sort} onSort={setSort} className="min-w-0 flex-1">
-                  Nom de l'équipe
-                </SortHeader>
-                <SortHeader column="category" sort={sort} onSort={setSort} className="w-28">
-                  Catégorie
-                </SortHeader>
-                <SortHeader column="gender" sort={sort} onSort={setSort} className="w-20">
-                  Genre
-                </SortHeader>
-                <SortHeader column="level" sort={sort} onSort={setSort} className="w-32">
-                  Niveau de jeu
-                </SortHeader>
-                <SortHeader column="sessions" sort={sort} onSort={setSort} className="w-16">
-                  Séances
-                </SortHeader>
+                <SortHeader column="name" sort={sort} onSort={setSort} className="min-w-0 flex-1" label="Nom de l'équipe" />
+                <SortHeader column="category" sort={sort} onSort={setSort} className="w-28" label="Catégorie" />
+                <SortHeader column="gender" sort={sort} onSort={setSort} className="w-20" label="Genre" />
+                <SortHeader column="level" sort={sort} onSort={setSort} className="w-32" label="Niveau de jeu" />
+                <SortHeader column="sessions" sort={sort} onSort={setSort} className="w-16" label="Séances" />
                 <span className="w-8 text-right">Suppr.</span>
               </div>
               {byRank ? (
@@ -758,16 +788,7 @@ function TeamsEditor() {
                 // et le badge de rang par ligne porte l'information qu'elles donnaient.
                 <div className="rounded-lg border border-border bg-card px-2">
                   {flatTeams.map((team) => (
-                    <TeamRow
-                      key={team.id}
-                      team={team}
-                      number={numberOf.get(team.id) ?? 0}
-                      categories={categories}
-                      tiers={tiers}
-                      onField={onField}
-                      onDelete={setToDelete}
-                      rankLabel={rankLabelOf(team)}
-                    />
+                    <TeamRow key={team.id} team={team} categories={categories} tiers={tiers} onField={onField} onDelete={setToDelete} rankLabel={rankLabelOf(team)} />
                   ))}
                 </div>
               )}
