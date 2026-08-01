@@ -9,7 +9,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
 import { TabPanel, Tabs } from "@/shared/components/ui/tabs";
-import { groupTeamsByTier } from "@/shared/lib/teamTiers";
+import { compareTeamsByRank } from "@/shared/lib/teamTiers";
 import { Spinner } from "@/shared/components/ui/spinner";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 
@@ -100,9 +100,41 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   // premier rendu. Un `useState(() => teams.map(…))` n'est évalué QU'UNE fois — le défaut
   // serait resté vide pour toujours, et la modale aurait affiché « 0 équipe sur 49 » en se
   // croyant d'accord avec elle-même.
+  //
+  // ⚠ Ni figé au premier rendu, ni dérivé en permanence (revue #346) :
+  //  - un `useState(() => teams.map(…))` gèle un défaut VIDE, `teams` valant [] au premier
+  //    rendu — la modale aurait affiché « 0 équipe sur 49 » en se croyant d'accord ;
+  //  - mais le lire à CHAQUE rendu perd l'INSTANTANÉ : la sélection intacte suivait alors la
+  //    requête, et un refetch d'arrière-plan (une saisie d'email invalide les coachs)
+  //    élargissait la collecte en silence à des équipes jamais montrées — sélecteur replié,
+  //    la seule trace à l'écran était une ligne de résumé.
+  // On SEMENCE donc une fois, dès que les équipes sont réellement là : après quoi la
+  // sélection n'appartient plus qu'au gestionnaire.
   const [pickedTeamIds, setPickedTeamIds] = useState<Set<string> | null>(null !== existing ? new Set(existing.teamIds) : null);
-  const teamIds = pickedTeamIds ?? new Set(teams.map((t) => t.id));
+  // La graine est posée UNE fois, au premier rendu où les équipes existent — ajustement
+  // d'état PENDANT le rendu, le motif documenté pour « recalculer quand une donnée arrive »
+  // (ni initialiseur paresseux, qui gèlerait le vide, ni effet, que React refuse ici).
+  // Après ça, la sélection n'appartient qu'au gestionnaire : aucun refetch ne l'élargit
+  // dans son dos.
+  const [teamsSeeded, setTeamsSeeded] = useState(false);
+  if (!teamsSeeded && null === pickedTeamIds && teams.length > 0) {
+    setTeamsSeeded(true);
+    setPickedTeamIds(new Set(teams.map((t) => t.id)));
+  }
+  const teamIds = useMemo(() => pickedTeamIds ?? new Set<string>(), [pickedTeamIds]);
   const setTeamIds = setPickedTeamIds;
+
+  // ⚠ Le sélecteur montre TOUT ce qui est sélectionné, éligible ou non : une campagne
+  // existante peut porter une équipe qui a perdu son coach depuis. Ne rendre que les
+  // éligibles laissait « tout décocher » sans effet sur elle, le résumé annoncer « 0 » et
+  // l'enregistrement la poster quand même (revue #346).
+  const pickerTeams = useMemo(() => {
+    const shown = new Set(teams.map((t) => t.id));
+    const strays = (teamsQuery.data ?? []).filter((t) => !shown.has(t.id) && teamIds.has(t.id));
+
+    return 0 === strays.length ? teams : [...teams, ...strays];
+  }, [teams, teamsQuery.data, teamIds]);
+  const ineligibleIds = useMemo(() => new Set(pickerTeams.filter((t) => !teams.some((e) => e.id === t.id)).map((t) => t.id)), [pickerTeams, teams]);
   // La date limite par défaut était `entry.startDate`, donc DANS LE PASSÉ dès que la
   // période a commencé — cas que ce lot vient précisément de rendre légitime. Les liens
   // partaient morts : le serveur répond 410 « deadline dépassée », et le gestionnaire ne
@@ -127,7 +159,15 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
     if (null !== campaign) {
       updateCampaign.mutate({ id: campaign.id, body }, { onSuccess: setCampaign });
     } else {
-      createCampaign.mutate(body, { onSuccess: setCampaign });
+      // Après création, on BASCULE sur les liens : c'est ce que le gestionnaire est venu
+      // chercher. Sans ça (revue #346), le bouton changeait de libellé, un onglet
+      // apparaissait discrètement, et rien d'autre ne bougeait — on croyait l'échec.
+      createCampaign.mutate(body, {
+        onSuccess: (created) => {
+          setCampaign(created);
+          setActiveTab("coachs");
+        },
+      });
     }
   };
 
@@ -174,7 +214,7 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
           </div>
         </fieldset>
 
-        <TeamPicker teams={teams} tiers={tiers} selected={teamIds} onChange={setTeamIds} />
+        <TeamPicker teams={pickerTeams} ineligibleIds={ineligibleIds} tiers={tiers} selected={teamIds} onChange={setTeamIds} />
 
         <label className="mt-4 flex items-center gap-2 text-sm font-medium">
           À renvoyer avant le
@@ -236,7 +276,6 @@ function CoachLinks({ campaign, onEmailSaved, onCampaignRefreshed }: { campaign:
   const remind = useRemindCampaignSilent();
   const teamsQuery = useWizardTeams();
   const teamCoachesQuery = useWizardTeamCoaches();
-  const { data: tiers = [] } = usePriorityTiers();
 
   // Filtres (D1/D2/D3) : par ÉQUIPE (celles de la campagne) et par STATUT, additifs dans
   // chaque axe, combinés en ET entre axes. N'affectent QUE la liste, jamais les boutons (D4).
@@ -247,10 +286,12 @@ function CoachLinks({ campaign, onEmailSaved, onCampaignRefreshed }: { campaign:
   const campaignTeamIds = new Set(campaign.teamIds);
   // P3-15 (b) — triées par RANG, comme partout où une équipe se lit. Elles sortaient dans
   // l'ordre brut de l'API : même helper, pas une seconde règle de tri.
-  const campaignTeams = groupTeamsByTier(
-    (teamsQuery.data ?? []).filter((t) => campaignTeamIds.has(t.id)),
-    tiers,
-  ).flatMap((g) => g.teams);
+  // Tri par RANG, mais avec `compareTeamsByRank` et non `groupTeamsByTier` : ce dernier a
+  // besoin des rangs CHARGÉS, et tant qu'ils ne le sont pas il verse tout dans « Autres »
+  // puis re-trie à leur arrivée — la rangée se réordonnait sous le pointeur, et un clic
+  // filtrait sur une autre équipe que celle visée (revue #346). Le comparateur donne le
+  // même ordre dès le premier rendu.
+  const campaignTeams = [...(teamsQuery.data ?? []).filter((t) => campaignTeamIds.has(t.id))].sort(compareTeamsByRank);
   // coachId → équipes de la campagne qu'il coache (D1 : TeamCoach ∩ teamIds campagne).
   const coachTeams = new Map<string, Set<string>>();
   for (const tc of teamCoachesQuery.data ?? []) {
