@@ -365,6 +365,10 @@ function VenuesEditor() {
                 </option>
               ))}
             </Select>
+            {/* L'indice manquait : la barre annonçait une durée sans dire ce qu'on en fait
+                (retour terrain). Il vit ICI, là où le regard est déjà au moment où la
+                question se pose. */}
+            <span className="text-xs text-muted-foreground">— cliquez la grille pour ajouter un créneau</span>
           </div>
 
           <VenueAvailabilityGrid

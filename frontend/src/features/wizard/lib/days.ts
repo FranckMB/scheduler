@@ -24,4 +24,6 @@ export const toMinutes = (time: string): number => {
 export const fmtMinutes = (m: number): string => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 /** Durées proposées pour un créneau (min) — éditeurs de saison et de période. */
-export const DURATIONS = [60, 75, 90, 105, 120];
+// 45 min → 2h30 par pas de 15 (retour terrain 2026-07-31 : la liste s'arrêtait à 1h→2h,
+// alors qu'un club pose des séances courtes de jeunes comme des créneaux longs de senior).
+export const DURATIONS = [45, 60, 75, 90, 105, 120, 135, 150];

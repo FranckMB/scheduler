@@ -17,18 +17,25 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
   const color = venue.color ?? "var(--accent)";
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+    // P4-37 — la grille DÉFILE en interne au lieu de pousser la page. Elle n'avait aucune
+    // borne verticale : passer de 22h à 23h l'aurait allongée d'autant, aggravant un
+    // problème qui existait déjà. `max-h` + `overflow-y-auto` la bornent au viewport.
+    <div className="max-h-[min(70vh,40rem)] overflow-auto rounded-lg border border-border bg-card">
       <div className="grid text-xs" style={{ gridTemplateColumns, gridTemplateRows }}>
-        <div className="border-b border-r border-border" style={{ gridColumn: 1, gridRow: 1 }} />
+        {/* Coin figé sur les DEUX axes : il masque la gouttière quand elle défile sous
+            l'en-tête, sinon les heures passeraient par-dessus les noms de jours. */}
+        <div className="sticky left-0 top-0 z-30 border-b border-r border-border bg-card" style={{ gridColumn: 1, gridRow: 1 }} />
         {WEEK.map((d, i) => (
-          <div key={d.n} className="border-b border-l border-border py-0.5 text-center font-medium" style={{ gridColumn: 2 + i, gridRow: 1 }}>
+          <div key={d.n} className="sticky top-0 z-20 border-b border-l border-border bg-card py-0.5 text-center font-medium" style={{ gridColumn: 2 + i, gridRow: 1 }}>
             {d.label}
           </div>
         ))}
 
         {/* Time gutter — label on the hour */}
         {rows.map((m, i) => (
-          <div key={`t${m}`} className="border-r border-border pr-1 text-right text-[10px] text-muted-foreground" style={{ gridColumn: 1, gridRow: 2 + i }}>
+          // La gouttière reste lisible pendant le défilement HORIZONTAL : sans `sticky`,
+          // les heures disparaissaient sous les colonnes dès qu'on faisait défiler.
+          <div key={`t${m}`} className="sticky left-0 z-10 border-r border-border bg-card pr-1 text-right text-[10px] text-muted-foreground" style={{ gridColumn: 1, gridRow: 2 + i }}>
             {0 === m % 60 ? fmt(m) : ""}
           </div>
         ))}

@@ -24,7 +24,7 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
   const color = venue.color ?? "var(--accent)";
 
   // Dynamic vertical range: only the hours that actually hold slots for THIS
-  // venue (Réserver-only — the Gymnases grid keeps the fixed 08–22 for creation).
+  // venue (Réserver-only — the Gymnases grid keeps the fixed 08–23 for creation).
   // Rounded to the hour; falls back to the fixed range when the venue has none.
   const startMins = slots.map((s) => startMinutes(s.startTime));
   const endMins = slots.map((s) => startMinutes(s.startTime) + s.durationMinutes);

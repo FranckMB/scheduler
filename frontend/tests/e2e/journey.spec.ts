@@ -29,6 +29,8 @@ test("full journey: wizard → generation → validated planning → cockpit", a
 
   // --- Step 2 · venue + two weekly slots (2 sessions to place).
   await expect(page.getByRole("heading", { name: /Étape 2\/6/ })).toBeVisible();
+  // P4-37 : la barre « À poser » dit désormais ce qu'on en fait — rien ne l'indiquait.
+  await expect(page.getByText(/cliquez la grille pour ajouter un créneau/i)).toBeVisible();
   await page.getByLabel("Nom du gymnase").fill("Gymnase E2E");
   await page.getByRole("button", { name: "Ajouter un gymnase" }).click();
   // Created venue is auto-selected in the venue picker; the grid is open.

@@ -492,10 +492,14 @@ function PeriodVenuePanel({
   const modeBusy = setMode.isPending || clearMode.isPending || syncing;
   const gridBusy = resetGrid.isPending || clearGrid.isPending;
   const reservationCount = reservations.filter((r) => r.venueId === venue.id).length;
-  // #8 round 2 finding #6 — un creneau sur un jour que la grille ne montre pas (dimanche,
-  // jour 7, herite de l ancien formulaire ; ni la saison ni la nouvelle grille ne le
-  // proposent) resterait INVISIBLE tout en etant SERVI au solveur. On le rend visible et
-  // supprimable plutot que de le laisser agir en silence.
+  // #8 round 2 finding #6 — un créneau sur un jour que la grille ne montre pas resterait
+  // INVISIBLE tout en étant SERVI au solveur. On le rend visible et supprimable plutôt que
+  // de le laisser agir en silence.
+  //
+  // ⚠ Le cas d'origine était le DIMANCHE, que la grille s'arrêtant au samedi ne pouvait pas
+  // afficher. P4-37 a traité la cause : les sept jours sont désormais rendus, et ce filet
+  // ne rattrape plus qu'un jour ABERRANT (donnée importée, dérive). On le garde pour ça —
+  // il coûte une ligne et son absence rendrait le créneau muet.
   const offGridSlots = slots.filter((sl) => !WEEK.some((d) => d.n === sl.dayOfWeek));
 
   const toggleActive = () => {
@@ -552,7 +556,7 @@ function PeriodVenuePanel({
       {offGridSlots.length > 0 && !isDisabled ? (
         <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-2">
           <p role="alert" className="mb-1 text-xs font-medium text-destructive">
-            Créneau(x) sur un jour non affichable (dimanche) — servi au solveur mais invisible sur la grille. Supprimez-le pour ne pas planifier ce jour-là.
+            Créneau(x) sur un jour non affichable — servi au solveur mais invisible sur la grille. Supprimez-le pour ne pas planifier ce jour-là.
           </p>
           <ul className="flex flex-col gap-1">
             {offGridSlots.map((sl) => (

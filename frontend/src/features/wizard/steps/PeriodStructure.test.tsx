@@ -520,21 +520,32 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     expect(updateSlot).toHaveBeenCalled();
   });
 
-  it("rend visible et supprimable un créneau sur un jour non affichable (dimanche, jour 7)", async () => {
-    // Round 2 finding #6 : un créneau jour-7 hérité serait servi au solveur mais invisible
-    // sur la grille (1–6). On le montre dans un bandeau d'alerte, avec un bouton Supprimer,
-    // plutôt que de le laisser planifier le dimanche en silence.
+  it("rend visible et supprimable un créneau sur un jour ABERRANT", async () => {
+    // Round 2 finding #6 : un créneau sur un jour que la grille ne montre pas serait servi
+    // au solveur tout en restant invisible. On le montre dans un bandeau d'alerte, avec un
+    // bouton Supprimer, plutôt que de le laisser agir en silence.
+    // ⚠ Le cas d'origine était le DIMANCHE ; P4-37 a traité la cause (les sept jours sont
+    // rendus). Le filet ne rattrape donc plus qu'un jour hors semaine — donnée importée ou
+    // dérive — et c'est ce cas-là que ce test garde désormais.
     const del = vi.fn();
     deletePeriodSlotImpl.value = del;
-    periodSlotOverride.value = [{ id: "sun1", venueId: "v1", dayOfWeek: 7, startTime: "10:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }];
+    periodSlotOverride.value = [{ id: "odd1", venueId: "v1", dayOfWeek: 9, startTime: "10:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }];
     const user = userEvent.setup();
     render(<PeriodVenues calendarEntryId="e1" />);
 
-    const alert = screen.getByText(/jour non affichable \(dimanche\)/);
-    expect(alert).toBeInTheDocument();
+    expect(screen.getByText(/jour non affichable/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Supprimer/ }));
-    expect(del).toHaveBeenCalledWith("sun1");
+    expect(del).toHaveBeenCalledWith("odd1");
     deletePeriodSlotImpl.value = deleteSlot;
+  });
+
+  // P4-37 — la CAUSE : le dimanche n'était pas affichable, donc un créneau posé ce jour-là
+  // n'existait que dans le filet ci-dessus. Il vit maintenant dans la grille.
+  it("affiche un créneau du dimanche DANS la grille, plus dans le filet", () => {
+    periodSlotOverride.value = [{ id: "sun1", venueId: "v1", dayOfWeek: 7, startTime: "10:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }];
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    expect(screen.queryByText(/jour non affichable/)).toBeNull();
   });
 
   it("gèle la grille d'un gymnase désactivé au lieu de la laisser éditer", async () => {
