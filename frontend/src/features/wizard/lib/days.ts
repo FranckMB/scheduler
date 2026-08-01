@@ -27,3 +27,16 @@ export const fmtMinutes = (m: number): string => `${String(Math.floor(m / 60)).p
 // 45 min → 2h30 par pas de 15 (retour terrain 2026-07-31 : la liste s'arrêtait à 1h→2h,
 // alors qu'un club pose des séances courtes de jeunes comme des créneaux longs de senior).
 export const DURATIONS = [45, 60, 75, 90, 105, 120, 135, 150];
+
+/**
+ * Les durées à OFFRIR dans un éditeur, la valeur courante comprise.
+ *
+ * Un select ne peut pas afficher une valeur qu'il n'offre pas : sans cela, un créneau dont
+ * la durée ne figure pas dans la liste (donnée antérieure à l'élargissement de P4-37,
+ * import, écriture directe — l'API n'impose qu'un `Range(min: 15)`) s'ouvrait sur un champ
+ * VIDE, exactement comme le select « Jour » face à un dimanche. CHOISIR se restreint,
+ * NOMMER jamais : la liste offerte se complète de ce qui est déjà là.
+ */
+export function durationOptions(current: number): number[] {
+  return DURATIONS.includes(current) ? DURATIONS : [...DURATIONS, current].sort((a, b) => a - b);
+}

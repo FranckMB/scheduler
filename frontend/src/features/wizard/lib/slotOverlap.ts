@@ -41,7 +41,14 @@ const DAY_END = 24 * 60;
  * Rend le message d'erreur, ou null si le créneau tient dans la journée.
  */
 export function pastMidnightMessage(startTime: string, durationMinutes: number): string | null {
-  if (toMinutes(startTime) + durationMinutes <= DAY_END) {
+  const start = toMinutes(startTime);
+  // ⚠ `startTime` vient d'un `<input type="time">` que l'utilisateur peut VIDER en cours
+  // de frappe : `toMinutes("")` rend NaN, et `NaN <= DAY_END` étant faux, la garde criait
+  // « un créneau qui commence à ⟨rien⟩ ne peut pas durer 1h30 » — en désignant la durée,
+  // que l'utilisateur n'avait pas touchée, et en court-circuitant le contrôle de
+  // chevauchement placé après elle. Une heure illisible n'est pas une heure tardive :
+  // elle se signale là où elle est saisie (champ requis, 422 serveur), pas ici.
+  if (!Number.isFinite(start) || start + durationMinutes <= DAY_END) {
     return null;
   }
 
@@ -50,3 +57,24 @@ export function pastMidnightMessage(startTime: string, durationMinutes: number):
 
 export const conflictMessage = (c: VenueTrainingSlot): string =>
   `Chevauchement avec le créneau ${dayLabel(c.dayOfWeek)} ${hhmm(c.startTime)}–${fmtMinutes(toMinutes(c.startTime) + c.durationMinutes)}. Les créneaux ne peuvent pas se superposer.`;
+
+/**
+ * LA validation de pose d'un créneau — minuit, puis chevauchement, dans cet ordre.
+ *
+ * La séquence était recopiée sur les quatre sites qui posent ou déplacent un créneau
+ * (création au clic et édition, en saison et en période). Quatre copies d'une règle, c'est
+ * quatre occasions qu'elles divergent : la revue de P4-37 a précisément trouvé un site où
+ * la borne de minuit manquait encore. Un seul foyer, appelé partout.
+ *
+ * Rend le message à afficher, ou null si la pose est valide.
+ */
+export function slotPlacementError(others: VenueTrainingSlot[], day: number, startTime: string, durationMinutes: number): string | null {
+  const tooLate = pastMidnightMessage(startTime, durationMinutes);
+  if (null !== tooLate) {
+    return tooLate;
+  }
+
+  const conflict = findSlotConflict(others, day, startTime, durationMinutes);
+
+  return null === conflict ? null : conflictMessage(conflict);
+}

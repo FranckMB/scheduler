@@ -520,6 +520,38 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     expect(updateSlot).toHaveBeenCalled();
   });
 
+  it("REFUSE d'enregistrer un créneau qui franchirait minuit, et ne l'envoie pas", async () => {
+    // ⚠ Ce test garde le CÂBLAGE, pas la règle : `slotPlacementError` a ses propres tests
+    // unitaires, mais on pouvait supprimer ses quatre appels sans qu'un seul test rougisse
+    // (revue #349 round 2, CLAUDE.md §7.2 pt 5). Il faut donc vérifier ici qu'un geste
+    // réel est bloqué, pas seulement qu'une fonction pure rend le bon message.
+    periodSlotOverride.value = [{ id: "ps1", venueId: "v1", dayOfWeek: 1, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await user.click(screen.getByTitle(/^20:00 .*modifier$/));
+
+    await user.clear(screen.getByLabelText("Début"));
+    await user.type(screen.getByLabelText("Début"), "23:30");
+    await user.selectOptions(screen.getByLabelText("Durée"), "90");
+    await user.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    expect(updateSlot).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(/après minuit/);
+  });
+
+  it("affiche la durée COURANTE d'un créneau même absente de la liste proposée", async () => {
+    // Même règle que le select « Jour » : un select ne peut pas montrer une valeur qu'il
+    // n'offre pas. 30 min n'est pas dans `DURATIONS` mais l'API l'accepte (`Range(min: 15)`),
+    // et le champ s'ouvrait VIDE — le gestionnaire lisait « pas de durée » sur un créneau
+    // qui en a une.
+    periodSlotOverride.value = [{ id: "ps1", venueId: "v1", dayOfWeek: 1, startTime: "20:00:00", durationMinutes: 30, capacity: 1, schedulePlanId: "plan-1" }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await user.click(screen.getByTitle(/^20:00 .*modifier$/));
+
+    expect(screen.getByLabelText("Durée")).toHaveValue("30");
+  });
+
   it("laisse déplacer un créneau AU dimanche depuis la modale d'édition", async () => {
     // ⚠ Le select « Jour » portait sa PROPRE liste amputée du dimanche, distincte de la
     // géométrie de la grille : rendre le dimanche posable au clic l'aurait laissé

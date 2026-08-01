@@ -65,7 +65,15 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
           if (di < 0) {
             return null;
           }
-          const startRow = 2 + Math.round((startMinutes(slot.startTime) - START_MIN) / STEP);
+          // Le DÉBUT aussi doit tomber sur une ligne qui existe. Sans borne, un créneau à
+          // 07:00 (l'API ne borne pas `startTime`) donnait `startRow = -2` : en CSS une
+          // ligne négative se compte depuis la FIN de la grille explicite, donc le bloc
+          // s'affichait à 22:45 en portant le libellé « 07:00 » — un créneau du matin lu
+          // comme un créneau du soir. À 07:30 la ligne valait 0, valeur invalide : tout le
+          // `grid-row` était ignoré et le bloc placé au hasard. Borné, il se colle au bord
+          // de la grille en gardant son libellé d'heure réel.
+          const rawRow = 2 + Math.round((startMinutes(slot.startTime) - START_MIN) / STEP);
+          const startRow = Math.min(rows.length + 1, Math.max(2, rawRow));
           // Le span est BORNÉ par la dernière ligne déclarée. Un créneau qui finit après
           // 23:00 est légitime (22:00 + 2h30) mais son bloc demanderait des lignes que
           // `gridTemplateRows` ne déclare pas : CSS en crée alors d'implicites, en `auto`,
@@ -81,6 +89,11 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
               type="button"
               onClick={() => onSelect(slot)}
               title={`${hhmm(slot.startTime)} · ${formatDuration(slot.durationMinutes)} · cap ${slot.capacity} — cliquer pour modifier`}
+              // Le `title` n'est PAS le nom accessible (le texte du bouton l'emporte) et ne
+              // s'affiche jamais au doigt : la durée réelle n'était lisible qu'à la souris.
+              // Or un bloc tronqué — celui dont la fin déborde la grille — est précisément
+              // celui qui affiche moins d'occupation qu'il n'en prend.
+              aria-label={`${WEEK[di]?.label ?? ""} ${hhmm(slot.startTime)} · ${formatDuration(slot.durationMinutes)} · capacité ${slot.capacity} — modifier`}
               className={cn(
                 // Full border + OPAQUE fill so a slot is always clearly bounded —
                 // the old semi-transparent var(--muted) fill was identical to the

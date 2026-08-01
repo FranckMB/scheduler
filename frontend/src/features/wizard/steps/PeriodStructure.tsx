@@ -19,8 +19,8 @@ import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
-import { DAYS, DURATIONS, hhmm } from "../lib/days";
-import { conflictMessage, findSlotConflict, pastMidnightMessage } from "../lib/slotOverlap";
+import { DAYS, durationOptions, hhmm } from "../lib/days";
+import { findSlotConflict, pastMidnightMessage, slotPlacementError } from "../lib/slotOverlap";
 import {
   useCreatePeriodConstraintOverride,
   useClearVenuePeriodGrid,
@@ -543,9 +543,13 @@ function PeriodVenuePanel({
             // créneau peut finir APRÈS la dernière ligne de la grille — un créneau du soir
             // (22:00–23:30) est légitime, et l'y interdire rendait la période plus stricte
             // que la saison (revue #8 PR-B round 2). La seule borne est MINUIT (P4-37).
-            const tooLate = pastMidnightMessage(startTime, 90);
-            if (null !== tooLate) {
-              toast.error(tooLate);
+            // ⚠ Ici la durée est FIXE (90 min) : ce panneau n'a pas de barre « À poser ».
+            // Renvoyer le message générique désignerait une durée que l'utilisateur ne peut
+            // pas changer avant de poser, et la dernière rangée de la grille (22:45) serait
+            // définitivement inutilisable sans qu'aucun écran ne dise comment faire. On
+            // nomme donc le chemin : poser plus tôt, puis ajuster dans l'éditeur.
+            if (null !== pastMidnightMessage(startTime, 90)) {
+              toast.error(`Posé à ${startTime}, un créneau de 1h30 finirait après minuit. Posez-le plus tôt, puis ajustez son horaire dans l'éditeur.`);
               return;
             }
             if (null !== findSlotConflict(slots, dayOfWeek, startTime, 90)) {
@@ -687,16 +691,9 @@ function PeriodSlotEditor({
   };
 
   const save = () => {
-    // Un créneau doit finir dans sa journée — P4-37 a ouvert les deux bouts (22:45 + 2h30
-    // se posait en un clic et ressortait en « 25:15 »).
-    const tooLate = pastMidnightMessage(time, duration);
-    if (null !== tooLate) {
-      setError(tooLate);
-      return;
-    }
-    const conflict = findSlotConflict(otherSlots, day, time, duration);
-    if (null !== conflict) {
-      setError(conflictMessage(conflict));
+    const invalid = slotPlacementError(otherSlots, day, time, duration);
+    if (null !== invalid) {
+      setError(invalid);
       return;
     }
     // Déplacer un créneau réservé retire ses réservations : on le confirme d'abord.
@@ -730,7 +727,7 @@ function PeriodSlotEditor({
         <label className="text-xs text-muted-foreground">
           Durée
           <Select aria-label="Durée" className="mt-0.5 h-9 w-28" value={duration} onChange={(e) => (setDuration(Number(e.target.value)), setError(null))}>
-            {DURATIONS.map((d) => (
+            {durationOptions(duration).map((d) => (
               <option key={d} value={d}>
                 {formatDuration(d)}
               </option>

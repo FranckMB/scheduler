@@ -13,8 +13,8 @@ import { formatDuration } from "@/shared/lib/duration";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { Venue, VenueTrainingSlot } from "../api";
-import { DAYS, DURATIONS, hhmm } from "../lib/days";
-import { conflictMessage, findSlotConflict, pastMidnightMessage } from "../lib/slotOverlap";
+import { DAYS, durationOptions, DURATIONS, hhmm } from "../lib/days";
+import { slotPlacementError } from "../lib/slotOverlap";
 import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodVenues } from "./PeriodStructure";
@@ -101,17 +101,11 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
   const reservationCount = reservations.filter((r) => r.venueId === slot.venueId && r.dayOfWeek === slot.dayOfWeek && hhmm(r.startTime) === hhmm(slot.startTime)).length;
 
   const save = () => {
-    // Un créneau doit finir dans sa journée — P4-37 a ouvert les deux bouts (22:45 + 2h30
-    // se posait en un clic et ressortait en « 25:15 »).
-    const tooLate = pastMidnightMessage(time, duration);
-    if (null !== tooLate) {
-      setError(tooLate);
-      return;
-    }
-    // Never let an edit overlap another slot of the same gym/day (self excluded).
-    const conflict = findSlotConflict(otherSlots, day, time, duration);
-    if (null !== conflict) {
-      setError(conflictMessage(conflict));
+    // Minuit puis chevauchement — même foyer que la pose au clic (`slotPlacementError`),
+    // `otherSlots` excluant déjà le créneau édité.
+    const invalid = slotPlacementError(otherSlots, day, time, duration);
+    if (null !== invalid) {
+      setError(invalid);
       return;
     }
     // Close ONLY once the write succeeds. If the backend rejects it (e.g. a stale
@@ -145,7 +139,7 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
         <label className="text-xs text-muted-foreground">
           Durée
           <Select aria-label="Durée" className="mt-0.5 h-9 w-28" value={duration} onChange={(e) => (setDuration(Number(e.target.value)), setError(null))}>
-            {DURATIONS.map((d) => (
+            {durationOptions(duration).map((d) => (
               <option key={d} value={d}>
                 {formatDuration(d)}
               </option>
@@ -385,15 +379,9 @@ function VenuesEditor() {
             slots={venueSlots}
             selectedSlotId={editingSlot?.id ?? null}
             onAdd={(dayOfWeek, startTime) => {
-              const tooLate = pastMidnightMessage(startTime, duration);
-              if (null !== tooLate) {
-                toast.error(tooLate);
-                return;
-              }
-              // Forbid dropping a slot that overlaps an existing one (same gym/day).
-              const conflict = findSlotConflict(venueSlots, dayOfWeek, startTime, duration);
-              if (null !== conflict) {
-                toast.error(conflictMessage(conflict));
+              const invalid = slotPlacementError(venueSlots, dayOfWeek, startTime, duration);
+              if (null !== invalid) {
+                toast.error(invalid);
                 return;
               }
               addSlot.mutate({ venueId: selected.id, dayOfWeek, startTime, durationMinutes: duration, capacity: 1 });
