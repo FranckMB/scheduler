@@ -264,10 +264,10 @@ Le frontend doit :
 
 ### 6.2 Visualisation planning = `WeekGrid` (custom)
 
-Le planning est une semaine type (lun-sam), rendu par le composant maison `WeekGrid`
+Le planning est une semaine type (**lundi→dimanche** — `lib/grid.ts:312` filtre `dayOfWeek >= 1 && <= 7` ; le samedi était la borne avant P4-37, alors qu'une séance du dimanche était placée par le solveur et imprimée par l'export tout en étant escamotée de l'écran), rendu par le composant maison `WeekGrid`
 (`src/features/planning/WeekGrid.tsx` + `lib/grid.ts`) — pas de FullCalendar :
 
-- Créneaux colorés, filtre par ressource (`ResourceFilter` : équipe / coach / salle)
+- Créneaux colorés, filtre par ressource (`ResourceFilter` : équipe / coach / salle). Il vit **ligne 1 de `PlanningToolbar`, contre le sélecteur de vue** dont il suit le libellé (« Par gymnase » → « Gymnases : … ») — séparés, c'étaient deux contrôles sur les mêmes ressources à deux endroits, dont le second passait inaperçu (P4-43). Un filtre **posé se voit** : bordure et texte en accent, graisse medium. ⚠ **Sans fond teinté, délibérément** — mesuré, `text-accent` sur `bg-accent/10` tombe à 4.18:1 en thème clair, sous les 4.5:1 de WCAG 1.4.3 ; le jeton est verrouillé par `a11y-contrast.spec.ts`. ⚠ **L'export ne connaît pas ce filtre** : `ExportMenu` porte son propre périmètre gymnase et le rendu est serveur.
 - Click sur créneau → détail (`SlotDetail` : équipe, coach, salle, verrou)
 - Lecture seule quand le plan **pointe** la version affichée (`Schedule.isChosen` — le verrou d'édition)
 - Pas de vue mensuelle — le planning est hebdomadaire type

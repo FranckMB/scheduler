@@ -10,10 +10,12 @@ const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Sch
 
 function renderToolbar(
   schedules: Schedule | Schedule[],
-  { embedded = true, selectedScheduleId = "s1", disableRegenerate = false }: { embedded?: boolean; selectedScheduleId?: string; disableRegenerate?: boolean } = {},
+  { embedded = true, selectedScheduleId = "s1", disableRegenerate = false, slots = false }: { embedded?: boolean; selectedScheduleId?: string; disableRegenerate?: boolean; slots?: boolean } = {},
 ) {
   return render(
     <PlanningToolbar
+      filterSlot={slots ? <span>FILTRE</span> : undefined}
+      rightSlot={slots ? <span>EXPORT</span> : undefined}
       schedules={Array.isArray(schedules) ? schedules : [schedules]}
       selectedScheduleId={selectedScheduleId}
       onSelectSchedule={noop}
@@ -31,6 +33,27 @@ function renderToolbar(
     />,
   );
 }
+
+describe("PlanningToolbar — où vivent le filtre et l'export (P4-43)", () => {
+  it("place le filtre AVEC le sélecteur de vue (ligne 1), et l'export avec les actions (ligne 2)", () => {
+    // Le filtre vivait en ligne 2 derrière l'export, alors que son libellé SUIT le mode de
+    // vue courant (« Par gymnase » → « Gymnases : … ») : deux contrôles sur les mêmes trois
+    // ressources, à deux endroits éloignés, dont le second passait inaperçu. L'ordre du DOM
+    // porte la règle — pas les classes, qu'un ajustement de style ferait rougir pour rien.
+    renderToolbar(schedule("COMPLETED"), { slots: true });
+
+    const view = screen.getByRole("button", { name: "Par gymnase" });
+    const filter = screen.getByText("FILTRE");
+    const exported = screen.getByText("EXPORT");
+    const regenerate = screen.getByRole("button", { name: "Régénérer" });
+
+    // Vue → filtre → actions : le filtre est monté avant la ligne d'actions.
+    expect(view.compareDocumentPosition(filter) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(filter.compareDocumentPosition(regenerate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // L'export, lui, reste après les actions.
+    expect(regenerate.compareDocumentPosition(exported) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
 
 describe("PlanningToolbar — schedule lifecycle (N3)", () => {
   it("offers Valider + a Régénérer button on a completed schedule", () => {

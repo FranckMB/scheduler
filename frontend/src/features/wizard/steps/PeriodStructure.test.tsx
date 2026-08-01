@@ -44,6 +44,10 @@ const conflictState: { venueIds: string[] } = { venueIds: [] };
 const overridesVenueState: { data: Array<{ id: string; schedulePlanId: string; venueId: string; mode: "DISABLED" | "BLANK" }> } = { data: [] };
 const overridesFetchingState = { value: false };
 const venueCanSplitState = { value: false };
+// Le club n'a QU'UN gymnase par défaut : la plupart des tests portent sur une grille, et
+// un second gymnase changerait ce que voient les assertions d'ensemble (« TOUS les
+// gymnases interdits »). Les rares tests qui ont besoin d'en changer l'ajoutent ici.
+const extraVenuesState: { value: Array<{ id: string; name: string; color: string | null; canSplit: boolean; isActive: boolean }> } = { value: [] };
 const periodSlotOverride: { value: Array<Record<string, unknown>> | null } = { value: null };
 const deletePeriodSlotImpl: { value: (...a: unknown[]) => void } = { value: () => {} };
 // Fidèle : invoque le onSuccess passé (c'est là que vit le retrait des réservations).
@@ -95,7 +99,7 @@ vi.mock("../queries", () => ({
   useCreateTeamPeriodOverride: () => ({ mutate: createOverride, mutateAsync: createOverride, isPending: false }),
   useUpdateTeamPeriodOverride: () => ({ mutate: updateOverride, mutateAsync: updateOverride, isPending: false }),
   useDeleteTeamPeriodOverride: () => ({ mutate: deleteOverride, mutateAsync: deleteOverride, isPending: false }),
-  useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: "#ff0000", canSplit: venueCanSplitState.value, isActive: true }] }),
+  useWizardVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: "#ff0000", canSplit: venueCanSplitState.value, isActive: true }, ...extraVenuesState.value] }),
   useVenueSlots: () => ({ data: [] }),
   usePeriodSlots: (anchor: string | null) => {
     periodSlotsAnchor.value = anchor;
@@ -176,6 +180,7 @@ afterEach(() => {
   // un `toHaveBeenCalled` passe grâce à lui).
   vi.clearAllMocks();
   resetPeriodSeed();
+  extraVenuesState.value = [];
   overridesState.data = [];
   constraintsState.data = [];
   constraintsState.isLoading = false;
@@ -401,6 +406,46 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     expect(createSlot).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", dayOfWeek: 2, startTime: "21:00" }));
   });
 
+  it("pose un cr\u00e9neau \u00e0 la dur\u00e9e choisie dans la barre \u00ab \u00c0 poser \u00bb (et non 90 min impos\u00e9es)", async () => {
+    // P4-43 : la pose \u00e9tait fig\u00e9e \u00e0 90 min quoi qu'on fasse \u2014 un cr\u00e9neau de 2h se posait en
+    // deux gestes (poser, puis rouvrir l'\u00e9diteur). La barre de la saison manquait ici.
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    await user.selectOptions(screen.getByLabelText("Dur\u00e9e \u00e0 poser"), "120");
+    await user.click(screen.getByRole("button", { name: "Lun 18:00" }));
+
+    expect(createSlot).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", dayOfWeek: 1, startTime: "18:00", durationMinutes: 120, capacity: 1 }));
+  });
+
+  it("la dur\u00e9e \u00e0 poser SURVIT au changement de gymnase (comme en saison)", async () => {
+    // L'\u00e9tat vit dans le parent : le panneau est remont\u00e9 par `key={selected.id}`, donc l'y
+    // loger remettrait 90 min \u00e0 chaque changement de gymnase \u2014 le gestionnaire qui r\u00e9partit
+    // des cr\u00e9neaux de 2h sur trois gymnases le repaierait \u00e0 chaque fois, sans le voir.
+    extraVenuesState.value = [{ id: "v2", name: "Gymnase B", color: "#00ff00", canSplit: false, isActive: true }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    await user.selectOptions(screen.getByLabelText("Dur\u00e9e \u00e0 poser"), "120");
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v2");
+
+    expect(screen.getByLabelText("Dur\u00e9e \u00e0 poser")).toHaveValue("120");
+  });
+
+  it("REFUSE une pose qui franchirait minuit, en nommant la dur\u00e9e que l'\u00e9cran offre d\u00e9sormais", async () => {
+    // Le message de minuit \u00e9tait surcharg\u00e9 ici (\u00ab ajustez-la dans l'\u00e9diteur \u00bb) parce que la
+    // pose n'offrait aucun r\u00e9glage. La barre existe : le message par d\u00e9faut, qui NOMME la
+    // dur\u00e9e, redevient vrai \u2014 et le point de surcharge de `slotPlacementError` est retir\u00e9.
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    await user.selectOptions(screen.getByLabelText("Dur\u00e9e \u00e0 poser"), "150");
+    await user.click(screen.getByRole("button", { name: "Lun 22:45" }));
+
+    expect(createSlot).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/ne peut pas durer 2h30 .*apr\u00e8s minuit/));
+  });
+
   it("clic sur un cr\u00e9neau ouvre l'\u00e9diteur avec un choix de DUR\u00c9E (r\u00e9gression saison combl\u00e9e)", async () => {
     // Finding #6 : le panneau n'offrait aucun \u00e9diteur, dur\u00e9e fig\u00e9e \u00e0 90 min. On r\u00e9utilise
     // le geste de la saison : clic sur le cr\u00e9neau \u2192 modale jour/heure/dur\u00e9e.
@@ -441,6 +486,10 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     overridesVenueState.data = [{ id: "o1", schedulePlanId: "plan-1", venueId: "v1", mode: "DISABLED" }];
     render(<PeriodVenues calendarEntryId="e1" />);
     expect(screen.getByRole("button", { name: "Lun 18:00" })).toBeDisabled();
+    // La barre « À poser » est DANS le fieldset (revue #351) : laissée dehors, son indice
+    // « cliquez la grille » restait lisible en pleine opacité au-dessus d'une grille gelée.
+    // Le geste et son réglage s'éteignent ensemble.
+    expect(screen.getByLabelText("Durée à poser")).toBeDisabled();
   });
 
   it("verrouille l'\u00e9tat actif/d\u00e9sactiv\u00e9 pendant la synchro (anti double-clic \u2192 422)", () => {

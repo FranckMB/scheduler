@@ -94,6 +94,22 @@ make start | stop | logs | shell | status   # Docker Compose helpers
 exits 0 having checked nothing, while CI (which runs `tsc -b`) fails on the errors it
 skipped. `--force` is also required — a stale `tsbuildinfo` short-circuits the check.
 
+### ⚠ Trap: an e2e run can validate the PREVIOUS build
+
+The `frontend` compose service **builds its own image** (`docker/frontend/Dockerfile`, Nginx
+on 8081) — `dist` is **not** a bind mount, and `frontend-tooling` is a COPY image with no
+mount either. So `npx vite build` inside the tooling container writes into that container
+and is thrown away: the app served on 8081 does not move, and an e2e launched afterwards
+**passes against the old bundle**. Before any e2e that must see your change:
+
+```bash
+docker compose build frontend && docker compose up -d --force-recreate frontend
+```
+
+Only `frontend-dev` (profile `dev`, port 5173) mounts `./frontend` — that is the hot-reload
+path, not what the e2e targets. Found the hard way on P4-43: the journey spec went green
+while a screenshot showed the old toolbar.
+
 E2E Playwright is **not** Dockerized yet and is driven by CI (tracked as P4-33 in
 `../specs/evolution/roadmap.md`).
 
@@ -235,7 +251,13 @@ believe empty.
    at a version and deletes its sibling versions; reopening un-points it.
 10. **A period owns its venue grid.** In wizard period mode the Venues step is **editable**, not
     a read-only summary: the period's slots are a copy taken at plan birth and never unioned
-    with the season's own. See `../specs/courantes/frontend-wizard.md`.
+    with the season's own. Same gestures as the season, barre « À poser » included (P4-43).
+    See `../specs/courantes/frontend-wizard.md`.
+11. **Accent as TEXT needs a plain background.** `text-accent` clears 4.5:1 (WCAG 1.4.3) only
+    on `bg-background`/`bg-card`: over `bg-accent/10` it drops to 4.18:1 in light mode, over
+    `bg-muted` to 4.37:1 — even `accent/05` fails. Tint the surface **or** colour the text,
+    never both. The token pairs are locked by `tests/e2e/a11y-contrast.spec.ts`; add any new
+    text token to its list rather than eyeballing the result.
 
 ---
 
