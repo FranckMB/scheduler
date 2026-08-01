@@ -29,6 +29,27 @@ describe("clock — le « aujourd'hui » du front", () => {
     expect(todayISO()).toBe(toISODate(new Date()));
   });
 
+  // La FORME ne suffit pas (revue #344) : `2026-13-01` passait la regex et, triant après
+  // toute date réelle, vidait le radar — « Rien à l'horizon » sur un club qui a du travail.
+  it("refuse une date bien formée mais IMPOSSIBLE", () => {
+    setTodayOverride("2026-13-01"); // 13ᵉ mois
+    expect(todayISO()).toBe(toISODate(new Date()));
+
+    setTodayOverride("2026-02-31"); // 31 février — le constructeur le reporterait au 3 mars
+    expect(todayISO()).toBe(toISODate(new Date()));
+
+    setTodayOverride("2026-00-10"); // mois zéro
+    expect(todayISO()).toBe(toISODate(new Date()));
+  });
+
+  it("accepte un 29 février d'année bissextile (et refuse celui d'une année commune)", () => {
+    setTodayOverride("2028-02-29");
+    expect(todayISO()).toBe("2028-02-29");
+
+    setTodayOverride("2027-02-29");
+    expect(todayISO()).toBe(toISODate(new Date()));
+  });
+
   it("toISODate rend la date LOCALE (pas le décalage UTC de toISOString)", () => {
     // 1er janvier 00:30 heure locale : toISOString basculerait au 31 décembre sur un
     // fuseau à l'est de Greenwich.

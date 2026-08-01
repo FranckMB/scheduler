@@ -27,6 +27,10 @@ let plansData: SchedulePlan[] | undefined = [];
 // Versions existantes par plan (retour fondateur 2026-07-18 : « planning en cours »
 // = plan avec versions mais sans version validée → carte toujours visible).
 let schedulesData: { schedulePlanId: string }[] | undefined = [];
+// #10 C2 — les campagnes de doléances, indexées par période. Mockées ici parce qu'une
+// vacance qui en porte une ÉCHAPPE à l'horizon 60 j (revue #344 : cette carte est la seule
+// surface qui rende le badge « x à traiter »).
+let campaignsData: unknown[] = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, mutateAsync: createHolidayMutateAsync, isPending: false }),
@@ -39,6 +43,7 @@ vi.mock("./queries", () => ({
   useSchedulePlans: () => ({ data: plansData }),
 }));
 vi.mock("@/features/planning/queries", () => ({ useSchedules: () => ({ data: schedulesData }) }));
+vi.mock("@/features/coach-wishes/campaignQueries", () => ({ useCoachWishCampaigns: () => ({ data: campaignsData }) }));
 // Saison de travail couvrant les fixtures FUTURE (2999) : le clamp saison des
 // créations de vacances (revue #260 round 1) laisse passer les dates de test.
 vi.mock("@/features/auth/queries", () => ({
@@ -112,6 +117,7 @@ describe("RadarPanel", () => {
     conflictsPending = false;
     plansData = [];
     schedulesData = [];
+    campaignsData = [];
   });
   afterEach(() => setTodayOverride(null));
 
@@ -229,7 +235,7 @@ describe("RadarPanel", () => {
         closure({ id: "w2", title: "S2", parentEntryId: "m1", startDate: w2s, endDate: addDays(w2s, 6) }),
       ],
     });
-    expect(screen.getByText("1/2 semaines couverte")).toBeInTheDocument();
+    expect(screen.getByText("1/2 semaines à venir couverte")).toBeInTheDocument();
     // Semaine validée → ✅ (Voir) ; à faire → Reprendre (adapt).
     await expandCard(user, "Barros en travaux");
     expect(screen.getByRole("button", { name: /✅/ })).toBeInTheDocument();
@@ -253,7 +259,7 @@ describe("RadarPanel", () => {
         // Semaine 2 jamais créée — décochée au picker.
       ],
     });
-    expect(screen.getByText("1/2 semaines couverte")).toBeInTheDocument();
+    expect(screen.getByText("1/2 semaines à venir couverte")).toBeInTheDocument();
     await expandCard(user, "Barros en travaux");
     expect(screen.getByRole("button", { name: /\+ sem\. du/ })).toBeInTheDocument();
   });
@@ -271,7 +277,7 @@ describe("RadarPanel", () => {
         closure({ id: "w1", title: "S1", parentEntryId: "m1", startDate: w1s, endDate: addDays(w1s, 6) }),
       ],
     });
-    expect(screen.queryByText(/semaines? couverte/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/semaines? à venir couverte/)).not.toBeInTheDocument();
     expect(screen.getByText(/Rien à l'horizon/)).toBeInTheDocument();
   });
 
@@ -308,8 +314,9 @@ describe("RadarPanel", () => {
   });
 
   // (b) « 0/7 semaines couvertes alors que 3 sont derrière — on gère l'avenir, pas le
-  // présent. » Les semaines révolues ne comptent plus au dénominateur.
-  it("ne compte que les semaines à venir dans la couverture", async () => {
+  // présent. » Les semaines RÉVOLUES sortent du dénominateur ; la semaine ENTAMÉE y reste,
+  // il lui reste des jours (revue #344 : « commencé » n'est pas « fini »).
+  it("sort les semaines révolues du compte, garde celle qui est entamée", async () => {
     const user = userEvent.setup();
     const w1s = mondayOf("2999-01-04"); // lundi
     const weeks = [0, 1, 2, 3].map((i) => addDays(w1s, 7 * i));
@@ -323,9 +330,10 @@ describe("RadarPanel", () => {
       ],
     });
 
-    expect(screen.getByText("0/2 semaines couverte")).toBeInTheDocument();
+    // S1 est révolue ; S2 (en cours), S3 et S4 restent — pas 4, pas 2.
+    expect(screen.getByText("0/3 semaines à venir couverte")).toBeInTheDocument();
     await expandCard(user, "Barros en travaux");
-    expect(screen.getAllByRole("button", { name: /sem\. du/ })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /sem\. du/ })).toHaveLength(3);
   });
 
   it("efface la carte de couverture quand toutes ses semaines sont derrière", () => {
@@ -338,7 +346,7 @@ describe("RadarPanel", () => {
       ],
     });
 
-    expect(screen.queryByText(/semaines? couverte/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/semaines? à venir couverte/)).not.toBeInTheDocument();
     expect(screen.getByText(/Rien à l'horizon/)).toBeInTheDocument();
   });
 
@@ -359,11 +367,77 @@ describe("RadarPanel", () => {
     // Carte simple : son action est là, sans clic.
     expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
     // Carte de couverture : l'en-tête parle, les puces attendent.
-    expect(screen.getByText(/semaines? couverte/)).toBeInTheDocument();
+    expect(screen.getByText(/semaines? à venir couverte/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /sem\. du/ })).toBeNull();
 
     await expandCard(user, "Barros en travaux");
     expect(screen.getAllByRole("button", { name: /sem\. du/ }).length).toBeGreaterThan(0);
+  });
+
+  // ── Revue #344 : les pièges que « la semaine a commencé » avait ouverts ──
+
+  // Une fermeture qui démarre MERCREDI devenait implanifiable dès le lundi : la puce
+  // « + créer » de sa semaine disparaissait, et le DayDialog ne reproduit ces puces que
+  // pour les vacances. Une semaine entamée porte encore du travail.
+  it("garde la puce « + créer » d'une semaine entamée dont la fermeture est encore devant", async () => {
+    const user = userEvent.setup();
+    const w1s = mondayOf("2999-01-04");
+    setTodayOverride(w1s); // le lundi même ; la fermeture ne commence que le mercredi
+    plansData = [{ id: "pl-w2", type: "CLOSURE", name: "S2", startDate: FUTURE, calendarEntryId: "w2", chosenScheduleId: "ov", teamSelectionInitialized: false }];
+    renderRadar({
+      entries: [
+        closure({ id: "m1", title: "Barros en travaux", startDate: addDays(w1s, 2), endDate: addDays(w1s, 9) }),
+        // Seule la 2ᵉ semaine existe : celle du lundi courant est MANQUANTE (décochée).
+        closure({ id: "w2", title: "S2", parentEntryId: "m1", startDate: addDays(w1s, 7), endDate: addDays(w1s, 13) }),
+      ],
+    });
+
+    await expandCard(user, "Barros en travaux");
+    expect(screen.getByRole("button", { name: /\+ sem\. du/ })).toBeInTheDocument();
+  });
+
+  // Le pire des deux : masquer la tâche était la décision du fondateur, AFFIRMER « tout
+  // roule » par-dessus ne l'était pas. Une semaine orpheline encore en cours et non
+  // validée doit garder sa carte — sa « seule surface » (revue #262).
+  it("n'affirme jamais « Tout roule » sur une semaine en cours non validée", () => {
+    const w1s = mondayOf("2999-01-04");
+    setTodayOverride(addDays(w1s, 2)); // mercredi de cette semaine
+    renderRadar({
+      // Mère absente du radar (ignorée) → l'enfant est orphelin d'affichage.
+      entries: [closure({ id: "w1", title: "S1", parentEntryId: "absente", startDate: w1s, endDate: addDays(w1s, 6) })],
+    });
+
+    expect(screen.getByText("Planning de semaine à finaliser")).toBeInTheDocument();
+    expect(screen.queryByText(/Rien à l'horizon/)).not.toBeInTheDocument();
+  });
+
+  // L'horizon 60 j effaçait la SEULE surface qui rende le badge « x à traiter » et le
+  // bouton « Solliciter les coachs » — or la collecte vit précisément du délai.
+  it("garde une vacance lointaine qui porte déjà une campagne de doléances", () => {
+    setTodayOverride("2998-10-01"); // à 96 j : hors horizon
+    campaignsData = [{ id: "camp1", calendarEntryId: "h1", deadline: "2998-12-01", weeks: [], teamIds: [], totalCoachCount: 4, respondedCoachCount: 1, openWishCount: 2, lastReminderAt: null, coaches: [] }];
+    renderRadar({
+      holidays: [holiday],
+      entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", schoolHolidayId: "h1", startDate: FUTURE, endDate: FUTURE_END })],
+    });
+
+    expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
+  });
+
+  // Le badge de suivi n'existe nulle part ailleurs : le replier le rendait invisible, et
+  // le gestionnaire refermait le cockpit en croyant n'avoir rien à traiter.
+  it("laisse « Doléances » hors du repli sur la carte de couverture", () => {
+    const w1s = mondayOf("2999-01-15");
+    renderRadar({
+      entries: [
+        closure({ id: "hm", periodType: "holiday", title: "Toussaint", startDate: addDays(w1s, 3), endDate: addDays(w1s, 8) }),
+        closure({ id: "w1", periodType: "holiday", title: "S1", parentEntryId: "hm", startDate: w1s, endDate: addDays(w1s, 6) }),
+      ],
+    });
+
+    // Carte repliée (les puces sont absentes) mais l'action de suivi est là.
+    expect(screen.queryByRole("button", { name: /sem\. du/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Doléances/ })).toBeInTheDocument();
   });
 
   // P3-11 : le panneau restait NU pendant que les plans arrivaient — un cadre « À traiter »
@@ -373,7 +447,7 @@ describe("RadarPanel", () => {
     plansData = undefined;
     renderRadar({});
 
-    expect(screen.getByRole("status", { name: /Chargement des éléments à traiter/ })).toBeInTheDocument();
+    expect(screen.getByText(/Chargement des éléments à traiter/)).toBeInTheDocument();
     expect(screen.queryByText(/Rien à l'horizon/)).not.toBeInTheDocument();
   });
 

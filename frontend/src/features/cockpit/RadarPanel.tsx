@@ -10,7 +10,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
 import { useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
-import { clampRangeToSeason, daysUntil, frDateShort, isUpcomingWeek, mondayOf, periodAdjustWeeks, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { clampRangeToSeason, daysUntil, frDateShort, isActionableWeek, periodAdjustWeeks, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
 import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
@@ -151,14 +151,16 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // que la DERNIÈRE fenêtre (mère ou enfants — une semaine pleine déborde la
   // mère) n'est pas passée ; tout couvert → la carte s'efface (to-do).
   const motherWeekSlots = (m: CalendarEntry): { week: WeekWindow; child: CalendarEntry | null }[] => {
-    // P3-13 (b) — les semaines RÉVOLUES et la semaine EN COURS ne comptent ni ne
-    // s'offrent : « 0/7 couvertes » quand 3 étaient derrière décrivait un travail
-    // impossible. Filtre appliqué en SORTIE, donc aux deux branches ci-dessous.
-    const upcoming = (slots: { week: WeekWindow; child: CalendarEntry | null }[]) => slots.filter(({ week }) => isUpcomingWeek(week, today));
+    // P3-13 (b) — les semaines RÉVOLUES ne comptent ni ne s'offrent : « 0/7 couvertes »
+    // quand 3 étaient derrière décrivait un travail impossible. ⚠ RÉVOLUE, pas
+    // « commencée » (revue #344) : une semaine dont il reste des jours porte encore du
+    // travail — une fermeture du mercredi serait devenue implanifiable dès le lundi.
+    // Filtre appliqué en SORTIE, donc aux deux branches ci-dessous.
+    const stillOpen = (slots: { week: WeekWindow; child: CalendarEntry | null }[]) => slots.filter(({ week }) => isActionableWeek(week, today));
     const children = childrenByParent.get(m.id) ?? [];
     if (null === workingSeason) {
       // Saison inconnue : pas de calcul des manquantes — les enfants existants font foi.
-      return upcoming(children.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: mondayOf(c.startDate) }, child: c })));
+      return stillOpen(children.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c })));
     }
     // Filet #262 + revue C F1 : on itère TOUTES les semaines calendaires et on garde
     // une semaine si elle porte un enfant EXISTANT (toujours visible/gérable) OU si
@@ -166,7 +168,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     // d'une vacance démarrant Ven/Sam/Dim). Une semaine partielle SANS enfant
     // disparaît (pas de chip « + créer ») ; AVEC enfant, elle reste (jamais orpheline).
     const offeredMondays = new Set(periodAdjustWeeks(m.startDate, m.endDate, workingSeason, m.periodType).map((w) => w.monday));
-    return upcoming(
+    return stillOpen(
       weeksCovering(m.startDate, m.endDate, workingSeason)
         .map((week) => ({ week, child: children.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null }))
         .filter(({ week, child }) => null !== child || offeredMondays.has(week.monday)),
@@ -182,11 +184,12 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // (ignorée) : dans les deux cas, sans surface, la semaine encore courante et
   // non validée serait implanifiable (revue #262 rounds 2-3). Carte dédiée.
   const renderedMotherIds = new Set(splitMothers.map((m) => m.id));
-  // Même règle que la couverture (P3-13 b) : une semaine ORPHELINE encore à venir. Une
-  // semaine en cours reste consultable au calendrier et au DayDialog — elle sort de la
-  // to-do, pas de l'application (décision fondateur).
+  // Même règle que la couverture (P3-13 b) : une semaine orpheline dont il reste des
+  // jours. ⚠ Ce filet existe pour « la semaine encore COURANTE et non validée » (revue
+  // #262) — le restreindre aux semaines non commencées l'aurait vidé de sa raison d'être,
+  // et le radar aurait affirmé « Tout roule » sur un gymnase fermé cette semaine-là.
   const orphanWeekChildren = active.filter(
-    (e) => null !== e.parentEntryId && !renderedMotherIds.has(e.parentEntryId) && mondayOf(e.startDate) > today && !activeByEntry.has(e.id),
+    (e) => null !== e.parentEntryId && !renderedMotherIds.has(e.parentEntryId) && e.endDate >= today && !activeByEntry.has(e.id),
   );
 
   // Adapter une période qui COUVRE PLUSIEURS SEMAINES = les choisir — sauf déjà
@@ -217,7 +220,15 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     // P3-13 (a) : horizon, comme les fériés en ont un depuis toujours. Sans lui, `.slice(0, 3)`
     // laissait passer Noël en plein été — trois vacances, mais pas les trois PROCHAINES au
     // sens où le gestionnaire peut agir dessus.
-    .filter((h) => daysUntil(today, h.startDate) <= SCHOOL_HOLIDAY_HORIZON_DAYS)
+    // ⚠ EXEMPTION (revue #344) : une vacance qui porte déjà une CAMPAGNE de doléances
+    // reste affichée quelle que soit sa distance. Cette carte est le seul endroit de
+    // l'application qui rende le badge de suivi (« 5 à traiter ») et le bouton
+    // « Solliciter les coachs » — l'horizon effaçait donc, avec le bruit, la seule surface
+    // capable de dire qu'il y a des souhaits en attente de réponse.
+    .filter((h) => {
+      const e = entryByHoliday.get(h.id);
+      return (undefined !== e && campaignByEntry.has(e.id)) || daysUntil(today, h.startDate) <= SCHOOL_HOLIDAY_HORIZON_DAYS;
+    })
     .filter((h) => entryByHoliday.get(h.id)?.status !== "ignored")
     // Entièrement hors de la fenêtre de saison → rien à bâtir, pas de carte.
     // (Saison inconnue = on garde la carte ; le bouton Adapter, lui, est gardé.)
@@ -379,18 +390,37 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         const slots = motherWeekSlots(m);
         const covered = slots.filter(({ child }) => null !== child && activeByEntry.has(child.id)).length;
         const impactCount = splitImpactCountByEntry.get(m.id) ?? 0;
-        const coverageDetail = `${covered}/${slots.length} semaine${slots.length > 1 ? "s" : ""} couverte${covered > 1 ? "s" : ""}${impactCount > 0 ? ` · ${impactCount} séance${impactCount > 1 ? "s" : ""} touchée${impactCount > 1 ? "s" : ""}` : ""}`;
+        // ⚠ Le compteur de semaines ne porte QUE les semaines encore actionnables, alors
+        // que le nombre de séances touchées vient du serveur, qui l'évalue sur TOUTE la
+        // plage de la mère (revue #344). Les juxtaposer sans le dire laissait évaluer le
+        // travail restant au double de ce que la carte permet de corriger : la phrase
+        // nomme donc chaque périmètre au lieu de les faire passer pour le même.
+        const coverageDetail = `${covered}/${slots.length} semaine${slots.length > 1 ? "s" : ""} à venir couverte${covered > 1 ? "s" : ""}${impactCount > 0 ? ` · ${impactCount} séance${impactCount > 1 ? "s" : ""} touchée${impactCount > 1 ? "s" : ""} sur toute la période` : ""}`;
         return (
           // La SEULE carte repliée par défaut : ses N puces de semaine sont ce qui allonge
           // vraiment le radar (P3-13 d, arbitrage fondateur 2026-08-01).
-          <RadarCard key={`split-${m.id}`} icon={<CalendarClock className="size-4 text-accent" />} title={m.title} detail={coverageDetail} collapsible>
-            {"holiday" === m.periodType ? (
-              <Button variant="ghost" size="sm" onClick={() => setWishesEntry(m)}>
-                <MessageSquare className="size-4" />
-                Doléances
-              </Button>
-            ) : null}
-            {"holiday" === m.periodType ? <RadarCoachWishAction entry={m} season={workingSeason} campaign={campaignByEntry.get(m.id) ?? null} /> : null}
+          // ⚠ Les DOLÉANCES restent hors du repli (`actions`) : le badge de suivi
+          // (« 5 à traiter ») n'existe nulle part ailleurs dans l'application, et un
+          // compteur dont la raison d'être est d'être vu d'un coup d'œil ne peut pas vivre
+          // derrière un clic (revue #344).
+          <RadarCard
+            key={`split-${m.id}`}
+            icon={<CalendarClock className="size-4 text-accent" />}
+            title={m.title}
+            detail={coverageDetail}
+            collapsible
+            actions={
+              "holiday" === m.periodType ? (
+                <>
+                  <Button variant="ghost" size="sm" onClick={() => setWishesEntry(m)}>
+                    <MessageSquare className="size-4" />
+                    Doléances
+                  </Button>
+                  <RadarCoachWishAction entry={m} season={workingSeason} campaign={campaignByEntry.get(m.id) ?? null} />
+                </>
+              ) : null
+            }
+          >
             {slots.map(({ week, child }) => {
               if (null === child) {
                 return (
@@ -508,7 +538,11 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       {/* P3-11 : squelette tant qu'on ne sait pas — jamais en même temps que « Tout roule »
           (`isEmpty` exige déjà que ces mêmes lectures soient résolues). */}
       {stillLoading ? (
-        <div role="status" aria-label="Chargement des éléments à traiter" className="space-y-2">
+        <div role="status" className="space-y-2">
+          {/* Une région live annonce son CONTENU, jamais son `aria-label` : sans ce texte,
+              le lecteur d'écran passait du titre « À traiter » au silence, ce qui se lit
+              « rien à faire » (revue #344). */}
+          <span className="sr-only">Chargement des éléments à traiter…</span>
           {[0, 1].map((i) => (
             <div key={i} className="animate-pulse rounded-md border border-border p-3">
               <div className="h-3 w-2/5 rounded bg-muted" />
@@ -623,7 +657,22 @@ function ClosureRadarItem({ entry, activeScheduleId, inProgress = false, seasonU
  * à deux clics (13 tests d'action tombaient) sans raccourcir ce qui est réellement long.
  * L'en-tête reste toujours lisible : c'est ce qu'on demande au panneau d'un coup d'œil.
  */
-function RadarCard({ icon, title, detail, collapsible = false, children }: { icon: React.ReactNode; title: string; detail: string; collapsible?: boolean; children?: React.ReactNode }) {
+function RadarCard({
+  icon,
+  title,
+  detail,
+  collapsible = false,
+  actions,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  detail: string;
+  collapsible?: boolean;
+  /** Rendu TOUJOURS, même carte repliée — pour ce qui doit se lire d'un coup d'œil. */
+  actions?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const foldable = collapsible && undefined !== children && null !== children;
 
@@ -647,6 +696,7 @@ function RadarCard({ icon, title, detail, collapsible = false, children }: { ico
           </button>
         ) : null}
       </div>
+      {actions ? <div className="mt-2 flex flex-col items-end gap-1">{actions}</div> : null}
       {/* Empilées à droite (pas en ligne) : les chips par semaine d'une carte de
           couverture débordaient de l'encart en ligne (retour fondateur 2026-07-24). */}
       {children && (!foldable || open) ? <div className="mt-2 flex flex-col items-end gap-1">{children}</div> : null}

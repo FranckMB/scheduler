@@ -84,27 +84,41 @@ describe("CampaignDialog", () => {
     expect(body.deadline).toBe("2026-02-16");
   });
 
-  // ── P3-15 (c) : on ne sollicite un coach que pour l'AVENIR (retour terrain 2026-07-31) ──
+  // ── P3-15 (c) : on ne sollicite un coach que pour ce qu'il RESTE (retour 2026-07-31) ──
 
-  // « Les semaines passées ET la semaine en cours sont proposées et cochées par défaut » :
-  // le gestionnaire envoyait à ses coachs un lien pour dire ses souhaits sur du révolu.
-  it("n'offre ni ne coche les semaines passées et la semaine en cours", () => {
-    // Période du 16/02 au 01/03 = deux semaines (16 et 23). « Aujourd'hui » = mercredi de
-    // la première : elle est EN COURS, seule celle du 23 se sollicite.
-    setTodayOverride("2026-02-18");
+  // « Les semaines passées et la semaine en cours sont proposées ET cochées par défaut » :
+  // le gestionnaire envoyait à ses coachs un lien pour dire leurs souhaits sur du révolu.
+  // ⚠ RÉVOLU, pas « entamé » (revue #344) : une vacance qui démarre un samedi n'aurait
+  // plus pu faire l'objet d'aucune collecte dès le lundi suivant, pour des séances
+  // pourtant toutes à venir — et rien d'autre dans l'app ne crée une campagne.
+  it("n'offre ni ne coche une semaine révolue, garde celle qui est entamée", () => {
+    // Période du 16/02 au 01/03 = deux semaines (16 et 23). « Aujourd'hui » = lundi 23 :
+    // la semaine du 16 est finie, celle du 23 court encore.
+    setTodayOverride("2026-02-23");
     render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
 
     expect(screen.queryByLabelText(/Semaine du 16/)).toBeNull();
-    const remaining = screen.getByLabelText(/Semaine du 23/);
-    expect(remaining).toBeInTheDocument();
-    expect(remaining).toBeChecked();
+    const current = screen.getByLabelText(/Semaine du 23/);
+    expect(current).toBeInTheDocument();
+    expect(current).toBeChecked();
+  });
+
+  // Le cas qui rendait la collecte IMPOSSIBLE avec le premier critère : la période
+  // n'a plus qu'une semaine, entamée, mais ses jours utiles sont devant.
+  it("laisse créer une collecte sur une semaine entamée aux jours encore à venir", () => {
+    setTodayOverride("2026-02-25"); // mercredi de la dernière semaine, qui finit le 01/03
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    expect(screen.queryByText(/Aucune semaine disponible/)).toBeNull();
+    expect(screen.getByLabelText(/Semaine du 23/)).toBeChecked();
   });
 
   // ATTEINDRE ≠ CHOISIR : une campagne EXISTANTE peut porter une semaine devenue révolue.
   // La masquer laisserait l'état porter un lundi que l'écran ne montre pas et que
-  // l'enregistrement renverrait — un état invisible est un état faux.
+  // l'enregistrement renverrait — un état invisible est un état faux. Le marqueur vit
+  // DANS le nom accessible, sinon un lecteur d'écran ne l'entend jamais (revue #344).
   it("garde visible et marquée une semaine déjà retenue devenue révolue", () => {
-    setTodayOverride("2026-02-18");
+    setTodayOverride("2026-02-25");
     const existing: CoachWishCampaign = {
       id: "camp1",
       calendarEntryId: "e1",
@@ -119,10 +133,9 @@ describe("CampaignDialog", () => {
     };
     render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
 
-    const past = screen.getByLabelText(/Semaine du 16/);
+    const past = screen.getByLabelText("Semaine du 16/02/2026 (révolue)");
     expect(past).toBeInTheDocument();
     expect(past).toBeChecked();
-    expect(screen.getByText("déjà commencée")).toBeInTheDocument();
   });
 
   it("copie le lien personnel d'un coach", async () => {

@@ -135,27 +135,39 @@ function startsLateInWeek(iso: string): boolean {
  * `length > 1` évite de renvoyer vide (un week-end de vacances isolé garde sa semaine).
  */
 /**
- * P3-13 — UNE SEMAINE ACTIONNABLE EST UNE SEMAINE QUI N'A PAS COMMENCÉ.
+ * P3-13 — UNE SEMAINE EST ACTIONNABLE TANT QU'IL LUI RESTE DES JOURS DEVANT.
  *
- * Décision fondateur 2026-08-01 : « on écarte les semaines passées ET les semaines en
- * cours. S'il veut voir le planning de la semaine, on a d'autres moyens de le voir. Le
- * radar c'est pour gérer les tâches/événements À VENIR. » Le radar comptait « 0/7 semaines
- * couvertes » quand 3 étaient derrière, et la campagne coachs sollicitait pour du passé.
+ * Besoin fondateur 2026-08-01 : le radar comptait « 0/7 semaines couvertes » alors que 3
+ * étaient DERRIÈRE, et la campagne coachs sollicitait pour du passé. « On gère l'avenir,
+ * pas le présent. »
  *
- * ⚠ On compare `monday`, PAS `startDate` : `startDate` peut être rogné par la fenêtre de
- * saison (vacances à cheval sur la frontière) alors que `monday` identifie la semaine
- * calendaire — c'est lui qui répond à « quelle semaine est-ce ? ».
+ * ⚠ Le premier jet lisait ça comme « la semaine n'a pas COMMENCÉ » (`monday > today`), et
+ * la revue #344 a montré que c'est faux et dangereux — « commencé » n'est pas « fini » :
+ *  - une fermeture du MERCREDI 11 devenait implanifiable dès le lundi 9, parce que la
+ *    puce « + créer » de sa semaine disparaissait alors que la fermeture était encore
+ *    entièrement devant (et le DayDialog ne reproduit ces puces que pour les vacances) ;
+ *  - une vacance démarrant un samedi ne pouvait plus faire l'objet d'une collecte le lundi
+ *    suivant, pour des séances pourtant toutes à venir ;
+ *  - une semaine rognée par le début de saison (saison démarrant un mardi) était déclarée
+ *    « commencée » le lundi d'avant, alors que la saison n'existait pas encore.
+ *
+ * D'où le critère : `endDate >= today` — la semaine reste tant qu'un de ses jours n'est pas
+ * passé. C'est EXACTEMENT le test que le radar applique déjà au niveau période
+ * (`e.endDate >= today`) : une seule notion de « c'est derrière », à deux échelles.
+ *
+ * On lit donc `endDate` et non `monday` : le lundi dit QUELLE semaine c'est (clé stable),
+ * la fin dit s'il reste quelque chose à y faire. Ce sont deux questions différentes.
  *
  * Fonctions PURES, hors React : les tests d'écran mockent les hooks et ne garderaient que
  * le câblage (leçon P2-15 / CLAUDE.md §7.2).
  */
-export function isUpcomingWeek(week: WeekWindow, today: string): boolean {
-  return week.monday > today;
+export function isActionableWeek(week: WeekWindow, today: string): boolean {
+  return week.endDate >= today;
 }
 
-/** Les semaines de `weeks` qui n'ont pas encore commencé. @see isUpcomingWeek */
-export function upcomingWeeks(weeks: WeekWindow[], today: string): WeekWindow[] {
-  return weeks.filter((w) => isUpcomingWeek(w, today));
+/** Les semaines de `weeks` qu'il reste quelque chose à traiter. @see isActionableWeek */
+export function actionableWeeks(weeks: WeekWindow[], today: string): WeekWindow[] {
+  return weeks.filter((w) => isActionableWeek(w, today));
 }
 
 export function periodAdjustWeeks(start: string, end: string, season: { startDate: string; endDate: string }, periodType: string | null): WeekWindow[] {

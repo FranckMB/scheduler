@@ -3,7 +3,7 @@ import { HTTPError } from "ky";
 import { Check, Copy, Send } from "lucide-react";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
-import { isUpcomingWeek, periodAdjustWeeks, todayISO } from "@/features/cockpit/lib/date";
+import { isActionableWeek, periodAdjustWeeks, todayISO } from "@/features/cockpit/lib/date";
 import { useUpdateCoach, useWizardTeamCoaches, useWizardTeams } from "@/features/wizard/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
@@ -44,9 +44,12 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   // Campagne courante (après enregistrement, on garde la réponse pour afficher les liens).
   const [campaign, setCampaign] = useState<CoachWishCampaign | null>(existing);
 
-  // P3-13/P3-15 (c) — on ne sollicite un coach que pour l'AVENIR : les semaines révolues et
-  // la semaine en cours étaient proposées ET cochées par défaut. Même règle et même foyer
-  // que le radar (`isUpcomingWeek`), pas une seconde implémentation (CLAUDE.md §7.2).
+  // P3-13/P3-15 (c) — on ne sollicite un coach que pour ce qu'il reste à vivre : les
+  // semaines RÉVOLUES étaient proposées ET cochées par défaut. Même règle et même foyer
+  // que le radar (`isActionableWeek`), pas une seconde implémentation (CLAUDE.md §7.2).
+  // ⚠ Une semaine ENTAMÉE reste offerte (revue #344) : une vacance qui démarre un samedi
+  // n'aurait plus pu faire l'objet d'aucune collecte dès le lundi suivant, pour des
+  // séances pourtant toutes à venir — et rien d'autre dans l'app ne crée une campagne.
   //
   // ⚠ Une campagne EXISTANTE peut porter une semaine devenue révolue : elle reste LISTÉE
   // et marquée, jamais offerte à une nouvelle sélection. La masquer laisserait `weeks`
@@ -60,7 +63,7 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
     const all = periodAdjustWeeks(entry.startDate, entry.endDate, season, entry.periodType);
     const kept = new Set(existing?.weeks ?? []);
 
-    return all.filter((w) => isUpcomingWeek(w, today) || kept.has(w.monday));
+    return all.filter((w) => isActionableWeek(w, today) || kept.has(w.monday));
   }, [entry, season, existing, today]);
 
   // Équipes ayant AU MOINS un coach — cocher une équipe sans coach ne crée aucun lien.
@@ -75,7 +78,7 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
 
   // Défaut : les semaines À VENIR seulement — cocher d'office une semaine révolue partait
   // solliciter les coachs pour du passé.
-  const [weeks, setWeeks] = useState<Set<string>>(() => new Set(existing ? existing.weeks : availableWeeks.filter((w) => isUpcomingWeek(w, today)).map((w) => w.monday)));
+  const [weeks, setWeeks] = useState<Set<string>>(() => new Set(existing ? existing.weeks : availableWeeks.filter((w) => isActionableWeek(w, today)).map((w) => w.monday)));
   const [teamIds, setTeamIds] = useState<Set<string>>(() => new Set(existing ? existing.teamIds : []));
   const [deadline, setDeadline] = useState<string>(existing?.deadline ?? entry.startDate);
 
@@ -115,9 +118,18 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
           ) : (
             availableWeeks.map((w) => (
               <label key={w.monday} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={weeks.has(w.monday)} onChange={() => toggle(weeks, w.monday, setWeeks)} aria-label={`Semaine du ${frDate(w.startDate)}`} />
+                {/* Le marqueur vit DANS le nom accessible : `aria-label` écrase le
+                    contenu du label, donc un marqueur posé à côté n'est jamais annoncé et
+                    un lecteur d'écran entend des semaines indistinctes (revue #344). */}
+                <input
+                  type="checkbox"
+                  className="size-4 accent-[var(--accent)]"
+                  checked={weeks.has(w.monday)}
+                  onChange={() => toggle(weeks, w.monday, setWeeks)}
+                  aria-label={`Semaine du ${frDate(w.startDate)}${isActionableWeek(w, today) ? "" : " (révolue)"}`}
+                />
                 Semaine du {frDate(w.startDate)} au {frDate(w.endDate)}
-                {isUpcomingWeek(w, today) ? null : <span className="text-xs italic text-muted-foreground">déjà commencée</span>}
+                {isActionableWeek(w, today) ? null : <span className="text-xs italic text-muted-foreground">révolue</span>}
               </label>
             ))
           )}

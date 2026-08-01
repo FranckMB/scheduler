@@ -28,17 +28,34 @@ export function toISODate(date: Date): string {
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * La date existe-t-elle vraiment ? La FORME ne suffit pas (revue #344) : `2026-13-01` et
+ * `2026-02-31` passent la regex, et comme ces chaînes trient APRÈS toute date réelle, plus
+ * aucune vacance ni semaine ne franchissait les filtres — le radar affichait « Rien à
+ * l'horizon. Tout roule. » sur un club qui avait trois périodes à ajuster. On construit
+ * donc la date et on vérifie qu'elle se relit à l'identique (le constructeur reporte :
+ * le 31 février devient le 3 mars).
+ */
+function isRealDate(iso: string): boolean {
+  if (!ISO_DATE.test(iso)) {
+    return false;
+  }
+  const [y, m, d] = iso.split("-").map(Number);
+
+  return toISODate(new Date(y, m - 1, d)) === iso;
+}
+
 let override: string | null = null;
 
 /**
  * Fixe le « aujourd'hui » du front, ou le relâche avec `null`.
  *
- * Une valeur malformée est IGNORÉE plutôt que propagée : un `?today=hier` qui traverserait
+ * Une valeur invalide est IGNORÉE plutôt que propagée : un `?today=hier` qui traverserait
  * les comparaisons de chaînes ISO donnerait des filtres silencieusement faux (`"hier" > "2026-…"`
  * est vrai lexicographiquement) — un écran qui ment est pire qu'un paramètre sans effet.
  */
 export function setTodayOverride(iso: string | null): void {
-  override = null !== iso && ISO_DATE.test(iso) ? iso : null;
+  override = null !== iso && isRealDate(iso) ? iso : null;
 }
 
 /** La date du jour, ISO Y-m-d — l'override de dev s'il est posé, l'horloge sinon. */
