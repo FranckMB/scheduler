@@ -149,7 +149,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // (`embedded`), ouvert : « sinon on risque de ne pas le voir si on n'est pas familier
   // avec l'écran génération » (retour terrain). Les deux règles ne se contredisent pas —
   // la seconde nomme un contexte que la première n'avait pas distingué.
-  const [diagnosticsCollapsed, setDiagnosticsCollapsed] = useState(!embedded);
+  const [diagnosticsCollapsed, setDiagnosticsCollapsed] = useState(true);
   const [validateOpen, setValidateOpen] = useState(false);
   // Reopening the baseline with period overlays → 409; confirm to delete them.
   const [reopenOverlayCount, setReopenOverlayCount] = useState<number | null>(null);
@@ -350,6 +350,21 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     () => (0 === hiddenVenueIds.size ? allDiagnostics : allDiagnostics.filter((d) => null === d.venueId || !hiddenVenueIds.has(d.venueId))),
     [allDiagnostics, hiddenVenueIds],
   );
+
+  // P4-40 — l'aside s'ouvre au sortir d'une génération lancée DEPUIS LE WIZARD, mais
+  // seulement s'il a quelque chose à montrer.
+  //
+  // ⚠ Deux raisons d'attendre les diagnostics plutôt que d'initialiser à `!embedded`
+  // (revue #350) : (1) au premier rendu ils ne sont pas encore là, donc l'aside s'ouvrait
+  // TOUJOURS — y compris sur une génération propre, où il volait 20rem de largeur à la
+  // grille dans une hauteur embarquée déjà courte pour n'afficher que « le planning est
+  // propre » ; (2) l'amorce ne se rejoue pas après un repli manuel — refermer l'aside est
+  // un geste, pas un accident.
+  const [asideAutoOpened, setAsideAutoOpened] = useState(false);
+  if (embedded && !asideAutoOpened && diagnostics.length > 0) {
+    setAsideAutoOpened(true);
+    setDiagnosticsCollapsed(false);
+  }
 
   // Clicking the solver's "unused_slot" warning brings its venue column on screen
   // (venue view, filtered to that venue) so the concerned `vide` cell is visible.

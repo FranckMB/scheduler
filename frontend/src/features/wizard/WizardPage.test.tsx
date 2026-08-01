@@ -118,7 +118,7 @@ describe("Wizard (integration)", () => {
     await user.click(await screen.findByRole("button", { name: /Retour à l'accueil/ }));
     // Rien n'est supprimé sans confirmation explicite.
     expect(deleteEntryMutateAsync).not.toHaveBeenCalled();
-    expect(await screen.findByRole("dialog")).toHaveTextContent("Abandonner l'ajustement ?");
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Quitter l'ajustement ?");
 
     await user.click(screen.getByRole("button", { name: "Retirer la période" }));
     // La confirmation re-vérifie le serveur (lecture fraîche) puis supprime.
@@ -150,7 +150,7 @@ describe("Wizard (integration)", () => {
     renderWithProviders(<WizardPage />, { route: "/wizard" });
 
     await user.click(await screen.findByRole("button", { name: /Retour à l'accueil/ }));
-    expect(await screen.findByRole("dialog")).toHaveTextContent("Abandonner l'ajustement ?");
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Quitter l'ajustement ?");
     await user.click(screen.getByRole("button", { name: "Retirer la période" }));
     await waitFor(() => expect(deleteEntryMutateAsync).toHaveBeenCalledWith("entry-x"));
   });
@@ -192,5 +192,9 @@ describe("bandeau de période — la forme (P4-38)", () => {
     // ⚠ Le titre porte DÉJÀ le repère de semaine (`cockpit/queries.ts:349`) : le bandeau ne
     // le réécrit pas, sous peine de l'afficher deux fois.
     expect(screen.getByText(/Mode période —/)).toBeInTheDocument();
+    // …et la LIGNE 2 dit la fenêtre. Sans cette assertion, le test s'appelait « porte le
+    // titre et les dates » en n'en vérifiant aucune : vider la ligne 2 le laissait vert
+    // (revue #350).
+    expect(await screen.findByText(/^du 16-10-2026 au 31-10-2026$/)).toBeInTheDocument();
   });
 });

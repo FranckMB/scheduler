@@ -28,7 +28,10 @@ interface DiagnosticsPanelProps {
   onFocusVenue?: (venueId: string) => void;
   /** Collapse the panel back to the compact bar (frees grid width). */
   onCollapse?: () => void;
-  /** Ouvre d'emblée le groupe le PLUS SÉVÈRE présent (P4-40, contexte wizard). */
+  /** Ouvre d'emblée le groupe le PLUS SÉVÈRE présent (P4-40, contexte wizard).
+   *  ⚠ Le panneau est DÉMONTÉ quand on le replie (`PlanningPage`), donc chaque
+   *  réouverture ré-amorce : c'est voulu — rouvrir l'aside, c'est redemander à voir les
+   *  diagnostics, et ce qu'on doit alors voir est le plus grave. */
   openMostSevere?: boolean;
 }
 
@@ -47,9 +50,18 @@ export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups,
   // par le lint React Compiler du dépôt (`react-hooks/set-state-in-effect`), et un
   // `useState(initial)` ne suffirait pas — les diagnostics arrivent APRÈS le premier
   // rendu, quand l'état initial est déjà figé.
-  const [seeded, setSeeded] = useState(false);
-  if (openMostSevere && !seeded && groups.length > 0) {
-    setSeeded(true);
+  //
+  // ⚠ La clé porte l'IDENTITÉ des diagnostics, et non un simple booléen « déjà fait »
+  // (revue #350). Un verrou à un coup ne se réarmait jamais : changer de version dans le
+  // sélecteur remplace les diagnostics SANS démonter le panneau, si bien qu'`openSeverity`
+  // continuait de désigner une sévérité que la nouvelle version ne contient pas — donc
+  // AUCUN groupe ouvert, exactement la régression que ce lot supprime. Avec la clé, un jeu
+  // de diagnostics différent ré-amorce sur son propre plus-sévère, tandis que refermer un
+  // groupe à la main ne change pas la clé et n'est donc jamais défait.
+  const seedKey = groups.map((g) => `${g.severity}:${g.items.length}`).join("|");
+  const [seededKey, setSeededKey] = useState<string | null>(null);
+  if (openMostSevere && groups.length > 0 && seededKey !== seedKey) {
+    setSeededKey(seedKey);
     setOpenSeverity(groups[0].severity);
   }
 

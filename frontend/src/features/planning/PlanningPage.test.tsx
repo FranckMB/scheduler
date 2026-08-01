@@ -365,6 +365,12 @@ describe("PlanningPage (integration)", () => {
 
     // Panneau déplié : son titre est un en-tête, pas le bouton de la barre repliée.
     expect(await screen.findByRole("heading", { name: "Diagnostics du solveur" })).toBeInTheDocument();
+
+    // ⚠ ET le groupe le plus sévère est DÉPLIÉ. Sans cette seconde assertion, le test
+    // restait vert en supprimant `openMostSevere` : le titre du panneau est rendu quoi
+    // qu'il arrive, donc il ne prouvait que le repli de l'aside, pas le câblage qu'il
+    // prétendait garder (revue #350). C'est le message d'un diagnostic qui le prouve.
+    expect(await screen.findByText("Conflit de gymnase.")).toBeInTheDocument();
   });
 
   it("laisse les diagnostics REPLIÉS en boucle de travail", async () => {

@@ -104,8 +104,9 @@ le planning s'ouvre sur rien après une génération réussie.
   `null`. Même piège pour `score` : un plan sans score (DRAFT/en vol) affichait sinon
   le littéral « score undefined ». ⚠ **Amendé 2026-08-01 (P4-39)** : plus aucun écran
   n'affiche le score, donc cette illustration est **historique** — la normalisation, elle,
-  reste en place (`planning/api.ts:285`) et reste nécessaire, le champ étant toujours servi
-  et comparé.
+  reste en place (`planning/api.ts:285`) — non plus pour corriger un affichage, mais pour
+  garder le type honnête (`score: number | null`) sur un champ que l'API sert toujours et
+  que **plus aucun code frontend ne lit**.
 - **Règle générale** : tout champ nullable consommé côté frontend via une comparaison
   `=== null` doit être normalisé à la frontière de son endpoint, ou testé avec un
   check *nullish* (`!x` / `== null`), jamais `=== null` seul.
