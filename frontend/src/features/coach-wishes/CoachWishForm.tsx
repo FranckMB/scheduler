@@ -56,8 +56,21 @@ export function CoachWishForm({
   // Défaut coach = le coach MAIN de l'équipe, mais À LA CRÉATION seulement. En édition on
   // garde ce qui est là — y compris "" pour une doléance déjà dé-attribuée : retomber sur le
   // MAIN actuel la ré-attribuerait en silence à un autre auteur.
-  const mainCoachId = (t: string): string => teamCoaches.find((tc) => tc.teamId === t && "MAIN" === tc.role)?.coachId ?? "";
+  const mainCoachIds = (t: string): string[] => teamCoaches.filter((tc) => tc.teamId === t && "MAIN" === tc.role).map((tc) => tc.coachId);
+  const mainCoachId = (t: string): string => mainCoachIds(t)[0] ?? "";
   const resolvedCoachId = "" !== coachId ? coachId : isEdit ? "" : mainCoachId(teamId);
+
+  // P3-14 (décision fondateur 2026-08-01 : « je veux que les MAIN coach ») — le select
+  // n'offre que les coachs PRINCIPAUX de l'équipe choisie. Il listait tout le club, alors
+  // même que le défaut pré-sélectionne le MAIN : on pouvait enregistrer « U18F1 — Emerick »
+  // quand Emerick n'encadre que SF1 et U15F1. Rien ne l'attrapait ensuite.
+  //
+  // ⚠ CHOISIR n'est pas NOMMER (leçon #342) : la valeur COURANTE reste offerte même si son
+  // lien MAIN a disparu depuis (coach passé assistant, lien retiré). La filtrer viderait le
+  // select sur une doléance qui nomme pourtant un coach — et « combler le trou » la
+  // réattribuerait en silence à quelqu'un d'autre. Elle est gardée, et marquée.
+  const offerableCoachIds = new Set(mainCoachIds(teamId));
+  const offeredCoaches = coaches.filter((c) => offerableCoachIds.has(c.id) || c.id === resolvedCoachId);
 
   const toggleDay = (n: number) => setDays((prev) => (prev.includes(n) ? prev.filter((d) => d !== n) : [...prev, n].sort((a, b) => a - b)));
 
@@ -106,9 +119,10 @@ export function CoachWishForm({
           Coach
           <Select aria-label="Coach" className={cn(fieldClass, "mt-0.5 block w-40")} value={resolvedCoachId} onChange={(e) => setCoachId(e.target.value)}>
             {!isEdit || wasDetached ? <option value="">Coach…</option> : null}
-            {coaches.map((c) => (
+            {offeredCoaches.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.firstName} {c.lastName}
+                {offerableCoachIds.has(c.id) ? "" : " (n'encadre plus cette équipe)"}
               </option>
             ))}
           </Select>
