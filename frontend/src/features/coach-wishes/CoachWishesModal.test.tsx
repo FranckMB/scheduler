@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,11 +7,35 @@ import type { CalendarEntry } from "@/features/cockpit/api";
 import { CoachWishesModal } from "./CoachWishesModal";
 
 // Saison couvrant les deux semaines des vacances de test (lun 2026-02-16 → dim 2026-03-01).
+// P3-14 : le tri des filtres (staffing / rang) et le bornage du coach aux MAIN de l'équipe
+// se lisent tous deux dans ces fixtures. `t2`/U13 n'a VOLONTAIREMENT aucun lien coach —
+// c'est ce qui rend observable qu'elle sort du formulaire sans sortir du filtre.
+const teamsState = { data: [
+  { id: "t1", name: "SM1", priorityTierId: 3, tierOrder: 0 },
+  { id: "t2", name: "U13", priorityTierId: 3, tierOrder: 1 },
+  { id: "t3", name: "Fanion", priorityTierId: 1, tierOrder: 0 },
+] as { id: string; name: string; priorityTierId: number; tierOrder: number }[] };
+const coachesState = { data: [
+  { id: "c1", firstName: "Maxime", lastName: "Durand", isEmployee: false },
+  { id: "c2", firstName: "Léa", lastName: "Roy", isEmployee: true },
+] as { id: string; firstName: string; lastName: string; isEmployee: boolean }[] };
+const teamCoachesState = { data: [
+  { id: "tc1", teamId: "t1", coachId: "c1", role: "MAIN" },
+  { id: "tc3", teamId: "t3", coachId: "c2", role: "MAIN" },
+] as { id: string; teamId: string; coachId: string; role: string }[] };
+const coachPlayersState = { data: [] as { coachId: string; isActive: boolean }[] };
+const tiersState = { data: [
+  { id: 1, label: "S", name: "Fanion", color: null },
+  { id: 3, label: "B", name: "Moyenne", color: null },
+] as { id: number; label: string; name: string; color: string | null }[] };
+
 vi.mock("@/features/auth/queries", () => ({ useWorkingSeason: () => ({ startDate: "2025-09-01", endDate: "2026-06-30" }) }));
 vi.mock("@/features/wizard/queries", () => ({
-  useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1" }, { id: "t2", name: "U13" }] }),
-  useWizardCoaches: () => ({ data: [{ id: "c1", firstName: "Maxime", lastName: "Durand" }, { id: "c2", firstName: "Léa", lastName: "Roy" }] }),
-  useWizardTeamCoaches: () => ({ data: [{ id: "tc1", teamId: "t1", coachId: "c1", role: "MAIN" }] }),
+  useWizardTeams: () => ({ data: teamsState.data }),
+  useWizardCoaches: () => ({ data: coachesState.data }),
+  useWizardTeamCoaches: () => ({ data: teamCoachesState.data }),
+  useWizardCoachPlayers: () => ({ data: coachPlayersState.data }),
+  usePriorityTiers: () => ({ data: tiersState.data }),
 }));
 
 const wishesState: { data: unknown[] } = { data: [] };
@@ -55,6 +79,11 @@ const wish = (over: Record<string, unknown>) => ({
 describe("CoachWishesModal", () => {
   beforeEach(() => {
     wishesState.data = [];
+    // Un cas vide les liens coach : sans ré-armement, il contaminerait les suivants.
+    teamCoachesState.data = [
+      { id: "tc1", teamId: "t1", coachId: "c1", role: "MAIN" },
+      { id: "tc3", teamId: "t3", coachId: "c2", role: "MAIN" },
+    ];
     createMut.mockClear();
     updateMut.mockClear();
     deleteMut.mockClear();
@@ -146,5 +175,92 @@ describe("CoachWishesModal", () => {
     // Équipe SM1 (défaut) → coach MAIN c1 pré-rempli ; on soumet directement.
     await user.click(screen.getByRole("button", { name: /Ajouter la doléance/ }));
     expect(createMut).toHaveBeenCalledWith(expect.objectContaining({ calendarEntryId: "e1", weekStart: "2026-02-16", teamId: "t1", coachId: "c1" }), expect.anything());
+  });
+
+  // ── P3-14 (retour terrain 2026-07-31) ──
+
+  // (a) « La liste de coachs n'est pas triée » : elle sortait dans l'ordre brut de l'API,
+  // alors que le regroupement salariés / coachs-joueurs / bénévoles existe et sert déjà au
+  // récap et à l'onglet contraintes.
+  it("groupe les coachs du filtre par staffing", async () => {
+    const user = userEvent.setup();
+    render(<CoachWishesModal mother={mother} weekFilter={null} onClose={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: /Coachs/ }));
+    expect(screen.getByText("Salariés")).toBeInTheDocument();
+    expect(screen.getByText("Bénévoles")).toBeInTheDocument();
+  });
+
+  // Les équipes du filtre suivent le RANG, comme partout où une équipe se choisit.
+  it("groupe les équipes du filtre par rang, fanion d'abord", async () => {
+    const user = userEvent.setup();
+    render(<CoachWishesModal mother={mother} weekFilter={null} onClose={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: /Équipes/ }));
+    const headers = screen.getAllByText(/^(S · Fanion|B · Moyenne)$/).map((el) => el.textContent);
+    expect(headers.indexOf("S · Fanion")).toBeLessThan(headers.indexOf("B · Moyenne"));
+  });
+
+  // (b) décision fondateur : « comment avoir une doléance de coach si une équipe n'a pas de
+  // coach ? ben c'est pas possible ». U13 n'a aucun lien MAIN → hors du FORMULAIRE.
+  it("n'offre pas à la saisie une équipe sans coach principal", async () => {
+    const user = userEvent.setup();
+    render(<CoachWishesModal mother={mother} weekFilter={null} onClose={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: /Ajouter/ }));
+    const picker = screen.getByLabelText("Équipe");
+    expect(within(picker).queryByRole("option", { name: "U13" })).toBeNull();
+    expect(within(picker).getByRole("option", { name: "SM1" })).toBeInTheDocument();
+  });
+
+  // …mais le FILTRE la garde : il sert à LIRE des doléances existantes, dont celles d'une
+  // équipe qui a perdu son coach depuis. Cacher ne vaut que pour un CHOIX.
+  it("garde toutes les équipes dans le filtre, y compris sans coach", async () => {
+    const user = userEvent.setup();
+    render(<CoachWishesModal mother={mother} weekFilter={null} onClose={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: /Équipes/ }));
+    expect(screen.getByRole("button", { name: "U13" })).toBeInTheDocument();
+  });
+
+  // « Je veux que les MAIN coach » : le select listait TOUT le club, on pouvait enregistrer
+  // une équipe avec un coach qui ne l'encadre pas.
+  it("n'offre que le coach principal de l'équipe choisie", async () => {
+    const user = userEvent.setup();
+    render(<CoachWishesModal mother={mother} weekFilter={null} onClose={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: /Ajouter/ }));
+    const picker = screen.getByLabelText("Coach");
+    expect(within(picker).getByRole("option", { name: /Maxime Durand/ })).toBeInTheDocument();
+    expect(within(picker).queryByRole("option", { name: /Léa Roy/ })).toBeNull();
+
+    // Changer d'équipe change la liste : Fanion est encadrée par Léa, pas par Maxime.
+    await user.selectOptions(screen.getByLabelText("Équipe"), "t3");
+    expect(within(screen.getByLabelText("Coach")).getByRole("option", { name: /Léa Roy/ })).toBeInTheDocument();
+    expect(within(screen.getByLabelText("Coach")).queryByRole("option", { name: /Maxime Durand/ })).toBeNull();
+  });
+
+  // ⚠ CHOISIR n'est pas NOMMER (leçon #342) : un coach qui a perdu son lien MAIN reste
+  // affiché sur la doléance qu'il porte — sinon le select rend blanc sur une doléance qui
+  // nomme pourtant quelqu'un, et « combler le trou » la réattribue en silence.
+  it("garde le coach d'une doléance existante même s'il n'encadre plus l'équipe", async () => {
+    wishesState.data = [wish({ id: "w1", teamId: "t1", coachId: "c2", weekStart: "2026-02-16" })]; // Léa n'encadre pas SM1
+    const user = userEvent.setup();
+    render(<CoachWishesModal mother={mother} weekFilter={null} onClose={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: "Modifier" }));
+    const picker = screen.getByLabelText("Coach") as HTMLSelectElement;
+    expect(picker.value).toBe("c2");
+    expect(within(picker).getByRole("option", { name: /Léa Roy.*n'encadre plus cette équipe/ })).toBeInTheDocument();
+  });
+
+  // Aucune équipe saisissable : on dit ce qui manque plutôt que d'ouvrir un formulaire sans
+  // cible (un select d'équipes vide, dont rien n'expliquerait le vide).
+  it("annonce ce qui manque quand aucune équipe n'a de coach principal", () => {
+    teamCoachesState.data = [];
+    render(<CoachWishesModal mother={mother} weekFilter={null} onClose={() => {}} />);
+
+    expect(screen.getByText(/rattachez-en un pour pouvoir saisir une doléance/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ajouter/ })).toBeDisabled();
   });
 });
