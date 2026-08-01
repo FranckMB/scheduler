@@ -542,27 +542,31 @@ function PeriodVenuePanel({
         <p role="alert" className="mb-2 text-sm text-destructive">Aucun créneau : aucune équipe ne pourra s’entraîner dans ce gymnase tant que vous n’en aurez pas posé.</p>
       ) : null}
 
-      {/* Barre « À poser » — même forme et même rôle qu'en saison (`VenuesStep`) : la durée
-          du PROCHAIN créneau posé au clic. Elle manquait ici, et la pose était figée à
-          90 min : un créneau de 2h se posait en deux gestes (poser, puis rouvrir
-          l'éditeur), et une pose tardive était refusée pour une durée que le gestionnaire
-          n'avait pas choisie (P4-43). La capacité, elle, reste réglée par créneau dans
-          l'éditeur — un créneau neuf vaut toujours 1, comme en saison. */}
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">À poser :</span>
-        <Select aria-label="Durée à poser" className="h-9 w-24" disabled={isDisabled} value={posingDuration} onChange={(e) => onPosingDuration(Number(e.target.value))}>
-          {DURATIONS.map((d) => (
-            <option key={d} value={d}>
-              {formatDuration(d)}
-            </option>
-          ))}
-        </Select>
-        <span className="text-xs text-muted-foreground">— cliquez la grille pour ajouter un créneau</span>
-      </div>
-
       {/* fieldset disabled : gèle la grille à la souris ET au clavier quand le gymnase est
-          désactivé — ses boutons sortent de l'ordre de tabulation et ne s'activent pas. */}
+          désactivé — ses boutons sortent de l'ordre de tabulation et ne s'activent pas.
+          ⚠ La barre « À poser » est DEDANS, pas au-dessus : le geste qu'elle règle et la
+          grille où il s'exerce ne font qu'un. Laissée dehors, son libellé et son indice
+          « cliquez la grille » restaient en pleine opacité au-dessus d'une grille gelée —
+          une instruction de cliquer là où le clic est impossible (revue #351). */}
       <fieldset disabled={isDisabled} className={cn("min-w-0 border-0 p-0", isDisabled && "opacity-50")}>
+        {/* Barre « À poser » — même forme et même rôle qu'en saison (`VenuesStep`) : la durée
+            du PROCHAIN créneau posé au clic. Elle manquait ici, et la pose était figée à
+            90 min : un créneau de 2h se posait en deux gestes (poser, puis rouvrir
+            l'éditeur), et une pose tardive était refusée pour une durée que le gestionnaire
+            n'avait pas choisie (P4-43). La capacité, elle, reste réglée par créneau dans
+            l'éditeur — un créneau neuf vaut toujours 1, comme en saison. */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">À poser :</span>
+          <Select aria-label="Durée à poser" className="h-9 w-24" value={posingDuration} onChange={(e) => onPosingDuration(Number(e.target.value))}>
+            {DURATIONS.map((d) => (
+              <option key={d} value={d}>
+                {formatDuration(d)}
+              </option>
+            ))}
+          </Select>
+          <span className="text-xs text-muted-foreground">— cliquez la grille pour ajouter un créneau</span>
+        </div>
+
         <VenueAvailabilityGrid
           venue={venue}
           slots={slots}

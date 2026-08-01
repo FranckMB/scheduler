@@ -486,6 +486,10 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     overridesVenueState.data = [{ id: "o1", schedulePlanId: "plan-1", venueId: "v1", mode: "DISABLED" }];
     render(<PeriodVenues calendarEntryId="e1" />);
     expect(screen.getByRole("button", { name: "Lun 18:00" })).toBeDisabled();
+    // La barre « À poser » est DANS le fieldset (revue #351) : laissée dehors, son indice
+    // « cliquez la grille » restait lisible en pleine opacité au-dessus d'une grille gelée.
+    // Le geste et son réglage s'éteignent ensemble.
+    expect(screen.getByLabelText("Durée à poser")).toBeDisabled();
   });
 
   it("verrouille l'\u00e9tat actif/d\u00e9sactiv\u00e9 pendant la synchro (anti double-clic \u2192 422)", () => {

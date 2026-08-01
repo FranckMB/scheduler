@@ -104,7 +104,10 @@ export function ResourceFilter({ viewMode, groups, selected, onToggle, onClear }
                   ) : null}
                   <ul>
                     {group.resources.map((resource) => {
-                      const active = selected.includes(resource.id);
+                      // `isSelected` et non `active` : ce dernier nomme désormais l'état du
+                      // BOUTON déclencheur (au moins une ressource cochée). Deux `active`
+                      // imbriqués, et un style ajouté ici plus tard lirait le mauvais.
+                      const isSelected = selected.includes(resource.id);
                       return (
                         <li key={resource.id}>
                           <button
@@ -112,7 +115,7 @@ export function ResourceFilter({ viewMode, groups, selected, onToggle, onClear }
                             onClick={() => onToggle(resource.id)}
                             className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
                           >
-                            <Check className={cn("size-4 shrink-0 text-accent", active ? "" : "invisible")} />
+                            <Check className={cn("size-4 shrink-0 text-accent", isSelected ? "" : "invisible")} />
                             <span className="truncate">{resource.label}</span>
                           </button>
                         </li>
