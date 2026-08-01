@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CalendarEntry, SchedulePlan, SchoolHoliday } from "./api";
 import { setTodayOverride } from "@/shared/lib/clock";
 
-import { addDays, mondayOf, todayISO } from "./lib/date";
+import { addDays, frDateShort, mondayOf, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
@@ -24,13 +24,14 @@ let conflictsPending = false;
 // PRÉSENCE de donnée, pas sur le statut (une donnée périmée après un refetch en échec reste
 // affichable).
 let plansData: SchedulePlan[] | undefined = [];
+const plansState = { failed: false };
 // Versions existantes par plan (retour fondateur 2026-07-18 : « planning en cours »
 // = plan avec versions mais sans version validée → carte toujours visible).
 let schedulesData: { schedulePlanId: string }[] | undefined = [];
 // #10 C2 — les campagnes de doléances, indexées par période. Mockées ici parce qu'une
 // vacance qui en porte une ÉCHAPPE à l'horizon 60 j (revue #344 : cette carte est la seule
 // surface qui rende le badge « x à traiter »).
-let campaignsData: unknown[] = [];
+let campaignsData: unknown[] | undefined = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, mutateAsync: createHolidayMutateAsync, isPending: false }),
@@ -40,10 +41,10 @@ vi.mock("./queries", () => ({
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
-  useSchedulePlans: () => ({ data: plansData }),
+  useSchedulePlans: () => ({ data: plansState.failed ? undefined : plansData, isError: plansState.failed }),
 }));
 vi.mock("@/features/planning/queries", () => ({ useSchedules: () => ({ data: schedulesData }) }));
-vi.mock("@/features/coach-wishes/campaignQueries", () => ({ useCoachWishCampaigns: () => ({ data: campaignsData }) }));
+vi.mock("@/features/coach-wishes/campaignQueries", () => ({ useCoachWishCampaigns: () => ({ data: campaignsData, isError: false }) }));
 // Saison de travail couvrant les fixtures FUTURE (2999) : le clamp saison des
 // créations de vacances (revue #260 round 1) laisse passer les dates de test.
 vi.mock("@/features/auth/queries", () => ({
@@ -118,6 +119,7 @@ describe("RadarPanel", () => {
     plansData = [];
     schedulesData = [];
     campaignsData = [];
+    plansState.failed = false;
   });
   afterEach(() => setTodayOverride(null));
 
@@ -421,7 +423,10 @@ describe("RadarPanel", () => {
       entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", schoolHolidayId: "h1", startDate: FUTURE, endDate: FUTURE_END })],
     });
 
+    // ⚠ On épingle le BADGE, pas le titre : l'exemption existe pour lui, et un test sur le
+    // titre resterait vert si la carte survivait sans son suivi (revue #344 round 2).
     expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Solliciter les coachs|Suivre la collecte|traiter/ })).toBeInTheDocument();
   });
 
   // Le badge de suivi n'existe nulle part ailleurs : le replier le rendait invisible, et
@@ -438,6 +443,69 @@ describe("RadarPanel", () => {
     // Carte repliée (les puces sont absentes) mais l'action de suivi est là.
     expect(screen.queryByRole("button", { name: /sem\. du/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Doléances/ })).toBeInTheDocument();
+  });
+
+  // ── Revue #344 round 2 : la règle vaut à TOUS ses sites, pas seulement là où je l'ai vue ──
+
+  // Le picker offrait — et cochait — les semaines révolues. La semaine ainsi créée était
+  // ensuite filtrée partout par le radar : un plan sans carte, sans puce, sans retour.
+  it("n'offre pas une semaine révolue dans le picker de semaines", async () => {
+    const user = userEvent.setup();
+    const w1s = mondayOf("2999-01-04");
+    // Vacance sur 3 semaines ; « aujourd'hui » = lundi de la 2ᵉ → la 1ʳᵉ est révolue.
+    setTodayOverride(addDays(w1s, 7));
+    renderRadar({ holidays: [{ id: "h9", label: "Vacances longues", holidayType: "noel", startDate: w1s, endDate: addDays(w1s, 20), schoolYear: "2998-2999" }] });
+
+    await user.click(screen.getByRole("button", { name: "Adapter" }));
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(`Semaine du ${frDateShort(w1s)}`))).toBeNull();
+    expect(screen.getByText(new RegExp(`Semaine du ${frDateShort(addDays(w1s, 7))}`))).toBeInTheDocument();
+  });
+
+  // « Commencé » n'est pas « fini », à l'échelle VACANCE aussi : le filtre de période
+  // gardait `startDate >= today` et faisait disparaître, dès le samedi de son début, le
+  // seul point d'entrée vers « Adapter » et « Solliciter les coachs ».
+  it("garde la carte d'une vacance déjà commencée dont les jours restent devant", () => {
+    setTodayOverride(addDays(FUTURE, 2)); // deux jours après le début, la vacance dure 13 j
+    renderRadar({ holidays: [holiday] });
+
+    expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
+  });
+
+  // Le cap borne le BRUIT, pas ce qu'on a décidé de garder : trié par date, la vacance
+  // exemptée est toujours la dernière, donc la première coupée — le cap annulait
+  // silencieusement l'exemption qu'il côtoie.
+  it("ne laisse pas le cap de 3 vacances manger celle qui porte une campagne", () => {
+    setTodayOverride("2998-12-01");
+    const near = [0, 1, 2].map((i) => ({ id: `n${i}`, label: `Proche ${i}`, holidayType: "noel", startDate: addDays("2998-12-05", i), endDate: addDays("2998-12-12", i), schoolYear: "2998-2999" }));
+    campaignsData = [{ id: "camp1", calendarEntryId: "h1", deadline: "2999-01-01", weeks: [], teamIds: [], totalCoachCount: 4, respondedCoachCount: 1, openWishCount: 2, lastReminderAt: null, coaches: [] }];
+    renderRadar({
+      holidays: [...near, holiday], // + la lointaine, exemptée par sa campagne
+      entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", schoolHolidayId: "h1", startDate: FUTURE, endDate: FUTURE_END })],
+    });
+
+    expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
+  });
+
+  // Une lecture RATÉE n'est ni « ça charge » ni « tout roule » : le squelette bâti sur
+  // « pas de donnée » transformait un échec en « Chargement… » perpétuel.
+  it("dit l'échec au lieu de charger indéfiniment quand une lecture a échoué", () => {
+    plansState.failed = true;
+    renderRadar({});
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/Impossible de charger les éléments à traiter/);
+    expect(screen.queryByText(/Chargement des éléments à traiter/)).toBeNull();
+    expect(screen.queryByText(/Rien à l'horizon/)).toBeNull();
+  });
+
+  // L'exemption fait dépendre l'EXISTENCE d'une carte de la lecture des campagnes : tant
+  // qu'elle n'a pas répondu, « Tout roule » serait un vide crédible.
+  it("n'affirme pas « Tout roule » tant que les campagnes ne sont pas lues", () => {
+    campaignsData = undefined;
+    renderRadar({});
+
+    expect(screen.queryByText(/Rien à l'horizon/)).toBeNull();
   });
 
   // P3-11 : le panneau restait NU pendant que les plans arrivaient — un cadre « À traiter »

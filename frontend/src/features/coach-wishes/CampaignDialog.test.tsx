@@ -138,6 +138,44 @@ describe("CampaignDialog", () => {
     expect(past).toBeChecked();
   });
 
+  // ── Revue #344 round 2 ──
+
+  // La date limite par défaut valait `entry.startDate`, donc DANS LE PASSÉ dès que la
+  // période a commencé — le cas que ce lot vient de rendre légitime. Les liens partaient
+  // morts (410 « deadline dépassée ») et rien ne le disait au gestionnaire.
+  it("ne propose jamais une date limite déjà passée", () => {
+    setTodayOverride("2026-02-25"); // la période a commencé le 16
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    const deadline = screen.getByLabelText("Date limite") as HTMLInputElement;
+    expect(deadline.value).toBe("2026-02-25");
+    expect(deadline.min).toBe("2026-02-25");
+  });
+
+  // Une semaine retenue par la campagne peut ne PLUS être émise (période redimensionnée,
+  // saison déplacée). La filtrer la laissait invisible tout en la gardant dans l'état, que
+  // l'enregistrement renvoyait : on sollicite pour une semaine jamais montrée.
+  it("montre une semaine retenue que la période n'émet plus", () => {
+    setTodayOverride("2026-02-01");
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2026-03-01",
+      weeks: ["2026-02-02"], // hors de la période 16/02 → 01/03 : plus émise du tout
+      teamIds: ["t1"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    const orphan = screen.getByLabelText(/Semaine du 02\/02\/2026/);
+    expect(orphan).toBeInTheDocument();
+    expect(orphan).toBeChecked();
+  });
+
   it("copie le lien personnel d'un coach", async () => {
     const existing: CoachWishCampaign = {
       id: "camp1",
