@@ -34,7 +34,8 @@ export function TeamPicker({
 }: {
   /** Les équipes RENDUES : les éligibles, plus celles que la sélection porte encore. */
   teams: Team[];
-  /** Parmi elles, celles qui ne devraient plus l'être (plus de coach, désactivée) — marquées. */
+  /** Parmi elles, celles qui ne peuvent plus être sollicitées (plus de coach, désactivée,
+   *  supprimée) — marquées. Le motif exact n'est pas connu ici : on ne l'invente pas. */
   ineligibleIds: ReadonlySet<string>;
   tiers: PriorityTier[];
   selected: ReadonlySet<string>;
@@ -62,9 +63,16 @@ export function TeamPicker({
   const allIds = teams.map((t) => t.id);
   const toggle = (id: string) => setMany([id], !selected.has(id));
 
-  const chosen = teams.filter((t) => selected.has(t.id)).length;
-  const summary =
-    0 === teams.length ? "Aucune équipe avec un coach rattaché" : chosen === teams.length ? `Toutes les équipes (${teams.length})` : `${chosen} équipe${chosen > 1 ? "s" : ""} sur ${teams.length}`;
+  // ⚠ Le compte porte sur ce qui produira RÉELLEMENT un lien (revue #346 round 2) :
+  // compter les inéligibles au numérateur ET au dénominateur annonçait « Toutes les
+  // équipes (3) » quand deux seulement seraient sollicitées — et le sélecteur replié étant
+  // la seule ligne lue, rien n'expliquait l'écart. Les inéligibles se disent À PART.
+  const eligible = teams.filter((t) => !ineligibleIds.has(t.id));
+  const chosen = eligible.filter((t) => selected.has(t.id)).length;
+  const strayChosen = teams.filter((t) => ineligibleIds.has(t.id) && selected.has(t.id)).length;
+  const base =
+    0 === eligible.length ? "Aucune équipe avec un coach rattaché" : chosen === eligible.length ? `Toutes les équipes (${eligible.length})` : `${chosen} équipe${chosen > 1 ? "s" : ""} sur ${eligible.length}`;
+  const summary = 0 === strayChosen ? base : `${base} · ${strayChosen} sans coach, à retirer`;
 
   return (
     <fieldset className="mt-4">
@@ -115,7 +123,7 @@ export function TeamPicker({
                         key={t.id}
                         type="button"
                         aria-pressed={picked}
-                        aria-label={ineligible ? `${t.name} (n'a plus de coach)` : t.name}
+                        aria-label={ineligible ? `${t.name} (ne peut plus être sollicitée)` : t.name}
                         onClick={() => toggle(t.id)}
                         className={cn(
                           "rounded-md border px-2 py-1 text-xs",

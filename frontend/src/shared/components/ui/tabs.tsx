@@ -39,7 +39,8 @@ export interface TabsProps {
   ariaLabel: string;
   /** Prefix for tab/panel IDs — must be unique per tablist (avoids collisions with nested sub-tabs). */
   idPrefix: string;
-  /** Peau : `console` pour l'admin (défaut historique), `app` pour l'application club. */
+  /** Peau : `app` par DÉFAUT (l'application club) ; la console superadmin doit passer
+   *  `console` explicitement — l'oublier peint des tokens clairs sur fond sombre. */
   variant?: TabsVariant;
 }
 

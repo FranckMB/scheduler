@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HTTPError } from "ky";
 import { Check, Copy, Send } from "lucide-react";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
+import type { Team } from "@/features/wizard/api";
 import { addDays, isActionableWeek, periodAdjustWeeks, todayISO } from "@/features/cockpit/lib/date";
 import { usePriorityTiers, useUpdateCoach, useWizardTeamCoaches, useWizardTeams } from "@/features/wizard/queries";
 import { Button } from "@/shared/components/ui/button";
@@ -116,8 +117,16 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   // (ni initialiseur paresseux, qui gèlerait le vide, ni effet, que React refuse ici).
   // Après ça, la sélection n'appartient qu'au gestionnaire : aucun refetch ne l'élargit
   // dans son dos.
+  // ⚠ On attend que les deux lectures soient POSÉES, pas seulement non vides (revue #346
+  // round 2) : react-query sert un cache périmé immédiatement et refetch derrière, si bien
+  // qu'un cache de plus de 30 s semait une liste incomplète et s'y verrouillait — « 48
+  // équipes sur 49 » annoncé comme « toutes », et le coach de la 49ᵉ sans lien.
+  const teamsSettled = undefined !== teamsQuery.data && !teamsQuery.isFetching && undefined !== teamCoachesQuery.data && !teamCoachesQuery.isFetching;
   const [teamsSeeded, setTeamsSeeded] = useState(false);
-  if (!teamsSeeded && null === pickedTeamIds && teams.length > 0) {
+  // `teams.length > 0` reste requis : une lecture POSÉE mais vide (aucune équipe éligible)
+  // ne doit pas verrouiller une graine vide — on laisse la graine ouverte, la sélection
+  // reste vide et « Créer » désactivé, ce qui est la vérité.
+  if (!teamsSeeded && null === pickedTeamIds && teamsSettled && teams.length > 0) {
     setTeamsSeeded(true);
     setPickedTeamIds(new Set(teams.map((t) => t.id)));
   }
@@ -128,13 +137,27 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   // existante peut porter une équipe qui a perdu son coach depuis. Ne rendre que les
   // éligibles laissait « tout décocher » sans effet sur elle, le résumé annoncer « 0 » et
   // l'enregistrement la poster quand même (revue #346).
+  //
+  // ⚠ Y COMPRIS UNE ÉQUIPE SUPPRIMÉE, que plus aucune requête ne connaît (round 2) : sans
+  // ça elle restait dans `teamIds`, invisible, indécochable, et partait quand même au POST
+  // — le serveur refusait, et l'écran ne disait pas laquelle. On la rend sous un libellé
+  // générique : mieux vaut « équipe supprimée » qu'un id fantôme.
   const pickerTeams = useMemo(() => {
     const shown = new Set(teams.map((t) => t.id));
     const strays = (teamsQuery.data ?? []).filter((t) => !shown.has(t.id) && teamIds.has(t.id));
+    const known = new Set([...shown, ...strays.map((t) => t.id)]);
+    const ghosts = [...teamIds].filter((id) => !known.has(id)).map((id) => ({ id, name: "Équipe supprimée", isActive: false, priorityTierId: Number.MAX_SAFE_INTEGER, tierOrder: 0 }) as Team);
 
-    return 0 === strays.length ? teams : [...teams, ...strays];
+    return 0 === strays.length && 0 === ghosts.length ? teams : [...teams, ...strays, ...ghosts];
   }, [teams, teamsQuery.data, teamIds]);
-  const ineligibleIds = useMemo(() => new Set(pickerTeams.filter((t) => !teams.some((e) => e.id === t.id)).map((t) => t.id)), [pickerTeams, teams]);
+  // ⚠ On n'ACCUSE que sur une donnée LUE (revue #346 round 2) : `teams` est vide tant que
+  // les liens coachs n'ont pas répondu, si bien que TOUTES les équipes d'une campagne
+  // existante s'affichaient « n'a plus de coach », en italique et fléchées. Le gestionnaire
+  // en concluait que ses affectations avaient sauté — et « nettoyait » une sélection saine.
+  const ineligibleIds = useMemo(
+    () => (undefined === teamCoachesQuery.data ? new Set<string>() : new Set(pickerTeams.filter((t) => !teams.some((e) => e.id === t.id)).map((t) => t.id))),
+    [pickerTeams, teams, teamCoachesQuery.data],
+  );
   // La date limite par défaut était `entry.startDate`, donc DANS LE PASSÉ dès que la
   // période a commencé — cas que ce lot vient précisément de rendre légitime. Les liens
   // partaient morts : le serveur répond 410 « deadline dépassée », et le gestionnaire ne
@@ -151,6 +174,10 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
     apply(next);
   };
 
+  // Le focus suit la bascule programmatique : une ref + un effet (interdits pendant le
+  // rendu, autorisés ici) plutôt qu'un état, qu'aucun rendu ne devrait porter.
+  const focusTabAfterSwitch = useRef(false);
+
   const canSave = weeks.size > 0 && teamIds.size > 0 && "" !== deadline;
   const saving = createCampaign.isPending || updateCampaign.isPending;
 
@@ -165,7 +192,12 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
       createCampaign.mutate(body, {
         onSuccess: (created) => {
           setCampaign(created);
+          // ⚠ On EMPORTE le focus avec l'onglet (revue #346) : le bouton qui vient d'être
+          // pressé se retrouve dans un panneau `hidden`, le navigateur rend alors le focus
+          // à `<body>` — et le piège à focus comme Échap, qui écoutent sur le panneau de la
+          // modale, cessent d'agir pendant qu'elle reste ouverte.
           setActiveTab("coachs");
+          focusTabAfterSwitch.current = true;
         },
       });
     }
@@ -179,8 +211,24 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   // gestionnaire. La reléguer derrière un onglet qu'il n'ouvre jamais annulait cette
   // garantie en silence (revue #346) — et ses tests continuaient de passer, `getByLabelText`
   // ne filtrant pas le contenu caché.
-  const weeksNeedAttention = null !== existing && availableWeeks.some((w) => existing.weeks.includes(w.monday) && !isActionableWeek(w, today));
+  // Deux motifs, pas un (revue #346 round 2) : une semaine retenue peut être RÉVOLUE, ou
+  // ne plus être ÉMISE par la période — c'est ce second cas que #344 avait attrapé, et que
+  // mon premier jet laissait filer parce qu'une semaine orpheline encore future passe pour
+  // actionnable. Les deux doivent ramener le gestionnaire sur les Réglages.
+  const emittedMondays = useMemo(
+    () => new Set(null === season ? [] : periodAdjustWeeks(entry.startDate, entry.endDate, season, entry.periodType).map((w) => w.monday)),
+    [entry, season],
+  );
+  const weeksNeedAttention =
+    null !== existing &&
+    (existing.weeks.some((monday) => !emittedMondays.has(monday)) || availableWeeks.some((w) => existing.weeks.includes(w.monday) && !isActionableWeek(w, today)));
   const [activeTab, setActiveTab] = useState(null !== existing && !weeksNeedAttention ? "coachs" : "reglages");
+  useEffect(() => {
+    if (focusTabAfterSwitch.current) {
+      focusTabAfterSwitch.current = false;
+      document.getElementById(`campaign-tab-${activeTab}`)?.focus();
+    }
+  });
   const tabs = null === campaign ? [{ id: "reglages", label: "Réglages" }] : [{ id: "reglages", label: "Réglages" }, { id: "coachs", label: `Coachs (${campaign.coaches.length})` }];
 
   return (

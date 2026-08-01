@@ -358,20 +358,25 @@ describe("AdminDashboardPage", () => {
 
     expect(await axe(container)).toHaveNoViolations();
   }, 10_000);
-});
 
-// Revue #346 — le déplacement de `Tabs` vers `shared/` a introduit une peau par défaut
-// (`app`, thème clair) : un `variant="console"` oublié sur un site d'appel peint des tokens
-// clairs sur la coque `slate-950` et rend l'onglet actif illisible. C'est arrivé aux
-// sous-onglets Journaux, et RIEN ne l'avait vu — le test du composant épingle le composant,
-// pas la PAGE. Cette assertion garde le site d'appel.
-it("habille TOUS ses onglets de la peau console, sous-onglets compris", async () => {
-  const user = userEvent.setup();
-  renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
-
-  await user.click(await screen.findByRole("tab", { name: /Journaux/ }));
-  for (const tab of screen.getAllByRole("tab")) {
-    expect(tab.className).toMatch(/text-white|text-slate-400/);
-    expect(tab.className).not.toContain("text-muted-foreground");
-  }
+  // Revue #346 — le déplacement de `Tabs` vers `shared/` a introduit une peau par défaut
+  // (`app`, thème clair) : un `variant="console"` oublié sur un site d'appel peint des tokens
+  // clairs sur la coque `slate-950` et rend l'onglet actif illisible. C'est arrivé aux
+  // sous-onglets Journaux, et RIEN ne l'avait vu — le test du composant épingle le composant,
+  // pas la PAGE. Cette assertion garde le site d'appel.
+  it("habille TOUS ses onglets de la peau console, sous-onglets compris", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+  
+    await user.click(await screen.findByRole("tab", { name: /Journaux/ }));
+    for (const tab of screen.getAllByRole("tab")) {
+      expect(tab.className).toMatch(/text-white|text-slate-400/);
+      expect(tab.className).not.toContain("text-muted-foreground");
+    }
+    // Les PANNEAUX aussi : leur anneau de focus vient du même `variant`, et l'oublier
+    // rendrait invisible la position du focus sur la coque sombre (revue #346 round 2).
+    for (const panel of screen.getAllByRole("tabpanel", { hidden: true })) {
+      expect(panel.className).toContain("ring-cyan-300/20");
+    }
+  });
 });

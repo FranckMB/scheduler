@@ -51,7 +51,12 @@ export function useModalA11y({ ref, onClose, active = true }: ModalA11yOptions):
       if (event.key !== "Tab") {
         return;
       }
-      const focusables = panel.querySelectorAll<HTMLElement>(FOCUSABLE);
+      // ⚠ Les focusables d'un sous-arbre CACHÉ ne comptent pas (revue #346) : le sélecteur
+      // CSS ignore `hidden`, si bien qu'une modale à onglets — dont le panneau inactif
+      // porte ses propres boutons — avait pour `last` un élément inatteignable. Tab depuis
+      // le dernier bouton VISIBLE ne bouclait donc plus : le focus sortait du dialogue,
+      // sans retour au clavier. `closest("[hidden]")` couvre le cas exact des `TabPanel`.
+      const focusables = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => null === el.closest("[hidden]"));
       if (focusables.length === 0) {
         return;
       }
