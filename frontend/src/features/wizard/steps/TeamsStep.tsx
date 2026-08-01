@@ -9,12 +9,12 @@ import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
-import { TIER_MEANING, tierGroupLabel } from "@/shared/lib/teamTiers";
+import { groupTeamsByTier, TIER_MEANING, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
 import type { Gender, PriorityTier, SportCategory, Team, TeamLevel, TeamPayload } from "../api";
 import { useWizardFooter } from "../lib/footerSlot";
-import { orderedTeams, teamsOfTier, usedTiers } from "../lib/ranking";
+import { orderedTeams, teamsOfTier } from "../lib/ranking";
 import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useReservations, useSportCategories, useUpdateTeam, useWizardCoachPlayers, useWizardTeamCoaches, useWizardTeams } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodTeams } from "./PeriodStructure";
@@ -197,6 +197,13 @@ type SortColumn = "rang" | "name" | "category" | "gender" | "level" | "sessions"
  * `sortOrder` du catalogue), jamais sur son nom : trier « U11 » avant « U9 » alphabétiquement
  * donnerait un second ordre de catégories dans la même application.
  */
+/** Rang d'un niveau dans la hiérarchie FFBB affichée ; sans niveau ⇒ en fin. */
+function levelRank(level: TeamLevel | null): number {
+  const index = LEVELS.findIndex((l) => l.value === level);
+
+  return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+}
+
 function compareOn(column: SortColumn, a: Team, b: Team, categoryRank: Map<string, number>): number {
   const byName = a.name.localeCompare(b.name, "fr");
   switch (column) {
@@ -207,7 +214,10 @@ function compareOn(column: SortColumn, a: Team, b: Team, categoryRank: Map<strin
     case "gender":
       return (a.gender ?? "").localeCompare(b.gender ?? "", "fr") || byName;
     case "level":
-      return (a.level ?? "").localeCompare(b.level ?? "", "fr") || byName;
+      // ⚠ Sur la HIÉRARCHIE déclarée (`LEVELS`), pas sur l'alphabet : comparer les codes
+      // de l'enum plaçait Départemental avant Élite, et les équipes sans niveau en tête
+      // (revue #347). Sans niveau = en fin de liste, là où on va les compléter.
+      return levelRank(a.level) - levelRank(b.level) || byName;
     case "sessions":
       return a.sessionsPerWeek - b.sessionsPerWeek || byName;
     default:
@@ -346,7 +356,6 @@ function TeamsEditor() {
   const effectiveCat = catId || categories[0]?.id || "";
 
   const numberOf = new Map(orderedTeams(teams).map((r) => [r.team.id, r.globalNumber]));
-  const tierGroups = usedTiers(teams, tiers);
 
   // P4-36 (c) — trier par une AUTRE colonne que le rang est incompatible avec un affichage
   // en sections : « trié par catégorie » donnerait cinq listes triées séparément, ce qui ne
@@ -355,17 +364,31 @@ function TeamsEditor() {
   // perdre l'information que les titres de section portaient.
   const [sort, setSort] = useState<{ column: SortColumn; dir: 1 | -1 }>({ column: "rang", dir: 1 });
   const byRank = "rang" === sort.column;
+  // ⚠ `groupTeamsByTier` et non `usedTiers`/`teamsOfTier` (revue #347) : le helper partagé
+  // range les équipes au rang DÉRIVÉ dans un seau « Autres » et documente qu'aucune n'est
+  // jamais perdue. Sans lui, une telle équipe était visible en liste plate et s'évanouissait
+  // au retour sur « Rang » — ni supprimable ni reclassable depuis l'écran qui en a la charge.
+  const rankGroups = -1 === sort.dir ? [...groupTeamsByTier(teams, tiers)].reverse() : groupTeamsByTier(teams, tiers);
   const rankLabelOf = (team: Team): { short: string; full: string } => {
     const tier = tiers.find((t) => t.id === team.priorityTierId) ?? null;
 
-    return { short: tier?.label ?? "?", full: tierGroupLabel(tier) };
+    return { short: tier?.label ?? "?", full: tierGroupLabel(tier ?? null) };
   };
   const categoryRank = new Map(categories.map((c, index) => [c.id, index]));
   const flatTeams = [...teams].sort((a, b) => sort.dir * compareOn(sort.column, a, b, categoryRank));
 
   // Déplacer d'un rang : on renvoie l'ordre COMPLET, comme le mode « Trier » à sa sortie —
   // un envoi partiel laisserait les équipes sans `tierOrder` explicite là où elles sont.
+  // ⚠ Les flèches se TAISENT tant qu'un ordre est en vol (revue #347). Deux pièges
+  // sinon : juste après « Terminer le tri », la liste normale se réaffiche avec un `teams`
+  // encore PÉRIMÉ (l'invalidation n'a lieu qu'au `onSuccess`), et un clic y reconstruirait
+  // l'ordre complet depuis l'état d'AVANT le glisser-déposer — annulant en silence le
+  // reclassement qu'on venait de faire. Le double-clic rapide a la même racine.
+  const reorderBusy = reorder.isPending;
   const moveInTier = (team: Team, dir: -1 | 1) => {
+    if (reorderBusy) {
+      return;
+    }
     const group = teamsOfTier(teams, team.priorityTierId);
     const from = group.findIndex((t) => t.id === team.id);
     const to = from + dir;
@@ -705,31 +728,31 @@ function TeamsEditor() {
                 <span className="w-8 text-right">Suppr.</span>
               </div>
               {byRank ? (
-                tierGroups.map((tier) => {
-                  const group = teamsOfTier(teams, tier.id);
-                  return (
-                    <section key={tier.id}>
-                      <h3 className="mb-1 text-sm font-semibold">{tierGroupLabel(tier)}</h3>
-                      <div className="rounded-lg border border-border bg-card px-2">
-                        {group.map((team, index) => (
-                          <TeamRow
-                            key={team.id}
-                            team={team}
-                            number={numberOf.get(team.id) ?? 0}
-                            categories={categories}
-                            tiers={tiers}
-                            onField={onField}
-                            onDelete={setToDelete}
-                            rankLabel={rankLabelOf(team)}
-                            canUp={index > 0}
-                            canDown={index < group.length - 1}
-                            onMove={(dir) => moveInTier(team, dir)}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  );
-                })
+                // Le SENS s'applique aussi au rang (revue #347) : sans ça, un second clic
+                // peignait une flèche descendante et n'inversait rien — l'écran affirmait
+                // avoir obéi, et le lecteur d'écran annonçait un tri inexistant.
+                rankGroups.map(({ tier, teams: group }) => (
+                  <section key={tier?.id ?? "orphan"}>
+                    <h3 className="mb-1 text-sm font-semibold">{tierGroupLabel(tier)}</h3>
+                    <div className="rounded-lg border border-border bg-card px-2">
+                      {group.map((team, index) => (
+                        <TeamRow
+                          key={team.id}
+                          team={team}
+                          number={numberOf.get(team.id) ?? 0}
+                          categories={categories}
+                          tiers={tiers}
+                          onField={onField}
+                          onDelete={setToDelete}
+                          rankLabel={rankLabelOf(team)}
+                          canUp={index > 0 && !reorderBusy}
+                          canDown={index < group.length - 1 && !reorderBusy}
+                          onMove={null === tier ? undefined : (dir) => moveInTier(team, dir)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))
               ) : (
                 // Liste PLATE : les sections n'auraient plus de sens (le tri les traverserait),
                 // et le badge de rang par ligne porte l'information qu'elles donnaient.
