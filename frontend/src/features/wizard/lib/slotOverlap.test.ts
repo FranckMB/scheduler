@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { VenueTrainingSlot } from "../api";
-import { toMinutes } from "./days";
-import { conflictMessage, findSlotConflict, pastMidnightMessage } from "./slotOverlap";
+import { DURATIONS, durationOptions, toMinutes } from "./days";
+import { conflictMessage, findSlotConflict, pastMidnightMessage, slotPlacementError } from "./slotOverlap";
 
 const slot = (over: Partial<VenueTrainingSlot>): VenueTrainingSlot =>
   ({ id: "s", venueId: "v", dayOfWeek: 1, startTime: "17:00", durationMinutes: 90, capacity: 1, ...over }) as VenueTrainingSlot;
@@ -81,5 +81,45 @@ describe("pastMidnightMessage", () => {
     expect(message).toContain("22:45");
     expect(message).toContain("2h30");
     expect(message).toContain("après minuit");
+  });
+});
+
+describe("slotPlacementError — l'ordre des contrôles", () => {
+  const others = [{ id: "a", venueId: "v", dayOfWeek: 1, startTime: "17:00", durationMinutes: 90, capacity: 1 } as VenueTrainingSlot];
+
+  it("nomme le CHAMP quand l'heure de début est illisible, au lieu de laisser passer", () => {
+    // Sans ce contrôle, NaN traversait toute la chaîne : la borne de minuit se taisait
+    // (correctement — NaN n'est pas tardif), puis `findSlotConflict` comparait des NaN et
+    // ne trouvait donc AUCUN chevauchement, et l'écriture partait avec `startTime: ""`
+    // pour un 422 générique qui ne désigne aucun champ.
+    expect(slotPlacementError(others, 1, "", 90)).toMatch(/heure de début/i);
+  });
+
+  it("ne masque pas un chevauchement derrière une heure valide", () => {
+    expect(slotPlacementError(others, 1, "17:30", 30)).toMatch(/[Cc]hevauchement/);
+  });
+
+  it("laisse passer une pose valide", () => {
+    expect(slotPlacementError(others, 1, "19:00", 90)).toBeNull();
+  });
+
+  it("permet de remplacer le message de minuit là où la durée n'est pas réglable", () => {
+    // La pose au clic en période impose 90 min sans offrir de sélecteur : y désigner « la
+    // durée » enverrait l'utilisateur vers un réglage que son écran n'a pas.
+    expect(slotPlacementError([], 1, "22:45", 90, () => "message du panneau période")).toBe("message du panneau période");
+  });
+});
+
+describe("durationOptions", () => {
+  it("garde la durée STOCKÉE disponible même après un changement du select", () => {
+    // Appelée avec le seul état édité, elle retirait l'option d'origine dès le premier
+    // changement : un créneau de 30 min ouvert puis modifié ne pouvait plus revenir à 30.
+    expect(durationOptions(60, 30)).toContain(30);
+    expect(durationOptions(60, 30)).toEqual([...durationOptions(60, 30)].sort((a, b) => a - b));
+  });
+
+  it("ignore une durée absurde plutôt que de l'offrir", () => {
+    expect(durationOptions(90, 0)).toEqual(DURATIONS);
+    expect(durationOptions(90, Number.NaN)).toEqual(DURATIONS);
   });
 });
