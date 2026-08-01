@@ -46,6 +46,8 @@ test("CSP does not break the app across login → register → wizard → club",
   // the connect-src policy — the paths a too-strict CSP would break.
   await expect(page.getByRole("heading", { name: /Étape 1\/6/ })).toBeVisible({ timeout: 15_000 });
   await page.getByLabel("Nom de l'équipe").fill("SM1");
+  // La catégorie n'a plus de défaut (revue #347) — cf. journey.spec.
+  await page.getByLabel("Catégorie").selectOption({ label: "Senior" });
   await page.getByRole("button", { name: "Ajouter l'équipe" }).click();
   await page.getByRole("button", { name: "Suivant" }).click();
   await expect(page.getByRole("heading", { name: /Étape 2\/6/ })).toBeVisible();

@@ -40,7 +40,12 @@ for (const mode of MODES) {
     await expectNoContrastViolations(page, `wizard · équipes (${mode})`);
 
     // Add a team + advance to the gym availability grid (dense small text).
+    // ⚠ La catégorie n'a plus de valeur par défaut (revue #347) : la pré-sélection valait
+    // `categories[0]`, que le catalogue réordonné a transformé en « Vétéran » pour tous les
+    // clubs. Le choix est donc explicite — et il PERSISTE d'un ajout à l'autre, si bien
+    // qu'il ne coûte qu'une fois par changement de catégorie.
     await page.getByLabel("Nom de l'équipe").fill("SM1");
+    await page.getByLabel("Catégorie").selectOption({ label: "Senior" });
     await page.getByRole("button", { name: "Ajouter l'équipe" }).click();
     await page.getByRole("button", { name: "Suivant" }).click();
     await expect(page.getByRole("heading", { name: /Étape 2\/6/ })).toBeVisible();
