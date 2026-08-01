@@ -144,12 +144,28 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
   });
 
-  it("standalone /planning (not embedded) hides the version selector, status badge and score", () => {
+  it("standalone /planning (not embedded) hides the version selector and the status badge", () => {
+    // ⚠ Ce test assertait aussi l'absence du score. P4-39 l'ayant retiré PARTOUT, cette
+    // assertion serait devenue vraie quoi qu'il arrive : elle aurait continué de passer
+    // même si la distinction standalone/embedded cassait, en donnant l'illusion de garder
+    // une règle qu'elle ne gardait plus. Elle est déplacée dans le test ci-dessous, où
+    // elle porte sur ce qui est réellement en jeu.
     renderToolbar(schedule("COMPLETED"), { embedded: false });
     expect(screen.queryByRole("combobox", { name: /version du planning/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Terminé")).not.toBeInTheDocument();
-    expect(screen.queryByText(/score/i)).not.toBeInTheDocument();
     // View modes remain (consultation still switches gym/coach/team views).
     expect(screen.getByRole("button", { name: "Par coach" })).toBeInTheDocument();
+  });
+
+  it("n'affiche le score du solveur NULLE PART, embedded compris (P4-39)", () => {
+    // Décision fondateur : « ça ne sert à rien pour le gestionnaire ». Le mode embedded est
+    // celui qui l'affichait — c'est donc LUI qu'il faut interroger : le vérifier en
+    // standalone ne prouverait rien, il n'y était déjà pas.
+    renderToolbar(schedule("COMPLETED", { score: 9051 }), { embedded: true });
+
+    expect(screen.queryByText(/score/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/9051/)).not.toBeInTheDocument();
+    // …et le badge de statut, lui, reste : on retire le score, pas la ligne.
+    expect(screen.getByText("Terminé")).toBeInTheDocument();
   });
 });

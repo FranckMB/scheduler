@@ -279,20 +279,25 @@ export function WizardPage() {
   return (
     <WizardFooterContext.Provider value={footerCtx}>
       {periodMode ? (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm">
+        // P4-38 — DEUX lignes plutôt qu'une. La forme d'origine accolait les dates au titre
+        // et alignait quatre actions à droite : sur un titre long (« Vacances d'Été —
+        // semaine du 17 août »), la ligne débordait et les dates passaient sous les boutons.
+        // Ligne 1 = QUOI (le titre) + les gestes qui SORTENT du mode ; ligne 2 = QUAND (les
+        // dates) + le geste qui y RESTE (Doléances).
+        //
+        // ⚠ Le titre porte DÉJÀ le repère de semaine : `cockpit/queries.ts:349` nomme une
+        // semaine enfant « {mère} — semaine du {lundi} ». Rien à ajouter ici, sous peine de
+        // l'écrire deux fois.
+        <div className="mb-4 flex flex-col gap-1 rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex items-center gap-2">
             <CalendarClock className="size-4 text-accent" />
             <span className="font-medium">Mode période — {periodEntry?.title ?? "…"}</span>
-            {periodEntry ? (
-              <span className="text-muted-foreground">
-                du {frDateNumeric(periodEntry.startDate)} au {frDateNumeric(periodEntry.endDate)}
-              </span>
-            ) : null}
           </span>
           <span className="flex items-center gap-1">
             {/* Supprimer ce planning secondaire (cascade plan + versions) → retour cockpit.
                 On ARME leavingRef comme finishQuit, sinon le useBlocker d'abandon
-                intercepte le navigate et ré-ouvre « Abandonner ? » sur une entrée déjà
+                intercepte le navigate et ré-ouvre « Quitter l'ajustement ? » sur une entrée déjà
                 supprimée (revue B2 F1). Masqué sur l'étape GÉNÉRATION : une génération
                 lancée à l'instant n'est pas encore dans le cache — supprimer là
                 détruirait la version en vol (revue B2 F4 ; l'abandon relit le serveur,
@@ -300,17 +305,30 @@ export function WizardPage() {
             {null !== calendarEntryId && "generate" !== stepId ? (
               <DeletePlanningButton calendarEntryId={calendarEntryId} title={periodEntry?.title ?? "ce planning"} onDeleted={() => { leavingRef.current = true; exitPeriodMode(); navigate("/"); }} />
             ) : null}
-            {canWishes ? (
-              <Button variant="ghost" size="sm" onClick={() => setWishesOpen(true)}>
-                <MessageSquare className="size-4" />
-                Doléances
-              </Button>
-            ) : null}
+            {/* « Quitter » se lisait comme « abandonner ma saisie » alors que le geste
+                ramène au cockpit — le nom dit maintenant où l'on va. */}
             <Button variant="ghost" size="sm" onClick={quitPeriod}>
               <X className="size-4" />
-              Quitter
+              Retour à l'accueil
             </Button>
           </span>
+          </div>
+
+          {/* Ligne 2 seulement si elle a quelque chose à dire : sans dates chargées ni accès
+              aux doléances, elle laisserait une bande vide sous le titre. */}
+          {periodEntry || canWishes ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-muted-foreground">
+                {periodEntry ? `du ${frDateNumeric(periodEntry.startDate)} au ${frDateNumeric(periodEntry.endDate)}` : ""}
+              </span>
+              {canWishes ? (
+                <Button variant="ghost" size="sm" onClick={() => setWishesOpen(true)}>
+                  <MessageSquare className="size-4" />
+                  Doléances
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {/* Texte CONDITIONNEL : la vérité se lit au serveur À LA CONFIRMATION (une
@@ -318,7 +336,11 @@ export function WizardPage() {
           « aucun planning n'a été généré » ici pourrait contredire l'action. */}
       <ConfirmDialog
         open={abandonOpen}
-        title="Abandonner l'ajustement ?"
+        // « Abandonner » contredisait le bouton renommé « Retour à l'accueil » : le geste
+        // paraît anodin, le dialogue accusait un abandon. Le titre dit ce qu'on QUITTE (il
+        // s'ouvre aussi depuis le blocker de navigation, pas seulement depuis ce bouton),
+        // la description dit ce qu'il advient de la période — inchangée (revue #350).
+        title="Quitter l'ajustement ?"
         description="Si aucun planning n'a été généré pour cette période, elle sera retirée du calendrier (recréable via « Adapter »). Si une génération existe, la période sera conservée."
         confirmLabel="Retirer la période"
         cancelLabel="Rester sur l'ajustement"

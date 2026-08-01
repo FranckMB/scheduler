@@ -290,7 +290,7 @@ secondaire.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────┐
-│  BANDEAU · Planning principal — Validé · score 9011   [ Ouvrir ▸ ] [ Modifier… ] │
+│  BANDEAU · Planning principal — Validé                [ Ouvrir ▸ ] [ Modifier… ] │
 │  (Ouvrir = grille en lecture seule · Modifier = rouvre le wizard, ⚠ détruit les secondaires) │
 ├──────────────────────────────────────────────┬────────────────────────────┤
 │  CALENDRIER (mois entier · jour courant ⭕ · navigable) │  RADAR — à traiter │
@@ -308,7 +308,10 @@ secondaire.
 └──────────────────────────────────────────────┴────────────────────────────┘
 ```
 
-**Bandeau** = l'état du plan principal **d'un coup d'œil** : **validé** · score · N diagnostics.
+**Bandeau** = l'état du plan principal **d'un coup d'œil** : **validé** · N diagnostics. ⚠ **Amendé
+2026-08-01 (P4-39)** : le score du solveur, montré dans le croquis d'origine ci-dessus, ne s'affiche
+plus nulle part — décision fondateur (« ça ne sert à rien pour le gestionnaire ») ; voir
+`etat-des-lieux.md` §2.
 - **« Ouvrir »** → l'**écran de consultation** (grille lecture seule) — **le même écran** qui
   sert aussi à consulter les calendriers secondaires (§6ter). Pas de zones d'édition ; les entités
   sont visibles, non modifiables.

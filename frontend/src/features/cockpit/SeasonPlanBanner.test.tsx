@@ -41,6 +41,18 @@ describe("SeasonPlanBanner", () => {
     expect(screen.queryByRole("button", { name: /Modifier/ })).not.toBeInTheDocument();
   });
 
+  it("n'affiche PAS le score du solveur (P4-39, décision fermée)", () => {
+    // La fixture porte `score: 9011` : si le bandeau le remettait, ce test le verrait.
+    // Sans lui, le retrait n'était gardé nulle part — une décision fermée que rien
+    // n'empêchait de défaire par accident (revue #350).
+    renderBanner();
+
+    expect(screen.queryByText(/score/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/9011/)).not.toBeInTheDocument();
+    // …et le statut, lui, reste : on retire le score, pas la ligne qui le portait.
+    expect(screen.getByText(/Terminé/)).toBeInTheDocument();
+  });
+
   it("titles the strip with the plan's REAL name, not a generic label", () => {
     renderBanner();
     expect(screen.getByText("Planning de la saison 2026-2027")).toBeInTheDocument();

@@ -120,7 +120,13 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const slotLayerId = null !== displayed && !isSeasonPlanType(displayed.planType) ? (displayed.schedulePlanId ?? null) : null;
 
   const { data: slots = [] } = useSlots(validScheduleId);
-  const { data: allDiagnostics = [] } = useDiagnostics(validScheduleId);
+  const diagnosticsQuery = useDiagnostics(validScheduleId);
+  // `useMemo` et non `?? []` : le repli littéral fabriquait un tableau NEUF à chaque rendu,
+  // ce qui invalidait le `useMemo` du filtrage en aval à chaque fois (avertissement lint).
+  const allDiagnostics = useMemo(() => diagnosticsQuery.data ?? [], [diagnosticsQuery.data]);
+  // « Pas encore lu » n'est pas « rien à signaler » : tant que la requête est en vol, le
+  // panneau ne doit pas annoncer un planning propre (revue #350, doctrine `readState`).
+  const diagnosticsPending = null !== validScheduleId && undefined === diagnosticsQuery.data;
   const { data: trainingSlots = [] } = useTrainingSlots(slotLayerId);
   const { data: teams = [] } = useTeams();
   const { data: venues = [] } = useVenues();
@@ -143,8 +149,12 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const [regenerateFromOpen, setRegenerateFromOpen] = useState(false);
   const renamePlanning = useRenamePlanning();
   const [editingPlanningName, setEditingPlanningName] = useState<string | null>(null);
-  // Diagnostics panel collapsed by default (user request): the grid gets the
-  // full width for verification, a compact bar re-opens the aside on demand.
+  // Repli CONTEXTUEL (P4-40). En boucle de travail, replié par défaut : la grille prend
+  // toute la largeur pour vérifier, une barre compacte rouvre l'aside — c'est la demande
+  // utilisateur d'origine, inchangée. Au sortir d'une génération lancée DEPUIS LE WIZARD
+  // (`embedded`), ouvert : « sinon on risque de ne pas le voir si on n'est pas familier
+  // avec l'écran génération » (retour terrain). Les deux règles ne se contredisent pas —
+  // la seconde nomme un contexte que la première n'avait pas distingué.
   const [diagnosticsCollapsed, setDiagnosticsCollapsed] = useState(true);
   const [validateOpen, setValidateOpen] = useState(false);
   // Reopening the baseline with period overlays → 409; confirm to delete them.
@@ -347,6 +357,31 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     [allDiagnostics, hiddenVenueIds],
   );
 
+  // P4-40 — l'aside s'ouvre au sortir d'une génération lancée DEPUIS LE WIZARD, mais
+  // seulement s'il a quelque chose à montrer.
+  //
+  // ⚠ Deux raisons d'attendre les diagnostics plutôt que d'initialiser à `!embedded`
+  // (revue #350) : (1) au premier rendu ils ne sont pas encore là, donc l'aside s'ouvrait
+  // TOUJOURS — y compris sur une génération propre, où il volait 20rem de largeur à la
+  // grille dans une hauteur embarquée déjà courte pour n'afficher que « le planning est
+  // propre » ; (2) refermer l'aside est un geste, pas un accident.
+  //
+  // ⚠ L'amorce est indexée sur la VERSION affichée, pas sur un booléen « déjà fait »
+  // (revue #350 round 2) : le premier jet gardait ici le verrou à un coup que le correctif
+  // du panneau venait pourtant de condamner un cran plus bas. Conséquence, après UN repli
+  // manuel aucune version suivante ne rouvrait l'aside — les erreurs d'une V2 restaient
+  // derrière la barre compacte, « on risque de ne pas le voir » de nouveau. Les deux
+  // moitiés de la même règle se déclenchent donc sur le même signal.
+  const [asideSeededFor, setAsideSeededFor] = useState<string | null>(null);
+  if (embedded && !diagnosticsPending && null !== validScheduleId && asideSeededFor !== validScheduleId) {
+    setAsideSeededFor(validScheduleId);
+    // Les DEUX sens, une fois les diagnostics lus : une version qui en porte ouvre l'aside,
+    // une version propre le referme. Ne traiter que l'ouverture laissait 20rem occupés par
+    // « le planning est propre » après un passage d'une version bavarde à une version
+    // saine — dans une hauteur embarquée déjà courte (revue #350 round 2).
+    setDiagnosticsCollapsed(0 === diagnostics.length);
+  }
+
   // Clicking the solver's "unused_slot" warning brings its venue column on screen
   // (venue view, filtered to that venue) so the concerned `vide` cell is visible.
   const focusVenue = useCallback(
@@ -518,6 +553,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               const showDetail = null !== selectedCell && null !== selectedSlot;
               // The diagnostics aside only claims grid width when it has content
               // to show: a selected slot's detail, or the (expanded) diagnostics.
+              // ⚠ « Déplié » est un état de l'ASIDE, pas une promesse de contenu : c'est
+              // l'amorce ci-dessus qui replie l'aside sur une version sans diagnostic. Le
+              // rouvrir à la main reste possible et respecté, y compris à vide.
               const showDiagnostics = !isReadOnly && !diagnosticsCollapsed;
               const showAside = showDetail || showDiagnostics;
               const height = embedded ? "lg:h-[max(calc(100vh-24rem),26rem)]" : "lg:h-[calc(100vh-16rem)]";
@@ -562,7 +600,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                       ) : null}
                       {showDiagnostics ? (
                         <div className="min-h-[12rem] flex-1">
-                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} onCollapse={() => setDiagnosticsCollapsed(true)} />
+                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} onCollapse={() => setDiagnosticsCollapsed(true)} openMostSevere={embedded} seedToken={validScheduleId} pending={diagnosticsPending} />
                         </div>
                       ) : null}
                     </div>
