@@ -701,7 +701,10 @@ function PeriodSlotEditor({
         <label className="text-xs text-muted-foreground">
           Jour
           <Select aria-label="Jour" className="mt-0.5 h-9 w-28" value={day} onChange={(e) => (setDay(Number(e.target.value)), setError(null))}>
-            {DAYS.filter((d) => d.n <= 6).map((d) => (
+            {/* Idem `VenuesStep` : ce select filtrait le dimanche pour son compte, alors
+                que la grille le rend désormais (P4-37). Un créneau du dimanche s'y ouvrait
+                sur un champ vide. */}
+            {WEEK.map((d) => (
               <option key={d.n} value={d.n}>
                 {d.label}
               </option>

@@ -20,8 +20,7 @@ import { useWizardStore } from "../store";
 import { PeriodVenues } from "./PeriodStructure";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 import { CapacitySelect } from "./slotFields";
-
-const WEEK = DAYS.filter((d) => d.n <= 6);
+import { WEEK } from "../lib/weekGrid";
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -122,6 +121,9 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
         <label className="text-xs text-muted-foreground">
           Jour
           <Select aria-label="Jour" className="mt-0.5 h-9 w-28" value={day} onChange={(e) => (setDay(Number(e.target.value)), setError(null))}>
+            {/* Les SEPT jours, lus de la géométrie partagée. Ce select portait sa PROPRE
+                copie amputée du dimanche : un créneau du dimanche — désormais posable —
+                s'y ouvrait sur un champ VIDE, et le jour n'était pas rattrapable (P4-37). */}
             {WEEK.map((d) => (
               <option key={d.n} value={d.n}>
                 {d.label}

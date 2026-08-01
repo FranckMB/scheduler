@@ -520,6 +520,34 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     expect(updateSlot).toHaveBeenCalled();
   });
 
+  it("laisse déplacer un créneau AU dimanche depuis la modale d'édition", async () => {
+    // ⚠ Le select « Jour » portait sa PROPRE liste amputée du dimanche, distincte de la
+    // géométrie de la grille : rendre le dimanche posable au clic l'aurait laissé
+    // inatteignable ici, et un créneau du dimanche s'y serait ouvert sur un champ VIDE.
+    // La règle « les sept jours » vaut partout où un jour se choisit, pas seulement dans
+    // la grille (P4-37, CLAUDE.md §7.2 pt 1 : corriger la RÈGLE, pas le cas).
+    periodSlotOverride.value = [{ id: "ps1", venueId: "v1", dayOfWeek: 1, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await user.click(screen.getByTitle(/^20:00 .*modifier$/));
+
+    await user.selectOptions(screen.getByLabelText("Jour"), "7");
+    await user.click(screen.getByRole("button", { name: "Enregistrer" }));
+
+    expect(updateSlot).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ dayOfWeek: 7 }) }), expect.anything());
+  });
+
+  it("ouvre un créneau DU dimanche sur son vrai jour, pas sur un champ vide", async () => {
+    periodSlotOverride.value = [{ id: "ps1", venueId: "v1", dayOfWeek: 7, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await user.click(screen.getByTitle(/^20:00 .*modifier$/));
+
+    // Sans l'option, le `value={7}` du select ne correspondait à rien : le champ
+    // s'affichait vide, et toute autre retouche l'enregistrait sur un jour non lu.
+    expect(screen.getByLabelText("Jour")).toHaveValue("7");
+  });
+
   it("rend visible et supprimable un créneau sur un jour ABERRANT", async () => {
     // Round 2 finding #6 : un créneau sur un jour que la grille ne montre pas serait servi
     // au solveur tout en restant invisible. On le montre dans un bandeau d'alerte, avec un
