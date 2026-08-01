@@ -18,6 +18,7 @@ Last verified @ 2026-07-29
 > | Cockpit (accueil temporel, radar) | [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md) |
 > | Module matchs | [`module-matchs.md`](module-matchs.md) |
 > | Doléances coachs (#10) — dont la page publique `/doleances/{token}` | [`types-de-planning.md`](types-de-planning.md) §E5 |
+> | **Onglets** (`shared/components/ui/tabs.tsx`) — motif WAI-ARIA (roving tabindex, flèches/Home/End), deux peaux : `console` (admin, sombre) et `app` (club). Déplacé de `features/admin/` le 2026-08-01 quand la modale de sollicitation en a eu besoin | — |
 > | Console superadmin (`/admin`) | [`superadmin-auth.md`](superadmin-auth.md) |
 > | Conventions agent, pièges, primitives partagées | [`../../frontend/AGENTS.md`](../../frontend/AGENTS.md) |
 >

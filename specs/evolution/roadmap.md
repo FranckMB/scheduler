@@ -35,7 +35,7 @@
 > que l'outil s'est donnés à lui-même. P1-1 et P1-3 sont des lignes anciennes, légitimes, mais
 > elles ne viennent d'aucune demande d'usage — elles attendent que le terrain soit servi.
 
-1. **Les lots du retour terrain 2026-07-31** *(P2-9, P2-15, P3-13 et P3-14 sont SOLDÉS — plus aucun 🔴 au backlog.)* — P3-15 (ergonomie de la modale de sollicitation), puis les lots UI P4-36 à P4-43 (wizard Équipes, wizard Gymnases, bandeau période, score retiré, diagnostics, noms par défaut, tag BABY).
+1. **Les lots du retour terrain 2026-07-31** *(P2-9, P2-15, P3-13, P3-14 et P3-15 sont SOLDÉS — le retour terrain 2026-07-31 ne laisse plus que les lots UI.)* — les lots UI P4-36 à P4-43 (wizard Équipes, wizard Gymnases, bandeau période, score retiré, diagnostics, noms par défaut, tag BABY).
 3. **P1-4 (module matchs)** — la feature qui décide de la mise en prod, selon le fondateur. Gros lot, à phaser ; **P2-19** (reconnaissance `api.ffbb.app`) le précède, elle peut changer son cadrage.
 4. **P2-16 / P2-17 / P2-18** — contraintes de base à la création d'un club, mutualisation lisible, resynchronisation FFBB (également issus du terrain).
 5. Ensuite seulement **P1-1 (rôles)** puis **P1-3 (bridage freemium)** — structurants pour la suite du produit, mais aucun club ne les a demandés.
@@ -76,7 +76,6 @@
 
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
-| P3-15 | **Modale « Solliciter les coachs » — trop longue** | 🟡 | S | **Constaté 2026-07-31 ; le volet (c) est LIVRÉ** (P3-13, 2026-08-01 : la modale ne propose plus que les semaines à venir). Restent deux volets d'ERGONOMIE. (a) `CampaignDialog.tsx` empile semaines + équipes + deadline + liste des coachs dans une seule modale : « BEAUCOUP TROP longue, c'est pas jouable ». Piste fondateur : **onglets**. (b) La liste des équipes sélectionnées n'est **pas triée par importance** (le rang existe, `groupTeamsByTier` est déjà utilisé ailleurs) |
 | P3-1 | **Matchs — reste du palier A** (FF#21) : volet joueur (`CoachPlayerMembership` côté matchs), `Team.preferredMatchWindow`, envelope-ligue HARD | 🟡 | M | **Absorbé par P1-4** — à traiter dans son cadrage plutôt qu'isolément |
 | P3-2 | **Overlays — période `custom` générante** | 🟡 | M | `periodType=custom` n'est pas générant : créer un overlay dessus rend 422 = impasse UX. Mitigation livrée (bouton désactivé + tooltip, gardé par test). Reste à activer quand `custom` devient générant |
 | P3-3 | **Modèle « templates → occurrences »** (v3 §3.5, §8.1 · FF#8) | 🟡 | L | Débloque la cascade calendrier de saison → plans secondaires, et le grain fin (exceptions, annulations, déplacements, remplacements coach/salle). ⚠ **La matérialisation glissante J+14 de la vision d'origine est abandonnée** au profit d'une projection + occurrences éparses (deltas) : `schedule_slot_occurrences` ne stocke, si elle existe, **que les overrides**. Le grain fin est déjà partiellement couvert par `ManualEditController` (`/manual-edit/one-time` + `temporaryLock`) — n'ajouter la table **que si** un besoin réel le justifie |
