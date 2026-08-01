@@ -29,8 +29,11 @@ interface PlanningToolbarProps {
   disableRegenerate?: boolean;
   isGenerating: boolean;
   actionBusy: boolean;
-  /** Export + resource filter, rendered right-aligned on the actions row (owned by the page). */
+  /** Export, rendered right-aligned on the actions row (owned by the page). */
   rightSlot?: ReactNode;
+  /** Resource filter, rendered next to the view switcher on row 1 — its label mirrors the
+   *  current view mode, so the two belong together (P4-43). Owned by the page. */
+  filterSlot?: ReactNode;
   /** Wizard-embedded (generation step) vs standalone /planning consultation. The
    *  standalone view hides the version selector and the status badge — version
    *  management lives in the wizard, /planning is for consulting. */
@@ -46,7 +49,7 @@ interface PlanningToolbarProps {
  * « En vigueur » ne se décide pas ici : c'est le plan qui POINTE une version, et
  * seul « Valider » déplace ce pointeur — il n'y a pas d'action « définir principal »
  * (rien ne se pointe automatiquement non plus). Deux lignes : (1) version + état +
- * mode d'affichage, (2) actions de génération + export/filtre.
+ * mode d'affichage + filtre de ressources, (2) actions de génération + export.
  */
 export function PlanningToolbar({
   schedules,
@@ -63,6 +66,7 @@ export function PlanningToolbar({
   isGenerating,
   actionBusy,
   rightSlot,
+  filterSlot,
   embedded = false,
 }: PlanningToolbarProps) {
   const selected = schedules.find((s) => s.id === selectedScheduleId) ?? null;
@@ -177,7 +181,13 @@ export function PlanningToolbar({
             Rouvrir
           </Button>
         ) : null}
-        <div className="ml-auto flex items-center gap-1 rounded-md border border-border p-0.5">
+        {/* Vue et filtre, accolés (P4-43). Le filtre vivait en ligne 2 derrière l'export,
+            alors que son libellé SUIT le mode de vue courant (« Par gymnase » → « Gymnases :
+            … ») : deux contrôles sur les mêmes trois ressources, à deux endroits éloignés,
+            dont le second passait inaperçu. Côte à côte, ils se lisent comme un couple —
+            quelle vue, puis quoi dedans. */}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
           {VIEWS.map((view) => (
             <Button
               key={view.key}
@@ -190,9 +200,11 @@ export function PlanningToolbar({
             </Button>
           ))}
         </div>
+        {filterSlot}
+        </div>
       </div>
 
-      {/* Row 2 — generation actions, with export + filter right-aligned. */}
+      {/* Row 2 — generation actions, with export right-aligned. */}
       <div className="flex flex-wrap items-center gap-2">
         {isChosen ? null : (
           // Disabled during a "Charger" restore too (actionBusy) — but the busy

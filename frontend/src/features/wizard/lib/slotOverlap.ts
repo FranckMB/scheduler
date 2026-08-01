@@ -64,13 +64,15 @@ export const conflictMessage = (c: VenueTrainingSlot): string =>
  * quatre occasions qu'elles divergent : la revue de P4-37 a précisément trouvé un site où
  * la borne de minuit manquait encore. Un seul foyer, appelé par les quatre.
  *
- * `midnightMessage` remplace le message de minuit là où le contexte le rend faux : la pose
- * au clic en période impose 90 min sans offrir de sélecteur, donc y désigner « la durée »
- * enverrait l'utilisateur vers un réglage que son écran n'a pas.
+ * Le message de minuit fut un temps surchargeable par appelant : la pose au clic en période
+ * imposait 90 min sans offrir de sélecteur, donc y désigner « la durée » aurait renvoyé
+ * vers un réglage que cet écran n'avait pas. P4-43 lui a donné sa barre « À poser » — les
+ * quatre sites règlent désormais la durée, et le message par défaut est vrai partout. Le
+ * point de surcharge est retiré plutôt que laissé mort avec une justification périmée.
  *
  * Rend le message à afficher, ou null si la pose est valide.
  */
-export function slotPlacementError(others: VenueTrainingSlot[], day: number, startTime: string, durationMinutes: number, midnightMessage?: (startTime: string, durationMinutes: number) => string): string | null {
+export function slotPlacementError(others: VenueTrainingSlot[], day: number, startTime: string, durationMinutes: number): string | null {
   // L'heure d'ABORD : le champ « Début » est un `<input type="time">` sans `required`,
   // dans une modale sans `<form>` — rien ne l'exige. Vidé en cours de frappe, il rendait
   // NaN, et NaN traversait tout : la borne de minuit se taisait (correctement), puis
@@ -82,8 +84,9 @@ export function slotPlacementError(others: VenueTrainingSlot[], day: number, sta
     return "Renseignez une heure de début (format HH:MM).";
   }
 
-  if (null !== pastMidnightMessage(startTime, durationMinutes)) {
-    return midnightMessage?.(startTime, durationMinutes) ?? pastMidnightMessage(startTime, durationMinutes);
+  const midnight = pastMidnightMessage(startTime, durationMinutes);
+  if (null !== midnight) {
+    return midnight;
   }
 
   const conflict = findSlotConflict(others, day, startTime, durationMinutes);

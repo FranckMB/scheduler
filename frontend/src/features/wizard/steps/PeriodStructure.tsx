@@ -19,7 +19,7 @@ import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
-import { DAYS, durationOptions, hhmm } from "../lib/days";
+import { DAYS, DURATIONS, durationOptions, hhmm } from "../lib/days";
 import { slotPlacementError } from "../lib/slotOverlap";
 import {
   useCreatePeriodConstraintOverride,
@@ -355,6 +355,11 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
 
   const [selectedId, setSelectedId] = useState("");
   const [editingSlot, setEditingSlot] = useState<VenueTrainingSlot | null>(null);
+  // Durée du PROCHAIN créneau posé au clic (P4-43). L'état vit ICI et non dans
+  // `PeriodVenuePanel` : ce dernier est remonté par `key={selected.id}`, si bien qu'y
+  // loger la durée la remettrait à 90 min à chaque changement de gymnase. La saison la
+  // conserve (état dans `VenuesEditor`) — la période fait pareil.
+  const [posingDuration, setPosingDuration] = useState(90);
 
   // P4-1 — la grille EST ces deux requêtes : un échec coercé en `[]` afficherait
   // « 0 créneau », indistinguable d'une période délibérément vidée. Le gestionnaire
@@ -451,6 +456,8 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
         syncing={overridesQuery.isFetching}
         editingSlot={editingSlot}
         onEditSlot={setEditingSlot}
+        posingDuration={posingDuration}
+        onPosingDuration={setPosingDuration}
       />
     </div>
   );
@@ -465,6 +472,8 @@ function PeriodVenuePanel({
   syncing,
   editingSlot,
   onEditSlot,
+  posingDuration,
+  onPosingDuration,
 }: {
   venue: Venue;
   schedulePlanId: string;
@@ -474,6 +483,8 @@ function PeriodVenuePanel({
   syncing: boolean;
   editingSlot: VenueTrainingSlot | null;
   onEditSlot: (slot: VenueTrainingSlot | null) => void;
+  posingDuration: number;
+  onPosingDuration: (minutes: number) => void;
 }) {
   const [pending, setPending] = useState<"reset" | "clear" | null>(null);
   const { data: reservations = [] } = useReservations(schedulePlanId);
@@ -531,6 +542,24 @@ function PeriodVenuePanel({
         <p role="alert" className="mb-2 text-sm text-destructive">Aucun créneau : aucune équipe ne pourra s’entraîner dans ce gymnase tant que vous n’en aurez pas posé.</p>
       ) : null}
 
+      {/* Barre « À poser » — même forme et même rôle qu'en saison (`VenuesStep`) : la durée
+          du PROCHAIN créneau posé au clic. Elle manquait ici, et la pose était figée à
+          90 min : un créneau de 2h se posait en deux gestes (poser, puis rouvrir
+          l'éditeur), et une pose tardive était refusée pour une durée que le gestionnaire
+          n'avait pas choisie (P4-43). La capacité, elle, reste réglée par créneau dans
+          l'éditeur — un créneau neuf vaut toujours 1, comme en saison. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">À poser :</span>
+        <Select aria-label="Durée à poser" className="h-9 w-24" disabled={isDisabled} value={posingDuration} onChange={(e) => onPosingDuration(Number(e.target.value))}>
+          {DURATIONS.map((d) => (
+            <option key={d} value={d}>
+              {formatDuration(d)}
+            </option>
+          ))}
+        </Select>
+        <span className="text-xs text-muted-foreground">— cliquez la grille pour ajouter un créneau</span>
+      </div>
+
       {/* fieldset disabled : gèle la grille à la souris ET au clavier quand le gymnase est
           désactivé — ses boutons sortent de l'ordre de tabulation et ne s'activent pas. */}
       <fieldset disabled={isDisabled} className={cn("min-w-0 border-0 p-0", isDisabled && "opacity-50")}>
@@ -539,21 +568,17 @@ function PeriodVenuePanel({
           slots={slots}
           selectedSlotId={editingSlot?.id ?? null}
           onAdd={(dayOfWeek, startTime) => {
-            // Ajout par clic : 90 min par défaut, ajustables ensuite dans l'éditeur. Un
-            // créneau peut finir APRÈS la dernière ligne de la grille — un créneau du soir
-            // (22:00–23:30) est légitime, et l'y interdire rendait la période plus stricte
-            // que la saison (revue #8 PR-B round 2). La seule borne est MINUIT (P4-37).
-            // ⚠ Ici la durée est FIXE (90 min) : ce panneau n'a pas de barre « À poser ».
-            // Le message générique désignerait une durée que l'utilisateur ne peut pas
-            // régler avant de poser. Il nomme donc le chemin réel — et il nomme les DEUX
-            // gestes : avancer l'heure sans raccourcir la durée ne suffit pas toujours,
-            // conseiller « ajustez l'horaire » seul envoyait vers un éditeur qui refuse.
-            const invalid = slotPlacementError(slots, dayOfWeek, startTime, 90, (start) => `Posé à ${start}, un créneau de 1h30 finirait après minuit. Posez-le plus tôt, puis ajustez son horaire et sa durée dans l'éditeur.`);
+            // Un créneau peut finir APRÈS la dernière ligne de la grille — un créneau du
+            // soir (22:00–23:30) est légitime, et l'y interdire rendait la période plus
+            // stricte que la saison (revue #8 PR-B round 2). La seule borne est MINUIT
+            // (P4-37), et son message par défaut nomme désormais la durée : le gestionnaire
+            // a la barre « À poser » sous les yeux pour la corriger.
+            const invalid = slotPlacementError(slots, dayOfWeek, startTime, posingDuration);
             if (null !== invalid) {
               toast.error(invalid);
               return;
             }
-            createSlot.mutate({ venueId: venue.id, dayOfWeek, startTime, durationMinutes: 90, capacity: 1 });
+            createSlot.mutate({ venueId: venue.id, dayOfWeek, startTime, durationMinutes: posingDuration, capacity: 1 });
           }}
           onSelect={(slot) => onEditSlot(slot)}
         />

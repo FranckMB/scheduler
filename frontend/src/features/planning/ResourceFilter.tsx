@@ -1,5 +1,5 @@
 import { Check, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { cn } from "@/shared/lib/utils";
 
@@ -24,6 +24,10 @@ interface ResourceFilterProps {
 export function ResourceFilter({ viewMode, groups, selected, onToggle, onClear }: ResourceFilterProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // `useId` et non un id littéral : ce composant est monté DEUX fois dans la même page
+  // (modale doléances — coachs et équipes), et deux `aria-controls` identiques
+  // désigneraient le même panneau.
+  const panelId = useId();
 
   if (groups.every((g) => 0 === g.resources.length)) {
     return null;
@@ -34,24 +38,41 @@ export function ResourceFilter({ viewMode, groups, selected, onToggle, onClear }
     .map((g) => ({ ...g, resources: g.resources.filter((r) => r.label.toLowerCase().includes(needle)) }))
     .filter((g) => g.resources.length > 0);
   const count = selected.length;
-  const summary = 0 === count ? "tous" : `${count} sélectionné${count > 1 ? "s" : ""}`;
+  // Un filtre POSÉ doit se voir. Sans état visuel distinct, « Gymnases : 3 sélectionnés »
+  // et « Gymnases : tous » portaient exactement le même habillage : une grille filtrée se
+  // lisait comme une grille complète, et le gestionnaire concluait sur ce qu'il ne voyait
+  // pas (P4-43). C'est ce silence, plus que la taille du bouton, qui le rendait invisible.
+  const active = count > 0;
+  const summary = active ? `${count} sélectionné${count > 1 ? "s" : ""}` : "tous";
 
   return (
     <div className="relative inline-block">
+      {/* Motif « disclosure » : `aria-expanded` + `aria-controls`. Pas de
+          `aria-haspopup="listbox"` — le panneau porte un champ de recherche et des boutons
+          bascules, pas des `option` ; l'annoncer en listbox promettrait à l'AT une
+          navigation qui n'existe pas. */}
       <button
         type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
         onClick={() => setOpen((o) => !o)}
-        className="flex h-8 items-center gap-2 rounded-md border border-border bg-background px-3 text-xs text-foreground hover:bg-muted"
+        className={cn(
+          "flex h-8 items-center gap-2 rounded-md border px-3 text-sm",
+          active ? "border-accent bg-accent/10 font-medium text-accent hover:bg-accent/20" : "border-border bg-background text-foreground hover:bg-muted",
+        )}
       >
-        <span className="font-medium text-muted-foreground">{LABELS[viewMode]} :</span>
+        <span className={cn("font-medium", active ? "" : "text-muted-foreground")}>{LABELS[viewMode]} :</span>
         <span>{summary}</span>
-        <ChevronDown className="size-3.5 text-muted-foreground" />
+        <ChevronDown className={cn("size-3.5", active ? "" : "text-muted-foreground")} />
       </button>
 
       {open ? (
         <>
-          <button type="button" aria-hidden className="fixed inset-0 z-50 cursor-default" onClick={() => setOpen(false)} />
-          <div className="absolute z-[60] mt-1 w-72 rounded-md border border-border bg-card shadow-md">
+          {/* Voile de fermeture — `aria-hidden` sur un élément FOCUSABLE est une violation
+              axe (`aria-hidden-focus`) : il faut aussi le sortir de l'ordre de tabulation,
+              sinon le clavier atterrit sur un bouton que rien n'annonce. */}
+          <button type="button" aria-hidden tabIndex={-1} className="fixed inset-0 z-50 cursor-default" onClick={() => setOpen(false)} />
+          <div id={panelId} className="absolute z-[60] mt-1 w-72 rounded-md border border-border bg-card shadow-md">
             <div className="border-b border-border p-2">
               <input
                 // eslint-disable-next-line jsx-a11y/no-autofocus -- search field inside a just-opened popover; focusing it is the expected behaviour

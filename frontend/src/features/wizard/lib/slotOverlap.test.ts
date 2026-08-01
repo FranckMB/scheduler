@@ -103,10 +103,11 @@ describe("slotPlacementError — l'ordre des contrôles", () => {
     expect(slotPlacementError(others, 1, "19:00", 90)).toBeNull();
   });
 
-  it("permet de remplacer le message de minuit là où la durée n'est pas réglable", () => {
-    // La pose au clic en période impose 90 min sans offrir de sélecteur : y désigner « la
-    // durée » enverrait l'utilisateur vers un réglage que son écran n'a pas.
-    expect(slotPlacementError([], 1, "22:45", 90, () => "message du panneau période")).toBe("message du panneau période");
+  it("nomme la durée quand la pose franchirait minuit — sur TOUS les sites", () => {
+    // Le message fut un temps surchargeable, la pose au clic en période imposant 90 min
+    // sans offrir de sélecteur. P4-43 lui a donné sa barre « À poser » : les quatre sites
+    // règlent la durée, le message par défaut est vrai partout, la surcharge est retirée.
+    expect(slotPlacementError([], 1, "22:45", 90)).toMatch(/ne peut pas durer 1h30 .*après minuit/);
   });
 });
 
