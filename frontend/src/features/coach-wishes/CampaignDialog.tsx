@@ -1,17 +1,21 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HTTPError } from "ky";
 import { Check, Copy, Send } from "lucide-react";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
+import type { Team } from "@/features/wizard/api";
 import { addDays, isActionableWeek, periodAdjustWeeks, todayISO } from "@/features/cockpit/lib/date";
-import { useUpdateCoach, useWizardTeamCoaches, useWizardTeams } from "@/features/wizard/queries";
+import { usePriorityTiers, useUpdateCoach, useWizardTeamCoaches, useWizardTeams } from "@/features/wizard/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
+import { TabPanel, Tabs } from "@/shared/components/ui/tabs";
+import { compareTeamsByRank } from "@/shared/lib/teamTiers";
 import { Spinner } from "@/shared/components/ui/spinner";
 import { copyToClipboard } from "@/shared/lib/clipboard";
 
 import { doleancesLink, type CampaignCoach, type CoachWishCampaign } from "./campaignApi";
+import { TeamPicker } from "./TeamPicker";
 import { useCreateCoachWishCampaign, useRemindCampaignSilent, useSendCampaignLinks, useUpdateCoachWishCampaign } from "./campaignQueries";
 
 interface CampaignDialogProps {
@@ -38,6 +42,7 @@ const frDate = (iso: string): string => {
 export function CampaignDialog({ entry, season, existing, onClose }: CampaignDialogProps) {
   const teamsQuery = useWizardTeams();
   const teamCoachesQuery = useWizardTeamCoaches();
+  const { data: tiers = [] } = usePriorityTiers();
   const createCampaign = useCreateCoachWishCampaign();
   const updateCampaign = useUpdateCoachWishCampaign();
 
@@ -88,7 +93,71 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   // Défaut : les semaines À VENIR seulement — cocher d'office une semaine révolue partait
   // solliciter les coachs pour du passé.
   const [weeks, setWeeks] = useState<Set<string>>(() => new Set(existing ? existing.weeks : availableWeeks.filter((w) => isActionableWeek(w, today)).map((w) => w.monday)));
-  const [teamIds, setTeamIds] = useState<Set<string>>(() => new Set(existing ? existing.teamIds : []));
+  // P3-15 — une nouvelle collecte démarre avec TOUTES les équipes (celles qui ont un
+  // coach) : solliciter tout le monde est le cas courant, et il demandait 49 clics. Une
+  // campagne existante rouvre évidemment sur SA sélection, jamais sur « toutes ».
+  //
+  // ⚠ DÉRIVÉ, pas figé dans un état initial : `teams` vient d'une requête et vaut `[]` au
+  // premier rendu. Un `useState(() => teams.map(…))` n'est évalué QU'UNE fois — le défaut
+  // serait resté vide pour toujours, et la modale aurait affiché « 0 équipe sur 49 » en se
+  // croyant d'accord avec elle-même.
+  //
+  // ⚠ Ni figé au premier rendu, ni dérivé en permanence (revue #346) :
+  //  - un `useState(() => teams.map(…))` gèle un défaut VIDE, `teams` valant [] au premier
+  //    rendu — la modale aurait affiché « 0 équipe sur 49 » en se croyant d'accord ;
+  //  - mais le lire à CHAQUE rendu perd l'INSTANTANÉ : la sélection intacte suivait alors la
+  //    requête, et un refetch d'arrière-plan (une saisie d'email invalide les coachs)
+  //    élargissait la collecte en silence à des équipes jamais montrées — sélecteur replié,
+  //    la seule trace à l'écran était une ligne de résumé.
+  // On SEMENCE donc une fois, dès que les équipes sont réellement là : après quoi la
+  // sélection n'appartient plus qu'au gestionnaire.
+  const [pickedTeamIds, setPickedTeamIds] = useState<Set<string> | null>(null !== existing ? new Set(existing.teamIds) : null);
+  // La graine est posée UNE fois, au premier rendu où les équipes existent — ajustement
+  // d'état PENDANT le rendu, le motif documenté pour « recalculer quand une donnée arrive »
+  // (ni initialiseur paresseux, qui gèlerait le vide, ni effet, que React refuse ici).
+  // Après ça, la sélection n'appartient qu'au gestionnaire : aucun refetch ne l'élargit
+  // dans son dos.
+  // ⚠ On attend que les deux lectures soient POSÉES, pas seulement non vides (revue #346
+  // round 2) : react-query sert un cache périmé immédiatement et refetch derrière, si bien
+  // qu'un cache de plus de 30 s semait une liste incomplète et s'y verrouillait — « 48
+  // équipes sur 49 » annoncé comme « toutes », et le coach de la 49ᵉ sans lien.
+  const teamsSettled = undefined !== teamsQuery.data && !teamsQuery.isFetching && undefined !== teamCoachesQuery.data && !teamCoachesQuery.isFetching;
+  const [teamsSeeded, setTeamsSeeded] = useState(false);
+  // `teams.length > 0` reste requis : une lecture POSÉE mais vide (aucune équipe éligible)
+  // ne doit pas verrouiller une graine vide — on laisse la graine ouverte, la sélection
+  // reste vide et « Créer » désactivé, ce qui est la vérité.
+  if (!teamsSeeded && null === pickedTeamIds && teamsSettled && teams.length > 0) {
+    setTeamsSeeded(true);
+    setPickedTeamIds(new Set(teams.map((t) => t.id)));
+  }
+  const teamIds = useMemo(() => pickedTeamIds ?? new Set<string>(), [pickedTeamIds]);
+  const setTeamIds = setPickedTeamIds;
+
+  // ⚠ Le sélecteur montre TOUT ce qui est sélectionné, éligible ou non : une campagne
+  // existante peut porter une équipe qui a perdu son coach depuis. Ne rendre que les
+  // éligibles laissait « tout décocher » sans effet sur elle, le résumé annoncer « 0 » et
+  // l'enregistrement la poster quand même (revue #346).
+  //
+  // ⚠ Y COMPRIS UNE ÉQUIPE SUPPRIMÉE, que plus aucune requête ne connaît (round 2) : sans
+  // ça elle restait dans `teamIds`, invisible, indécochable, et partait quand même au POST
+  // — le serveur refusait, et l'écran ne disait pas laquelle. On la rend sous un libellé
+  // générique : mieux vaut « équipe supprimée » qu'un id fantôme.
+  const pickerTeams = useMemo(() => {
+    const shown = new Set(teams.map((t) => t.id));
+    const strays = (teamsQuery.data ?? []).filter((t) => !shown.has(t.id) && teamIds.has(t.id));
+    const known = new Set([...shown, ...strays.map((t) => t.id)]);
+    const ghosts = [...teamIds].filter((id) => !known.has(id)).map((id) => ({ id, name: "Équipe supprimée", isActive: false, priorityTierId: Number.MAX_SAFE_INTEGER, tierOrder: 0 }) as Team);
+
+    return 0 === strays.length && 0 === ghosts.length ? teams : [...teams, ...strays, ...ghosts];
+  }, [teams, teamsQuery.data, teamIds]);
+  // ⚠ On n'ACCUSE que sur une donnée LUE (revue #346 round 2) : `teams` est vide tant que
+  // les liens coachs n'ont pas répondu, si bien que TOUTES les équipes d'une campagne
+  // existante s'affichaient « n'a plus de coach », en italique et fléchées. Le gestionnaire
+  // en concluait que ses affectations avaient sauté — et « nettoyait » une sélection saine.
+  const ineligibleIds = useMemo(
+    () => (undefined === teamCoachesQuery.data ? new Set<string>() : new Set(pickerTeams.filter((t) => !teams.some((e) => e.id === t.id)).map((t) => t.id))),
+    [pickerTeams, teams, teamCoachesQuery.data],
+  );
   // La date limite par défaut était `entry.startDate`, donc DANS LE PASSÉ dès que la
   // période a commencé — cas que ce lot vient précisément de rendre légitime. Les liens
   // partaient morts : le serveur répond 410 « deadline dépassée », et le gestionnaire ne
@@ -105,6 +174,10 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
     apply(next);
   };
 
+  // Le focus suit la bascule programmatique : une ref + un effet (interdits pendant le
+  // rendu, autorisés ici) plutôt qu'un état, qu'aucun rendu ne devrait porter.
+  const focusTabAfterSwitch = useRef(false);
+
   const canSave = weeks.size > 0 && teamIds.size > 0 && "" !== deadline;
   const saving = createCampaign.isPending || updateCampaign.isPending;
 
@@ -113,81 +186,116 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
     if (null !== campaign) {
       updateCampaign.mutate({ id: campaign.id, body }, { onSuccess: setCampaign });
     } else {
-      createCampaign.mutate(body, { onSuccess: setCampaign });
+      // Après création, on BASCULE sur les liens : c'est ce que le gestionnaire est venu
+      // chercher. Sans ça (revue #346), le bouton changeait de libellé, un onglet
+      // apparaissait discrètement, et rien d'autre ne bougeait — on croyait l'échec.
+      createCampaign.mutate(body, {
+        onSuccess: (created) => {
+          setCampaign(created);
+          // ⚠ On EMPORTE le focus avec l'onglet (revue #346) : le bouton qui vient d'être
+          // pressé se retrouve dans un panneau `hidden`, le navigateur rend alors le focus
+          // à `<body>` — et le piège à focus comme Échap, qui écoutent sur le panneau de la
+          // modale, cessent d'agir pendant qu'elle reste ouverte.
+          setActiveTab("coachs");
+          focusTabAfterSwitch.current = true;
+        },
+      });
     }
   };
 
   const failed = createCampaign.isError || updateCampaign.isError;
 
+  // Une campagne déjà lancée s'ouvre sur « Coachs » — suivre et envoyer est le geste
+  // fréquent. ⚠ SAUF si ses réglages demandent une correction : #344 avait imposé qu'une
+  // semaine retenue mais révolue, ou que la période n'émet plus, reste SOUS LES YEUX du
+  // gestionnaire. La reléguer derrière un onglet qu'il n'ouvre jamais annulait cette
+  // garantie en silence (revue #346) — et ses tests continuaient de passer, `getByLabelText`
+  // ne filtrant pas le contenu caché.
+  // Deux motifs, pas un (revue #346 round 2) : une semaine retenue peut être RÉVOLUE, ou
+  // ne plus être ÉMISE par la période — c'est ce second cas que #344 avait attrapé, et que
+  // mon premier jet laissait filer parce qu'une semaine orpheline encore future passe pour
+  // actionnable. Les deux doivent ramener le gestionnaire sur les Réglages.
+  const emittedMondays = useMemo(
+    () => new Set(null === season ? [] : periodAdjustWeeks(entry.startDate, entry.endDate, season, entry.periodType).map((w) => w.monday)),
+    [entry, season],
+  );
+  const weeksNeedAttention =
+    null !== existing &&
+    (existing.weeks.some((monday) => !emittedMondays.has(monday)) || availableWeeks.some((w) => existing.weeks.includes(w.monday) && !isActionableWeek(w, today)));
+  const [activeTab, setActiveTab] = useState(null !== existing && !weeksNeedAttention ? "coachs" : "reglages");
+  useEffect(() => {
+    if (focusTabAfterSwitch.current) {
+      focusTabAfterSwitch.current = false;
+      document.getElementById(`campaign-tab-${activeTab}`)?.focus();
+    }
+  });
+  const tabs = null === campaign ? [{ id: "reglages", label: "Réglages" }] : [{ id: "reglages", label: "Réglages" }, { id: "coachs", label: `Coachs (${campaign.coaches.length})` }];
+
   return (
     <Modal label="Solliciter les coachs" title="Solliciter les coachs" onClose={onClose} className="max-w-lg">
-      <p className="mt-2 text-sm text-muted-foreground">Choisissez les semaines et les équipes concernées, puis copiez le lien de chaque coach pour le lui envoyer.</p>
+      {/* P3-15 — DEUX MOMENTS, DEUX ONGLETS. On règle une fois (semaines, équipes, date
+          limite), puis on revient suivre les réponses et envoyer. Tout empiler faisait une
+          modale « BEAUCOUP TROP longue, c'est pas jouable » (fondateur).
+          L'onglet Coachs n'EXISTE pas tant que rien n'est enregistré — il n'aurait rien à
+          montrer — et c'est lui qui s'ouvre à la ré-ouverture d'une campagne : suivre est
+          alors le geste fréquent. */}
+      <Tabs tabs={tabs} activeTab={activeTab} onTabChange={setActiveTab} ariaLabel="Sections de la collecte" idPrefix="campaign" />
 
-      <fieldset className="mt-4">
-        <legend className="text-sm font-medium">Semaines</legend>
-        <div className="mt-1 space-y-1">
-          {0 === availableWeeks.length ? (
-            <p className="text-sm text-muted-foreground">Aucune semaine disponible sur cette période.</p>
-          ) : (
-            availableWeeks.map((w) => (
-              <label key={w.monday} className="flex items-center gap-2 text-sm">
-                {/* Le marqueur vit DANS le nom accessible : `aria-label` écrase le
-                    contenu du label, donc un marqueur posé à côté n'est jamais annoncé et
-                    un lecteur d'écran entend des semaines indistinctes (revue #344). */}
-                <input
-                  type="checkbox"
-                  className="size-4 accent-[var(--accent)]"
-                  checked={weeks.has(w.monday)}
-                  onChange={() => toggle(weeks, w.monday, setWeeks)}
-                  aria-label={`Semaine du ${frDate(w.startDate)}${isActionableWeek(w, today) ? "" : " (révolue)"}`}
-                />
-                Semaine du {frDate(w.startDate)} au {frDate(w.endDate)}
-                {isActionableWeek(w, today) ? null : <span className="text-xs italic text-muted-foreground">révolue</span>}
-              </label>
-            ))
-          )}
+      <TabPanel tabId="reglages" idPrefix="campaign" active={"reglages" === activeTab} className="pt-3">
+        <fieldset>
+          <legend className="text-sm font-medium">Semaines</legend>
+          <div className="mt-1 space-y-1">
+            {0 === availableWeeks.length ? (
+              <p className="text-sm text-muted-foreground">Aucune semaine disponible sur cette période.</p>
+            ) : (
+              availableWeeks.map((w) => (
+                <label key={w.monday} className="flex items-center gap-2 text-sm">
+                  {/* Le marqueur vit DANS le nom accessible : `aria-label` écrase le
+                      contenu du label, donc un marqueur posé à côté n'est jamais annoncé et
+                      un lecteur d'écran entend des semaines indistinctes (revue #344). */}
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[var(--accent)]"
+                    checked={weeks.has(w.monday)}
+                    onChange={() => toggle(weeks, w.monday, setWeeks)}
+                    aria-label={`Semaine du ${frDate(w.startDate)}${isActionableWeek(w, today) ? "" : " (révolue)"}`}
+                  />
+                  Semaine du {frDate(w.startDate)} au {frDate(w.endDate)}
+                  {isActionableWeek(w, today) ? null : <span className="text-xs italic text-muted-foreground">révolue</span>}
+                </label>
+              ))
+            )}
+          </div>
+        </fieldset>
+
+        <TeamPicker teams={pickerTeams} ineligibleIds={ineligibleIds} tiers={tiers} selected={teamIds} onChange={setTeamIds} />
+
+        <label className="mt-4 flex items-center gap-2 text-sm font-medium">
+          À renvoyer avant le
+          <Input type="date" min={today} className="h-8 w-40" value={deadline} onChange={(e) => setDeadline(e.target.value)} aria-label="Date limite" />
+        </label>
+
+        {failed ? <p className="mt-3 text-sm text-destructive">Enregistrement impossible. Vérifiez les semaines et équipes choisies.</p> : null}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Fermer
+          </Button>
+          <Button size="sm" disabled={!canSave || saving} onClick={save}>
+            {saving ? <Spinner className="size-4" /> : null}
+            {null === campaign ? "Créer la collecte" : "Enregistrer"}
+          </Button>
         </div>
-      </fieldset>
-
-      <fieldset className="mt-4">
-        <legend className="text-sm font-medium">Équipes</legend>
-        <div className="mt-1 space-y-1">
-          {0 === teams.length ? (
-            <p className="text-sm text-muted-foreground">Aucune équipe avec un coach rattaché.</p>
-          ) : (
-            teams.map((t) => (
-              <label key={t.id} className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={teamIds.has(t.id)} onChange={() => toggle(teamIds, t.id, setTeamIds)} aria-label={t.name} />
-                {t.name}
-              </label>
-            ))
-          )}
-        </div>
-      </fieldset>
-
-      <label className="mt-4 flex items-center gap-2 text-sm font-medium">
-        À renvoyer avant le
-        <Input type="date" min={today} className="h-8 w-40" value={deadline} onChange={(e) => setDeadline(e.target.value)} aria-label="Date limite" />
-      </label>
-
-      {failed ? <p className="mt-3 text-sm text-destructive">Enregistrement impossible. Vérifiez les semaines et équipes choisies.</p> : null}
-
-      <div className="mt-5 flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          Fermer
-        </Button>
-        <Button size="sm" disabled={!canSave || saving} onClick={save}>
-          {saving ? <Spinner className="size-4" /> : null}
-          {null === campaign ? "Créer la collecte" : "Enregistrer"}
-        </Button>
-      </div>
+      </TabPanel>
 
       {null !== campaign ? (
-        <CoachLinks
-          campaign={campaign}
-          onEmailSaved={(coachId, email) => setCampaign((c) => (null === c ? c : { ...c, coaches: c.coaches.map((k) => (k.coachId === coachId ? { ...k, email } : k)) }))}
-          onCampaignRefreshed={setCampaign}
-        />
+        <TabPanel tabId="coachs" idPrefix="campaign" active={"coachs" === activeTab} className="pt-3">
+          <CoachLinks
+            campaign={campaign}
+            onEmailSaved={(coachId, email) => setCampaign((c) => (null === c ? c : { ...c, coaches: c.coaches.map((k) => (k.coachId === coachId ? { ...k, email } : k)) }))}
+            onCampaignRefreshed={setCampaign}
+          />
+        </TabPanel>
       ) : null}
     </Modal>
   );
@@ -230,7 +338,14 @@ function CoachLinks({ campaign, onEmailSaved, onCampaignRefreshed }: { campaign:
 
   // Équipes de la campagne (id + nom) pour les boutons de filtre.
   const campaignTeamIds = new Set(campaign.teamIds);
-  const campaignTeams = (teamsQuery.data ?? []).filter((t) => campaignTeamIds.has(t.id));
+  // P3-15 (b) — triées par RANG, comme partout où une équipe se lit. Elles sortaient dans
+  // l'ordre brut de l'API : même helper, pas une seconde règle de tri.
+  // Tri par RANG, mais avec `compareTeamsByRank` et non `groupTeamsByTier` : ce dernier a
+  // besoin des rangs CHARGÉS, et tant qu'ils ne le sont pas il verse tout dans « Autres »
+  // puis re-trie à leur arrivée — la rangée se réordonnait sous le pointeur, et un clic
+  // filtrait sur une autre équipe que celle visée (revue #346). Le comparateur donne le
+  // même ordre dès le premier rendu.
+  const campaignTeams = [...(teamsQuery.data ?? []).filter((t) => campaignTeamIds.has(t.id))].sort(compareTeamsByRank);
   // coachId → équipes de la campagne qu'il coache (D1 : TeamCoach ∩ teamIds campagne).
   const coachTeams = new Map<string, Set<string>>();
   for (const tc of teamCoachesQuery.data ?? []) {

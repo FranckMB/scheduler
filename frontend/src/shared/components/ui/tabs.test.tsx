@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { renderWithProviders, expectNoA11yViolations } from "@/test/utils";
 
-import { ADMIN_TABS, DEFAULT_SUBTAB, DEFAULT_TAB, STORAGE_KEY, resolveActiveSubTab, resolveActiveTab } from "./tabsConfig";
-import { TabPanel, Tabs } from "./Tabs";
+import { ADMIN_TABS, DEFAULT_SUBTAB, DEFAULT_TAB, STORAGE_KEY, resolveActiveSubTab, resolveActiveTab } from "@/features/admin/tabs/tabsConfig";
+import { TabPanel, Tabs } from "./tabs";
 
 const MAIN_TAB_IDS = ADMIN_TABS.map((t) => t.id);
 const JOURNAUX_SUBTABS = ADMIN_TABS.find((t) => t.id === "journaux")?.subTabs ?? [];
@@ -43,12 +43,13 @@ function TabHarness() {
 
   return (
     <div>
-      <Tabs tabs={ADMIN_TABS} activeTab={activeTab} onTabChange={handleTabChange} ariaLabel="Sections admin" idPrefix="admin" />
+      <Tabs variant="console" tabs={ADMIN_TABS} activeTab={activeTab} onTabChange={handleTabChange} ariaLabel="Sections admin" idPrefix="admin" />
       {MAIN_TAB_IDS.map((tabId) => (
-        <TabPanel key={tabId} tabId={tabId} idPrefix="admin" active={activeTab === tabId}>
+        <TabPanel variant="console" key={tabId} tabId={tabId} idPrefix="admin" active={activeTab === tabId}>
           {tabId === "journaux" ? (
             <div>
               <Tabs
+                variant="console"
                 tabs={JOURNAUX_SUBTABS.map((s) => ({ id: s.id, label: s.label }))}
                 activeTab={activeSubTab}
                 onTabChange={handleSubTabChange}
@@ -56,7 +57,7 @@ function TabHarness() {
                 idPrefix="admin-journaux"
               />
               {JOURNAUX_SUBTABS.map((sub) => (
-                <TabPanel key={sub.id} tabId={sub.id} idPrefix="admin-journaux" active={activeSubTab === sub.id}>
+                <TabPanel variant="console" key={sub.id} tabId={sub.id} idPrefix="admin-journaux" active={activeSubTab === sub.id}>
                   <p>{sub.label} content</p>
                 </TabPanel>
               ))}
@@ -199,5 +200,18 @@ describe("Tabs", () => {
 
   it("has no axe accessibility violations", async () => {
     await expectNoA11yViolations(<TabHarness />, { route: `/admin?tab=${DEFAULT_TAB}` });
+  });
+
+  // Le harnais reproduit AdminDashboardPage, qui passe `variant="console"` partout : sans
+  // ça (revue #346), la seule suite d'onglets du dépôt exerçait une peau qu'aucune page ne
+  // rend, et un `variant` oublié sur un site d'appel — ce qui venait d'arriver aux
+  // sous-onglets Journaux — passait la CI en vert.
+  it("garde la peau console sur les onglets de l'admin", () => {
+    renderHarness();
+
+    const active = screen.getByRole("tab", { name: /Vue d'ensemble/ });
+    expect(active.className).toContain("border-cyan-300");
+    expect(active.className).toContain("text-white");
+    expect(active.className).not.toContain("border-accent");
   });
 });

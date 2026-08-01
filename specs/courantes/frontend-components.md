@@ -18,6 +18,7 @@ Last verified @ 2026-07-29
 > | Cockpit (accueil temporel, radar) | [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md) |
 > | Module matchs | [`module-matchs.md`](module-matchs.md) |
 > | Doléances coachs (#10) — dont la page publique `/doleances/{token}` | [`types-de-planning.md`](types-de-planning.md) §E5 |
+> | **Onglets** (`shared/components/ui/tabs.tsx`) — motif WAI-ARIA (roving tabindex, flèches/Home/End), deux peaux : `console` (admin, sombre) et `app` (club, **défaut**). Déplacé de `features/admin/` le 2026-08-01 quand la modale de sollicitation en a eu besoin. ⚠ **Des onglets dans une MODALE demandent deux précautions** (revue #346) : le piège à focus de `useModalA11y` ignore désormais les sous-arbres `hidden` — sans quoi le « dernier » focusable est un bouton du panneau inactif et Tab sort du dialogue — et toute bascule d'onglet PROGRAMMATIQUE doit emporter le focus, sinon il retombe sur `<body>` et le piège comme Échap cessent d'agir | — |
 > | Console superadmin (`/admin`) | [`superadmin-auth.md`](superadmin-auth.md) |
 > | Conventions agent, pièges, primitives partagées | [`../../frontend/AGENTS.md`](../../frontend/AGENTS.md) |
 >

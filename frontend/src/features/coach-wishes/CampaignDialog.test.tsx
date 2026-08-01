@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HTTPError } from "ky";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,9 +8,26 @@ import { setTodayOverride } from "@/shared/lib/clock";
 
 import type { CoachWishCampaign } from "./campaignApi";
 
+const teamsLate = { value: false };
+const teamsFetching = { value: false };
+const teamCoachesUnread = { value: false };
 vi.mock("@/features/wizard/queries", () => ({
-  useWizardTeams: () => ({ data: [{ id: "t1", name: "SM1", isActive: true }, { id: "t2", name: "U13", isActive: true }, { id: "t3", name: "U11", isActive: true }] }),
-  useWizardTeamCoaches: () => ({ data: [{ id: "tc1", teamId: "t1", coachId: "c1", role: "MAIN" }, { id: "tc2", teamId: "t2", coachId: "c2", role: "MAIN" }] }),
+  // Rangs posés : t3/U11 en fanion (S) mais SANS coach — elle ne doit apparaître nulle
+  // part ; t1/SM1 et t2/U13 en rang B, dans cet ordre de `tierOrder`.
+  // `isFetching` compte : la graine attend une lecture POSÉE, pas un cache périmé servi
+  // pendant que le refetch tourne (revue #346 round 2).
+  useWizardTeams: () => ({
+    isFetching: teamsFetching.value,
+    data: teamsLate.value
+      ? []
+      : [
+          { id: "t1", name: "SM1", isActive: true, priorityTierId: 3, tierOrder: 0 },
+          { id: "t2", name: "U13", isActive: true, priorityTierId: 3, tierOrder: 1 },
+          { id: "t3", name: "U11", isActive: true, priorityTierId: 1, tierOrder: 0 },
+        ],
+  }),
+  usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 3, label: "B", name: "Moyenne", color: null }] }),
+  useWizardTeamCoaches: () => ({ data: teamCoachesUnread.value ? undefined : [{ id: "tc1", teamId: "t1", coachId: "c1", role: "MAIN" }, { id: "tc2", teamId: "t2", coachId: "c2", role: "MAIN" }] }),
   useUpdateCoach: () => ({ mutate: vi.fn() }),
 }));
 
@@ -54,6 +71,9 @@ describe("CampaignDialog", () => {
   // deux semaines avant la période plutôt que de repasser les dates en relatif.
   beforeEach(() => {
     setTodayOverride("2026-02-01");
+    teamsLate.value = false;
+    teamsFetching.value = false;
+    teamCoachesUnread.value = false;
     createMut.mockReset();
     updateMut.mockReset();
     sendMut.mockReset();
@@ -69,19 +89,106 @@ describe("CampaignDialog", () => {
   it("crée une campagne avec les semaines et équipes choisies", async () => {
     render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
 
-    // Seules les équipes AVEC coach sont proposées (t1/t2 ; t3 « U11 » sans coach est masquée).
-    expect(screen.getByLabelText("SM1")).toBeInTheDocument();
-    expect(screen.queryByLabelText("U11")).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByLabelText("SM1"));
     await userEvent.click(screen.getByRole("button", { name: /Créer la collecte/ }));
 
     expect(createMut).toHaveBeenCalledTimes(1);
     const body = createMut.mock.calls[0][0];
     expect(body.calendarEntryId).toBe("e1");
-    expect(body.teamIds).toEqual(["t1"]);
     expect(body.weeks.length).toBeGreaterThan(0);
     expect(body.deadline).toBe("2026-02-16");
+  });
+
+  // ── P3-15 (a)(b) : une modale qu'on peut lire (retour terrain 2026-07-31) ──
+
+  // ⚠ L'assertion porte sur le CONTENU envoyé, pas sur `canSave` : une sélection vide
+  // laisserait `canSave` faux, mais un test qui ne regarderait que le bouton passerait
+  // aussi bien avec un défaut cassé.
+  it("démarre une nouvelle collecte avec TOUTES les équipes ayant un coach", async () => {
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    // Le résumé le dit d'une ligne, sans rien déplier.
+    expect(screen.getByText(/Toutes les équipes \(2\)/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Créer la collecte/ }));
+    // t3/U11 n'a pas de coach : elle n'est ni comptée ni envoyée.
+    expect(createMut.mock.calls[0][0].teamIds.sort()).toEqual(["t1", "t2"]);
+  });
+
+  // Le cœur du besoin : 49 équipes ne s'empilent plus, elles se replient derrière une ligne.
+  it("garde le sélecteur d'équipes replié, et le déplie à la demande", async () => {
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    const toggle = screen.getByRole("button", { name: /Modifier les équipes/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "SM1" })).toBeNull();
+
+    await userEvent.click(toggle);
+    expect(screen.getByRole("button", { name: "SM1" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  // Agir en masse : c'est ce qui manquait le plus avec une ligne par équipe.
+  it("permet de tout décocher puis de tout recocher d'un geste", async () => {
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Modifier les équipes/ }));
+    await userEvent.click(screen.getByRole("button", { name: "tout décocher" }));
+    expect(screen.getByText(/0 équipe sur 2/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Créer la collecte/ })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "tout cocher" }));
+    expect(screen.getByText(/Toutes les équipes \(2\)/)).toBeInTheDocument();
+  });
+
+  // (b) Les équipes sont groupées par RANG, comme partout où une équipe se choisit.
+  it("groupe les équipes du sélecteur par rang", async () => {
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Modifier les équipes/ }));
+    expect(screen.getByText("B · Moyenne")).toBeInTheDocument();
+    // U11 (rang S) n'a pas de coach : son groupe n'existe pas non plus.
+    expect(screen.queryByText("S · Fanion")).toBeNull();
+  });
+
+  // Une campagne EXISTANTE rouvre sur SA sélection — jamais sur « toutes », ce qui
+  // élargirait la collecte en silence à des équipes que le gestionnaire avait écartées.
+  it("rouvre une campagne existante sur sa propre sélection, pas sur « toutes »", () => {
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2027-06-30",
+      weeks: ["2026-02-16"],
+      teamIds: ["t1"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    expect(screen.getByText(/1 équipe sur 2/)).toBeInTheDocument();
+  });
+
+  // Deux moments, deux onglets — et rien à montrer tant que rien n'est enregistré.
+  it("n'offre l'onglet Coachs qu'une fois la collecte créée, et s'y ouvre à la ré-ouverture", () => {
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+    expect(screen.queryByRole("tab", { name: /Coachs/ })).toBeNull();
+
+    cleanup();
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2027-06-30",
+      weeks: ["2026-02-16"],
+      teamIds: ["t1"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [{ coachId: "c1", firstName: "Maxime", lastName: "Durand", email: null, token: "a".repeat(64), respondedAt: null, sentAt: null }],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+    expect(screen.getByRole("tab", { name: /Coachs/ })).toHaveAttribute("aria-selected", "true");
   });
 
   // ── P3-15 (c) : on ne sollicite un coach que pour ce qu'il RESTE (retour 2026-07-31) ──
@@ -174,6 +281,234 @@ describe("CampaignDialog", () => {
     const orphan = screen.getByLabelText(/Semaine du 02\/02\/2026/);
     expect(orphan).toBeInTheDocument();
     expect(orphan).toBeChecked();
+  });
+
+  // ── Revue #346 : ce que mes propres choix avaient défait ──
+
+  // Une campagne existante peut porter une équipe qui a perdu son coach. Ne rendre que les
+  // ÉLIGIBLES la laissait invisible : « tout décocher » restait sans effet sur elle, le
+  // résumé annonçait « 0 » et l'enregistrement la postait quand même.
+  it("montre, marque et décoche une équipe sélectionnée qui n'a plus de coach", async () => {
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2027-06-30",
+      weeks: ["2026-02-23"],
+      teamIds: ["t1", "t3"], // t3/U11 n'a AUCUN coach : inéligible, mais retenue
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: /Réglages/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Modifier les équipes/ }));
+    expect(screen.getByRole("button", { name: /U11 \(ne peut plus être sollicitée\)/ })).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(screen.getByRole("button", { name: "tout décocher" }));
+    // Le résumé et l'enregistrement disent la MÊME chose : plus rien n'est sélectionné.
+    expect(screen.getByRole("button", { name: /Enregistrer/ })).toBeDisabled();
+  });
+
+  // Après création, le gestionnaire vient chercher les liens : les laisser dans un panneau
+  // caché faisait croire à un échec (le bouton changeait de libellé, rien d'autre ne bougeait).
+  it("bascule sur l'onglet Coachs après la création", async () => {
+    createMut.mockImplementation((_body: unknown, opts: { onSuccess: (c: CoachWishCampaign) => void }) =>
+      opts.onSuccess({
+        id: "camp1",
+        calendarEntryId: "e1",
+        deadline: "2026-03-01",
+        weeks: ["2026-02-23"],
+        teamIds: ["t1"],
+        totalCoachCount: 1,
+        respondedCoachCount: 0,
+        openWishCount: 0,
+        lastReminderAt: null,
+        coaches: [{ coachId: "c1", firstName: "Maxime", lastName: "Durand", email: null, token: "a".repeat(64), respondedAt: null, sentAt: null }],
+      }),
+    );
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Créer la collecte/ }));
+    expect(screen.getByRole("tab", { name: /Coachs/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: /Copier le lien/ })).toBeVisible();
+  });
+
+  // #344 exigeait qu'une semaine retenue mais révolue reste SOUS LES YEUX. Mon onglet par
+  // défaut la reléguait derrière un clic que le chemin fréquent ne déclenche jamais.
+  it("ouvre sur Réglages quand une semaine retenue demande une correction", () => {
+    setTodayOverride("2026-02-25"); // la semaine du 23 court, celle du 16 est révolue
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2026-03-01",
+      weeks: ["2026-02-16"],
+      teamIds: ["t1"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    expect(screen.getByRole("tab", { name: /Réglages/ })).toHaveAttribute("aria-selected", "true");
+    // VISIBLE, pas seulement présent : `getByLabelText` ne filtre pas le contenu caché, ce
+    // qui laissait les deux gardes de #344 passer dans un panneau `hidden`.
+    expect(screen.getByLabelText(/Semaine du 16\/02\/2026 \(révolue\)/)).toBeVisible();
+  });
+
+  // Le défaut « toutes les équipes » n'était gardé par RIEN : les mocks rendent la donnée
+  // dès le premier rendu, donc la condition même pour laquelle il existe — des équipes qui
+  // arrivent APRÈS — n'était jamais simulée (revue #346, prouvé par falsification).
+  it("coche toutes les équipes même quand elles arrivent après le premier rendu", async () => {
+    teamsLate.value = true;
+    const { rerender } = render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+    expect(screen.getByText(/Aucune équipe avec un coach rattaché/)).toBeInTheDocument();
+
+    teamsLate.value = false;
+    teamsFetching.value = false;
+    teamCoachesUnread.value = false;
+    rerender(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+    expect(screen.getByText(/Toutes les équipes \(2\)/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Créer la collecte/ }));
+    expect(createMut.mock.calls[0][0].teamIds.sort()).toEqual(["t1", "t2"]);
+  });
+
+  // ── Revue #346 round 2 : ce que mes correctifs du round 1 avaient laissé passer ──
+
+  // Un cache chaud mais PÉRIMÉ est servi immédiatement pendant que le refetch tourne :
+  // semer là-dessus verrouillait une liste incomplète, annoncée comme « toutes ».
+  it("attend que la lecture soit POSÉE avant de semer, pas seulement non vide", async () => {
+    teamsFetching.value = true; // cache périmé servi, refetch en cours
+    const { rerender } = render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+    // Rien n'est semé tant que la lecture n'est pas posée : le résumé dit la vérité
+    // (« 0 sur 2 ») plutôt que d'annoncer « toutes » sur une liste peut-être incomplète.
+    expect(screen.getByText(/0 équipe sur 2/)).toBeInTheDocument();
+
+    teamsFetching.value = false; // le refetch a répondu : liste complète
+    rerender(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+    expect(screen.getByText(/Toutes les équipes \(2\)/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Créer la collecte/ }));
+    expect(createMut.mock.calls[0][0].teamIds.sort()).toEqual(["t1", "t2"]);
+  });
+
+  // On n'ACCUSE que sur une donnée lue : tant que les liens coachs n'ont pas répondu,
+  // toutes les équipes s'affichaient « ne peut plus être sollicitée ».
+  it("n'accuse aucune équipe tant que les liens coachs ne sont pas lus", async () => {
+    teamCoachesUnread.value = true;
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2027-06-30",
+      weeks: ["2026-02-23"],
+      teamIds: ["t1", "t2"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: /Réglages/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Modifier les équipes/ }));
+    expect(screen.queryByRole("button", { name: /ne peut plus être sollicitée/ })).toBeNull();
+  });
+
+  // Une équipe SUPPRIMÉE n'est dans aucune requête : sans un libellé de repli, elle restait
+  // dans la sélection, invisible, indécochable, et partait quand même au POST.
+  it("rend atteignable une équipe supprimée encore portée par la campagne", async () => {
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2027-06-30",
+      weeks: ["2026-02-23"],
+      teamIds: ["t1", "tSupprimee"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: /Réglages/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Modifier les équipes/ }));
+    expect(screen.getByRole("button", { name: /Équipe supprimée/ })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "tout décocher" }));
+    // Le bouton et la sélection disent la MÊME chose : plus rien ne partira.
+    expect(screen.getByRole("button", { name: /Enregistrer/ })).toBeDisabled();
+  });
+
+  // Le résumé compte ce qui produira un lien : compter les inéligibles des deux côtés
+  // annonçait « Toutes les équipes (3) » quand deux seulement seraient sollicitées.
+  it("ne compte dans le résumé que les équipes qui produiront un lien", async () => {
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2027-06-30",
+      weeks: ["2026-02-23"],
+      teamIds: ["t1", "t2", "t3"], // t3/U11 n'a pas de coach
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: /Réglages/ }));
+    expect(screen.getByText(/Toutes les équipes \(2\) · 1 sans coach, à retirer/)).toBeInTheDocument();
+  });
+
+  // #344 visait la semaine que la période n'ÉMET PLUS ; mon premier jet ne rattrapait que
+  // la semaine révolue, et une orpheline encore future ouvrait donc sur l'onglet Coachs.
+  it("ouvre sur Réglages quand une semaine retenue n'est plus émise par la période", () => {
+    setTodayOverride("2026-02-01");
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2026-03-01",
+      weeks: ["2026-03-09"], // hors de la période 16/02 → 01/03, et encore future
+      teamIds: ["t1"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    expect(screen.getByRole("tab", { name: /Réglages/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  // Le focus suit la bascule : sans ça il retombe sur `<body>`, et le piège à focus comme
+  // Échap — qui écoutent sur le panneau de la modale — cessent d'agir.
+  it("emporte le focus avec l'onglet après la création", async () => {
+    createMut.mockImplementation((_body: unknown, opts: { onSuccess: (c: CoachWishCampaign) => void }) =>
+      opts.onSuccess({
+        id: "camp1",
+        calendarEntryId: "e1",
+        deadline: "2026-03-01",
+        weeks: ["2026-02-23"],
+        teamIds: ["t1"],
+        totalCoachCount: 1,
+        respondedCoachCount: 0,
+        openWishCount: 0,
+        lastReminderAt: null,
+        coaches: [{ coachId: "c1", firstName: "Maxime", lastName: "Durand", email: null, token: "a".repeat(64), respondedAt: null, sentAt: null }],
+      }),
+    );
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Créer la collecte/ }));
+    expect(document.activeElement).toBe(screen.getByRole("tab", { name: /Coachs/ }));
   });
 
   it("copie le lien personnel d'un coach", async () => {
