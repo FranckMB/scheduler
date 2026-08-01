@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { renderWithProviders, expectNoA11yViolations } from "@/test/utils";
 
-import { ADMIN_TABS, DEFAULT_SUBTAB, DEFAULT_TAB, STORAGE_KEY, resolveActiveSubTab, resolveActiveTab } from "./tabsConfig";
-import { TabPanel, Tabs } from "./Tabs";
+import { ADMIN_TABS, DEFAULT_SUBTAB, DEFAULT_TAB, STORAGE_KEY, resolveActiveSubTab, resolveActiveTab } from "@/features/admin/tabs/tabsConfig";
+import { TabPanel, Tabs } from "./tabs";
 
 const MAIN_TAB_IDS = ADMIN_TABS.map((t) => t.id);
 const JOURNAUX_SUBTABS = ADMIN_TABS.find((t) => t.id === "journaux")?.subTabs ?? [];

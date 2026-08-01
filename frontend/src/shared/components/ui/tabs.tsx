@@ -8,6 +8,30 @@ export interface TabItem {
   icon?: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 }
 
+/**
+ * Deux PEAUX, un seul comportement. La console superadmin est sombre (`slate-950`,
+ * `cyan-300`), l'application club suit les tokens du thème. Extraire le composant sans
+ * cette distinction aurait repeint la console — on déplace la logique ARIA, pas le style.
+ */
+export type TabsVariant = "console" | "app";
+
+const TAB_SKINS: Record<TabsVariant, { list: string; base: string; active: string; idle: string; panel: string }> = {
+  console: {
+    list: "border-white/10",
+    base: "focus-visible:ring-cyan-300/40 focus-visible:ring-offset-slate-950",
+    active: "border-cyan-300 text-white",
+    idle: "border-transparent text-slate-400 hover:text-white hover:border-white/10",
+    panel: "focus-visible:ring-cyan-300/20",
+  },
+  app: {
+    list: "border-border",
+    base: "focus-visible:ring-ring/40 focus-visible:ring-offset-background",
+    active: "border-accent font-medium text-foreground",
+    idle: "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
+    panel: "focus-visible:ring-ring/20",
+  },
+};
+
 export interface TabsProps {
   tabs: TabItem[];
   activeTab: string;
@@ -15,6 +39,8 @@ export interface TabsProps {
   ariaLabel: string;
   /** Prefix for tab/panel IDs — must be unique per tablist (avoids collisions with nested sub-tabs). */
   idPrefix: string;
+  /** Peau : `console` pour l'admin (défaut historique), `app` pour l'application club. */
+  variant?: TabsVariant;
 }
 
 /**
@@ -27,7 +53,8 @@ export interface TabsProps {
  *   required by the WAI-ARIA spec for the manual-activation fallback).
  * - Tab key exits to the panel (browser default with roving tabindex).
  */
-export function Tabs({ tabs, activeTab, onTabChange, ariaLabel, idPrefix }: TabsProps) {
+export function Tabs({ tabs, activeTab, onTabChange, ariaLabel, idPrefix, variant = "app" }: TabsProps) {
+  const skin = TAB_SKINS[variant];
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const activeIndex = Math.max(
@@ -71,7 +98,7 @@ export function Tabs({ tabs, activeTab, onTabChange, ariaLabel, idPrefix }: Tabs
   }
 
   return (
-    <div role="tablist" aria-label={ariaLabel} className="flex flex-wrap gap-1 border-b border-white/10">
+    <div role="tablist" aria-label={ariaLabel} className={cn("flex flex-wrap gap-1 border-b", skin.list)}>
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
         const Icon = tab.icon;
@@ -90,10 +117,9 @@ export function Tabs({ tabs, activeTab, onTabChange, ariaLabel, idPrefix }: Tabs
             onClick={() => onTabChange(tab.id)}
             onKeyDown={onKeyDown}
             className={cn(
-              "flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/40 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950",
-              isActive
-                ? "border-cyan-300 text-white"
-                : "border-transparent text-slate-400 hover:text-white hover:border-white/10",
+              "flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+              skin.base,
+              isActive ? skin.active : skin.idle,
             )}
           >
             {Icon ? <Icon className="size-4" aria-hidden={true} /> : null}
@@ -113,9 +139,10 @@ export interface TabPanelProps {
   /** Optional label for screen readers when the panel has no visible heading. */
   ariaLabel?: string;
   className?: string;
+  variant?: TabsVariant;
 }
 
-export function TabPanel({ tabId, idPrefix, active, children, ariaLabel, className }: TabPanelProps) {
+export function TabPanel({ tabId, idPrefix, active, children, ariaLabel, className, variant = "app" }: TabPanelProps) {
   return (
     <div
       role="tabpanel"
@@ -124,7 +151,7 @@ export function TabPanel({ tabId, idPrefix, active, children, ariaLabel, classNa
       aria-label={ariaLabel}
       hidden={!active}
       tabIndex={active ? 0 : -1}
-      className={cn("focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/20", className)}
+      className={cn("focus-visible:outline-none focus-visible:ring-2", TAB_SKINS[variant].panel, className)}
     >
       {children}
     </div>

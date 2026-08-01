@@ -36,7 +36,7 @@ import { AuditSubtab } from "./Journaux/AuditSubtab";
 import { MessengerFailedSubtab } from "./Journaux/MessengerFailedSubtab";
 import { SystemErrorsSubtab } from "./Journaux/SystemErrorsSubtab";
 import { ADMIN_TABS, DEFAULT_SUBTAB, STORAGE_KEY, resolveActiveSubTab, resolveActiveTab } from "./tabs/tabsConfig";
-import { TabPanel, Tabs } from "./tabs/Tabs";
+import { TabPanel, Tabs } from "@/shared/components/ui/tabs";
 
 const CLUBS_PER_PAGE = 25;
 
@@ -134,28 +134,28 @@ export function AdminDashboardPage() {
         </Button>
       </section>
 
-      <Tabs tabs={ADMIN_TABS} activeTab={activeTab} onTabChange={handleTabChange} ariaLabel="Sections admin" idPrefix="admin" />
+      <Tabs tabs={ADMIN_TABS} activeTab={activeTab} onTabChange={handleTabChange} ariaLabel="Sections admin" idPrefix="admin" variant="console" />
 
-      <TabPanel tabId="vue-densemble" idPrefix="admin" active={activeTab === "vue-densemble"} className="space-y-8 pt-6">
+      <TabPanel variant="console" tabId="vue-densemble" idPrefix="admin" active={activeTab === "vue-densemble"} className="space-y-8 pt-6">
         <OverviewSection data={overview.data} loading={overview.isPending} error={overview.isError} retry={() => void overview.refetch()} />
         <UsageSection data={overview.data} loading={overview.isPending} error={overview.isError} retry={() => void overview.refetch()} />
       </TabPanel>
 
-      <TabPanel tabId="infrastructure" idPrefix="admin" active={activeTab === "infrastructure"} className="space-y-8 pt-6">
+      <TabPanel variant="console" tabId="infrastructure" idPrefix="admin" active={activeTab === "infrastructure"} className="space-y-8 pt-6">
         <HealthSection data={health.data} loading={health.isPending} error={health.isError} retry={() => void health.refetch()} />
         <ContainersSection />
         <ExternalDepsSection />
       </TabPanel>
 
-      <TabPanel tabId="jobs" idPrefix="admin" active={activeTab === "jobs"} className="space-y-8 pt-6">
+      <TabPanel variant="console" tabId="jobs" idPrefix="admin" active={activeTab === "jobs"} className="space-y-8 pt-6">
         <JobsSection data={jobs.data} loading={jobs.isPending} error={jobs.isError} retry={() => void jobs.refetch()} />
       </TabPanel>
 
-      <TabPanel tabId="referentiels" idPrefix="admin" active={activeTab === "referentiels"} className="space-y-8 pt-6">
+      <TabPanel variant="console" tabId="referentiels" idPrefix="admin" active={activeTab === "referentiels"} className="space-y-8 pt-6">
         <FreshnessSection data={freshness.data} loading={freshness.isPending} error={freshness.isError} retry={() => void freshness.refetch()} />
       </TabPanel>
 
-      <TabPanel tabId="clubs" idPrefix="admin" active={activeTab === "clubs"} className="space-y-4 pt-6">
+      <TabPanel variant="console" tabId="clubs" idPrefix="admin" active={activeTab === "clubs"} className="space-y-4 pt-6">
         <section aria-labelledby="clubs-heading" className="space-y-4">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
             <div>
@@ -196,15 +196,15 @@ export function AdminDashboardPage() {
         </section>
       </TabPanel>
 
-      <TabPanel tabId="journaux" idPrefix="admin" active={activeTab === "journaux"} className="space-y-6 pt-6">
+      <TabPanel variant="console" tabId="journaux" idPrefix="admin" active={activeTab === "journaux"} className="space-y-6 pt-6">
         <Tabs tabs={journauxSubTabs} activeTab={activeSubTab} onTabChange={handleSubTabChange} ariaLabel="Journaux" idPrefix="admin-journaux" />
-        <TabPanel tabId="audit" idPrefix="admin-journaux" active={activeSubTab === "audit"}>
+        <TabPanel variant="console" tabId="audit" idPrefix="admin-journaux" active={activeSubTab === "audit"}>
           <AuditSubtab />
         </TabPanel>
-        <TabPanel tabId="messenger" idPrefix="admin-journaux" active={activeSubTab === "messenger"}>
+        <TabPanel variant="console" tabId="messenger" idPrefix="admin-journaux" active={activeSubTab === "messenger"}>
           <MessengerFailedSubtab />
         </TabPanel>
-        <TabPanel tabId="errors" idPrefix="admin-journaux" active={activeSubTab === "errors"}>
+        <TabPanel variant="console" tabId="errors" idPrefix="admin-journaux" active={activeSubTab === "errors"}>
           <SystemErrorsSubtab />
         </TabPanel>
       </TabPanel>
