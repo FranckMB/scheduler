@@ -12,6 +12,14 @@ const baseTeam: Team = {
 };
 // Mutable : « engagée » vient du serveur, donc les tests le font varier comme lui.
 let team: Team = baseTeam;
+// P4-36 : le tri et les flèches demandent PLUSIEURS équipes, dans plusieurs rangs et
+// plusieurs catégories. `teamsState` remplace la liste quand un cas en a besoin.
+const teamsState: { data: Team[] | null } = { data: null };
+const CATEGORIES = [
+  { id: "catVet", name: "Vétéran", sortOrder: 0 },
+  { id: "cat1", name: "Senior", sortOrder: 1 },
+  { id: "catU11", name: "U11", sortOrder: 6 },
+];
 
 const createMut = vi.fn();
 const updateMut = vi.fn();
@@ -19,8 +27,8 @@ const reorderMut = vi.fn();
 const deleteMut = vi.fn();
 
 vi.mock("../queries", () => ({
-  useWizardTeams: () => ({ data: [team] }),
-  useSportCategories: () => ({ data: [{ id: "cat1", name: "Senior", sortOrder: 0 }] }),
+  useWizardTeams: () => ({ data: teamsState.data ?? [team] }),
+  useSportCategories: () => ({ data: CATEGORIES }),
   usePriorityTiers: () => ({
     data: [
       { id: 1, label: "S", name: "Elite", color: null },
@@ -41,6 +49,8 @@ import { TeamsStep } from "./TeamsStep";
 describe("TeamsStep", () => {
   beforeEach(() => {
     team = baseTeam;
+    teamsState.data = null;
+    reorderMut.mockClear();
     createMut.mockClear();
     updateMut.mockClear();
     deleteMut.mockClear();
@@ -147,5 +157,93 @@ describe("TeamsStep", () => {
     expect(updateMut).toHaveBeenCalled();
     const body = updateMut.mock.calls[0][0].body;
     expect(body.level).toBe("REGIONAL");
+  });
+
+  // ── P4-36 (retour terrain 2026-07-31) ──
+
+  // (a) L'en-tête ne vivait QUE dans la branche « au moins une équipe », alors que le
+  // formulaire d'ajout est AU-DESSUS : un club neuf saisissait sa première équipe à
+  // l'aveugle, avec des placeholders pour seuls repères.
+  it("nomme les colonnes du formulaire même quand aucune équipe n'existe", () => {
+    teamsState.data = [];
+    renderWithProviders(<TeamsStep />);
+
+    expect(screen.getByText("Aucune équipe pour le moment.")).toBeInTheDocument();
+    expect(screen.getByText("Niveau de jeu")).toBeInTheDocument();
+    expect(screen.getByText("Séances")).toBeInTheDocument();
+  });
+
+  // (b) Le rang n'était qu'un titre de section : invisible dès qu'on trie autrement.
+  it("affiche le rang sur chaque ligne, et les flèches hors du mode Trier", () => {
+    renderWithProviders(<TeamsStep />);
+
+    // « D » est le label du rang de l'équipe fixture (priorityTierId 5).
+    expect(screen.getByTitle("D · Bonus")).toHaveTextContent("D");
+    expect(screen.getByRole("button", { name: /Monter SM3/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Descendre SM3/ })).toBeInTheDocument();
+  });
+
+  // Les flèches persistent l'ordre COMPLET, comme la sortie du mode « Trier » — un envoi
+  // partiel laisserait des équipes sans `tierOrder` explicite.
+  it("déplace une équipe dans son rang et persiste l'ordre entier", async () => {
+    teamsState.data = [
+      { ...baseTeam, id: "a", name: "Alpha", tierOrder: 0 },
+      { ...baseTeam, id: "b", name: "Bravo", tierOrder: 1 },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<TeamsStep />);
+
+    await user.click(screen.getByRole("button", { name: /Descendre Alpha/ }));
+    expect(reorderMut).toHaveBeenCalledWith([
+      { id: "b", priorityTierId: 5, tierOrder: 0 },
+      { id: "a", priorityTierId: 5, tierOrder: 1 },
+    ]);
+  });
+
+  it("désactive la flèche qui sortirait du rang", () => {
+    teamsState.data = [
+      { ...baseTeam, id: "a", name: "Alpha", tierOrder: 0 },
+      { ...baseTeam, id: "b", name: "Bravo", tierOrder: 1 },
+    ];
+    renderWithProviders(<TeamsStep />);
+
+    expect(screen.getByRole("button", { name: /Monter Alpha/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Descendre Bravo/ })).toBeDisabled();
+  });
+
+  // (c) Trier par une autre colonne bascule en LISTE PLATE : appliquer le tri à l'intérieur
+  // de chaque section donnerait cinq listes triées séparément, ce qui ne répond pas à
+  // « je veux voir mes équipes par catégorie ».
+  it("bascule en liste plate au clic d'une colonne, et revient aux sections sur Rang", async () => {
+    teamsState.data = [
+      { ...baseTeam, id: "a", name: "Alpha", priorityTierId: 1, sportCategoryId: "catU11" },
+      { ...baseTeam, id: "b", name: "Bravo", priorityTierId: 5, sportCategoryId: "catVet" },
+    ];
+    const user = userEvent.setup();
+    renderWithProviders(<TeamsStep />);
+
+    // Par défaut : sections de rang, une par rang présent.
+    expect(screen.getByRole("heading", { name: "S · Fanion" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Catégorie/ }));
+    expect(screen.queryByRole("heading", { name: "S · Fanion" })).toBeNull();
+    // Vétéran (sortOrder 0) passe devant U11 (6) : c'est l'ordre SERVI, pas l'alphabet.
+    const names = screen.getAllByLabelText("Nom").map((input) => (input as HTMLInputElement).value);
+    expect(names).toEqual(["Bravo", "Alpha"]);
+
+    await user.click(screen.getByRole("button", { name: /Rang/ }));
+    expect(screen.getByRole("heading", { name: "S · Fanion" })).toBeInTheDocument();
+  });
+
+  // Les flèches déplacent AU SEIN d'un rang : hors ordre par rang, ce geste n'a plus de
+  // sens. Absentes plutôt qu'inertes — un bouton désactivé sans raison lisible est pire.
+  it("retire les flèches quand la liste n'est plus triée par rang", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TeamsStep />);
+
+    await user.click(screen.getByRole("button", { name: /Catégorie/ }));
+    expect(screen.queryByRole("button", { name: /Monter SM3/ })).toBeNull();
+    // …mais le rang reste LISIBLE sur la ligne, sinon la bascule perdrait l'information.
+    expect(screen.getByTitle("D · Bonus")).toHaveTextContent("D");
   });
 });
