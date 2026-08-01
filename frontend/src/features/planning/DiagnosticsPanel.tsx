@@ -33,9 +33,14 @@ interface DiagnosticsPanelProps {
    *  réouverture ré-amorce : c'est voulu — rouvrir l'aside, c'est redemander à voir les
    *  diagnostics, et ce qu'on doit alors voir est le plus grave. */
   openMostSevere?: boolean;
+  /** IDENTITÉ du jeu de diagnostics — en pratique l'id de la version affichée. Changer de
+   *  valeur ré-amorce l'ouverture ; garder la même la laisse intacte. */
+  seedToken?: string | null;
+  /** La lecture des diagnostics est EN COURS — ne pas annoncer un planning propre. */
+  pending?: boolean;
 }
 
-export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups, onHighlight, onFocusVenue, onCollapse, openMostSevere = false }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups, onHighlight, onFocusVenue, onCollapse, openMostSevere = false, seedToken = null, pending = false }: DiagnosticsPanelProps) {
   const [openSeverity, setOpenSeverity] = useState<DiagnosticSeverity | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -51,18 +56,29 @@ export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups,
   // `useState(initial)` ne suffirait pas — les diagnostics arrivent APRÈS le premier
   // rendu, quand l'état initial est déjà figé.
   //
-  // ⚠ La clé porte l'IDENTITÉ des diagnostics, et non un simple booléen « déjà fait »
-  // (revue #350). Un verrou à un coup ne se réarmait jamais : changer de version dans le
-  // sélecteur remplace les diagnostics SANS démonter le panneau, si bien qu'`openSeverity`
-  // continuait de désigner une sévérité que la nouvelle version ne contient pas — donc
-  // AUCUN groupe ouvert, exactement la régression que ce lot supprime. Avec la clé, un jeu
-  // de diagnostics différent ré-amorce sur son propre plus-sévère, tandis que refermer un
-  // groupe à la main ne change pas la clé et n'est donc jamais défait.
-  const seedKey = groups.map((g) => `${g.severity}:${g.items.length}`).join("|");
-  const [seededKey, setSeededKey] = useState<string | null>(null);
-  if (openMostSevere && groups.length > 0 && seededKey !== seedKey) {
-    setSeededKey(seedKey);
+  // ⚠ Le ré-amorçage se déclenche sur l'IDENTITÉ de la version (`seedToken`), et non sur un
+  // booléen « déjà fait » ni sur la FORME des diagnostics. Deux essais avant celui-ci, tous
+  // deux faux, et pour des raisons opposées (revue #350) :
+  //  (1) un verrou à un coup ne se réarmait jamais — changer de version remplace les
+  //      diagnostics sans démonter le panneau, `openSeverity` désignait alors une sévérité
+  //      absente de la nouvelle version, donc AUCUN groupe ouvert ;
+  //  (2) une clé « sévérités + cardinalités » se trompait dans les DEUX sens : deux
+  //      versions de même forme (1 ERROR + 1 INFO) donnaient la même clé et ne
+  //      ré-amorçaient pas, tandis qu'un simple filtre gymnase changeait les cardinalités
+  //      et rouvrait un groupe que l'utilisateur venait de fermer.
+  // L'appelant CONNAÎT la version affichée : la deviner à partir du contenu était le tort.
+  // Sentinelle `undefined`, distincte des jetons possibles (`string | null`) : sans elle,
+  // un appelant qui pose `openMostSevere` sans jeton ne déclenchait JAMAIS l'amorce —
+  // l'état initial étant déjà égal au jeton absent. Une prop qui ne fait rien en silence
+  // est pire que pas de prop.
+  const [seededToken, setSeededToken] = useState<string | null | undefined>(undefined);
+  if (openMostSevere && groups.length > 0 && seededToken !== seedToken) {
+    setSeededToken(seedToken);
     setOpenSeverity(groups[0].severity);
+    // Le surlignage de la grille appartenait au diagnostic de la version PRÉCÉDENTE : le
+    // laisser en place désignerait des créneaux qui ne le concernent plus.
+    setActiveId(null);
+    onHighlight(new Set());
   }
 
   function toggleGroup(severity: DiagnosticSeverity) {
@@ -100,7 +116,11 @@ export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups,
       </CardHeader>
       <CardContent className="min-h-0 flex-1 overflow-y-auto pt-0">
         {0 === diagnostics.length ? (
-          <EmptyHint>Aucun diagnostic — le planning est propre.</EmptyHint>
+          // ⚠ Charger n'est pas être propre. Le panneau étant désormais OUVERT d'emblée au
+          // sortir du wizard, cet état vide est ce qu'on lit pendant le chargement d'une
+          // version — annoncer « le planning est propre » y serait une affirmation fausse,
+          // et rassurante (revue #350).
+          <EmptyHint>{pending ? "Lecture des diagnostics…" : "Aucun diagnostic — le planning est propre."}</EmptyHint>
         ) : (
           <div className="flex flex-col gap-1">
             {groups.map((group) => {

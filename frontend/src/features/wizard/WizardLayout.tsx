@@ -297,7 +297,7 @@ export function WizardPage() {
           <span className="flex items-center gap-1">
             {/* Supprimer ce planning secondaire (cascade plan + versions) → retour cockpit.
                 On ARME leavingRef comme finishQuit, sinon le useBlocker d'abandon
-                intercepte le navigate et ré-ouvre « Abandonner ? » sur une entrée déjà
+                intercepte le navigate et ré-ouvre « Quitter l'ajustement ? » sur une entrée déjà
                 supprimée (revue B2 F1). Masqué sur l'étape GÉNÉRATION : une génération
                 lancée à l'instant n'est pas encore dans le cache — supprimer là
                 détruirait la version en vol (revue B2 F4 ; l'abandon relit le serveur,

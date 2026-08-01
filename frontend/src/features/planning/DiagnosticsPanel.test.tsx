@@ -46,18 +46,36 @@ describe("DiagnosticsPanel — ouverture contextuelle", () => {
     expect(screen.queryByText("info lisible")).not.toBeInTheDocument();
   });
 
-  it("RÉ-AMORCE quand les diagnostics changent sans démontage (changement de version)", () => {
-    // LE défaut du round 1. Le sélecteur de version n'existe qu'en mode embedded : en
-    // changer remplace les diagnostics SANS démonter le panneau. Avec un verrou à un coup,
-    // `openSeverity` restait sur « WARNING » — sévérité absente de la nouvelle version —
-    // donc AUCUN groupe ouvert : la régression même que P4-40 supprime, revenue par la
-    // porte de derrière.
-    const { rerender } = render(panel({ diagnostics: [diag("WARNING", "alerte V1")], openMostSevere: true }));
-    expect(screen.getByText("alerte V1")).toBeInTheDocument();
+  it("RÉ-AMORCE quand la VERSION change, même à forme identique", () => {
+    // LE défaut du round 2. Le premier correctif comparait « sévérités + cardinalités » :
+    // deux versions de même forme (1 ERROR + 1 INFO) produisaient la MÊME clé, donc aucun
+    // ré-amorçage — le groupe INFO que l'utilisateur avait ouvert sur V1 restait ouvert et
+    // l'ERREUR de V2 restait fermée. Deviner l'identité à partir du contenu était le tort :
+    // l'appelant la connaît.
+    const v1 = [diag("ERROR", "erreur V1"), diag("INFO", "info V1")];
+    const v2 = [diag("ERROR", "erreur V2"), diag("INFO", "info V2")];
+    const { rerender } = render(panel({ diagnostics: v1, openMostSevere: true, seedToken: "v1" }));
+    expect(screen.getByText("erreur V1")).toBeInTheDocument();
 
-    rerender(panel({ diagnostics: [diag("ERROR", "erreur V2")], openMostSevere: true }));
+    rerender(panel({ diagnostics: v2, openMostSevere: true, seedToken: "v2" }));
 
     expect(screen.getByText("erreur V2")).toBeInTheDocument();
+  });
+
+  it("ne ré-amorce PAS quand seul le filtre change à version constante", () => {
+    // Le pendant, et l'autre moitié du défaut : la clé de forme changeait quand un filtre
+    // gymnase retirait des lignes, si bien qu'un simple glisser-déposer rouvrait sous le
+    // curseur un groupe que l'utilisateur venait de fermer. À version constante, l'amorce
+    // ne rejoue pas.
+    const complet = [diag("ERROR", "erreur filtrable"), diag("WARNING", "alerte restante")];
+    const { rerender } = render(panel({ diagnostics: complet, openMostSevere: true, seedToken: "v1" }));
+    expect(screen.getByText("erreur filtrable")).toBeInTheDocument();
+
+    // Le filtre retire les ERREURS : la FORME change, la version non.
+    rerender(panel({ diagnostics: [diag("WARNING", "alerte restante")], openMostSevere: true, seedToken: "v1" }));
+
+    // Le groupe ALERTES ne s'est pas ouvert tout seul.
+    expect(screen.queryByText("alerte restante")).not.toBeInTheDocument();
   });
 
   it("ne DÉFAIT pas le repli manuel d'un groupe", async () => {

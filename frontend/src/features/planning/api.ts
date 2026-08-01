@@ -280,8 +280,8 @@ export const createOverlayVersion = (schedulePlanId: string): Promise<{ id: stri
 // regression); score → historiquement, un plan sans score (DRAFT/en vol) affichait le
 // littéral « score undefined ». Depuis P4-39 plus aucun écran ne l'affiche et plus AUCUN
 // code ne le lit : la normalisation ne corrige donc plus de bug visible, elle garde le type
-// honnête (`score: number | null`) pour le champ toujours servi par l'API. Normalise them at the boundary so the type is honest and
-// every consumer sees a real null.
+// honnête (`score: number | null`) pour un champ que l'API sert toujours — donc tout
+// consommateur voit un vrai null.
 export const listSchedules = (): Promise<Schedule[]> =>
   collectionAll<Schedule>("schedules").then((rows) =>
     rows.map((s) => ({ ...s, planType: s.planType ?? null, schedulePlanId: s.schedulePlanId ?? null, score: s.score ?? null })),

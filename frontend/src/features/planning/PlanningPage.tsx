@@ -120,7 +120,13 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const slotLayerId = null !== displayed && !isSeasonPlanType(displayed.planType) ? (displayed.schedulePlanId ?? null) : null;
 
   const { data: slots = [] } = useSlots(validScheduleId);
-  const { data: allDiagnostics = [] } = useDiagnostics(validScheduleId);
+  const diagnosticsQuery = useDiagnostics(validScheduleId);
+  // `useMemo` et non `?? []` : le repli littéral fabriquait un tableau NEUF à chaque rendu,
+  // ce qui invalidait le `useMemo` du filtrage en aval à chaque fois (avertissement lint).
+  const allDiagnostics = useMemo(() => diagnosticsQuery.data ?? [], [diagnosticsQuery.data]);
+  // « Pas encore lu » n'est pas « rien à signaler » : tant que la requête est en vol, le
+  // panneau ne doit pas annoncer un planning propre (revue #350, doctrine `readState`).
+  const diagnosticsPending = null !== validScheduleId && undefined === diagnosticsQuery.data;
   const { data: trainingSlots = [] } = useTrainingSlots(slotLayerId);
   const { data: teams = [] } = useTeams();
   const { data: venues = [] } = useVenues();
@@ -358,12 +364,22 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // (revue #350) : (1) au premier rendu ils ne sont pas encore là, donc l'aside s'ouvrait
   // TOUJOURS — y compris sur une génération propre, où il volait 20rem de largeur à la
   // grille dans une hauteur embarquée déjà courte pour n'afficher que « le planning est
-  // propre » ; (2) l'amorce ne se rejoue pas après un repli manuel — refermer l'aside est
-  // un geste, pas un accident.
-  const [asideAutoOpened, setAsideAutoOpened] = useState(false);
-  if (embedded && !asideAutoOpened && diagnostics.length > 0) {
-    setAsideAutoOpened(true);
-    setDiagnosticsCollapsed(false);
+  // propre » ; (2) refermer l'aside est un geste, pas un accident.
+  //
+  // ⚠ L'amorce est indexée sur la VERSION affichée, pas sur un booléen « déjà fait »
+  // (revue #350 round 2) : le premier jet gardait ici le verrou à un coup que le correctif
+  // du panneau venait pourtant de condamner un cran plus bas. Conséquence, après UN repli
+  // manuel aucune version suivante ne rouvrait l'aside — les erreurs d'une V2 restaient
+  // derrière la barre compacte, « on risque de ne pas le voir » de nouveau. Les deux
+  // moitiés de la même règle se déclenchent donc sur le même signal.
+  const [asideSeededFor, setAsideSeededFor] = useState<string | null>(null);
+  if (embedded && !diagnosticsPending && null !== validScheduleId && asideSeededFor !== validScheduleId) {
+    setAsideSeededFor(validScheduleId);
+    // Les DEUX sens, une fois les diagnostics lus : une version qui en porte ouvre l'aside,
+    // une version propre le referme. Ne traiter que l'ouverture laissait 20rem occupés par
+    // « le planning est propre » après un passage d'une version bavarde à une version
+    // saine — dans une hauteur embarquée déjà courte (revue #350 round 2).
+    setDiagnosticsCollapsed(0 === diagnostics.length);
   }
 
   // Clicking the solver's "unused_slot" warning brings its venue column on screen
@@ -537,6 +553,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               const showDetail = null !== selectedCell && null !== selectedSlot;
               // The diagnostics aside only claims grid width when it has content
               // to show: a selected slot's detail, or the (expanded) diagnostics.
+              // ⚠ « Déplié » est un état de l'ASIDE, pas une promesse de contenu : c'est
+              // l'amorce ci-dessus qui replie l'aside sur une version sans diagnostic. Le
+              // rouvrir à la main reste possible et respecté, y compris à vide.
               const showDiagnostics = !isReadOnly && !diagnosticsCollapsed;
               const showAside = showDetail || showDiagnostics;
               const height = embedded ? "lg:h-[max(calc(100vh-24rem),26rem)]" : "lg:h-[calc(100vh-16rem)]";
@@ -581,7 +600,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                       ) : null}
                       {showDiagnostics ? (
                         <div className="min-h-[12rem] flex-1">
-                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} onCollapse={() => setDiagnosticsCollapsed(true)} openMostSevere={embedded} />
+                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} onCollapse={() => setDiagnosticsCollapsed(true)} openMostSevere={embedded} seedToken={validScheduleId} pending={diagnosticsPending} />
                         </div>
                       ) : null}
                     </div>
