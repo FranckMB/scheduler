@@ -353,6 +353,13 @@ Une to-do n'est pas un inventaire. Trois règles, décidées par le fondateur le
   ne pouvait plus faire l'objet d'aucune collecte dès le lundi suivant ; et une semaine
   rognée par un début de saison un mardi était déclarée commencée le lundi d'avant.
   Le lundi dit QUELLE semaine c'est (clé stable) ; la fin dit s'il reste à y faire.
+  ⚠ **La règle vaut à TOUS ses sites** : la liste des semaines OFFERTES passe par
+  `periodWeeksToAdjust` — radar, modale du jour et picker compris. Les avoir laissés
+  diverger (revue #344 round 2) faisait cocher une semaine révolue au picker, dont la
+  création produisait un plan de semaine que le radar filtrait ensuite partout : un
+  artefact sans carte, sans puce et sans retour possible. Même critère au niveau
+  **période** (`h.endDate >= today` sur les vacances) : une vacance commencée dont les
+  jours restent devant garde son point d'entrée.
 - **La carte de couverture est repliée par défaut** ; les autres gardent leur action
   visible. Arbitrage pris à l'implémentation : tout replier mettait **chaque** geste du
   radar à deux clics sans raccourcir ce qui est réellement long (les N puces de semaine).
@@ -369,9 +376,15 @@ disparaître un travail engagé. Pour la même raison, « Doléances » et « So
 coachs » restent **hors du repli** de la carte de couverture : un compteur dont la raison
 d'être est d'être lu d'un coup d'œil ne peut pas vivre derrière un clic.
 
-**Chargement** (P3-11) : tant que les plans, les versions, les impacts de fermeture ou la
-zone scolaire sont en vol, le radar affiche un **squelette** (avec un texte lu par les
-lecteurs d'écran : une région live annonce son contenu, pas son `aria-label`). Il restait nu — et un cadre
+**Chargement** (P3-11) : tant que les plans, les versions, les campagnes, les impacts de
+fermeture ou la zone scolaire sont en vol, le radar affiche un **squelette** (avec un texte
+lu par les lecteurs d'écran : une région live annonce son contenu, pas son `aria-label`).
+⚠ **Charger n'est pas échouer** — le squelette s'appuie sur `readLoading`, pas sur
+« pas de donnée » : bâti sur le second, un premier chargement en échec restait « Chargement… »
+pour toujours, l'écran affirmant qu'il travaillait alors qu'il avait renoncé. Une lecture
+ratée le **dit** (« Impossible de charger les éléments à traiter »), et la lecture des
+campagnes entre dans `isEmpty` puisque l'exemption d'horizon fait dépendre d'elle
+l'existence d'une carte. Il restait nu — et un cadre
 « À traiter » vide se lit comme « rien à faire ». Le squelette et « Rien à l'horizon. Tout
 roule. » ne coexistent jamais : `isEmpty` exige que ces mêmes lectures soient résolues.
 
