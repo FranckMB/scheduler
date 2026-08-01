@@ -197,7 +197,7 @@ export function AdminDashboardPage() {
       </TabPanel>
 
       <TabPanel variant="console" tabId="journaux" idPrefix="admin" active={activeTab === "journaux"} className="space-y-6 pt-6">
-        <Tabs tabs={journauxSubTabs} activeTab={activeSubTab} onTabChange={handleSubTabChange} ariaLabel="Journaux" idPrefix="admin-journaux" />
+        <Tabs variant="console" tabs={journauxSubTabs} activeTab={activeSubTab} onTabChange={handleSubTabChange} ariaLabel="Journaux" idPrefix="admin-journaux" />
         <TabPanel variant="console" tabId="audit" idPrefix="admin-journaux" active={activeSubTab === "audit"}>
           <AuditSubtab />
         </TabPanel>

@@ -173,8 +173,14 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
 
   const failed = createCampaign.isError || updateCampaign.isError;
 
-  // Une campagne déjà lancée s'ouvre sur « Coachs » ; une création n'a que « Réglages ».
-  const [activeTab, setActiveTab] = useState(null !== existing ? "coachs" : "reglages");
+  // Une campagne déjà lancée s'ouvre sur « Coachs » — suivre et envoyer est le geste
+  // fréquent. ⚠ SAUF si ses réglages demandent une correction : #344 avait imposé qu'une
+  // semaine retenue mais révolue, ou que la période n'émet plus, reste SOUS LES YEUX du
+  // gestionnaire. La reléguer derrière un onglet qu'il n'ouvre jamais annulait cette
+  // garantie en silence (revue #346) — et ses tests continuaient de passer, `getByLabelText`
+  // ne filtrant pas le contenu caché.
+  const weeksNeedAttention = null !== existing && availableWeeks.some((w) => existing.weeks.includes(w.monday) && !isActionableWeek(w, today));
+  const [activeTab, setActiveTab] = useState(null !== existing && !weeksNeedAttention ? "coachs" : "reglages");
   const tabs = null === campaign ? [{ id: "reglages", label: "Réglages" }] : [{ id: "reglages", label: "Réglages" }, { id: "coachs", label: `Coachs (${campaign.coaches.length})` }];
 
   return (

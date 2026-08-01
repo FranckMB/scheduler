@@ -8,15 +8,18 @@ import { setTodayOverride } from "@/shared/lib/clock";
 
 import type { CoachWishCampaign } from "./campaignApi";
 
+const teamsLate = { value: false };
 vi.mock("@/features/wizard/queries", () => ({
   // Rangs posés : t3/U11 en fanion (S) mais SANS coach — elle ne doit apparaître nulle
   // part ; t1/SM1 et t2/U13 en rang B, dans cet ordre de `tierOrder`.
   useWizardTeams: () => ({
-    data: [
-      { id: "t1", name: "SM1", isActive: true, priorityTierId: 3, tierOrder: 0 },
-      { id: "t2", name: "U13", isActive: true, priorityTierId: 3, tierOrder: 1 },
-      { id: "t3", name: "U11", isActive: true, priorityTierId: 1, tierOrder: 0 },
-    ],
+    data: teamsLate.value
+      ? []
+      : [
+          { id: "t1", name: "SM1", isActive: true, priorityTierId: 3, tierOrder: 0 },
+          { id: "t2", name: "U13", isActive: true, priorityTierId: 3, tierOrder: 1 },
+          { id: "t3", name: "U11", isActive: true, priorityTierId: 1, tierOrder: 0 },
+        ],
   }),
   usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 3, label: "B", name: "Moyenne", color: null }] }),
   useWizardTeamCoaches: () => ({ data: [{ id: "tc1", teamId: "t1", coachId: "c1", role: "MAIN" }, { id: "tc2", teamId: "t2", coachId: "c2", role: "MAIN" }] }),
@@ -63,6 +66,7 @@ describe("CampaignDialog", () => {
   // deux semaines avant la période plutôt que de repasser les dates en relatif.
   beforeEach(() => {
     setTodayOverride("2026-02-01");
+    teamsLate.value = false;
     createMut.mockReset();
     updateMut.mockReset();
     sendMut.mockReset();
@@ -107,7 +111,7 @@ describe("CampaignDialog", () => {
   it("garde le sélecteur d'équipes replié, et le déplie à la demande", async () => {
     render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
 
-    const toggle = screen.getByRole("button", { name: "Modifier" });
+    const toggle = screen.getByRole("button", { name: /Modifier les équipes/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "SM1" })).toBeNull();
 
@@ -119,7 +123,7 @@ describe("CampaignDialog", () => {
   it("permet de tout décocher puis de tout recocher d'un geste", async () => {
     render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Modifier" }));
+    await userEvent.click(screen.getByRole("button", { name: /Modifier les équipes/ }));
     await userEvent.click(screen.getByRole("button", { name: "tout décocher" }));
     expect(screen.getByText(/0 équipe sur 2/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Créer la collecte/ })).toBeDisabled();
@@ -132,7 +136,7 @@ describe("CampaignDialog", () => {
   it("groupe les équipes du sélecteur par rang", async () => {
     render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Modifier" }));
+    await userEvent.click(screen.getByRole("button", { name: /Modifier les équipes/ }));
     expect(screen.getByText("B · Moyenne")).toBeInTheDocument();
     // U11 (rang S) n'a pas de coach : son groupe n'existe pas non plus.
     expect(screen.queryByText("S · Fanion")).toBeNull();
@@ -270,6 +274,99 @@ describe("CampaignDialog", () => {
     const orphan = screen.getByLabelText(/Semaine du 02\/02\/2026/);
     expect(orphan).toBeInTheDocument();
     expect(orphan).toBeChecked();
+  });
+
+  // ── Revue #346 : ce que mes propres choix avaient défait ──
+
+  // Une campagne existante peut porter une équipe qui a perdu son coach. Ne rendre que les
+  // ÉLIGIBLES la laissait invisible : « tout décocher » restait sans effet sur elle, le
+  // résumé annonçait « 0 » et l'enregistrement la postait quand même.
+  it("montre, marque et décoche une équipe sélectionnée qui n'a plus de coach", async () => {
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2027-06-30",
+      weeks: ["2026-02-23"],
+      teamIds: ["t1", "t3"], // t3/U11 n'a AUCUN coach : inéligible, mais retenue
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("tab", { name: /Réglages/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Modifier les équipes/ }));
+    expect(screen.getByRole("button", { name: /U11 \(n'a plus de coach\)/ })).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(screen.getByRole("button", { name: "tout décocher" }));
+    // Le résumé et l'enregistrement disent la MÊME chose : plus rien n'est sélectionné.
+    expect(screen.getByRole("button", { name: /Enregistrer/ })).toBeDisabled();
+  });
+
+  // Après création, le gestionnaire vient chercher les liens : les laisser dans un panneau
+  // caché faisait croire à un échec (le bouton changeait de libellé, rien d'autre ne bougeait).
+  it("bascule sur l'onglet Coachs après la création", async () => {
+    createMut.mockImplementation((_body: unknown, opts: { onSuccess: (c: CoachWishCampaign) => void }) =>
+      opts.onSuccess({
+        id: "camp1",
+        calendarEntryId: "e1",
+        deadline: "2026-03-01",
+        weeks: ["2026-02-23"],
+        teamIds: ["t1"],
+        totalCoachCount: 1,
+        respondedCoachCount: 0,
+        openWishCount: 0,
+        lastReminderAt: null,
+        coaches: [{ coachId: "c1", firstName: "Maxime", lastName: "Durand", email: null, token: "a".repeat(64), respondedAt: null, sentAt: null }],
+      }),
+    );
+    render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Créer la collecte/ }));
+    expect(screen.getByRole("tab", { name: /Coachs/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: /Copier le lien/ })).toBeVisible();
+  });
+
+  // #344 exigeait qu'une semaine retenue mais révolue reste SOUS LES YEUX. Mon onglet par
+  // défaut la reléguait derrière un clic que le chemin fréquent ne déclenche jamais.
+  it("ouvre sur Réglages quand une semaine retenue demande une correction", () => {
+    setTodayOverride("2026-02-25"); // la semaine du 23 court, celle du 16 est révolue
+    const existing: CoachWishCampaign = {
+      id: "camp1",
+      calendarEntryId: "e1",
+      deadline: "2026-03-01",
+      weeks: ["2026-02-16"],
+      teamIds: ["t1"],
+      totalCoachCount: 1,
+      respondedCoachCount: 0,
+      openWishCount: 0,
+      lastReminderAt: null,
+      coaches: [],
+    };
+    render(<CampaignDialog entry={entry} season={season} existing={existing} onClose={vi.fn()} />);
+
+    expect(screen.getByRole("tab", { name: /Réglages/ })).toHaveAttribute("aria-selected", "true");
+    // VISIBLE, pas seulement présent : `getByLabelText` ne filtre pas le contenu caché, ce
+    // qui laissait les deux gardes de #344 passer dans un panneau `hidden`.
+    expect(screen.getByLabelText(/Semaine du 16\/02\/2026 \(révolue\)/)).toBeVisible();
+  });
+
+  // Le défaut « toutes les équipes » n'était gardé par RIEN : les mocks rendent la donnée
+  // dès le premier rendu, donc la condition même pour laquelle il existe — des équipes qui
+  // arrivent APRÈS — n'était jamais simulée (revue #346, prouvé par falsification).
+  it("coche toutes les équipes même quand elles arrivent après le premier rendu", async () => {
+    teamsLate.value = true;
+    const { rerender } = render(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+    expect(screen.getByText(/Aucune équipe avec un coach rattaché/)).toBeInTheDocument();
+
+    teamsLate.value = false;
+    rerender(<CampaignDialog entry={entry} season={season} existing={null} onClose={vi.fn()} />);
+    expect(screen.getByText(/Toutes les équipes \(2\)/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /Créer la collecte/ }));
+    expect(createMut.mock.calls[0][0].teamIds.sort()).toEqual(["t1", "t2"]);
   });
 
   it("copie le lien personnel d'un coach", async () => {
