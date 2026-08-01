@@ -34,18 +34,21 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
   const gridTemplateRows = `1.5rem repeat(${gridRows.length}, ${ROW_H}px)`;
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+    // Même traitement que la grille de saisie (P4-37) : la 7ᵉ colonne rend le défilement
+    // horizontal courant sur petit écran, et sans en-têtes figés on perd la colonne de vue.
+    // Empilement strict identique — créneaux (z-10) < gouttière (z-20) < jours (z-30) < coin.
+    <div className="max-h-[min(70vh,40rem)] overflow-auto rounded-lg border border-border bg-card">
       <div className="grid text-xs" style={{ gridTemplateColumns, gridTemplateRows }}>
-        <div className="border-b border-r border-border" style={{ gridColumn: 1, gridRow: 1 }} />
+        <div className="sticky left-0 top-0 z-40 border-b border-r border-border bg-card" style={{ gridColumn: 1, gridRow: 1 }} />
         {WEEK.map((d, i) => (
-          <div key={d.n} className="border-b border-l border-border py-0.5 text-center font-medium" style={{ gridColumn: 2 + i, gridRow: 1 }}>
+          <div key={d.n} className="sticky top-0 z-30 border-b border-l border-border bg-card py-0.5 text-center font-medium" style={{ gridColumn: 2 + i, gridRow: 1 }}>
             {d.label}
           </div>
         ))}
 
         {/* Time gutter — label on the hour */}
         {gridRows.map((m, i) => (
-          <div key={`t${m}`} className="border-r border-border pr-1 text-right text-[10px] text-muted-foreground" style={{ gridColumn: 1, gridRow: 2 + i }}>
+          <div key={`t${m}`} className="sticky left-0 z-20 border-r border-border bg-card pr-1 text-right text-[10px] text-muted-foreground" style={{ gridColumn: 1, gridRow: 2 + i }}>
             {0 === m % 60 ? fmt(m) : ""}
           </div>
         ))}
