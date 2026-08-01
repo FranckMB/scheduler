@@ -30,11 +30,6 @@ final class SportCategoryOrderTest extends WebTestCase
 
     private KernelBrowser $client;
 
-    protected function setUp(): void
-    {
-        $this->client = self::createClient();
-    }
-
     public function testCategoriesAreServedOldestToYoungest(): void
     {
         $token = $this->register();
@@ -58,6 +53,11 @@ final class SportCategoryOrderTest extends WebTestCase
         self::assertSame('Vétéran', $names[0], 'le plus âgé en tête');
         self::assertSame('U5', $names[9], 'puis l\'axe des âges jusqu\'au plus jeune');
         self::assertSame(['Baby basket', 'Loisir'], \array_slice($names, 10), 'les catégories sans âge ferment la liste');
+    }
+
+    protected function setUp(): void
+    {
+        $this->client = self::createClient();
     }
 
     private function register(): string
