@@ -239,7 +239,7 @@ believe empty.
    ⚠ **Switching it on takes TWO changes, not one** (P4-65): set `VITE_SENTRY_DSN` at build
    time **and** allow the DSN's ingest host in `connect-src` (`docker/frontend/csp.conf`,
    which allows no third party). The DSN alone initialises the SDK while the browser drops
-   every send **silently**. `frontend/build/sentryCspGuard.ts` (called from `vite.config.ts`)
+   every send **silently**. `frontend/tooling/sentryCspGuard.ts` (called from `vite.config.ts`)
    now **fails the build** on that combination; it is inert while no DSN is set. INF-01.
 7. **The club accent is per-club and AA-guarded.** `useApplyClubTheme` reads
    `accentColor`/`accentColorDark`/`accentPalette` from `/api/me` and drives `--accent` /

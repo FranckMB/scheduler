@@ -14,7 +14,7 @@ import "@/index.css";
 // ⚠ L'activer demande DEUX gestes, pas un (P4-65) : poser `VITE_SENTRY_DSN` au build ET
 // autoriser l'hôte d'ingestion du DSN dans `connect-src` (`docker/frontend/csp.conf`).
 // Le DSN seul initialise le SDK et la CSP jette chaque envoi EN SILENCE. Un garde de build
-// refuse désormais cette combinaison (`build/sentryCspGuard.ts`). INF-01.
+// refuse désormais cette combinaison (`tooling/sentryCspGuard.ts`). INF-01.
 if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN, environment: import.meta.env.MODE, tracesSampleRate: 0 });
 }

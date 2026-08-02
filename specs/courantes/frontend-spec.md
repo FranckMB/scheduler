@@ -661,7 +661,7 @@ l'application paraît instrumentée, rien n'arrive — et on le découvre le jou
 une erreur de production.
 
 **Activer Sentry = deux gestes dans le même changement** : le DSN, et son hôte dans
-`connect-src`. Un garde de build (`frontend/build/sentryCspGuard.ts`, appelé par
+`connect-src`. Un garde de build (`frontend/tooling/sentryCspGuard.ts`, appelé par
 `vite.config.ts`) **fait échouer le build** si le DSN est posé sans son hôte — la panne
 silencieuse est devenue bruyante. Il est inerte tant qu'aucun DSN n'est posé.
 
