@@ -79,16 +79,32 @@ export interface ConflictTrainingView {
   windowEnd: string;
 }
 
+/** VENUE_UNAVAILABLE side — no occupancy window: the DATE match suffices. */
+export interface ConflictUnavailableFixtureView {
+  fixtureId: string;
+  teamId: string;
+  homeAway: HomeAway;
+  matchDate: string;
+  kickoffTime: string | null;
+  status: FixtureStatus;
+}
+
 export interface Conflict {
-  type: "MATCH_MATCH" | "MATCH_TRAINING";
-  coachId: string;
-  /** Overlap segment (ISO datetimes). */
-  start: string;
-  end: string;
+  type: "MATCH_MATCH" | "MATCH_TRAINING" | "VENUE_UNAVAILABLE";
+  coachId?: string;
+  /** Overlap segment (ISO datetimes) — coach conflicts only. */
+  start?: string;
+  end?: string;
   left?: ConflictFixtureView;
   right?: ConflictFixtureView;
-  fixture?: ConflictFixtureView;
+  fixture?: ConflictFixtureView | ConflictUnavailableFixtureView;
   training?: ConflictTrainingView;
+  /** VENUE_UNAVAILABLE only. */
+  venueId?: string;
+  unavailabilityId?: string;
+  label?: string | null;
+  unavailableFrom?: string;
+  unavailableUntil?: string;
 }
 
 export interface ConflictsResponse {
@@ -184,6 +200,68 @@ export const getLeagueWindows = (): Promise<LeagueWindowsResponse> =>
 
 /** Same-coach conflict radar, recomputed server-side on every call. */
 export const getConflicts = (): Promise<ConflictsResponse> => api.get("fixtures/conflicts").json<ConflictsResponse>();
+
+// ── Capacity layer (P1-4 PR B) ───────────────────────────────────────────────
+
+/** Match access window of a venue — ≥ 1 window makes it a MATCH venue. */
+export interface VenueMatchWindow {
+  id: string;
+  venueId: string;
+  /** ISO 1..7 */
+  dayOfWeek: number;
+  /** HH:MM */
+  startTime: string;
+  /** HH:MM, same-day, exclusive. */
+  endTime: string;
+}
+
+/** All-circumstances venue closure — alerts, never blocks. */
+export interface VenueUnavailability {
+  id: string;
+  venueId: string;
+  /** Y-m-d, inclusive. */
+  startDate: string;
+  endDate: string;
+  label: string | null;
+}
+
+export interface UnavailabilityImpactItem {
+  unavailabilityId: string;
+  venueId: string;
+  startDate: string;
+  endDate: string;
+  label: string | null;
+  affectedFixtures: { fixtureId: string; teamId: string; matchDate: string; kickoffTime: string | null; status: FixtureStatus }[];
+  /** Dated training sessions inside the range. */
+  trainingOccurrences: number;
+  /** Distinct weekly slots affected. */
+  trainingSlotCount: number;
+}
+
+export interface UnavailabilityImpactResponse {
+  clubId: string;
+  seasonId: string | null;
+  items: UnavailabilityImpactItem[];
+}
+
+export const getVenueMatchWindows = (): Promise<VenueMatchWindow[]> => collectionAll<VenueMatchWindow>("venue_match_windows");
+
+export const createVenueMatchWindow = (input: { venueId: string; dayOfWeek: number; startTime: string; endTime: string }): Promise<VenueMatchWindow> =>
+  api.post("venue_match_windows", { json: input }).json<VenueMatchWindow>();
+
+export const deleteVenueMatchWindow = (id: string): Promise<void> => api.delete(`venue_match_windows/${id}`).then(() => undefined);
+
+export const getVenueUnavailabilities = (): Promise<VenueUnavailability[]> =>
+  (async () => (await collectionAll<VenueUnavailability>("venue_unavailabilities")).map((u) => ({ ...u, label: u.label ?? null })))();
+
+export const createVenueUnavailability = (input: { venueId: string; startDate: string; endDate: string; label?: string }): Promise<VenueUnavailability> =>
+  api.post("venue_unavailabilities", { json: input }).json<VenueUnavailability>();
+
+export const deleteVenueUnavailability = (id: string): Promise<void> => api.delete(`venue_unavailabilities/${id}`).then(() => undefined);
+
+/** Alert-only impact feed (cockpit card): what each unavailability affects. */
+export const getUnavailabilityImpact = (): Promise<UnavailabilityImpactResponse> =>
+  api.get("venue-unavailability-impact").json<UnavailabilityImpactResponse>();
 
 /** One division group of the analyzed file, resolved (or not) against the
  * persisted Division↔team mapping. `fbiTeamLabel` is only set when TWO club

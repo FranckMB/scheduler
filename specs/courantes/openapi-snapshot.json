@@ -6268,7 +6268,8 @@
                                                         "type": "string",
                                                         "enum": [
                                                             "MATCH_MATCH",
-                                                            "MATCH_TRAINING"
+                                                            "MATCH_TRAINING",
+                                                            "VENUE_UNAVAILABLE"
                                                         ]
                                                     },
                                                     "coachId": {
@@ -6385,6 +6386,82 @@
                     }
                 },
                 "summary": "League match-kickoff windows inherited by the club (global reference, read-only)"
+            }
+        },
+        "/api/venue-unavailability-impact": {
+            "get": {
+                "operationId": "getVenueUnavailabilityImpact",
+                "tags": [
+                    "Match"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-unavailability impact: affected placed matches + training sessions of the effective schedules (cockpit alert feed \u2014 P1-4 PR B)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "clubId": {
+                                            "type": "string"
+                                        },
+                                        "seasonId": {
+                                            "type": "string",
+                                            "nullable": true
+                                        },
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "unavailabilityId": {
+                                                        "type": "string"
+                                                    },
+                                                    "venueId": {
+                                                        "type": "string"
+                                                    },
+                                                    "startDate": {
+                                                        "type": "string",
+                                                        "format": "date"
+                                                    },
+                                                    "endDate": {
+                                                        "type": "string",
+                                                        "format": "date"
+                                                    },
+                                                    "label": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "affectedFixtures": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object"
+                                                        }
+                                                    },
+                                                    "trainingOccurrences": {
+                                                        "type": "integer",
+                                                        "description": "Dated training sessions inside the range"
+                                                    },
+                                                    "trainingSlotCount": {
+                                                        "type": "integer",
+                                                        "description": "Distinct weekly slots affected"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "No club in context"
+                    },
+                    "401": {
+                        "description": "Unauthorized (missing/expired JWT)"
+                    }
+                },
+                "summary": "Venue unavailability impact (alert-only, computed on the fly \u2014 blocks nothing)"
             }
         },
         "/api/priority_tiers": {
@@ -11985,6 +12062,418 @@
                 ]
             }
         },
+        "/api/venue_match_windows": {
+            "get": {
+                "operationId": "api_venue_match_windows_get_collection",
+                "tags": [
+                    "VenueMatchWindow"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "VenueMatchWindow collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "VenueMatchWindow.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchema"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/VenueMatchWindow.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/VenueMatchWindow"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/VenueMatchWindow.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of VenueMatchWindow resources.",
+                "description": "Retrieves the collection of VenueMatchWindow resources.",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "The collection page number",
+                        "required": false,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        },
+                        "style": "form",
+                        "explode": true
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "api_venue_match_windows_post",
+                "tags": [
+                    "VenueMatchWindow"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "VenueMatchWindow resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueMatchWindow.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueMatchWindow"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueMatchWindow.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a VenueMatchWindow resource.",
+                "description": "Creates a VenueMatchWindow resource.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new VenueMatchWindow resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueMatchWindow.VenueMatchWindowInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueMatchWindow.VenueMatchWindowInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueMatchWindow.VenueMatchWindowInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/venue_match_windows/{id}": {
+            "get": {
+                "operationId": "api_venue_match_windows_id_get",
+                "tags": [
+                    "VenueMatchWindow"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "VenueMatchWindow resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueMatchWindow.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueMatchWindow"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueMatchWindow.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a VenueMatchWindow resource.",
+                "description": "Retrieves a VenueMatchWindow resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "VenueMatchWindow identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            },
+            "put": {
+                "operationId": "api_venue_match_windows_id_put",
+                "tags": [
+                    "VenueMatchWindow"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "VenueMatchWindow resource updated",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueMatchWindow.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueMatchWindow"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueMatchWindow.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Replaces the VenueMatchWindow resource.",
+                "description": "Replaces the VenueMatchWindow resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "VenueMatchWindow identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The updated VenueMatchWindow resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueMatchWindow.VenueMatchWindowInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueMatchWindow.VenueMatchWindowInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueMatchWindow.VenueMatchWindowInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "api_venue_match_windows_id_delete",
+                "tags": [
+                    "VenueMatchWindow"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "VenueMatchWindow resource deleted"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Removes the VenueMatchWindow resource.",
+                "description": "Removes the VenueMatchWindow resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "VenueMatchWindow identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
         "/api/venue_period_overrides": {
             "get": {
                 "operationId": "api_venue_period_overrides_get_collection",
@@ -12936,6 +13425,418 @@
                         "name": "id",
                         "in": "path",
                         "description": "VenueTrainingSlot identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
+        "/api/venue_unavailabilities": {
+            "get": {
+                "operationId": "api_venue_unavailabilities_get_collection",
+                "tags": [
+                    "VenueUnavailability"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "VenueUnavailability collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "VenueUnavailability.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchema"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/VenueUnavailability.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/VenueUnavailability"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/VenueUnavailability.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of VenueUnavailability resources.",
+                "description": "Retrieves the collection of VenueUnavailability resources.",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "description": "The collection page number",
+                        "required": false,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "integer",
+                            "default": 1
+                        },
+                        "style": "form",
+                        "explode": true
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "api_venue_unavailabilities_post",
+                "tags": [
+                    "VenueUnavailability"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "VenueUnavailability resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueUnavailability.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueUnavailability"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueUnavailability.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Creates a VenueUnavailability resource.",
+                "description": "Creates a VenueUnavailability resource.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new VenueUnavailability resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueUnavailability.VenueUnavailabilityInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueUnavailability.VenueUnavailabilityInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueUnavailability.VenueUnavailabilityInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/venue_unavailabilities/{id}": {
+            "get": {
+                "operationId": "api_venue_unavailabilities_id_get",
+                "tags": [
+                    "VenueUnavailability"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "VenueUnavailability resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueUnavailability.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueUnavailability"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueUnavailability.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a VenueUnavailability resource.",
+                "description": "Retrieves a VenueUnavailability resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "VenueUnavailability identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            },
+            "put": {
+                "operationId": "api_venue_unavailabilities_id_put",
+                "tags": [
+                    "VenueUnavailability"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "VenueUnavailability resource updated",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueUnavailability.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueUnavailability"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VenueUnavailability.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Replaces the VenueUnavailability resource.",
+                "description": "Replaces the VenueUnavailability resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "VenueUnavailability identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The updated VenueUnavailability resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueUnavailability.VenueUnavailabilityInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueUnavailability.VenueUnavailabilityInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/VenueUnavailability.VenueUnavailabilityInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "api_venue_unavailabilities_id_delete",
+                "tags": [
+                    "VenueUnavailability"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "VenueUnavailability resource deleted"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Removes the VenueUnavailability resource.",
+                "description": "Removes the VenueUnavailability resource.",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "VenueUnavailability identifier",
                         "required": true,
                         "deprecated": false,
                         "schema": {
@@ -20185,6 +21086,177 @@
                     }
                 ]
             },
+            "VenueMatchWindow": {
+                "type": "object",
+                "description": "Match access window of a venue \u2014 \u2265 1 window makes it a MATCH venue (derived flag).",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "venueId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "dayOfWeek": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "startTime": {
+                        "description": "HH:MM",
+                        "default": "",
+                        "type": "string"
+                    },
+                    "endTime": {
+                        "description": "HH:MM, same-day, exclusive.",
+                        "default": "",
+                        "type": "string"
+                    }
+                }
+            },
+            "VenueMatchWindow.VenueMatchWindowInput": {
+                "type": "object",
+                "description": "Match access window of a venue \u2014 \u2265 1 window makes it a MATCH venue (derived flag).",
+                "required": [
+                    "venueId",
+                    "dayOfWeek",
+                    "startTime",
+                    "endTime"
+                ],
+                "properties": {
+                    "venueId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "dayOfWeek": {
+                        "minimum": 1,
+                        "maximum": 7,
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "startTime": {
+                        "pattern": "^(.*(^([01]\\d|2[0-3]):[0-5]\\d$).*)$",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "endTime": {
+                        "pattern": "^(.*(^([01]\\d|2[0-3]):[0-5]\\d$).*)$",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "VenueMatchWindow.html": {
+                "type": "object",
+                "description": "Match access window of a venue \u2014 \u2265 1 window makes it a MATCH venue (derived flag).",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "venueId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "dayOfWeek": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "startTime": {
+                        "description": "HH:MM",
+                        "default": "",
+                        "type": "string"
+                    },
+                    "endTime": {
+                        "description": "HH:MM, same-day, exclusive.",
+                        "default": "",
+                        "type": "string"
+                    }
+                }
+            },
+            "VenueMatchWindow.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "version": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "venueId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "dayOfWeek": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "startTime": {
+                                "description": "HH:MM",
+                                "default": "",
+                                "type": "string"
+                            },
+                            "endTime": {
+                                "description": "HH:MM, same-day, exclusive.",
+                                "default": "",
+                                "type": "string"
+                            }
+                        }
+                    }
+                ],
+                "description": "Match access window of a venue \u2014 \u2265 1 window makes it a MATCH venue (derived flag)."
+            },
             "VenuePeriodOverride": {
                 "type": "object",
                 "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact.",
@@ -20551,6 +21623,187 @@
                         }
                     }
                 ]
+            },
+            "VenueUnavailability": {
+                "type": "object",
+                "description": "All-circumstances venue unavailability \u2014 alerts matches AND training, blocks nothing.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "venueId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "startDate": {
+                        "description": "Y-m-d, inclusive.",
+                        "default": "",
+                        "type": "string"
+                    },
+                    "endDate": {
+                        "description": "Y-m-d, inclusive.",
+                        "default": "",
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "VenueUnavailability.VenueUnavailabilityInput": {
+                "type": "object",
+                "description": "All-circumstances venue unavailability \u2014 alerts matches AND training, blocks nothing.",
+                "required": [
+                    "venueId",
+                    "startDate",
+                    "endDate"
+                ],
+                "properties": {
+                    "venueId": {
+                        "format": "uuid",
+                        "externalDocs": {
+                            "url": "https://schema.org/identifier"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "startDate": {
+                        "description": "Y-m-d, inclusive.",
+                        "externalDocs": {
+                            "url": "https://schema.org/Date"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "endDate": {
+                        "description": "Y-m-d, inclusive.",
+                        "externalDocs": {
+                            "url": "https://schema.org/Date"
+                        },
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "label": {
+                        "maxLength": 180,
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "VenueUnavailability.html": {
+                "type": "object",
+                "description": "All-circumstances venue unavailability \u2014 alerts matches AND training, blocks nothing.",
+                "properties": {
+                    "id": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "version": {
+                        "default": 0,
+                        "type": "integer"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "venueId": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "startDate": {
+                        "description": "Y-m-d, inclusive.",
+                        "default": "",
+                        "type": "string"
+                    },
+                    "endDate": {
+                        "description": "Y-m-d, inclusive.",
+                        "default": "",
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "VenueUnavailability.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "version": {
+                                "default": 0,
+                                "type": "integer"
+                            },
+                            "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "updatedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                            },
+                            "venueId": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "startDate": {
+                                "description": "Y-m-d, inclusive.",
+                                "default": "",
+                                "type": "string"
+                            },
+                            "endDate": {
+                                "description": "Y-m-d, inclusive.",
+                                "default": "",
+                                "type": "string"
+                            },
+                            "label": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                "description": "All-circumstances venue unavailability \u2014 alerts matches AND training, blocks nothing."
             }
         },
         "responses": {},
@@ -20677,6 +21930,10 @@
             "description": "Resource 'User' operations."
         },
         {
+            "name": "VenueMatchWindow",
+            "description": "Match access window of a venue \u2014 \u2265 1 window makes it a MATCH venue (derived flag)."
+        },
+        {
             "name": "VenuePeriodOverride",
             "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact."
         },
@@ -20687,6 +21944,10 @@
         {
             "name": "VenueTrainingSlot",
             "description": "Resource 'VenueTrainingSlot' operations."
+        },
+        {
+            "name": "VenueUnavailability",
+            "description": "All-circumstances venue unavailability \u2014 alerts matches AND training, blocks nothing."
         }
     ],
     "webhooks": {}

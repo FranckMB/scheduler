@@ -15,6 +15,11 @@ let periodSlots: ReturnType<typeof q>;
 const store = { reservations: [], mode: "season", calendarEntryId: null as string | null, stepId: "recap" };
 
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
+// P1-4 PR B — l'exemption fenêtre match vient du module matches (mock voisin).
+vi.mock("@/features/matches/queries", () => ({
+  useVenueMatchWindows: () => ({ data: [], isLoading: false }),
+}));
+
 vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
   usePeriodAnchor: () => ({ state: "period", planId: "plan-1" }),

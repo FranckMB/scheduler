@@ -151,10 +151,44 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   fichier + nouveaux mappings → rapport affiché en place. Invalidation `fixtures` + `wizard/teams`
   (engagement) + `competitions`.
 
+## Couche capacité (P1-4 PR B, 2026-08-03)
+
+- **Fenêtres d'accès match** (`VenueMatchWindow`, tenant+saison, RLS) : jour ISO 1-7 + plage `start<end`
+  même jour (famille P4-61) — les créneaux que la mairie accorde LES JOURS DE MATCH, distincts des créneaux
+  d'entraînement. **Gymnase de match = dérivé** (≥ 1 fenêtre), aucun booléen sur `Venue`. **Recopiées à la
+  bascule de saison** (`SeasonTransitionService` — la convention mairie se renouvelle). Saisie à DEUX
+  endroits (décision fondateur) : section « Accès match » de l'étape Gymnases du wizard, et dialog
+  « Accès match » de `/matchs` — même composant `MatchWindowsEditor`, une seule vérité.
+- **Règle wizard assouplie** : « gymnase sans créneau » devient « sans créneau d'entraînement NI fenêtre
+  match » — un gymnase loué pour les matchs seulement ne bloque plus la validation (gate
+  `useStepValidation` + bandeau `VenuesStep`, les deux sites ensemble ; en échec de lecture des fenêtres,
+  AUCUNE exemption — plus strict, jamais moins).
+- **Indisponibilité gymnase** (`VenueUnavailability`, tenant+saison, RLS) : plage de dates INCLUSES + motif,
+  **toutes circonstances** — posée au cockpit (carte « Indisponibilités gymnase », écriture
+  management-gated SEC-07), **jamais recopiée** en N+1 (fait daté). **Alerte seulement**, ne bloque ni ne
+  régénère rien :
+  - carte cockpit : « N créneau(x) d'entraînement/sem. (M séances) · K match(s) placé(s) à repositionner »,
+    servie par `GET /api/venue-unavailability-impact` (`VenueUnavailabilityImpact`, pur) ;
+  - radar matchs : finding **`VENUE_UNAVAILABLE`** (match posé sur un gymnase fermé à sa date — le cas que
+    la garde de placement ne peut pas attraper : l'indispo posée APRÈS le placement).
+- **Garde de placement** (`PlacementPanel` + `lib/matchAccess.ts`, HARD sans dégradation — donnée du club,
+  pas de mapping incertain) : sélecteur restreint aux gymnases de match (repli : club sans AUCUNE fenêtre →
+  liste complète, donnée non adoptée) ; bloqué si jour sans fenêtre, heure hors plage, ou gymnase indispo à
+  la date. Pas de verrou serveur (décision fondateur — le solveur PR D posera le HARD définitif).
+- **Source unique ADR-0002** : la règle « quel planning s'applique à telle date » est extraite en
+  `EffectiveScheduleResolver` (pur) + `TrainingCalendarContext` (chargement scopé), consommés par le
+  radar ET l'impact — deux copies auraient divergé.
+
 ## Vérifs / gardes
 
 - NR bloquant (phase1, CI) : `MatchTenantIsolationTest` (Competition/Fixture scopés club+saison, POST stampe,
-  écriture saison archivée → 409). Le catalogue global reste hors tenant : garanti par `RlsIsolationTest` +
+  écriture saison archivée → 409 ; **+ PR B** : fenêtres/indispos scopées et stampées, `venueId` étranger →
+  422 sans écriture cross-club, indispo management-gated 403 + saison archivée 409). PR B aussi :
+  `VenueUnavailabilityImpactTest` (unit — sémantique ADR-0002 épinglée : période sans overlay = zéro alerte
+  fantôme, overlay = SES créneaux), `VenueCapacityApiTest` (CRUD + validations + flux d'impact),
+  `MatchConflictDetectorTest` étendu (VENUE_UNAVAILABLE, bornes incluses, sans-kickoff affecté),
+  `SeasonTransitionServiceTest` (fenêtres copiées, indispos non), `useStepValidation.test` (exemption
+  fenêtre match socle + période), `PlacementPanel.test` (filtre sélecteur, gardes jour/heure/indispo, repli). Le catalogue global reste hors tenant : garanti par `RlsIsolationTest` +
   `TenantOwnedInterfaceCompletenessTest` (il n'a pas de club_id) + `LeagueMatchWindowsApiTest` (partagé,
   aucune donnée club).
 - PR-2 : `FixtureConflictsApiTest` (phase1) — structure du radar **+ isolation club** (un club ne voit jamais

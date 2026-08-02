@@ -258,6 +258,8 @@ Détail : [`module-matchs.md`](module-matchs.md). Placement des rencontres domic
 |-------|---------|------------|-------------|
 | `/api/league-match-windows` | GET | `LeagueMatchWindowsController` | Fenêtres de match héritées de la ligue du club (`Club.league`, fallback fédé AURA). Catalogue global partagé. |
 | `/api/fixtures/conflicts` | GET | `FixtureConflictsController` | Radar : conflits d'empreinte-temps coach/joueur entre rencontres et entraînements. |
+| `/api/venue_match_windows` · `/api/venue_unavailabilities` | CRUD | API Platform (5-fichiers) | **Capacité (P1-4 PR B)** : fenêtres d'accès match (jour+plage, `start<end` même jour) et indisponibilités toutes-circonstances (dates incluses + motif, écriture management-gated). `venueId` étranger invisible → 422. |
+| `/api/venue-unavailability-impact` | GET | `VenueUnavailabilityImpactController` | Flux d'alerte cockpit : par indispo, matchs placés touchés + séances d'entraînement des plannings **effectifs** (ADR-0002, `EffectiveScheduleResolver`). Lecture seule, rien persisté. |
 | `/api/fixtures/import/analyze` | POST | `ImportFixturesAnalyzeController` | **Dry-run** de l'export FBI global club : table des divisions résolue contre la correspondance persistée (`Competition`), zéro écriture. |
 | `/api/fixtures/import` | POST | `ImportFixturesController` | Import FBI **une passe** (fichier global + `mappings` JSON) : persiste les correspondances puis crée/**met à jour** par diff `(team, n° FBI)`. Rapport `created`/`updated`/`unchanged`/`exempted`/`warnings`/`unmappedDivisions`/`errors`. Remplace `/api/teams/{id}/fixtures/import` (P1-4 PR A, 2026-08-02). |
 

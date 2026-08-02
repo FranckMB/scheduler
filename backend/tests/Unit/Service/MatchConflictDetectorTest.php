@@ -7,8 +7,10 @@ namespace App\Tests\Unit\Service;
 use App\Entity\Fixture;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\TeamCoach;
+use App\Entity\VenueUnavailability;
 use App\Enum\FixtureHomeAway;
 use App\Enum\TeamCoachRole;
+use App\Service\EffectiveScheduleResolver;
 use App\Service\MatchConflictDetector;
 use App\Service\MatchFootprint;
 use DateTimeImmutable;
@@ -208,18 +210,73 @@ final class MatchConflictDetectorTest extends TestCase
         self::assertSame(self::COACH_A, $conflicts[0]['coachId']);
     }
 
+    public function testVenueUnavailableFlagsAPlacedFixtureInsideTheRange(): void
+    {
+        // The real-life case the placement guard cannot catch: placed on
+        // 2027-02-14, the closure is posed AFTERWARDS (P1-4 PR B).
+        $fixture = $this->fixture('fx-1', self::TEAM_1, '2027-02-14', '15:30');
+        $fixture->setVenueId('venue-armand');
+        $unavailability = $this->unavailability('venue-armand', '2027-02-04', '2027-02-28', 'travaux');
+
+        $conflicts = $this->detect([$fixture], [], null, [], [], [$unavailability]);
+
+        self::assertCount(1, $conflicts);
+        self::assertSame('VENUE_UNAVAILABLE', $conflicts[0]['type']);
+        self::assertSame('travaux', $conflicts[0]['label']);
+        self::assertSame('fx-1', $conflicts[0]['fixture']['fixtureId']);
+    }
+
+    public function testVenueUnavailableBoundsAreInclusiveAndKickoffFree(): void
+    {
+        // « du 4 au 28 » covers the 28th; a venue-holding fixture without a
+        // kickoff (no footprint) is affected too — the DATE suffices.
+        $lastDay = $this->fixture('fx-1', self::TEAM_1, '2027-02-28', null);
+        $lastDay->setVenueId('venue-armand');
+        $dayAfter = $this->fixture('fx-2', self::TEAM_1, '2027-03-01', '15:30');
+        $dayAfter->setVenueId('venue-armand');
+        $otherVenue = $this->fixture('fx-3', self::TEAM_1, '2027-02-14', '15:30');
+        $otherVenue->setVenueId('venue-mateo');
+        $unplaced = $this->fixture('fx-4', self::TEAM_1, '2027-02-14', null); // no venue
+
+        $conflicts = $this->detect(
+            [$lastDay, $dayAfter, $otherVenue, $unplaced],
+            [],
+            null,
+            [],
+            [],
+            [$this->unavailability('venue-armand', '2027-02-04', '2027-02-28', null)],
+        );
+
+        self::assertCount(1, $conflicts);
+        self::assertSame('fx-1', $conflicts[0]['fixture']['fixtureId']);
+    }
+
+    private function unavailability(string $venueId, string $from, string $until, ?string $label): VenueUnavailability
+    {
+        $unavailability = new VenueUnavailability;
+        $unavailability->setClubId('club');
+        $unavailability->setSeasonId('season');
+        $unavailability->setVenueId($venueId);
+        $unavailability->setStartDate(new DateTimeImmutable($from));
+        $unavailability->setEndDate(new DateTimeImmutable($until));
+        $unavailability->setLabel($label);
+
+        return $unavailability;
+    }
+
     /**
      * @param list<Fixture>                                                                     $fixtures
      * @param list<TeamCoach>                                                                   $links
      * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string}> $overlayPeriods
      * @param array<string, list<ScheduleSlotTemplate>>                                         $slotsBySchedule
+     * @param list<VenueUnavailability>                                                         $unavailabilities
      *
      * @return list<array<string, mixed>>
      */
-    private function detect(array $fixtures, array $links, ?string $baselineScheduleId = null, array $overlayPeriods = [], array $slotsBySchedule = []): array
+    private function detect(array $fixtures, array $links, ?string $baselineScheduleId = null, array $overlayPeriods = [], array $slotsBySchedule = [], array $unavailabilities = []): array
     {
-        return new MatchConflictDetector(new MatchFootprint)
-            ->detect($fixtures, $links, $baselineScheduleId, $overlayPeriods, $slotsBySchedule);
+        return new MatchConflictDetector(new MatchFootprint, new EffectiveScheduleResolver)
+            ->detect($fixtures, $links, $baselineScheduleId, $overlayPeriods, $slotsBySchedule, $unavailabilities);
     }
 
     private function fixture(string $id, string $teamId, string $date, ?string $kickoff): Fixture

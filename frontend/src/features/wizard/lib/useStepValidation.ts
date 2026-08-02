@@ -1,4 +1,5 @@
 import { anchorIsWritable, usePeriodAnchor } from "@/features/cockpit/queries";
+import { useVenueMatchWindows } from "@/features/matches/queries";
 import { readFailed, readLoading } from "@/shared/lib/readState";
 import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
 import { useConstraintValidation, usePeriodSlots, useReservations, useTeamPeriodOverrides, useVenuePeriodOverrides, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
@@ -64,10 +65,12 @@ export function computeReservationWarnings(reservations: Reservation[], teams: T
 }
 
 /** Venues that carry no availability slot — the "gym without slot" rule, shared
- * by the venues and recap gates. */
-function venuesWithoutSlot(venues: Venue[], slots: VenueTrainingSlot[]): Venue[] {
+ * by the venues and recap gates. P1-4 PR B : un gymnase à fenêtre MATCH est
+ * épargné (loué pour les matchs seulement, il n'a légitimement aucun créneau
+ * d'entraînement — ni de saison, ni de période). */
+function venuesWithoutSlot(venues: Venue[], slots: VenueTrainingSlot[], matchVenueIds: ReadonlySet<string>): Venue[] {
   const withSlot = new Set(slots.map((s) => s.venueId));
-  return venues.filter((v) => !withSlot.has(v.id));
+  return venues.filter((v) => !withSlot.has(v.id) && !matchVenueIds.has(v.id));
 }
 
 /**
@@ -80,6 +83,10 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   const venuesQuery = useWizardVenues();
   const slotsQuery = useVenueSlots();
   const coachesQuery = useWizardCoaches();
+  // P1-4 PR B — l'exemption « fenêtre match » de la règle gymnase-sans-créneau.
+  // En échec de lecture : AUCUNE exemption (plus strict, jamais moins) — le
+  // bandeau de l'étape porte l'explication, le gate ne ment pas en vert.
+  const matchWindowsQuery = useVenueMatchWindows();
   const { data: teams = [] } = teamsQuery;
   const { data: venues = [] } = venuesQuery;
   const { data: slots = [] } = slotsQuery;
@@ -124,7 +131,7 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // On first load the queries default to [], which would flash a false blocking
   // error ("Ajoutez au moins une équipe") before the data arrives. Stay neutral
   // but mark pending so gates stay closed (isLoading = first load only).
-  if (teamsQuery.isLoading || venuesQuery.isLoading || slotsQuery.isLoading || coachesQuery.isLoading) {
+  if (teamsQuery.isLoading || venuesQuery.isLoading || slotsQuery.isLoading || coachesQuery.isLoading || matchWindowsQuery.isLoading) {
     return { errors: [], warnings: [], pending: true };
   }
 
@@ -201,9 +208,10 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // sur un gymnase volontairement désactivé, le temps que les overrides arrivent.
   const periodGridReady =
     "period" === periodAnchor.state && !readLoading(periodSlotsQuery) && !readLoading(periodOverridesQuery);
+  const matchVenueIds = new Set((matchWindowsQuery.data ?? []).map((w) => w.venueId));
   const emptyVenues = periodMode
-    ? (periodGridReady ? venuesWithoutSlot(layerVenues, periodSlots) : [])
-    : venuesWithoutSlot(venues, slots);
+    ? (periodGridReady ? venuesWithoutSlot(layerVenues, periodSlots, matchVenueIds) : [])
+    : venuesWithoutSlot(venues, slots, matchVenueIds);
 
   if ("venues" === stepId) {
     const errors: string[] = [];
@@ -211,7 +219,7 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
       errors.push(noVenueError);
     }
     if (emptyVenues.length > 0) {
-      errors.push(`Gymnase(s) sans créneau : ${emptyVenues.map((v) => v.name).join(", ")}.`);
+      errors.push(`Gymnase(s) sans créneau d'entraînement ni fenêtre match : ${emptyVenues.map((v) => v.name).join(", ")}.`);
     }
     return { errors, warnings: [] };
   }
@@ -238,7 +246,7 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
       errors.push(noVenueError);
     }
     if (emptyVenues.length > 0) {
-      errors.push(`Gymnase(s) sans créneau : ${emptyVenues.map((v) => v.name).join(", ")}.`);
+      errors.push(`Gymnase(s) sans créneau d'entraînement ni fenêtre match : ${emptyVenues.map((v) => v.name).join(", ")}.`);
     }
     if (constraintValidation && !constraintValidation.valid) {
       for (const messages of Object.values(constraintValidation.errors)) {

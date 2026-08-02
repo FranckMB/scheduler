@@ -11,6 +11,13 @@ const anchorState: { failed: boolean; absent: boolean } = { failed: false, absen
 // A gym with NO availability slot — the "sans créneau" rule fires on it in base
 // mode but must stay silent in period mode (slots are inherited & read-only).
 // Le plan de la période : ancre des réservations depuis le lot C3 (inv. 5).
+// P1-4 PR B — l'exemption fenêtre match vient du module matches ; sans mock,
+// le hook réel exigerait un QueryClient. État mutable pour tester l'exemption.
+const matchWindowsState = vi.hoisted(() => ({ windows: [] as { id: string; venueId: string; dayOfWeek: number; startTime: string; endTime: string }[] }));
+vi.mock("@/features/matches/queries", () => ({
+  useVenueMatchWindows: () => ({ data: matchWindowsState.windows, isLoading: false }),
+}));
+
 vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
   // Ancre résolue seulement si une entrée est fournie : mode période sans entrée = plan
@@ -132,6 +139,23 @@ describe("useStepValidation — venue slot rule (période : #8 PR-B, la grille e
     useWizardStore.setState({ mode: "season", calendarEntryId: null, stepId: "venues" });
     const { result } = renderHook(() => useStepValidation("venues"));
     expect(result.current.errors.some((e) => /sans créneau/.test(e))).toBe(true);
+  });
+
+  it("épargne un gymnase de MATCH (≥ 1 fenêtre) sans créneau d'entraînement — P1-4 PR B", () => {
+    // Un gymnase loué pour les matchs seulement n'a légitimement aucun créneau
+    // d'entraînement : la fenêtre match lève le blocage, en socle comme en période.
+    matchWindowsState.windows = [{ id: "w1", venueId: "v1", dayOfWeek: 6, startTime: "14:00", endTime: "22:00" }];
+    try {
+      useWizardStore.setState({ mode: "season", calendarEntryId: null, stepId: "venues" });
+      const { result } = renderHook(() => useStepValidation("venues"));
+      expect(result.current.errors).toEqual([]);
+
+      useWizardStore.setState({ mode: "period", calendarEntryId: "e1", stepId: "venues" });
+      const { result: periodResult } = renderHook(() => useStepValidation("venues"));
+      expect(periodResult.current.errors).toEqual([]);
+    } finally {
+      matchWindowsState.windows = [];
+    }
   });
 
   it("flags an ACTIVE gym without a period slot — la période possède sa grille, plus d'héritage lecture seule", () => {

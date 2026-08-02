@@ -70,7 +70,8 @@ All services share the Docker network `clubscheduler_network`.
   | `SeasonTransitionController` | `POST /api/seasons/{id}/transition` | copy N→N+1 draft (transition P1) |
   | `CalendarEntryConflictsController` | `GET /api/calendar-entries/{id}/conflicts` | cockpit "séances à replacer" radar |
   | `SchoolHolidaysController` / `PublicHolidaysController` | `GET /api/{school,public}-holidays` | holiday display feeds (club zone) |
-  | `LeagueMatchWindowsController` / `FixtureConflictsController` | `GET /api/league-match-windows`, `GET /api/fixtures/conflicts` | match envelope + same-coach conflict radar |
+  | `LeagueMatchWindowsController` / `FixtureConflictsController` | `GET /api/league-match-windows`, `GET /api/fixtures/conflicts` | match envelope + conflict radar (same-coach + VENUE_UNAVAILABLE) |
+  | `VenueUnavailabilityImpactController` | `GET /api/venue-unavailability-impact` | alert-only impact of venue closures (placed matches + effective-schedule trainings) |
   | `ImportFixturesAnalyzeController` / `ImportFixturesController` | `POST /api/fixtures/import/analyze`, `POST /api/fixtures/import` | club-wide FBI import, one pass: dry-run mapping table → import with validated Division↔team mappings (diff/update by FBI number) |
   | `RegenerateController` / `RegenerateFromVersionController` | `POST /api/schedules/{id}/{regenerate,regenerate-from}` | new version of the same plan (guards refuse to overwrite the version the plan points at) |
   | `ValidateConstraintsController` | `POST /api/constraints/validate` | pre-solve check (per **plan**: its settings + the dated constraints of the fact) |

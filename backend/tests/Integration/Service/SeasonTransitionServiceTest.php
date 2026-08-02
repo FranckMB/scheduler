@@ -18,7 +18,9 @@ use App\Entity\TeamCoach;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
+use App\Entity\VenueMatchWindow;
 use App\Entity\VenueTrainingSlot;
+use App\Entity\VenueUnavailability;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -77,6 +79,13 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         self::assertSame([$refs['venueA']->getId(), $refs['venueB']->getId()], [$newVenues[0]->getParentVenueId(), $newVenues[1]->getParentVenueId()]);
         $newSlot = $this->em->getRepository(VenueTrainingSlot::class)->findOneBy(['seasonId' => $target->getId()]);
         self::assertSame($newVenues[0]->getId(), $newSlot?->getVenueId());
+
+        // P1-4 PR B — match access windows follow (city-hall convention renews),
+        // remapped to the copied venue; the dated unavailability does NOT.
+        $newWindow = $this->em->getRepository(VenueMatchWindow::class)->findOneBy(['seasonId' => $target->getId()]);
+        self::assertSame($newVenues[0]->getId(), $newWindow?->getVenueId());
+        self::assertSame('14:00', $newWindow?->getStartTime()->format('H:i'));
+        self::assertNull($this->em->getRepository(VenueUnavailability::class)->findOneBy(['seasonId' => $target->getId()]));
 
         // Team: forcedVenueId remapped to the copied venue, name untouched.
         $newTeams = $this->em->getRepository(Team::class)->findBy(['seasonId' => $target->getId()], ['name' => 'ASC']);
@@ -317,6 +326,26 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $slot->setDurationMinutes(90);
         $slot->setCapacity(1);
         $this->em->persist($slot);
+
+        // P1-4 PR B — capacité : la fenêtre match se recopie (convention mairie),
+        // l'indisponibilité (fait daté one-shot) jamais.
+        $window = new VenueMatchWindow;
+        $window->setClubId($club->getId());
+        $window->setSeasonId($season->getId());
+        $window->setVenueId($venueA->getId());
+        $window->setDayOfWeek(6);
+        $window->setStartTime(new DateTimeImmutable('14:00'));
+        $window->setEndTime(new DateTimeImmutable('22:00'));
+        $this->em->persist($window);
+
+        $unavailability = new VenueUnavailability;
+        $unavailability->setClubId($club->getId());
+        $unavailability->setSeasonId($season->getId());
+        $unavailability->setVenueId($venueA->getId());
+        $unavailability->setStartDate(new DateTimeImmutable('2027-02-04'));
+        $unavailability->setEndDate(new DateTimeImmutable('2027-02-28'));
+        $unavailability->setLabel('travaux');
+        $this->em->persist($unavailability);
 
         $anna = $this->coach($club, $season, 'Anna');
         $bob = $this->coach($club, $season, 'Bob');

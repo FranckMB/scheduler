@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
-use App\Entity\CalendarEntry;
 use App\Entity\Fixture;
-use App\Entity\ScheduleSlotTemplate;
 use App\Entity\TeamCoach;
-use App\Repository\CalendarEntryRepository;
+use App\Entity\VenueUnavailability;
 use App\Service\MatchConflictDetector;
-use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
+use App\Service\TrainingCalendarContext;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -21,10 +19,10 @@ use Symfony\Component\Routing\Attribute\Route;
 
 /**
  * On-the-fly match/training conflict radar for a single coach (spec
- * gestion-matchs palier A, PR-2). Recomputed at each call from the current
- * fixtures + the schedule effective on each match date (period overlay, else
- * the season baseline) — nothing is persisted. Read-only display feed for the
- * future placement grid / radar.
+ * gestion-matchs palier A, PR-2 — + VENUE_UNAVAILABLE since P1-4 PR B).
+ * Recomputed at each call from the current fixtures + the schedule effective on
+ * each match date (period overlay, else the season baseline) — nothing is
+ * persisted. Read-only display feed for the placement grid / radar.
  *
  * Tenant scope: everything is loaded through mapped-entity repositories, so the
  * Doctrine club+season filters apply automatically — a club only ever sees its
@@ -36,11 +34,10 @@ final class FixtureConflictsController extends AbstractController
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
-        private readonly CalendarEntryRepository $calendarEntryRepository,
         private readonly RequestStack $requestStack,
         private readonly SeasonResolver $seasonResolver,
         private readonly MatchConflictDetector $detector,
-        private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly TrainingCalendarContext $trainingCalendarContext,
     ) {}
 
     // priority > 0: this static path must win over API Platform's /api/fixtures/{id}
@@ -57,49 +54,22 @@ final class FixtureConflictsController extends AbstractController
         $fixtures = $this->entityManager->getRepository(Fixture::class)->findBy([]);
         /** @var list<TeamCoach> $teamCoachRows */
         $teamCoachRows = $this->entityManager->getRepository(TeamCoach::class)->findBy([]);
+        /** @var list<VenueUnavailability> $unavailabilities */
+        $unavailabilities = $this->entityManager->getRepository(VenueUnavailability::class)->findBy([]);
 
         $season = $this->seasonResolver->selectedOrCurrent($this->requestStack->getCurrentRequest(), $clubId);
-        // ADR-0002 : le calendrier de base = la version CHOISIE du plan SEASON.
-        // null = espace de travail : rien n'est arrêté, donc rien contre quoi
-        // détecter un conflit.
-        $seasonScheduleId = $this->schedulePlanProvisioner->chosenOfSeasonPlan($season?->getId());
+        // ADR-0002 context (chosen season version, active periods + overlays,
+        // slots) — shared with the unavailability impact (TrainingCalendarContext).
+        $context = $this->trainingCalendarContext->load($season?->getId());
 
-        // Active period entries capture the dates they cover: inside them the base
-        // plan does not apply (user rule "soit un overlay généré, soit le planning
-        // de base" — and a closure with no overlay means "no training"). Ordered
-        // so overlapping periods resolve deterministically.
-        $activePeriods = [];
-        $scheduleIds = null !== $seasonScheduleId ? [$seasonScheduleId] : [];
-        // ADR-0002 lot D-b : l'overlay d'une période = la version VALIDÉE de son plan
-        // (chosenScheduleId). null = plan non validé → aucun overlay ne s'applique
-        // (« soit un overlay généré, soit le planning de base »). Résolu en UNE requête
-        // pour toutes les périodes (chosenByPeriodPlans) plutôt qu'un SELECT par période.
-        $periods = $this->calendarEntryRepository->findActivePeriodsOrdered();
-        $overlayByEntry = $this->schedulePlanProvisioner->chosenByPeriodPlans(array_map(static fn (CalendarEntry $p): string => $p->getId(), $periods));
-        foreach ($periods as $period) {
-            $overlayId = $overlayByEntry[$period->getId()] ?? null;
-            $activePeriods[] = [
-                'start' => $period->getStartDate(),
-                'end' => $period->getEndDate(),
-                'scheduleId' => $overlayId,
-            ];
-            if (null !== $overlayId) {
-                $scheduleIds[] = $overlayId;
-            }
-        }
-
-        $slotsBySchedule = [];
-        if ([] !== $scheduleIds) {
-            /** @var list<ScheduleSlotTemplate> $slots */
-            $slots = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy([
-                'scheduleId' => array_values(array_unique($scheduleIds)),
-            ]);
-            foreach ($slots as $slot) {
-                $slotsBySchedule[$slot->getScheduleId()][] = $slot;
-            }
-        }
-
-        $conflicts = $this->detector->detect($fixtures, $teamCoachRows, $seasonScheduleId, $activePeriods, $slotsBySchedule);
+        $conflicts = $this->detector->detect(
+            $fixtures,
+            $teamCoachRows,
+            $context['seasonScheduleId'],
+            $context['activePeriods'],
+            $context['slotsBySchedule'],
+            $unavailabilities,
+        );
 
         return $this->json([
             'clubId' => $clubId,
@@ -110,7 +80,7 @@ final class FixtureConflictsController extends AbstractController
             // et `conflicts: []` devient indiscernable d'une saison réellement saine. Le
             // gestionnaire poserait un match sur un entraînement vivant. Un silence qui
             // ment est pire qu'un blanc.
-            'seasonPlanChosen' => null !== $seasonScheduleId,
+            'seasonPlanChosen' => null !== $context['seasonScheduleId'],
         ]);
     }
 }

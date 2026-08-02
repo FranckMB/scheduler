@@ -11,6 +11,7 @@ use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\Venue;
+use App\Entity\VenueMatchWindow;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintScope;
 use DateTimeImmutable;
@@ -173,6 +174,24 @@ final class SeasonTransitionService
             $copy->setCapacity($slot->getCapacity());
             $this->entityManager->persist($copy);
             ++$slots;
+        }
+
+        // P1-4 PR B — les fenêtres d'accès MATCH se recopient comme les créneaux :
+        // la convention mairie se renouvelle. Les indisponibilités (VenueUnavailability),
+        // elles, sont des faits datés one-shot : JAMAIS recopiées.
+        foreach ($this->rows(VenueMatchWindow::class, $clubId, $sourceId) as $window) {
+            $newVenueId = $venueMap[$window->getVenueId()] ?? null;
+            if (null === $newVenueId) {
+                continue; // dangling venue reference — nothing to attach to.
+            }
+            $copy = new VenueMatchWindow;
+            $copy->setClubId($clubId);
+            $copy->setSeasonId($target->getId());
+            $copy->setVenueId($newVenueId);
+            $copy->setDayOfWeek($window->getDayOfWeek());
+            $copy->setStartTime($window->getStartTime());
+            $copy->setEndTime($window->getEndTime());
+            $this->entityManager->persist($copy);
         }
 
         $coachMap = [];

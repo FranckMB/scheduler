@@ -12,6 +12,9 @@ import { nextVenueColor } from "@/shared/lib/color";
 import { formatDuration } from "@/shared/lib/duration";
 import { toast } from "@/shared/stores/toastStore";
 
+import { MatchWindowsEditor } from "@/features/matches/MatchWindowsEditor";
+import { useVenueMatchWindows } from "@/features/matches/queries";
+
 import type { Venue, VenueTrainingSlot } from "../api";
 import { DAYS, durationOptions, DURATIONS, hhmm } from "../lib/days";
 import { slotPlacementError } from "../lib/slotOverlap";
@@ -200,6 +203,7 @@ export function VenuesStep() {
 function VenuesEditor() {
   const { data: venues = [] } = useWizardVenues();
   const { data: slots = [] } = useVenueSlots();
+  const matchWindowsQuery = useVenueMatchWindows();
   const { data: reservations = [] } = useReservations();
   const create = useCreateVenue();
   const update = useUpdateVenue();
@@ -258,7 +262,11 @@ function VenuesEditor() {
     nameRef.current?.focus();
   };
 
-  const emptyVenues = venues.filter((v) => !slots.some((s) => s.venueId === v.id));
+  // P1-4 PR B — un gymnase à fenêtre MATCH est légitime sans créneau
+  // d'entraînement (loué pour les matchs seulement) : la règle l'épargne, ici
+  // comme au gate (useStepValidation — les deux sites bougent ensemble, §7.2).
+  const matchVenueIds = new Set((matchWindowsQuery.data ?? []).map((w) => w.venueId));
+  const emptyVenues = venues.filter((v) => !slots.some((s) => s.venueId === v.id) && !matchVenueIds.has(v.id));
 
   return (
     <div>
@@ -294,7 +302,10 @@ function VenuesEditor() {
 
       {emptyVenues.length > 0 ? (
         <p role="alert" className="mb-3 text-sm text-destructive">
-          {emptyVenues.length > 1 ? "Ces gymnases doivent avoir au moins un créneau" : "Ce gymnase doit avoir au moins un créneau"} : {emptyVenues.map((v) => v.name).join(", ")}.
+          {emptyVenues.length > 1
+            ? "Ces gymnases doivent avoir au moins un créneau d'entraînement ou une fenêtre match"
+            : "Ce gymnase doit avoir au moins un créneau d'entraînement ou une fenêtre match"}{" "}
+          : {emptyVenues.map((v) => v.name).join(", ")}.
         </p>
       ) : null}
 
@@ -392,6 +403,16 @@ function VenuesEditor() {
           {null !== editingSlot ? (
             <SlotEditor key={editingSlot.id} slot={editingSlot} canSplit={selected.canSplit} otherSlots={venueSlots.filter((s) => s.id !== editingSlot.id)} onClose={() => setEditingSlot(null)} />
           ) : null}
+
+          {/* P1-4 PR B — accès MATCH du gymnase : la lettre de la mairie qui
+              donne les créneaux d'entraînement donne aussi les accès des jours
+              de match — un document, un écran. Même éditeur que la page matchs. */}
+          <div className="mt-3 rounded-lg border border-border bg-card p-3">
+            <div className="mb-2 text-xs font-medium text-muted-foreground">
+              Accès match de « {selected.name} » (créneaux accordés par la mairie les jours de match)
+            </div>
+            <MatchWindowsEditor venueId={selected.id} />
+          </div>
         </>
       )}
 
