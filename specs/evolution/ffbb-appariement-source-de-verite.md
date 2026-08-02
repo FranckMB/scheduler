@@ -392,26 +392,51 @@ Le nom court reste **libre et modifiable** : c'est le vocabulaire du club, l'app
 proposition raisonnable est de pré-remplir le court à partir de l'officiel et de le laisser réécrire — pas de
 l'imposer.
 
-**⚠ La carte a un coût que la liste n'a pas, et il faut le dire avant de s'y engager.**
+#### La carte — ce qui coûte n'est pas le pin
 
-Aucune bibliothèque de carte n'existe dans le front. Et la CSP de production est stricte :
-`img-src 'self' data: blob:` · `connect-src 'self' blob:` (`docker/frontend/csp.conf`). **Les tuiles seraient
-bloquées.** Les afficher suppose :
+> *« Qu'est-ce qui bloque si j'affiche la localisation sur une carte ? Si on a les coordonnées, ce n'est pas
+> très complexe, c'est juste un pin. »*
 
-- **relâcher la CSP** pour autoriser un hôte de tuiles — une vraie décision de posture, pas une ligne de config ;
-- accepter que **chaque tuile envoie l'IP du gestionnaire** à ce tiers → à inscrire dans `docs/security/rgpd.md` ;
-- ou **auto-héberger les tuiles**, ce qui est lourd (stockage, mises à jour) pour l'usage.
+**Rien ne bloque, et le pin est effectivement trivial.** Une première rédaction dramatisait — correction :
 
-**Chemin proposé, en deux temps :**
+| | Coût réel |
+|---|---|
+| **Le marqueur** | Nul. Un point depuis lat/lng ; Leaflet fait ~40 Ko et reste optionnel |
+| **Le fond de carte** | **Tout le sujet.** Sans tuiles, des pins sur fond blanc sont justes et illisibles — on ne reconnaît pas un lieu sans les rues |
 
-1. **Une LISTE triée par distance**, cases à cocher : `GYMNASE ARMAND — 400 m`. Le tri existe déjà
-   (`_geoPoint:asc`), zéro dépendance, zéro changement de CSP. **Ça livre l'essentiel de la valeur** : le
-   gestionnaire ne part plus de zéro, il coche.
-2. **La carte ensuite**, si la liste montre ses limites (deux gymnases homonymes, un doute sur lequel est
-   lequel). C'est là que la carte gagne vraiment — comme pour un point relais, **la liste porte le choix, la
-   carte porte la confiance**.
+Les tuiles viennent d'un hôte tiers, et la CSP (`docker/frontend/csp.conf:10`) n'autorise **aucun tiers** :
+`img-src 'self' data: blob:` · `connect-src 'self' blob:`.
 
-Rien dans l'étape 1 n'empêche l'étape 2 : les coordonnées sont stockées dès le départ.
+**C'est littéralement UNE ligne à modifier.** Ce qui pèse n'est pas l'effort, c'est que **ce serait le premier
+appel navigateur vers un tiers de toute l'application** — et que chaque tuile envoie l'IP du gestionnaire à ce
+tiers (→ `docs/security/rgpd.md`).
+
+**Trois options, par ordre de cohérence avec l'existant :**
+
+1. **Proxifier les tuiles par notre backend**, exactement comme `FfbbLogoFetcher` réhéberge déjà les logos FFBB
+   au lieu de les hotlinker. Same-origin, CSP inchangée, **aucune IP ne fuit**. ⚠ Coût : bande passante, cache,
+   et **les CGU du fournisseur de tuiles — beaucoup interdisent le proxy**. À vérifier avant de choisir.
+2. **Autoriser un hôte de tuiles dans la CSP.** Une ligne, mais on assume le premier tiers navigateur.
+3. ~~Pas de carte~~ — **écarté** : voir la décision ci-dessous.
+
+#### ✅ La carte est VOULUE — décision fondateur
+
+> **« Il faut une carte de France, oui, qui centre sur la géoloc de mon club et qui affiche les gymnases aux
+> alentours. »** (2026-08-02)
+
+L'écran est donc : **carte centrée sur `Club.latitude/longitude`**, un **pin par gymnase** du rayon courant
+(§ ci-dessus, rayon auto-élargi), le **nom officiel** au pin, et la **case à cocher** qui importe.
+La liste triée par distance et la carte sont **deux vues du même jeu** — pas une alternative.
+
+**Ce qui reste à trancher : la source des tuiles** (options 1 ou 2 ci-dessus). C'est la seule vraie question,
+et elle est indépendante du reste de l'écran :
+- **proxy backend** — cohérent avec le réhébergement des logos, aucune IP ne fuit, ⚠ vérifier les **CGU du
+  fournisseur** (beaucoup interdisent le proxy) ;
+- **hôte de tuiles en CSP** — une ligne, mais premier appel navigateur vers un tiers, à inscrire en RGPD.
+
+**Ordre de livraison suggéré** (sans rien retirer de la cible) : la **liste** d'abord — elle ne dépend d'aucune
+tuile et livre déjà « il ne part plus de zéro » —, la **carte** ensuite par-dessus le même jeu de données. Les
+coordonnées étant stockées dès le premier jour, la carte ne demande aucune reprise du modèle.
 
 ### ❌ Rejeté explicitement
 
