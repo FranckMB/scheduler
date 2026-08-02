@@ -7,6 +7,13 @@
 > d'origine `🔴 lourd / V2` de la roadmap : le cœur n'est **pas** un solveur.
 > **Rattachement roadmap** : **P1-4** (FF#21 « Planification des matchs »,
 > FF#19 « Import calendrier de matchs FFBB »). **Vision d'origine** : `initiales/ClubScheduler_v3.md` §1.4.
+>
+> ⚠ **AMENDÉ le 2026-08-02 par [`p1-4-cadrage-module-matchs.md`](p1-4-cadrage-module-matchs.md)** (cadrage
+> tranché sur un vrai export FBI). Points renversés : **le solveur PLACE les matchs domicile** puis le
+> gestionnaire ajuste (le §2/§12 « pas un solveur / placement manuel » ne fait plus foi) · l'import FBI est
+> un **fichier GLOBAL club** (pas par équipe — §12 « export FBI par équipe » ne fait plus foi) · le tracker
+> dérogation (§8) sort de P1-4 (l'outil alerte, le gestionnaire agit). Le reste (empreinte-temps §4bis,
+> catalogue-ligue §6bis, annuaire adverse §5bis, trajet §7) reste la référence.
 
 ---
 
@@ -31,6 +38,9 @@ librement, on fait une **demande de dérogation** (processus ligue) et on négoc
 ---
 
 ## 2. Le reframe central (challenge du `🔴` d'origine)
+
+> ⚠ **Renversé le 2026-08-02** (`p1-4-cadrage-module-matchs.md` §2) : le solveur place, le gestionnaire
+> ajuste — le tableau ci-dessous reste utile pour la différence de nature (dates réelles vs semaine type).
 
 > **Les matchs ne sont PAS un problème solveur. C'est un module « placement daté + radar de conflits +
 > workflow dérogation ».**
@@ -361,6 +371,10 @@ l'entraînement* ; le calendrier compétition montre *la vie des championnats*.
 ---
 
 ## 12. Tranché vs ouvert
+
+> ⚠ Trois lignes de ce « tranché » sont **renversées ou amendées** par le cadrage 2026-08-02
+> (`p1-4-cadrage-module-matchs.md`) : le solveur place (§2 y est renversé), l'import FBI est **global club**
+> (pas par équipe), la dérogation reste tracker-free dans P1-4.
 
 **Tranché :**
 - Cœur = **placement manuel + radar de conflits + dérogation**, **pas** un solveur (solveur = assist V2).
