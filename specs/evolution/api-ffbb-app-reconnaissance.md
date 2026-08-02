@@ -101,7 +101,21 @@ Champs utiles (28 au total) : `codeClub` · `nomEquipe` · `numeroEquipe` · `ca
 | Le **logo d'équipe** | `logo` / `thumbnail` par engagement | **P2-18 (b)** — « synchro à la création d'une équipe » |
 | Ligue et comité de rattachement | `codeLigue` / `codeComite` + noms | Déjà partiellement couvert par `FfbbClubPopulator` |
 
-⚠️ **La limite dure : aucun champ `saison`.** Le document d'engagement n'en porte pas (vérifié sur les 283 résultats). Impossible de distinguer un engagement 25-26 d'un 26-27 depuis cet index seul. **À lever avant de câbler quoi que ce soit** — sans quoi une resynchronisation ramènerait des équipes de saisons mortes.
+⚠️ **Aucun champ `saison` sur l'engagement lui-même** (vérifié sur les 283 résultats) — mais **ce n'était pas un bloquant, et la première rédaction de ce document se trompait en l'annonçant comme tel** (relevé par le fondateur, corrigé le 2026-08-02).
+
+✅ **La saison s'obtient par jointure**, en une requête : `engagement.idCompetition.id` → `ffbbserver_competitions` → **`saison.code`**. Mesuré sur les 14 engagements de BCCL : **14/14 résolus, tous `26-27`**. Le référentiel `competitions` porte en plus `phases[]` et **`poules[]` avec la liste des engagements de chaque poule** — voir §5bis.
+
+---
+
+### 5bis. `ffbbserver_competitions` — la clé de voûte, sous-estimée au premier passage
+
+425 documents. Une compétition porte `saison {code}`, `phases[]`, `etat`, `typeCompetition` (Championnat / Coupe / …), `categorie`, `sexe`, `niveau`, `organisateur` (l'organisme complet), et surtout :
+
+```
+poules: [ { id, nom: "Poule A", engagements: [ {id, nom: "FIRMINY CHAZEAU-FAYOL AL"}, … ] }, … ]
+```
+
+**Une compétition donne donc sa poule ET tous les clubs engagés dedans.** C'est ce qui rend observable ce que le fondateur appelle « la compétition change dans le temps » : les six engagements *Brassage* de BCCL (RMU13/RMU15/RMU18, RFU13/RFU15/RFU18) sont des compétitions distinctes des championnats seniors — la **phase est déjà modélisée côté FFBB**, il n'y a pas à la deviner.
 
 ---
 
@@ -139,7 +153,7 @@ Le schéma, lui, est riche et cohérent (36 champs : `date_rencontre`, `idOrgani
 
 | # | Action | Pour |
 |---|---|---|
-| 1 | **Lever la question `saison`** sur les engagements (autre index ? filtre Meilisearch ? `idCompetition.slug` ?) | Bloquant pour P2-18 |
+| 1 | ~~Lever la question `saison`~~ — **levée le 2026-08-02** : jointure `idCompetition.id` → `competitions.saison.code`, 14/14 sur BCCL | ✅ |
 | 2 | Étendre `FfbbApiClient` à `ffbbserver_engagements`, **en filtrant sur `codeClub`** et jamais sur la pertinence | P2-18, P1-4 (2) |
 | 3 | Garder le confinement SSRF tel quel — les deux hôtes restent en dur, aucun dérivé d'input | Sécurité |
 | 4 | Re-tester `ffbbserver_rencontres` **au moment d'attaquer P1-4** | P1-4 |

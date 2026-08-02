@@ -81,6 +81,8 @@ GET https://api.ffbb.com/assets/{uuid}?format=webp&height=220&fit=contain
 
 Ce fichier décrit ce que le backend **appelle aujourd'hui**. La reconnaissance P2-19 a mesuré ce que la même clé `key_ms` rend **en plus** — cinq autres index Meilisearch, dont `ffbbserver_engagements` (équipes engagées d'un club, avec compétition, poule, niveau et logo).
 
-⚠ Deux pièges qui ne se devinent pas : la recherche plein texte d'un code club rend **beaucoup de faux positifs** (283 hits pour 14 vrais sur `ARA0069036` — filtrer sur le champ `codeClub`, jamais sur la pertinence), et un engagement **ne porte aucun champ `saison`**.
+⚠ Un piège qui ne se devine pas : la recherche plein texte d'un code club rend **beaucoup de faux positifs** — 283 hits pour 14 vrais sur `ARA0069036`. **Filtrer sur le champ `codeClub`, jamais sur la pertinence.**
+
+La **saison** ne figure pas sur l'engagement mais s'obtient en une jointure : `engagement.idCompetition.id` → `ffbbserver_competitions` → `saison.code` (vérifié 14/14 sur BCCL, toutes `26-27`). Le référentiel `competitions` porte aussi `phases[]` et `poules[]` avec les engagements de chaque poule.
 
 → Inventaire complet, route par route, avec les mesures : [`../../specs/evolution/api-ffbb-app-reconnaissance.md`](../../specs/evolution/api-ffbb-app-reconnaissance.md)
