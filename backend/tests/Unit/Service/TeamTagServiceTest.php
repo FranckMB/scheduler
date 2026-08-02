@@ -123,10 +123,14 @@ final class TeamTagServiceTest extends TestCase
 
         $this->service->syncTeamTags($team, 'season-1');
 
+        // ⚠ On assert e les NOMS, pas seulement le compte (revue #356). Le mock pose
+        // `id = name`, donc `getTagId()` rend le nom du tag. Avec un simple `assertCount(4)`,
+        // inverser les branches Gender::F / Gender::M laissait ce test VERT : une équipe
+        // féminine recevait MASCULINE, et une contrainte visant les filles atteignait les
+        // garçons sans qu'aucun test rougisse.
         $tagNames = array_map(static fn (TeamTagAssignment $a): string => $a->getTagId(), $persistedAssignments);
-
-        // U15F should generate: JEUNE, U15, FEMININE, REGIONAL
-        self::assertCount(4, $persistedAssignments);
+        sort($tagNames);
+        self::assertSame(['FEMININE', 'JEUNE', 'REGIONAL', 'U15'], $tagNames);
     }
 
     public function testSyncTeamTagsForSeniorLoisir(): void
@@ -172,8 +176,10 @@ final class TeamTagServiceTest extends TestCase
 
         $this->service->syncTeamTags($team, 'season-1');
 
-        // Senior Loisir should generate: SENIOR, MASCULINE, LOISIR
-        self::assertCount(3, $persistedAssignments);
+        // Idem : les noms, pas le compte (revue #356).
+        $tagNames = array_map(static fn (TeamTagAssignment $a): string => $a->getTagId(), $persistedAssignments);
+        sort($tagNames);
+        self::assertSame(['LOISIR_ADULTE', 'MASCULINE', 'SENIOR'], $tagNames);
     }
 
     public function testSyncTeamTagsRemovesExistingAssignments(): void
@@ -191,8 +197,11 @@ final class TeamTagServiceTest extends TestCase
         $this->assignmentRepository->method('findBy')
             ->willReturn([$existingAssignment]);
 
+        // Doit simuler une vraie base : depuis la revue #356 le service ÉCHOUE FORT si la
+        // relecture ne rend pas les tags qu'il vient d'insérer — un `willReturn([])` nu
+        // décrirait une base qui perd les écritures, pas un scénario réel.
         $this->teamTagRepository->method('findBy')
-            ->willReturn([]);
+            ->willReturnCallback(fn (array $criteres): array => $this->tagsInsertedFor($criteres));
 
         $this->sportCategoryRepository->method('find')
             ->willReturn(null);
@@ -222,8 +231,11 @@ final class TeamTagServiceTest extends TestCase
         $this->assignmentRepository->method('findBy')
             ->willReturn([]);
 
+        // Doit simuler une vraie base : depuis la revue #356 le service ÉCHOUE FORT si la
+        // relecture ne rend pas les tags qu'il vient d'insérer — un `willReturn([])` nu
+        // décrirait une base qui perd les écritures, pas un scénario réel.
         $this->teamTagRepository->method('findBy')
-            ->willReturn([]);
+            ->willReturnCallback(fn (array $criteres): array => $this->tagsInsertedFor($criteres));
 
         $this->sportCategoryRepository->method('find')
             ->willReturn(null);

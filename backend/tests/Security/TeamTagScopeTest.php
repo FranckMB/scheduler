@@ -11,6 +11,7 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamTag;
+use App\Enum\TeamTagAxis;
 use App\Service\TeamTagResolver;
 use App\Service\TeamTagService;
 use App\Tests\TenantGucTrait;
@@ -18,6 +19,7 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
+use ReflectionClass;
 use ReflectionMethod;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Uid\Uuid;
@@ -197,30 +199,53 @@ final class TeamTagScopeTest extends KernelTestCase
      * mocke la connexion — et casse en production à la première écriture d'équipe d'un club
      * neuf, qui n'obtient alors AUCUN tag système.
      */
-    public function testTheHandWrittenColumnListMatchesTheEntityMapping(): void
+    public function testTheInsertColumnListMatchesTheEntityMapping(): void
     {
+        // ⚠ On lit la constante que le SQL UTILISE, pas une liste recopiée ici (revue #356).
+        // La première version de ce test comparait deux copies : retirer une colonne de
+        // l'INSERT le laissait vert — exactement le défaut qu'il était censé fermer.
+        /** @var list<string> $insertees */
+        $insertees = new ReflectionClass(TeamTagService::class)->getConstant('INSERT_COLUMNS');
         $colonnesEntite = $this->em->getClassMetadata(TeamTag::class)->getColumnNames();
-
-        // Toute colonne NOT NULL sans défaut doit figurer dans l'INSERT, sinon l'écriture
-        // casse. On compare à la source (le mapping), jamais à une liste recopiée.
-        $insertees = ['id', 'version', 'created_at', 'updated_at', 'club_id', 'name', 'color', 'is_system', 'axis'];
-        $oubliees = array_diff($colonnesEntite, $insertees);
 
         self::assertSame(
             [],
-            array_values($oubliees),
-            'colonne(s) de team_tag absente(s) de insertMissingSystemTags — une NOT NULL ferait échouer toute écriture',
+            array_values(array_diff($colonnesEntite, $insertees)),
+            'colonne(s) de team_tag absente(s) de INSERT_COLUMNS — une NOT NULL ferait échouer toute écriture',
         );
-        self::assertSame([], array_values(array_diff($insertees, $colonnesEntite)), 'colonne insérée qui n\'existe plus');
+        self::assertSame(
+            [],
+            array_values(array_diff($insertees, $colonnesEntite)),
+            'colonne insérée qui n\'existe plus au mapping',
+        );
+    }
+
+    /**
+     * NR — revue #356 : le `true` de `is_system` est un littéral dans une chaîne SQL, que rien
+     * n'assertait. L'écrire `false` ferait naître tous les tags système en non-système sans
+     * qu'un test rougisse — les lectures ne filtrent plus sur ce drapeau (correctif round 1),
+     * donc la panne ne se verrait que sur les écrans qui distinguent système et personnalisé.
+     */
+    public function testInsertedSystemTagsAreFlaggedAsSystem(): void
+    {
+        $this->scopeGucToClub($this->club->getId());
+
+        $tag = $this->em->getRepository(TeamTag::class)
+            ->findOneBy(['clubId' => $this->club->getId(), 'name' => 'BABY']);
+
+        self::assertInstanceOf(TeamTag::class, $tag);
+        self::assertTrue($tag->getIsSystem(), 'un tag semé par insertMissingSystemTags est SYSTÈME');
+        self::assertSame(TeamTagAxis::AGE, $tag->getAxis(), 'et il naît avec son axe');
     }
 
     /**
      * NR — P4-64, l'autre moitié : la garde ne doit pas transformer la course en 500.
      *
-     * `insertMissingSystemTags` insère en `ON CONFLICT DO NOTHING` puis RELIT. Rejouer la
-     * dérivation sur un club déjà semé doit donc être un no-op silencieux, et surtout ne pas
-     * fermer l'EntityManager — ce qu'un `flush()` en violation de contrainte ferait, emportant
-     * au passage les assignations de l'appelant.
+     * ⚠ Ce test n'emprunte PAS le chemin d'insertion (revue #356) : sur un club déjà semé
+     * `$manquants` est vide et `insertMissingSystemTags` n'est jamais appelé. Il garde
+     * l'IDEMPOTENCE d'ensemble — rejouer la dérivation n'ajoute ni ne perd de tag, et
+     * l'EntityManager reste ouvert. Le chemin de conflit lui-même est gardé par
+     * `testInsertingAlreadyExistingSystemTagsIsAConflictFreeNoOp`.
      */
     public function testResyncingAnAlreadySeededClubIsAQuietNoOp(): void
     {

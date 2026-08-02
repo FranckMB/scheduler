@@ -29,17 +29,33 @@ use Doctrine\Migrations\AbstractMigration;
  * départage pour être déterministe) et on **réaffecte ses assignations** avant de supprimer
  * les autres : supprimer d'abord perdrait les affectations portées par les doublons.
  *
- * ⚠ Rétro-compatibilité (convention `docs/ops/deploy.md`) : le deploy migre AVANT de basculer
- * les conteneurs, donc l'ancien code tourne quelques secondes sur le nouveau schéma. Ajouter
- * un index unique ne casse aucune LECTURE. La seule écriture qu'il peut refuser est
- * précisément l'insertion en double que ce lot supprime — et le code qui l'émettait est celui
- * qu'on remplace dans la même PR.
+ * ⚠ Rétro-compatibilité (convention `docs/ops/deploy.md`) — à lire en entier, la première
+ * rédaction était incomplète sur le MODE d'échec (revue #356). Le deploy migre AVANT de
+ * basculer les conteneurs : pendant quelques secondes, l'ANCIENNE release tourne sur le
+ * nouveau schéma. Aucune LECTURE ne casse. La seule écriture que l'index refuse est
+ * l'insertion en double que ce lot supprime — mais l'ancienne release l'émet via
+ * `persist()` + `flush()`, donc la violation **ferme l'EntityManager** et fait échouer TOUTE
+ * la requête, pas seulement l'insertion du tag : le gestionnaire prend un 500 et son équipe
+ * n'est pas créée. Fenêtre de quelques secondes, sur le seul chemin « un tag système manque
+ * encore à ce club » — mais elle existe et doit être écrite.
+ *
+ * ⚠ Second effet de la même fenêtre : l'étape 3 supprime des lignes `team_tag` pendant que
+ * l'ancienne release sert, et `team_tag_assignment.tag_id` ne porte **aucune clé étrangère**
+ * (`Version20260615010708` ne crée que des index). Une assignation écrite en vol vers un tag
+ * doublon que l'étape 3 vient de supprimer resterait donc orpheline, sans que la base s'y
+ * oppose. Poser cette FK est une dette à part, hors de ce lot.
  */
 final class Version20260802140000 extends AbstractMigration
 {
     public function getDescription(): string
     {
-        return 'P4-64: dédoublonne team_tag puis pose un index unique sur (club_id, name).';
+        // Description ÉLARGIE (revue #356) : elle annonçait « dédoublonne team_tag » alors que
+        // l'étape 2 dédoublonne aussi `team_tag_assignment` sur TOUTE la table. C'est ce que
+        // lit l'opérateur avant de jouer la migration en production ; elle doit dire ce que la
+        // migration fait, pas ce qu'on aimerait qu'elle fasse.
+        return 'P4-64 : dédoublonne team_tag (club_id, name) EN RÉAFFECTANT ses assignations, '
+            . 'dédoublonne team_tag_assignment (team_id, tag_id, season_id) SUR TOUTE LA TABLE, '
+            . 'puis pose l\'index unique uniq_team_tag_club_name. Irréversible.';
     }
 
     public function up(Schema $schema): void
@@ -64,25 +80,17 @@ final class Version20260802140000 extends AbstractMigration
         //    par (team_id, tag_id, season_id), sinon le payload du solveur porterait deux
         //    fois le même tag pour une équipe.
         //
-        //    ⚠ RESTREINT aux tags que l'étape 1 vient de toucher (revue #356). Sans le
-        //    `WHERE a.tag_id IN (…)`, cette requête dédoublonnait TOUTE la table — y compris
-        //    pour des clubs n'ayant jamais eu de tag en double. Aucune donnée n'aurait été
-        //    perdue (le triplet ne porte rien d'autre), mais le rayon d'action dépassait ce
-        //    que le nom, la description et le changelog annoncent — c'est-à-dire ce que lit
-        //    l'opérateur avant de la jouer en production.
+        //    ⚠ PORTÉE : toute la table, délibérément (arbitrage fondateur, revue #356). Le
+        //    round 1 avait relevé, à juste titre, que le rayon d'action dépassait ce que le
+        //    nom annonçait. Le resserrer aux seuls tags dupliqués a supprimé un nettoyage
+        //    LÉGITIME : un triplet en double sur un tag qui n'a jamais eu de doublon (écriture
+        //    concurrente antérieure) est exactement le même préjudice — le payload porterait
+        //    deux fois le même tag pour une équipe. On garde donc la portée large et c'est la
+        //    DESCRIPTION qui a été élargie, pas la requête qui a été rétrécie.
         $this->addSql(<<<'SQL'
-            WITH gardee_dupliquee AS (
-                SELECT DISTINCT ON (club_id, name) id
-                FROM team_tag
-                WHERE (club_id, name) IN (
-                    SELECT club_id, name FROM team_tag GROUP BY club_id, name HAVING count(*) > 1
-                )
-                ORDER BY club_id, name, created_at, id
-            )
             DELETE FROM team_tag_assignment a
             USING team_tag_assignment plus_ancienne
-            WHERE a.tag_id IN (SELECT id FROM gardee_dupliquee)
-              AND a.team_id = plus_ancienne.team_id
+            WHERE a.team_id = plus_ancienne.team_id
               AND a.tag_id = plus_ancienne.tag_id
               AND a.season_id = plus_ancienne.season_id
               AND (a.created_at, a.id) > (plus_ancienne.created_at, plus_ancienne.id)
