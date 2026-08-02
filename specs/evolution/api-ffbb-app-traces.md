@@ -4,8 +4,12 @@
 > **Ici, la sortie réelle de l'API**, capturée le **2026-08-02** pour le club **`ARA0069036`** (B Charpennes Croix Luizet).
 > Elle existe pour qu'on puisse relire chaque route sans refaire les appels, et vérifier ce que le rapport affirme.
 >
-> **Aucun jeton n'est reproduit.** Quelques champs très volumineux et sans valeur d'analyse (dégradés de couleur,
-> cartographie, listes de vidéos) sont marqués `…(tronqué)` ; tout le reste est verbatim.
+> **Aucun jeton n'est reproduit.** Seuls `rematch_videos` et `compare_old_site` sont marqués `…(tronqué)` ;
+> tout le reste est **verbatim**.
+>
+> ⚠ **Une première version tronquait aussi `gradient_color` et `cartographie`** en les jugeant « sans valeur
+> d'analyse ». Les deux portaient de l'information : la **couleur du club** (`#c9102e`), et un
+> **`status: "draft"`** sur la géoloc — la FFBB n'a pas validé ces coordonnées. **Ne pas trier avant d'avoir lu.**
 
 ---
 
@@ -143,7 +147,25 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
         "Label FFBB Citoyen MAIF 2 étoiles",
         "EFMB3"
       ],
-      "cartographie": "…(tronqué)",
+      "cartographie": {
+        "adresse": "Rue Émile Dunière",
+        "codePostal": "69100",
+        "coordonnees": {
+          "type": "Point",
+          "coordinates": [
+            4.88467,
+            45.78017
+          ]
+        },
+        "date_created": null,
+        "date_updated": null,
+        "id": "G-11104",
+        "latitude": 45.78017,
+        "longitude": 4.88467,
+        "title": "",
+        "ville": "Villeurbanne",
+        "status": "draft"
+      },
       "commune": {
         "libelle": "VILLEURBANNE",
         "codePostal": "69100",
@@ -203,7 +225,25 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
         "Compétition MiniBasket"
       ],
       "labellisation": [],
-      "cartographie": "…(tronqué)",
+      "cartographie": {
+        "adresse": "Rue Antonin Perrin",
+        "codePostal": "69100",
+        "coordonnees": {
+          "type": "Point",
+          "coordinates": [
+            4.88468,
+            45.75967
+          ]
+        },
+        "date_created": null,
+        "date_updated": null,
+        "id": "G-11072",
+        "latitude": 45.75967,
+        "longitude": 4.88468,
+        "title": "",
+        "ville": "Villeurbanne",
+        "status": "draft"
+      },
       "commune": {
         "libelle": "VILLEURBANNE",
         "codePostal": "69100",
@@ -266,7 +306,25 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
       "labellisation": [
         "EFMB3"
       ],
-      "cartographie": "…(tronqué)",
+      "cartographie": {
+        "adresse": "Ruelle de la Cure",
+        "codePostal": "69430",
+        "coordonnees": {
+          "type": "Point",
+          "coordinates": [
+            4.61649,
+            46.11797
+          ]
+        },
+        "date_created": null,
+        "date_updated": null,
+        "id": "G-11086",
+        "latitude": 46.11797,
+        "longitude": 4.61649,
+        "title": "",
+        "ville": "Quincié-en-Beaujolais",
+        "status": "draft"
+      },
       "commune": {
         "libelle": "QUINCIE-EN-BEAUJOLAIS",
         "codePostal": "69430",
@@ -388,7 +446,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
       "codeClub": "ARA0069036",
       "nomClubPro": "",
       "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005335264",
-      "gradient_color": "…(tronqué)"
+      "gradient_color": "#c9102e"
     },
     {
       "id": "200000005337255",
@@ -460,7 +518,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
       "codeClub": "ARA0069036",
       "nomClubPro": "",
       "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005337255",
-      "gradient_color": "…(tronqué)"
+      "gradient_color": "#c9102e"
     },
     {
       "id": "200000005338342",
@@ -532,7 +590,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
       "codeClub": "ARA0069036",
       "nomClubPro": "",
       "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005338342",
-      "gradient_color": "…(tronqué)"
+      "gradient_color": "#c9102e"
     }
   ]
 }
@@ -1548,7 +1606,25 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
       "mail": "",
       "numero": "032429402",
       "telephone": "",
-      "cartographie": "…(tronqué)",
+      "cartographie": {
+        "adresse": "Route de Sainte-Foy la Grande",
+        "codePostal": "24700",
+        "coordonnees": {
+          "type": "Point",
+          "coordinates": [
+            0.16231,
+            44.99708
+          ]
+        },
+        "date_created": null,
+        "date_updated": null,
+        "id": "S-10000000013",
+        "latitude": 44.99708,
+        "longitude": 0.16231,
+        "title": "GYMNASE Jean ROSTAND",
+        "ville": "Montpon-Ménestérol",
+        "status": "draft"
+      },
       "commune": {
         "codeInsee": null,
         "codePostal": "24700",
@@ -1580,7 +1656,25 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
       "mail": "",
       "numero": "034026101",
       "telephone": "",
-      "cartographie": "…(tronqué)",
+      "cartographie": {
+        "adresse": "Avenue George Sand",
+        "codePostal": "40230",
+        "coordonnees": {
+          "type": "Point",
+          "coordinates": [
+            -1.21828,
+            43.69375
+          ]
+        },
+        "date_created": null,
+        "date_updated": null,
+        "id": "S-10000000014",
+        "latitude": 43.69375,
+        "longitude": -1.21828,
+        "title": "SAINT GEOURS MAREMNE",
+        "ville": "Saint-Geours-de-Maremne",
+        "status": "draft"
+      },
       "commune": {
         "codeInsee": null,
         "codePostal": "40230",
@@ -1612,7 +1706,25 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
       "mail": "",
       "numero": "034026301",
       "telephone": "0558579293",
-      "cartographie": "…(tronqué)",
+      "cartographie": {
+        "adresse": null,
+        "codePostal": "40380",
+        "coordonnees": {
+          "type": "Point",
+          "coordinates": [
+            -0.87861,
+            43.78918
+          ]
+        },
+        "date_created": null,
+        "date_updated": null,
+        "id": "S-10000000015",
+        "latitude": 43.78918,
+        "longitude": -0.87861,
+        "title": "SALLE ST JEAN DE LIER",
+        "ville": "Saint-Jean-de-Lier",
+        "status": "draft"
+      },
       "commune": {
         "codeInsee": null,
         "codePostal": "40380",
@@ -1655,7 +1767,25 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
       "nom": "Arena",
       "numero": 1,
       "rue": "58 Lieu-dit Aréna",
-      "cartographie": "…(tronqué)",
+      "cartographie": {
+        "adresse": "Lieu-dit Aréna",
+        "codePostal": "20215",
+        "coordonnees": {
+          "type": "Point",
+          "coordinates": [
+            9.46505,
+            42.50032
+          ]
+        },
+        "date_created": null,
+        "date_updated": null,
+        "id": "T-1",
+        "latitude": 42.50032,
+        "longitude": 9.46505,
+        "title": null,
+        "ville": "Vescovato",
+        "status": "draft"
+      },
       "commune": {
         "codeInsee": null,
         "codePostal": "20215",
@@ -1690,7 +1820,25 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
       "nom": "Plateau Multisports",
       "numero": 10,
       "rue": "D109",
-      "cartographie": "…(tronqué)",
+      "cartographie": {
+        "adresse": "D109",
+        "codePostal": "20230",
+        "coordonnees": {
+          "type": "Point",
+          "coordinates": [
+            9.489639,
+            42.400738
+          ]
+        },
+        "date_created": null,
+        "date_updated": null,
+        "id": "T-10",
+        "latitude": 42.400738,
+        "longitude": 9.489639,
+        "title": null,
+        "ville": "Poggio-Mezzana",
+        "status": "draft"
+      },
       "commune": {
         "codeInsee": null,
         "codePostal": "20230",
@@ -1725,7 +1873,25 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
       "nom": "Espace Sportif de Proximite",
       "numero": 100,
       "rue": "13 Résidence du Petit Bois",
-      "cartographie": "…(tronqué)",
+      "cartographie": {
+        "adresse": "Résidence du Petit Bois",
+        "codePostal": "95480",
+        "coordonnees": {
+          "type": "Point",
+          "coordinates": [
+            2.16085,
+            49.02033
+          ]
+        },
+        "date_created": null,
+        "date_updated": null,
+        "id": "T-100",
+        "latitude": 49.02033,
+        "longitude": 2.16085,
+        "title": null,
+        "ville": "Pierrelaye",
+        "status": "draft"
+      },
       "commune": {
         "codeInsee": null,
         "codePostal": "95480",
@@ -1758,7 +1924,11 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
 
 ⚠ Filtrés sur **`codeClub == "ARA0069036"`**, pas sur la pertinence : la requête plein texte rendait **283 hits**, dont 269 appartenant à d'autres clubs (`ARA0069016`, `ARA0069034`…) qui matchaient sur `competitionsUrl` ou la compétition partagée.
 
-⚠ **Aucun champ `saison`** dans ces documents — c'est la limite qui bloque P2-18.
+⚠ **Aucun champ `saison`** dans ces documents — mais **ce n'est PAS un bloquant** : la saison s'obtient par jointure `idCompetition.id` → `ffbbserver_competitions` → `saison.code` (14/14 résolus, tous `26-27`).
+
+⚠ **Aucune clé stable d'équipe** : `nomEquipe`, `nomUsuel`, `nomOfficiel`, `codeAbrege`, `nomCtc` sont vides **14/14**, et `numeroEquipe` (6/14) n'a pas de signification métier. C'est ce qui impose de ré-apparier à chaque phase.
+
+⚠ Le `logo` est **le même sur les 14** et **identique à celui de l'organisme** : c'est le logo du CLUB, pas de l'équipe. Son `gradient_color` porte en revanche **la couleur du club**.
 
 ```json
 [
@@ -1832,7 +2002,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005335264",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005337255",
@@ -1904,7 +2074,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005337255",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005338342",
@@ -1976,7 +2146,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005338342",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005341546",
@@ -2048,7 +2218,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005341546",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005341569",
@@ -2120,7 +2290,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005341569",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005341649",
@@ -2192,7 +2362,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005341649",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005341770",
@@ -2264,7 +2434,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005341770",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005346875",
@@ -2312,7 +2482,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005346875",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005346973",
@@ -2360,7 +2530,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005346973",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005347005",
@@ -2408,7 +2578,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005347005",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005347033",
@@ -2456,7 +2626,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005347033",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005347065",
@@ -2504,7 +2674,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005347065",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005347169",
@@ -2552,7 +2722,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005347169",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   },
   {
     "id": "200000005347201",
@@ -2600,7 +2770,7 @@ Déjà exploité par `FfbbApiClient::search`. 69 hits pour le code club, 4 635 d
     "codeClub": "ARA0069036",
     "nomClubPro": "",
     "competitionsUrl": "/ligues/ara/comites/0069/clubs/ARA0069036/equipes/200000005347201",
-    "gradient_color": "…(tronqué)"
+    "gradient_color": "#c9102e"
   }
 ]
 ```

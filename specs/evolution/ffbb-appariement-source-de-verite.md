@@ -50,6 +50,26 @@ phase**. C'est le fait qui gouverne le §3.
 > ⚠️ Détail d'implémentation à ne pas rater : `niveau.libelle` sort en `PrÃ© rÃ©gionale` — **double encodage
 > UTF-8 côté FFBB**. À normaliser à l'entrée, jamais à afficher brut.
 
+### 2bis. Champs relevés au second balayage — à ne pas re-perdre
+
+Un premier passage les avait manqués. Aucun n'est structurant seul ; ensemble ils évitent des requêtes et des
+erreurs.
+
+| Champ | Où | Ce que ça vaut |
+|---|---|---|
+| `logo.gradient_color` | organisme, engagement | **La couleur du club** → §6.7 |
+| `salles.numero` + `_geo` | salles | **L'identité et la position d'un gymnase** → §6.8 |
+| `engagements_codes` | organisme | La liste des compétitions du club **en une chaîne, sur l'organisme** — pour un ADVERSAIRE, ça évite une requête sur `engagements` |
+| `url_competition` | organisme | `/ligues/ara/comites/0069/clubs/ara0069036` — **la hiérarchie ligue/comité en un chemin**, utile au §6.4 |
+| `saison_en_cours` | organisme | Booléen — un filtre de saison existe donc bien à ce niveau |
+| `cartographie.status` | organisme, salles | Vaut **`"draft"`** sur BCCL : la FFBB **n'a pas validé cette géoloc**. Raison de plus de préférer la salle (§6.8) à l'adresse du club |
+| `nom_simple` | organisme | **Le champ « nom d'usage » EXISTE côté FFBB** — mais il est `null` pour BCCL. La décision §4 (pas de nom d'usage) reste bonne : la source ne le remplit pas |
+| `type` + `type_association` | organisme | `Groupement` / `{code: K, libelle: Club}` — de quoi distinguer club, CTC et entente le jour où `nomCtc` servira |
+| `dateAffiliation` | organisme | **`null` sur BCCL** — inutilisable, contrairement à ce qu'une première lecture supposait |
+| `uniqueKey` | rencontre | `{pouleId}_{journée}_{n}` — **clé de dédoublonnage naturelle** pour le jour où l'index se remplit |
+| `idOrganismeEquipe1/2.code` | rencontre | Le **code club** des deux camps → jointure directe vers `organismes` |
+| `pratique` | rencontre | `5x5` — distingue le 3x3, qui a ses propres compétitions |
+
 ---
 
 ## 3. L'appariement — TRANCHÉ
@@ -200,8 +220,11 @@ adversaire est connue **par la poule, avant le calendrier** → l'empreinte d'un
 change, *« si on joue contre Clermont c'est 2h de route aller, 45 min d'échauffement, 2h retour et 30 de
 douche — l'ordre de grandeur d'indisponibilité est le même »*.
 ⚠ **Réserve retenue** : l'approximation est bonne au loin et **faible en local**, or les championnats
-**départementaux** — le gros du volume — sont locaux, où 25 minutes d'écart changent un placement. → afficher
-**comme estimation**, corrigeable, jamais comme une donnée.
+**départementaux** — le gros du volume — sont locaux, où 25 minutes d'écart changent un placement.
+
+⚑ **Mais le §6.8 rend cette approximation largement inutile** : l'export FBI nomme la **salle**, et
+`ffbbserver_salles` en donne les coordonnées exactes. On ne se rabat sur l'adresse du club que si la salle ne
+résout pas. Dans ce cas seulement, afficher **comme estimation**, corrigeable.
 
 ### 6.6 🟡 Les rivaux — un drapeau, pas une inférence
 
@@ -227,6 +250,27 @@ nom, §4, où le fondateur a tranché l'inverse).
 
 *(Trouvée parce que le fondateur a pointé l'objet `logo` du §9 des traces. Je l'avais lu comme « rien de neuf,
 c'est le logo du club » et j'étais passé à côté du champ d'à côté.)*
+
+### 6.8 🟢 Résoudre les GYMNASES — la trouvaille du second balayage
+
+`ffbbserver_salles` est **peuplé** (5 000+) et porte, par salle : `numero` (**l'identifiant FFBB de la salle**),
+`libelle`, `adresse`, `commune`, et `_geo`. Testé : `VILLEURBANNE` → 17 salles du 69100, dont **GYMNASE JEAN
+VILAR** — un gymnase de BCCL. **L'index couvre donc aussi NOS salles**, pas seulement celles des adversaires.
+
+⚠ La recherche plein texte seule ne suffit pas — « GYMNASE JEAN VILAR » rend **2 999 hits**. Il faut
+**désambiguïser par le code postal** ; même règle qu'au §2, on filtre sur le champ.
+
+**Trois usages, et le premier change une décision déjà prise :**
+
+1. **Le trajet devient réel, plus une estimation.** L'export FBI porte une colonne **`Salle`**. Nom + commune →
+   la salle exacte et ses coordonnées. **Ça périme la réserve du §6.5** : plus besoin d'approximer par
+   l'adresse du club (dont la géoloc est d'ailleurs en `status: "draft"` côté FFBB, donc non validée).
+2. **Nos propres gymnases se pré-remplissent.** `Venue.latitude`/`longitude` et `Venue.externalRef` **existent**
+   (entité + DTO) mais **le front ne les envoie jamais** — ils sont morts. Le `numero` FFBB est exactement ce
+   qu'attend `externalRef`, et il donne au **gymnase de match** (§7) son identité officielle, celle qu'on
+   déclare à la ligue.
+3. **Le jour où `rencontres` se remplira**, la salle est **embarquée dans le document de match** avec adresse et
+   coordonnées — plus aucune résolution à faire.
 
 ### ❌ Rejeté explicitement
 
@@ -260,8 +304,12 @@ qui partirait ensuite au solveur.
    le samedi ne peut pas accueillir l'entraînement en même temps — c'est un axe **constraint semantics**, donc
    un test de non-régression obligatoire le jour venu.
 
-*(Piste sans urgence : `ffbbserver_salles` porte `capaciteSpectateur`, et un niveau peut exiger une capacité
-minimale. Mais l'index n'est pas indexé par club — non exploitable en l'état.)*
+**Ce que le §6.8 apporte ici** : un gymnase de match a une **identité officielle** côté FFBB (`salles.numero`),
+et c'est elle qu'on déclare à la ligue. `Venue.externalRef` l'attend déjà. Le résoudre à la saisie donne au
+passage la géoloc, qui sert le trajet.
+
+*(Piste écartée : `capaciteSpectateur` — un niveau peut exiger une capacité minimale, mais le champ est **vide**
+sur l'échantillon lu. Non exploitable.)*
 
 ---
 
