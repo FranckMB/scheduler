@@ -18,6 +18,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 
 #[Group('unit')]
 final class TeamTagServiceTest extends TestCase
@@ -58,6 +59,15 @@ final class TeamTagServiceTest extends TestCase
         // catégorie sans âge.
         yield 'Baby basket → BABY par son nom, faute d\'âges' => ['Baby basket', null, null, 'BABY'];
         yield 'Loisir → aucune tranche' => ['Loisir', null, null, null];
+        // LA frontière de la règle, et le SEUL endroit où elle peut dériver : quand le nom
+        // dit « baby » mais que l'âge dit autre chose, c'est l'ÂGE qui tranche. Sans ce
+        // cas, inverser la précédence laissait toute la suite verte (revue #352).
+        yield 'nom « Baby » mais âges de U9 → EMB, l\'âge prime' => ['Baby élite', 8, 9, 'EMB'];
+        yield 'nom « Baby » mais âges de U15 → JEUNE, l\'âge prime' => ['Baby compétition', 14, 15, 'JEUNE'];
+        // `ageMin` seul renseigné : l'API les rend indépendamment optionnels
+        // (`SportCategoryInput`). Exiger les DEUX bornes nulles faisait retomber ce cas
+        // hors de toutes les branches — le trou que le lot vient boucher (revue #352).
+        yield 'Baby basket avec le seul ageMin → BABY quand même' => ['Baby basket', 3, null, 'BABY'];
     }
 
     public function testSyncTeamTagsForU15F(): void
@@ -212,15 +222,23 @@ final class TeamTagServiceTest extends TestCase
 
         $tagNames = array_map(static fn (TeamTag $t): string => $t->getName(), $persistedTags);
 
-        // Le catalogue de tags système est semé EN ENTIER sur un club qui n'en a aucun,
-        // et sans doublon. On l'assertait par un compte en dur (21) : ajouter BABY le
-        // faisait rougir pour la seule raison qu'il avait bougé — un nombre magique dit
-        // « ça a changé », jamais « c'est faux ». Ce qu'on veut garder, c'est qu'aucun tag
-        // ne soit semé deux fois, et que les tranches d'âge y soient toutes.
-        self::assertSame(array_unique($tagNames), $tagNames, 'aucun tag système semé en double');
-        foreach (['BABY', 'EMB', 'JEUNE', 'SENIOR'] as $bracket) {
-            self::assertContains($bracket, $tagNames, 'toutes les tranches d\'âge sont semées');
-        }
+        // Le catalogue de tags système est semé EN ENTIER sur un club qui n'en a aucun, et
+        // sans doublon.
+        //
+        // Il était asserté par un compte en dur (21) : ajouter BABY le faisait rougir pour
+        // la seule raison qu'il avait bougé. Mais mon premier remplacement — unicité + les
+        // quatre tranches — était STRICTEMENT PLUS FAIBLE : retirer 'U21' de `$requiredTags`
+        // le laissait vert, alors que le compte l'attrapait (revue #352). Un tag manquant
+        // n'est pas un détail : `TeamTagResolver` ne le trouve pas, log un warning et rend
+        // une liste vide — la contrainte qui le cible est SILENCIEUSEMENT ignorée.
+        //
+        // L'invariant sans nombre magique : semer exactement les tags dont l'axe est
+        // déclaré. Les deux listes vivent dans le même fichier et doivent rester jumelles.
+        $declaredAxes = array_keys(new ReflectionClass(TeamTagService::class)->getConstant('SYSTEM_TAG_AXES'));
+        sort($declaredAxes);
+        $seeded = $tagNames;
+        sort($seeded);
+        self::assertSame($declaredAxes, $seeded, 'on sème exactement les tags système dont l\'axe est déclaré — ni un de moins, ni un doublon');
         self::assertContains('JEUNE', $tagNames);
         self::assertContains('SENIOR', $tagNames);
         self::assertContains('MASCULINE', $tagNames);

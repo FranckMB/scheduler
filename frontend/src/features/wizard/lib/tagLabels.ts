@@ -20,7 +20,11 @@ const TAG_LABELS: Record<string, string> = {
   // corriger l'étiquette — c'est elle qui disait le besoin. Ne pas l'élargir « pour
   // coller au code » sans vérifier `TeamTagService::determineTagNames` d'abord.
   EMB: "EMB (U9-U11)",
-  BABY: "Baby (U5-U7)",
+  // « Baby basket » est NOMMÉ, pas sous-entendu : le tag le couvre (catégorie sans âge,
+  // semée dans tout club neuf), et un libellé qui s'arrête à « U5-U7 » referait exactement
+  // ce qu'on reproche à l'ancien « EMB » — annoncer une portée plus étroite que la vraie,
+  // sur une contrainte qui peut être HARD (revue #352).
+  BABY: "Baby (U5-U7, Baby basket)",
 };
 
 const LEVEL_LABELS: Record<string, string | undefined> = LEVEL_LABEL;
