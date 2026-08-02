@@ -10,12 +10,15 @@ use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
+use App\Entity\TeamTag;
 use App\Service\TeamTagResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\Uid\Uuid;
 
 /**
  * NR BLOQUANT — SÉMANTIQUE DE CONTRAINTE (axe structurant §7.1).
@@ -101,6 +104,49 @@ final class TeamTagScopeTest extends KernelTestCase
         }
     }
 
+    /**
+     * NR — P4-64. LA garde : la base refuse deux tags de même nom dans un club.
+     *
+     * Sans elle, deux écritures de `Team` concurrentes inséraient le tag deux fois, et
+     * `TeamTagResolver::tagTeamIds` (`findOneBy`) en choisissait **une** pendant que les
+     * assignations se répartissaient entre les deux lignes : une contrainte ciblant ce tag
+     * n'atteignait qu'une partie des équipes, **sans erreur ni warning** — le tag était bien
+     * trouvé. C'est le pire mode de panne, et aucun test ne le couvrait.
+     */
+    public function testDatabaseRefusesTwoTagsWithTheSameNameInAClub(): void
+    {
+        $this->scopeGucToClub($this->club->getId());
+
+        // Le tag BABY existe déjà (posé par la dérivation au setUp) : le ré-insérer doit
+        // heurter `uniq_team_tag_club_name`.
+        $this->expectException(UniqueConstraintViolationException::class);
+        $this->em->getConnection()->executeStatement(
+            'INSERT INTO team_tag (id, version, created_at, updated_at, club_id, name, color, is_system, axis)'
+            . ' VALUES (:id, 1, NOW(), NOW(), :club, \'BABY\', \'#F5A9C8\', true, \'AGE\')',
+            ['id' => Uuid::v4()->toRfc4122(), 'club' => $this->club->getId()],
+        );
+    }
+
+    /**
+     * NR — P4-64, l'autre moitié : la garde ne doit pas transformer la course en 500.
+     *
+     * `insertMissingSystemTags` insère en `ON CONFLICT DO NOTHING` puis RELIT. Rejouer la
+     * dérivation sur un club déjà semé doit donc être un no-op silencieux, et surtout ne pas
+     * fermer l'EntityManager — ce qu'un `flush()` en violation de contrainte ferait, emportant
+     * au passage les assignations de l'appelant.
+     */
+    public function testResyncingAnAlreadySeededClubIsAQuietNoOp(): void
+    {
+        $avant = $this->countSystemTags();
+
+        // Une écriture de Team de plus → le listener rejoue `syncTeamTags`, donc
+        // `getOrCreateSystemTags`, sur un club qui a déjà tous ses tags.
+        $this->createTeamInCategory('U15', 14, 15);
+
+        self::assertSame($avant, $this->countSystemTags(), 'aucun tag système en double, aucun tag perdu');
+        self::assertTrue($this->em->isOpen(), 'l\'EntityManager doit rester ouvert — un flush en violation le fermerait');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -168,6 +214,16 @@ final class TeamTagScopeTest extends KernelTestCase
         // Le mémo de `TeamTagResolver` est par requête/message : il aurait pu figer une
         // réponse d'avant la création des équipes. On repart propre.
         $this->resolver->reset();
+    }
+
+    private function countSystemTags(): int
+    {
+        $this->scopeGucToClub($this->club->getId());
+
+        return \count($this->em->getRepository(TeamTag::class)->findBy([
+            'clubId' => $this->club->getId(),
+            'isSystem' => true,
+        ]));
     }
 
     /**
