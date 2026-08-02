@@ -428,11 +428,39 @@ L'écran est donc : **carte centrée sur `Club.latitude/longitude`**, un **pin p
 (§ ci-dessus, rayon auto-élargi), le **nom officiel** au pin, et la **case à cocher** qui importe.
 La liste triée par distance et la carte sont **deux vues du même jeu** — pas une alternative.
 
-**Ce qui reste à trancher : la source des tuiles** (options 1 ou 2 ci-dessus). C'est la seule vraie question,
-et elle est indépendante du reste de l'écran :
-- **proxy backend** — cohérent avec le réhébergement des logos, aucune IP ne fuit, ⚠ vérifier les **CGU du
-  fournisseur** (beaucoup interdisent le proxy) ;
-- **hôte de tuiles en CSP** — une ligne, mais premier appel navigateur vers un tiers, à inscrire en RGPD.
+#### La source des tuiles — candidats vérifiés le 2026-08-02
+
+| Source | Usage commercial | Coût | Verdict |
+|---|---|---|---|
+| **IGN Géoplateforme** `data.geopf.fr/wmts` | ✅ autorisé | **gratuit** | 🟢 **Le candidat** |
+| **OSM** `tile.openstreetmap.org` | toléré, **mais…** | gratuit | 🔴 **À écarter** |
+| Commerciaux (MapTiler, Stadia…) | ✅ | payant au-delà d'un palier | 🟡 repli |
+| Auto-hébergé (PMTiles / OpenMapTiles) | ✅ | stockage + génération | 🟡 le zéro-tiers absolu |
+
+**🔴 Pourquoi OSM est écarté, et ce n'est pas une question de licence.** Leur propre politique d'usage le dit :
+l'usage commercial est permis, mais *« access may be withdrawn at any point: you may no longer be able to serve
+your paying customers if access is withdrawn »*. Pour un produit qu'on commercialise à mi-2027, **c'est une
+dépendance qui peut être coupée sans préavis**. S'ajoutent : bulk download **strictement interdit**, proxy
+« généralement déconseillé », User-Agent identifiant obligatoire (les UA génériques de bibliothèques sont
+bloqués).
+
+**🟢 Pourquoi l'IGN convient**, vérifié dans les CGU (v. 15/10/2024) : **usage commercial autorisé**, service
+**gratuit** (« l'utilisation des géodonnées et géoservices est gratuite »), **aucune limite de débit sur le
+WMTS** (les quotas cités portent sur les tuiles vectorielles TMS, le WFS et le téléchargement), palier de
+consommation *Essentiel* à 1 To/mois, disponibilité annoncée 99,5 %. Licence par défaut **Licence Ouverte /
+Etalab** → **attribution obligatoire**.
+
+Et l'argument qui n'est pas technique : c'est un **service public français**, pour un produit **franco-français**
+qui vend à des clubs FFBB. Pas de transfert vers un hébergeur tiers étranger — le volet RGPD s'allège.
+
+⚠ **Restent à vérifier avant de coder** : (a) la **formulation exacte de l'attribution** exigée par la couche
+choisie (elle dépend du producteur de la donnée, pas de la Géoplateforme) ; (b) si le **proxy backend** est
+compatible avec leurs CGU — si oui, on garde `img-src 'self'` et **la CSP ne bouge pas du tout**, ce qui rend
+la question du §précédent sans objet.
+
+Sources : [politique de tuiles OSM](https://operations.osmfoundation.org/policies/tiles/) ·
+[CGU cartes.gouv.fr](https://cartes.gouv.fr/cgu) ·
+[API WMTS Géoplateforme](https://www.data.gouv.fr/dataservices/api-geoplateforme-diffusion-dimages-tuilees-wmts)
 
 **Ordre de livraison suggéré** (sans rien retirer de la cible) : la **liste** d'abord — elle ne dépend d'aucune
 tuile et livre déjà « il ne part plus de zéro » —, la **carte** ensuite par-dessus le même jeu de données. Les
