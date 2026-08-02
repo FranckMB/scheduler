@@ -44,6 +44,38 @@ Trois leviers, du plus mesuré au moins cadré :
 ⚠ **La limite du principe, à tenir** : « prémâché » ne veut pas dire « décidé ». Tout ce qui est pré-rempli
 doit être **coché, pas imposé** — sinon on retombe sur le §1, qu'on vient d'établir.
 
+### 1ter. Le principe qui englobe tout — transférer le cerveau du gestionnaire
+
+> **« On reste dans cette démarche de rendre le cerveau et la connaissance du gestionnaire facilement
+> transférables dans notre outil. »** (fondateur, 2026-08-02)
+
+C'est la formulation générale dont « la page pas vierge » et « l'outil retire du travail » sont deux faces. Le
+gestionnaire **sait déjà tout** : ses gymnases, ses équipes, ses contraintes, ses adversaires. Le produit ne
+lui apprend rien — **il baisse le coût de sortir ce savoir de sa tête**. Chaque écran se juge à ça : combien
+de frappes pour transférer ce qu'il sait déjà ?
+
+C'est aussi le critère qui **disqualifie** une fonctionnalité : si elle lui apprend quelque chose, elle est
+probablement inutile ; si elle lui épargne de saisir ce qu'il connaît, elle est probablement bonne.
+
+#### La fréquence — un écran vu UNE fois, et pourquoi ça ne le rend pas mineur
+
+Les gymnases se définissent sur le **plan SEASON**, et `SeasonTransitionService` (`:139-145`) les **recopie
+d'une saison à l'autre** — `latitude`, `longitude` et `externalRef` compris. Donc :
+
+- l'écran de sélection sert **une fois par club**, plus quelques ajouts ponctuels ;
+- mais **ce qu'on remplit une fois se propage gratuitement à toutes les saisons suivantes**, sans reprise.
+
+⚠ **Ne pas en conclure « peu utilisé donc peu important ».** Cette fois unique **est le moment de l'onboarding**
+— celui qui décide si le club adopte l'outil ou repart. Le fondateur le dit lui-même : *« un sentiment que
+l'appli me comprend, TRÈS PUISSANT »*. Une fonctionnalité vue une fois peut porter le plus fort levier
+d'adoption du produit.
+
+**Ce que la fréquence change en revanche, c'est le SÉQUENCEMENT.** Une carte, c'est de la machinerie
+(bibliothèque, tuiles, attribution, CGU) pour un écran vu une fois. Raison de plus de livrer **la liste
+d'abord** — elle capte l'essentiel à une fraction du coût — puis de décider de la carte **en ayant vu la liste
+servir**. Ce n'est pas un doute sur la carte : c'est refuser de payer sa complexité avant d'avoir la preuve
+qu'elle manque.
+
 ---
 
 ## 2. Ce que la FFBB donne vraiment — mesuré, pas supposé
