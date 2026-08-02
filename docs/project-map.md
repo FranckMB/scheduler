@@ -71,7 +71,7 @@ All services share the Docker network `clubscheduler_network`.
   | `CalendarEntryConflictsController` | `GET /api/calendar-entries/{id}/conflicts` | cockpit "séances à replacer" radar |
   | `SchoolHolidaysController` / `PublicHolidaysController` | `GET /api/{school,public}-holidays` | holiday display feeds (club zone) |
   | `LeagueMatchWindowsController` / `FixtureConflictsController` | `GET /api/league-match-windows`, `GET /api/fixtures/conflicts` | match envelope + same-coach conflict radar |
-  | `ImportFixturesController` | `POST /api/teams/{id}/fixtures/import` | FBI fixtures import (per team) |
+  | `ImportFixturesAnalyzeController` / `ImportFixturesController` | `POST /api/fixtures/import/analyze`, `POST /api/fixtures/import` | club-wide FBI import, one pass: dry-run mapping table → import with validated Division↔team mappings (diff/update by FBI number) |
   | `RegenerateController` / `RegenerateFromVersionController` | `POST /api/schedules/{id}/{regenerate,regenerate-from}` | new version of the same plan (guards refuse to overwrite the version the plan points at) |
   | `ValidateConstraintsController` | `POST /api/constraints/validate` | pre-solve check (per **plan**: its settings + the dated constraints of the fact) |
   | `VenuePeriodGridActionController` | `POST /api/venue_period_overrides/{reset-grid,clear-grid}` | #8 period grid **actions** (re-copy from the season model / empty it) — actions, not states, hence not a `PUT` of a mode |

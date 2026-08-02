@@ -258,7 +258,8 @@ Détail : [`module-matchs.md`](module-matchs.md). Placement des rencontres domic
 |-------|---------|------------|-------------|
 | `/api/league-match-windows` | GET | `LeagueMatchWindowsController` | Fenêtres de match héritées de la ligue du club (`Club.league`, fallback fédé AURA). Catalogue global partagé. |
 | `/api/fixtures/conflicts` | GET | `FixtureConflictsController` | Radar : conflits d'empreinte-temps coach/joueur entre rencontres et entraînements. |
-| `/api/teams/{id}/fixtures/import` | POST | `ImportFixturesController` | Import FBI (.xlsx **par équipe**, choisie à l'upload). Idempotent par `Fixture.externalRef` (n° FBI). Rapport `created`/`skipped`/`errors`. |
+| `/api/fixtures/import/analyze` | POST | `ImportFixturesAnalyzeController` | **Dry-run** de l'export FBI global club : table des divisions résolue contre la correspondance persistée (`Competition`), zéro écriture. |
+| `/api/fixtures/import` | POST | `ImportFixturesController` | Import FBI **une passe** (fichier global + `mappings` JSON) : persiste les correspondances puis crée/**met à jour** par diff `(team, n° FBI)`. Rapport `created`/`updated`/`unchanged`/`exempted`/`warnings`/`unmappedDivisions`/`errors`. Remplace `/api/teams/{id}/fixtures/import` (P1-4 PR A, 2026-08-02). |
 
 ### Transition de saison (P1/P2)
 

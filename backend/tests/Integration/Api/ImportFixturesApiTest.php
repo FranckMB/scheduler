@@ -20,8 +20,9 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 
 /**
- * End-to-end FBI import over HTTP (module matchs PR-4): multipart upload →
- * report; the created fixtures surface on GET /api/fixtures; re-upload skips.
+ * End-to-end FBI one-pass import over HTTP (cadrage P1-4): analyze (dry-run
+ * mapping table) → import with mappings → diff/update on re-import. Also the
+ * NR of the « périmètre engagé » axis: the import IS the engagement.
  */
 #[Group('integration')]
 final class ImportFixturesApiTest extends WebTestCase
@@ -37,74 +38,110 @@ final class ImportFixturesApiTest extends WebTestCase
     /** @var list<string> */
     private array $tempFiles = [];
 
-    public function testUploadImportsThenReimportSkips(): void
+    public function testAnalyzeThenOnePassImportThenDiffUpdate(): void
     {
         [$token, $clubName, $teamId] = $this->registerWithTeam();
+        $needle = strtoupper($clubName);
 
-        $file = $this->xlsx([
-            ['D2 Poule A', 'A9001', strtoupper($clubName) . ' - 1', 'AS Voisins', '03/10/2026', '15:30', 'Gymnase X'],
-            ['D2 Poule A', 'A9002', 'AS Voisins', strtoupper($clubName) . ' - 1', '10/10/2026', '', ''],
-        ]);
+        // 1. ANALYZE — dry-run: the division shows up unmapped, nothing written.
+        $this->upload('/api/fixtures/import/analyze', $token, $this->xlsx([
+            ['D2 Poule A', 'A9001', $needle . ' - 1', 'AS Voisins', '03/10/2026', '15:30', 'Gymnase X'],
+            ['D2 Poule A', 'A9002', 'AS Voisins', $needle . ' - 1', '10/10/2026', '00:00', 'Salle Y'],
+        ]));
+        self::assertResponseStatusCodeSame(200);
+        $analysis = $this->responseData();
+        self::assertSame(2, $analysis['totalRows']);
+        self::assertSame([['name' => 'D2 Poule A', 'fbiTeamLabel' => null, 'rowCount' => 2, 'teamId' => null, 'competitionId' => null]], $analysis['divisions']);
 
-        $this->client->request('POST', '/api/teams/' . $teamId . '/fixtures/import', [], [
-            'file' => new UploadedFile($file, 'fbi.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
-        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        $this->client->request('GET', '/api/fixtures', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertCount(0, $this->responseData()['member'] ?? [], 'analyze must write nothing');
+
+        // 2. IMPORT — same file + the manager's mapping: ONE pass creates all.
+        $this->upload('/api/fixtures/import', $token, $this->xlsx([
+            ['D2 Poule A', 'A9001', $needle . ' - 1', 'AS Voisins', '03/10/2026', '15:30', 'Gymnase X'],
+            ['D2 Poule A', 'A9002', 'AS Voisins', $needle . ' - 1', '10/10/2026', '00:00', 'Salle Y'],
+        ]), ['mappings' => json_encode([['division' => 'D2 Poule A', 'teamId' => $teamId]], \JSON_THROW_ON_ERROR)]);
         self::assertResponseStatusCodeSame(200);
         $report = $this->responseData();
         self::assertSame(2, $report['created']);
-        self::assertSame(0, $report['skipped']);
+        self::assertSame(0, $report['updated']);
         self::assertSame([], $report['errors']);
+        self::assertSame([], $report['unmappedDivisions']);
 
-        // The fixtures surface on the collection, external ref exposed.
+        // The fixtures surface on the collection; the FBI « Salle » label is
+        // exposed (fact F3) and the 00:00 sentinel produced a null kickoff.
         $this->client->request('GET', '/api/fixtures', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
-        self::assertResponseStatusCodeSame(200);
         $members = $this->responseData()['member'] ?? [];
         self::assertCount(2, $members);
-        $refs = array_map(static fn (array $m): string => $m['externalRef'], $members);
-        sort($refs);
-        self::assertSame(['A9001', 'A9002'], $refs);
+        $byRef = array_column($members, null, 'externalRef');
+        self::assertSame('Gymnase X', $byRef['A9001']['fbiVenueLabel'] ?? null);
+        self::assertTrue(\array_key_exists('kickoffTime', $byRef['A9002']), 'kickoffTime must be exposed');
+        self::assertNull($byRef['A9002']['kickoffTime']);
 
-        // Re-upload the same file → nothing new.
-        $file2 = $this->xlsx([
-            ['D2 Poule A', 'A9001', strtoupper($clubName) . ' - 1', 'AS Voisins', '03/10/2026', '15:30', 'Gymnase X'],
-            ['D2 Poule A', 'A9002', 'AS Voisins', strtoupper($clubName) . ' - 1', '10/10/2026', '', ''],
-        ]);
-        $this->client->request('POST', '/api/teams/' . $teamId . '/fixtures/import', [], [
-            'file' => new UploadedFile($file2, 'fbi.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
-        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        // 3. RE-IMPORT with a rescheduled date — diff/update, not skip: the
+        // mapping persisted, no « mappings » field needed anymore.
+        $this->upload('/api/fixtures/import', $token, $this->xlsx([
+            ['D2 Poule A', 'A9001', $needle . ' - 1', 'AS Voisins', '17/10/2026', '15:30', 'Gymnase X'],
+            ['D2 Poule A', 'A9002', 'AS Voisins', $needle . ' - 1', '10/10/2026', '00:00', 'Salle Y'],
+        ]));
         self::assertResponseStatusCodeSame(200);
         $second = $this->responseData();
         self::assertSame(0, $second['created']);
-        self::assertSame(2, $second['skipped']);
+        self::assertSame(1, $second['updated']);
+        self::assertSame(1, $second['unchanged']);
+        self::assertSame('RESCHEDULED', $second['warnings'][0]['type'] ?? null);
+    }
+
+    public function testImportEngagesTheTeam(): void
+    {
+        // NR « périmètre engagé » (§7.1) : the import IS the engagement — even
+        // all-UNPLACED, the team can no longer be deleted (its matches exist
+        // at the federation).
+        [$token, $clubName, $teamId] = $this->registerWithTeam();
+
+        $this->upload('/api/fixtures/import', $token, $this->xlsx([
+            ['D2', 'A9200', strtoupper($clubName) . ' - 1', 'AS Voisins', '03/10/2026', '', ''],
+        ]), ['mappings' => json_encode([['division' => 'D2', 'teamId' => $teamId]], \JSON_THROW_ON_ERROR)]);
+        self::assertResponseStatusCodeSame(200);
+        self::assertSame(1, $this->responseData()['created']);
+
+        $this->client->request('DELETE', '/api/teams/' . $teamId, [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(409, 'an engaged team must refuse deletion');
     }
 
     public function testImportRefusedWhileSocleNotValidated(): void
     {
-        // SocleGuard path on THIS controller: without a validated main plan the
-        // import must 409 — the other tests pre-stamp the socle, so this is the
-        // only request keeping that branch covered.
-        [$token, $clubName, $teamId] = $this->registerWithTeam(validateSocle: false);
+        // SocleGuard path on BOTH import endpoints: without a validated main
+        // plan the write must 409 — the other tests pre-stamp the socle.
+        [$token, $clubName] = $this->registerWithTeam(validateSocle: false);
 
-        $file = $this->xlsx([
-            ['D2 Poule A', 'A9100', strtoupper($clubName) . ' - 1', 'AS Voisins', '03/10/2026', '15:30', 'Gymnase X'],
-        ]);
-        $this->client->request('POST', '/api/teams/' . $teamId . '/fixtures/import', [], [
-            'file' => new UploadedFile($file, 'fbi.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
-        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        $this->upload('/api/fixtures/import', $token, $this->xlsx([
+            ['D2', 'A9100', strtoupper($clubName) . ' - 1', 'AS Voisins', '03/10/2026', '15:30', ''],
+        ]));
         self::assertResponseStatusCodeSame(409);
     }
 
     public function testNonXlsxUploadIsRejected(): void
     {
-        [$token, , $teamId] = $this->registerWithTeam();
+        [$token] = $this->registerWithTeam();
 
         $path = tempnam(sys_get_temp_dir(), 'fbi') . '.csv';
         file_put_contents($path, 'not;an;xlsx');
         $this->tempFiles[] = $path;
 
-        $this->client->request('POST', '/api/teams/' . $teamId . '/fixtures/import', [], [
+        $this->client->request('POST', '/api/fixtures/import', [], [
             'file' => new UploadedFile($path, 'fbi.csv', 'text/csv', null, true),
         ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(400);
+    }
+
+    public function testMalformedMappingsFieldIsRejected(): void
+    {
+        [$token, $clubName] = $this->registerWithTeam();
+
+        $this->upload('/api/fixtures/import', $token, $this->xlsx([
+            ['D2', 'A9300', strtoupper($clubName) . ' - 1', 'AS Voisins', '03/10/2026', '', ''],
+        ]), ['mappings' => '{"not":"a list"}']);
         self::assertResponseStatusCodeSame(400);
     }
 
@@ -120,6 +157,14 @@ final class ImportFixturesApiTest extends WebTestCase
             @unlink($file);
         }
         parent::tearDown();
+    }
+
+    /** @param array<string, string> $parameters */
+    private function upload(string $uri, string $token, string $filePath, array $parameters = []): void
+    {
+        $this->client->request('POST', $uri, $parameters, [
+            'file' => new UploadedFile($filePath, 'fbi.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
     }
 
     /**
@@ -178,12 +223,12 @@ final class ImportFixturesApiTest extends WebTestCase
         return [$token, $clubName, $team->getId()];
     }
 
-    /** @param list<list<string>> $rows */
+    /** @param list<list<string>> $rows real-format header (fact F1/F8) */
     private function xlsx(array $rows): string
     {
         $spreadsheet = new Spreadsheet;
         $spreadsheet->getActiveSheet()->fromArray(
-            [['Division', 'Numéro', 'Équipe 1', 'Équipe 2', 'Date de rencontre', 'Heure', 'Salle'], ...$rows],
+            [['Division', 'N° de match ', 'Equipe 1', 'Equipe 2', 'Date de rencontre', 'Heure', 'Salle'], ...$rows],
             null,
             'A1',
         );

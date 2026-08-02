@@ -4,8 +4,8 @@ import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
 import { TeamSelect } from "@/shared/components/ui/team-select";
 
-import type { ImportFbiResult, PriorityTier, Team } from "./api";
-import { useImportFbiFixtures } from "./queries";
+import type { ImportFbiAnalysis, ImportFbiResult, PriorityTier, Team } from "./api";
+import { useAnalyzeFbiFixtures, useImportFbiFixtures } from "./queries";
 
 interface ImportFbiDialogProps {
   teams: Team[];
@@ -13,37 +13,61 @@ interface ImportFbiDialogProps {
   onClose: () => void;
 }
 
+/** One mapping row of the analysis table is keyed division + FBI club-team
+ * label (the label only exists when two club teams share a division). */
+const divisionKey = (d: { name: string; fbiTeamLabel: string | null }): string => `${d.name}|${d.fbiTeamLabel ?? ""}`;
+
 /**
- * Upload one FBI export (.xlsx) for ONE team — the team is chosen here, never
- * guessed from the file. Stays open after the import to show the per-row report
- * (created / skipped / errors), which is the point of the feedback.
+ * One-pass FBI import (cadrage P1-4, décision fondateur 2026-08-02) : choose
+ * the CLUB-WIDE export → the file is analyzed (dry-run) into a mapping table
+ * pre-filled from the persisted Division↔team mappings → the manager completes
+ * the new ones → « Importer » sends file + mappings in a single request.
+ * Stays open afterwards to show the report (created / updated / warnings),
+ * which is the point of the feedback.
  */
 export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps) {
+  const analyzeFbi = useAnalyzeFbiFixtures();
   const importFbi = useImportFbiFixtures();
-  const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
   const [file, setFile] = useState<File | null>(null);
+  const [analysis, setAnalysis] = useState<ImportFbiAnalysis | null>(null);
+  const [choices, setChoices] = useState<Record<string, string>>({});
   const [report, setReport] = useState<ImportFbiResult | null>(null);
 
-  const canImport = "" !== teamId && null !== file && !importFbi.isPending;
+  const teamName = (id: string | null): string => teams.find((t) => t.id === id)?.name ?? "?";
+
+  const onFileChange = (next: File | null): void => {
+    setFile(next);
+    setAnalysis(null);
+    setChoices({});
+    setReport(null);
+    if (null !== next) {
+      analyzeFbi.mutate(next, { onSuccess: setAnalysis });
+    }
+  };
 
   const submit = (): void => {
-    if (null === file || "" === teamId) {
+    if (null === file || null === analysis) {
       return;
     }
-    importFbi.mutate({ teamId, file }, { onSuccess: (result) => setReport(result) });
+    // Only the NEW choices ride along — already-resolved divisions are persisted.
+    const mappings = analysis.divisions
+      .filter((d) => null === d.teamId)
+      .flatMap((d) => {
+        const teamId = choices[divisionKey(d)];
+        return undefined === teamId || "" === teamId ? [] : [{ division: d.name, fbiTeamLabel: d.fbiTeamLabel, teamId }];
+      });
+    importFbi.mutate({ file, mappings }, { onSuccess: setReport });
   };
+
+  const canImport = null !== file && null !== analysis && !importFbi.isPending && !analyzeFbi.isPending;
 
   return (
     <Modal label="Importer FBI" title="Importer un export FBI" onClose={onClose}>
       <div className="flex flex-col gap-3">
         <p className="text-xs text-muted-foreground">
-          Un fichier .xlsx par équipe (export FBI des rencontres). Les matchs déjà importés sont ignorés.
+          L’export FBI global du club (« Saisie des résultats », .xlsx). Chaque division se relie une seule fois à
+          l’une de vos équipes ; les matchs connus sont mis à jour, jamais dupliqués.
         </p>
-
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-muted-foreground">Équipe</span>
-          <TeamSelect aria-label="Équipe" teams={teams} tiers={tiers} value={teamId} onChange={(e) => setTeamId(e.target.value)} />
-        </label>
 
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-muted-foreground">Fichier FBI (.xlsx)</span>
@@ -52,17 +76,79 @@ export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps)
             type="file"
             accept=".xlsx"
             className="text-sm"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
           />
         </label>
 
-        {null !== report ? (
-          <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-            <p className="font-medium">
-              {report.created} créé{report.created > 1 ? "s" : ""} · {report.skipped} ignoré{report.skipped > 1 ? "s" : ""}
+        {analyzeFbi.isPending ? <p className="text-xs text-muted-foreground">Analyse du fichier…</p> : null}
+
+        {null !== analysis && null === report ? (
+          <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+            <p className="text-xs text-muted-foreground">
+              {analysis.totalRows} rencontre{analysis.totalRows > 1 ? "s" : ""} ·{" "}
+              {analysis.divisions.length} division{analysis.divisions.length > 1 ? "s" : ""}
+              {analysis.exempted > 0 ? ` · ${analysis.exempted} exempt${analysis.exempted > 1 ? "s" : ""}` : ""}
             </p>
+            <ul className="flex max-h-64 flex-col gap-1 overflow-y-auto">
+              {analysis.divisions.map((division) => (
+                <li key={divisionKey(division)} className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 flex-1 truncate">
+                    {division.name}
+                    {null !== division.fbiTeamLabel ? (
+                      <span className="text-muted-foreground"> ({division.fbiTeamLabel})</span>
+                    ) : null}
+                    <span className="text-muted-foreground"> · {division.rowCount} match{division.rowCount > 1 ? "s" : ""}</span>
+                  </span>
+                  {null !== division.teamId ? (
+                    <span className="shrink-0 text-xs text-muted-foreground">→ {teamName(division.teamId)}</span>
+                  ) : (
+                    <TeamSelect
+                      aria-label={`Équipe pour ${division.name}${null !== division.fbiTeamLabel ? ` (${division.fbiTeamLabel})` : ""}`}
+                      className="w-40 shrink-0"
+                      teams={teams}
+                      tiers={tiers}
+                      placeholder="Associer à…"
+                      value={choices[divisionKey(division)] ?? ""}
+                      onChange={(e) => setChoices((prev) => ({ ...prev, [divisionKey(division)]: e.target.value }))}
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+            {analysis.errors.length > 0 ? (
+              <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-destructive">
+                {analysis.errors.map((error, i) => (
+                  <li key={i}>{error}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
+        {null !== report ? (
+          <div className="flex flex-col gap-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+            <p className="font-medium">
+              {report.created} créé{report.created > 1 ? "s" : ""} · {report.updated} mis à jour ·{" "}
+              {report.unchanged} inchangé{report.unchanged > 1 ? "s" : ""}
+              {report.exempted > 0 ? ` · ${report.exempted} exempt${report.exempted > 1 ? "s" : ""}` : ""}
+            </p>
+            {report.warnings.length > 0 ? (
+              <ul className="max-h-40 list-inside list-disc overflow-y-auto text-xs text-warning-foreground">
+                {report.warnings.map((warning, i) => (
+                  <li key={i}>{warning.message}</li>
+                ))}
+              </ul>
+            ) : null}
+            {report.unmappedDivisions.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Non associées :{" "}
+                {report.unmappedDivisions
+                  .map((d) => `${d.name}${null !== d.fbiTeamLabel ? ` (${d.fbiTeamLabel})` : ""} (${d.rowCount})`)
+                  .join(", ")}
+              </p>
+            ) : null}
             {report.errors.length > 0 ? (
-              <ul className="mt-1 max-h-40 list-inside list-disc overflow-y-auto text-xs text-destructive">
+              <ul className="max-h-40 list-inside list-disc overflow-y-auto text-xs text-destructive">
                 {report.errors.map((error, i) => (
                   <li key={i}>{error}</li>
                 ))}

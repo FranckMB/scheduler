@@ -1,9 +1,16 @@
-Last verified @ 2026-07-31 (JSON **régénéré** depuis le backend vivant)
+Last verified @ 2026-08-02 (JSON **régénéré** depuis le backend vivant)
 
-Snapshot régénéré depuis le backend vivant le 2026-07-31 : `php bin/console api:openapi:export`.
+Snapshot régénéré depuis le backend vivant le 2026-08-02 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P1-4 PR A (2026-08-02)** : l'import FBI passe au **format réel, une passe** —
+  `POST /api/teams/{id}/fixtures/import` **disparaît** (l'opération quitte `TeamResource`),
+  remplacé par `POST /api/fixtures/import/analyze` (dry-run multipart `file`) et
+  `POST /api/fixtures/import` (multipart `file` + `mappings` JSON) sur `FixtureResource`.
+  `Fixture` expose `fbiVenueLabel` (libellé Salle FBI, domicile ET extérieur) et
+  `Competition` expose `fbiTeamLabel` (désambiguïsation deux-équipes-une-division).
+  Détail : [`module-matchs.md`](module-matchs.md) §Import FBI réel.
 - **P4-41 (2026-07-31)** : `Schedule.ScheduleInput` — `name` **quitte les champs requis**
   (`required` ne garde que `status`). ADR-0002 inv. 12 : le nom vit sur le PLAN, une version
   n'a pas d'identité produit ; un POST sans nom laisse le serveur nommer la version d'après

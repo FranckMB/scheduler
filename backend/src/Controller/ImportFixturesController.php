@@ -5,16 +5,10 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Club;
-use App\Entity\ClubUser;
-use App\Entity\Team;
-use App\Entity\User;
 use App\Exception\ImportRejectedException;
-use App\Repository\ClubUserRepository;
 use App\Service\FbiFixtureImporter;
-use App\Service\SeasonAccessGuard;
-use App\Service\SocleGuard;
+use App\Service\FixtureImportGate;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
-use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
@@ -27,9 +21,11 @@ use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * FBI fixtures import (module matchs PR-4): upload one FBI export for ONE team
- * — the target team is chosen at upload, the parser never guesses it. Security
- * sequence mirrors ImportController (SEC-04).
+ * POST /api/fixtures/import — club-wide FBI import, ONE pass (cadrage P1-4,
+ * décision fondateur 2026-08-02) : the file rides with the manager's validated
+ * Division↔team mappings (multipart field « mappings », JSON). The persisted
+ * mappings are created first, then every resolvable row is created/updated.
+ * The dialog obtained the mapping table from /api/fixtures/import/analyze.
  */
 #[AsController]
 final class ImportFixturesController extends AbstractController
@@ -38,66 +34,29 @@ final class ImportFixturesController extends AbstractController
     private const GENERIC_FAILURE = 'Le fichier n\'a pas pu être lu. Vérifiez qu\'il s\'agit bien d\'un export FBI au format .xlsx, puis réessayez.';
 
     public function __construct(
-        private readonly EntityManagerInterface $entityManager,
         private readonly FbiFixtureImporter $importer,
-        private readonly ClubUserRepository $clubUserRepository,
-        private readonly SeasonAccessGuard $seasonAccessGuard,
-        private readonly SocleGuard $socleGuard,
+        private readonly FixtureImportGate $gate,
         private readonly LoggerInterface $logger,
     ) {}
 
-    public function __invoke(Request $request, string $id): JsonResponse
+    public function __invoke(Request $request): JsonResponse
     {
-        // Malformed id → 404 like any unknown team: a non-UUID must never reach
-        // Postgres (22P02 on the native uuid column would surface as a 500).
-        if (1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id)) {
-            return $this->json(['error' => 'Team not found.'], Response::HTTP_NOT_FOUND);
-        }
-
-        // The Team lookup goes through the tenant+season filters: another club's
-        // (or another season's) team is invisible → 404, no cross-tenant oracle.
-        $team = $this->entityManager->getRepository(Team::class)->find($id);
-        if (!$team instanceof Team) {
-            return $this->json(['error' => 'Team not found.'], Response::HTTP_NOT_FOUND);
-        }
-
-        // SEC-04 semantics (mirrors ImportController): no active membership on
-        // the team's club → 404; member but not a management role → 403.
-        $user = $this->getUser();
-        $membership = $user instanceof User
-            ? $this->clubUserRepository->findActiveMembership($user->getId(), $team->getClubId())
-            : null;
-        if (!$membership instanceof ClubUser) {
-            return $this->json(['error' => 'Team not found.'], Response::HTTP_NOT_FOUND);
-        }
-        if (!$this->clubUserRepository->isManagementRole($membership->getRole())) {
-            return $this->json(['error' => 'Forbidden.'], Response::HTTP_FORBIDDEN);
-        }
-
-        // Archived-season write refused (409) — AFTER auth so 403 wins first.
-        $this->seasonAccessGuard->assertWritable($request);
-        // Matches require the season's main plan validated first (cockpit state 2→3).
-        $this->socleGuard->assertSeasonPlanChosen($request->attributes->get('_season_id') ?? $request->headers->get('X-Season-Id'));
-
-        /** @var UploadedFile|null $file */
-        $file = $request->files->get('file');
-        if (!$file instanceof UploadedFile) {
-            return $this->json(['error' => 'No file uploaded.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        if ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' !== $file->getMimeType()
-            && !str_ends_with(strtolower($file->getClientOriginalName()), '.xlsx')
-        ) {
-            return $this->json(['error' => 'Invalid file format. Only .xlsx files are accepted.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        $club = $this->entityManager->getRepository(Club::class)->find($team->getClubId());
+        $club = $this->gate->gate($request);
         if (!$club instanceof Club) {
-            return $this->json(['error' => 'Team not found.'], Response::HTTP_NOT_FOUND);
+            return $club;
+        }
+        $file = $this->gate->requireXlsxFile($request);
+        if (!$file instanceof UploadedFile) {
+            return $file;
+        }
+
+        $mappings = $this->parseMappings($request);
+        if ($mappings instanceof JsonResponse) {
+            return $mappings;
         }
 
         try {
-            $result = $this->importer->import((string) $file->getRealPath(), $team, $club);
+            $result = $this->importer->import((string) $file->getRealPath(), $club, $mappings);
         } catch (ImportRejectedException $e) {
             // Le SEUL type relayé : son message est écrit pour le gestionnaire.
             return $this->json(['error' => $e->getMessage()], $e->getStatusCode());
@@ -115,16 +74,63 @@ final class ImportFixturesController extends AbstractController
         } catch (InvalidArgumentException|RuntimeException $e) {
             // Tout le reste vient d'une dépendance (PhpSpreadsheet étend RuntimeException)
             // et peut porter un chemin serveur — journalisé, jamais renvoyé (P4-5).
-            $this->logger->error('Import rencontres en échec', ['teamId' => $team->getId(), 'exception' => $e]);
+            $this->logger->error('Import rencontres en échec', ['clubId' => $club->getId(), 'exception' => $e]);
 
             return $this->json(['error' => self::GENERIC_FAILURE], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         return $this->json([
-            'message' => 'Import completed.',
+            'message' => 'Import terminé.',
             'created' => $result['created'],
-            'skipped' => $result['skipped'],
+            'updated' => $result['updated'],
+            'unchanged' => $result['unchanged'],
+            'exempted' => $result['exempted'],
             'errors' => $result['errors'],
+            'warnings' => $result['warnings'],
+            'unmappedDivisions' => $result['unmappedDivisions'],
         ], Response::HTTP_OK);
+    }
+
+    /**
+     * The multipart « mappings » field: a JSON list of
+     * {division, fbiTeamLabel|null, teamId}. Absent = no new mapping (rows
+     * only resolve through the already-persisted ones).
+     *
+     * @return list<array{division: string, fbiTeamLabel: string|null, teamId: string}>|JsonResponse
+     */
+    private function parseMappings(Request $request): array|JsonResponse
+    {
+        $raw = $request->request->get('mappings');
+        if (null === $raw || '' === $raw) {
+            return [];
+        }
+        if (!\is_string($raw)) {
+            return $this->json(['error' => 'Champ « mappings » invalide.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!\is_array($decoded) || !array_is_list($decoded)) {
+            return $this->json(['error' => 'Champ « mappings » invalide (liste JSON attendue).'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $mappings = [];
+        foreach ($decoded as $entry) {
+            if (!\is_array($entry)
+                || !\is_string($entry['division'] ?? null) || '' === trim($entry['division'])
+                || !\is_string($entry['teamId'] ?? null)
+                || 1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $entry['teamId'])
+                || (null !== ($entry['fbiTeamLabel'] ?? null) && !\is_string($entry['fbiTeamLabel']))
+            ) {
+                return $this->json(['error' => 'Champ « mappings » invalide (entrées {division, teamId, fbiTeamLabel?} attendues).'], Response::HTTP_BAD_REQUEST);
+            }
+            $label = $entry['fbiTeamLabel'] ?? null;
+            $mappings[] = [
+                'division' => $entry['division'],
+                'fbiTeamLabel' => \is_string($label) && '' !== trim($label) ? $label : null,
+                'teamId' => $entry['teamId'],
+            ];
+        }
+
+        return $mappings;
     }
 }

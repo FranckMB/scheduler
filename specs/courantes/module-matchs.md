@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-07-29
+Last verified @ 2026-08-02 (import FBI réel une passe — P1-4 PR A)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés
@@ -101,39 +101,55 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   fenêtre du catalogue ; **dégradation en repère indicatif** (non bloquant) quand le mapping catégorie/niveau
   ne résout pas de façon fiable (`lib/envelope.ts`). Le radar serveur reste la vérité dure.
 - **Saisie manuelle** (`FixtureFormDialog`) : `POST /api/fixtures` (équipe, date, HOME/AWAY, adversaire,
-  compétition optionnelle = amical) — en attendant l'import FBI (PR-4).
+  compétition optionnelle = amical) — complément de l'import FBI (amicaux, manquants).
 - **Radar affiché** (`ConflictRadar`) : `GET /api/fixtures/conflicts` en direct (invalidé à chaque mutation).
 - Tests : Vitest `lib/{weekendGrid,envelope}.test.ts`, `PlacementPanel`/`FixtureFormDialog`/`MatchesPage`
   (.test.tsx) ; e2e Playwright `tests/e2e/matches.spec.ts` (login → créer → placer / garde hors-fenêtre).
   ⚠ L'API omet les props null → `getFixtures` re-normalise `venueId`/`kickoffTime`/`competitionId` en `null`.
 
-## Palier A — PR-4 (import FBI des rencontres, 2026-07-07)
+## Import FBI réel — une passe (P1-4 PR A, 2026-08-02, remplace le PR-4 du 2026-07-07)
 
-> ⚠ **FORMAT SUPPOSÉ — aucun export FBI réel n'était disponible.** Colonnes actées avec l'utilisateur :
-> `Division · Numéro · Équipe 1 (recevant) · Équipe 2 (visiteur) · Date de rencontre · Heure · Salle`.
-> **À valider contre un vrai export** (en-têtes, format date/heure, forme des libellés d'équipe, présence du
-> code club) avant fiabilisation — le parseur devra peut-être être ajusté.
+> **Format MESURÉ** sur un vrai export (« Saisie des résultats pour tout le club », gelé en fixture de test
+> `backend/tests/Fixtures/fbi/rechercherRencontre.xlsx`, 124 rencontres BCCL 2026-27 — faits F1-F9 du
+> [cadrage](../evolution/p1-4-cadrage-module-matchs.md) §3) : fichier **GLOBAL club**, colonnes
+> `Division · N° de match · Equipe 1 · Equipe 2 · Date de rencontre · Heure · Salle · e-Marque V2 ·
+> Scores/Forfaits (ignorés)`. L'import « un fichier par équipe » de PR-4 est supprimé.
 
-- **`FbiFixtureImporter`** (patron `FfbbExcelImporter`) : un export FBI **par équipe** (spec §5), l'équipe est
-  **choisie à l'upload** (jamais devinée). Rapport **par ligne** `{created, skipped, errors[]}` — les lignes
-  valides s'importent même si d'autres échouent.
-  - **HOME/AWAY** : le nom du club (normalisé casse/accents) doit apparaître dans exactement UN des deux
-    libellés ; aucun ou les deux (derby intra-club) → erreur de ligne explicite, jamais de devinette.
-    Limitation connue : le derby se saisit manuellement.
-  - **Idempotence** : `Numéro` → `Fixture.externalRef` + index unique partiel `(club, season, team,
-    external_ref)`. Re-upload = skip (pas d'update de re-programmation en PR-4). Saisies manuelles :
-    `externalRef` null (hors index).
-  - **Division** → `Competition` find-or-create (CHAMPIONSHIP) avec cache intra-fichier.
-  - **Statut toujours `UNPLACED`** : placer exige un gymnase DU CLUB + action explicite (PlacementPanel) ;
-    l'Heure FBI préremplit seulement `kickoffTime` (proposition à domicile, nourrit le radar à l'extérieur).
-  - **Salle : lue mais non stockée** (gymnases adverses = annuaire palier B).
-  - Dates/heures : `jj/mm/aaaa` + `HH:MM` **et** serials Excel ; invalide = erreur de ligne.
-- **Endpoint** `POST /api/teams/{id}/fixtures/import` (multipart, opération API Platform sur `TeamResource`,
-  contrôleur `ImportFixturesController`) — séquence SEC-04, dans cet ordre : équipe d'un autre club/saison
-  invisible → 404, pas d'adhésion active → 404, membre non-management → 403, saison archivée → 409,
-  **plan de saison sans version choisie → 409 (`SocleGuard`, cf. encadré en tête)**, non-xlsx → 400.
-- **UI** : bouton « Importer FBI » dans `/matchs` → `ImportFbiDialog` (équipe + fichier, reste ouvert pour
-  afficher le rapport créés/ignorés/erreurs). Invalidation `fixtures` + `competitions`.
+- **Flux une passe** (décision fondateur 2026-08-02) : `analyze()` (dry-run, ZÉRO écriture) rend la table
+  des groupes de divisions résolus contre la correspondance persistée → le gestionnaire complète les
+  nouvelles dans le dialog → `import()` reçoit le MÊME fichier + les `mappings` et fait tout : persiste les
+  correspondances (`Competition`) puis crée/met à jour chaque rencontre.
+- **Correspondance Division↔équipe = `Competition`** (name = division, `teamId`), créée par l'appariement,
+  **jamais** par find-or-create aveugle. Type inféré (`BRASSAGE` si le nom contient « Brassage », sinon
+  `CHAMPIONSHIP`). **Deux équipes du club dans la même division** : le libellé FBI côté club
+  (« BCCL - 2 ») désambiguïse — stocké dans `Competition.fbiTeamLabel`, une entrée d'appariement par
+  libellé ; nominal (une équipe par division) → label null, robuste au drift de libellé.
+- **Diff/update par `(team, externalRef)`** — re-upload ≠ skip :
+  - date changée ou switch HOME↔AWAY → mise à jour + **dé-placement** (`UNPLACED`, `venueId` effacé) +
+    warning `RESCHEDULED`/`SWITCHED` (« la ligue a re-décidé ») ;
+  - heure réelle changée → mise à jour **en place** (la salle reste le choix du club) + warning si placé ;
+  - **`00:00` = sentinelle « heure non fixée »** (F2) → `kickoffTime` null à la création, et n'écrase
+    JAMAIS une heure posée par le club ;
+  - salle/adversaire dérivés → mise à jour silencieuse ; rien → `unchanged`.
+- **`Exempt`** (journée de repos) → sauté, compté `exempted`, jamais une erreur (F5). **Salle stockée**
+  domicile ET extérieur dans `Fixture.fbiVenueLabel` (F3 — matière trajet, jamais une référence `Venue`).
+- **Multi-fichiers incrémental** : la ligue d'abord, le comité quand il répond — chaque fichier complète
+  (créations) et corrige (diff) ; divisions inconnues → `unmappedDivisions`, ni créées ni en erreur.
+- Gardes de ligne conservées de PR-4 : HOME/AWAY par needle mot-entier du nom du club (derby → erreur de
+  ligne), dates/heures `jj/mm/aaaa`/`HH:MM` + serials Excel, n° > 64 car. → erreur de ligne, reader épinglé
+  XLSX. En-têtes tolérants (« N° de match » avec espace traînant, « Numéro » legacy accepté).
+- **Endpoints** (opérations API Platform sur `FixtureResource`, gate partagée `FixtureImportGate` —
+  refus byte-identiques) : `POST /api/fixtures/import/analyze` (multipart `file`) et
+  `POST /api/fixtures/import` (multipart `file` + `mappings` JSON). Séquence : pas de club/adhésion → 404,
+  membre non-management → 403, saison archivée → 409, **socle non validé → 409 (`SocleGuard`)**,
+  fichier/mappings invalides → 400. Un `teamId` étranger dans `mappings` est invisible (filtres tenant) →
+  400, aucune écriture cross-club.
+- **Rapport** `{created, updated, unchanged, exempted, errors[], warnings[{type, division, externalRef,
+  message}], unmappedDivisions[{name, fbiTeamLabel, rowCount}]}`.
+- **UI** : « Importer FBI » dans `/matchs` → `ImportFbiDialog` **une passe** : fichier choisi → analyse
+  auto → table des correspondances (connues en texte, nouvelles en `TeamSelect`) → « Importer » envoie
+  fichier + nouveaux mappings → rapport affiché en place. Invalidation `fixtures` + `wizard/teams`
+  (engagement) + `competitions`.
 
 ## Vérifs / gardes
 
@@ -144,10 +160,15 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
 - PR-2 : `FixtureConflictsApiTest` (phase1) — structure du radar **+ isolation club** (un club ne voit jamais
   les conflits d'un autre). `MatchConflictDetectorTest` (unit) — match↔match, match↔entraînement, projection
   jour de semaine, overlay > base, demi-ouvert, away-sans-kickoff ignoré.
-- PR-4 : `ImportFixturesAuthorizationTest` (phase1, §7.1 tenant) — équipe étrangère 404, non-management 403,
-  saison archivée 409. `FbiFixtureImporterTest` (xlsx générés à la volée — nominal, idempotence, derby,
-  club absent, date invalide, colonnes manquantes, find-or-create). `ImportFixturesApiTest` (multipart HTTP
-  bout-en-bout + re-upload skip). `ImportFbiDialog.test.tsx` (upload + rapport).
+- Import (PR A P1-4) : `ImportFixturesAuthorizationTest` (phase1, §7.1 tenant) — non-management 403 (import
+  ET analyze), saison archivée 409, **mapping vers une équipe étrangère → 400 sans écriture cross-club**.
+  `FbiFixtureImporterTest` — le nominal tourne sur la **fixture réelle gelée** (124 lignes : 14 divisions,
+  2 exempts, DF2=22/PNM=10, `00:00`→null, salle stockée) + diff/update (re-programmation, switch, heure en
+  place, `00:00` n'écrase pas), deux-équipes-une-division par label, brassage inféré, et les successeurs de
+  chaque garde PR-4 (derby, club absent, dates, colonnes, reader épinglé, en-tête legacy).
+  `ImportFixturesApiTest` (HTTP bout-en-bout : analyze → import une passe → re-import diff + **NR périmètre
+  engagé** : DELETE équipe → 409 après import). `ImportErrorMessageLeakTest` (P4-5 sur la nouvelle route).
+  `ImportFbiDialog.test.tsx` (analyse au choix du fichier, mappings pré-remplis vs sélecteurs, rapport V2).
 - Unit : `MatchFootprintTest`, `LeagueResolverTest`. Command : `SeedLeagueWindowsCommandTest`. Api :
   `FixtureApiTest`.
 - Smoke-solveur COMPLETED (les nouvelles tables/RLS ne cassent pas le pipeline ; payload solveur inchangé).

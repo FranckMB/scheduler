@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Security;
 
 use App\Entity\ClubUser;
+use App\Entity\Competition;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
@@ -17,16 +18,20 @@ use App\Tests\VerifiesRegistration;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
- * SEC-04 non-regression for POST /api/teams/{id}/fixtures/import (module matchs
- * PR-4, §7.1 tenant axis): the FBI import writes into ONE team — a caller must
- * hold an active management membership in that team's club, a foreign team is
- * invisible (404, no existence oracle), and archived seasons refuse writes (409).
+ * SEC-04 non-regression for the club-wide FBI import endpoints (cadrage P1-4,
+ * §7.1 tenant axis): POST /api/fixtures/import[/analyze] write into the
+ * CALLER's club only — management role required, archived seasons refuse
+ * writes (409), and a mapping can never target another club's team (the
+ * tenant filters make it invisible → clean 400, no cross-tenant write).
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -40,27 +45,16 @@ final class ImportFixturesAuthorizationTest extends WebTestCase
 
     private EntityManagerInterface $em;
 
-    public function testImportOnForeignTeamReturns404(): void
-    {
-        [$tokenA] = $this->register('FIXA');
-        [, , $clubB] = $this->register('FIXB');
-        $teamB = $this->createTeam($clubB);
-
-        // The tenant filter hides club B's team from club A's caller → 404,
-        // no cross-tenant existence oracle.
-        $this->client->request('POST', '/api/teams/' . $teamB->getId() . '/fixtures/import', [], [], [
-            'HTTP_AUTHORIZATION' => 'Bearer ' . $tokenA,
-        ]);
-        self::assertResponseStatusCodeSame(404, 'a non-member must not learn the team exists');
-    }
+    /** @var list<string> */
+    private array $tempFiles = [];
 
     public function testImportAsActiveAdminReaches400WithoutFile(): void
     {
         [$tokenA, , $clubA] = $this->register('FIXC');
-        $team = $this->createTeam($clubA);
+        $this->createTeam($clubA);
 
         // Guard passed → falls through to "No file uploaded" (400).
-        $this->client->request('POST', '/api/teams/' . $team->getId() . '/fixtures/import', [], [], [
+        $this->client->request('POST', '/api/fixtures/import', [], [], [
             'HTTP_AUTHORIZATION' => 'Bearer ' . $tokenA,
         ]);
         self::assertResponseStatusCodeSame(400);
@@ -69,19 +63,33 @@ final class ImportFixturesAuthorizationTest extends WebTestCase
     public function testImportAsNonAdminMemberReturns403(): void
     {
         [, , $clubA] = $this->register('FIXD');
-        $team = $this->createTeam($clubA);
+        $this->createTeam($clubA);
         $editorToken = $this->addActiveMember($clubA, 'editor');
 
-        $this->client->request('POST', '/api/teams/' . $team->getId() . '/fixtures/import', [], [], [
+        $this->client->request('POST', '/api/fixtures/import', [], [], [
             'HTTP_AUTHORIZATION' => 'Bearer ' . $editorToken,
         ]);
         self::assertResponseStatusCodeSame(403, 'a non-management member must not import');
     }
 
+    public function testAnalyzeAsNonAdminMemberReturns403(): void
+    {
+        // Same gate on the dry-run: the mapping table leaks club data
+        // (divisions, teams) — management only, byte-identical refusals.
+        [, , $clubA] = $this->register('FIXF');
+        $this->createTeam($clubA);
+        $editorToken = $this->addActiveMember($clubA, 'editor');
+
+        $this->client->request('POST', '/api/fixtures/import/analyze', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $editorToken,
+        ]);
+        self::assertResponseStatusCodeSame(403);
+    }
+
     public function testImportOnArchivedSeasonReturns409(): void
     {
         [$tokenA, , $clubA] = $this->register('FIXE');
-        // A PAST season → archived (read-only) → its team refuses the write.
+        // A PAST season → archived (read-only) → refuses the write.
         // Register seeds a civil-year season (possibly a future bin before the
         // July-15 pivot) — anchor the TRUE current season so the past one is
         // actually archived rather than falling back to "latest started".
@@ -89,19 +97,54 @@ final class ImportFixturesAuthorizationTest extends WebTestCase
         $currentYear = SeasonResolver::seasonYear(new DateTimeImmutable('today'));
         $this->createSeason($clubA, $currentYear);
         $past = $this->createSeason($clubA, $currentYear - 1);
-        $team = $this->createTeam($clubA, $past->getId());
 
-        $this->client->request('POST', '/api/teams/' . $team->getId() . '/fixtures/import', [], [], [
+        $this->client->request('POST', '/api/fixtures/import', [], [], [
             'HTTP_AUTHORIZATION' => 'Bearer ' . $tokenA,
             'HTTP_X-Season-Id' => $past->getId(),
         ]);
         self::assertResponseStatusCodeSame(409, 'archived-season writes must be refused');
     }
 
+    public function testMappingCannotTargetAForeignTeam(): void
+    {
+        // The cross-tenant seam of the new flow: club A's manager posts a
+        // mapping whose teamId belongs to club B. The tenant+season filters
+        // make that team invisible → 400, and NO Competition row lands in
+        // either club (no cross-tenant write, no existence oracle beyond
+        // « équipe introuvable »).
+        [$tokenA, , $clubA] = $this->register('FIXA');
+        $this->createTeam($clubA); // settles club A's socle: the gate must pass, the MAPPING must fail
+        [, , $clubB] = $this->register('FIXB');
+        $teamB = $this->createTeam($clubB);
+
+        $file = $this->xlsx([['D2', 'X1', 'CLUB FIXA - 1', 'AS Voisins', '03/10/2026', '', '']]);
+        $this->client->request('POST', '/api/fixtures/import', [
+            'mappings' => json_encode([['division' => 'D2', 'teamId' => $teamB->getId()]], \JSON_THROW_ON_ERROR),
+        ], [
+            'file' => new UploadedFile($file, 'fbi.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
+        ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $tokenA]);
+        self::assertResponseStatusCodeSame(400);
+
+        $this->scopeGucToClub($clubB);
+        self::assertCount(
+            0,
+            $this->em->getRepository(Competition::class)->findBy(['teamId' => $teamB->getId()]),
+            'a foreign mapping must never write into the other club',
+        );
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
+    protected function tearDown(): void
+    {
+        foreach ($this->tempFiles as $file) {
+            @unlink($file);
+        }
+        parent::tearDown();
     }
 
     private function createSeason(string $clubId, int $startYear): Season
@@ -188,6 +231,22 @@ final class ImportFixturesAuthorizationTest extends WebTestCase
         $this->em->flush();
 
         return $container->get(JWTTokenManagerInterface::class)->create($user);
+    }
+
+    /** @param list<list<string>> $rows */
+    private function xlsx(array $rows): string
+    {
+        $spreadsheet = new Spreadsheet;
+        $spreadsheet->getActiveSheet()->fromArray(
+            [['Division', 'N° de match ', 'Equipe 1', 'Equipe 2', 'Date de rencontre', 'Heure', 'Salle'], ...$rows],
+            null,
+            'A1',
+        );
+        $path = tempnam(sys_get_temp_dir(), 'fbi') . '.xlsx';
+        new Xlsx($spreadsheet)->save($path);
+        $this->tempFiles[] = $path;
+
+        return $path;
     }
 
     /**

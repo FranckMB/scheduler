@@ -58,13 +58,13 @@ final class ImportErrorMessageLeakTest extends WebTestCase
      */
     public function testALibraryFailureNeverLeaksItsMessage(): void
     {
-        [$token, , $teamId] = $this->registerWithTeam();
+        [$token] = $this->registerWithTeam();
 
         $path = tempnam(sys_get_temp_dir(), 'leak') . '.xlsx';
         file_put_contents($path, "PK\x03\x04 ceci n'est pas un classeur");
         $this->tempFiles[] = $path;
 
-        $this->client->request('POST', '/api/teams/' . $teamId . '/fixtures/import', [], [
+        $this->client->request('POST', '/api/fixtures/import', [], [
             'file' => new UploadedFile($path, 'fbi.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
         ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
 
@@ -84,18 +84,18 @@ final class ImportErrorMessageLeakTest extends WebTestCase
      */
     public function testABusinessRejectionStillReachesTheUser(): void
     {
-        [$token, , $teamId] = $this->registerWithTeam();
+        [$token] = $this->registerWithTeam();
 
         // Classeur valide, mais sans les colonnes attendues par l'import FBI.
         $file = $this->xlsxWithHeader(['Colonne A', 'Colonne B']);
 
-        $this->client->request('POST', '/api/teams/' . $teamId . '/fixtures/import', [], [
+        $this->client->request('POST', '/api/fixtures/import', [], [
             'file' => new UploadedFile($file, 'fbi.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true),
         ], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
 
         self::assertResponseStatusCodeSame(400);
         $error = (string) (json_decode((string) $this->client->getResponse()->getContent(), true)['error'] ?? '');
-        self::assertStringContainsString('Required columns missing', $error, 'Le message métier doit continuer d’atteindre le gestionnaire.');
+        self::assertStringContainsString('Colonnes requises manquantes', $error, 'Le message métier doit continuer d’atteindre le gestionnaire.');
     }
 
     /**

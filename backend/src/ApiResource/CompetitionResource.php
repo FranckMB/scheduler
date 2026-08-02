@@ -59,6 +59,10 @@ class CompetitionResource
     #[Groups(['read'])]
     public ?string $endDate = null;
 
+    /** FBI club-team label — disambiguates two club teams in one division. */
+    #[Groups(['read'])]
+    public ?string $fbiTeamLabel = null;
+
     public static function fromEntity(Competition $entity): self
     {
         $dto = new self;
@@ -72,6 +76,7 @@ class CompetitionResource
         $dto->competitionType = $entity->getCompetitionType()->value;
         $dto->startDate = $entity->getStartDate()?->format('Y-m-d');
         $dto->endDate = $entity->getEndDate()?->format('Y-m-d');
+        $dto->fbiTeamLabel = $entity->getFbiTeamLabel();
 
         return $dto;
     }
