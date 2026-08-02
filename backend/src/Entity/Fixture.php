@@ -84,6 +84,14 @@ class Fixture implements TenantOwnedInterface
     #[ORM\Column(length: 64, nullable: true)]
     private ?string $externalRef = null;
 
+    /**
+     * The raw « Salle » label from the FBI export — filled HOME and AWAY (the
+     * away venue is the travel-footprint raw material, cadrage P1-4 F3). Not a
+     * Venue reference: the federation's label, never resolved in PR A.
+     */
+    #[ORM\Column(length: 180, nullable: true)]
+    private ?string $fbiVenueLabel = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -260,6 +268,18 @@ class Fixture implements TenantOwnedInterface
     public function setExternalRef(?string $externalRef): self
     {
         $this->externalRef = $externalRef;
+
+        return $this;
+    }
+
+    public function getFbiVenueLabel(): ?string
+    {
+        return $this->fbiVenueLabel;
+    }
+
+    public function setFbiVenueLabel(?string $fbiVenueLabel): self
+    {
+        $this->fbiVenueLabel = $fbiVenueLabel;
 
         return $this;
     }

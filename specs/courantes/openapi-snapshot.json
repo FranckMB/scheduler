@@ -5571,6 +5571,202 @@
                 }
             }
         },
+        "/api/fixtures/import": {
+            "post": {
+                "operationId": "import_fixtures",
+                "tags": [
+                    "Fixture"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Fixture resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Fixture.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Fixture"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Fixture.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Import an FBI club export (.xlsx) with validated mappings",
+                "description": "Multipart upload: field \"file\" + optional field \"mappings\" (JSON list of {division, fbiTeamLabel?, teamId} \u2014 the manager's choices from the analyze step; persisted as Competition rows). Creates new fixtures and DIFF-UPDATES known ones (by FBI number per team): a rescheduled date or a HOME\u2194AWAY switch un-places the match and lands in warnings[]. Report {message, created, updated, unchanged, exempted, errors[], warnings[{type, division, externalRef, message}], unmappedDivisions[]}. 404 no club/membership \u00b7 403 non-management member \u00b7 409 archived season, socle not validated or concurrent duplicate import \u00b7 400 missing/invalid file, columns or mappings.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new Fixture resource",
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "file": {
+                                        "type": "string",
+                                        "format": "binary"
+                                    },
+                                    "mappings": {
+                                        "type": "string",
+                                        "description": "JSON list of {division, fbiTeamLabel?, teamId}"
+                                    }
+                                },
+                                "required": [
+                                    "file"
+                                ]
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
+        "/api/fixtures/import/analyze": {
+            "post": {
+                "operationId": "analyze_fixtures_import",
+                "tags": [
+                    "Fixture"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Fixture resource created",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Fixture.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Fixture"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Fixture.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Analyze an FBI club export (.xlsx) \u2014 dry-run",
+                "description": "Multipart upload (field \"file\"). Parses the club-wide FBI export and returns its division groups resolved against the persisted Division\u2194team mappings: {divisions[{name, fbiTeamLabel, rowCount, teamId, competitionId}], totalRows, exempted, errors[]}. Writes nothing. 404 no club/membership \u00b7 403 non-management member \u00b7 409 archived season or socle not validated \u00b7 400 missing/invalid file or columns.",
+                "parameters": [],
+                "requestBody": {
+                    "description": "The new Fixture resource",
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "file": {
+                                        "type": "string",
+                                        "format": "binary"
+                                    }
+                                },
+                                "required": [
+                                    "file"
+                                ]
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
         "/api/fixtures/{id}": {
             "get": {
                 "operationId": "api_fixtures_id_get",
@@ -10091,115 +10287,6 @@
                 ]
             }
         },
-        "/api/teams/{id}/fixtures/import": {
-            "post": {
-                "operationId": "import_fixtures",
-                "tags": [
-                    "Team"
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Team resource created",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Team.jsonld"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Team"
-                                }
-                            },
-                            "text/html": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Team.html"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "400": {
-                        "description": "Invalid input",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "422": {
-                        "description": "An error occurred",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation"
-                                }
-                            }
-                        },
-                        "links": {}
-                    }
-                },
-                "summary": "Import an FBI fixtures export (.xlsx) for this team",
-                "description": "Multipart upload (field \"file\"). Per-row report {message, created, skipped, errors[]}. Idempotent by FBI match number (re-upload skips). 404 unknown/foreign team \u00b7 403 non-management member \u00b7 409 archived season or concurrent duplicate import \u00b7 400 missing/invalid file or columns.",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "Team identifier",
-                        "required": true,
-                        "deprecated": false,
-                        "schema": {
-                            "type": "string"
-                        },
-                        "style": "simple",
-                        "explode": false
-                    }
-                ],
-                "requestBody": {
-                    "description": "The new Team resource",
-                    "content": {
-                        "multipart/form-data": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "file": {
-                                        "type": "string",
-                                        "format": "binary"
-                                    }
-                                },
-                                "required": [
-                                    "file"
-                                ]
-                            }
-                        }
-                    },
-                    "required": false
-                }
-            }
-        },
         "/api/team_coaches": {
             "get": {
                 "operationId": "api_team_coaches_get_collection",
@@ -14716,6 +14803,13 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "fbiTeamLabel": {
+                        "description": "FBI club-team label \u2014 disambiguates two club teams in one division.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -14820,6 +14914,13 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "fbiTeamLabel": {
+                        "description": "FBI club-team label \u2014 disambiguates two club teams in one division.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -14870,6 +14971,13 @@
                                 ]
                             },
                             "endDate": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "fbiTeamLabel": {
+                                "description": "FBI club-team label \u2014 disambiguates two club teams in one division.",
                                 "type": [
                                     "string",
                                     "null"
@@ -15752,6 +15860,13 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "fbiVenueLabel": {
+                        "description": "Raw FBI \u00ab Salle \u00bb label, HOME and AWAY \u2014 never a Venue reference.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -15908,6 +16023,13 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "fbiVenueLabel": {
+                        "description": "Raw FBI \u00ab Salle \u00bb label, HOME and AWAY \u2014 never a Venue reference.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -15979,6 +16101,13 @@
                             },
                             "externalRef": {
                                 "description": "FBI match number (import idempotence key) \u2014 null for manual entries.",
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "fbiVenueLabel": {
+                                "description": "Raw FBI \u00ab Salle \u00bb label, HOME and AWAY \u2014 never a Venue reference.",
                                 "type": [
                                     "string",
                                     "null"

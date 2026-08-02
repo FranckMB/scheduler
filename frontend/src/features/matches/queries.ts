@@ -74,17 +74,26 @@ export function usePlaceFixture() {
   });
 }
 
+/** Dry-run — writes nothing server-side, so no invalidation. */
+export function useAnalyzeFbiFixtures() {
+  return useMutation({
+    mutationFn: (file: File) => matchesApi.analyzeFbiFixtures(file),
+    // Surface the backend's actionable message (missing columns, bad format…),
+    // not a fixed label — same pattern as cockpit/queries.
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
+  });
+}
+
 export function useImportFbiFixtures() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ teamId, file }: { teamId: string; file: File }) => matchesApi.importFbiFixtures(teamId, file),
+    mutationFn: ({ file, mappings }: { file: File; mappings: matchesApi.FbiMapping[] }) =>
+      matchesApi.importFbiFixtures(file, mappings),
     onSuccess: () => {
       invalidateFixtures(queryClient);
-      // The import may find-or-create competitions.
+      // The import persists the new Division↔team mappings as competitions.
       void queryClient.invalidateQueries({ queryKey: ["competitions"] });
     },
-    // Surface the backend's actionable message (missing columns, bad format…),
-    // not a fixed label — same pattern as cockpit/queries.
     onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
   });
 }

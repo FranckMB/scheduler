@@ -51,6 +51,15 @@ class Competition implements TenantOwnedInterface
     #[ORM\Column(length: 20, enumType: CompetitionType::class)]
     private CompetitionType $competitionType;
 
+    /**
+     * The club-side team label as the FBI export writes it (e.g. « B CHARPENNES
+     * CROIX LUIZET - 2 ») — the disambiguator when TWO club teams play in the
+     * same division (cadrage P1-4, décision fondateur 2026-08-02 : le suffixe
+     * appareille la 2ᵉ équipe). Null when the division alone identifies the team.
+     */
+    #[ORM\Column(length: 180, nullable: true)]
+    private ?string $fbiTeamLabel = null;
+
     #[ORM\Column(type: 'date_immutable', nullable: true)]
     private ?DateTimeImmutable $startDate = null;
 
@@ -168,6 +177,18 @@ class Competition implements TenantOwnedInterface
     public function setCompetitionType(CompetitionType $competitionType): self
     {
         $this->competitionType = $competitionType;
+
+        return $this;
+    }
+
+    public function getFbiTeamLabel(): ?string
+    {
+        return $this->fbiTeamLabel;
+    }
+
+    public function setFbiTeamLabel(?string $fbiTeamLabel): self
+    {
+        $this->fbiTeamLabel = $fbiTeamLabel;
 
         return $this;
     }

@@ -18,6 +18,7 @@ const fixture: Fixture = {
   venueId: null,
   kickoffTime: null,
   externalRef: null,
+  fbiVenueLabel: null,
 };
 const venues: Venue[] = [{ id: "venue-1", name: "Gymnase Alpha", color: null }];
 

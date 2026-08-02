@@ -25,6 +25,8 @@ export interface Fixture {
   kickoffTime: string | null;
   /** FBI match number (import idempotence key) — null for manual entries. */
   externalRef: string | null;
+  /** Raw FBI « Salle » label, HOME and AWAY — never a Venue reference. */
+  fbiVenueLabel: string | null;
 }
 
 export interface Competition {
@@ -32,6 +34,8 @@ export interface Competition {
   teamId: string;
   name: string;
   competitionType: string;
+  /** FBI club-team label — set when two club teams share one division. */
+  fbiTeamLabel?: string | null;
 }
 
 export interface LeagueWindow {
@@ -160,6 +164,7 @@ function normalizeFixture(raw: Fixture): Fixture {
     venueId: raw.venueId ?? null,
     kickoffTime: raw.kickoffTime ?? null,
     externalRef: raw.externalRef ?? null,
+    fbiVenueLabel: raw.fbiVenueLabel ?? null,
   };
 }
 
@@ -180,18 +185,64 @@ export const getLeagueWindows = (): Promise<LeagueWindowsResponse> =>
 /** Same-coach conflict radar, recomputed server-side on every call. */
 export const getConflicts = (): Promise<ConflictsResponse> => api.get("fixtures/conflicts").json<ConflictsResponse>();
 
-export interface ImportFbiResult {
-  message: string;
-  created: number;
-  skipped: number;
+/** One division group of the analyzed file, resolved (or not) against the
+ * persisted Division↔team mapping. `fbiTeamLabel` is only set when TWO club
+ * teams share the division (the FBI suffix disambiguates them). */
+export interface ImportAnalysisDivision {
+  name: string;
+  fbiTeamLabel: string | null;
+  rowCount: number;
+  teamId: string | null;
+  competitionId: string | null;
+}
+
+export interface ImportFbiAnalysis {
+  divisions: ImportAnalysisDivision[];
+  totalRows: number;
+  exempted: number;
   errors: string[];
 }
 
-/** Upload one FBI export (.xlsx) for ONE team (multipart) → per-row report. */
-export const importFbiFixtures = (teamId: string, file: File): Promise<ImportFbiResult> => {
+export interface ImportFbiWarning {
+  type: "RESCHEDULED" | "SWITCHED";
+  division: string;
+  externalRef: string;
+  message: string;
+}
+
+export interface ImportFbiResult {
+  message: string;
+  created: number;
+  updated: number;
+  unchanged: number;
+  exempted: number;
+  errors: string[];
+  warnings: ImportFbiWarning[];
+  unmappedDivisions: { name: string; fbiTeamLabel: string | null; rowCount: number }[];
+}
+
+/** A manager's mapping choice for one division group of the analyze step. */
+export interface FbiMapping {
+  division: string;
+  fbiTeamLabel: string | null;
+  teamId: string;
+}
+
+/** Dry-run: parse the club-wide FBI export and return its mapping table. */
+export const analyzeFbiFixtures = (file: File): Promise<ImportFbiAnalysis> => {
   const form = new FormData();
   form.append("file", file);
-  return api.post(`teams/${teamId}/fixtures/import`, { body: form }).json<ImportFbiResult>();
+  return api.post("fixtures/import/analyze", { body: form }).json<ImportFbiAnalysis>();
+};
+
+/** One-pass import: the SAME file + the completed mappings (multipart). */
+export const importFbiFixtures = (file: File, mappings: FbiMapping[]): Promise<ImportFbiResult> => {
+  const form = new FormData();
+  form.append("file", file);
+  if (mappings.length > 0) {
+    form.append("mappings", JSON.stringify(mappings));
+  }
+  return api.post("fixtures/import", { body: form }).json<ImportFbiResult>();
 };
 
 export const createFixture = (input: CreateFixtureInput): Promise<Fixture> =>
