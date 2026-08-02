@@ -15,7 +15,12 @@ const TAG_LABELS: Record<string, string> = {
   // ÂGE
   SENIOR: "Adulte",
   JEUNE: "Jeune (U13-U21)",
+  // ⚠ « EMB (U9-U11) » MENTAIT jusqu'à P4-42 : la règle serveur taguait EMB toute
+  // catégorie d'`ageMax <= 12`, donc U5 et U7 aussi. Le lot a rétréci le tag au lieu de
+  // corriger l'étiquette — c'est elle qui disait le besoin. Ne pas l'élargir « pour
+  // coller au code » sans vérifier `TeamTagService::determineTagNames` d'abord.
   EMB: "EMB (U9-U11)",
+  BABY: "Baby (U5-U7)",
 };
 
 const LEVEL_LABELS: Record<string, string | undefined> = LEVEL_LABEL;
