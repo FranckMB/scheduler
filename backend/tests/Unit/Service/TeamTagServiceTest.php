@@ -12,6 +12,7 @@ use App\Enum\Gender;
 use App\Enum\TeamLevel;
 use App\Enum\TeamTagAxis;
 use App\Service\TeamTagService;
+use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -36,6 +37,15 @@ final class TeamTagServiceTest extends TestCase
 
     /** @var EntityRepository<SportCategory>&MockObject */
     private MockObject $sportCategoryRepository;
+
+    /** @var Connection&MockObject */
+    private MockObject $connection;
+
+    /** @var list<string> le SQL d'insertion capturé — c'est là que vivent désormais les tags semés */
+    private array $insertStatements = [];
+
+    /** @var list<array<string, mixed>> les paramètres liés de ces insertions */
+    private array $insertParams = [];
 
     /**
      * La tranche d'âge posée par catégorie, aux âges RÉELS du catalogue
@@ -88,9 +98,11 @@ final class TeamTagServiceTest extends TestCase
             ->with(['teamId' => $team->getId(), 'seasonId' => 'season-1'])
             ->willReturn([]);
 
+        // Base vide au premier passage, peuplée à la RELECTURE — ce que fait une vraie base
+        // après l'insertion en SQL natif (P4-64).
         $this->teamTagRepository->method('findBy')
             ->with(['clubId' => 'club-1', 'isSystem' => true])
-            ->willReturn([]);
+            ->willReturnOnConsecutiveCalls([], $this->systemTagsKeyedByName());
 
         $this->sportCategoryRepository->method('find')
             ->with('cat-u15')
@@ -132,9 +144,11 @@ final class TeamTagServiceTest extends TestCase
             ->with(['teamId' => $team->getId(), 'seasonId' => 'season-1'])
             ->willReturn([]);
 
+        // Base vide au premier passage, peuplée à la RELECTURE — ce que fait une vraie base
+        // après l'insertion en SQL natif (P4-64).
         $this->teamTagRepository->method('findBy')
             ->with(['clubId' => 'club-1', 'isSystem' => true])
-            ->willReturn([]);
+            ->willReturnOnConsecutiveCalls([], $this->systemTagsKeyedByName());
 
         $this->sportCategoryRepository->method('find')
             ->with('cat-senior')
@@ -208,52 +222,57 @@ final class TeamTagServiceTest extends TestCase
         $this->sportCategoryRepository->method('find')
             ->willReturn(null);
 
-        $persistedTags = [];
-        $this->entityManager->method('persist')
-            ->willReturnCallback(function ($entity) use (&$persistedTags): void {
-                if ($entity instanceof TeamTag) {
-                    $persistedTags[] = $entity;
-                }
-            });
-
         $this->entityManager->expects(self::once())->method('flush');
 
         $this->service->syncTeamTags($team, 'season-1');
 
-        $tagNames = array_map(static fn (TeamTag $t): string => $t->getName(), $persistedTags);
+        // ⚠ Les tags système ne sont plus `persist`és : depuis P4-64 ils partent en UNE
+        // requête `INSERT … ON CONFLICT DO NOTHING` (`insertMissingSystemTags`), parce qu'un
+        // `flush()` en violation de contrainte fermerait l'EntityManager. L'observable a donc
+        // changé de nature — c'est le SQL — mais l'invariant gardé est le MÊME.
+        self::assertCount(1, $this->insertStatements, 'une seule requête, pas une par tag');
+        $sql = $this->insertStatements[0];
 
-        // Le catalogue de tags système est semé EN ENTIER sur un club qui n'en a aucun, et
-        // sans doublon.
-        //
-        // Il était asserté par un compte en dur (21) : ajouter BABY le faisait rougir pour
-        // la seule raison qu'il avait bougé. Mais mon premier remplacement — unicité + les
-        // quatre tranches — était STRICTEMENT PLUS FAIBLE : retirer 'U21' de `$requiredTags`
-        // le laissait vert, alors que le compte l'attrapait (revue #352). Un tag manquant
-        // n'est pas un détail : `TeamTagResolver` ne le trouve pas, log un warning et rend
-        // une liste vide — la contrainte qui le cible est SILENCIEUSEMENT ignorée.
-        //
-        // L'invariant sans nombre magique : semer exactement les tags dont l'axe est
-        // déclaré. Les deux listes vivent dans le même fichier et doivent rester jumelles.
-        $declaredAxes = array_keys(new ReflectionClass(TeamTagService::class)->getConstant('SYSTEM_TAG_AXES'));
-        sort($declaredAxes);
-        $seeded = $tagNames;
-        sort($seeded);
-        self::assertSame($declaredAxes, $seeded, 'on sème exactement les tags système dont l\'axe est déclaré — ni un de moins, ni un doublon');
-        self::assertContains('JEUNE', $tagNames);
-        self::assertContains('SENIOR', $tagNames);
-        self::assertContains('MASCULINE', $tagNames);
-        self::assertContains('LOISIR_ADULTE', $tagNames);
-        self::assertContains('LOISIR_JEUNE', $tagNames);
+        self::assertStringContainsString('ON CONFLICT (club_id, name) DO NOTHING', $sql, 'la course doit être un no-op, pas une erreur');
+        self::assertSame(
+            \count(new ReflectionClass(TeamTagService::class)->getConstant('SYSTEM_TAG_AXES')),
+            substr_count($sql, '(:id'),
+            'un tuple par tag système déclaré — ni un de moins, ni un doublon',
+        );
 
-        // Lot B: each system tag is created with its deterministic axis.
-        $byName = [];
-        foreach ($persistedTags as $tag) {
-            $byName[$tag->getName()] = $tag;
+        // Le catalogue de tags système est semé EN ENTIER sur un club qui n'en a aucun.
+        //
+        // Il était asserté par un compte en dur (21) : ajouter BABY le faisait rougir pour la
+        // seule raison qu'il avait bougé. Mais un premier remplacement — unicité + les quatre
+        // tranches — était STRICTEMENT PLUS FAIBLE : retirer 'U21' de `$requiredTags` le
+        // laissait vert (revue #352). Un tag manquant n'est pas un détail :
+        // `TeamTagResolver` ne le trouve pas, log un warning et rend une liste vide — la
+        // contrainte qui le cible est SILENCIEUSEMENT ignorée.
+        //
+        // L'invariant sans nombre magique : semer exactement les tags dont l'axe est déclaré.
+        // Les deux listes vivent dans le même fichier et doivent rester jumelles.
+        $params = $this->insertParams[0];
+
+        /** @var array<string, string> $axeParNom nom du tag → axe envoyé */
+        $axeParNom = [];
+        foreach ($params as $cle => $valeur) {
+            if (str_starts_with((string) $cle, 'name')) {
+                $axeParNom[(string) $valeur] = (string) $params['axis' . substr((string) $cle, 4)];
+            }
         }
-        self::assertSame(TeamTagAxis::GENRE, $byName['MASCULINE']->getAxis());
-        self::assertSame(TeamTagAxis::AGE, $byName['U15']->getAxis());
-        self::assertSame(TeamTagAxis::AGE, $byName['SENIOR']->getAxis());
-        self::assertSame(TeamTagAxis::NIVEAU, $byName['DEPARTEMENTAL']->getAxis());
+
+        $declaredAxes = new ReflectionClass(TeamTagService::class)->getConstant('SYSTEM_TAG_AXES');
+        $attendus = array_keys($declaredAxes);
+        $semes = array_keys($axeParNom);
+        sort($attendus);
+        sort($semes);
+        self::assertSame($attendus, $semes, 'on sème exactement les tags système dont l\'axe est déclaré');
+
+        // Et chacun part avec SON axe — un tag sans axe, ou avec le mauvais, tomberait dans
+        // « Autres » au sélecteur de cible de contrainte.
+        foreach ($declaredAxes as $nom => $axe) {
+            self::assertSame($axe->value, $axeParNom[$nom], \sprintf('axe de %s', $nom));
+        }
     }
 
     #[DataProvider('ageBracketCases')]
@@ -298,6 +317,22 @@ final class TeamTagServiceTest extends TestCase
         $this->teamTagRepository = $this->createMock(EntityRepository::class);
         $this->sportCategoryRepository = $this->createMock(EntityRepository::class);
 
+        // P4-64 : les tags système manquants sont désormais insérés en SQL natif
+        // (`ON CONFLICT DO NOTHING`, cf. `insertMissingSystemTags`) et non plus par `persist`,
+        // parce qu'un `flush()` en violation de contrainte FERMERAIT l'EntityManager. Le
+        // double mock ci-dessous simule ce que fait une vraie base : la requête est capturée,
+        // puis la RELECTURE rend les tags. Sans lui, le service verrait une base restée vide
+        // et n'assignerait rien.
+        $this->connection = $this->createMock(Connection::class);
+        $this->connection->method('executeStatement')
+            ->willReturnCallback(function (string $sql, array $params = []): int {
+                $this->insertStatements[] = $sql;
+                $this->insertParams[] = $params;
+
+                return 1;
+            });
+        $this->entityManager->method('getConnection')->willReturn($this->connection);
+
         $this->entityManager->method('getRepository')
             ->willReturnMap([
                 [TeamTagAssignment::class, $this->assignmentRepository],
@@ -309,20 +344,29 @@ final class TeamTagServiceTest extends TestCase
     }
 
     /**
-     * Tous les tags système, id = nom, pour que l'assignation soit lisible.
+     * TOUS les tags système, id = nom pour que l'assignation soit lisible.
+     *
+     * ⚠ Dérivés de `SYSTEM_TAG_AXES`, jamais d'une liste écrite ici. La liste manuelle
+     * précédente omettait les tags de NIVEAU (`REGIONAL`, `LOISIR_ADULTE`…) : les assignations
+     * correspondantes étaient donc silencieusement sautées, et les tests comptaient une
+     * assignation de moins sans que rien ne dise pourquoi. Un fixture qui recopie une liste
+     * du code finit toujours par en diverger.
      *
      * @return list<TeamTag>
      */
     private function systemTagsKeyedByName(): array
     {
         $tags = [];
-        foreach (['BABY', 'EMB', 'JEUNE', 'SENIOR', 'U9', 'U11', 'U13', 'U15', 'U18', 'U21', 'FEMININE', 'MASCULINE', 'MIXTE'] as $name) {
+        /** @var array<string, TeamTagAxis> $axes */
+        $axes = new ReflectionClass(TeamTagService::class)->getConstant('SYSTEM_TAG_AXES');
+
+        foreach ($axes as $name => $axis) {
             $tag = new TeamTag;
             $tag->setId($name);
             $tag->setName($name);
             $tag->setClubId('club-1');
             $tag->setIsSystem(true);
-            $tag->setAxis(TeamTagAxis::AGE);
+            $tag->setAxis($axis);
             $tags[] = $tag;
         }
 
