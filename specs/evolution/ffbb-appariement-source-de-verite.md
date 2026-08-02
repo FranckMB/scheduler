@@ -337,10 +337,40 @@ on lui épargne la saisie.
 FFBB** dans `Venue.externalRef` — l'identité officielle qu'un gymnase de match déclare à la ligue (§7). Trois
 champs aujourd'hui morts faute d'être saisis (§6.8).
 
-⚠ **Réserves.** Le rayon est un réglage produit (3 km rend 25 salles, 5 km en rend 53 — au-delà ça devient une
-liste à trier plutôt qu'une aide). Un club dont la géoloc est absente ou fausse retombe sur la saisie manuelle,
-sans dégradation. Et le `status: "draft"` de la cartographie FFBB (§2bis) vaut ici aussi : la position est une
-bonne amorce, pas une vérité.
+#### Le rayon — mesuré sur quatre clubs, et le défaut fixe est un piège
+
+> **« Dans une ville comme Villeurbanne, 5 km ça donne beaucoup de gymnases, mais pour les petits clubs il y a
+> une limite, quitte à la modifier (3 km, 5 km, 10 km). »** (fondateur, 2026-08-02)
+
+L'intuition est bonne. Les chiffres la précisent :
+
+| Club | 3 km | 5 km | 10 km | 20 km |
+|---|---:|---:|---:|---:|
+| **BCCL** — Villeurbanne (urbain dense) | 25 | 53 | 127 | 217 |
+| **Cantalienne Aurillac** — ville moyenne | 4 | 4 | 5 | 5 |
+| **Naucelles Basket** — Cantal (rural) | 1 | 3 | 5 | 5 |
+| **Martiel/Villefranchois** — Aveyron (rural) | **0** | **0** | 5 | 13 |
+
+⚑ **Martiel rend ZÉRO gymnase à 3 km comme à 5 km.** Un défaut fixe montrerait donc une **liste vide** à un
+club rural — sur son tout premier écran, et pour une fonctionnalité dont l'argument est « l'appli me comprend ».
+C'est l'inverse de l'effet recherché.
+
+Et à l'autre bout, BCCL à 10 km rend **127 salles** : ce n'est plus une aide, c'est un annuaire à trier.
+
+**Proposition : un rayon qui s'élargit tout seul, avec les paliers restés manuels.**
+
+Partir à **3 km**, et tant que le résultat est en dessous d'un seuil utile (~5 salles), passer au palier
+suivant — 5, 10, 20 km — **en le disant** (« aucun gymnase à moins de 5 km, voici ceux dans 10 km »). Les
+paliers restent affichés pour élargir ou resserrer à la main.
+
+Résultat sur les quatre cas : BCCL s'arrête à 3 km avec 25 salles, Aurillac et Naucelles à 10 km avec 5,
+Martiel à 10 km avec 5. **Aucun n'atterrit sur une liste vide, aucun sur 127.**
+
+⚠ **Réserves.** Un club dont la géoloc est absente ou fausse retombe sur la saisie manuelle, sans dégradation.
+Le `status: "draft"` de la cartographie FFBB (§2bis) vaut ici aussi : la position est une bonne amorce, pas une
+vérité. Et surtout — **le 9/9 de BCCL est UN club** : rien ne garantit que le gymnase d'un club donné figure à
+l'index. Les 0 de Martiel le rappellent. La liste pré-remplie est une **amorce**, l'ajout manuel doit rester à
+portée immédiate, jamais relégué derrière la liste.
 
 #### La forme voulue — « comme un choix de point relais »
 
