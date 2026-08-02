@@ -32,7 +32,8 @@ domaine est à rejeter — il sait. Ce que l'API doit faire, c'est **pré-rempli
 | Catégorie / sexe / niveau de l'engagement | ⚠️ **7/14 seulement** sur BCCL — les 7 vides sont les **jeunes** |
 | **Nom d'équipe** | ❌ **0/14**. `nomEquipe`, `nomUsuel`, `nomOfficiel`, `codeAbrege`, `nomCtc` : tous vides |
 | **Numéro d'équipe** | ❌ 6/14, et **sans signification** (décision fondateur) |
-| **Logo par équipe** | ❌ **N'EXISTE PAS.** Un seul id logo pour les 14 engagements : c'est **le logo du CLUB**, qu'on récupère déjà |
+| **Logo par équipe** | ❌ **N'EXISTE PAS.** L'engagement porte bien un `logo`, mais c'est **exactement le même id** que celui de l'organisme (`ad8d7110-…` sur les 14, vérifié) : **le logo du CLUB**, déjà récupéré par `FfbbLogoFetcher`. Une copie, pas une donnée neuve |
+| **Couleur du club** | 🟢 **`logo.gradient_color`** — `#c9102e` pour BCCL. Voir §6.7 : personne ne l'avait vue |
 | **Contact nommé** | ❌ **Absent de l'index.** Seuls `mail` et `telephone` institutionnels — et c'est heureux (donnée personnelle) |
 | Calendrier des rencontres | ❌ index de **test** (31 docs nationaux) → **l'import FBI reste le chemin** |
 | Créneaux, coachs, contraintes, équipes non engagées | — hors FFBB, à nous |
@@ -210,6 +211,23 @@ contre le Clar, il faut peut-être prévoir une action de club autour de ce matc
 **Posé par le gestionnaire, jamais déduit.** Une objection initiale visait une déduction automatique (même
 commune ? même niveau ?) — hors sujet : ce n'était pas la demande, et déduire violerait le §1.
 
+### 6.7 🟢 La couleur du club, pré-remplie — trouvée en relisant les traces
+
+L'objet `logo` porte **`gradient_color`** : `#c9102e` pour BCCL, le rouge du club. Elle voyage dans le payload
+que `FfbbClubPopulator` récupère **déjà** à la création.
+
+Or `Club.accentColor` existe (`Club.php:99`) et pilote tout le thème du club (`useApplyClubTheme`, garde AA
+incluse) — mais **`FfbbClubPopulator` ne le renseigne pas** : le gestionnaire choisit sa couleur à la main
+dans `/club`.
+
+**Un club neuf peut donc arriver déjà à ses couleurs, sans un geste.** Coût : lire un champ qu'on télécharge
+déjà. ⚠ Passer par la dérivation AA existante — une couleur fédérale n'est pas garantie lisible en thème
+sombre — et rester **surchargeable** : c'est un pré-remplissage, pas une identité imposée (contrairement au
+nom, §4, où le fondateur a tranché l'inverse).
+
+*(Trouvée parce que le fondateur a pointé l'objet `logo` du §9 des traces. Je l'avais lu comme « rien de neuf,
+c'est le logo du club » et j'étais passé à côté du champ d'à côté.)*
+
 ### ❌ Rejeté explicitement
 
 **« Dire quelles phases sont publiées »** (`etat`, `publicationInternet`). Le gestionnaire sait quand sortent
@@ -252,8 +270,23 @@ minimale. Mais l'index n'est pas indexé par club — non exploitable en l'état
 | # | Sujet |
 |---|---|
 | **8.1** | **Forfait général.** Les matchs sont perdus et n'ont plus à être gérés ; surtout, l'équipe **n'a potentiellement plus besoin de ses créneaux**, réallouables. ⚠ `EngagedTeamGuard` verrouille toute équipe **ayant des matchs** — une équipe en forfait en a. **Forfait ≠ désengagement dans notre modèle** : il faudra un troisième état. Axe *périmètre engagé* → NR obligatoire. **Réel, pas prioritaire** (fondateur). |
-| **8.2** | **Juridique.** Consulter un club à la demande : sans risque. **Stocker un annuaire national** : extraction substantielle d'une base de données, protégée même quand chaque donnée est publique (art. L341-1 CPI). Aucune CGU lue. **À trancher avant toute mise en cache durable**, pas après. |
-| **8.3** | **Correspondance saison** FFBB `26-27` ↔ notre pivot du 15 juillet : posée une fois, où ? |
+| **8.2** | **Correspondance saison** FFBB `26-27` ↔ notre pivot du 15 juillet : posée une fois, où ? |
+
+> ✅ **Le point juridique est FERMÉ, pas supprimé** (décision fondateur, 2026-08-02) : **on ne stocke pas
+> d'annuaire.** Chaque club consulte la FFBB **pour lui-même, à la demande** — c'est de la consommation par
+> locataire, pas de l'extraction de base. Le risque que soulevait ce point (droit *sui generis* du producteur
+> de base de données, art. L341-1 CPI : l'extraction **substantielle** est protégée même quand chaque donnée
+> est publique) **naissait du stockage des 4 635 organismes**, pas de l'usage.
+>
+> ⚠ **Ce que ça interdit, et qu'il faudra rappeler le jour où l'idée reviendra** : constituer une base
+> d'adversaires nationale, un fichier de prospection commerciale à partir des `dateAffiliation` /
+> `labellisation` / `offresPratiques`, ou tout cache global qui survivrait à la requête d'un club. Le jour où
+> l'un de ces trois usages est demandé, **ce point se rouvre** et exige un avis juridique — il n'est pas
+> tranché « pour toujours », il est tranché **pour l'architecture actuelle**.
+>
+> Non concerné : le réhébergement du logo et l'identité du club **de ce club-là**, qui existent depuis le
+> lot C. Et l'annuaire d'adversaires enrichi par l'usage de [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md)
+> §5bis reste possible — il naît de **ce que les clubs saisissent**, pas d'une extraction FFBB.
 
 ---
 
