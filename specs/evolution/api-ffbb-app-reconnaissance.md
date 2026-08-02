@@ -2,6 +2,9 @@
 
 > **Livrable de cadrage**, pas du code. Alimente [P1-4](roadmap.md) (module matchs) et P2-18 (resynchronisation FFBB).
 > Mesures faites le **2026-08-02** sur le club réel **`ARA0069036`** (B Charpennes Croix Luizet).
+>
+> 📎 **Les sorties brutes de l'API sont dans [`api-ffbb-app-traces.md`](api-ffbb-app-traces.md)** — une section par route,
+> les 14 engagements de BCCL en entier, et de quoi relire chaque affirmation d'ici sans refaire les appels.
 > Lectures seules, une requête par index. **Aucun jeton n'est reproduit ici** : ils sont publics mais rotatifs, et un secret recopié dans un dépôt y reste.
 
 ---

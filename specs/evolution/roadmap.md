@@ -18,7 +18,8 @@
 > Cap de commercialisation : **mi-2027**.
 >
 > **Fichiers de détail actifs** : [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) (P1-4) ·
-> [`api-ffbb-app-reconnaissance.md`](api-ffbb-app-reconnaissance.md) (**ce que l'API FFBB rend vraiment** — mesuré, alimente P1-4 et P2-18) ·
+> [`api-ffbb-app-reconnaissance.md`](api-ffbb-app-reconnaissance.md) (**ce que l'API FFBB rend vraiment** — mesuré, alimente P1-4 et P2-18)
+> + son annexe [`api-ffbb-app-traces.md`](api-ffbb-app-traces.md) (**les sorties brutes**, club `ARA0069036`) ·
 > [`bridage-freemium-decouverte.md`](bridage-freemium-decouverte.md) (P1-3) ·
 > [`enregistrement-ffbb.md`](enregistrement-ffbb.md) (P3-4) · [`compte-demo.md`](compte-demo.md) (P2-4) ·
 > [`console-superadmin.md`](console-superadmin.md) (P4-54) ·
