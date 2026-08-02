@@ -439,10 +439,12 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         // — créer un tag n'est pas l'assigner. Ce fixture en créait donc un DOUBLON sans le
         // savoir ; l'index unique de P4-64 l'a révélé. La règle gardée ici est inchangée :
         // c'est l'ASSIGNATION ci-dessous que `determineTagNames` ne dériverait jamais.
-        $tag = $this->em->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => 'U13'])
-            ?? (new TeamTag)->setClubId($club->getId())->setName('U13')->setIsSystem(true);
-        $this->em->persist($tag);
-        $this->em->flush();
+        $tag = $this->em->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => 'U13']);
+        // ⚠ Pas de repli `?? new TeamTag` (revue #356) : il serait INATTEIGNABLE, et le jour
+        // où le listener cesserait de semer U13 il créerait le tag à la main — le test
+        // resterait vert en n'exerçant plus un tag semé par le listener, c'est-à-dire le
+        // « fixture qui vérifie ses propres fixtures » que ce fichier dénonce plus bas.
+        self::assertInstanceOf(TeamTag::class, $tag, 'garde du fixture : le listener doit avoir semé U13');
         $this->em->persist((new TeamTagAssignment)->setTagId($tag->getId())->setTeamId($team->getId())->setSeasonId($season->getId()));
         $this->em->flush();
 

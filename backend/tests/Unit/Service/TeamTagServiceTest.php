@@ -98,11 +98,14 @@ final class TeamTagServiceTest extends TestCase
             ->with(['teamId' => $team->getId(), 'seasonId' => 'season-1'])
             ->willReturn([]);
 
-        // Base vide au premier passage, peuplée à la RELECTURE — ce que fait une vraie base
-        // après l'insertion en SQL natif (P4-64).
+        // Base vide au premier passage, puis peuplée de CE QUI A RÉELLEMENT ÉTÉ INSÉRÉ.
+        //
+        // ⚠ La relecture rendait d'abord le catalogue complet quoi qu'il arrive (revue #356) :
+        // lier le mauvais `club_id` dans l'insertion laissait ces tests VERTS. En dérivant la
+        // réponse des paramètres capturés, le mock se comporte comme une base — il ne rend que
+        // ce qu'on lui a donné, pour le club qu'on lui a nommé.
         $this->teamTagRepository->method('findBy')
-            ->with(['clubId' => 'club-1', 'isSystem' => true])
-            ->willReturnOnConsecutiveCalls([], $this->systemTagsKeyedByName());
+            ->willReturnCallback(fn (array $criteres): array => $this->tagsInsertedFor($criteres));
 
         $this->sportCategoryRepository->method('find')
             ->with('cat-u15')
@@ -144,11 +147,14 @@ final class TeamTagServiceTest extends TestCase
             ->with(['teamId' => $team->getId(), 'seasonId' => 'season-1'])
             ->willReturn([]);
 
-        // Base vide au premier passage, peuplée à la RELECTURE — ce que fait une vraie base
-        // après l'insertion en SQL natif (P4-64).
+        // Base vide au premier passage, puis peuplée de CE QUI A RÉELLEMENT ÉTÉ INSÉRÉ.
+        //
+        // ⚠ La relecture rendait d'abord le catalogue complet quoi qu'il arrive (revue #356) :
+        // lier le mauvais `club_id` dans l'insertion laissait ces tests VERTS. En dérivant la
+        // réponse des paramètres capturés, le mock se comporte comme une base — il ne rend que
+        // ce qu'on lui a donné, pour le club qu'on lui a nommé.
         $this->teamTagRepository->method('findBy')
-            ->with(['clubId' => 'club-1', 'isSystem' => true])
-            ->willReturnOnConsecutiveCalls([], $this->systemTagsKeyedByName());
+            ->willReturnCallback(fn (array $criteres): array => $this->tagsInsertedFor($criteres));
 
         $this->sportCategoryRepository->method('find')
             ->with('cat-senior')
@@ -341,6 +347,53 @@ final class TeamTagServiceTest extends TestCase
             ]);
 
         $this->service = new TeamTagService($this->entityManager);
+    }
+
+    /**
+     * Ce qu'une vraie base rendrait : les tags RÉELLEMENT insérés, pour le club demandé.
+     *
+     * Se substitue au retour inconditionnel du catalogue complet (revue #356) — celui-ci
+     * rendait les tests aveugles à ce que l'insertion contenait vraiment, tenant compris.
+     *
+     * @param array<string, mixed> $criteres
+     *
+     * @return list<TeamTag>
+     */
+    private function tagsInsertedFor(array $criteres): array
+    {
+        $club = $criteres['clubId'] ?? null;
+        $noms = null;
+        if (isset($criteres['name'])) {
+            $noms = \is_array($criteres['name']) ? $criteres['name'] : [$criteres['name']];
+        }
+
+        /** @var array<string, TeamTagAxis> $axes */
+        $axes = new ReflectionClass(TeamTagService::class)->getConstant('SYSTEM_TAG_AXES');
+        $tags = [];
+
+        foreach ($this->insertParams as $params) {
+            if (($params['club'] ?? null) !== $club) {
+                continue; // insertion faite pour un AUTRE club : elle ne doit rien rendre ici
+            }
+            foreach ($params as $cle => $valeur) {
+                if (!str_starts_with((string) $cle, 'name')) {
+                    continue;
+                }
+                $nom = (string) $valeur;
+                if (null !== $noms && !\in_array($nom, $noms, true)) {
+                    continue;
+                }
+                $tag = new TeamTag;
+                $tag->setId($nom);
+                $tag->setName($nom);
+                $tag->setClubId((string) $club);
+                $tag->setIsSystem(true);
+                $tag->setAxis($axes[$nom] ?? TeamTagAxis::AGE);
+                $tags[] = $tag;
+            }
+        }
+
+        return $tags;
     }
 
     /**

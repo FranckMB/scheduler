@@ -109,10 +109,17 @@ final class TeamTagService
     private function getOrCreateSystemTags(string $clubId): array
     {
         $repository = $this->entityManager->getRepository(TeamTag::class);
-        $existingTags = $repository->findBy([
-            'clubId' => $clubId,
-            'isSystem' => true,
-        ]);
+        // ⚠ On lit par CLUB, pas par `isSystem` (revue #356). L'arbitre d'écriture est
+        // `ON CONFLICT (club_id, name)`, qui ne regarde pas `is_system` : filtrer ici sur ce
+        // drapeau faisait diverger la lecture et l'écriture. Une ligne homonyme non-système
+        // était alors invisible à la lecture, avalée à l'insertion, et absente de la relecture
+        // — `syncTeamTags` sautait l'assignation APRÈS avoir supprimé les anciennes, donc
+        // éditer une équipe DÉTRUISAIT son assignation sans la recréer, en silence.
+        //
+        // Le nom d'un tag est unique dans un club (`uniq_team_tag_club_name`) : un tag nommé
+        // « U13 » EST le U13 du club, quelle que soit son origine. `is_system` dit d'où il
+        // vient, pas ce qu'il est.
+        $existingTags = $repository->findBy(['clubId' => $clubId]);
 
         /** @var array<string, TeamTag> $tags */
         $tags = [];
@@ -168,8 +175,12 @@ final class TeamTagService
         // laissé passer une ligne écrite par une transaction concurrente : l'id que NOUS avons
         // tiré n'est alors pas celui qui existe en base, et une assignation le référençant
         // pointerait dans le vide. On repart donc de ce que la base contient vraiment.
-        $tags = [];
-        foreach ($repository->findBy(['clubId' => $clubId, 'isSystem' => true]) as $tag) {
+        //
+        // ⚠ On relit les SEULS noms manquants, et on FUSIONNE (revue #356). Rejouer le
+        // `findBy` complet rejouait aussi son critère — donc deux endroits devaient s'accorder
+        // sur le même filtre, et c'est précisément par cette divergence que le défaut ci-dessus
+        // est né. Un seul point de fusion, un seul critère.
+        foreach ($repository->findBy(['clubId' => $clubId, 'name' => array_keys($manquants)]) as $tag) {
             $tags[$tag->getName()] = $tag;
         }
 
@@ -192,7 +203,8 @@ final class TeamTagService
      * ⚠ SQL natif plutôt que l'ORM, délibérément : un `flush()` qui viole une contrainte
      * **ferme l'EntityManager**, ce qui perdrait aussi le travail de l'appelant (assignations,
      * backfill d'axe). L'insertion doit donc ne jamais lever. Le prix est cette liste de
-     * colonnes, à tenir alignée sur l'entité — d'où le test qui les compare.
+     * colonnes, à tenir alignée sur l'entité — comparée au mapping Doctrine par
+     * `TeamTagScopeTest::testTheHandWrittenColumnListMatchesTheEntityMapping`.
      *
      * @param array<string, string> $manquants nom du tag → couleur
      */

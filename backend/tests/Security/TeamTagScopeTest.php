@@ -12,11 +12,13 @@ use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamTag;
 use App\Service\TeamTagResolver;
+use App\Service\TeamTagService;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
+use ReflectionMethod;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\Uid\Uuid;
 
@@ -128,6 +130,91 @@ final class TeamTagScopeTest extends KernelTestCase
     }
 
     /**
+     * NR — revue #356, LE défaut le plus grave du lot : lecture et écriture doivent s'accorder.
+     *
+     * L'arbitre d'écriture est `ON CONFLICT (club_id, name)`, qui ne regarde PAS `is_system`.
+     * Tant que les lectures filtraient sur ce drapeau, une ligne homonyme non-système était
+     * invisible à la lecture, avalée à l'insertion, absente de la relecture — et
+     * `syncTeamTags` sautait l'assignation APRÈS avoir supprimé les anciennes. Éditer une
+     * équipe DÉTRUISAIT donc son assignation sans jamais la recréer, en silence, et une
+     * contrainte ciblant ce tag n'atteignait plus personne.
+     */
+    public function testANonSystemTagWithASystemNameIsUsedInsteadOfBeingLost(): void
+    {
+        $this->scopeGucToClub($this->club->getId());
+
+        // On remplace le U13 système par un homonyme NON système — l'état que la migration
+        // elle-même peut produire en gardant la ligne la plus ancienne.
+        $this->em->getConnection()->executeStatement(
+            'UPDATE team_tag SET is_system = false WHERE club_id = :club AND name = \'U13\'',
+            ['club' => $this->club->getId()],
+        );
+        $this->em->clear();
+
+        $equipe = $this->createTeamInCategory('U13 bis', 12, 13);
+
+        self::assertContains(
+            $equipe->getId(),
+            $this->resolver->tagTeamIds('U13', $this->season->getId(), $this->club->getId()),
+            'le tag homonyme doit être RÉUTILISÉ, pas ignoré — sinon l\'assignation disparaît sans bruit',
+        );
+    }
+
+    /**
+     * NR — P4-64. LE chemin de conflit, atteint pour de vrai (revue #356).
+     *
+     * Le test précédent tournait sur un club déjà semé : `$manquants` y était vide,
+     * `insertMissingSystemTags` n'était JAMAIS appelé, et l'assertion « l'EM reste ouvert »
+     * était vraie par vacuité. Retirer `ON CONFLICT DO NOTHING` laissait toute la suite verte.
+     *
+     * On appelle donc la méthode DIRECTEMENT, sur un club dont les tags existent déjà : chaque
+     * ligne de l'INSERT entre alors en conflit. C'est le seul moyen d'atteindre ce chemin de
+     * façon déterministe — une vraie course entre deux transactions ne se scripte pas. La
+     * réflexion est le prix ; en échange le test exerce le VRAI SQL contre le VRAI Postgres.
+     */
+    public function testInsertingAlreadyExistingSystemTagsIsAConflictFreeNoOp(): void
+    {
+        $this->scopeGucToClub($this->club->getId());
+        $avant = $this->countTags();
+
+        $methode = new ReflectionMethod(TeamTagService::class, 'insertMissingSystemTags');
+        $service = self::getContainer()->get(TeamTagService::class);
+
+        // Les mêmes noms qu'en base, avec des ids NEUFS : sans `ON CONFLICT DO NOTHING`,
+        // Postgres lève une violation d'unicité et ce test rougit.
+        $methode->invoke($service, $this->club->getId(), ['BABY' => '#F5A9C8', 'EMB' => '#45B7D1']);
+
+        self::assertSame($avant, $this->countTags(), 'aucune ligne ajoutée : le conflit est un no-op');
+        self::assertTrue($this->em->isOpen(), 'l\'EntityManager reste ouvert — c\'est tout l\'intérêt du SQL natif');
+    }
+
+    /**
+     * NR — P4-64. La liste de colonnes écrite à la main dans `insertMissingSystemTags` doit
+     * rester alignée sur l'entité (revue #356 : le docblock promettait ce test, il n'existait
+     * pas).
+     *
+     * Sans lui, ajouter une colonne NOT NULL à `team_tag` laisse la suite unitaire verte — elle
+     * mocke la connexion — et casse en production à la première écriture d'équipe d'un club
+     * neuf, qui n'obtient alors AUCUN tag système.
+     */
+    public function testTheHandWrittenColumnListMatchesTheEntityMapping(): void
+    {
+        $colonnesEntite = $this->em->getClassMetadata(TeamTag::class)->getColumnNames();
+
+        // Toute colonne NOT NULL sans défaut doit figurer dans l'INSERT, sinon l'écriture
+        // casse. On compare à la source (le mapping), jamais à une liste recopiée.
+        $insertees = ['id', 'version', 'created_at', 'updated_at', 'club_id', 'name', 'color', 'is_system', 'axis'];
+        $oubliees = array_diff($colonnesEntite, $insertees);
+
+        self::assertSame(
+            [],
+            array_values($oubliees),
+            'colonne(s) de team_tag absente(s) de insertMissingSystemTags — une NOT NULL ferait échouer toute écriture',
+        );
+        self::assertSame([], array_values(array_diff($insertees, $colonnesEntite)), 'colonne insérée qui n\'existe plus');
+    }
+
+    /**
      * NR — P4-64, l'autre moitié : la garde ne doit pas transformer la course en 500.
      *
      * `insertMissingSystemTags` insère en `ON CONFLICT DO NOTHING` puis RELIT. Rejouer la
@@ -214,6 +301,13 @@ final class TeamTagScopeTest extends KernelTestCase
         // Le mémo de `TeamTagResolver` est par requête/message : il aurait pu figer une
         // réponse d'avant la création des équipes. On repart propre.
         $this->resolver->reset();
+    }
+
+    private function countTags(): int
+    {
+        $this->scopeGucToClub($this->club->getId());
+
+        return \count($this->em->getRepository(TeamTag::class)->findBy(['clubId' => $this->club->getId()]));
     }
 
     private function countSystemTags(): int

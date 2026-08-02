@@ -63,10 +63,26 @@ final class Version20260802140000 extends AbstractMigration
         //    la réaffectation ci-dessus les a rendues identiques. On ne garde qu'une ligne
         //    par (team_id, tag_id, season_id), sinon le payload du solveur porterait deux
         //    fois le même tag pour une équipe.
+        //
+        //    ⚠ RESTREINT aux tags que l'étape 1 vient de toucher (revue #356). Sans le
+        //    `WHERE a.tag_id IN (…)`, cette requête dédoublonnait TOUTE la table — y compris
+        //    pour des clubs n'ayant jamais eu de tag en double. Aucune donnée n'aurait été
+        //    perdue (le triplet ne porte rien d'autre), mais le rayon d'action dépassait ce
+        //    que le nom, la description et le changelog annoncent — c'est-à-dire ce que lit
+        //    l'opérateur avant de la jouer en production.
         $this->addSql(<<<'SQL'
+            WITH gardee_dupliquee AS (
+                SELECT DISTINCT ON (club_id, name) id
+                FROM team_tag
+                WHERE (club_id, name) IN (
+                    SELECT club_id, name FROM team_tag GROUP BY club_id, name HAVING count(*) > 1
+                )
+                ORDER BY club_id, name, created_at, id
+            )
             DELETE FROM team_tag_assignment a
             USING team_tag_assignment plus_ancienne
-            WHERE a.team_id = plus_ancienne.team_id
+            WHERE a.tag_id IN (SELECT id FROM gardee_dupliquee)
+              AND a.team_id = plus_ancienne.team_id
               AND a.tag_id = plus_ancienne.tag_id
               AND a.season_id = plus_ancienne.season_id
               AND (a.created_at, a.id) > (plus_ancienne.created_at, plus_ancienne.id)
@@ -89,7 +105,20 @@ final class Version20260802140000 extends AbstractMigration
 
     public function down(Schema $schema): void
     {
-        // Les doublons supprimés ne se restaurent pas — et ne doivent pas l'être.
-        $this->addSql('DROP INDEX uniq_team_tag_club_name');
+        // ⚠ IRRÉVERSIBLE, et pas seulement parce que les doublons supprimés ne se restaurent
+        // pas (revue #356). Le code de P4-64 DÉPEND de cet index : `insertMissingSystemTags`
+        // émet `ON CONFLICT (club_id, name)`, que PostgreSQL refuse sans index unique
+        // correspondant (SQLSTATE 42P10). Reculer d'un cran pendant que les conteneurs
+        // servent ferait donc échouer TOUTE création d'équipe — l'exception remonte de
+        // `TeamTagSyncListener::postFlush` et avorte le flush englobant : 500, équipe non
+        // créée. Le `down()` d'origine, lui, se contentait de supprimer l'index en silence.
+        //
+        // Le retour arrière d'une release fautive passe par la restauration du dump pris
+        // AVANT la migration (`docs/ops/backup-restore.md` §3), pas par `migrate prev`.
+        $this->throwIrreversibleMigrationException(
+            'P4-64 : reculer supprimerait uniq_team_tag_club_name, dont ON CONFLICT dépend — '
+            . 'toute création d\'équipe échouerait en 42P10. Restaurer le dump pré-migration '
+            . '(docs/ops/backup-restore.md §3) plutôt que de jouer ce down().',
+        );
     }
 }
