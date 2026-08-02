@@ -12,6 +12,11 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Entity(repositoryClass: TeamTagRepository::class)]
 #[ORM\Table(name: 'team_tag')]
 #[ORM\Index(name: 'idx_team_tag_club', columns: ['club_id'])]
+// P4-64 : un nom de tag est unique DANS un club. Sans cet index, deux écritures de Team
+// concurrentes créaient le même tag deux fois, et le résolveur en choisissait une pendant que
+// les assignations se répartissaient entre les deux — une contrainte n'atteignait alors
+// qu'une partie des équipes, sans erreur.
+#[ORM\UniqueConstraint(name: 'uniq_team_tag_club_name', columns: ['club_id', 'name'])]
 #[ORM\HasLifecycleCallbacks]
 class TeamTag implements TenantOwnedInterface
 {

@@ -11,7 +11,10 @@ use App\Entity\TeamTagAssignment;
 use App\Enum\Gender;
 use App\Enum\TeamLevel;
 use App\Enum\TeamTagAxis;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use RuntimeException;
+use Symfony\Component\Uid\Uuid;
 
 final class TeamTagService
 {
@@ -25,6 +28,16 @@ final class TeamTagService
         'DEPARTEMENTAL' => TeamTagAxis::NIVEAU, 'LOISIR_ADULTE' => TeamTagAxis::NIVEAU, 'LOISIR_JEUNE' => TeamTagAxis::NIVEAU,
         'HONNEUR' => TeamTagAxis::NIVEAU, 'PROMOTION' => TeamTagAxis::NIVEAU, 'PRE_REGION' => TeamTagAxis::NIVEAU,
     ];
+
+    /**
+     * Les colonnes écrites par `insertMissingSystemTags`, dans l'ordre du tuple.
+     *
+     * ⚠ Le SQL est CONSTRUIT à partir de cette constante, il ne la recopie pas — sans quoi le
+     * test qui la compare au mapping Doctrine garderait une copie et non le code (revue #356,
+     * défaut que le correctif du round 1 avait lui-même introduit). Le garde vit dans
+     * `TeamTagScopeTest::testTheInsertColumnListMatchesTheEntityMapping`.
+     */
+    private const INSERT_COLUMNS = ['id', 'version', 'created_at', 'updated_at', 'club_id', 'name', 'color', 'is_system', 'axis'];
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -106,17 +119,16 @@ final class TeamTagService
      */
     private function getOrCreateSystemTags(string $clubId): array
     {
-        $repository = $this->entityManager->getRepository(TeamTag::class);
-        $existingTags = $repository->findBy([
-            'clubId' => $clubId,
-            'isSystem' => true,
-        ]);
+        $tags = $this->readClubTags($clubId);
 
-        /** @var array<string, TeamTag> $tags */
-        $tags = [];
-        foreach ($existingTags as $tag) {
-            $tags[$tag->getName()] = $tag;
-            // Backfill the axis on a pre-Lot-B tag (idempotent).
+        foreach ($tags as $tag) {
+            // Backfill de l'axe sur un tag antérieur au lot B (idempotent).
+            //
+            // ⚠ Le garde `isset(SYSTEM_TAG_AXES[...])` limite l'écriture aux NOMS système : un
+            // tag personnalisé « MonTag » n'est jamais touché. En revanche un tag personnalisé
+            // nommé « ELITE » l'est, et c'est VOULU (revue #356) — le nom étant unique dans un
+            // club, « ELITE » désigne le niveau ELITE quelle que soit l'origine de la ligne,
+            // et lui poser son axe le sort de la section « Autres » du sélecteur de cible.
             if (null === $tag->getAxis() && isset(self::SYSTEM_TAG_AXES[$tag->getName()])) {
                 $tag->setAxis(self::SYSTEM_TAG_AXES[$tag->getName()]);
             }
@@ -126,14 +138,9 @@ final class TeamTagService
             'JEUNE' => '#FF6B6B',
             'SENIOR' => '#4ECDC4',
             'EMB' => '#45B7D1',
-            // P4-42. Pas de migration : un club antérieur gagne le tag à sa prochaine
-            // écriture d'équipe. ⚠ « Idempotent » au sens séquentiel SEULEMENT — il n'y a
-            // aucun index unique sur `(club_id, name)` (`Version20260615010708` ne pose que
-            // `idx_team_tag_club`), donc deux écritures de Team concurrentes sur un même
-            // club peuvent insérer le tag DEUX fois. Le résolveur prend alors l'une des
-            // deux lignes tandis que les assignations se répartissent : la contrainte
-            // n'atteint qu'une partie des équipes, sans erreur. Mécanisme préexistant, mais
-            // cette ligne rouvre la fenêtre une fois par club (revue #352) → P4-64.
+            // P4-42. Pas de migration : un club antérieur gagne le tag à sa prochaine écriture
+            // d'équipe. La course qu'ouvrait cette ligne est fermée depuis P4-64 (index unique
+            // + `ON CONFLICT DO NOTHING`, cf. `insertMissingSystemTags`).
             'BABY' => '#F5A9C8',
             'U9' => '#96CEB4',
             'U11' => '#FFEAA7',
@@ -155,23 +162,122 @@ final class TeamTagService
             'PRE_REGION' => '#B0E0E6',
         ];
 
-        foreach ($requiredTags as $name => $color) {
-            if (!isset($tags[$name])) {
-                $tag = new TeamTag;
-                $tag->setClubId($clubId);
-                $tag->setName($name);
-                $tag->setColor($color);
-                $tag->setIsSystem(true);
-                $tag->setAxis(self::SYSTEM_TAG_AXES[$name]);
-
-                $this->entityManager->persist($tag);
-                $tags[$name] = $tag;
-            }
+        $manquants = array_diff_key($requiredTags, $tags);
+        if ([] !== $manquants) {
+            $this->insertMissingSystemTags($clubId, $manquants);
         }
 
+        // Le backfill d'axe ci-dessus est une écriture ORM ordinaire : il part avec ce flush.
         $this->entityManager->flush();
 
+        if ([] === $manquants) {
+            return $tags;
+        }
+
+        // RELECTURE obligatoire après l'insertion (P4-64). `ON CONFLICT DO NOTHING` peut avoir
+        // laissé passer une ligne écrite par une transaction concurrente : l'id que NOUS avons
+        // tiré n'est alors pas celui qui existe en base, et une assignation le référençant
+        // pointerait dans le vide. On repart donc de ce que la base contient vraiment.
+        foreach ($this->readClubTags($clubId, array_keys($manquants)) as $nom => $tag) {
+            $tags[$nom] = $tag;
+        }
+
+        // ⚠ ÉCHOUER FORT plutôt que perdre une assignation en silence (revue #356).
+        //
+        // Avant P4-64 la boucle construisait toujours l'objet en mémoire : un nom système ne
+        // pouvait pas manquer, et le `continue` de `syncTeamTags` était du code mort. Depuis
+        // que le jeu vient d'une RELECTURE, un nom qu'elle manquerait serait simplement sauté
+        // — or `syncTeamTags` a DÉJÀ supprimé les anciennes assignations et le flush ci-dessus
+        // les a commitées. L'équipe perdrait donc le tag, définitivement, sans exception ni
+        // log. Le pire mode de panne, et exactement celui que ce lot combat.
+        $introuvables = array_diff(array_keys($manquants), array_keys($tags));
+        if ([] !== $introuvables) {
+            throw new RuntimeException(\sprintf('Tags système introuvables après insertion pour le club %s : %s. Abandonner ici évite de laisser des équipes sans leurs assignations, que le flush a déjà supprimées.', $clubId, implode(', ', $introuvables)));
+        }
+
         return $tags;
+    }
+
+    /**
+     * LA lecture des tags d'un club — point unique, critère unique.
+     *
+     * ⚠ Aucun filtre sur `isSystem`, et cette méthode existe pour que ce choix ne puisse pas
+     * diverger (revue #356). L'arbitre d'écriture est `ON CONFLICT (club_id, name)`, qui ne
+     * regarde pas `is_system` : une lecture qui filtrerait dessus rendrait une ligne homonyme
+     * non-système invisible à la lecture, avalée à l'insertion et absente de la relecture — et
+     * `syncTeamTags` sauterait l'assignation APRÈS avoir supprimé les anciennes.
+     *
+     * Les deux lectures passaient auparavant par deux `findBy` distincts : rétablir « la parité
+     * de critère » entre eux — geste naturel pour un mainteneur — réintroduisait le défaut. Ici
+     * il n'y a plus qu'un endroit où le filtre pourrait être ajouté, et l'y ajouter fait rougir
+     * `TeamTagScopeTest::testANonSystemTagWithASystemNameIsUsedInsteadOfBeingLost`.
+     *
+     * Le nom d'un tag est unique dans un club (`uniq_team_tag_club_name`) : un tag nommé
+     * « U13 » EST le U13 du club. `is_system` dit d'où il vient, pas ce qu'il est.
+     *
+     * @param list<string>|null $noms restreint la lecture à ces noms ; null = tout le club
+     *
+     * @return array<string, TeamTag> indexés par nom
+     */
+    private function readClubTags(string $clubId, ?array $noms = null): array
+    {
+        $criteres = ['clubId' => $clubId];
+        if (null !== $noms) {
+            $criteres['name'] = $noms;
+        }
+
+        $tags = [];
+        foreach ($this->entityManager->getRepository(TeamTag::class)->findBy($criteres) as $tag) {
+            $tags[$tag->getName()] = $tag;
+        }
+
+        return $tags;
+    }
+
+    /**
+     * Insère les tags système absents en **une** requête, sans jamais échouer sur une course.
+     *
+     * P4-64 — `getOrCreateSystemTags` lisait « ce tag manque » puis le persistait : deux
+     * écritures de `Team` concurrentes sur le même club inséraient le tag DEUX fois, et le
+     * résolveur en choisissait ensuite une pendant que les assignations se répartissaient
+     * entre les deux. Une contrainte ciblant ce tag n'atteignait alors qu'une partie des
+     * équipes, **sans erreur** — le tag était bien trouvé.
+     *
+     * L'index unique `uniq_team_tag_club_name` interdit désormais le doublon ; reste à ne pas
+     * transformer la course en erreur 500 pour le perdant. D'où `ON CONFLICT DO NOTHING` :
+     * celui qui arrive second n'écrit rien et lit la ligne de l'autre.
+     *
+     * ⚠ SQL natif plutôt que l'ORM, délibérément : un `flush()` qui viole une contrainte
+     * **ferme l'EntityManager**, ce qui perdrait aussi le travail de l'appelant (assignations,
+     * backfill d'axe). L'insertion doit donc ne jamais lever. Le prix est cette liste de
+     * colonnes, à tenir alignée sur l'entité — comparée au mapping Doctrine par
+     * `TeamTagScopeTest::testTheHandWrittenColumnListMatchesTheEntityMapping`.
+     *
+     * @param array<string, string> $manquants nom du tag → couleur
+     */
+    private function insertMissingSystemTags(string $clubId, array $manquants): void
+    {
+        $now = (new DateTimeImmutable)->format('Y-m-d H:i:sP');
+        $valeurs = [];
+        $params = [];
+
+        foreach (array_keys($manquants) as $i => $name) {
+            $valeurs[] = \sprintf('(:id%1$d, 1, :now, :now, :club, :name%1$d, :color%1$d, true, :axis%1$d)', $i);
+            $params['id' . $i] = Uuid::v4()->toRfc4122();
+            $params['name' . $i] = $name;
+            $params['color' . $i] = $manquants[$name];
+            $params['axis' . $i] = self::SYSTEM_TAG_AXES[$name]->value;
+        }
+
+        $params['now'] = $now;
+        $params['club'] = $clubId;
+
+        $this->entityManager->getConnection()->executeStatement(
+            'INSERT INTO team_tag (' . implode(', ', self::INSERT_COLUMNS) . ') VALUES '
+            . implode(', ', $valeurs)
+            . ' ON CONFLICT (club_id, name) DO NOTHING',
+            $params,
+        );
     }
 
     /**
