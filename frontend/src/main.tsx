@@ -9,8 +9,12 @@ import { readPersistedThemeMode } from "@/shared/stores/themeStore";
 import "@/index.css";
 
 // Sentry ERREURS uniquement (pas d'APM/replay — quota free tier préservé). DSN
-// absent = init sautée, SDK inerte : tout est câblé, activé le jour où le compte
-// existe en posant VITE_SENTRY_DSN au build (INF-01).
+// absent = init sautée, SDK inerte.
+//
+// ⚠ L'activer demande DEUX gestes, pas un (P4-65) : poser `VITE_SENTRY_DSN` au build ET
+// autoriser l'hôte d'ingestion du DSN dans `connect-src` (`docker/frontend/csp.conf`).
+// Le DSN seul initialise le SDK et la CSP jette chaque envoi EN SILENCE. Un garde de build
+// refuse désormais cette combinaison (`build/sentryCspGuard.ts`). INF-01.
 if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({ dsn: import.meta.env.VITE_SENTRY_DSN, environment: import.meta.env.MODE, tracesSampleRate: 0 });
 }

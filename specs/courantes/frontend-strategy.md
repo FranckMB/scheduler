@@ -90,7 +90,7 @@ de version majeure ou mineure sans décision explicite et re-vérification de co
 | @dnd-kit/core + sortable + utilities | ^6.3 / ^10.0 / ^3.2 | Drag & drop | Accessible ; utilisé pour le tri des équipes (wizard) |
 | react-router | ^8.3 | Routing | Data router (`createBrowserRouter`), **`lazy` par route** (P4-6), nested layouts. ⚠ paquet **`react-router`**, PAS `react-router-dom` |
 | lucide-react | ^1.27 | Icônes | SVG tree-shakeable |
-| @sentry/react | ^10.68 | Reporting d'erreurs | **Erreurs seules** — pas d'APM, pas de replay, `tracesSampleRate: 0` (quota free tier préservé). DSN absent → init sautée, SDK inerte ; activé en posant `VITE_SENTRY_DSN` au build (INF-01) |
+| @sentry/react | ^10.68 | Reporting d'erreurs | **Erreurs seules** — pas d'APM, pas de replay, `tracesSampleRate: 0` (quota free tier préservé). DSN absent → init sautée, SDK inerte. ⚠ **L'activer demande DEUX gestes** (P4-65) : poser `VITE_SENTRY_DSN` au build **ET** autoriser l'hôte d'ingestion du DSN dans `connect-src` (`docker/frontend/csp.conf`, qui n'autorise aucun tiers). Le DSN seul initialise le SDK et la CSP jette chaque envoi **en silence** ; un garde de build (`frontend/build/sentryCspGuard.ts`) refuse désormais cette combinaison. INF-01 |
 | @radix-ui/react-label + react-slot | ^2.1 / ^1.1 | Primitives UI | Base des composants shadcn-style de `shared/components/ui/` |
 
 > **FullCalendar n'est PAS installé** : la grille planning est un composant custom

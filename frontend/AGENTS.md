@@ -235,8 +235,12 @@ believe empty.
    The pre-paint class and `useApplyTheme` share the same predicate and storage shape so they
    can never disagree.
 6. **Sentry is errors-only** (`main.tsx`): no APM, no replay, `tracesSampleRate: 0` — the free
-   tier quota is deliberately preserved. No DSN = init skipped, SDK inert; it is switched on by
-   setting `VITE_SENTRY_DSN` at build time (INF-01).
+   tier quota is deliberately preserved. No DSN = init skipped, SDK inert.
+   ⚠ **Switching it on takes TWO changes, not one** (P4-65): set `VITE_SENTRY_DSN` at build
+   time **and** allow the DSN's ingest host in `connect-src` (`docker/frontend/csp.conf`,
+   which allows no third party). The DSN alone initialises the SDK while the browser drops
+   every send **silently**. `frontend/build/sentryCspGuard.ts` (called from `vite.config.ts`)
+   now **fails the build** on that combination; it is inert while no DSN is set. INF-01.
 7. **The club accent is per-club and AA-guarded.** `useApplyClubTheme` reads
    `accentColor`/`accentColorDark`/`accentPalette` from `/api/me` and drives `--accent` /
    `--accent-foreground`; an explicit dark accent is applied as-is in dark mode, otherwise a
