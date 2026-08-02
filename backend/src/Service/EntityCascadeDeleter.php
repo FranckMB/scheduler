@@ -21,8 +21,10 @@ use App\Entity\TeamCoach;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
+use App\Entity\VenueMatchWindow;
 use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
+use App\Entity\VenueUnavailability;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Enum\SchedulePlanType;
@@ -92,6 +94,8 @@ final class EntityCascadeDeleter
 
         $this->withoutTenantFilters(function () use ($clubId, $seasonId, $venueId): void {
             $this->deleteByField(VenueTrainingSlot::class, 'venueId', $venueId, $clubId, $seasonId);
+            $this->deleteByField(VenueMatchWindow::class, 'venueId', $venueId, $clubId, $seasonId);
+            $this->deleteByField(VenueUnavailability::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(VenuePeriodOverride::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(Reservation::class, 'venueId', $venueId, $clubId, $seasonId);
             $this->deleteByField(ScheduleSlotTemplate::class, 'venueId', $venueId, $clubId, $seasonId);

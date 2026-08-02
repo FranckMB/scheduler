@@ -9,6 +9,7 @@ import { FullPageSpinner } from "@/shared/components/ui/spinner";
 import { SeasonPlanBanner } from "./SeasonPlanBanner";
 import { MonthCalendar } from "./MonthCalendar";
 import { PUBLIC_HOLIDAY_HORIZON_DAYS, RadarPanel } from "./RadarPanel";
+import { VenueUnavailabilityCard } from "./VenueUnavailabilityCard";
 import { useCalendarEntries, usePublicHolidays, useSchoolHolidays } from "./queries";
 import { addDays, monthWindow, todayISO } from "./lib/date";
 
@@ -77,14 +78,19 @@ export function CockpitPage() {
             jours sans marqueur ni accès (revue #262 round 1). Le calendrier
             empile les entrées chevauchantes comme avant. */}
         <MonthCalendar year={cursor.year} month={cursor.month} entries={entries} holidays={monthHolidays?.items ?? []} publicHolidays={publicHolidays?.items ?? []} onPrev={prev} onNext={next} />
-        <RadarPanel
-          entries={radarEntries}
-          holidays={radarHolidays}
-          publicHolidays={radarPublicHolidays?.items ?? []}
-          publicHolidaysLoading={publicHolidaysLoading}
-          zone={holidays?.zone ?? null}
-          zoneLoading={holidaysLoading}
-        />
+        <div className="flex flex-col gap-4">
+          <RadarPanel
+            entries={radarEntries}
+            holidays={radarHolidays}
+            publicHolidays={radarPublicHolidays?.items ?? []}
+            publicHolidaysLoading={publicHolidaysLoading}
+            zone={holidays?.zone ?? null}
+            zoneLoading={holidaysLoading}
+          />
+          {/* P1-4 PR B — les indisponibilités gymnase vivent au calendrier :
+              « ça affecte les matchs et le planning n'est qu'une conséquence ». */}
+          <VenueUnavailabilityCard />
+        </div>
       </div>
     </div>
   );

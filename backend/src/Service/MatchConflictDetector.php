@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\Fixture;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\TeamCoach;
+use App\Entity\VenueUnavailability;
 use DateInterval;
 use DateTimeImmutable;
 
@@ -16,14 +17,17 @@ use DateTimeImmutable;
  * training can NEVER overlap for the same person — this surfaces the clash as
  * early as the fixture is entered (the anticipation value of the module).
  *
- * Two conflict kinds, both built on {@see MatchFootprint} occupancy windows:
+ * Three conflict kinds. The first two are built on {@see MatchFootprint}
+ * occupancy windows:
  * - MATCH_MATCH: two fixtures of teams sharing a coach whose windows overlap.
  * - MATCH_TRAINING: a fixture overlapping a training of one of the coach's teams,
- *   read from the schedule EFFECTIVE on the match date. An active period entry
- *   CAPTURES the dates it covers — inside it the base plan does not apply: its
- *   overlay if any, else no training plan at all (a closure means "no training").
- *   Outside any period the season baseline applies. A footprint crossing midnight
+ *   read from the schedule EFFECTIVE on the match date (rule extracted to
+ *   {@see EffectiveScheduleResolver} — P1-4 PR B). A footprint crossing midnight
  *   is checked against BOTH calendar days it spans.
+ * - VENUE_UNAVAILABLE (P1-4 PR B): a fixture whose venue is unavailable on its
+ *   date (all-circumstances closure posed on the club calendar AFTER the match
+ *   was placed — the real-life case the placement guard cannot catch). Coach-
+ *   independent, kickoff-independent: the DATE falling in the range suffices.
  *
  * Pure/stateless: the controller loads the scoped data and passes it in; this
  * class only crosses and overlaps, so it is unit-testable without a kernel.
@@ -33,7 +37,10 @@ use DateTimeImmutable;
  */
 final class MatchConflictDetector
 {
-    public function __construct(private readonly MatchFootprint $footprint) {}
+    public function __construct(
+        private readonly MatchFootprint $footprint,
+        private readonly EffectiveScheduleResolver $effectiveScheduleResolver,
+    ) {}
 
     /**
      * @param list<Fixture>                                                                          $fixtures         season fixtures (already club+season scoped)
@@ -42,6 +49,7 @@ final class MatchConflictDetector
      * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string|null}> $activePeriods
      *                                                                                                                 active period windows (ordered), scheduleId = their overlay or null
      * @param array<string, list<ScheduleSlotTemplate>>                                              $slotsBySchedule  slots indexed by their scheduleId
+     * @param list<VenueUnavailability>                                                              $unavailabilities scoped all-circumstances closures
      *
      * @return list<array<string, mixed>> conflict items ready to serialize
      */
@@ -51,6 +59,7 @@ final class MatchConflictDetector
         ?string $seasonScheduleId,
         array $activePeriods,
         array $slotsBySchedule,
+        array $unavailabilities = [],
     ): array {
         $coachesByTeam = [];
         foreach ($teamCoachRows as $link) {
@@ -76,7 +85,61 @@ final class MatchConflictDetector
         return [
             ...$this->matchMatchConflicts($views),
             ...$this->matchTrainingConflicts($views, $coachesByTeam, $seasonScheduleId, $activePeriods, $slotsBySchedule),
+            ...$this->venueUnavailableConflicts($fixtures, $unavailabilities),
         ];
+    }
+
+    /**
+     * A fixture sitting on a venue that is unavailable on its date. No window
+     * math: the closure is all-circumstances, the DATE match suffices (a
+     * kickoff-less home fixture with a venue is affected too).
+     *
+     * @param list<Fixture>             $fixtures
+     * @param list<VenueUnavailability> $unavailabilities
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function venueUnavailableConflicts(array $fixtures, array $unavailabilities): array
+    {
+        if ([] === $unavailabilities) {
+            return [];
+        }
+
+        $conflicts = [];
+        foreach ($fixtures as $fixture) {
+            $venueId = $fixture->getVenueId();
+            if (null === $venueId) {
+                continue;
+            }
+            $date = $fixture->getMatchDate()->format('Y-m-d');
+            foreach ($unavailabilities as $unavailability) {
+                if ($unavailability->getVenueId() !== $venueId) {
+                    continue;
+                }
+                // Inclusive bounds: « du 4 au 28 février » covers the 28th.
+                if ($date < $unavailability->getStartDate()->format('Y-m-d') || $date > $unavailability->getEndDate()->format('Y-m-d')) {
+                    continue;
+                }
+                $conflicts[] = [
+                    'type' => 'VENUE_UNAVAILABLE',
+                    'venueId' => $venueId,
+                    'unavailabilityId' => $unavailability->getId(),
+                    'label' => $unavailability->getLabel(),
+                    'unavailableFrom' => $unavailability->getStartDate()->format('Y-m-d'),
+                    'unavailableUntil' => $unavailability->getEndDate()->format('Y-m-d'),
+                    'fixture' => [
+                        'fixtureId' => $fixture->getId(),
+                        'teamId' => $fixture->getTeamId(),
+                        'homeAway' => $fixture->getHomeAway()->value,
+                        'matchDate' => $date,
+                        'kickoffTime' => $fixture->getKickoffTime()?->format('H:i'),
+                        'status' => $fixture->getStatus()->value,
+                    ],
+                ];
+            }
+        }
+
+        return $conflicts;
     }
 
     /**
@@ -132,7 +195,7 @@ final class MatchConflictDetector
             // A footprint can cross midnight (late kickoff) — check every calendar
             // day it spans, each resolving its own effective schedule + weekday.
             foreach ($this->spannedDates($view['window']) as $date) {
-                $scheduleId = $this->effectiveScheduleId($date, $activePeriods, $seasonScheduleId);
+                $scheduleId = $this->effectiveScheduleResolver->resolve($date, $activePeriods, $seasonScheduleId);
                 if (null === $scheduleId) {
                     continue;
                 }
@@ -203,25 +266,6 @@ final class MatchConflictDetector
         }
 
         return [$startDay, $endDay];
-    }
-
-    /**
-     * The schedule effective on a date. An active period covering the date
-     * captures it — its overlay (may be null → no training plan) wins; the first
-     * covering period in the ordered list decides. Outside any period the season's
-     * own calendar applies.
-     *
-     * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string|null}> $activePeriods
-     */
-    private function effectiveScheduleId(DateTimeImmutable $date, array $activePeriods, ?string $seasonScheduleId): ?string
-    {
-        foreach ($activePeriods as $period) {
-            if ($date >= $period['start'] && $date <= $period['end']) {
-                return $period['scheduleId'];
-            }
-        }
-
-        return $seasonScheduleId;
     }
 
     /**

@@ -27,8 +27,10 @@ use App\Entity\TeamCoach;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
+use App\Entity\VenueMatchWindow;
 use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
+use App\Entity\VenueUnavailability;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -119,6 +121,10 @@ final class SeasonDataPurger
             Team::class,
             Coach::class,
             VenueTrainingSlot::class,
+            // P1-4 PR B — capacité matchs : les deux tables pointent venue_id,
+            // purgées AVANT Venue (aucune FK en base, même règle que le reste).
+            VenueMatchWindow::class,
+            VenueUnavailability::class,
             Venue::class,
         ] as $entityClass) {
             $deleted += $this->deleteByClubSeason($entityClass, $clubId, $seasonId);

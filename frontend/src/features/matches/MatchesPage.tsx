@@ -1,9 +1,11 @@
-import { ChevronLeft, ChevronRight, Lock, Plus, Upload } from "lucide-react";
-import { useMemo } from "react";
+import { ChevronLeft, ChevronRight, DoorOpen, Lock, Plus, Upload } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Modal } from "@/shared/components/ui/modal";
+import { Select } from "@/shared/components/ui/select";
 import { Spinner } from "@/shared/components/ui/spinner";
 
 import type { Category, Coach, Fixture, Team, Venue } from "./api";
@@ -12,8 +14,9 @@ import { FixtureFormDialog } from "./FixtureFormDialog";
 import { ImportFbiDialog } from "./ImportFbiDialog";
 import { isInEnvelope, resolveEnvelope } from "./lib/envelope";
 import { buildWeekendGrid, isPlacedOnGrid, listWeekends, weekendKeyOf, weekendLabel } from "./lib/weekendGrid";
+import { MatchWindowsEditor } from "./MatchWindowsEditor";
 import { PlacementPanel } from "./PlacementPanel";
-import { useCategories, useCoaches, useCompetitions, useConflicts, useFixtures, useLeagueWindows, usePlaceFixture, usePriorityTiers, useTeams, useVenues } from "./queries";
+import { useCategories, useCoaches, useCompetitions, useConflicts, useFixtures, useLeagueWindows, usePlaceFixture, usePriorityTiers, useTeams, useVenueMatchWindows, useVenues, useVenueUnavailabilities } from "./queries";
 import { useMatchesStore } from "./store";
 import { UnplacedList } from "./UnplacedList";
 import { WeekendGrid } from "./WeekendGrid";
@@ -33,7 +36,13 @@ export function MatchesPage() {
   const venues = useVenues();
   const categories = useCategories();
   const coaches = useCoaches();
+  const matchWindows = useVenueMatchWindows();
+  const unavailabilities = useVenueUnavailabilities();
   const placeFixture = usePlaceFixture();
+  // Second entry point of the match-access editor (founder 2026-08-03: wizard
+  // for onboarding, HERE when working the matches) — local UI state only.
+  const [accessDialogOpen, setAccessDialogOpen] = useState(false);
+  const [accessVenueId, setAccessVenueId] = useState("");
 
   const { selectedWeekend, selectedFixtureId, fixtureFormOpen, importDialogOpen, setSelectedWeekend, setSelectedFixtureId, setFixtureFormOpen, setImportDialogOpen } =
     useMatchesStore();
@@ -103,6 +112,17 @@ export function MatchesPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="border-l-[3px] border-accent pl-3 text-lg font-semibold">Matchs</h1>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setAccessVenueId(venues.data?.[0]?.id ?? "");
+              setAccessDialogOpen(true);
+            }}
+          >
+            <DoorOpen className="size-4" />
+            Accès match
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
             <Upload className="size-4" />
             Importer FBI
@@ -130,6 +150,8 @@ export function MatchesPage() {
               key={selectedFixture.id}
               fixture={selectedFixture}
               venues={venues.data ?? []}
+              matchWindows={matchWindows.data ?? []}
+              unavailabilities={unavailabilities.data ?? []}
               teamLabel={teamsMap.get(selectedFixture.teamId)?.name ?? "Équipe ?"}
               categoryLabel={categoriesMap.get(teamsMap.get(selectedFixture.teamId)?.sportCategoryId ?? "")?.name ?? "—"}
               envelope={selectedEnvelope}
@@ -185,6 +207,29 @@ export function MatchesPage() {
 
       {fixtureFormOpen ? <FixtureFormDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} competitions={competitions.data ?? []} onClose={() => setFixtureFormOpen(false)} /> : null}
       {importDialogOpen ? <ImportFbiDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} onClose={() => setImportDialogOpen(false)} /> : null}
+      {accessDialogOpen ? (
+        <Modal label="Accès match" title="Accès match des gymnases" onClose={() => setAccessDialogOpen(false)}>
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground">
+              Les créneaux que la mairie accorde les jours de match — un gymnase sans fenêtre n'accueille pas de
+              matchs. Même éditeur que l'étape Gymnases du wizard.
+            </p>
+            <Select aria-label="Gymnase des accès match" value={accessVenueId} onChange={(e) => setAccessVenueId(e.target.value)}>
+              {(venues.data ?? []).map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </Select>
+            {"" !== accessVenueId ? <MatchWindowsEditor venueId={accessVenueId} /> : null}
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => setAccessDialogOpen(false)}>
+                Fermer
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }

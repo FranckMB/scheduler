@@ -1,9 +1,14 @@
-Last verified @ 2026-08-02 (JSON **régénéré** depuis le backend vivant)
+Last verified @ 2026-08-03 (JSON **régénéré** depuis le backend vivant)
 
-Snapshot régénéré depuis le backend vivant le 2026-08-02 : `php bin/console api:openapi:export`.
+Snapshot régénéré depuis le backend vivant le 2026-08-03 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P1-4 PR B (2026-08-03)** : couche capacité matchs — +`/api/venue_match_windows` et
+  +`/api/venue_unavailabilities` (CRUD API Platform, 5-fichiers), +`/api/venue-unavailability-impact`
+  (route contrôleur, **déclarée dans `CustomRoutesOpenApiFactory`** — le déclencheur « route custom ⇒
+  entrée factory + regen » est appliqué) ; l'enum du radar `/api/fixtures/conflicts` gagne
+  `VENUE_UNAVAILABLE`. Détail : [`module-matchs.md`](module-matchs.md) §Couche capacité.
 - **P1-4 PR A (2026-08-02)** : l'import FBI passe au **format réel, une passe** —
   `POST /api/teams/{id}/fixtures/import` **disparaît** (l'opération quitte `TeamResource`),
   remplacé par `POST /api/fixtures/import/analyze` (dry-run multipart `file`) et

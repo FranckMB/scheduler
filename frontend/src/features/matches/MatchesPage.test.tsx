@@ -36,6 +36,9 @@ vi.mock("./api", () => ({
   getCategories: vi.fn(() => Promise.resolve([{ id: "cat-1", name: "U13" }, { id: "cat-2", name: "Seniors" }])),
   getCoaches: vi.fn(() => Promise.resolve([{ id: "coach-1", firstName: "Jean", lastName: "Dupont" }])),
   getLeagueWindows: vi.fn(() => Promise.resolve({ league: "AURA", items: [] })),
+  // Capacity layer (P1-4 PR B) — empty: no window declared, nothing blocks.
+  getVenueMatchWindows: vi.fn(() => Promise.resolve([])),
+  getVenueUnavailabilities: vi.fn(() => Promise.resolve([])),
   getConflicts: vi.fn(() =>
     Promise.resolve({
       clubId: "c",

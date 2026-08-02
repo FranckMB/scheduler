@@ -32,7 +32,14 @@ function conflictSummary(conflict: Conflict, teams: Map<string, Team>): string {
   if ("MATCH_TRAINING" === conflict.type && conflict.fixture && conflict.training) {
     return `Match ${teamName(teams, conflict.fixture.teamId)} × entraînement ${teamName(teams, conflict.training.teamId)}`;
   }
+  if ("VENUE_UNAVAILABLE" === conflict.type && conflict.fixture) {
+    return `Match ${teamName(teams, conflict.fixture.teamId)} du ${frDate(conflict.fixture.matchDate)} — gymnase indisponible, à repositionner`;
+  }
   return "Conflit";
+}
+
+function frDate(ymd: string): string {
+  return new Date(`${ymd}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
 /** The same-coach conflict radar (server-computed). Empty = green "no clash" state. */
@@ -55,12 +62,19 @@ export function ConflictRadar({ conflicts, teams, coaches }: ConflictRadarProps)
         ) : (
           <ul className="flex flex-col gap-2">
             {conflicts.map((conflict, index) => (
-              <li key={`${conflict.type}-${conflict.coachId}-${index}`} className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm">
-                <p className="font-medium">{coachName(coaches, conflict.coachId)}</p>
-                <p className="text-muted-foreground">{conflictSummary(conflict, teams)}</p>
-                <p className="text-xs text-muted-foreground">
-                  {whenLabel(conflict.start)} → {whenLabel(conflict.end)}
+              <li key={`${conflict.type}-${conflict.coachId ?? conflict.unavailabilityId ?? ""}-${index}`} className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm">
+                {/* VENUE_UNAVAILABLE porte une indispo, pas un coach ni une fenêtre. */}
+                <p className="font-medium">
+                  {undefined !== conflict.coachId
+                    ? coachName(coaches, conflict.coachId)
+                    : `Gymnase indisponible${null != conflict.label && "" !== conflict.label ? ` (${conflict.label})` : ""}`}
                 </p>
+                <p className="text-muted-foreground">{conflictSummary(conflict, teams)}</p>
+                {undefined !== conflict.start && undefined !== conflict.end ? (
+                  <p className="text-xs text-muted-foreground">
+                    {whenLabel(conflict.start)} → {whenLabel(conflict.end)}
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>

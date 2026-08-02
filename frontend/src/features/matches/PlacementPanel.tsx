@@ -4,13 +4,16 @@ import { useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
-import type { Fixture, PlaceFixtureInput, Venue } from "./api";
+import type { Fixture, PlaceFixtureInput, Venue, VenueMatchWindow, VenueUnavailability } from "./api";
 import type { EnvelopeResult } from "./lib/envelope";
 import { isInEnvelope } from "./lib/envelope";
+import { matchVenueIds, venueAccessError } from "./lib/matchAccess";
 
 interface PlacementPanelProps {
   fixture: Fixture;
   venues: Venue[];
+  matchWindows: VenueMatchWindow[];
+  unavailabilities: VenueUnavailability[];
   teamLabel: string;
   categoryLabel: string;
   envelope: EnvelopeResult;
@@ -48,14 +51,30 @@ function EnvelopeHint({ envelope, kickoff }: { envelope: EnvelopeResult; kickoff
   );
 }
 
-/** Place a home fixture: pick venue + kickoff. Blocks out-of-envelope only when the team maps. */
-export function PlacementPanel({ fixture, venues, teamLabel, categoryLabel, envelope, busy, onClose, onPlace }: PlacementPanelProps) {
-  const [venueId, setVenueId] = useState(fixture.venueId ?? venues[0]?.id ?? "");
+/**
+ * Place a home fixture: pick venue + kickoff. Two HARD guards: the league
+ * envelope (when the team maps) and the club's own capacity data (P1-4 PR B —
+ * match access windows + unavailabilities; the club declared them itself, no
+ * degradation). A club with no window anywhere keeps the full venue list.
+ */
+export function PlacementPanel({ fixture, venues, matchWindows, unavailabilities, teamLabel, categoryLabel, envelope, busy, onClose, onPlace }: PlacementPanelProps) {
+  // Masquer n'est légitime que pour un CHOIX (§7.2.3) : le sélecteur n'offre
+  // que les gymnases de match — mais seulement si le club a déclaré des
+  // fenêtres quelque part (sinon liste complète, donnée non adoptée).
+  const matchIds = matchVenueIds(matchWindows);
+  const selectableVenues = 0 === matchIds.size ? venues : venues.filter((v) => matchIds.has(v.id));
+
+  const [venueId, setVenueId] = useState(() => {
+    const initial = fixture.venueId ?? selectableVenues[0]?.id ?? "";
+    return "" === initial || selectableVenues.some((v) => v.id === initial) ? initial : (selectableVenues[0]?.id ?? "");
+  });
   const [kickoff, setKickoff] = useState(fixture.kickoffTime ?? "");
 
   const hasKickoff = "" !== kickoff;
-  const blocked = envelope.mapped && hasKickoff && !isInEnvelope(envelope, kickoff);
-  const canPlace = "" !== venueId && hasKickoff && !blocked && !busy;
+  const envelopeBlocked = envelope.mapped && hasKickoff && !isInEnvelope(envelope, kickoff);
+  const venueName = venues.find((v) => v.id === venueId)?.name ?? "ce gymnase";
+  const accessError = "" === venueId ? null : venueAccessError(venueId, venueName, fixture.matchDate, kickoff, matchWindows, unavailabilities);
+  const canPlace = "" !== venueId && hasKickoff && !envelopeBlocked && null === accessError && !busy;
 
   return (
     <Card>
@@ -76,7 +95,7 @@ export function PlacementPanel({ fixture, venues, teamLabel, categoryLabel, enve
               <option value="" disabled>
                 Gymnase…
               </option>
-              {venues.map((v) => (
+              {selectableVenues.map((v) => (
                 <option key={v.id} value={v.id}>
                   {v.name}
                 </option>
@@ -86,6 +105,12 @@ export function PlacementPanel({ fixture, venues, teamLabel, categoryLabel, enve
           </div>
 
           {hasKickoff ? <EnvelopeHint envelope={envelope} kickoff={kickoff} /> : null}
+          {null !== accessError ? (
+            <p className="flex items-center gap-1 text-xs text-warning">
+              <AlertTriangle className="size-3.5" />
+              {accessError}
+            </p>
+          ) : null}
 
           <Button size="sm" disabled={!canPlace} onClick={() => onPlace({ venueId, kickoffTime: kickoff })}>
             Placer

@@ -10,6 +10,9 @@ use App\Entity\Competition;
 use App\Entity\Fixture;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Entity\Venue;
+use App\Entity\VenueMatchWindow;
+use App\Entity\VenueUnavailability;
 use App\Enum\CompetitionType;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
@@ -120,10 +123,122 @@ final class MatchTenantIsolationTest extends WebTestCase
         self::assertResponseStatusCodeSame(409);
     }
 
+    // ── Capacité matchs (P1-4 PR B) : mêmes frontières pour les deux nouvelles entités ──
+
+    public function testVenueMatchWindowsAreScopedAndStampTheResolvedClub(): void
+    {
+        [$clubA, $userA, $seasonA] = $this->createClubUser('a');
+        $venueA = $this->createVenue($clubA, $seasonA, 'Gymnase A');
+        [$clubB, $userB, $seasonB] = $this->createClubUser('b');
+        $this->createVenue($clubB, $seasonB, 'Gymnase B');
+
+        $this->client->request('POST', '/api/venue_match_windows', [], [], $this->authHeaders($userA) + ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'venueId' => $venueA->getId(),
+            'dayOfWeek' => 6,
+            'startTime' => '14:00',
+            'endTime' => '22:00',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        $window = $this->em->getRepository(VenueMatchWindow::class)->findOneBy(['venueId' => $venueA->getId()]);
+        self::assertNotNull($window);
+        self::assertSame($clubA->getId(), $window->getClubId());
+        self::assertSame($seasonA->getId(), $window->getSeasonId());
+
+        // Club B sees nothing of it.
+        $this->client->request('GET', '/api/venue_match_windows', [], [], $this->authHeaders($userB));
+        self::assertResponseStatusCodeSame(200);
+        self::assertCount(0, $this->responseData()['member'] ?? ['sentinel']);
+    }
+
+    public function testCapacityWritesCannotTargetAForeignVenue(): void
+    {
+        // The venue of the OTHER club is invisible through the tenant filters →
+        // 422, no dangling cross-club reference (both new entities).
+        [, $userA] = $this->createClubUser('a');
+        [$clubB, , $seasonB] = $this->createClubUser('b');
+        $venueB = $this->createVenue($clubB, $seasonB, 'Gymnase B');
+
+        $this->client->request('POST', '/api/venue_match_windows', [], [], $this->authHeaders($userA) + ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'venueId' => $venueB->getId(), 'dayOfWeek' => 6, 'startTime' => '14:00', 'endTime' => '22:00',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+
+        $this->client->request('POST', '/api/venue_unavailabilities', [], [], $this->authHeaders($userA) + ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'venueId' => $venueB->getId(), 'startDate' => '2027-02-04', 'endDate' => '2027-02-28',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+
+        $this->scopeGucToClub($clubB->getId());
+        self::assertCount(0, $this->em->getRepository(VenueMatchWindow::class)->findBy(['venueId' => $venueB->getId()]));
+        self::assertCount(0, $this->em->getRepository(VenueUnavailability::class)->findBy(['venueId' => $venueB->getId()]));
+    }
+
+    public function testVenueUnavailabilityIsManagementGatedAndSeasonGuarded(): void
+    {
+        [$clubA, $userA, $seasonA] = $this->createClubUser('a');
+        $venueA = $this->createVenue($clubA, $seasonA, 'Gymnase A');
+
+        // Cockpit-surface write (SEC-07): a non-management member is refused.
+        $editor = $this->createMember($clubA, 'editor');
+        $this->client->request('POST', '/api/venue_unavailabilities', [], [], $this->authHeaders($editor) + ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'venueId' => $venueA->getId(), 'startDate' => '2027-02-04', 'endDate' => '2027-02-28',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(403);
+
+        // Archived-season writes refused (inherited SeasonAccessGuard).
+        $this->scopeGucToClub($clubA->getId());
+        $past = $this->season($clubA, SeasonResolver::seasonYear(new DateTimeImmutable('today')) - 1);
+        $this->em->flush();
+        $this->client->request('POST', '/api/venue_unavailabilities', [], [], $this->authHeaders($userA) + [
+            'HTTP_X-Season-Id' => $past->getId(), 'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'venueId' => $venueA->getId(), 'startDate' => '2026-02-04', 'endDate' => '2026-02-28',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(409);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
+    private function createVenue(Club $club, Season $season, string $name): Venue
+    {
+        $this->scopeGucToClub($club->getId());
+        $venue = new Venue;
+        $venue->setClubId($club->getId());
+        $venue->setSeasonId($season->getId());
+        $venue->setName($name);
+        $venue->setSource('manual');
+        $this->em->persist($venue);
+        $this->em->flush();
+
+        return $venue;
+    }
+
+    private function createMember(Club $club, string $role): User
+    {
+        $hasher = self::getContainer()->get('security.user_password_hasher');
+        $uid = uniqid($role, true);
+        $user = new User;
+        $user->setEmail($role . $uid . '@test.com');
+        $user->setFirstName('N');
+        $user->setLastName('Member');
+        $user->setPasswordHash($hasher->hashPassword($user, 'pass'));
+        $this->em->persist($user);
+
+        $this->scopeGucToClub($club->getId());
+        $membership = new ClubUser;
+        $membership->setClubId($club->getId());
+        $membership->setUserId($user->getId());
+        $membership->setRole($role);
+        $membership->setIsActive(true);
+        $this->em->persist($membership);
+        $this->em->flush();
+
+        return $user;
     }
 
     /**

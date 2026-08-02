@@ -22,6 +22,8 @@ import { toast } from "@/shared/stores/toastStore";
 import { WizardFooterContext } from "./lib/footerSlot";
 import { WIZARD_STEPS, type WizardStepId } from "./lib/steps";
 import { useStepValidation } from "./lib/useStepValidation";
+import { useVenueMatchWindows } from "@/features/matches/queries";
+
 import { useVenueSlots, useWizardCoaches, useWizardTeams, useWizardVenues } from "./queries";
 import { CoachesStep } from "./steps/CoachesStep";
 import { ConstraintsStep } from "./steps/ConstraintsStep";
@@ -146,8 +148,13 @@ export function WizardPage() {
   const venues = useWizardVenues();
   const slots = useVenueSlots();
   const coaches = useWizardCoaches();
+  // P1-4 PR B — même exemption « fenêtre match » que le gate (useStepValidation)
+  // et le bandeau (VenuesStep) : la règle vit à TROIS sites, ils bougent ensemble.
+  // Un échec de lecture ne bloque pas le positionnement (settled, pas success) :
+  // sans exemption on est plus strict, jamais moins.
+  const matchWindows = useVenueMatchWindows();
   const positioned = useRef(false);
-  const ready = teams.isSuccess && venues.isSuccess && slots.isSuccess && coaches.isSuccess;
+  const ready = teams.isSuccess && venues.isSuccess && slots.isSuccess && coaches.isSuccess && !matchWindows.isLoading;
   useEffect(() => {
     if (positioned.current || !guided || !ready) {
       return;
@@ -156,10 +163,11 @@ export function WizardPage() {
     const venueList = venues.data ?? [];
     const slotList = slots.data ?? [];
     const withSlot = new Set(slotList.map((s) => s.venueId));
+    const matchVenues = new Set((matchWindows.data ?? []).map((w) => w.venueId));
     let gap: WizardStepId | null = null;
     if (0 === (teams.data ?? []).length) {
       gap = "teams";
-    } else if (0 === venueList.length || venueList.some((v) => !withSlot.has(v.id))) {
+    } else if (0 === venueList.length || venueList.some((v) => !withSlot.has(v.id) && !matchVenues.has(v.id))) {
       gap = "venues";
     } else if (0 === (coaches.data ?? []).length) {
       gap = "coaches";
@@ -172,7 +180,7 @@ export function WizardPage() {
       // génération step — a remount must not yank them off the progress view).
       jumpTo("recap");
     }
-  }, [guided, ready, stepId, teams.data, venues.data, slots.data, coaches.data, jumpTo]);
+  }, [guided, ready, stepId, teams.data, venues.data, slots.data, coaches.data, matchWindows.data, jumpTo]);
 
   // ── Abandon d'un ajustement de période jamais généré (retour fondateur 2026-07-18) ──
   // « Adapter » crée la période AVANT le wizard (ADR-0002 : le plan naît du geste) ;

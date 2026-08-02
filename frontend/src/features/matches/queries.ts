@@ -74,6 +74,65 @@ export function usePlaceFixture() {
   });
 }
 
+// ── Capacity layer (P1-4 PR B) ───────────────────────────────────────────────
+
+/** Match access windows of the club's venues — consumed by the placement panel,
+ * the wizard gate exemption and the access editor. */
+export function useVenueMatchWindows() {
+  return useQuery({ queryKey: ["venue_match_windows"], queryFn: matchesApi.getVenueMatchWindows, staleTime: 300_000 });
+}
+
+export function useCreateVenueMatchWindow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: matchesApi.createVenueMatchWindow,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["venue_match_windows"] }),
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
+  });
+}
+
+export function useDeleteVenueMatchWindow() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: matchesApi.deleteVenueMatchWindow,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["venue_match_windows"] }),
+    onError: () => toast.error("Suppression de la fenêtre impossible"),
+  });
+}
+
+export function useVenueUnavailabilities() {
+  return useQuery({ queryKey: ["venue_unavailabilities"], queryFn: matchesApi.getVenueUnavailabilities, staleTime: 60_000 });
+}
+
+/** Any unavailability write moves both alert surfaces (impact card + radar). */
+function invalidateUnavailabilities(queryClient: ReturnType<typeof useQueryClient>): void {
+  void queryClient.invalidateQueries({ queryKey: ["venue_unavailabilities"] });
+  void queryClient.invalidateQueries({ queryKey: ["venue-unavailability-impact"] });
+  void queryClient.invalidateQueries({ queryKey: ["fixtures", "conflicts"] });
+}
+
+export function useCreateVenueUnavailability() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: matchesApi.createVenueUnavailability,
+    onSuccess: () => invalidateUnavailabilities(queryClient),
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
+  });
+}
+
+export function useDeleteVenueUnavailability() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: matchesApi.deleteVenueUnavailability,
+    onSuccess: () => invalidateUnavailabilities(queryClient),
+    onError: () => toast.error("Suppression de l'indisponibilité impossible"),
+  });
+}
+
+export function useUnavailabilityImpact() {
+  return useQuery({ queryKey: ["venue-unavailability-impact"], queryFn: matchesApi.getUnavailabilityImpact, staleTime: 60_000 });
+}
+
 /** Dry-run — writes nothing server-side, so no invalidation. */
 export function useAnalyzeFbiFixtures() {
   return useMutation({

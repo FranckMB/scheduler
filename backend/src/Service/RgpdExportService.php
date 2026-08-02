@@ -35,6 +35,8 @@ final class RgpdExportService
         'coach',
         'venue',
         'venue_training_slot',
+        'venue_match_window',
+        'venue_unavailability',
         'constraint',
         'reservation',
         'schedule_slot_template',

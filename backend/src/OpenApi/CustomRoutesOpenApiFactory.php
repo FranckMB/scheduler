@@ -315,7 +315,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'clubId' => ['type' => 'string'],
                         'seasonId' => ['type' => 'string', 'nullable' => true],
                         'conflicts' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
-                            'type' => ['type' => 'string', 'enum' => ['MATCH_MATCH', 'MATCH_TRAINING']],
+                            'type' => ['type' => 'string', 'enum' => ['MATCH_MATCH', 'MATCH_TRAINING', 'VENUE_UNAVAILABLE']],
                             'coachId' => ['type' => 'string'],
                             'start' => ['type' => 'string', 'format' => 'date-time', 'description' => 'Overlap segment start'],
                             'end' => ['type' => 'string', 'format' => 'date-time', 'description' => 'Overlap segment end'],
@@ -330,6 +330,33 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 '401' => new Response('Unauthorized (missing/expired JWT)'),
             ],
             summary: 'Same-coach match/training conflict radar (read-only, computed on the fly)',
+        )));
+
+        $paths->addPath('/api/venue-unavailability-impact', new PathItem(get: new Operation(
+            operationId: 'getVenueUnavailabilityImpact',
+            tags: ['Match'],
+            responses: [
+                '200' => $this->jsonResponse('Per-unavailability impact: affected placed matches + training sessions of the effective schedules (cockpit alert feed — P1-4 PR B)', [
+                    'type' => 'object',
+                    'properties' => [
+                        'clubId' => ['type' => 'string'],
+                        'seasonId' => ['type' => 'string', 'nullable' => true],
+                        'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                            'unavailabilityId' => ['type' => 'string'],
+                            'venueId' => ['type' => 'string'],
+                            'startDate' => ['type' => 'string', 'format' => 'date'],
+                            'endDate' => ['type' => 'string', 'format' => 'date'],
+                            'label' => ['type' => 'string', 'nullable' => true],
+                            'affectedFixtures' => ['type' => 'array', 'items' => ['type' => 'object']],
+                            'trainingOccurrences' => ['type' => 'integer', 'description' => 'Dated training sessions inside the range'],
+                            'trainingSlotCount' => ['type' => 'integer', 'description' => 'Distinct weekly slots affected'],
+                        ]]],
+                    ],
+                ]),
+                '400' => new Response('No club in context'),
+                '401' => new Response('Unauthorized (missing/expired JWT)'),
+            ],
+            summary: 'Venue unavailability impact (alert-only, computed on the fly — blocks nothing)',
         )));
 
         return $openApi;

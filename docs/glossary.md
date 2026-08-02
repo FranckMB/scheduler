@@ -12,6 +12,8 @@
 | **Saison** | Cadre annuel d'un club (pivot calendaire **15 juillet**). Une saison archivée est en lecture seule (409 à l'écriture). |
 | **Équipe** (`Team`) | Unité planifiée : catégorie d'âge (U9…U21, senior), genre, niveau, `sessionsPerWeek`. |
 | **Gymnase** (`Venue`) — *jamais « salle »* | Lieu d'entraînement, porte des créneaux (`trainingSlots`). Divisible via `canSplit`/capacité. |
+| **Fenêtre d'accès match** (`VenueMatchWindow`) | Plage `jour + heures` qu'un gymnase reçoit de la mairie **les jours de match** — distincte des créneaux d'entraînement. Un gymnase avec ≥ 1 fenêtre EST un « gymnase de match » (flag dérivé, jamais un booléen). Recopiées à la bascule de saison |
+| **Indisponibilité gymnase** (`VenueUnavailability`) | Fermeture **toutes circonstances** d'un gymnase sur une plage de dates (incluses), posée au cockpit. Alerte les matchs placés ET les entraînements (impact chiffré) — ne bloque et ne régénère jamais rien. Jamais recopiée en N+1 |
 | **Créneau** (`slot`) — *jamais « slot » dans l'UI* | Fenêtre `jour + heure début + durée` d'un gymnase. Id engine : `"jour:HH:MM"` (jour 1=lundi…7=dimanche). |
 | **Coach** — *jamais « entraîneur » dans l'UI* | Encadrant d'équipes. Taxonomie : **salarié** (`isEmployee`), **coach-joueur** (joue aussi — `CoachPlayerMembership`), **bénévole**. Rôle `ASSISTANT` = optionnel, ne bloque jamais un placement. |
 | **Contrainte** | Règle de placement saisie (famille × ruleType × config) ou implicite (no-overlap, capacité…). |
