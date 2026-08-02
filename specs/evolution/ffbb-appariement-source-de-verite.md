@@ -21,6 +21,27 @@ Et son corollaire, qui a recadré tout ce document :
 n'EXPLIQUE PAS LE MÉTIER.** Toute fonctionnalité dont la valeur est « informer le gestionnaire » sur son propre
 domaine est à rejeter — il sait. Ce que l'API doit faire, c'est **pré-remplir** et **contrôler**.
 
+### 1bis. La page pas vierge — l'objectif produit
+
+> **« Il doit arriver avec une page pas vierge. C'est un gros effort, mais un travail prémâché qu'il peut
+> moduler à sa guise. Il y a un sentiment de "l'appli me comprend et me connaît" qui est TRÈS PUISSANT. »**
+
+**Périmètre : les clubs NEUFS uniquement.** Au changement de saison le problème ne se pose pas — on copie le
+planning de la saison précédente, le travail est déjà prémâché. C'est la **première** arrivée qui est nue.
+
+Trois leviers, du plus mesuré au moins cadré :
+
+1. **Les gymnases proches, à cocher** → §6.9. **Validé 9/9 sur BCCL.**
+2. **Les équipes engagées, à apparier** → §3. ⚠ Indisponible avant le 20 juillet (§5) : inopérant pour un club
+   qui s'inscrit en juin, utile pour celui qui arrive en cours de saison.
+3. **Des contraintes de base** semées d'office → c'est **P2-16**, déjà en roadmap et non cadré. Le fondateur le
+   confirme comme un besoin de ce lot. ⚠ Le piège y est déjà écrit : des contraintes HARD semées peuvent rendre
+   un club atypique INFEASIBLE, et une règle que le gestionnaire n'a pas écrite doit être **visible et
+   supprimable**.
+
+⚠ **La limite du principe, à tenir** : « prémâché » ne veut pas dire « décidé ». Tout ce qui est pré-rempli
+doit être **coché, pas imposé** — sinon on retombe sur le §1, qu'on vient d'établir.
+
 ---
 
 ## 2. Ce que la FFBB donne vraiment — mesuré, pas supposé
@@ -271,6 +292,53 @@ VILAR** — un gymnase de BCCL. **L'index couvre donc aussi NOS salles**, pas se
    déclare à la ligue.
 3. **Le jour où `rencontres` se remplira**, la salle est **embarquée dans le document de match** avec adresse et
    coordonnées — plus aucune résolution à faire.
+
+### 6.9 🟢🟢 « Cochez vos gymnases parmi ceux d'à côté » — **validé 9/9 sur BCCL**
+
+> **« Il doit arriver avec une page pas vierge. C'est un gros effort, mais un travail prémâché qu'il peut
+> moduler à sa guise. Si j'ai l'adresse du club, à l'onboarding il peut sélectionner parmi les gymnases pas
+> loin pour dire s'il y a accès ou non. Il y a un sentiment de "l'appli me comprend et me connaît" qui est TRÈS
+> PUISSANT. »** (fondateur, 2026-08-02)
+
+**Testé, et le résultat dépasse l'intuition.** Meilisearch accepte le filtre géographique **avec la clé
+search-only** :
+
+```json
+{ "indexUid": "ffbbserver_salles", "q": "", "limit": 60,
+  "filter": "_geoRadius(45.78017, 4.88467, 5000)",
+  "sort":   ["_geoPoint(45.78017, 4.88467):asc"] }
+```
+
+Le club porte déjà ses coordonnées (`Club.latitude/longitude`, remplies par `FfbbClubPopulator`). Autour de
+BCCL : **25 salles dans 3 km, 53 dans 5 km**, triées par distance.
+
+**Croisement avec les 9 gymnases réellement utilisés par BCCL : 9/9 retrouvés.**
+
+| Le club dit | La FFBB dit |
+|---|---|
+| Armand | GYMNASE ARMAND |
+| **ADN** | GYMNASE **A**LEXANDRA **D**AVID **N**EEL |
+| Debarros | SALLE RAPHAEL DE BARROS |
+| Annexe | SALLE ANNEXE DE BARROS |
+| Jean Vilar | GYMNASE JEAN VILAR |
+| Tonkin | GYMNASE MOULIN DE TONKIN |
+| **JDR** | GYMNASE **J**EANNE **D**ESPARMET-**R**UELLO |
+| Matéo | GYMNASE MATEO |
+| Camus | SALLE ALBERT CAMUS |
+
+⚑ **Ce tableau porte le principe entier.** Le club appelle ses salles par des sigles que **personne d'autre ne
+peut deviner** — « ADN », « JDR ». L'app propose les **noms officiels géolocalisés**, le gestionnaire coche et
+**renomme à sa main**. C'est exactement « prémâché, modulable à sa guise » : on ne devine pas son vocabulaire,
+on lui épargne la saisie.
+
+**Ce que ça remplit d'un coup** : le gymnase, son adresse, sa **géoloc** (donc les trajets), et son **`numero`
+FFBB** dans `Venue.externalRef` — l'identité officielle qu'un gymnase de match déclare à la ligue (§7). Trois
+champs aujourd'hui morts faute d'être saisis (§6.8).
+
+⚠ **Réserves.** Le rayon est un réglage produit (3 km rend 25 salles, 5 km en rend 53 — au-delà ça devient une
+liste à trier plutôt qu'une aide). Un club dont la géoloc est absente ou fausse retombe sur la saisie manuelle,
+sans dégradation. Et le `status: "draft"` de la cartographie FFBB (§2bis) vaut ici aussi : la position est une
+bonne amorce, pas une vérité.
 
 ### ❌ Rejeté explicitement
 
