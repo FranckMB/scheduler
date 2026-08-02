@@ -18,7 +18,7 @@ final class TeamTagService
     /** Deterministic axis of each system tag, for the constraint target grouping (Lot B). */
     private const SYSTEM_TAG_AXES = [
         'FEMININE' => TeamTagAxis::GENRE, 'MASCULINE' => TeamTagAxis::GENRE, 'MIXTE' => TeamTagAxis::GENRE,
-        'EMB' => TeamTagAxis::AGE, 'JEUNE' => TeamTagAxis::AGE, 'SENIOR' => TeamTagAxis::AGE,
+        'BABY' => TeamTagAxis::AGE, 'EMB' => TeamTagAxis::AGE, 'JEUNE' => TeamTagAxis::AGE, 'SENIOR' => TeamTagAxis::AGE,
         'U9' => TeamTagAxis::AGE, 'U11' => TeamTagAxis::AGE, 'U13' => TeamTagAxis::AGE,
         'U15' => TeamTagAxis::AGE, 'U18' => TeamTagAxis::AGE, 'U21' => TeamTagAxis::AGE,
         'ELITE' => TeamTagAxis::NIVEAU, 'REGIONAL' => TeamTagAxis::NIVEAU, 'NATIONAL' => TeamTagAxis::NIVEAU,
@@ -67,6 +67,41 @@ final class TeamTagService
     }
 
     /**
+     * U5-U7, la tranche que le fondateur veut distinguer d'EMB (P4-42).
+     *
+     * Deux chemins, et l'ÂGE prime quand il est connu : `ageMax <= 7` couvre U5 (3-5) et
+     * U7 (6-7), U9 commençant à 8.
+     *
+     * Le nom ne sert que lorsque `ageMax` est absent, et c'est le cas de « Baby basket » :
+     * ses bornes sont `null` au catalogue, si bien que les trois branches d'âge étaient
+     * fausses et qu'il n'avait AUCUN tag de tranche — invisible à toute contrainte par âge,
+     * alors que le fondateur le tient pour du U5/U7. On le reconnaît donc comme les tags
+     * U9…U21 le sont déjà : au nom de sa catégorie.
+     *
+     * ⚠ La bascule se fait sur `ageMax` SEUL, et non « aucune des deux bornes ». L'API rend
+     * `ageMin` et `ageMax` indépendamment optionnels (`SportCategoryInput`) : exiger les
+     * deux nulles laissait « Baby basket » renseigné du seul `ageMin` tomber hors de TOUTES
+     * les branches — le trou même que ce lot vient boucher (revue #352). `ageMax` est de
+     * toute façon le discriminant des branches voisines.
+     *
+     * ⚠ L'âge d'abord, délibérément : une catégorie personnalisée nommée « Baby … » mais
+     * dotée d'un `ageMax` réel doit suivre son âge, pas son nom.
+     *
+     * ⚠ Et surtout : on ne DONNE PAS d'âges à « Baby basket » pour s'épargner ce test. Ça
+     * l'enrôlerait dans la règle solveur d'âge croissant, qui exempte exprès les catégories
+     * sans âge (`engine/app/solver/constraints.py`, « Loisir, Baby »), et il faudrait migrer
+     * le catalogue recopié chez chaque club à l'inscription.
+     */
+    private function isBabyCategory(string $name, ?int $ageMax): bool
+    {
+        if (null !== $ageMax) {
+            return $ageMax <= 7;
+        }
+
+        return str_contains(mb_strtolower($name, 'UTF-8'), 'baby');
+    }
+
+    /**
      * @return array<string, TeamTag>
      */
     private function getOrCreateSystemTags(string $clubId): array
@@ -91,6 +126,15 @@ final class TeamTagService
             'JEUNE' => '#FF6B6B',
             'SENIOR' => '#4ECDC4',
             'EMB' => '#45B7D1',
+            // P4-42. Pas de migration : un club antérieur gagne le tag à sa prochaine
+            // écriture d'équipe. ⚠ « Idempotent » au sens séquentiel SEULEMENT — il n'y a
+            // aucun index unique sur `(club_id, name)` (`Version20260615010708` ne pose que
+            // `idx_team_tag_club`), donc deux écritures de Team concurrentes sur un même
+            // club peuvent insérer le tag DEUX fois. Le résolveur prend alors l'une des
+            // deux lignes tandis que les assignations se répartissent : la contrainte
+            // n'atteint qu'une partie des équipes, sans erreur. Mécanisme préexistant, mais
+            // cette ligne rouvre la fenêtre une fois par club (revue #352) → P4-64.
+            'BABY' => '#F5A9C8',
             'U9' => '#96CEB4',
             'U11' => '#FFEAA7',
             'U13' => '#DDA0DD',
@@ -144,8 +188,11 @@ final class TeamTagService
             $ageMax = $sportCategory->getAgeMax();
             $name = $sportCategory->getName();
 
-            // Age category tags
-            if (null !== $ageMax && $ageMax <= 12) {
+            // Tags de tranche d'âge. BABY passe AVANT EMB (P4-42) : U5/U7 satisfont les
+            // deux bornes, c'est l'ordre qui tranche.
+            if ($this->isBabyCategory($name, $ageMax)) {
+                $tags[] = 'BABY';
+            } elseif (null !== $ageMax && $ageMax <= 12) {
                 $tags[] = 'EMB';
             } elseif (null !== $ageMax && null !== $ageMin && $ageMin <= 18) {
                 $tags[] = 'JEUNE';

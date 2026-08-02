@@ -14,9 +14,11 @@ use App\Enum\TeamTagAxis;
 use App\Service\TeamTagService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 
 #[Group('unit')]
 final class TeamTagServiceTest extends TestCase
@@ -34,6 +36,39 @@ final class TeamTagServiceTest extends TestCase
 
     /** @var EntityRepository<SportCategory>&MockObject */
     private MockObject $sportCategoryRepository;
+
+    /**
+     * La tranche d'âge posée par catégorie, aux âges RÉELS du catalogue
+     * (`Service\Basketball\CategoryCatalog`) — inventer un jeu d'âges testerait une
+     * frontière qui n'existe nulle part.
+     *
+     * Complément rapide au NR d'intégration `TeamTagScopeTest` : ici on lit le NOM du tag
+     * posé, catégorie par catégorie, sans base.
+     *
+     * @return iterable<string, array{0: string, 1: int|null, 2: int|null, 3: string|null}>
+     */
+    public static function ageBracketCases(): iterable
+    {
+        yield 'U5 → BABY' => ['U5', 3, 5, 'BABY'];
+        yield 'U7 → BABY (dernière année de la tranche)' => ['U7', 6, 7, 'BABY'];
+        yield 'U9 → EMB (première année d\'EMB)' => ['U9', 8, 9, 'EMB'];
+        yield 'U11 → EMB' => ['U11', 10, 11, 'EMB'];
+        yield 'U13 → JEUNE, jamais EMB' => ['U13', 12, 13, 'JEUNE'];
+        // Sans âge : seul le NOM peut trancher. « Baby basket » entre, « Loisir » non —
+        // c'est la paire qui prouve que la règle vise « baby » et n'avale pas toute
+        // catégorie sans âge.
+        yield 'Baby basket → BABY par son nom, faute d\'âges' => ['Baby basket', null, null, 'BABY'];
+        yield 'Loisir → aucune tranche' => ['Loisir', null, null, null];
+        // LA frontière de la règle, et le SEUL endroit où elle peut dériver : quand le nom
+        // dit « baby » mais que l'âge dit autre chose, c'est l'ÂGE qui tranche. Sans ce
+        // cas, inverser la précédence laissait toute la suite verte (revue #352).
+        yield 'nom « Baby » mais âges de U9 → EMB, l\'âge prime' => ['Baby élite', 8, 9, 'EMB'];
+        yield 'nom « Baby » mais âges de U15 → JEUNE, l\'âge prime' => ['Baby compétition', 14, 15, 'JEUNE'];
+        // `ageMin` seul renseigné : l'API les rend indépendamment optionnels
+        // (`SportCategoryInput`). Exiger les DEUX bornes nulles faisait retomber ce cas
+        // hors de toutes les branches — le trou que le lot vient boucher (revue #352).
+        yield 'Baby basket avec le seul ageMin → BABY quand même' => ['Baby basket', 3, null, 'BABY'];
+    }
 
     public function testSyncTeamTagsForU15F(): void
     {
@@ -185,10 +220,25 @@ final class TeamTagServiceTest extends TestCase
 
         $this->service->syncTeamTags($team, 'season-1');
 
-        // All 21 required system tags should be created
-        self::assertCount(21, $persistedTags);
-
         $tagNames = array_map(static fn (TeamTag $t): string => $t->getName(), $persistedTags);
+
+        // Le catalogue de tags système est semé EN ENTIER sur un club qui n'en a aucun, et
+        // sans doublon.
+        //
+        // Il était asserté par un compte en dur (21) : ajouter BABY le faisait rougir pour
+        // la seule raison qu'il avait bougé. Mais mon premier remplacement — unicité + les
+        // quatre tranches — était STRICTEMENT PLUS FAIBLE : retirer 'U21' de `$requiredTags`
+        // le laissait vert, alors que le compte l'attrapait (revue #352). Un tag manquant
+        // n'est pas un détail : `TeamTagResolver` ne le trouve pas, log un warning et rend
+        // une liste vide — la contrainte qui le cible est SILENCIEUSEMENT ignorée.
+        //
+        // L'invariant sans nombre magique : semer exactement les tags dont l'axe est
+        // déclaré. Les deux listes vivent dans le même fichier et doivent rester jumelles.
+        $declaredAxes = array_keys(new ReflectionClass(TeamTagService::class)->getConstant('SYSTEM_TAG_AXES'));
+        sort($declaredAxes);
+        $seeded = $tagNames;
+        sort($seeded);
+        self::assertSame($declaredAxes, $seeded, 'on sème exactement les tags système dont l\'axe est déclaré — ni un de moins, ni un doublon');
         self::assertContains('JEUNE', $tagNames);
         self::assertContains('SENIOR', $tagNames);
         self::assertContains('MASCULINE', $tagNames);
@@ -206,6 +256,41 @@ final class TeamTagServiceTest extends TestCase
         self::assertSame(TeamTagAxis::NIVEAU, $byName['DEPARTEMENTAL']->getAxis());
     }
 
+    #[DataProvider('ageBracketCases')]
+    public function testAgeBracketTagPerCategory(string $categoryName, ?int $ageMin, ?int $ageMax, ?string $expected): void
+    {
+        $team = new Team;
+        $team->setClubId('club-1');
+        $team->setSeasonId('season-1');
+        $team->setSportCategoryId('cat-1');
+
+        $category = new SportCategory;
+        $category->setName($categoryName);
+        $category->setAgeMin($ageMin);
+        $category->setAgeMax($ageMax);
+
+        $this->assignmentRepository->method('findBy')->willReturn([]);
+        // Les tags système préexistent, chacun avec son NOM pour id : `syncTeamTags` écrit
+        // `$systemTags[$name]->getId()` dans l'assignation, donc lire le tagId revient à
+        // lire le nom du tag posé — ce que le mock ne permettait pas jusqu'ici.
+        $this->teamTagRepository->method('findBy')->willReturn($this->systemTagsKeyedByName());
+
+        $this->sportCategoryRepository->method('find')->with('cat-1')->willReturn($category);
+
+        $assigned = [];
+        $this->entityManager->method('persist')
+            ->willReturnCallback(function ($entity) use (&$assigned): void {
+                if ($entity instanceof TeamTagAssignment) {
+                    $assigned[] = $entity->getTagId();
+                }
+            });
+
+        $this->service->syncTeamTags($team, 'season-1');
+
+        $brackets = array_values(array_intersect($assigned, ['BABY', 'EMB', 'JEUNE', 'SENIOR']));
+        self::assertSame(null === $expected ? [] : [$expected], $brackets, \sprintf('tranche d\'âge de « %s »', $categoryName));
+    }
+
     protected function setUp(): void
     {
         $this->entityManager = $this->createMock(EntityManagerInterface::class);
@@ -221,5 +306,26 @@ final class TeamTagServiceTest extends TestCase
             ]);
 
         $this->service = new TeamTagService($this->entityManager);
+    }
+
+    /**
+     * Tous les tags système, id = nom, pour que l'assignation soit lisible.
+     *
+     * @return list<TeamTag>
+     */
+    private function systemTagsKeyedByName(): array
+    {
+        $tags = [];
+        foreach (['BABY', 'EMB', 'JEUNE', 'SENIOR', 'U9', 'U11', 'U13', 'U15', 'U18', 'U21', 'FEMININE', 'MASCULINE', 'MIXTE'] as $name) {
+            $tag = new TeamTag;
+            $tag->setId($name);
+            $tag->setName($name);
+            $tag->setClubId('club-1');
+            $tag->setIsSystem(true);
+            $tag->setAxis(TeamTagAxis::AGE);
+            $tags[] = $tag;
+        }
+
+        return $tags;
     }
 }
