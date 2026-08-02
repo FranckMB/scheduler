@@ -1,202 +1,272 @@
-# La FFBB comme source, le gestionnaire comme juge — besoin cadré
+# La FFBB comme source, le gestionnaire comme juge — besoin tranché
 
-> **Besoin fondateur, 2026-08-02**, posé à la lecture des traces de [P2-19](api-ffbb-app-reconnaissance.md).
-> Ce fichier **trace le besoin** et croise les specs existantes. Il ne prescrit aucune implémentation :
-> les propositions du §7 sont là pour être **contredites**, pas exécutées telles quelles.
+> **Besoin fondateur, 2026-08-02.** Posé à la lecture des traces de [P2-19](api-ffbb-app-reconnaissance.md),
+> puis **tranché point par point** au fil d'un échange de challenge. Les §1 à §4 sont des **décisions**, pas des
+> propositions : ne pas les re-poser sans fait nouveau. Le §7 est ouvert.
 >
 > Endpoints et sorties réelles : [`api-ffbb-app-reconnaissance.md`](api-ffbb-app-reconnaissance.md) · [`api-ffbb-app-traces.md`](api-ffbb-app-traces.md)
 
 ---
 
-## 1. Le principe, avant tout le reste
+## 1. Le principe
 
 > **« Le gestionnaire est capable d'associer ou pas les infos et de valider si ça correspond à la situation
 > réelle ou non. On l'accompagne, on ne décide pas pour lui. »**
 
-Tout ce qui suit en découle. La FFBB **propose**, l'app **présente**, le gestionnaire **tranche**. Trois
-conséquences qu'on ne négociera pas :
+Et son corollaire, qui a recadré tout ce document :
 
-1. **Aucun écrasement silencieux.** Une donnée FFBB qui contredit une donnée saisie se **montre** comme un
-   écart à arbitrer. Jamais un `UPDATE` discret. *(P2-18 (c) le disait déjà pour le club — on l'étend à tout.)*
-2. **Le refus est un état légitime, pas une erreur.** « Cette équipe FFBB ne correspond à aucune des miennes »
-   doit être **persistable**, sinon on repose la question à chaque synchro et le gestionnaire finit par
-   accepter n'importe quoi pour avoir la paix.
-3. **L'appariement est une donnée, pas un calcul.** Même décision que P4-35 (import d'équipes) : une
-   **correspondance explicite et persistée**, pas une clé naturelle devinée sur les noms.
+> **« Le gestionnaire connaît son métier, il le faisait déjà avant nous. »**
 
-⚠ **Le contre-exemple à garder en tête** est dans notre propre historique : l'import FFBB actuel
-(`FfbbExcelImporter`) devine par clé naturelle et se trompe — c'est exactement P4-35. Ne pas refaire.
+⚑ **Règle qui en découle, et qui a tué la moitié des idées d'un premier jet : l'outil RETIRE DU TRAVAIL, il
+n'EXPLIQUE PAS LE MÉTIER.** Toute fonctionnalité dont la valeur est « informer le gestionnaire » sur son propre
+domaine est à rejeter — il sait. Ce que l'API doit faire, c'est **pré-remplir** et **contrôler**.
 
 ---
 
-## 2. Ce que la FFBB sait, ce que nous savons
+## 2. Ce que la FFBB donne vraiment — mesuré, pas supposé
 
-| Objet | La FFBB en est la source | Nous en sommes la source |
-|---|---|---|
-| Identité du club, logo, adresse, ligue, comité | ✅ **entièrement** | — |
-| Équipes **engagées** en compétition + leur niveau | ✅ | le **nom d'usage** interne (« SM3 »), le rang, les séances/semaine |
-| Compétition, poule, phase, saison | ✅ | — |
-| Calendrier des rencontres | ❌ *(index de test — voir §5)* | import FBI |
-| Créneaux, gymnases, coachs, contraintes | — | ✅ **entièrement** |
-| Équipes **non engagées** (loisir, baby, académie) | ❌ elles n'existent pas pour la FFBB | ✅ |
-
-⚑ **La dernière ligne est structurante.** Sur BCCL, la FFBB connaît **14 équipes engagées** quand l'app en
-gère bien davantage (Baby 1/2, Micro Basket, Académies, Loisir…). Un appariement qui supposerait une
-bijection casserait sur la moitié du club. **Le sens est : FFBB ⊂ app.**
-
----
-
-## 3. Les objets à apparier, un par un
-
-### 3.1 Le club — lecture seule, rafraîchi
-
-**« Les informations de club ne sont pas en saisie manuelle mais proviennent de l'API. »**
-
-Déjà à moitié en place : `FfbbClubPopulator` remplit à la création (lot C). Ce qui manque est le
-**rafraîchissement**, c'est-à-dire P2-18 (a). La reconnaissance ne change pas ce cadrage — elle le confirme et
-lui donne sa source : `ffbbserver_organismes`, déjà interrogé par `FfbbApiClient::search`.
-
-**Conséquence produit à trancher** : si le club est en lecture seule, les champs correspondants du formulaire
-`/club` deviennent **non éditables**, avec le motif affiché (« vient de la FFBB, resynchronisez pour mettre à
-jour »). Sinon on garde deux vérités et on retombe sur l'écrasement silencieux.
-
-### 3.2 La ligue et le comité — à rafraîchir aussi
-
-`codeLigue` / `nomLigue` / `codeComite` / `nomComite` arrivent sur **chaque engagement** et sur l'organisme.
-Le modèle existe (`FfbbLeague` / `FfbbCommittee`, tables partagées hors RLS, cache-first).
-
-⚠ **Ce sont des tables GLOBALES** : un rafraîchissement déclenché par un club met à jour une ligne que **tous
-les clubs** lisent. Le geste est donc légitime mais son effet dépasse le locataire — à traiter comme tel
-(idempotence, traçabilité), pas comme une écriture tenant ordinaire.
-
-### 3.3 Les équipes engagées — le gain d'onboarding
-
-**« Pour l'onboarding la ligue connaît déjà les équipes du club, donc c'est un énorme gain de temps. »**
-
-Mesuré : 14 engagements pour BCCL, chacun avec catégorie, sexe, niveau, numéro d'équipe, **logo**, compétition
-et poule. Aujourd'hui le gestionnaire saisit tout cela à la main dans l'étape Équipes du wizard.
-
-**Ce n'est pas un import, c'est une proposition à valider.** Le gestionnaire doit pouvoir, ligne à ligne :
-apparier à une équipe existante · créer l'équipe depuis la proposition · **ignorer** (et que l'ignorance
-tienne). Le nom d'usage reste le sien — la FFBB dit « Pré nationale féminine », le club dit « SF1 ».
-
-### 3.4 L'équipe ↔ la compétition — et le fait qu'elle bouge
-
-**« Une équipe est donc liée à une compétition, cette compétition peut changer dans le temps car il y a des
-changements de poule ou autre en fonction des championnats. »**
-
-C'est **le** point de conception, et l'API le rend observable :
-
-- l'engagement porte `idCompetition {id, nom, code}` et `idPoule {id, nom}` — **ids FFBB stables** ;
-- la compétition porte `saison {code}`, `phases[]`, `typeCompetition`, et **`poules[]` avec la liste des
-  engagements de chaque poule** ;
-- sur BCCL, **6 des 14 engagements sont des « Brassage »** (RMU13/15/18, RFU13/15/18) — la phase de brassage
-  est une **compétition distincte** du championnat qui suivra.
-
-⚑ **Donc la « géométrie variable » de [P1-4 (5)](roadmap.md) — brassage → poule 1 → poule 2 — n'est pas à
-inventer : elle est déjà modélisée côté FFBB.** Ce que l'app doit tenir, c'est le **lien qui dure** quand la
-compétition change.
-
-**Proposition (à contredire)** : l'appariement stable est **équipe ↔ engagement**, pas équipe ↔ compétition.
-L'engagement est ce que la FFBB rattache au club ; la compétition et la poule sont des **attributs datés** de
-cet engagement. Quand la poule change, c'est l'attribut qui bouge, pas l'appariement — et le gestionnaire n'a
-rien à re-valider.
-→ Croise directement l'entité **`Competition / Phase`** esquissée en [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) §9,
-qui devra distinguer ces deux niveaux.
-
-### 3.5 Les salles — piste, non tranchée
-
-`ffbbserver_salles` porte 5 000+ salles (libellé, adresse, capacité, géoloc) mais **n'est pas indexée par
-club** : 0 hit sur `ARA0069036`. Utilisable pour l'**adversaire** (le « gymnase du Clar » de
-`gestion-matchs-ffbb.md` §5bis) plutôt que pour nos propres gymnases, que le gestionnaire saisit déjà.
-**Aucune urgence** — noté pour ne pas le redécouvrir.
-
----
-
-## 4. La saison — hypothèse fondateur, et ce que l'API en dit
-
-**Hypothèse posée** : *« pour les rencontres c'est la saison en cours, et en fin de saison la ligue détruit
-les infos. »*
-
-Ce qu'on a mesuré est **cohérent** : les 14 engagements de BCCL résolvent tous en `saison.code = "26-27"`.
-Rien de 25-26 ne traîne.
-
-⚠ **Mais « cohérent » n'est pas « vérifié ».** Une mesure à un instant ne prouve pas une politique de purge.
-Deux garde-fous à retenir dans la conception :
-
-1. **Toujours lire la saison, ne jamais la supposer.** La jointure `idCompetition.id →
-   competitions.saison.code` coûte une requête. Si l'hypothèse tombe (la FFBB conserve l'historique), un code
-   qui filtre explicitement continue de marcher ; un code qui suppose « tout est courant » importe des
-   fantômes.
-2. **Notre saison n'est pas la leur.** Nous avons un pivot au 15 juillet (`SeasonResolver`) et un code
-   `26-27` côté FFBB. La correspondance est à poser une fois, pas à chaque appel.
-
----
-
-## 5. Les rencontres — ce que ça ne débloque pas
-
-L'index `ffbbserver_rencontres` est un **index de test** (31 documents nationaux, « FFBB - CLUB SUPPORT - DTN »
-contre lui-même, `joue: false`). **L'import FBI reste le chemin** — la ligne « ✅ Livré palier A PR-4 sur
-FORMAT SUPPOSÉ » de [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) §5 reste donc à fiabiliser sur un vrai
-fichier, comme P1-4 (1) le dit.
-
-**Mais l'appariement Division ↔ équipe change de nature.** P1-4 (2) demandait une correspondance explicite et
-persistée ; elle peut désormais s'**ancrer sur l'`idCompetition` FFBB** plutôt que sur le libellé « Division »
-d'un fichier Excel. Un ré-import retrouve son équipe par un id stable, pas par une chaîne de caractères.
-
----
-
-## 6. Traçabilité — ce que ce besoin change, spec par spec
-
-| Spec / ligne | Ce que ce cadrage y ajoute |
+| Objet | Verdict |
 |---|---|
-| **P2-18** (resynchro FFBB) | Passe de « bouton à câbler » à **« écran d'arbitrage »** : club en lecture seule, ligue/comité globaux, équipes proposées ligne à ligne avec refus persistable |
-| **P1-4 (2)** (Division ↔ équipes) | L'ancrage devient l'**`idCompetition` FFBB**, pas le libellé Excel |
-| **P1-4 (5)** (géométrie variable) | Brassage/poules **déjà modélisés côté FFBB** — à lire, pas à inventer |
-| [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) §9 | L'entité `Competition / Phase` doit **séparer l'engagement (stable) de la compétition (datée)** |
-| [`enregistrement-ffbb.md`](enregistrement-ffbb.md) | L'onboarding peut **proposer les équipes** dès la vérification du code club |
-| **P4-35** (import d'équipes sans identité) | Même remède, même endroit : correspondance explicite persistée |
-| **P3-7** | Redevient atteignable par l'UI une fois l'écran d'arbitrage posé |
-| [`backend/docs/ffbb-api.md`](../../backend/docs/ffbb-api.md) | Catalogue à étendre quand un index de plus sera réellement appelé |
+| Identité club, adresse, ligue, comité, logo du club | ✅ complet |
+| Équipes **engagées** : compétition, poule, saison | ✅ complet |
+| Catégorie / sexe / niveau de l'engagement | ⚠️ **7/14 seulement** sur BCCL — les 7 vides sont les **jeunes** |
+| **Nom d'équipe** | ❌ **0/14**. `nomEquipe`, `nomUsuel`, `nomOfficiel`, `codeAbrege`, `nomCtc` : tous vides |
+| **Numéro d'équipe** | ❌ 6/14, et **sans signification** (décision fondateur) |
+| **Logo par équipe** | ❌ **N'EXISTE PAS.** Un seul id logo pour les 14 engagements : c'est **le logo du CLUB**, qu'on récupère déjà |
+| **Contact nommé** | ❌ **Absent de l'index.** Seuls `mail` et `telephone` institutionnels — et c'est heureux (donnée personnelle) |
+| Calendrier des rencontres | ❌ index de **test** (31 docs nationaux) → **l'import FBI reste le chemin** |
+| Créneaux, coachs, contraintes, équipes non engagées | — hors FFBB, à nous |
+
+⚑ **Deux faits structurants.**
+
+**(a) FFBB ⊂ app.** 14 équipes engagées connues de la FFBB, quand le club en gère bien plus (Baby, Micro,
+Académies, Loisir). Aucun appariement ne peut supposer une bijection.
+
+**(b) Il n'existe AUCUNE clé stable d'équipe côté FFBB.** Pas de nom, pas de code, pas de numéro fiable. Le
+seul identifiant est l'**id d'engagement**, qui est attaché à une **compétition** — donc qui **change à chaque
+phase**. C'est le fait qui gouverne le §3.
+
+> ⚠️ Détail d'implémentation à ne pas rater : `niveau.libelle` sort en `PrÃ© rÃ©gionale` — **double encodage
+> UTF-8 côté FFBB**. À normaliser à l'entrée, jamais à afficher brut.
 
 ---
 
-## 7. Force de proposition — trois briques, dans cet ordre
+## 3. L'appariement — TRANCHÉ
 
-> À **valider ou refuser** avant tout plan. Chacune est indépendante et livrable seule.
+**Le problème.** Une équipe du club porte **N engagements** et pas un seul :
 
-**Brique 1 — `FfbbEngagement`, lecture + appariement.** Une entité tenant-scopée : `clubId`, `seasonId`,
-`ffbbEngagementId` (l'id stable), `teamId` **nullable**, `status` ∈ `{à arbitrer, apparié, ignoré}`, plus la
-photo des attributs FFBB (compétition, poule, niveau, catégorie, sexe). Le `null` + `ignoré` **est** le refus
-persistable du §1.2. Alimentée par une requête filtrée sur `codeClub`.
+- **DF2** : une poule sur toute l'année → 1 engagement ;
+- **Brassage jeunes** : **3 poules successives** → 3 engagements ;
+- **PNM** : poule de classement, **puis** poule haute ou basse → 2 engagements ;
+- **plus la coupe**, en parallèle.
 
-**Brique 2 — l'écran d'arbitrage.** Une liste : à gauche ce que dit la FFBB, à droite mon équipe, au milieu
-trois gestes (apparier / créer / ignorer). Réutilise `team-select` (le picker rang-trié de l'app) et
-`DeleteConfirm` pour tout geste destructif. **C'est le même écran** pour l'onboarding et pour la resynchro —
-seule la population initiale change.
+Chaque phase étant une **compétition distincte**, chaque phase produit un **nouvel id d'engagement sans lien
+vers le précédent** (cf. §2b). BCCL le montre : 6 de ses 14 engagements sont des compétitions « Brassage »,
+distinctes des championnats.
 
-**Brique 3 — la resynchro comme *delta*, jamais comme *écrasement*.** Rejouer la requête, comparer à la
-photo, ne présenter **que ce qui a bougé** : nouvelle équipe engagée, poule changée, niveau changé, engagement
-disparu. Un écran qui dit « 2 changements » emporte l'adhésion ; un écran qui redemande 14 arbitrages à chaque
-fois se fait ignorer.
+### La décision
 
-⚠ **Ce qu'il ne faut PAS faire, et qui sera tentant** : brancher la resynchro sur un cron. Le principe du §1
-l'interdit — une synchro automatique **décide** à la place du gestionnaire. Le déclencheur reste un geste.
+> **On ré-apparie à chaque changement de phase. Assumé.**
+> « C'est 1 clic, c'est peu coûteux, si derrière ça génère RAPIDEMENT un calendrier de match fiable. »
+
+**On n'invente donc PAS d'identité d'équipe FFBB côté app.** Une première rédaction le proposait — c'était de
+la sur-conception : le troc « 1 clic contre un calendrier fiable » est bon, et une identité inventée aurait
+créé une seconde vérité à maintenir.
+
+### Le refus — il n'y a rien à modéliser
+
+> « Il dit "c'est pas la mienne", il n'associe pas via l'API, et c'est tout. Le gestionnaire SAIT, il saura
+> reconnaître. S'il ne matche pas, c'est qu'il y a un souci côté ligue et il s'en chargera. »
+
+**L'absence de lien EST l'état.** Pas de statut « ignoré », pas d'expiration, pas de mémoire du refus. Une
+première rédaction proposait un refus persistable : rejeté, c'était de la sur-conception.
+
+**En contrepartie, une obligation d'affichage** : partout où une donnée FFBB s'affiche, dire qu'elle **vient de
+la ligue** et que la correction se fait **auprès d'elle**. Sans cette phrase, un écart ressemble à un bug de
+l'app.
 
 ---
 
-## 8. À trancher avant tout plan
+## 4. L'identité du club — TRANCHÉE
 
-1. **Le club en lecture seule : jusqu'où ?** Nom, logo, adresse ? Le gestionnaire peut-il surcharger un nom
-   d'usage ? *(Le fondateur a dit « pas de saisie manuelle » — reste à dire ce que ça couvre exactement.)*
-2. **L'ignorance a-t-elle une durée ?** Une équipe ignorée cette saison revient-elle à arbitrer la suivante ?
-3. **Une équipe app peut-elle porter plusieurs engagements ?** Une même équipe en championnat **et** en coupe
-   est plausible — la brique 1 suppose 1↔1, à confirmer.
-4. **Que fait-on d'un engagement disparu** en cours de saison (forfait général) ? L'équipe reste, son
-   engagement s'éteint — avec quel effet sur les matchs déjà importés ?
-5. **La correspondance saison FFBB ↔ saison app** : `26-27` ↔ notre pivot 15 juillet, posée où ?
+**Lecture seule, sans nom d'usage.** Nom, logo, adresse viennent de la FFBB.
 
-## 9. Réserves héritées de P2-19
+> « C'est pas mon problème, le gestionnaire doit faire le nécessaire pour que le nom donné à la ligue
+> corresponde au nom réel. À la limite on peut préciser que ce sont les infos qui viennent de la ligue pour
+> qu'il fasse le nécessaire. »
 
-Licéité (aucune CGU lue), quotas inconnus, et **aucun index de licenciés n'a été cherché ni interrogé**.
-Un appel récurrent à la FFBB engage plus qu'une reconnaissance ponctuelle : à re-poser avant la brique 3.
+**Décision fermée** — l'objection a été posée et écartée : BCCL s'affiche `B CHARPENNES CROIX LUIZET` alors
+qu'il communique sous *Villeurbanne Sharks* (`urlSiteWeb: villeurbannesharks.fr`). Le fondateur assume : la
+donnée fédérale fait foi, et l'écart est un problème à régler avec la ligue, pas à contourner dans l'outil.
+
+⚠️ **Le « nom du contact » demandé n'est pas fournissable** : le champ n'existe pas dans l'index (déjà acté
+dans [`backend/docs/ffbb-api.md`](../../backend/docs/ffbb-api.md)). Seuls le mail et le téléphone
+institutionnels sont disponibles.
+
+**La ligue et le comité** se rafraîchissent aussi (`FfbbLeague` / `FfbbCommittee`). ⚠ Ce sont des tables
+**GLOBALES** : un rafraîchissement déclenché par un club met à jour une ligne que **tous** les clubs lisent —
+idempotence et traçabilité obligatoires, ce n'est pas une écriture tenant ordinaire.
+
+---
+
+## 5. Le calendrier de la valeur — quand ça sert
+
+> « Les poules sortent après le 20 juillet, donc on aura déjà basculé à la saison suivante. »
+
+Notre pivot de saison est au **15 juillet** (`SeasonResolver`). Donc **quand le gestionnaire construit son
+planning d'entraînement en juin, les poules n'existent pas encore.**
+
+⚑ **Conséquence de séquencement : ce n'est PAS une brique d'onboarding, c'est une brique du module matchs.**
+Elle sert en août-septembre. Le « gain d'onboarding » évoqué au départ existe, mais il arrive après le wizard.
+
+---
+
+## 6. Comment exploiter l'API — le retournement
+
+Un premier jet proposait des fonctionnalités d'**information**. Toutes rejetées, à raison : *« les idées que
+tu proposes sont trop simplettes »*. Le gestionnaire sait quand sortent ses poules, connaît sa charge, connaît
+ses difficultés.
+
+**Le bon usage de l'API n'est donc pas de lui parler. C'est de CONTRÔLER SES DONNÉES et de PRÉ-REMPLIR ses
+gestes.**
+
+### ⚑ Le principe qui rend ça possible : deux sources de vérité qui se croisent
+
+> **« L'API FFBB travaille de concert avec l'import FBI. Ce sont deux sources de vérité qui se croisent. »**
+> (fondateur, 2026-08-02)
+
+C'est le cœur du dispositif, et il faut le dire dans ces termes parce qu'il commande tout le §6 :
+
+| Source | Fait autorité sur | Ne sait rien de |
+|---|---|---|
+| **API FFBB** (poule, engagement) | le **PÉRIMÈTRE** — quelles équipes, quelles compétitions, **quels adversaires** | les dates, les heures, les salles |
+| **Export FBI** (fichier du gestionnaire) | le **CALENDRIER** — quand, où, contre qui, domicile/extérieur | si le fichier est le bon, complet, ou à jour |
+
+**Aucune des deux ne peut se valider seule.** Un export FBI est un fichier : rien en lui ne dit qu'il concerne
+la bonne équipe, la bonne phase, ni qu'il est entier. L'API, elle, ne connaît aucune date.
+
+**Leur croisement est le seul endroit où une erreur devient visible** — et c'est gratuit, puisque les deux
+existent déjà. C'est de là que viennent §6.1 (adversaire hors poule), §6.2 (journées manquantes) et §6.3
+(`Division` du fichier rapprochée du nom canonique de l'API).
+
+⚠ **Corollaire à tenir** : en cas de désaccord entre les deux, **on ne tranche pas** — on montre l'écart et on
+laisse le gestionnaire décider, exactement comme au §1. Une contradiction API↔FBI est souvent un vrai problème
+côté ligue, pas une donnée à réconcilier en silence.
+
+Les trois premières briques ci-dessous appliquent ce croisement.
+
+### 6.1 🟢 La poule comme garde-fou de l'import FBI — *la plus utile*
+
+La poule donne **la liste exacte des clubs adverses**. À l'import :
+
+- un adversaire **absent de la poule** → mauvais fichier, mauvaise équipe, ou mauvaise phase ;
+- un export chargé sur les SM3 alors que les adversaires sont ceux de la poule des SM4 → **attrapé
+  immédiatement**.
+
+**Aujourd'hui rien ne l'attrape.** L'erreur se découvre des semaines plus tard via un conflit coach aberrant —
+ou jamais. Ce n'est pas de l'information : **c'est une erreur qui ne se produit plus.**
+
+### 6.2 🟢 Le contrôle de complétude
+
+Poule de 12 → 22 journées attendues. Import qui en rend 9 → **le fichier est partiel**, on le dit.
+
+⚠ La nuance qui rend l'idée valable : il connaît sa saison, mais **il ne compte pas de tête les matchs
+manquants sur 14 équipes × 3 phases**. Et c'est exactement le trou de [P1-4 (5)](roadmap.md) : distinguer
+« incomplet parce que la phase suivante n'est pas sortie » de « incomplet parce qu'un fichier a été raté ».
+
+### 6.3 🟢 L'appariement pré-calculé — de 1 clic à 0
+
+L'export FBI porte une colonne **`Division`** en texte libre ; l'API porte le **nom canonique** de la
+compétition et sa poule. On rapproche les deux **une fois** ; aux phases suivantes, l'app propose
+l'appariement **déjà fait** et le gestionnaire **confirme en bloc**.
+
+14 équipes × 3 phases = 42 gestes ramenés à 3 confirmations. **Dégradation propre** : si le rapprochement
+échoue, on retombe sur l'appariement manuel du §3, qui reste le contrat.
+
+### 6.4 🟡 Le catalogue de fenêtres ligue se clé tout seul
+
+[`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) §6bis prévoit `LeagueMatchWindow`, **seedé à la main pour
+AURA** — ça ne passe pas à l'échelle. Or chaque engagement porte `codeLigue`/`codeComite`, et l'organisme
+porte `organisme_id_pere` (BCCL → *Comité du Rhône*). **La hiérarchie club→comité→ligue est gratuite.** Le
+gestionnaire ne tape jamais son code ligue : travail retiré, zéro information.
+
+### 6.5 🟡 L'empreinte-temps des déplacements, pré-remplie
+
+`MatchFootprint` existe déjà ([`module-matchs.md`](../courantes/module-matchs.md)). La commune de chaque
+adversaire est connue **par la poule, avant le calendrier** → l'empreinte d'un match extérieur se pré-remplit.
+
+**Arbitrage fondateur sur la précision** : l'adresse d'un club est celle de son gymnase principal ; même s'il
+change, *« si on joue contre Clermont c'est 2h de route aller, 45 min d'échauffement, 2h retour et 30 de
+douche — l'ordre de grandeur d'indisponibilité est le même »*.
+⚠ **Réserve retenue** : l'approximation est bonne au loin et **faible en local**, or les championnats
+**départementaux** — le gros du volume — sont locaux, où 25 minutes d'écart changent un placement. → afficher
+**comme estimation**, corrigeable, jamais comme une donnée.
+
+### 6.6 🟡 Les rivaux — un drapeau, pas une inférence
+
+Marquer un adversaire comme rival donne une **visibilité différente au calendrier** : *« ce soir la PNM joue
+contre le Clar, il faut peut-être prévoir une action de club autour de ce match »*.
+
+**Posé par le gestionnaire, jamais déduit.** Une objection initiale visait une déduction automatique (même
+commune ? même niveau ?) — hors sujet : ce n'était pas la demande, et déduire violerait le §1.
+
+### ❌ Rejeté explicitement
+
+**« Dire quelles phases sont publiées »** (`etat`, `publicationInternet`). Le gestionnaire sait quand sortent
+ses poules. Rejeté par le fondateur, et c'est de ce rejet qu'est née la règle du §1.
+
+---
+
+## 7. Les gymnases de match — un besoin neuf, avec une collision
+
+> **« Il faut que l'on définisse nos gymnases de match : tous les gymnases d'entraînement ne sont pas des
+> gymnases de match. »** (fondateur, 2026-08-02)
+
+**Rien n'existe.** `Venue` porte `isExternal`, `canSplit`, `isActive`, `parentVenueId`, `latitude/longitude` —
+**aucun marqueur d'aptitude au match**. [P1-4 (4)](roadmap.md) l'avait noté en passant (« un gymnase n'accueille
+pas forcément des matchs ») sans le spécifier.
+
+⚑ **La collision, à traiter avant de coder** : le wizard **exige aujourd'hui au moins un créneau par gymnase**
+(règle affichée sous le formulaire d'ajout, cf. [`frontend-wizard.md`](../courantes/frontend-wizard.md)). Or un
+gymnase **réservé aux matchs** — une salle plus grande louée le week-end, par exemple — n'a **aucun créneau
+d'entraînement**. La règle actuelle le refuserait, ou forcerait le gestionnaire à inventer un créneau fictif
+qui partirait ensuite au solveur.
+
+**Trois questions, à trancher ensemble :**
+
+1. **Un attribut ou deux listes ?** `Venue.canHostMatches` sur l'entité existante, ou un gymnase de match est-il
+   une ressource d'une autre nature ? *(L'attribut paraît suffisant et évite de dupliquer adresse/géoloc.)*
+2. **Que devient la validation « ≥ 1 créneau » ?** Elle doit devenir « ≥ 1 créneau **ou** gymnase de match »,
+   sans quoi la saisie est bloquée.
+3. **Le solveur doit-il savoir qu'un créneau est mangé par un match ?** Un gymnase mixte accueillant un match
+   le samedi ne peut pas accueillir l'entraînement en même temps — c'est un axe **constraint semantics**, donc
+   un test de non-régression obligatoire le jour venu.
+
+*(Piste sans urgence : `ffbbserver_salles` porte `capaciteSpectateur`, et un niveau peut exiger une capacité
+minimale. Mais l'index n'est pas indexé par club — non exploitable en l'état.)*
+
+---
+
+## 8. Reste ouvert
+
+| # | Sujet |
+|---|---|
+| **8.1** | **Forfait général.** Les matchs sont perdus et n'ont plus à être gérés ; surtout, l'équipe **n'a potentiellement plus besoin de ses créneaux**, réallouables. ⚠ `EngagedTeamGuard` verrouille toute équipe **ayant des matchs** — une équipe en forfait en a. **Forfait ≠ désengagement dans notre modèle** : il faudra un troisième état. Axe *périmètre engagé* → NR obligatoire. **Réel, pas prioritaire** (fondateur). |
+| **8.2** | **Juridique.** Consulter un club à la demande : sans risque. **Stocker un annuaire national** : extraction substantielle d'une base de données, protégée même quand chaque donnée est publique (art. L341-1 CPI). Aucune CGU lue. **À trancher avant toute mise en cache durable**, pas après. |
+| **8.3** | **Correspondance saison** FFBB `26-27` ↔ notre pivot du 15 juillet : posée une fois, où ? |
+
+---
+
+## 9. Traçabilité
+
+| Spec / ligne | Ce que ce document y change |
+|---|---|
+| **P2-18** | Devient un **écran d'arbitrage** ; club en lecture seule sans nom d'usage ; **pas** de refus modélisé |
+| **P1-4 (2)** | L'appariement s'ancre sur la compétition FFBB, **ré-apparié à chaque phase** (§3) |
+| **P1-4 (4)** | Les **gymnases de match** sortent du parking et deviennent un besoin cadré (§7) |
+| **P1-4 (5)** | Brassage/poules déjà modélisés côté FFBB ; le contrôle de complétude (§6.2) attaque le vrai trou |
+| [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) §6bis | `LeagueMatchWindow` devient **auto-clé** (§6.4) |
+| [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) §9 | `Competition / Phase` : une phase **est** une compétition FFBB, pas un sous-objet |
+| [`module-matchs.md`](../courantes/module-matchs.md) | `MatchFootprint` pré-remplissable (§6.5) |
+| **P4-35** | Même remède : correspondance explicite, jamais devinée |
+| **Abonnement** | Bascule de saison **gatée sur le renouvellement** — ligne roadmap distincte (fuite de revenu) |
