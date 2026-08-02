@@ -31,7 +31,9 @@ planning de la saison précédente, le travail est déjà prémâché. C'est la 
 
 Trois leviers, du plus mesuré au moins cadré :
 
-1. **Les gymnases proches, à cocher** → §6.9. **Validé 9/9 sur BCCL.**
+1. **Les gymnases proches, à cocher** → §6.9. **Validé 9/9 sur BCCL.** *« On ne part plus avec 0 % de gymnases
+   mais une liste pré-remplie validée par le gestionnaire. »* — c'est le levier le plus mesuré des trois, et le
+   seul qui soit déjà prouvé sur données réelles.
 2. **Les équipes engagées, à apparier** → §3. ⚠ Indisponible avant le 20 juillet (§5) : inopérant pour un club
    qui s'inscrit en juin, utile pour celui qui arrive en cours de saison.
 3. **Des contraintes de base** semées d'office → c'est **P2-16**, déjà en roadmap et non cadré. Le fondateur le
@@ -339,6 +341,47 @@ champs aujourd'hui morts faute d'être saisis (§6.8).
 liste à trier plutôt qu'une aide). Un club dont la géoloc est absente ou fausse retombe sur la saisie manuelle,
 sans dégradation. Et le `status: "draft"` de la cartographie FFBB (§2bis) vaut ici aussi : la position est une
 bonne amorce, pas une vérité.
+
+#### La forme voulue — « comme un choix de point relais »
+
+> **« Je vois pour les gymnases une carte avec le nom des gymnases, comme quand on veut choisir un relais
+> pickup. Le gymnase a donc un nom complet et un nom plus court utilisé par l'application. Le gestionnaire
+> choisit quels gymnases importer, et on ne part plus avec 0 % de gymnases mais une liste pré-remplie validée
+> par le gestionnaire. »** (fondateur, 2026-08-02)
+
+**Deux noms, et le modèle n'en a qu'un.** `Venue` porte `name`, point. Il faut :
+
+| Champ | Rôle | État |
+|---|---|---|
+| `name` | le **nom court**, celui du club — « ADN », « JDR » | existe |
+| *(nouveau)* nom officiel | « GYMNASE ALEXANDRA DAVID NEEL » — ce qu'on montre à l'import et ce qui parle à la ligue | **à créer** |
+| `externalRef` | le `numero` FFBB de la salle | existe, **jamais rempli** |
+| `latitude` / `longitude` | pour la carte et les trajets | existent, **jamais remplis** |
+
+Le nom court reste **libre et modifiable** : c'est le vocabulaire du club, l'app ne le devine pas (§6.9). Une
+proposition raisonnable est de pré-remplir le court à partir de l'officiel et de le laisser réécrire — pas de
+l'imposer.
+
+**⚠ La carte a un coût que la liste n'a pas, et il faut le dire avant de s'y engager.**
+
+Aucune bibliothèque de carte n'existe dans le front. Et la CSP de production est stricte :
+`img-src 'self' data: blob:` · `connect-src 'self' blob:` (`docker/frontend/csp.conf`). **Les tuiles seraient
+bloquées.** Les afficher suppose :
+
+- **relâcher la CSP** pour autoriser un hôte de tuiles — une vraie décision de posture, pas une ligne de config ;
+- accepter que **chaque tuile envoie l'IP du gestionnaire** à ce tiers → à inscrire dans `docs/security/rgpd.md` ;
+- ou **auto-héberger les tuiles**, ce qui est lourd (stockage, mises à jour) pour l'usage.
+
+**Chemin proposé, en deux temps :**
+
+1. **Une LISTE triée par distance**, cases à cocher : `GYMNASE ARMAND — 400 m`. Le tri existe déjà
+   (`_geoPoint:asc`), zéro dépendance, zéro changement de CSP. **Ça livre l'essentiel de la valeur** : le
+   gestionnaire ne part plus de zéro, il coche.
+2. **La carte ensuite**, si la liste montre ses limites (deux gymnases homonymes, un doute sur lequel est
+   lequel). C'est là que la carte gagne vraiment — comme pour un point relais, **la liste porte le choix, la
+   carte porte la confiance**.
+
+Rien dans l'étape 1 n'empêche l'étape 2 : les coordonnées sont stockées dès le départ.
 
 ### ❌ Rejeté explicitement
 
