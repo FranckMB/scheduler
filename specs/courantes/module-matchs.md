@@ -3,8 +3,11 @@
 Last verified @ 2026-07-29
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
-> [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C). Ici = ce qui
-> **existe** aujourd'hui. Module **fonctionnellement autonome** : ses entités, son moteur de conflits et sa
+> [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés
+> pour l'exécution le 2026-08-02** par
+> [`../evolution/p1-4-cadrage-module-matchs.md`](../evolution/p1-4-cadrage-module-matchs.md) (P1-4 —
+> notamment : le format FBI livré ici est **invalidé par un vrai export**, et le placement devient
+> solveur + boucle manuelle). Ici = ce qui **existe** aujourd'hui. Module **fonctionnellement autonome** : ses entités, son moteur de conflits et sa
 > grille week-end ne dépendent pas du solveur d'entraînement, et rien de ce module n'entre dans le payload
 > solveur.
 
