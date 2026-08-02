@@ -26,7 +26,7 @@ Versions figées pour le rebuild. Aucune librairie ne sera ajoutée sans justifi
 | Primitives UI | Radix UI (label, slot) + cva + tailwind-merge | — | Composants shadcn-style dans `src/shared/components/ui/` |
 | Routing | react-router | 8 | Data router (`createBrowserRouter`), **`lazy` par route** (P4-6), nested layouts. ⚠ paquet `react-router`, **pas** `react-router-dom` |
 | Icons | lucide-react | 1.x | Icônes SVG tree-shakeable |
-| Reporting d'erreurs | @sentry/react | 10.x | **Erreurs seules** — pas d'APM ni de replay (`tracesSampleRate: 0`, quota free tier). DSN absent → init sautée, SDK inerte (INF-01) |
+| Reporting d'erreurs | @sentry/react | 10.x | **Erreurs seules** — pas d'APM ni de replay (`tracesSampleRate: 0`, quota free tier). DSN absent → init sautée, SDK inerte. ⚠ L'activer demande **le DSN ET l'hôte d'ingestion en CSP** — voir §Sentry (P4-65) |
 | Types API | — (manuels) | — | Types API écrits à la main par feature (`features/*/api.ts`) ; le codegen `openapi-typescript`/`types.gen.ts` a été **supprimé** (FRT-15 : 8365 l., 0 import, source de vérité fantôme) |
 
 ### Principes de la stack
@@ -653,6 +653,17 @@ diverger.
 `main.tsx` initialise Sentry **uniquement si `VITE_SENTRY_DSN` est posé au build** : erreurs
 seules, `tracesSampleRate: 0`, pas de replay (quota free tier préservé, INF-01). DSN absent =
 init sautée, SDK inerte — tout est câblé d'avance.
+
+⚠ **Mais le DSN seul ne l'active PAS** (P4-65). `docker/frontend/csp.conf` déclare
+`connect-src 'self' blob:` et **n'autorise aucun hôte tiers** : sans l'hôte d'ingestion du DSN
+dans cette directive, le navigateur **jette chaque envoi, en silence**. Le SDK s'initialise,
+l'application paraît instrumentée, rien n'arrive — et on le découvre le jour où on cherche
+une erreur de production.
+
+**Activer Sentry = deux gestes dans le même changement** : le DSN, et son hôte dans
+`connect-src`. Un garde de build (`frontend/tooling/sentryCspGuard.ts`, appelé par
+`vite.config.ts`) **fait échouer le build** si le DSN est posé sans son hôte — la panne
+silencieuse est devenue bruyante. Il est inerte tant qu'aucun DSN n'est posé.
 
 ### Naming
 
