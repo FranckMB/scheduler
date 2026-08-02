@@ -75,3 +75,14 @@ GET https://api.ffbb.com/assets/{uuid}?format=webp&height=220&fit=contain
 ## Ce que l'API NE fournit PAS
 
 - **Président / correspondant nommé** (personne physique) : absent de l'index. Volontairement **hors scope** lot C (seul le contact institutionnel — mail secrétariat + tél — est exposé).
+- **Les calendriers de rencontres.** Mesuré le 2026-08-02 : l'index `ffbbserver_rencontres` existe, son schéma est complet (36 champs), mais il ne contient que **31 documents de TEST** au niveau national. Les matchs continuent de passer par l'**import FBI**.
+
+## Ce qui est disponible et NON exploité
+
+Ce fichier décrit ce que le backend **appelle aujourd'hui**. La reconnaissance P2-19 a mesuré ce que la même clé `key_ms` rend **en plus** — cinq autres index Meilisearch, dont `ffbbserver_engagements` (équipes engagées d'un club, avec compétition, poule, niveau et logo).
+
+⚠ Un piège qui ne se devine pas : la recherche plein texte d'un code club rend **beaucoup de faux positifs** — 283 hits pour 14 vrais sur `ARA0069036`. **Filtrer sur le champ `codeClub`, jamais sur la pertinence.**
+
+La **saison** ne figure pas sur l'engagement mais s'obtient en une jointure : `engagement.idCompetition.id` → `ffbbserver_competitions` → `saison.code` (vérifié 14/14 sur BCCL, toutes `26-27`). Le référentiel `competitions` porte aussi `phases[]` et `poules[]` avec les engagements de chaque poule.
+
+→ Inventaire complet, route par route, avec les mesures : [`../../specs/evolution/api-ffbb-app-reconnaissance.md`](../../specs/evolution/api-ffbb-app-reconnaissance.md)
