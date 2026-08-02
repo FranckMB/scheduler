@@ -57,24 +57,50 @@ de frappes pour transférer ce qu'il sait déjà ?
 C'est aussi le critère qui **disqualifie** une fonctionnalité : si elle lui apprend quelque chose, elle est
 probablement inutile ; si elle lui épargne de saisir ce qu'il connaît, elle est probablement bonne.
 
-#### La fréquence — un écran vu UNE fois, et pourquoi ça ne le rend pas mineur
+#### La fréquence — rare, mais PAS une fois. Et l'écran doit être ré-ouvrable
 
-Les gymnases se définissent sur le **plan SEASON**, et `SeasonTransitionService` (`:139-145`) les **recopie
-d'une saison à l'autre** — `latitude`, `longitude` et `externalRef` compris. Donc :
+Les gymnases vivent sur le **plan SEASON** — c'est bien le **calendrier de saison** qu'ils concernent, pas les
+overlays de période, qui héritent d'une copie de la grille. Et `SeasonTransitionService` (`:139-145`) les
+**recopie d'une saison à l'autre**, `latitude`, `longitude`, `externalRef` et `isActive` compris : **ce qu'on
+remplit une fois se propage gratuitement**, sans reprise.
 
-- l'écran de sélection sert **une fois par club**, plus quelques ajouts ponctuels ;
-- mais **ce qu'on remplit une fois se propage gratuitement à toutes les saisons suivantes**, sans reprise.
+⚠ **Mais le parc bouge** (fondateur) :
 
-⚠ **Ne pas en conclure « peu utilisé donc peu important ».** Cette fois unique **est le moment de l'onboarding**
-— celui qui décide si le club adopte l'outil ou repart. Le fondateur le dit lui-même : *« un sentiment que
-l'appli me comprend, TRÈS PUISSANT »*. Une fonctionnalité vue une fois peut porter le plus fort levier
-d'adoption du produit.
+> *« Il se peut que le club en cours de saison accède à d'autres gymnases, ou que la saison suivante on perde
+> un gymnase pour en avoir un autre (travaux) ou autre. »*
 
-**Ce que la fréquence change en revanche, c'est le SÉQUENCEMENT.** Une carte, c'est de la machinerie
-(bibliothèque, tuiles, attribution, CGU) pour un écran vu une fois. Raison de plus de livrer **la liste
-d'abord** — elle capte l'essentiel à une fraction du coût — puis de décider de la carte **en ayant vu la liste
-servir**. Ce n'est pas un doute sur la carte : c'est refuser de payer sa complexité avant d'avoir la preuve
-qu'elle manque.
+**Conséquence de conception, qui n'est pas cosmétique : la sélection n'est PAS une étape d'onboarding
+one-shot.** C'est un écran **ré-ouvrable**, et donc **idempotent** :
+
+- rouvert, il doit distinguer **ce qui est déjà importé** de ce qui reste à proposer — sinon il re-présente
+  25 gymnases sans mémoire de ceux qui sont déjà les miens, et le gestionnaire re-coche ou crée des doublons ;
+- l'appariement se fait sur **`externalRef` = le `numero` FFBB** (§6.8), pas sur le nom — le club a renommé
+  « ALEXANDRA DAVID NEEL » en « ADN », un rapprochement par libellé échouerait ;
+- un gymnase **perdu pour travaux** devrait se **désactiver**, pas se supprimer.
+
+⚑ **Et là il y a un trou, vérifié : le geste n'existe pas.** `Venue.isActive` existe en base et
+`SeasonTransitionService` (`:144`) le reporte fidèlement d'une saison à l'autre — mais **`VenuesStep` n'offre
+aucune désactivation**, seulement la suppression (`pendingDeleteVenue` → `useDeleteVenue`).
+
+Donc aujourd'hui, un gymnase fermé pour travaux ne peut qu'être **supprimé** — ce qui emporte **ses créneaux et
+ses réservations** (`DeleteConfirm` l'annonce, mais l'annoncer n'est pas l'éviter). Au retour du gymnase, tout
+est à ressaisir.
+
+C'est exactement le scénario que le fondateur décrit, et **le modèle sait déjà le faire** : il manque le
+bouton. À couvrir avec la sélection de gymnases — les deux touchent le même écran.
+
+> ⚠ Ne pas confondre avec `VenuePeriodOverride` (`DISABLED`), qui désactive un gymnase **pour une période**.
+> Ici c'est la saison entière.
+
+⚠ **Ne pas conclure « peu utilisé donc peu important ».** Le premier passage **est le moment de l'onboarding**
+— celui qui décide si le club adopte l'outil ou repart. *« Un sentiment que l'appli me comprend, TRÈS
+PUISSANT »*. Un écran rare peut porter le plus fort levier d'adoption.
+
+**Ce que la rareté change, c'est le SÉQUENCEMENT.** Une carte, c'est de la machinerie (bibliothèque, tuiles,
+attribution, CGU) pour un écran ouvert deux ou trois fois par club et par an. Raison de plus de livrer **la
+liste d'abord** — elle capte l'essentiel à une fraction du coût — puis de décider de la carte **en ayant vu la
+liste servir**. Ce n'est pas un doute sur la carte : c'est refuser de payer sa complexité avant d'avoir la
+preuve qu'elle manque.
 
 ---
 
