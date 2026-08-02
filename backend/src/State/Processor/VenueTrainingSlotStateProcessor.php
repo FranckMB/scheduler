@@ -77,6 +77,7 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
             $entity->setCapacity($input->capacity);
         }
 
+        $this->validateEndsWithinDay($entity);
         $this->validateCapacityForVenue($entity);
         $this->validateNoOverlap($entity);
 
@@ -105,6 +106,7 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
             $entity->setCapacity($input->capacity);
         }
 
+        $this->validateEndsWithinDay($entity);
         $this->validateCapacityForVenue($entity);
         $this->validateNoOverlap($entity);
     }
@@ -115,6 +117,35 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): VenueTrainingSlotResource
     {
         return VenueTrainingSlotResource::fromEntity($entity);
+    }
+
+    /**
+     * Un créneau doit finir dans SA journée (P4-61).
+     *
+     * `VenueTrainingSlotInput` ne porte qu'un `Range(min: 15)` sur la durée : aucune borne de
+     * fin de journée. `22:45 + 150 min` était donc accepté, persisté, et ressortait
+     * **« 25:15 »** partout où une fin d'horaire s'affiche — `_format_time` côté engine fait
+     * un `divmod` sans modulo 24 h, et ne s'en plaint pas.
+     *
+     * Le geste est fermé côté front depuis P4-37 (`slotPlacementError`), mais un import, un
+     * script ou un appel direct passait toujours : l'invariant n'était gardé nulle part où il
+     * doit l'être. C'est ce que ferme cette méthode.
+     *
+     * ⚠ La borne est **minuit**, pas la fin de la grille de saisie : un créneau du soir
+     * (22:00–23:30) est légitime et doit rester acceptable. Même règle que le front.
+     *
+     * ⚠ On ne pose délibérément **aucune durée maximale** : elle serait arbitraire (2h30 est
+     * ce que la liste OFFRE, pas ce que le métier interdit) et rendrait l'API plus stricte
+     * que la réalité — un stage, un tournoi. La borne de journée suffit à fermer le trou.
+     */
+    private function validateEndsWithinDay(VenueTrainingSlot $entity): void
+    {
+        // `minutesOf` plutôt qu'un second calcul : `validateNoOverlap` lit déjà l'heure de
+        // début par ce chemin, et deux façons de convertir la même valeur finissent par
+        // diverger — c'est le motif de duplication que P4-37 a soldé côté front.
+        if ($this->minutesOf($entity) + $entity->getDurationMinutes() > 24 * 60) {
+            throw new ValidationException('A slot must end within its day: it would run past midnight.');
+        }
     }
 
     private function validateCapacityForVenue(VenueTrainingSlot $entity): void

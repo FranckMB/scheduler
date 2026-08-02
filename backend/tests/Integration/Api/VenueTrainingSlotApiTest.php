@@ -98,6 +98,60 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(201);
     }
 
+    /**
+     * NR — P4-61. L'API acceptait un créneau franchissant minuit : `22:45 + 150 min` était
+     * persisté et ressortait « 25:15 » partout où une fin d'horaire s'affiche. Le geste était
+     * fermé CÔTÉ FRONT depuis P4-37, mais un import ou un appel direct passait toujours.
+     *
+     * Axe *contraintes* effleuré : ce créneau part au solveur.
+     */
+    public function testSlotCrossingMidnightIsRejected(): void
+    {
+        $venue = $this->createVenue(false);
+
+        // 22:45 + 2h30 = 25:15. Le cas exact relevé à la revue de P4-37.
+        $this->postSlot($venue->getId(), 1, '22:45', 150);
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testEveningSlotEndingBeforeMidnightIsAccepted(): void
+    {
+        // La borne est MINUIT, pas la fin de la grille de saisie. Sans ce test, resserrer la
+        // règle sur 23:00 (la dernière ligne affichée) passerait inaperçu et rendrait l'API
+        // plus stricte que le métier — un 22:00–23:30 est légitime.
+        $venue = $this->createVenue(false);
+
+        $this->postSlot($venue->getId(), 1, '22:00', 90); // 22:00–23:30
+        self::assertResponseStatusCodeSame(201);
+
+        // Et la limite exacte : finir PILE à minuit reste dans la journée.
+        $this->postSlot($venue->getId(), 2, '23:00', 60); // 23:00–24:00
+        self::assertResponseStatusCodeSame(201);
+    }
+
+    public function testMidnightGuardAlsoAppliesToAnUpdate(): void
+    {
+        // La création et l'édition sont deux chemins distincts dans le processor : garder
+        // l'un sans l'autre laisserait le trou grand ouvert à un PUT.
+        $venue = $this->createVenue(false);
+        $this->postSlot($venue->getId(), 3, '18:00', 90);
+        $id = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR)['id'];
+
+        $this->client->request('PUT', '/api/venue_training_slots/' . $id, [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->token,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'venueId' => $venue->getId(),
+            'dayOfWeek' => 3,
+            'startTime' => '23:30',
+            'durationMinutes' => 90, // 23:30 + 1h30 = 25:00
+            'capacity' => 1,
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(422);
+    }
+
     public function testCanSplitPersistsOnVenueUpdate(): void
     {
         // Regression: the venue update processor silently dropped canSplit, so
