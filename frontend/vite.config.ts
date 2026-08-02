@@ -4,7 +4,10 @@ import tailwindcss from '@tailwindcss/vite'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { CSP_PATH, sentryCspError } from './build/sentryCspGuard'
+// ⚠ `tooling/`, PAS `build/` : `.gitignore` ignore `build/` (règle large visant les sorties
+// de build), si bien qu'un garde posé là n'aurait jamais été versionné — vert en local,
+// absent en CI. C'est exactement ce qui est arrivé au premier jet.
+import { CSP_PATH, sentryCspError } from './tooling/sentryCspGuard'
 
 // P4-65 — activer Sentry demande DEUX gestes, pas un : poser `VITE_SENTRY_DSN` ET autoriser
 // son hôte d'ingestion dans la CSP. Oublier le second ne casse rien de visible — le SDK
