@@ -1,5 +1,5 @@
 import { Check, Lock, Pencil, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
@@ -45,14 +45,23 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
 /** Coerce a JSON config value (unknown) into a day-number array. */
 const asNums = (v: unknown): number[] => (Array.isArray(v) ? v.map(Number).filter((n) => !Number.isNaN(n)) : []);
 
-function DayPicker({ days, toggle }: { days: Set<number>; toggle: (n: number) => void }) {
+/**
+ * ⚠ `legend` n'est pas décoratif : un jour coché est colorié pareil qu'il soit IMPOSÉ ou
+ * ÉVITÉ. Le sens vit dans un `Select` voisin, que la couleur ne rappelle pas et qu'un
+ * lecteur d'écran ne rattache à rien — les boutons n'annonçaient que « Lun », « Mar ».
+ * P4-58(a) décrivait la polarité comme invisible ; elle ne l'est plus depuis que ce
+ * sélecteur existe, mais le GROUPE, lui, restait muet. `aria-label` porté par le groupe
+ * suit la polarité courante : le sens est dit là où le geste se fait.
+ */
+function DayPicker({ days, toggle, legend }: { days: Set<number>; toggle: (n: number) => void; legend: string }) {
   return (
-    <div className="flex flex-wrap gap-1">
+    <div role="group" aria-label={legend} className="flex flex-wrap gap-1">
       {DAYS.map((d) => (
         <button
           key={d.n}
           type="button"
           onClick={() => toggle(d.n)}
+          aria-pressed={days.has(d.n)}
           className={cn("rounded-md border px-2 py-1 text-xs", days.has(d.n) ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground")}
         >
           {d.label}
@@ -139,6 +148,9 @@ export function ConstraintsStep() {
   const [pendingDelete, setPendingDelete] = useState<Constraint | null>(null);
   // id de la contrainte en cours d'édition (null = création) — réutilise le même formulaire.
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Le formulaire (haut de page) qu'il faut ramener à l'écran quand on édite une
+  // ligne éloignée — P4-66.
+  const formRef = useRef<HTMLDivElement>(null);
 
   const teamName = new Map(allTeams.map((t) => [t.id, t.name]));
   const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
@@ -352,6 +364,14 @@ export function ConstraintsStep() {
       }
     }
     setEditingId(c.id);
+    // P4-66 (retour fondateur 2026-08-02 : « je dois scroller ») — le formulaire
+    // d'édition est EN HAUT, la ligne cliquée peut être loin plus bas : sans ça
+    // le stylo semble ne rien faire. `requestAnimationFrame` laisse React peindre
+    // les champs pré-remplis avant qu'on les amène à l'écran. L'appel de la
+    // MÉTHODE est optionnel lui aussi : elle n'existe pas partout (jsdom), et ce
+    // code vit dans un rAF — hors du filet de React, une absence remonterait en
+    // erreur NON GÉRÉE (4 tests voisins pollués avant ce garde-fou).
+    requestAnimationFrame(() => formRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" }));
   };
 
   // Only groups (tags) that ACTUALLY concern a team of the club: the backend
@@ -504,7 +524,7 @@ export function ConstraintsStep() {
       ) : (
         <>
           {/* Per-family add form */}
-          <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
+          <div ref={formRef} className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
         {("TIME" === family || "DAY" === family || "FACILITY" === family) && teamPicker}
 
         {"TIME" === family && (
@@ -530,7 +550,7 @@ export function ConstraintsStep() {
               <option value="forbidden">à éviter</option>
               <option value="forced">uniquement</option>
             </Select>
-            <DayPicker days={days} toggle={toggleDay} />
+            <DayPicker days={days} toggle={toggleDay} legend={"forced" === dayMode ? "Jours imposés" : "Jours à éviter"} />
           </>
         )}
 
@@ -586,7 +606,7 @@ export function ConstraintsStep() {
               <option value="unavailable">indisponible</option>
               <option value="available">disponible uniquement</option>
             </Select>
-            <DayPicker days={days} toggle={toggleDay} />
+            <DayPicker days={days} toggle={toggleDay} legend={"available" === coachMode ? "Jours de disponibilité exclusive" : "Jours d'indisponibilité"} />
             {/* Lot C: optional time window on the selected days (empty = whole day). */}
             <label className="flex items-center gap-1 text-xs text-muted-foreground">
               de

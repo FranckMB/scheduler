@@ -367,6 +367,25 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "DAY", ruleType: "HARD", config: { allowedDays: [5] } });
   });
 
+  it("names the day group after the polarity in force, so the gesture says its own sense (P4-58a)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Jours" }));
+
+    // ⚠ La couleur d'un jour coché est la MÊME dans les deux sens. Sans nom sur le
+    // groupe, « Ven » activé se lit « vendredi retenu » aussi bien pour l'imposer que
+    // pour l'éviter — et un lecteur d'écran n'annonce que « Ven ».
+    expect(screen.getByRole("group", { name: "Jours à éviter" })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Type de jour"), "forced");
+    expect(screen.getByRole("group", { name: "Jours imposés" })).toBeInTheDocument();
+
+    // Et l'état de chaque jour est porté par le bouton lui-même, pas seulement par sa classe.
+    await user.click(screen.getByRole("button", { name: "Ven" }));
+    expect(screen.getByRole("button", { name: "Ven", pressed: true })).toBeInTheDocument();
+  });
+
   it("keeps the target after a create so several constraints can be added in a row (F5)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ConstraintsStep />);
@@ -794,5 +813,31 @@ describe("ConstraintsStep — période : choisir, nommer, atteindre", () => {
     const picker = screen.getByLabelText("Gymnase");
     expect((picker as HTMLSelectElement).value).toBe("v2");
     expect(within(picker).getByRole("option", { name: /Gymnase B \(désactivé pour cette période\)/ })).toBeInTheDocument();
+  });
+
+  it("ramène le formulaire à l'écran quand on édite une ligne éloignée (P4-66)", async () => {
+    // Retour fondateur 2026-08-02 : « le focus n'est pas automatique sur la ligne
+    // d'édition, donc je dois scroller ». jsdom n'implémente pas scrollIntoView —
+    // on l'espionne : ce qui compte est QUE le formulaire soit ramené, pas comment
+    // le navigateur l'anime.
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    // requestAnimationFrame: exécuter tout de suite pour ne pas attendre une frame.
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => {
+      cb(0);
+      return 0;
+    });
+
+    h.list = [{ id: "c1", name: "SM1 · impose Gymnase A", scope: "TEAM", scopeTargetId: "t1", family: "FACILITY", ruleType: "HARD", config: { forcedVenueId: "v1" }, isActive: true } as unknown as Constraint];
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Gymnase" }));
+    expect(scrollIntoView).not.toHaveBeenCalled(); // rien ne bouge tant qu'on n'édite pas
+
+    await user.click(screen.getByRole("button", { name: "Modifier" }));
+    expect(scrollIntoView).toHaveBeenCalled();
+
+    raf.mockRestore();
   });
 });
