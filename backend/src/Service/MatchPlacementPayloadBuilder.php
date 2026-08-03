@@ -20,6 +20,7 @@ use App\Enum\FixturePlacementSource;
 use App\Enum\FixtureStatus;
 use App\Repository\LeagueMatchWindowRepository;
 use DateInterval;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -207,7 +208,7 @@ final class MatchPlacementPayloadBuilder
             return $base + [
                 'kind' => 'AWAY',
                 'kickoff' => $kickoff?->format('H:i'),
-                'kickoffEstimated' => null === $fixture->getKickoffTime() && null !== $estimated,
+                'kickoffEstimated' => !$fixture->getKickoffTime() instanceof DateTimeImmutable && $estimated instanceof DateTimeImmutable,
             ];
         }
 
@@ -223,7 +224,7 @@ final class MatchPlacementPayloadBuilder
 
         // Manual / submitted / validated anchors — only if still fully anchored
         // (a submitted match whose venue was deleted, DOC-2, can do neither).
-        if (null === $fixture->getVenueId() || null === $fixture->getKickoffTime()) {
+        if (null === $fixture->getVenueId() || !$fixture->getKickoffTime() instanceof DateTimeImmutable) {
             return null;
         }
 

@@ -95,7 +95,8 @@ test("matches: create a fixture, place it, radar renders", async ({ page }) => {
   //  - out-of-envelope → the HARD guard disables placement and warns.
   await page.getByLabel("Gymnase").selectOption({ index: 1 });
   await page.getByLabel("Heure de coup d'envoi").fill("15:00");
-  const place = page.getByRole("button", { name: "Placer" });
+  // exact: the page also carries the "Placer automatiquement" solver button (PR D).
+  const place = page.getByRole("button", { name: "Placer", exact: true });
 
   if (await place.isEnabled()) {
     await place.click();

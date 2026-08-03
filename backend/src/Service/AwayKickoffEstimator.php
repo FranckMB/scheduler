@@ -27,7 +27,7 @@ final class AwayKickoffEstimator
      */
     public function estimate(Fixture $fixture, array $habitByTeamDay): ?DateTimeImmutable
     {
-        if (FixtureHomeAway::AWAY !== $fixture->getHomeAway() || null !== $fixture->getKickoffTime()) {
+        if (FixtureHomeAway::AWAY !== $fixture->getHomeAway() || $fixture->getKickoffTime() instanceof DateTimeImmutable) {
             return null;
         }
         $habit = $habitByTeamDay[$fixture->getTeamId()][(int) $fixture->getMatchDate()->format('N')] ?? null;
