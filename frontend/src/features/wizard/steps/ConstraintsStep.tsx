@@ -1,5 +1,5 @@
 import { Check, Lock, Pencil, Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
@@ -139,6 +139,9 @@ export function ConstraintsStep() {
   const [pendingDelete, setPendingDelete] = useState<Constraint | null>(null);
   // id de la contrainte en cours d'édition (null = création) — réutilise le même formulaire.
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Le formulaire (haut de page) qu'il faut ramener à l'écran quand on édite une
+  // ligne éloignée — P4-66.
+  const formRef = useRef<HTMLDivElement>(null);
 
   const teamName = new Map(allTeams.map((t) => [t.id, t.name]));
   const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
@@ -352,6 +355,14 @@ export function ConstraintsStep() {
       }
     }
     setEditingId(c.id);
+    // P4-66 (retour fondateur 2026-08-02 : « je dois scroller ») — le formulaire
+    // d'édition est EN HAUT, la ligne cliquée peut être loin plus bas : sans ça
+    // le stylo semble ne rien faire. `requestAnimationFrame` laisse React peindre
+    // les champs pré-remplis avant qu'on les amène à l'écran. L'appel de la
+    // MÉTHODE est optionnel lui aussi : elle n'existe pas partout (jsdom), et ce
+    // code vit dans un rAF — hors du filet de React, une absence remonterait en
+    // erreur NON GÉRÉE (4 tests voisins pollués avant ce garde-fou).
+    requestAnimationFrame(() => formRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" }));
   };
 
   // Only groups (tags) that ACTUALLY concern a team of the club: the backend
@@ -504,7 +515,7 @@ export function ConstraintsStep() {
       ) : (
         <>
           {/* Per-family add form */}
-          <div className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
+          <div ref={formRef} className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
         {("TIME" === family || "DAY" === family || "FACILITY" === family) && teamPicker}
 
         {"TIME" === family && (
