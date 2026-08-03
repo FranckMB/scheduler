@@ -1,4 +1,11 @@
 services:
+    # P1-4 PR F — integration tests must never hit the real federation: the
+    # FFBB client rides a deterministic stub (one engagement for ARA0000001).
+    App\Tests\Double\FfbbHttpClientStub: ~
+    App\Service\Basketball\FfbbApiClient:
+        arguments:
+            $httpClient: '@App\Tests\Double\FfbbHttpClientStub'
+
     App\AdminJob\AdminJobExecutorInterface:
         alias: App\Tests\Double\RecordingAdminJobExecutor
         public: true

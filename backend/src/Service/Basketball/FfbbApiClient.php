@@ -56,12 +56,64 @@ final class FfbbApiClient
      */
     public function search(string $query, int $limit = 3): array
     {
-        $response = $this->postSearch($query, $limit);
+        return $this->query(['indexUid' => self::INDEX, 'q' => $query, 'limit' => $limit]);
+    }
+
+    /**
+     * The club's engagements (P1-4 PR F). ⚠ Sondé le 2026-08-03 : `codeClub`
+     * n'est PAS filtrable et `idOrganisme` (filtrable) est NULL dans les
+     * données — le filtre Meilisearch est donc inutilisable ici. Repli mesuré :
+     * recherche plein texte sur le code (283 hits) puis filtre STRICT serveur
+     * sur le champ `codeClub` (→ les 14 vrais). Le code est re-validé avant
+     * appel (SSRF/format).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function searchEngagements(string $clubCode): array
+    {
+        if (!self::isValidClubCode($clubCode)) {
+            return [];
+        }
+        $hits = $this->query(['indexUid' => 'ffbbserver_engagements', 'q' => $clubCode, 'limit' => 300]);
+
+        return array_values(array_filter($hits, static fn (array $hit): bool => ($hit['codeClub'] ?? null) === $clubCode));
+    }
+
+    /**
+     * Competitions by CODE + season (P1-4 PR F). `id` n'est pas filtrable
+     * (sondé) mais `code` et `saison.code` le sont — le code (« PRM ») est
+     * national, l'appelant discrimine ensuite par `id` (porté par
+     * l'engagement). Les deux valeurs sont échappées par liste blanche stricte.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function searchCompetitionsByCode(string $competitionCode, string $seasonCode): array
+    {
+        if (1 !== preg_match('/^[A-Z0-9]{1,12}$/', $competitionCode) || 1 !== preg_match('/^\d{2}-\d{2}$/', $seasonCode)) {
+            return [];
+        }
+
+        return $this->query([
+            'indexUid' => 'ffbbserver_competitions',
+            'q' => '',
+            'filter' => \sprintf('code = \'%s\' AND saison.code = \'%s\'', $competitionCode, $seasonCode),
+            'limit' => 50,
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $searchQuery
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function query(array $searchQuery): array
+    {
+        $response = $this->postSearch($searchQuery);
         if (401 === $response->getStatusCode()) {
             // Token rotated (or the env override is stale): drop it and refetch
             // the public token from the config endpoint, then retry once.
             $this->token = null;
-            $response = $this->postSearch($query, $limit);
+            $response = $this->postSearch($searchQuery);
         }
 
         $data = $response->toArray(false);
@@ -70,14 +122,17 @@ final class FfbbApiClient
         return \is_array($hits) ? array_values(array_filter($hits, 'is_array')) : [];
     }
 
-    private function postSearch(string $query, int $limit): ResponseInterface
+    /**
+     * @param array<string, mixed> $searchQuery
+     */
+    private function postSearch(array $searchQuery): ResponseInterface
     {
         return $this->httpClient->request('POST', self::SEARCH_URL, [
             'headers' => [
                 'Authorization' => 'Bearer ' . $this->token(),
                 'Content-Type' => 'application/json',
             ],
-            'json' => ['queries' => [['indexUid' => self::INDEX, 'q' => $query, 'limit' => $limit]]],
+            'json' => ['queries' => [$searchQuery]],
             'timeout' => self::TIMEOUT,
             'max_duration' => self::TIMEOUT,
             'max_redirects' => 0,

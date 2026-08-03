@@ -77,12 +77,31 @@ GET https://api.ffbb.com/assets/{uuid}?format=webp&height=220&fit=contain
 - **Président / correspondant nommé** (personne physique) : absent de l'index. Volontairement **hors scope** lot C (seul le contact institutionnel — mail secrétariat + tél — est exposé).
 - **Les calendriers de rencontres.** Mesuré le 2026-08-02 : l'index `ffbbserver_rencontres` existe, son schéma est complet (36 champs), mais il ne contient que **31 documents de TEST** au niveau national. Les matchs continuent de passer par l'**import FBI**.
 
+## Engagements + compétitions (P1-4 PR F, appariement)
+
+Deux appels de plus, mêmes hosts, même confinement SSRF (`FfbbApiClient`) — **à la demande seulement**
+(geste management), aucun cache global, aucun cron (décision juridique fermée) :
+
+- `searchEngagements(clubCode)` — index `ffbbserver_engagements`. ⚠ **Sondé le 2026-08-03 : le champ
+  `codeClub` n'est PAS filtrable, et `idOrganisme.code` (filtrable) est NULL dans les données** — le
+  filtre Meilisearch est inutilisable. Repli : recherche plein texte du code (283 hits) puis **filtre
+  STRICT serveur sur `codeClub`** (→ les 14 vrais). Jamais la pertinence.
+- `searchCompetitionsByCode(code, saison)` — index `ffbbserver_competitions`. ⚠ `id` n'est pas filtrable ;
+  `code` (« PRM », national — 27 hits) et `saison.code` le sont. L'appelant discrimine ensuite par `id`
+  (porté par `engagement.idCompetition.id`). `poules[].engagements[].nom` = **la liste exacte des clubs
+  d'une poule** (le garde-fou d'import) ; taille de poule → `expectedMatchdays = 2×(N−1)`.
+
+La jointure complète vit dans `FfbbEngagementReader` (filtre saison via `FfbbSeasonCode` — « 26-27 » ↔
+`SeasonResolver::seasonYear` 2026 — et réparation du double encodage UTF-8 des libellés, mesuré :
+`PrÃ© rÃ©gionale`). Consommée par `FfbbEngagementsController` (`GET /api/ffbb/engagements` +
+`POST /api/ffbb/engagements/confirm`, SEC-07 + saison écrivable + socle pointé).
+
+Re-test `ffbbserver_rencontres` du 2026-08-03 : toujours **32 documents de test** (`joue: false`), 0 hit
+pour un code club réel — rien à récupérer, l'import FBI reste le chemin.
+
 ## Ce qui est disponible et NON exploité
 
-Ce fichier décrit ce que le backend **appelle aujourd'hui**. La reconnaissance P2-19 a mesuré ce que la même clé `key_ms` rend **en plus** — cinq autres index Meilisearch, dont `ffbbserver_engagements` (équipes engagées d'un club, avec compétition, poule, niveau et logo).
-
-⚠ Un piège qui ne se devine pas : la recherche plein texte d'un code club rend **beaucoup de faux positifs** — 283 hits pour 14 vrais sur `ARA0069036`. **Filtrer sur le champ `codeClub`, jamais sur la pertinence.**
-
-La **saison** ne figure pas sur l'engagement mais s'obtient en une jointure : `engagement.idCompetition.id` → `ffbbserver_competitions` → `saison.code` (vérifié 14/14 sur BCCL, toutes `26-27`). Le référentiel `competitions` porte aussi `phases[]` et `poules[]` avec les engagements de chaque poule.
+La reconnaissance P2-19 a mesuré ce que la même clé `key_ms` rend **en plus** — les index restants
+(salles, organismes détaillés…) restent non exploités.
 
 → Inventaire complet, route par route, avec les mesures : [`../../specs/evolution/api-ffbb-app-reconnaissance.md`](../../specs/evolution/api-ffbb-app-reconnaissance.md)

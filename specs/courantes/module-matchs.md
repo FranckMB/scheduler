@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle · PR E2 diagnostic gradué)
+Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle · PR E2 diagnostic gradué · PR F1 appariement FFBB)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés
@@ -318,6 +318,29 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   2h15, chevauchements posés côte à côte (une collision de gabarit doit se VOIR). Lecture seule
   (`lib/typicalWeekend.ts` pur + `TypicalWeekendGrid`) — l'édition reste dans « Habitudes &
   passerelles » ; habitudes sans gymnase listées à part.
+
+## Appariement FFBB — P1-4 PR F1 (2026-08-03)
+
+- **La FFBB fait autorité sur le PÉRIMÈTRE** (équipes engagées, poules, adversaires), l'export FBI sur
+  le calendrier. Deux appels Meilisearch de plus (`FfbbApiClient` — mêmes hosts SSRF, à la demande,
+  zéro cache/cron : décision juridique fermée), joints par `FfbbEngagementReader` (saison filtrée par
+  `FfbbSeasonCode`, double encodage réparé à l'entrée). Détail des sondes et des pièges (champ non
+  filtrable, id non filtrable) : `backend/docs/ffbb-api.md`.
+- **Dialog « Engagements FFBB » sur `/matchs`** (`FfbbEngagementsDialog`, fetch à l'ouverture seulement) :
+  chaque engagement (compétition · poule · N clubs · catégorie/niveau/sexe) se rattache à une équipe,
+  **confirmation en bloc**. Aux phases suivantes tout est pré-rempli (réf déjà connue, sinon égalité
+  normalisée stricte du nom canonique) — « on ré-apparie à chaque phase, assumé : 1 clic ». Ligne vide =
+  non rattachée, RIEN modélisé (l'absence de lien EST l'état). Mention obligatoire : « Données de la
+  ligue — un écart se corrige auprès d'elle. »
+- **Le confirm écrit sur la `Competition` de l'équipe** (réutilisée par nom canonique, sinon créée) :
+  `ffbbCompetitionId`/`ffbbPouleId`/`ffbbPouleName`/`ffbbCompetitionName`, **`expectedMatchdays` =
+  2×(N−1) figé à l'appariement**, et **`ffbbPouleOpponents`** (la liste des clubs de la poule, copiée —
+  le garde-fou d'import restera hors-réseau, PR F2). Taille et adversaires viennent d'un **re-fetch
+  serveur** — un client forgé ne peut pas éteindre la complétude. Un engagement = une équipe : ré-apparier
+  ailleurs efface les réfs de l'ancienne ligne (ses fixtures survivent). Champs exposés en LECTURE sur
+  `CompetitionResource`, jamais écrits par le CRUD.
+- **Reste PR F2** : garde-fou poule à l'analyze/import (division fautive refusée NOMMÉE et sautée),
+  complétude au rapport d'import + sévérité 6 du diagnostic, pré-remplissage de l'analyze.
 
 ## Vérifs / gardes
 

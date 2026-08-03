@@ -141,6 +141,26 @@ export function useSwapFixtures() {
   });
 }
 
+// ── FFBB pairing (P1-4 PR F) ─────────────────────────────────────────────────
+
+/** Fetched when the dialog OPENS only — on-demand consumption, never cached long. */
+export function useFfbbEngagements(enabled: boolean) {
+  return useQuery({ queryKey: ["ffbb", "engagements"], queryFn: matchesApi.getFfbbEngagements, enabled, staleTime: 0, gcTime: 0, retry: false });
+}
+
+export function useConfirmFfbbPairings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (pairings: { ffbbCompetitionId: string; teamId: string }[]) => matchesApi.confirmFfbbPairings(pairings),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["competitions"] });
+      void queryClient.invalidateQueries({ queryKey: ["ffbb", "engagements"] });
+      toast.success("Appariements enregistrés");
+    },
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
+  });
+}
+
 // ── Capacity layer (P1-4 PR B) ───────────────────────────────────────────────
 
 /** Match access windows of the club's venues — consumed by the placement panel,

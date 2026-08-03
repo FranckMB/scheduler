@@ -66,6 +66,36 @@ class Competition implements TenantOwnedInterface
     #[ORM\Column(type: 'date_immutable', nullable: true)]
     private ?DateTimeImmutable $endDate = null;
 
+    // ── FFBB pairing refs (P1-4 PR F, appariement §3) — written ONLY by the
+    // pairing confirm endpoint (never by the CRUD), re-paired at each phase. ──
+
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $ffbbCompetitionId = null;
+
+    #[ORM\Column(length: 64, nullable: true)]
+    private ?string $ffbbPouleId = null;
+
+    #[ORM\Column(length: 120, nullable: true)]
+    private ?string $ffbbPouleName = null;
+
+    /** Canonical FFBB competition name (« Pré régionale masculine ») — the pre-fill key across phases. */
+    #[ORM\Column(length: 180, nullable: true)]
+    private ?string $ffbbCompetitionName = null;
+
+    /** 2×(N−1) for a poule of N clubs — frozen at pairing time (never re-fetched at read). */
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $expectedMatchdays = null;
+
+    /**
+     * The poule's club names, copied at pairing time — the import poule guard's
+     * offline data (tenant-scoped snapshot born from this club's own on-demand
+     * consultation; NOT the forbidden global directory).
+     *
+     * @var list<string>|null
+     */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $ffbbPouleOpponents = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -213,6 +243,80 @@ class Competition implements TenantOwnedInterface
     public function setEndDate(?DateTimeImmutable $endDate): self
     {
         $this->endDate = $endDate;
+
+        return $this;
+    }
+
+    public function getFfbbCompetitionId(): ?string
+    {
+        return $this->ffbbCompetitionId;
+    }
+
+    public function setFfbbCompetitionId(?string $ffbbCompetitionId): self
+    {
+        $this->ffbbCompetitionId = $ffbbCompetitionId;
+
+        return $this;
+    }
+
+    public function getFfbbPouleId(): ?string
+    {
+        return $this->ffbbPouleId;
+    }
+
+    public function setFfbbPouleId(?string $ffbbPouleId): self
+    {
+        $this->ffbbPouleId = $ffbbPouleId;
+
+        return $this;
+    }
+
+    public function getFfbbPouleName(): ?string
+    {
+        return $this->ffbbPouleName;
+    }
+
+    public function setFfbbPouleName(?string $ffbbPouleName): self
+    {
+        $this->ffbbPouleName = $ffbbPouleName;
+
+        return $this;
+    }
+
+    public function getFfbbCompetitionName(): ?string
+    {
+        return $this->ffbbCompetitionName;
+    }
+
+    public function setFfbbCompetitionName(?string $ffbbCompetitionName): self
+    {
+        $this->ffbbCompetitionName = $ffbbCompetitionName;
+
+        return $this;
+    }
+
+    public function getExpectedMatchdays(): ?int
+    {
+        return $this->expectedMatchdays;
+    }
+
+    public function setExpectedMatchdays(?int $expectedMatchdays): self
+    {
+        $this->expectedMatchdays = $expectedMatchdays;
+
+        return $this;
+    }
+
+    /** @return list<string>|null */
+    public function getFfbbPouleOpponents(): ?array
+    {
+        return $this->ffbbPouleOpponents;
+    }
+
+    /** @param list<string>|null $ffbbPouleOpponents */
+    public function setFfbbPouleOpponents(?array $ffbbPouleOpponents): self
+    {
+        $this->ffbbPouleOpponents = $ffbbPouleOpponents;
 
         return $this;
     }

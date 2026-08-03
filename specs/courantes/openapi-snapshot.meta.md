@@ -4,6 +4,12 @@ Snapshot régénéré depuis le backend vivant le 2026-08-03 : `php bin/console 
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P1-4 PR F1 (2026-08-03)** : appariement FFBB — +`GET /api/ffbb/engagements` et
+  +`POST /api/ffbb/engagements/confirm` (routes contrôleur, **déclarées dans
+  `CustomRoutesOpenApiFactory`** — 103 → 105 paths) ; `Competition` expose les réfs FFBB en lecture
+  (`ffbbCompetitionId`/`ffbbPouleId`/`ffbbPouleName`/`ffbbCompetitionName`/`expectedMatchdays` —
+  écrites par le seul confirm, jamais par le CRUD). Détail :
+  [`module-matchs.md`](module-matchs.md) §Appariement FFBB.
 - **P1-4 PR E2 (2026-08-03)** : regen vérifiée, **JSON inchangé** (103 paths) — les deux routes
   qui évoluent sont des contrôleurs custom dont l'export ne porte pas le schéma de réponse :
   `GET /api/fixtures/conflicts` gagne `severity`/`coachRole` + 4 types de findings,
