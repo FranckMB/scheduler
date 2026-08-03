@@ -558,6 +558,85 @@ final class FbiFixtureImporterTest extends KernelTestCase
         $this->importer->analyze($this->write($spreadsheet), $this->club);
     }
 
+    public function testAWrongMappingRefusedByTheGuardIsNotPersisted(): void
+    {
+        // Revue F2 round 1 : le garde-fou PRÉCÈDE l'écriture — un mapping dont
+        // la division est refusée ne colle pas (le dialog n'a pas de re-mapping).
+        $paired = $this->pairedCompetition('RM2', ['AS VOISINS'], 14, canonicalName: 'Pré régionale masculine');
+        $file = $this->xlsx([
+            ['PRE REGIONALE MASCULINE', 'X1', 'BC TESTVILLE - 1', 'US INCONNU', '03/10/2026', '', ''],
+        ]);
+
+        $result = $this->importer->import($file, $this->club, [
+            ['division' => 'PRE REGIONALE MASCULINE', 'fbiTeamLabel' => null, 'teamId' => $this->team->getId(), 'competitionId' => $paired->getId()],
+        ]);
+
+        self::assertSame(0, $result['created']);
+        self::assertCount(1, array_filter($result['errors'], static fn (string $e): bool => str_contains($e, 'hors de la poule')));
+        self::assertSame([], $result['unmappedDivisions'], 'une division refusée n\'est pas re-signalée « à mapper »');
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Competition::class)->findOneBy(['id' => $paired->getId()]);
+        self::assertSame('RM2', $reloaded?->getName(), 'le mapping refusé n\'a pas renommé la compétition appariée');
+        self::assertCount(1, $this->em->getRepository(Competition::class)->findBy(['teamId' => $this->team->getId()]), 'et n\'a rien créé');
+    }
+
+    public function testAcceptedSuggestionReusesThePairedCompetition(): void
+    {
+        // Revue F2 round 1 : la suggestion voyage AVEC son competitionId — la
+        // compétition appariée est RÉUTILISÉE (renommée vers le libellé FBI,
+        // réfs/attendus/poule conservés), jamais dupliquée.
+        $paired = $this->pairedCompetition('RM2', ['AS VOISINS'], 14, canonicalName: 'Pré régionale masculine');
+        $file = $this->xlsx([
+            ['PRE REGIONALE MASCULINE', 'X1', 'BC TESTVILLE - 1', 'AS VOISINS', '03/10/2026', '', ''],
+        ]);
+
+        $result = $this->importer->import($file, $this->club, [
+            ['division' => 'PRE REGIONALE MASCULINE', 'fbiTeamLabel' => null, 'teamId' => $this->team->getId(), 'competitionId' => $paired->getId()],
+        ]);
+
+        self::assertSame(1, $result['created']);
+        $competitions = $this->em->getRepository(Competition::class)->findBy(['teamId' => $this->team->getId()]);
+        self::assertCount(1, $competitions, 'pas de doublon non apparié');
+        self::assertSame('PRE REGIONALE MASCULINE', $competitions[0]->getName(), 'le libellé FBI devient la clé du résolveur');
+        self::assertSame('Pré régionale masculine', $competitions[0]->getFfbbCompetitionName(), 'le nom canonique reste');
+        self::assertSame(14, $competitions[0]->getExpectedMatchdays(), 'l\'appariement est conservé');
+        self::assertSame($competitions[0]->getId(), $this->em->getRepository(Fixture::class)->findOneBy(['externalRef' => 'X1'])?->getCompetitionId());
+    }
+
+    public function testTwoMappingsToTheSameTeamAndDivisionInOneBatchCreateOneCompetition(): void
+    {
+        // Revue F2 round 1 : le dedupe DB ne voit pas les frères non flushés —
+        // garde en mémoire dans le lot.
+        $file = $this->xlsx([
+            ['D2', 'A1', 'BC TESTVILLE - 1', 'AS X', '03/10/2026', '', ''],
+            ['D2', 'A2', 'BC TESTVILLE - 2', 'AS Y', '03/10/2026', '', ''],
+        ]);
+
+        $this->importer->import($file, $this->club, [
+            ['division' => 'D2', 'fbiTeamLabel' => 'BC TESTVILLE - 1', 'teamId' => $this->team->getId()],
+            ['division' => 'D2', 'fbiTeamLabel' => 'BC TESTVILLE - 2', 'teamId' => $this->team->getId()],
+        ]);
+
+        self::assertCount(1, $this->em->getRepository(Competition::class)->findBy(['teamId' => $this->team->getId(), 'name' => 'D2']));
+    }
+
+    public function testNoSuggestionForAMultiLabelDivision(): void
+    {
+        // Revue F2 round 1 : le nom canonique ne sait pas dire LAQUELLE des deux
+        // équipes du club — aucune suggestion aveugle.
+        $this->pairedCompetition('RM2', ['AS VOISINS'], 14, canonicalName: 'D2');
+        $file = $this->xlsx([
+            ['D2', 'A1', 'BC TESTVILLE - 1', 'AS X', '03/10/2026', '', ''],
+            ['D2', 'A2', 'BC TESTVILLE - 2', 'AS Y', '03/10/2026', '', ''],
+        ]);
+
+        $analysis = $this->importer->analyze($file, $this->club);
+
+        foreach ($analysis['divisions'] as $division) {
+            self::assertNull($division['suggestedTeamId']);
+        }
+    }
+
     // ── Setup & helpers ────────────────────────────────────────────────────
 
     protected function setUp(): void

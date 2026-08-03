@@ -88,6 +88,7 @@ final class ImportFixturesController extends AbstractController
             'errors' => $result['errors'],
             'warnings' => $result['warnings'],
             'unmappedDivisions' => $result['unmappedDivisions'],
+            'completeness' => $result['completeness'],
         ], Response::HTTP_OK);
     }
 
@@ -96,7 +97,7 @@ final class ImportFixturesController extends AbstractController
      * {division, fbiTeamLabel|null, teamId}. Absent = no new mapping (rows
      * only resolve through the already-persisted ones).
      *
-     * @return list<array{division: string, fbiTeamLabel: string|null, teamId: string}>|JsonResponse
+     * @return list<array{division: string, fbiTeamLabel: string|null, teamId: string, competitionId: string|null}>|JsonResponse
      */
     private function parseMappings(Request $request): array|JsonResponse
     {
@@ -115,19 +116,24 @@ final class ImportFixturesController extends AbstractController
 
         $mappings = [];
         foreach ($decoded as $entry) {
+            $uuid = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
             if (!\is_array($entry)
                 || !\is_string($entry['division'] ?? null) || '' === trim($entry['division'])
                 || !\is_string($entry['teamId'] ?? null)
-                || 1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $entry['teamId'])
+                || 1 !== preg_match($uuid, $entry['teamId'])
                 || (null !== ($entry['fbiTeamLabel'] ?? null) && !\is_string($entry['fbiTeamLabel']))
+                || (null !== ($entry['competitionId'] ?? null) && (!\is_string($entry['competitionId']) || 1 !== preg_match($uuid, $entry['competitionId'])))
             ) {
-                return $this->json(['error' => 'Champ « mappings » invalide (entrées {division, teamId, fbiTeamLabel?} attendues).'], Response::HTTP_BAD_REQUEST);
+                return $this->json(['error' => 'Champ « mappings » invalide (entrées {division, teamId, fbiTeamLabel?, competitionId?} attendues).'], Response::HTTP_BAD_REQUEST);
             }
             $label = $entry['fbiTeamLabel'] ?? null;
             $mappings[] = [
                 'division' => $entry['division'],
                 'fbiTeamLabel' => \is_string($label) && '' !== trim($label) ? $label : null,
                 'teamId' => $entry['teamId'],
+                // P1-4 PR F2 — a FFBB suggestion travels WITH its competition so
+                // the pairing (refs, expectation, poule) is REUSED, not duplicated.
+                'competitionId' => \is_string($entry['competitionId'] ?? null) ? $entry['competitionId'] : null,
             ];
         }
 

@@ -436,6 +436,9 @@ export interface FbiMapping {
   division: string;
   fbiTeamLabel: string | null;
   teamId: string;
+  /** Rides along when the FFBB suggestion is accepted untouched: the pairing
+   * (refs, expectation, poule) is REUSED server-side, never duplicated. */
+  competitionId?: string | null;
 }
 
 /** Dry-run: parse the club-wide FBI export and return its mapping table. */

@@ -35,6 +35,12 @@ export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps)
 
   const teamName = (id: string | null): string => teams.find((t) => t.id === id)?.name ?? "?";
 
+  // A suggestion is usable ONLY when its team is offerable by the select —
+  // otherwise the select would render blank while the submit sent an invisible
+  // value (« what the select displays is what gets imported »).
+  const usableSuggestion = (d: { suggestedTeamId: string | null }): string | null =>
+    null !== d.suggestedTeamId && teams.some((t) => t.id === d.suggestedTeamId) ? d.suggestedTeamId : null;
+
   const onFileChange = (next: File | null): void => {
     setFile(next);
     setAnalysis(null);
@@ -51,12 +57,19 @@ export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps)
     }
     // Only the NEW choices ride along — already-resolved divisions are persisted.
     // A FFBB suggestion left untouched IS the choice shown on screen (F2, 6.3):
-    // what the select displays is what gets imported.
+    // what the select displays is what gets imported. When the suggestion is
+    // kept, its competitionId rides along so the PAIRED competition is reused
+    // server-side (refs, expectation, poule) instead of duplicated.
     const mappings = analysis.divisions
       .filter((d) => null === d.teamId)
       .flatMap((d) => {
-        const teamId = choices[divisionKey(d)] ?? d.suggestedTeamId ?? "";
-        return "" === teamId ? [] : [{ division: d.name, fbiTeamLabel: d.fbiTeamLabel, teamId }];
+        const suggestion = usableSuggestion(d);
+        const teamId = choices[divisionKey(d)] ?? suggestion ?? "";
+        if ("" === teamId) {
+          return [];
+        }
+        const competitionId = teamId === suggestion ? d.suggestedCompetitionId : null;
+        return [{ division: d.name, fbiTeamLabel: d.fbiTeamLabel, teamId, competitionId }];
       });
     importFbi.mutate({ file, mappings }, { onSuccess: setReport });
   };
@@ -111,10 +124,10 @@ export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps)
                         teams={teams}
                         tiers={tiers}
                         placeholder="Associer à…"
-                        value={choices[divisionKey(division)] ?? division.suggestedTeamId ?? ""}
+                        value={choices[divisionKey(division)] ?? usableSuggestion(division) ?? ""}
                         onChange={(e) => setChoices((prev) => ({ ...prev, [divisionKey(division)]: e.target.value }))}
                       />
-                      {null !== division.suggestedTeamId && undefined === choices[divisionKey(division)] ? (
+                      {null !== usableSuggestion(division) && undefined === choices[divisionKey(division)] ? (
                         <span className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide text-muted-foreground">proposé par la FFBB</span>
                       ) : null}
                     </span>

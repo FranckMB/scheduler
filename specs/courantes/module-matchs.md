@@ -351,8 +351,19 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   (`COMPETITION_INCOMPLETE`, groupe « Calendriers incomplets » replié) — seules les compétitions à
   `expectedMatchdays` sont jugées.
 - **Pré-remplissage de l'analyze (PR F2, 6.3)** : division NON mappée dont le libellé égale (normalisé)
-  le **nom canonique FFBB** d'une compétition appariée → `suggestedTeamId` (badge « proposé par la
-  FFBB ») — une suggestion, jamais une résolution ; ce que le sélecteur AFFICHE est ce qui s'importe.
+  le **nom canonique FFBB** d'une compétition appariée → `suggestedTeamId` + `suggestedCompetitionId`
+  (badge « proposé par la FFBB ») — une suggestion, jamais une résolution ; **jamais pour une division
+  multi-labels** (le canonique ne sait pas dire laquelle des deux équipes — même refus que le
+  résolveur) ; deux canoniques normalisés identiques = ambigu = aucune suggestion. Ce que le sélecteur
+  AFFICHE est ce qui s'importe — une suggestion dont l'équipe n'est plus offrable n'est ni affichée ni
+  envoyée. **La suggestion acceptée voyage AVEC son `competitionId`** : la compétition appariée est
+  RÉUTILISÉE (renommée vers le libellé FBI — la clé du résolveur —, canonique/réfs/attendus/poule
+  conservés), jamais dupliquée.
+- **Le garde-fou précède l'écriture** (revue F2 round 1) : un mapping dont la division est refusée par
+  le garde-fou poule n'est PAS persisté (erreur nommée, division ni importée ni re-signalée « à
+  mapper ») — le dialog n'a pas de geste de re-mapping, une écriture fautive collerait. Deux mappings
+  (équipe, division) identiques dans un même lot = une seule `Competition` (dedupe en mémoire, le
+  lookup DB ne voit pas les frères non flushés).
 
 ## Vérifs / gardes
 

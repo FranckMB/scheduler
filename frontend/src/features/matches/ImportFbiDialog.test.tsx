@@ -87,7 +87,7 @@ describe("ImportFbiDialog", () => {
 
     expect(importFbiFixtures).toHaveBeenCalledOnce();
     // Only DF2 rides along — PNM is already persisted server-side.
-    expect(importFbiFixtures).toHaveBeenCalledWith(expect.any(File), [{ division: "DF2", fbiTeamLabel: null, teamId: "team-2" }]);
+    expect(importFbiFixtures).toHaveBeenCalledWith(expect.any(File), [{ division: "DF2", fbiTeamLabel: null, teamId: "team-2", competitionId: null }]);
 
     // The dialog stays open and surfaces the diff report + warnings + errors.
     await waitFor(() => expect(screen.getByText(/22 créés · 1 mis à jour · 9 inchangés/)).toBeInTheDocument());
@@ -113,9 +113,33 @@ describe("ImportFbiDialog", () => {
     await waitFor(() => expect(screen.getByLabelText("Équipe pour DF2")).toHaveValue("team-2"));
     expect(screen.getByText("proposé par la FFBB")).toBeInTheDocument();
 
-    // What the select DISPLAYS is what gets imported — untouched suggestion included.
+    // What the select DISPLAYS is what gets imported — untouched suggestion
+    // included, and its competitionId rides along (pairing reused server-side).
     await user.click(screen.getByRole("button", { name: "Importer" }));
-    expect(importFbiFixtures).toHaveBeenCalledWith(expect.any(File), [{ division: "DF2", fbiTeamLabel: null, teamId: "team-2" }]);
+    expect(importFbiFixtures).toHaveBeenCalledWith(expect.any(File), [{ division: "DF2", fbiTeamLabel: null, teamId: "team-2", competitionId: "comp-9" }]);
+  });
+
+  it("ignores a suggestion whose team is not offerable — nothing invisible is ever sent", async () => {
+    const user = userEvent.setup();
+    analyzeFbiFixtures.mockResolvedValueOnce({
+      divisions: [
+        // The suggested team was deleted since the pairing: the select cannot
+        // display it, so the submit must not send it either.
+        { name: "DF2", fbiTeamLabel: null, rowCount: 22, teamId: null, competitionId: null, suggestedTeamId: "team-gone", suggestedCompetitionId: "comp-9", pouleError: null, pouleUnknownOpponents: [] },
+      ],
+      totalRows: 22,
+      exempted: 0,
+      errors: [],
+    });
+    renderWithProviders(<ImportFbiDialog teams={teams} tiers={tiers} onClose={vi.fn()} />);
+
+    await pickFile(user);
+    await waitFor(() => expect(screen.getByLabelText("Équipe pour DF2")).toBeInTheDocument());
+    expect(screen.getByLabelText("Équipe pour DF2")).toHaveValue("");
+    expect(screen.queryByText("proposé par la FFBB")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Importer" }));
+    expect(importFbiFixtures).toHaveBeenCalledWith(expect.any(File), []);
   });
 
   it("shows the blocking poule error and the minor drift on the analyze table", async () => {
