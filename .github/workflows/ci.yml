@@ -437,6 +437,22 @@ jobs:
         working-directory: frontend
         run: E2E_BASE_URL=http://localhost:5173 npx playwright test
 
+      # Semantic smoke tests on the SAME booted stack (demande fondateur
+      # 2026-08-03 : « les smokes doivent être joués automatiquement et par la
+      # CI »). Each is self-sufficient (mints its JWT, creates/cleans its data,
+      # sets/restores the season-plan pointer). Order matters: the solver smoke
+      # leaves the COMPLETED season schedule the others may pin.
+      - name: Smoke — onboarding (register → minimum → COMPLETED)
+        run: backend/scripts/onboarding-smoke.sh
+      - name: Smoke — season solver (async rail → COMPLETED)
+        run: backend/scripts/smoke-solver.sh
+      - name: Smoke — match placement (sync rail, window honoured, named impossibility)
+        run: backend/scripts/smoke-place-matches.sh
+      - name: Smoke — period overlay (cockpit rail → COMPLETED)
+        run: backend/scripts/smoke-overlay.sh
+      - name: Smoke — coach wishes (campaign → public token → persisted wish)
+        run: backend/scripts/smoke-coach-wishes.sh
+
       - name: Upload traces on failure
         if: failure()
         uses: actions/upload-artifact@v7
