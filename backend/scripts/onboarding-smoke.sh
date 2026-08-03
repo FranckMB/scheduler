@@ -17,6 +17,11 @@ EMAIL="onb-$ARA@smoke.fr"
 # A3: register defers everything to email verification — it returns a neutral 202
 # (no token, no club yet). The club + JWT are materialised only by /register/verify,
 # whose raw token arrives by email → pulled back out of Mailpit here.
+# Async generation needs a CONSUMING worker: a queued message nobody consumes
+# leaves the schedule PENDING forever (the smoke then times out on a healthy
+# solver). Same guarantee as smoke-solver.sh — every smoke stands alone.
+docker compose -f "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/docker-compose.yml" up -d messenger-worker >/dev/null 2>&1 || true
+
 info "register new club $ARA (deferred verification)"
 CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/register" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$EMAIL\",\"password\":\"Password123!\",\"firstName\":\"On\",\"lastName\":\"Board\",\"ara\":\"$ARA\",\"club_name\":\"Onb $ARA\",\"consent\":true}")

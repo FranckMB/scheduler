@@ -54,6 +54,34 @@ fi
 [[ -n "$CLUB_ID" ]] || die "could not resolve a club id (fixtures failed?)"
 ok "club id: $CLUB_ID"
 
+# 3bis. A club whose SEASON plan POINTS a version refuses a new one (409, ADR-0002
+# inv. 1: « rouvrez-le avant d'en préparer un autre »). That is the normal state
+# after anything validated the socle — the Playwright suite does it in CI, a
+# founder does it in dev. The smoke re-opens for the duration and RESTORES the
+# pointer on exit: it must never depend on what ran before it, nor leave the club
+# in another state than it found it.
+psql_dev() { dc exec -T postgres psql -U clubscheduler -d clubscheduler -tA -c "$1"; }
+RESTORE_CHOSEN=$(psql_dev "SELECT chosen_schedule_id FROM schedule_plan WHERE club_id='$CLUB_ID' AND type='SEASON' LIMIT 1" | tr -d '[:space:]')
+if [[ -n "$RESTORE_CHOSEN" ]]; then
+  info "season plan in force — re-opening for the smoke (restored on exit)"
+  psql_dev "UPDATE schedule_plan SET chosen_schedule_id=NULL WHERE club_id='$CLUB_ID' AND type='SEASON'" >/dev/null
+fi
+restore_pointer() {
+  [[ -n "$RESTORE_CHOSEN" ]] || return 0
+  # Only re-point a version that still EXISTS: the run may have replaced it, and
+  # pointing a deleted id would fail on the FK and leave the club re-opened —
+  # a state the caller never asked for. Fall back on the freshest COMPLETED
+  # version of the season plan: what matters to the next smoke is « socle in
+  # force », not which exact version carries it.
+  local target
+  target=$(psql_dev "SELECT id FROM schedule WHERE id='$RESTORE_CHOSEN'" | tr -d '[:space:]')
+  if [[ -z "$target" ]]; then
+    target=$(psql_dev "SELECT s.id FROM schedule s JOIN schedule_plan p ON p.id=s.schedule_plan_id WHERE s.club_id='$CLUB_ID' AND p.type='SEASON' AND s.status='COMPLETED' ORDER BY s.created_at DESC LIMIT 1" | tr -d '[:space:]')
+  fi
+  [[ -n "$target" ]] && psql_dev "UPDATE schedule_plan SET chosen_schedule_id='$target' WHERE club_id='$CLUB_ID' AND type='SEASON'" >/dev/null || true
+}
+trap restore_pointer EXIT
+
 # 4. messenger-worker up and consuming (async generation)
 dc up -d messenger-worker >/dev/null 2>&1 || true
 dc restart messenger-worker >/dev/null 2>&1 || true # fresh consumer — avoids stuck-queue flakiness
