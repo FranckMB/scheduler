@@ -39,6 +39,9 @@ vi.mock("./api", () => ({
   // Capacity layer (P1-4 PR B) — empty: no window declared, nothing blocks.
   getVenueMatchWindows: vi.fn(() => Promise.resolve([])),
   getVenueUnavailabilities: vi.fn(() => Promise.resolve([])),
+  // Preferences layer (P1-4 PR C) — empty: no habit, no link.
+  getTeamMatchHabits: vi.fn(() => Promise.resolve([])),
+  getTeamLinks: vi.fn(() => Promise.resolve([])),
   getConflicts: vi.fn(() =>
     Promise.resolve({
       clubId: "c",

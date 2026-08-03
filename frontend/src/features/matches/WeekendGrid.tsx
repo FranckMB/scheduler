@@ -80,10 +80,16 @@ export function WeekendGrid({ model }: WeekendGridProps) {
         {cells.map((cell) => (
           <div
             key={cell.key}
-            title={`${cell.teamLabel} vs ${cell.opponentLabel} · ${cell.venueLabel} · ${cell.footprintLabel}`}
+            title={
+              cell.ghost
+                ? `Habitude ${cell.teamLabel} · ${cell.venueLabel} · ${cell.footprintLabel} — fenêtre protégée (calendrier pas encore connu)`
+                : `${cell.teamLabel} vs ${cell.opponentLabel} · ${cell.venueLabel} · ${cell.footprintLabel}`
+            }
             className={cn(
               "z-10 m-px flex flex-col items-start overflow-hidden rounded border-l-4 px-1 py-0.5 text-left leading-tight",
               cell.outOfEnvelope ? "ring-1 ring-warning" : "",
+              // P1-4 PR C — habit ghost: translucent + dashed, visibly NOT a match.
+              cell.ghost ? "border border-dashed border-border opacity-60" : "",
             )}
             style={{
               gridColumn: cell.gridColumn,
@@ -92,15 +98,15 @@ export function WeekendGrid({ model }: WeekendGridProps) {
               width: `${100 / cell.laneCount}%`,
               transform: `translateX(${cell.lane * 100}%)`,
               borderLeftColor: cell.venueColor ?? "var(--accent)",
-              backgroundColor: tint(cell.venueColor) ?? "var(--muted)",
+              backgroundColor: cell.ghost ? "transparent" : (tint(cell.venueColor) ?? "var(--muted)"),
             }}
           >
             <span className="flex w-full items-center gap-1 font-medium">
-              <span className="truncate">{cell.teamLabel}</span>
+              <span className="truncate">{cell.ghost ? `Habitude ${cell.teamLabel}` : cell.teamLabel}</span>
               {cell.outOfEnvelope ? <AlertTriangle className="ml-auto size-3 shrink-0 text-warning" /> : null}
             </span>
             <span className="truncate text-[10px] text-muted-foreground">
-              {cell.kickoffLabel} · {cell.opponentLabel}
+              {cell.ghost ? `${cell.kickoffLabel} · fenêtre protégée` : `${cell.kickoffLabel} · ${cell.opponentLabel}`}
             </span>
           </div>
         ))}

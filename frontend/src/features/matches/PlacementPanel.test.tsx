@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Fixture, Venue, VenueMatchWindow, VenueUnavailability } from "./api";
+import type { Fixture, TeamMatchHabit, Venue, VenueMatchWindow, VenueUnavailability } from "./api";
 import type { EnvelopeResult } from "./lib/envelope";
 import { PlacementPanel } from "./PlacementPanel";
 
@@ -37,6 +37,7 @@ const openEnvelope: EnvelopeResult = { mapped: false, windows: [], dayOk: false,
 interface Overrides {
   matchWindows?: VenueMatchWindow[];
   unavailabilities?: VenueUnavailability[];
+  habits?: TeamMatchHabit[];
 }
 
 function renderPanel(envelope: EnvelopeResult, onPlace = vi.fn(), overrides: Overrides = {}) {
@@ -46,6 +47,7 @@ function renderPanel(envelope: EnvelopeResult, onPlace = vi.fn(), overrides: Ove
       venues={venues}
       matchWindows={overrides.matchWindows ?? []}
       unavailabilities={overrides.unavailabilities ?? []}
+      habits={overrides.habits ?? []}
       teamLabel="U13"
       categoryLabel="U13"
       envelope={envelope}
@@ -124,6 +126,21 @@ describe("PlacementPanel", () => {
     await user.type(screen.getByLabelText("Heure de coup d'envoi"), "14:00");
     expect(screen.getByText(/Pas d'accès match le samedi/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Placer" })).toBeDisabled();
+  });
+
+  it("prefills venue and kickoff from the team's habit of that weekday — guards stay sovereign", async () => {
+    // Saturday habit 15:30 at venue-2: both fields prefilled, hint shown.
+    const user = userEvent.setup();
+    const onPlace = renderPanel(openEnvelope, vi.fn(), {
+      habits: [{ id: "h1", teamId: "team-1", dayOfWeek: 6, kickoffTime: "15:30", venueId: "venue-2" }],
+    });
+
+    expect(screen.getByText(/Habitude : 15:30 · Gymnase Beta/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Gymnase")).toHaveValue("venue-2");
+    expect(screen.getByLabelText("Heure de coup d'envoi")).toHaveValue("15:30");
+
+    await user.click(screen.getByRole("button", { name: "Placer" }));
+    expect(onPlace).toHaveBeenCalledWith({ venueId: "venue-2", kickoffTime: "15:30" });
   });
 
   it("blocks an unavailable venue and keeps the full list when no window exists", async () => {

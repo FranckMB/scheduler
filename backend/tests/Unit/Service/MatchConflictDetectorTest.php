@@ -7,9 +7,12 @@ namespace App\Tests\Unit\Service;
 use App\Entity\Fixture;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\TeamCoach;
+use App\Entity\TeamLink;
+use App\Entity\TeamMatchHabit;
 use App\Entity\VenueUnavailability;
 use App\Enum\FixtureHomeAway;
 use App\Enum\TeamCoachRole;
+use App\Enum\TeamLinkType;
 use App\Service\EffectiveScheduleResolver;
 use App\Service\MatchConflictDetector;
 use App\Service\MatchFootprint;
@@ -251,6 +254,150 @@ final class MatchConflictDetectorTest extends TestCase
         self::assertSame('fx-1', $conflicts[0]['fixture']['fixtureId']);
     }
 
+    // ── Estimation d'heure extérieure + passerelles (P1-4 PR C) ─────────────
+
+    public function testAwayWithoutKickoffBorrowsTheHabitOfItsWeekday(): void
+    {
+        // 2026-10-04 is a Sunday; SF3's habit = Sunday 17:30. The away match
+        // gains an estimated footprint (17:00→20:00 + away extras) and the
+        // coach's 18:00 training conflict becomes VISIBLE, flagged estimated.
+        $away = $this->awayFixture('fx-1', self::TEAM_1, '2026-10-04', null);
+        $links = [$this->link(self::COACH_A, self::TEAM_1)];
+        $slots = [$this->slot('sl-1', self::BASELINE, self::TEAM_1, 7, '18:00', 90, self::COACH_A)];
+
+        $conflicts = $this->detect(
+            [$away],
+            $links,
+            self::BASELINE,
+            [],
+            [self::BASELINE => $slots],
+            [],
+            [$this->habit(self::TEAM_1, 7, '17:30')],
+        );
+
+        self::assertCount(1, $conflicts);
+        self::assertSame('MATCH_TRAINING', $conflicts[0]['type']);
+        self::assertTrue($conflicts[0]['fixture']['estimatedKickoff']);
+        self::assertNull($conflicts[0]['fixture']['kickoffTime']); // nothing persisted
+    }
+
+    public function testAwayWithoutHabitOnThatWeekdayStaysInvisible(): void
+    {
+        // NR of the PR-2 contract: no habit on the match's weekday → no
+        // estimation, no footprint, no conflict (blind spot told in PR E).
+        $away = $this->awayFixture('fx-1', self::TEAM_1, '2026-10-04', null); // Sunday
+        $links = [$this->link(self::COACH_A, self::TEAM_1)];
+        $slots = [$this->slot('sl-1', self::BASELINE, self::TEAM_1, 7, '18:00', 90, self::COACH_A)];
+
+        $conflicts = $this->detect(
+            [$away],
+            $links,
+            self::BASELINE,
+            [],
+            [self::BASELINE => $slots],
+            [],
+            [$this->habit(self::TEAM_1, 6, '15:30')], // Saturday habit only
+        );
+
+        self::assertSame([], $conflicts);
+    }
+
+    public function testARealKickoffIsNeverOverriddenByAHabit(): void
+    {
+        // The away match HAS a real hour (20:30, clear of the training) — the
+        // 17:30 habit must not fabricate a phantom conflict.
+        $away = $this->awayFixture('fx-1', self::TEAM_1, '2026-10-04', '20:30');
+        $links = [$this->link(self::COACH_A, self::TEAM_1)];
+        $slots = [$this->slot('sl-1', self::BASELINE, self::TEAM_1, 7, '14:00', 90, self::COACH_A)];
+
+        $conflicts = $this->detect(
+            [$away],
+            $links,
+            self::BASELINE,
+            [],
+            [self::BASELINE => $slots],
+            [],
+            [$this->habit(self::TEAM_1, 7, '17:30')],
+        );
+
+        self::assertSame([], $conflicts);
+    }
+
+    public function testLinkedTeamsOverlappingRaiseTeamLinkOverlapEvenWithoutCoaches(): void
+    {
+        // SM1 home 20:30 and SM2 home 21:00 the same evening, NO coach rows —
+        // the declared bridge alone raises the finding (players are shared).
+        $left = $this->fixture('fx-1', self::TEAM_1, '2026-10-03', '20:30');
+        $right = $this->fixture('fx-2', 'team-2', '2026-10-03', '21:00');
+
+        $conflicts = $this->detect(
+            [$left, $right],
+            [],
+            null,
+            [],
+            [],
+            [],
+            [],
+            [$this->teamLink(self::TEAM_1, 'team-2', TeamLinkType::NOT_SIMULTANEOUS)],
+        );
+
+        self::assertCount(1, $conflicts);
+        self::assertSame('TEAM_LINK_OVERLAP', $conflicts[0]['type']);
+        self::assertSame('fx-1', $conflicts[0]['left']['fixtureId']);
+        self::assertSame('fx-2', $conflicts[0]['right']['fixtureId']);
+    }
+
+    public function testBackToBackLinkRaisesNothingAndBackToBackFixturesDoNotOverlap(): void
+    {
+        // BACK_TO_BACK is a PR D preference, never a finding; and two chained
+        // matches (end == start) don't overlap (half-open) even when linked
+        // NOT_SIMULTANEOUS.
+        $first = $this->fixture('fx-1', self::TEAM_1, '2026-10-03', '18:00'); // window 17:30→19:45
+        $chained = $this->fixture('fx-2', 'team-2', '2026-10-03', '20:15'); // window 19:45→22:00
+
+        $viaBackToBack = $this->detect([$first, $chained], [], null, [], [], [], [], [
+            $this->teamLink(self::TEAM_1, 'team-2', TeamLinkType::BACK_TO_BACK),
+        ]);
+        self::assertSame([], $viaBackToBack);
+
+        $viaNotSimultaneous = $this->detect([$first, $chained], [], null, [], [], [], [], [
+            $this->teamLink(self::TEAM_1, 'team-2', TeamLinkType::NOT_SIMULTANEOUS),
+        ]);
+        self::assertSame([], $viaNotSimultaneous);
+    }
+
+    private function habit(string $teamId, int $dayOfWeek, string $kickoff): TeamMatchHabit
+    {
+        $habit = new TeamMatchHabit;
+        $habit->setClubId('club');
+        $habit->setSeasonId('season');
+        $habit->setTeamId($teamId);
+        $habit->setDayOfWeek($dayOfWeek);
+        $habit->setKickoffTime(DateTimeImmutable::createFromFormat('!H:i', $kickoff) ?: new DateTimeImmutable('00:00'));
+
+        return $habit;
+    }
+
+    private function teamLink(string $teamAId, string $teamBId, TeamLinkType $type): TeamLink
+    {
+        $link = new TeamLink;
+        $link->setClubId('club');
+        $link->setSeasonId('season');
+        $link->setTeamAId($teamAId);
+        $link->setTeamBId($teamBId);
+        $link->setLinkType($type);
+
+        return $link;
+    }
+
+    private function awayFixture(string $id, string $teamId, string $date, ?string $kickoff): Fixture
+    {
+        $fixture = $this->fixture($id, $teamId, $date, $kickoff);
+        $fixture->setHomeAway(FixtureHomeAway::AWAY);
+
+        return $fixture;
+    }
+
     private function unavailability(string $venueId, string $from, string $until, ?string $label): VenueUnavailability
     {
         $unavailability = new VenueUnavailability;
@@ -273,10 +420,10 @@ final class MatchConflictDetectorTest extends TestCase
      *
      * @return list<array<string, mixed>>
      */
-    private function detect(array $fixtures, array $links, ?string $baselineScheduleId = null, array $overlayPeriods = [], array $slotsBySchedule = [], array $unavailabilities = []): array
+    private function detect(array $fixtures, array $links, ?string $baselineScheduleId = null, array $overlayPeriods = [], array $slotsBySchedule = [], array $unavailabilities = [], array $habits = [], array $teamLinks = []): array
     {
         return new MatchConflictDetector(new MatchFootprint, new EffectiveScheduleResolver)
-            ->detect($fixtures, $links, $baselineScheduleId, $overlayPeriods, $slotsBySchedule, $unavailabilities);
+            ->detect($fixtures, $links, $baselineScheduleId, $overlayPeriods, $slotsBySchedule, $unavailabilities, $habits, $teamLinks);
     }
 
     private function fixture(string $id, string $teamId, string $date, ?string $kickoff): Fixture

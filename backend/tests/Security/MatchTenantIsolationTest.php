@@ -9,6 +9,11 @@ use App\Entity\ClubUser;
 use App\Entity\Competition;
 use App\Entity\Fixture;
 use App\Entity\Season;
+use App\Entity\Sport;
+use App\Entity\SportCategory;
+use App\Entity\Team;
+use App\Entity\TeamLink;
+use App\Entity\TeamMatchHabit;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenueMatchWindow;
@@ -198,10 +203,105 @@ final class MatchTenantIsolationTest extends WebTestCase
         self::assertResponseStatusCodeSame(409);
     }
 
+    // ── Préférences matchs (P1-4 PR C) : habitudes + passerelles ──────────────
+
+    public function testHabitsAreScopedStampedAndUniquePerDay(): void
+    {
+        [$clubA, $userA, $seasonA] = $this->createClubUser('a');
+        $teamA = $this->createTeam($clubA, $seasonA, 'SF3');
+        [, $userB] = $this->createClubUser('b');
+        $headers = $this->authHeaders($userA) + ['CONTENT_TYPE' => 'application/json'];
+
+        $this->client->request('POST', '/api/team_match_habits', [], [], $headers, json_encode([
+            'teamId' => $teamA->getId(), 'dayOfWeek' => 7, 'kickoffTime' => '17:30',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        $habit = $this->em->getRepository(TeamMatchHabit::class)->findOneBy(['teamId' => $teamA->getId()]);
+        self::assertSame($clubA->getId(), $habit?->getClubId());
+        self::assertSame($seasonA->getId(), $habit?->getSeasonId());
+
+        // One habit per weekday: readable 422, not a DB 500.
+        $this->client->request('POST', '/api/team_match_habits', [], [], $headers, json_encode([
+            'teamId' => $teamA->getId(), 'dayOfWeek' => 7, 'kickoffTime' => '10:30',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+
+        // Club B sees nothing.
+        $this->client->request('GET', '/api/team_match_habits', [], [], $this->authHeaders($userB));
+        self::assertCount(0, $this->responseData()['member'] ?? ['sentinel']);
+    }
+
+    public function testTeamLinkIsSymmetricUniqueAndTenantScoped(): void
+    {
+        [$clubA, $userA, $seasonA] = $this->createClubUser('a');
+        $sm1 = $this->createTeam($clubA, $seasonA, 'SM1');
+        $sm2 = $this->createTeam($clubA, $seasonA, 'SM2');
+        [$clubB, , $seasonB] = $this->createClubUser('b');
+        $foreign = $this->createTeam($clubB, $seasonB, 'Étrangère');
+        $headers = $this->authHeaders($userA) + ['CONTENT_TYPE' => 'application/json'];
+
+        $this->client->request('POST', '/api/team_links', [], [], $headers, json_encode([
+            'teamAId' => $sm1->getId(), 'teamBId' => $sm2->getId(), 'linkType' => 'NOT_SIMULTANEOUS',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        // SM2–SM1 is the SAME couple (normalized) → readable 422 duplicate.
+        $this->client->request('POST', '/api/team_links', [], [], $headers, json_encode([
+            'teamAId' => $sm2->getId(), 'teamBId' => $sm1->getId(), 'linkType' => 'BACK_TO_BACK',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+
+        // A foreign team is invisible → 422, no cross-club write.
+        $this->client->request('POST', '/api/team_links', [], [], $headers, json_encode([
+            'teamAId' => $sm1->getId(), 'teamBId' => $foreign->getId(), 'linkType' => 'NOT_SIMULTANEOUS',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+        self::assertCount(1, $this->em->getRepository(TeamLink::class)->findBy(['clubId' => $clubA->getId()]));
+
+        // A team linked to itself is refused.
+        $this->client->request('POST', '/api/team_links', [], [], $headers, json_encode([
+            'teamAId' => $sm1->getId(), 'teamBId' => $sm1->getId(), 'linkType' => 'NOT_SIMULTANEOUS',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
+    private function createTeam(Club $club, Season $season, string $name): Team
+    {
+        $this->scopeGucToClub($club->getId());
+        $sport = $this->em->getRepository(Sport::class)->findOneBy(['isActive' => true]);
+        if (null === $sport) {
+            $uid = uniqid('', true);
+            $sport = new Sport;
+            $sport->setName('Basket ' . $uid);
+            $sport->setSlug('basket-' . $uid);
+            $sport->setIsActive(true);
+            $this->em->persist($sport);
+        }
+        $category = new SportCategory;
+        $category->setClubId($club->getId());
+        $category->setSportId($sport->getId());
+        $category->setName('U13-' . uniqid('', true));
+        $this->em->persist($category);
+
+        $team = new Team;
+        $team->setClubId($club->getId());
+        $team->setSeasonId($season->getId());
+        $team->setSportCategoryId($category->getId());
+        $team->setPriorityTierId(3);
+        $team->setName($name);
+        $team->setSessionsPerWeek(2);
+        $team->setIsActive(true);
+        $this->em->persist($team);
+        $this->em->flush();
+
+        return $team;
     }
 
     private function createVenue(Club $club, Season $season, string $name): Venue

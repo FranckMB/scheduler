@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-08-02 (import FBI réel une passe — P1-4 PR A)
+Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés
@@ -179,6 +179,48 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   `EffectiveScheduleResolver` (pur) + `TrainingCalendarContext` (chargement scopé), consommés par le
   radar ET l'impact — deux copies auraient divergé.
 
+## Habitudes + passerelles (P1-4 PR C, 2026-08-03)
+
+- **Habitude d'équipe** (`TeamMatchHabit`, tenant+saison, RLS) : jour ISO + **heure-point** (pas une plage)
+  + gymnase optionnel — « SF3 = dimanche 17h30 à Coubertin ». **Une par jour et par équipe** (unique DB,
+  422 lisible avant), N par équipe. **Recopiée à la bascule** (remap équipe+gymnase ; gymnase pendu →
+  l'habitude survit en jour+heure). Solde le `Team.preferredMatchWindow` de P3-1.
+- **Passerelle** (`TeamLink`, nom NEUTRE — cross-module par conception, le solveur d'entraînement la
+  consommera un jour) : couple d'équipes **symétrique** (normalisation `teamAId < teamBId` → SM1–SM2 ≡
+  SM2–SM1, unique DB), deux types `TeamLinkType` : **`NOT_SIMULTANEOUS`** (« joueurs partagés » — aucune
+  entité joueur n'existe, le gestionnaire DÉCLARE le pont) et **`BACK_TO_BACK`** (« l'un après l'autre »,
+  implique la non-simultanéité). Équipe liée à elle-même → 422 ; équipe étrangère invisible → 422 sans
+  écriture. Cascade : suppression d'équipe purge habitudes + liens (les DEUX colonnes). Recopiée en N+1
+  re-normalisée. Solde le « volet joueur » de P3-1 **par décision** : pas de joueurs individuels, le lien
+  déclaré porte le besoin.
+- **Effets immédiats, sans solveur** :
+  - **Estimation d'heure extérieure** (résorbe l'angle mort PR-2) : un AWAY sans heure emprunte l'heure
+    habituelle de son équipe **du même jour de semaine** → l'empreinte naît (`MatchFootprint::occupancyAt`),
+    les conflits deviennent visibles, marqués **`estimatedKickoff: true`** (« heure estimée » dans le
+    radar). **Rien n'est persisté** (écrire l'estimation dans `kickoffTime` la ferait passer pour une heure
+    réelle et polluerait le diff de ré-import F2). Pas d'habitude ce jour-là → l'angle mort demeure (PR E).
+    Une heure RÉELLE n'est jamais supplantée. Un HOME non placé n'est pas estimé (son heure est le prochain
+    geste du gestionnaire).
+  - **Finding `TEAM_LINK_OVERLAP`** : deux matchs d'équipes liées `NOT_SIMULTANEOUS` dont les empreintes
+    (réelles ou estimées) se chevauchent (demi-ouvert — enchaînés dos-à-dos = pas de conflit). Indépendant
+    des coachs. `BACK_TO_BACK` ne produit AUCUN finding (préférence PR D, pas une règle).
+  - **Pré-remplissage au placement** : `PlacementPanel` initialise gymnase+heure depuis l'habitude du jour
+    du match (champs vides seulement) + ligne « Habitude : samedi 15:30 · Mateo ». **Les gardes restent
+    souveraines** (enveloppe, accès, indispo — l'habitude pré-remplit, ne débloque jamais).
+  - **Blocs fantômes** (`WeekendGrid`) : une habitude À GYMNASE dont l'équipe n'a AUCUN match ce jour-là
+    projette un bloc translucide pointillé « Habitude SF3 · fenêtre protégée » (empreinte 2h15, lanes
+    partagées avec les vrais matchs — un placement manuel atterrit À CÔTÉ, pas dessus). **La réalité
+    dissout le fantôme** : tout match de l'équipe à cette date — extérieur compris, la fenêtre se LIBÈRE.
+    Habitude sans gymnase → pas de fantôme (grille en colonnes gymnase).
+  - **Inférence** (`lib/habitInference.ts`, pure, front) : suggère l'habitude majoritaire quand **≥ 3
+    matchs horodatés ET ≥ 50 %** concordent (seuils fondateur) ; gymnase joint si ≥ 50 % des HOME placés du
+    groupe le partagent (le libellé texte `fbiVenueLabel` n'est JAMAIS résolu — décision PR A). Suggestion
+    = bouton « Accepter », jamais une écriture ; un jour déjà déclaré n'est pas re-suggéré.
+- **Saisie** : `/matchs` uniquement, bouton « Habitudes & passerelles » (`HabitsLinksDialog`) — l'inférence
+  exige des matchs importés, rien au wizard. Écritures non management-gated (patron `VenueMatchWindow`),
+  derrière le verrou socle de la page. **Engine intouché** (aucune donnée PR C au payload,
+  `CONTRACT_VERSION` inchangé — le solveur les consommera en PR D).
+
 ## Vérifs / gardes
 
 - NR bloquant (phase1, CI) : `MatchTenantIsolationTest` (Competition/Fixture scopés club+saison, POST stampe,
@@ -203,6 +245,14 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   `ImportFixturesApiTest` (HTTP bout-en-bout : analyze → import une passe → re-import diff + **NR périmètre
   engagé** : DELETE équipe → 409 après import). `ImportErrorMessageLeakTest` (P4-5 sur la nouvelle route).
   `ImportFbiDialog.test.tsx` (analyse au choix du fichier, mappings pré-remplis vs sélecteurs, rapport V2).
+- Préférences (PR C) : `MatchTenantIsolationTest` +2 (phase1 — habitude scopée+stampée+unique/jour,
+  passerelle symétrique/unique/anti-self, équipe étrangère → 422 sans écriture cross-club).
+  `MatchConflictDetectorTest` +5 (estimation même-jour seulement + flag, heure réelle jamais supplantée,
+  **NR : AWAY sans habitude reste invisible**, TEAM_LINK_OVERLAP sans coach, BACK_TO_BACK silencieux +
+  demi-ouvert). `SeasonTransitionServiceTest` (habitude+lien recopiés remappés, normalisation conservée).
+  Front : `habitInference.test` (seuils, non-horodatés ignorés, jour déclaré non re-suggéré, gymnase ≥ 50 %),
+  `weekendGrid.test` (fantôme rendu/dissous par la réalité/lanes partagées), `PlacementPanel.test`
+  (pré-remplissage + gardes souveraines).
 - Unit : `MatchFootprintTest`, `LeagueResolverTest`. Command : `SeedLeagueWindowsCommandTest`. Api :
   `FixtureApiTest`.
 - Smoke-solveur COMPLETED (les nouvelles tables/RLS ne cassent pas le pipeline ; payload solveur inchangé).

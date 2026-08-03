@@ -35,7 +35,15 @@ function conflictSummary(conflict: Conflict, teams: Map<string, Team>): string {
   if ("VENUE_UNAVAILABLE" === conflict.type && conflict.fixture) {
     return `Match ${teamName(teams, conflict.fixture.teamId)} du ${frDate(conflict.fixture.matchDate)} — gymnase indisponible, à repositionner`;
   }
+  if ("TEAM_LINK_OVERLAP" === conflict.type && conflict.left && conflict.right) {
+    return `Équipes liées en même temps — ${teamName(teams, conflict.left.teamId)} et ${teamName(teams, conflict.right.teamId)} (joueurs partagés)`;
+  }
   return "Conflit";
+}
+
+/** « heure estimée » when a side's window borrows the team's habit (P1-4 PR C). */
+function estimatedTag(conflict: Conflict): boolean {
+  return true === conflict.fixture?.estimatedKickoff || true === conflict.left?.estimatedKickoff || true === conflict.right?.estimatedKickoff;
 }
 
 function frDate(ymd: string): string {
@@ -67,9 +75,14 @@ export function ConflictRadar({ conflicts, teams, coaches }: ConflictRadarProps)
                 <p className="font-medium">
                   {undefined !== conflict.coachId
                     ? coachName(coaches, conflict.coachId)
-                    : `Gymnase indisponible${null != conflict.label && "" !== conflict.label ? ` (${conflict.label})` : ""}`}
+                    : "TEAM_LINK_OVERLAP" === conflict.type
+                      ? "Passerelle violée"
+                      : `Gymnase indisponible${null != conflict.label && "" !== conflict.label ? ` (${conflict.label})` : ""}`}
                 </p>
-                <p className="text-muted-foreground">{conflictSummary(conflict, teams)}</p>
+                <p className="text-muted-foreground">
+                  {conflictSummary(conflict, teams)}
+                  {estimatedTag(conflict) ? <span className="ml-1 rounded bg-muted px-1 text-[10px] uppercase tracking-wide">heure estimée</span> : null}
+                </p>
                 {undefined !== conflict.start && undefined !== conflict.end ? (
                   <p className="text-xs text-muted-foreground">
                     {whenLabel(conflict.start)} → {whenLabel(conflict.end)}

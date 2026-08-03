@@ -78,3 +78,47 @@ describe("buildWeekendGrid", () => {
     expect(new Set(grid.cells.map((c) => c.lane))).toEqual(new Set([0, 1]));
   });
 });
+
+describe("habit ghosts (P1-4 PR C)", () => {
+  const habit = (over: Partial<import("../api").TeamMatchHabit> = {}): import("../api").TeamMatchHabit => ({
+    id: "h-1",
+    teamId: "team-1",
+    dayOfWeek: 6, // Saturday
+    kickoffTime: "15:30",
+    venueId: "venue-1",
+    ...over,
+  });
+
+  it("renders a translucent ghost on the habit's weekday when the team has no fixture", () => {
+    const grid = buildWeekendGrid([], venues, teams, new Set(), [habit()], "2026-10-03");
+    expect(grid.empty).toBe(false);
+    expect(grid.cells).toHaveLength(1);
+    expect(grid.cells[0].ghost).toBe(true);
+    expect(grid.cells[0].teamLabel).toBe("U13");
+    expect(grid.cells[0].kickoffLabel).toBe("15:30");
+    // The ghost creates its date/venue column.
+    expect(grid.columns).toHaveLength(1);
+    expect(grid.columns[0].dateKey).toBe("2026-10-03");
+  });
+
+  it("dissolves the ghost when ANY fixture of the team sits on that date — away frees the slot", () => {
+    const away = fixture({ id: "fx-away", homeAway: "AWAY", venueId: null, kickoffTime: null, matchDate: "2026-10-03" });
+    const grid = buildWeekendGrid([away], venues, teams, new Set(), [habit()], "2026-10-03");
+    expect(grid.cells.filter((c) => c.ghost)).toHaveLength(0);
+  });
+
+  it("skips venue-less habits (the grid is venue-columned) and never blocks real cells", () => {
+    const grid = buildWeekendGrid([fixture()], venues, teams, new Set(), [habit({ teamId: "team-ghost", venueId: null })], "2026-10-03");
+    expect(grid.cells.filter((c) => c.ghost)).toHaveLength(0);
+    expect(grid.cells).toHaveLength(1);
+  });
+
+  it("lays a ghost and a real match of the same venue side by side (lanes)", () => {
+    const grid = buildWeekendGrid([fixture()], venues, teams, new Set(), [habit({ teamId: "team-ghost", kickoffTime: "16:00" })], "2026-10-03");
+    const ghost = grid.cells.find((c) => c.ghost);
+    const real = grid.cells.find((c) => !c.ghost);
+    expect(ghost?.laneCount).toBe(2);
+    expect(real?.laneCount).toBe(2);
+    expect(ghost?.lane).not.toBe(real?.lane);
+  });
+});

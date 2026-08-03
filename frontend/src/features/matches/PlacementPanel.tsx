@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
-import type { Fixture, PlaceFixtureInput, Venue, VenueMatchWindow, VenueUnavailability } from "./api";
+import type { Fixture, PlaceFixtureInput, TeamMatchHabit, Venue, VenueMatchWindow, VenueUnavailability } from "./api";
+import { isInEnvelope, isoWeekday } from "./lib/envelope";
 import type { EnvelopeResult } from "./lib/envelope";
-import { isInEnvelope } from "./lib/envelope";
 import { matchVenueIds, venueAccessError } from "./lib/matchAccess";
 
 interface PlacementPanelProps {
@@ -14,6 +14,8 @@ interface PlacementPanelProps {
   venues: Venue[];
   matchWindows: VenueMatchWindow[];
   unavailabilities: VenueUnavailability[];
+  /** P1-4 PR C — the team's habitual windows: prefill + hint, never a guard. */
+  habits: TeamMatchHabit[];
   teamLabel: string;
   categoryLabel: string;
   envelope: EnvelopeResult;
@@ -57,18 +59,24 @@ function EnvelopeHint({ envelope, kickoff }: { envelope: EnvelopeResult; kickoff
  * match access windows + unavailabilities; the club declared them itself, no
  * degradation). A club with no window anywhere keeps the full venue list.
  */
-export function PlacementPanel({ fixture, venues, matchWindows, unavailabilities, teamLabel, categoryLabel, envelope, busy, onClose, onPlace }: PlacementPanelProps) {
+export function PlacementPanel({ fixture, venues, matchWindows, unavailabilities, habits, teamLabel, categoryLabel, envelope, busy, onClose, onPlace }: PlacementPanelProps) {
   // Masquer n'est légitime que pour un CHOIX (§7.2.3) : le sélecteur n'offre
   // que les gymnases de match — mais seulement si le club a déclaré des
   // fenêtres quelque part (sinon liste complète, donnée non adoptée).
   const matchIds = matchVenueIds(matchWindows);
   const selectableVenues = 0 === matchIds.size ? venues : venues.filter((v) => matchIds.has(v.id));
 
+  // P1-4 PR C — the team's habit on the MATCH's weekday prefills the empty
+  // fields (venue must survive the selectable filter). Guards stay sovereign:
+  // a habit prefills, it never unlocks.
+  const habit = habits.find((h) => h.teamId === fixture.teamId && h.dayOfWeek === isoWeekday(fixture.matchDate)) ?? null;
+
   const [venueId, setVenueId] = useState(() => {
-    const initial = fixture.venueId ?? selectableVenues[0]?.id ?? "";
+    const habitVenue = null !== habit && null !== habit.venueId && selectableVenues.some((v) => v.id === habit.venueId) ? habit.venueId : "";
+    const initial = fixture.venueId ?? ("" !== habitVenue ? habitVenue : (selectableVenues[0]?.id ?? ""));
     return "" === initial || selectableVenues.some((v) => v.id === initial) ? initial : (selectableVenues[0]?.id ?? "");
   });
-  const [kickoff, setKickoff] = useState(fixture.kickoffTime ?? "");
+  const [kickoff, setKickoff] = useState(fixture.kickoffTime ?? habit?.kickoffTime ?? "");
 
   const hasKickoff = "" !== kickoff;
   const envelopeBlocked = envelope.mapped && hasKickoff && !isInEnvelope(envelope, kickoff);
@@ -104,6 +112,12 @@ export function PlacementPanel({ fixture, venues, matchWindows, unavailabilities
             <input aria-label="Heure de coup d'envoi" type="time" value={kickoff} onChange={(e) => setKickoff(e.target.value)} className={fieldClass} />
           </div>
 
+          {null !== habit ? (
+            <p className="text-xs text-muted-foreground">
+              Habitude : {habit.kickoffTime}
+              {null !== habit.venueId ? ` · ${venues.find((v) => v.id === habit.venueId)?.name ?? "?"}` : ""}
+            </p>
+          ) : null}
           {hasKickoff ? <EnvelopeHint envelope={envelope} kickoff={kickoff} /> : null}
           {null !== accessError ? (
             <p className="flex items-center gap-1 text-xs text-warning">

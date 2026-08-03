@@ -133,6 +133,63 @@ export function useUnavailabilityImpact() {
   return useQuery({ queryKey: ["venue-unavailability-impact"], queryFn: matchesApi.getUnavailabilityImpact, staleTime: 60_000 });
 }
 
+// ── Preferences layer (P1-4 PR C) ────────────────────────────────────────────
+
+export function useTeamMatchHabits() {
+  return useQuery({ queryKey: ["team_match_habits"], queryFn: matchesApi.getTeamMatchHabits, staleTime: 300_000 });
+}
+
+/** Habit writes move the radar (away estimation) and the grid ghosts. */
+function invalidateHabits(queryClient: ReturnType<typeof useQueryClient>): void {
+  void queryClient.invalidateQueries({ queryKey: ["team_match_habits"] });
+  void queryClient.invalidateQueries({ queryKey: ["fixtures", "conflicts"] });
+}
+
+export function useCreateTeamMatchHabit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: matchesApi.createTeamMatchHabit,
+    onSuccess: () => invalidateHabits(queryClient),
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
+  });
+}
+
+export function useDeleteTeamMatchHabit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: matchesApi.deleteTeamMatchHabit,
+    onSuccess: () => invalidateHabits(queryClient),
+    onError: () => toast.error("Suppression de l'habitude impossible"),
+  });
+}
+
+export function useTeamLinks() {
+  return useQuery({ queryKey: ["team_links"], queryFn: matchesApi.getTeamLinks, staleTime: 300_000 });
+}
+
+function invalidateTeamLinks(queryClient: ReturnType<typeof useQueryClient>): void {
+  void queryClient.invalidateQueries({ queryKey: ["team_links"] });
+  void queryClient.invalidateQueries({ queryKey: ["fixtures", "conflicts"] });
+}
+
+export function useCreateTeamLink() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: matchesApi.createTeamLink,
+    onSuccess: () => invalidateTeamLinks(queryClient),
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
+  });
+}
+
+export function useDeleteTeamLink() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: matchesApi.deleteTeamLink,
+    onSuccess: () => invalidateTeamLinks(queryClient),
+    onError: () => toast.error("Suppression du lien impossible"),
+  });
+}
+
 /** Dry-run — writes nothing server-side, so no invalidation. */
 export function useAnalyzeFbiFixtures() {
   return useMutation({

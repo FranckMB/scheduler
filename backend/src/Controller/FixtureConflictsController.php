@@ -6,6 +6,8 @@ namespace App\Controller;
 
 use App\Entity\Fixture;
 use App\Entity\TeamCoach;
+use App\Entity\TeamLink;
+use App\Entity\TeamMatchHabit;
 use App\Entity\VenueUnavailability;
 use App\Service\MatchConflictDetector;
 use App\Service\SeasonResolver;
@@ -56,6 +58,10 @@ final class FixtureConflictsController extends AbstractController
         $teamCoachRows = $this->entityManager->getRepository(TeamCoach::class)->findBy([]);
         /** @var list<VenueUnavailability> $unavailabilities */
         $unavailabilities = $this->entityManager->getRepository(VenueUnavailability::class)->findBy([]);
+        /** @var list<TeamMatchHabit> $habits */
+        $habits = $this->entityManager->getRepository(TeamMatchHabit::class)->findBy([]);
+        /** @var list<TeamLink> $teamLinks */
+        $teamLinks = $this->entityManager->getRepository(TeamLink::class)->findBy([]);
 
         $season = $this->seasonResolver->selectedOrCurrent($this->requestStack->getCurrentRequest(), $clubId);
         // ADR-0002 context (chosen season version, active periods + overlays,
@@ -69,6 +75,8 @@ final class FixtureConflictsController extends AbstractController
             $context['activePeriods'],
             $context['slotsBySchedule'],
             $unavailabilities,
+            $habits,
+            $teamLinks,
         );
 
         return $this->json([

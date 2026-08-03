@@ -24,6 +24,8 @@ use App\Entity\ScheduleStructureSnapshot;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamLink;
+use App\Entity\TeamMatchHabit;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
@@ -112,6 +114,9 @@ final class SeasonDataPurger
             Competition::class,
             TeamCoach::class,
             CoachPlayerMembership::class,
+            // P1-4 PR C — préférences matchs, pointent team_id : avant Team.
+            TeamMatchHabit::class,
+            TeamLink::class,
             CalendarEntry::class,
             // ADR-0002: the named container of a season/period's versions — a
             // club_id+season_id table, so it must be purged with the season
