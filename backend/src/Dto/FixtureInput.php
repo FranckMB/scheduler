@@ -46,4 +46,14 @@ class FixtureInput
     #[Assert\Regex(pattern: '/^([01]\d|2[0-3]):[0-5]\d$/', message: 'kickoffTime must be a valid HH:MM (00:00–23:59).')]
     #[Groups(['write'])]
     public ?string $kickoffTime = null;
+
+    /**
+     * P1-4 PR E — "rendre au solveur": SOLVER is accepted on an update ONLY when
+     * the placement (venue/kickoff/date) is untouched and the match stays PLACED;
+     * any other manual write keeps stamping MANUAL. MANUAL is accepted as a
+     * no-op echo (the stamp rule produces it anyway).
+     */
+    #[Assert\Choice(choices: ['MANUAL', 'SOLVER'])]
+    #[Groups(['write'])]
+    public ?string $placementSource = null;
 }

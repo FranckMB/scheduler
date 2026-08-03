@@ -5,12 +5,15 @@ interface MatchesState {
   selectedWeekend: string | null;
   /** Fixture being placed (opens the placement panel); null = none. */
   selectedFixtureId: string | null;
+  /** P1-4 PR E1 — swap mode: the placed fixture waiting for its exchange partner. */
+  swapSourceId: string | null;
   /** Manual fixture-entry dialog open. */
   fixtureFormOpen: boolean;
   /** FBI import dialog open. */
   importDialogOpen: boolean;
   setSelectedWeekend: (key: string | null) => void;
   setSelectedFixtureId: (id: string | null) => void;
+  setSwapSourceId: (id: string | null) => void;
   setFixtureFormOpen: (open: boolean) => void;
   setImportDialogOpen: (open: boolean) => void;
 }
@@ -19,10 +22,12 @@ interface MatchesState {
 export const useMatchesStore = create<MatchesState>((set) => ({
   selectedWeekend: null,
   selectedFixtureId: null,
+  swapSourceId: null,
   fixtureFormOpen: false,
   importDialogOpen: false,
   setSelectedWeekend: (selectedWeekend) => set({ selectedWeekend }),
   setSelectedFixtureId: (selectedFixtureId) => set({ selectedFixtureId }),
+  setSwapSourceId: (swapSourceId) => set({ swapSourceId }),
   setFixtureFormOpen: (fixtureFormOpen) => set({ fixtureFormOpen }),
   setImportDialogOpen: (importDialogOpen) => set({ importDialogOpen }),
 }));

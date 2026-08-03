@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -39,12 +39,18 @@ interface Overrides {
   matchWindows?: VenueMatchWindow[];
   unavailabilities?: VenueUnavailability[];
   habits?: TeamMatchHabit[];
+  fixture?: Fixture;
+  onUnplace?: () => void;
+  onToggleLock?: () => void;
+  onStartSwap?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 function renderPanel(envelope: EnvelopeResult, onPlace = vi.fn(), overrides: Overrides = {}) {
   render(
     <PlacementPanel
-      fixture={fixture}
+      fixture={overrides.fixture ?? fixture}
       venues={venues}
       matchWindows={overrides.matchWindows ?? []}
       unavailabilities={overrides.unavailabilities ?? []}
@@ -55,6 +61,11 @@ function renderPanel(envelope: EnvelopeResult, onPlace = vi.fn(), overrides: Ove
       busy={false}
       onClose={vi.fn()}
       onPlace={onPlace}
+      onUnplace={overrides.onUnplace ?? vi.fn()}
+      onToggleLock={overrides.onToggleLock ?? vi.fn()}
+      onStartSwap={overrides.onStartSwap ?? vi.fn()}
+      onEdit={overrides.onEdit ?? vi.fn()}
+      onDelete={overrides.onDelete ?? vi.fn()}
     />,
   );
   return onPlace;
@@ -164,5 +175,69 @@ describe("PlacementPanel", () => {
     expect(screen.getByRole("button", { name: "Placer" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Placer" }));
     expect(onPlace).toHaveBeenCalledWith({ venueId: "venue-2", kickoffTime: "14:00" });
+  });
+
+  // ── Manual loop (P1-4 PR E1) ─────────────────────────────────────────────
+
+  const placedFixture: Fixture = { ...fixture, status: "PLACED", venueId: "venue-1", kickoffTime: "16:00", placementSource: "MANUAL" };
+
+  it("on a placed match the main action is Déplacer, disabled while nothing changed", async () => {
+    const user = userEvent.setup();
+    const onPlace = renderPanel(openEnvelope, vi.fn(), { fixture: placedFixture });
+
+    const move = screen.getByRole("button", { name: "Déplacer" });
+    expect(move).toBeDisabled(); // unchanged placement — nothing to move
+
+    await user.clear(screen.getByLabelText("Heure de coup d'envoi"));
+    await user.type(screen.getByLabelText("Heure de coup d'envoi"), "18:00");
+    expect(move).toBeEnabled();
+    await user.click(move);
+    expect(onPlace).toHaveBeenCalledWith({ venueId: "venue-1", kickoffTime: "18:00" });
+  });
+
+  it("offers Dé-placer, swap and lock-toggle on a placed match", async () => {
+    const user = userEvent.setup();
+    const onUnplace = vi.fn();
+    const onStartSwap = vi.fn();
+    renderPanel(openEnvelope, vi.fn(), { fixture: placedFixture, onUnplace, onStartSwap });
+
+    await user.click(screen.getByRole("button", { name: "Dé-placer" }));
+    expect(onUnplace).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Échanger avec…" }));
+    expect(onStartSwap).toHaveBeenCalledOnce();
+  });
+
+  it("shows « Rendre au solveur » on a manual anchor", async () => {
+    const user = userEvent.setup();
+    const onToggleLock = vi.fn();
+    renderPanel(openEnvelope, vi.fn(), { fixture: placedFixture, onToggleLock });
+    await user.click(screen.getByRole("button", { name: "Rendre au solveur" }));
+    expect(onToggleLock).toHaveBeenCalledOnce();
+  });
+
+  it("shows « Verrouiller » on a SOLVER placement", () => {
+    renderPanel(openEnvelope, vi.fn(), { fixture: { ...placedFixture, placementSource: "SOLVER" } });
+    expect(screen.getByRole("button", { name: "Verrouiller" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rendre au solveur" })).not.toBeInTheDocument();
+  });
+
+  it("deletes only after the confirmation dialog", async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    renderPanel(openEnvelope, vi.fn(), { fixture: placedFixture, onDelete });
+
+    await user.click(screen.getByRole("button", { name: "Supprimer" }));
+    expect(onDelete).not.toHaveBeenCalled(); // the dialog gates the gesture
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/Supprimer le match contre/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Supprimer" }));
+    expect(onDelete).toHaveBeenCalledOnce();
+  });
+
+  it("a SUBMITTED match is read-only — filed with the federation", () => {
+    renderPanel(openEnvelope, vi.fn(), { fixture: { ...placedFixture, status: "SUBMITTED" } });
+    expect(screen.getByText(/Match déposé à la fédération/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Déplacer" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Supprimer" })).not.toBeInTheDocument();
   });
 });

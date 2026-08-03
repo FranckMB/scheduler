@@ -78,6 +78,56 @@ final class FixtureApiTest extends WebTestCase
         self::assertSame('22222222-2222-4222-8222-222222222222', $data['venueId']);
     }
 
+    public function testHandBackToSolverOnUntouchedPlacementEcho(): void
+    {
+        $placed = $this->createPlaced('2026-11-15');
+        $this->putFixture($placed['id'], $placed + ['placementSource' => 'SOLVER']);
+        self::assertResponseStatusCodeSame(200);
+        self::assertSame('SOLVER', $this->responseData()['placementSource']);
+    }
+
+    public function testHandBackRejectedWhenPlacementChangesInTheSamePut(): void
+    {
+        $placed = $this->createPlaced('2026-11-22');
+        $this->putFixture($placed['id'], ['kickoffTime' => '18:00', 'placementSource' => 'SOLVER'] + $placed);
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testHandBackRejectedWhenTheMatchLeavesPlaced(): void
+    {
+        $placed = $this->createPlaced('2026-11-29');
+        $this->putFixture($placed['id'], ['status' => 'UNPLACED', 'placementSource' => 'SOLVER'] + $placed);
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testEchoPutWithoutSourceStampsManual(): void
+    {
+        $placed = $this->createPlaced('2026-12-06');
+        $this->putFixture($placed['id'], $placed);
+        self::assertResponseStatusCodeSame(200);
+        self::assertSame('MANUAL', $this->responseData()['placementSource']);
+    }
+
+    public function testUnplacingClearsThePlacementSource(): void
+    {
+        $placed = $this->createPlaced('2026-12-13');
+        $this->putFixture($placed['id'], ['status' => 'UNPLACED', 'venueId' => '', 'kickoffTime' => ''] + $placed);
+        self::assertResponseStatusCodeSame(200);
+        self::assertNull($this->responseData()['placementSource'] ?? null);
+    }
+
+    public function testCreatingWithSolverSourceIsRejected(): void
+    {
+        $this->client->request('POST', '/api/fixtures', [], [], $this->authHeaders() + ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'teamId' => self::TEAM_ID,
+            'matchDate' => '2026-12-20',
+            'homeAway' => 'HOME',
+            'opponentLabel' => 'Faux solveur',
+            'placementSource' => 'SOLVER',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+    }
+
     public function testRejectsMalformedKickoffTime(): void
     {
         $this->client->request('POST', '/api/fixtures', [], [], $this->authHeaders() + ['CONTENT_TYPE' => 'application/json'], json_encode([
@@ -131,6 +181,37 @@ final class FixtureApiTest extends WebTestCase
         $this->client = self::createClient();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
         $this->user = $this->createClubUser();
+    }
+
+    /** @return array<string, mixed> the full-replace body of a freshly PLACED fixture */
+    private function createPlaced(string $date): array
+    {
+        $created = $this->post([
+            'teamId' => self::TEAM_ID,
+            'matchDate' => $date,
+            'homeAway' => 'HOME',
+            'opponentLabel' => 'Boucle manuelle',
+        ]);
+        $body = [
+            'teamId' => self::TEAM_ID,
+            'matchDate' => $date,
+            'homeAway' => 'HOME',
+            'opponentLabel' => 'Boucle manuelle',
+            'venueId' => '22222222-2222-4222-8222-222222222222',
+            'kickoffTime' => '16:30',
+            'status' => 'PLACED',
+        ];
+        $this->putFixture($created['id'], $body);
+        self::assertResponseStatusCodeSame(200);
+
+        return ['id' => $created['id']] + $body;
+    }
+
+    /** @param array<string, mixed> $body */
+    private function putFixture(string $id, array $body): void
+    {
+        unset($body['id']);
+        $this->client->request('PUT', '/api/fixtures/' . $id, [], [], $this->authHeaders() + ['CONTENT_TYPE' => 'application/json'], json_encode($body, \JSON_THROW_ON_ERROR));
     }
 
     /**

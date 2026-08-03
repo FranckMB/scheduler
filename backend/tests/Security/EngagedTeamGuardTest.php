@@ -302,6 +302,32 @@ final class EngagedTeamGuardTest extends WebTestCase
         self::assertTrue(json_decode((string) $client->getResponse()->getContent(), true)['isEngaged']);
     }
 
+    public function testDeletingAFixtureIsNotDeletingTheTeamAndReleasesTheEngagement(): void
+    {
+        // NR P1-4 PR E : la boucle manuelle ouvre DELETE /api/fixtures/{id} dans
+        // l'UI. Supprimer un MATCH n'est pas supprimer l'ÉQUIPE — la garde ne doit
+        // pas mordre ; et l'engagement étant DÉRIVÉ (au moins un fixture), il se
+        // relâche tout seul quand le dernier match part : aucune garde ne survit
+        // à tort, aucune ne saute.
+        $client = $this->client;
+        $team = $this->createTeam('U15 dont le match s\'annule');
+        $fixture = $this->fixture($team, FixtureStatus::PLACED);
+        $client->loginUser($this->user);
+
+        $client->request('DELETE', \sprintf('/api/fixtures/%s', $fixture->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+        ]);
+        self::assertResponseStatusCodeSame(204, 'supprimer un match d\'une équipe engagée passe — ce n\'est pas le DELETE d\'équipe');
+
+        // Stateless firewall: loginUser only arms ONE request — the second rides a real JWT.
+        $token = self::getContainer()->get('lexik_jwt_authentication.jwt_manager')->create($this->user);
+        $client->request('DELETE', \sprintf('/api/teams/%s', $team->getId()), [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+        ]);
+        self::assertResponseStatusCodeSame(204, 'sans plus aucun match, l\'équipe redevient supprimable');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

@@ -1,4 +1,4 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Lock } from "lucide-react";
 import { type UIEvent, useRef } from "react";
 
 import { EmptyBlock } from "@/shared/components/ui/empty-hint";
@@ -14,10 +14,14 @@ const HEADER_ROW = "1.75rem";
 /** hex colour → subtle translucent fill; non-hex falls back to no tint. */
 interface WeekendGridProps {
   model: WeekendGridModel;
+  /** P1-4 PR E1 — click a placed match to open its panel (ghosts stay inert). */
+  onSelectFixture?: (fixtureId: string) => void;
+  /** Highlighted cell (the fixture whose panel is open, or the swap source). */
+  selectedFixtureId?: string | null;
 }
 
 /** The placed home matches of one weekend on a dated venue grid (each block = 2h15 footprint). */
-export function WeekendGrid({ model }: WeekendGridProps) {
+export function WeekendGrid({ model, onSelectFixture, selectedFixtureId = null }: WeekendGridProps) {
   const { columns, dateGroups, rows, cells, empty } = model;
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -77,39 +81,48 @@ export function WeekendGrid({ model }: WeekendGridProps) {
           <div key={`line-${i}`} className={cn("border-l", row.major ? "border-b border-border/70" : "border-b border-border/30")} style={{ gridColumn: `2 / span ${columns.length}`, gridRow: 3 + i }} />
         ))}
 
-        {cells.map((cell) => (
-          <div
-            key={cell.key}
-            title={
-              cell.ghost
-                ? `Habitude ${cell.teamLabel} · ${cell.venueLabel} · ${cell.footprintLabel} — fenêtre protégée (calendrier pas encore connu)`
-                : `${cell.teamLabel} vs ${cell.opponentLabel} · ${cell.venueLabel} · ${cell.footprintLabel}`
-            }
-            className={cn(
-              "z-10 m-px flex flex-col items-start overflow-hidden rounded border-l-4 px-1 py-0.5 text-left leading-tight",
-              cell.outOfEnvelope ? "ring-1 ring-warning" : "",
-              // P1-4 PR C — habit ghost: translucent + dashed, visibly NOT a match.
-              cell.ghost ? "border border-dashed border-border opacity-60" : "",
-            )}
-            style={{
-              gridColumn: cell.gridColumn,
-              gridRow: `${cell.gridRowStart} / span ${cell.gridRowSpan}`,
-              justifySelf: "start",
-              width: `${100 / cell.laneCount}%`,
-              transform: `translateX(${cell.lane * 100}%)`,
-              borderLeftColor: cell.venueColor ?? "var(--accent)",
-              backgroundColor: cell.ghost ? "transparent" : (tint(cell.venueColor) ?? "var(--muted)"),
-            }}
-          >
-            <span className="flex w-full items-center gap-1 font-medium">
-              <span className="truncate">{cell.ghost ? `Habitude ${cell.teamLabel}` : cell.teamLabel}</span>
-              {cell.outOfEnvelope ? <AlertTriangle className="ml-auto size-3 shrink-0 text-warning" /> : null}
-            </span>
-            <span className="truncate text-[10px] text-muted-foreground">
-              {cell.ghost ? `${cell.kickoffLabel} · fenêtre protégée` : `${cell.kickoffLabel} · ${cell.opponentLabel}`}
-            </span>
-          </div>
-        ))}
+        {cells.map((cell) => {
+          const clickable = !cell.ghost && undefined !== onSelectFixture;
+          const Tag = clickable ? "button" : "div";
+          return (
+            <Tag
+              key={cell.key}
+              {...(clickable ? { type: "button" as const, onClick: () => onSelectFixture(cell.fixtureId) } : {})}
+              title={
+                cell.ghost
+                  ? `Habitude ${cell.teamLabel} · ${cell.venueLabel} · ${cell.footprintLabel} — fenêtre protégée (calendrier pas encore connu)`
+                  : `${cell.teamLabel} vs ${cell.opponentLabel} · ${cell.venueLabel} · ${cell.footprintLabel}`
+              }
+              className={cn(
+                "z-10 m-px flex flex-col items-start overflow-hidden rounded border-l-4 px-1 py-0.5 text-left leading-tight",
+                cell.outOfEnvelope ? "ring-1 ring-warning" : "",
+                // P1-4 PR C — habit ghost: translucent + dashed, visibly NOT a match.
+                cell.ghost ? "border border-dashed border-border opacity-60" : "",
+                clickable ? "cursor-pointer hover:brightness-95 dark:hover:brightness-110" : "",
+                cell.fixtureId === selectedFixtureId ? "ring-2 ring-accent" : "",
+              )}
+              style={{
+                gridColumn: cell.gridColumn,
+                gridRow: `${cell.gridRowStart} / span ${cell.gridRowSpan}`,
+                justifySelf: "start",
+                width: `${100 / cell.laneCount}%`,
+                transform: `translateX(${cell.lane * 100}%)`,
+                borderLeftColor: cell.venueColor ?? "var(--accent)",
+                backgroundColor: cell.ghost ? "transparent" : (tint(cell.venueColor) ?? "var(--muted)"),
+              }}
+            >
+              <span className="flex w-full items-center gap-1 font-medium">
+                <span className="truncate">{cell.ghost ? `Habitude ${cell.teamLabel}` : cell.teamLabel}</span>
+                {/* P1-4 PR E1 — padlock: MANUAL anchor, the solver never moves it. */}
+                {cell.locked ? <Lock aria-label="Ancre manuelle" className="ml-auto size-3 shrink-0 text-muted-foreground" /> : null}
+                {cell.outOfEnvelope ? <AlertTriangle className={cn("size-3 shrink-0 text-warning", cell.locked ? "" : "ml-auto")} /> : null}
+              </span>
+              <span className="truncate text-[10px] text-muted-foreground">
+                {cell.ghost ? `${cell.kickoffLabel} · fenêtre protégée` : `${cell.kickoffLabel} · ${cell.opponentLabel}`}
+              </span>
+            </Tag>
+          );
+        })}
       </div>
     </div>
   );

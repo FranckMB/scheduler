@@ -75,6 +75,9 @@ export interface WeekendCell {
   /** P1-4 PR C — a HABIT ghost, not a match: the team's protected window on a
    * weekend its calendar has not reached yet. Purely visual, never blocking. */
   ghost: boolean;
+  /** P1-4 PR E1 — anchor badge: MANUAL (or legacy null) placement, the solver
+   * never moves it. SOLVER-placed = re-solvable, no padlock. */
+  locked: boolean;
 }
 
 export interface WeekendGridRow {
@@ -267,6 +270,7 @@ export function buildWeekendGrid(
       footprintLabel: `${formatMinutes(start)}–${formatMinutes(end)}`,
       outOfEnvelope: outOfEnvelope.has(fixture.id),
       ghost: false,
+      locked: "SOLVER" !== fixture.placementSource,
     };
     cells.push(cell);
     intervals.push({ startMin: start, endMin: end, cell });
@@ -297,6 +301,7 @@ export function buildWeekendGrid(
       footprintLabel: `${formatMinutes(start)}–${formatMinutes(end)}`,
       outOfEnvelope: false,
       ghost: true,
+      locked: false,
     };
     cells.push(cell);
     intervals.push({ startMin: start, endMin: end, cell });

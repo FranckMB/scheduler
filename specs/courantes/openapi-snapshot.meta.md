@@ -4,6 +4,11 @@ Snapshot régénéré depuis le backend vivant le 2026-08-03 : `php bin/console 
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P1-4 PR E1 (2026-08-03)** : boucle manuelle — `Fixture.FixtureInput` gagne `placementSource`
+  (écriture : `SOLVER` = « rendre au solveur », accepté SEULEMENT sur un PUT à placement inchangé
+  et statut PLACED, 422 sinon ; refusé au POST ; `MANUAL` = écho no-op). Aucun path nouveau — la
+  boucle réutilise le CRUD `Fixture` existant. Détail : [`module-matchs.md`](module-matchs.md)
+  §Boucle manuelle.
 - **P1-4 PR D (2026-08-03)** : solveur de placement — +`POST /api/fixtures/place` (route
   contrôleur `PlaceMatchesController`, **déclarée dans `CustomRoutesOpenApiFactory`** — le
   déclencheur « route custom ⇒ entrée factory + regen » est appliqué) ; `Fixture` expose

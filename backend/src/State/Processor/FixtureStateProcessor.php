@@ -82,6 +82,10 @@ class FixtureStateProcessor extends AbstractStateProcessor
         }
         $entity->setVenueId('' === $input->venueId ? null : $input->venueId);
         $entity->setKickoffTime($this->parseTime($input->kickoffTime));
+        if (FixturePlacementSource::SOLVER->value === $input->placementSource) {
+            // A match born from a manager's POST is manual by definition.
+            throw new UnprocessableEntityHttpException('Un match créé à la main est manuel — le solveur seul pose SOLVER.');
+        }
 
         return $entity;
     }
@@ -92,6 +96,11 @@ class FixtureStateProcessor extends AbstractStateProcessor
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
+        $placementBefore = [
+            $entity->getVenueId(),
+            $entity->getKickoffTime()?->format('H:i'),
+            $entity->getMatchDate()->format('Y-m-d'),
+        ];
         if (null !== $input->teamId) {
             $entity->setTeamId($input->teamId);
         }
@@ -124,6 +133,12 @@ class FixtureStateProcessor extends AbstractStateProcessor
         if (null !== $input->kickoffTime) {
             $entity->setKickoffTime($this->parseTime($input->kickoffTime));
         }
+        if (FixturePlacementSource::SOLVER->value === $input->placementSource) {
+            $this->assertSolverHandBackAllowed($entity, $placementBefore);
+            // "Rendre au solveur" (P1-4 PR E): overrides the MANUAL stamp above —
+            // legitimate precisely because nothing else moved in this PUT.
+            $entity->setPlacementSource(FixturePlacementSource::SOLVER);
+        }
     }
 
     /**
@@ -132,6 +147,25 @@ class FixtureStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): FixtureResource
     {
         return FixtureResource::fromEntity($entity);
+    }
+
+    /**
+     * SOLVER can only be handed back on an untouched placement: you cannot label
+     * SOLVER a venue/time/date you just chose by hand (the anchor rule would lie
+     * to the next solve), nor an unplaced or submitted match (nothing to hand back).
+     *
+     * @param array{0: string|null, 1: string|null, 2: string} $placementBefore
+     */
+    private function assertSolverHandBackAllowed(Fixture $entity, array $placementBefore): void
+    {
+        $untouched = [
+            $entity->getVenueId(),
+            $entity->getKickoffTime()?->format('H:i'),
+            $entity->getMatchDate()->format('Y-m-d'),
+        ] === $placementBefore;
+        if (!$untouched || FixtureStatus::PLACED !== $entity->getStatus()) {
+            throw new UnprocessableEntityHttpException('Rendre au solveur exige un placement inchangé et un match PLACED — modifiez d\'abord (le match restera manuel), ou déverrouillez sans rien changer.');
+        }
     }
 
     private function parseTime(?string $value): ?DateTimeImmutable

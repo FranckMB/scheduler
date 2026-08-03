@@ -410,3 +410,70 @@ export const placeFixture = (fixture: Fixture, input: PlaceFixtureInput): Promis
       },
     })
     .json<Fixture>();
+
+// ── Manual loop (P1-4 PR E1) ─────────────────────────────────────────────────
+
+/** Full-replace echo body — PUT wipes whatever is not resent. */
+const fixtureEchoBody = (fixture: Fixture): Record<string, unknown> => ({
+  teamId: fixture.teamId,
+  matchDate: fixture.matchDate,
+  homeAway: fixture.homeAway,
+  opponentLabel: fixture.opponentLabel,
+  competitionId: fixture.competitionId,
+  venueId: fixture.venueId ?? "",
+  kickoffTime: fixture.kickoffTime ?? "",
+  status: fixture.status,
+});
+
+export interface EditFixtureInput {
+  matchDate: string;
+  homeAway: HomeAway;
+  opponentLabel: string;
+  competitionId: string | null;
+}
+
+/** Edit body rule (pure, unit-tested): a manual date change KEEPS the placement
+ * (the manager IS the decision — unlike an FBI re-import, which un-places); the
+ * diagnostic flags any problem the new date creates. Switching HOME → AWAY is
+ * the one exception: our venue makes no sense for an away game, the slot is
+ * freed (same rule as the FBI re-import switch). */
+export const editFixtureBody = (fixture: Fixture, input: EditFixtureInput): Record<string, unknown> => {
+  const switchedAway = "AWAY" === input.homeAway && "HOME" === fixture.homeAway;
+  const unplace = switchedAway ? { status: "UNPLACED", venueId: "", kickoffTime: "" } : {};
+  return { ...fixtureEchoBody(fixture), ...input, ...unplace };
+};
+
+export const updateFixture = (fixture: Fixture, input: EditFixtureInput): Promise<Fixture> =>
+  api.put(`fixtures/${fixture.id}`, { json: editFixtureBody(fixture, input) }).json<Fixture>();
+
+export const deleteFixture = (id: string): Promise<void> => api.delete(`fixtures/${id}`).then(() => undefined);
+
+/** Back to the "à placer" list: placement cleared, placementSource cleared server-side. */
+export const unplaceFixture = (fixture: Fixture): Promise<Fixture> =>
+  api
+    .put(`fixtures/${fixture.id}`, { json: { ...fixtureEchoBody(fixture), status: "UNPLACED", venueId: "", kickoffTime: "" } })
+    .json<Fixture>();
+
+/** Move a placed fixture (venue and/or kickoff) — stays a MANUAL anchor. */
+export const moveFixture = (fixture: Fixture, input: PlaceFixtureInput): Promise<Fixture> =>
+  api
+    .put(`fixtures/${fixture.id}`, { json: { ...fixtureEchoBody(fixture), venueId: input.venueId, kickoffTime: input.kickoffTime, status: "PLACED" } })
+    .json<Fixture>();
+
+/** Padlock: an echo PUT stamps MANUAL server-side — the solver never moves it again. */
+export const lockFixture = (fixture: Fixture): Promise<Fixture> =>
+  api.put(`fixtures/${fixture.id}`, { json: fixtureEchoBody(fixture) }).json<Fixture>();
+
+/** Hand back to the solver — accepted by the server ONLY on an untouched placement (422 otherwise). */
+export const unlockFixture = (fixture: Fixture): Promise<Fixture> =>
+  api.put(`fixtures/${fixture.id}`, { json: { ...fixtureEchoBody(fixture), placementSource: "SOLVER" } }).json<Fixture>();
+
+/**
+ * Swap the placements (venue + kickoff, NEVER the dates — the league owns them)
+ * of two placed fixtures. Two sequential PUTs, no server transaction: nothing is
+ * blocking, so a network failure mid-swap leaves a visible, recoverable state.
+ */
+export const swapFixtures = async (a: Fixture, b: Fixture): Promise<void> => {
+  await moveFixture(a, { venueId: b.venueId ?? "", kickoffTime: b.kickoffTime ?? "" });
+  await moveFixture(b, { venueId: a.venueId ?? "", kickoffTime: a.kickoffTime ?? "" });
+};

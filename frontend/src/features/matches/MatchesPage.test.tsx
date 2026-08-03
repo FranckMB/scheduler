@@ -7,7 +7,10 @@ import { renderWithProviders } from "@/test/utils";
 import { MatchesPage } from "./MatchesPage";
 import { useMatchesStore } from "./store";
 
-const { placeFixture } = vi.hoisted(() => ({ placeFixture: vi.fn(() => Promise.resolve({})) }));
+const { placeFixture, unplaceFixture } = vi.hoisted(() => ({
+  placeFixture: vi.fn(() => Promise.resolve({})),
+  unplaceFixture: vi.fn(() => Promise.resolve({})),
+}));
 
 // Matches are unlocked only once the season's socle is validated.
 vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "s1", hasFinishedVersion: true } } }) }));
@@ -69,11 +72,20 @@ vi.mock("./api", () => ({
   ),
   createFixture: vi.fn(() => Promise.resolve({})),
   placeFixture,
+  // Manual loop (P1-4 PR E1).
+  updateFixture: vi.fn(() => Promise.resolve({})),
+  deleteFixture: vi.fn(() => Promise.resolve()),
+  unplaceFixture,
+  moveFixture: vi.fn(() => Promise.resolve({})),
+  lockFixture: vi.fn(() => Promise.resolve({})),
+  unlockFixture: vi.fn(() => Promise.resolve({})),
+  swapFixtures: vi.fn(() => Promise.resolve()),
 }));
 
 beforeEach(() => {
   placeFixture.mockClear();
-  useMatchesStore.setState({ selectedWeekend: null, selectedFixtureId: null, fixtureFormOpen: false });
+  unplaceFixture.mockClear();
+  useMatchesStore.setState({ selectedWeekend: null, selectedFixtureId: null, swapSourceId: null, fixtureFormOpen: false });
 });
 
 describe("MatchesPage (integration)", () => {
@@ -116,5 +128,18 @@ describe("MatchesPage (integration)", () => {
 
     expect(placeFixture).toHaveBeenCalledOnce();
     expect(placeFixture).toHaveBeenCalledWith(expect.objectContaining({ id: "fx-unplaced" }), { venueId: "venue-1", kickoffTime: "15:00" });
+  });
+
+  it("clicking a placed grid cell opens the manual-loop panel (P1-4 PR E1)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MatchesPage />);
+
+    // The placed match renders as a clickable grid cell (team + kickoff + opponent).
+    await user.click(await screen.findByRole("button", { name: /Seniors.*Rivaux/ }));
+
+    // Panel of a PLACED match: main action is Déplacer, manual loop below.
+    expect(await screen.findByRole("button", { name: "Déplacer" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Dé-placer" }));
+    expect(unplaceFixture).toHaveBeenCalledWith(expect.objectContaining({ id: "fx-placed" }));
   });
 });
