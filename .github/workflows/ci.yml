@@ -437,11 +437,67 @@ jobs:
         working-directory: frontend
         run: E2E_BASE_URL=http://localhost:5173 npx playwright test
 
-      # Semantic smoke tests on the SAME booted stack (demande fondateur
-      # 2026-08-03 : « les smokes doivent être joués automatiquement et par la
-      # CI »). Each is self-sufficient (mints its JWT, creates/cleans its data,
-      # sets/restores the season-plan pointer). Order matters: the solver smoke
-      # leaves the COMPLETED season schedule the others may pin.
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-results
+          path: frontend/test-results/
+          retention-days: 7
+
+  # Semantic end-to-end smokes on a real stack — « les smokes doivent être joués
+  # automatiquement et par la CI pour que l'on s'assure que les fonctionnalités
+  # fonctionnent bien » (fondateur, 2026-08-03).
+  #
+  # NO `needs`: they answer « la fonctionnalité marche-t-elle ? », a question
+  # independent of the unit/blocking suites — waiting for them only delayed the
+  # answer (~13 min behind the e2e job, measured). Same reason dependency-audit
+  # and rector have none. They need NO npm, NO Playwright, NO Vite: only the API
+  # + the solver, so the job boots in a fraction of the e2e setup.
+  #
+  # Each script is self-sufficient (mints its JWT, creates AND cleans its data,
+  # re-opens then RESTORES the season-plan pointer) — order is a convenience,
+  # never a dependency. The solver smoke does leave the COMPLETED season
+  # schedule the later ones pin, hence this ordering.
+  smoke-tests:
+    name: Smoke Tests (semantic e2e)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
+      # mailpit rides along (php-fpm depends_on it) — the onboarding smoke pulls
+      # its verification link from it.
+      - name: Start services
+        run: docker compose up -d --wait php-fpm nginx engine mercure redis postgres
+
+      - name: Install PHP deps
+        run: docker compose exec -T php-fpm composer install --no-interaction
+
+      - name: Generate JWT keys
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction'
+
+      - name: Migrate dev database
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:migrations:migrate --no-interaction'
+
+      # The seeded club the solver/matches/overlay smokes drive. Same admin-URL
+      # dance as the e2e job (BasketballInit refuses the app_user connection).
+      - name: Load dev fixtures
+        run: |
+          docker compose exec -T php-fpm sh -c '
+            cd /app/backend
+            DBU=$(cat .env .env.local 2>/dev/null | sed -n "s/^DATABASE_ADMIN_URL=//p" | tail -n1 | tr -d "\"")
+            [ -n "$DBU" ] || { echo "DATABASE_ADMIN_URL introuvable dans backend/.env — fixtures ne peuvent pas tourner sur la connexion admin"; exit 1; }
+            DATABASE_URL="$DBU" php bin/console doctrine:fixtures:load --append --no-interaction
+          '
+
+      - name: Start messenger worker
+        run: docker compose up -d --wait messenger-worker
+
       - name: Smoke — onboarding (register → minimum → COMPLETED)
         run: backend/scripts/onboarding-smoke.sh
       - name: Smoke — season solver (async rail → COMPLETED)
@@ -453,13 +509,9 @@ jobs:
       - name: Smoke — coach wishes (campaign → public token → persisted wish)
         run: backend/scripts/smoke-coach-wishes.sh
 
-      - name: Upload traces on failure
+      - name: Dump service logs on failure
         if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-results
-          path: frontend/test-results/
-          retention-days: 7
+        run: docker compose logs --tail 120 php-fpm engine messenger-worker
 
   build-docker:
     name: Build Docker Images
