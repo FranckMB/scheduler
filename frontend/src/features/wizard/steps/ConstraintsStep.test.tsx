@@ -367,6 +367,25 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "DAY", ruleType: "HARD", config: { allowedDays: [5] } });
   });
 
+  it("names the day group after the polarity in force, so the gesture says its own sense (P4-58a)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Jours" }));
+
+    // ⚠ La couleur d'un jour coché est la MÊME dans les deux sens. Sans nom sur le
+    // groupe, « Ven » activé se lit « vendredi retenu » aussi bien pour l'imposer que
+    // pour l'éviter — et un lecteur d'écran n'annonce que « Ven ».
+    expect(screen.getByRole("group", { name: "Jours à éviter" })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Type de jour"), "forced");
+    expect(screen.getByRole("group", { name: "Jours imposés" })).toBeInTheDocument();
+
+    // Et l'état de chaque jour est porté par le bouton lui-même, pas seulement par sa classe.
+    await user.click(screen.getByRole("button", { name: "Ven" }));
+    expect(screen.getByRole("button", { name: "Ven", pressed: true })).toBeInTheDocument();
+  });
+
   it("keeps the target after a create so several constraints can be added in a row (F5)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ConstraintsStep />);

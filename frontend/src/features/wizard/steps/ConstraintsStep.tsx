@@ -45,14 +45,23 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
 /** Coerce a JSON config value (unknown) into a day-number array. */
 const asNums = (v: unknown): number[] => (Array.isArray(v) ? v.map(Number).filter((n) => !Number.isNaN(n)) : []);
 
-function DayPicker({ days, toggle }: { days: Set<number>; toggle: (n: number) => void }) {
+/**
+ * ⚠ `legend` n'est pas décoratif : un jour coché est colorié pareil qu'il soit IMPOSÉ ou
+ * ÉVITÉ. Le sens vit dans un `Select` voisin, que la couleur ne rappelle pas et qu'un
+ * lecteur d'écran ne rattache à rien — les boutons n'annonçaient que « Lun », « Mar ».
+ * P4-58(a) décrivait la polarité comme invisible ; elle ne l'est plus depuis que ce
+ * sélecteur existe, mais le GROUPE, lui, restait muet. `aria-label` porté par le groupe
+ * suit la polarité courante : le sens est dit là où le geste se fait.
+ */
+function DayPicker({ days, toggle, legend }: { days: Set<number>; toggle: (n: number) => void; legend: string }) {
   return (
-    <div className="flex flex-wrap gap-1">
+    <div role="group" aria-label={legend} className="flex flex-wrap gap-1">
       {DAYS.map((d) => (
         <button
           key={d.n}
           type="button"
           onClick={() => toggle(d.n)}
+          aria-pressed={days.has(d.n)}
           className={cn("rounded-md border px-2 py-1 text-xs", days.has(d.n) ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground")}
         >
           {d.label}
@@ -541,7 +550,7 @@ export function ConstraintsStep() {
               <option value="forbidden">à éviter</option>
               <option value="forced">uniquement</option>
             </Select>
-            <DayPicker days={days} toggle={toggleDay} />
+            <DayPicker days={days} toggle={toggleDay} legend={"forced" === dayMode ? "Jours imposés" : "Jours à éviter"} />
           </>
         )}
 
@@ -597,7 +606,7 @@ export function ConstraintsStep() {
               <option value="unavailable">indisponible</option>
               <option value="available">disponible uniquement</option>
             </Select>
-            <DayPicker days={days} toggle={toggleDay} />
+            <DayPicker days={days} toggle={toggleDay} legend={"available" === coachMode ? "Jours de disponibilité exclusive" : "Jours d'indisponibilité"} />
             {/* Lot C: optional time window on the selected days (empty = whole day). */}
             <label className="flex items-center gap-1 text-xs text-muted-foreground">
               de
