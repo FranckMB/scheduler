@@ -46,10 +46,11 @@ final class TeamTagSyncListener
         }
 
         // ⚠ CE FLUSH EST INDISPENSABLE — sans lui ce listener ne persistait RIEN.
-        // `syncTeamTags` fait `remove()` des anciennes assignations, puis
-        // `getOrCreateSystemTags` FLUSHE (ce qui commite ces remove), puis `persist()`
-        // les nouvelles — et ne flushe plus. En `postFlush`, le flush appelant est déjà
-        // terminé : les persist restaient donc en attente indéfiniment. Constaté :
+        // `syncTeamTags` fait `remove()` des anciennes assignations puis `persist()` les
+        // nouvelles, et ne flushe pas (depuis P2-13 : son seul flush restant sert au
+        // backfill d'axe, conditionnel — voir `TeamTagService::getOrCreateSystemTags`).
+        // En `postFlush`, le flush appelant est déjà terminé : les persist restaient donc
+        // en attente indéfiniment. Constaté :
         // créer une équipe donnait 21 `team_tag` mais 0 `team_tag_assignment`, et éditer
         // une équipe SUPPRIMAIT les siennes sans les recréer. Le défaut était masqué
         // parce que `ScheduleConstraintBuilder::serializeTeam` rappelait `syncTeamTags`
@@ -58,10 +59,10 @@ final class TeamTagSyncListener
         // writer : il doit finir son travail.
         //
         // Pas de récursion : `$pendingTeams` est vidé AVANT la boucle, donc le
-        // `postFlush` déclenché par ce flush-ci ressort immédiatement. Flusher ici est
-        // par ailleurs déjà le régime en vigueur — `getOrCreateSystemTags` le fait, et
-        // sans condition (donc N flushes pour N équipes importées ; ce coût préexiste,
-        // il est inscrit en dette). Celui-ci n'en ajoute qu'UN, en fin de lot.
+        // `postFlush` déclenché par ce flush-ci ressort immédiatement. Et c'est bien UN
+        // flush pour tout le lot : la boucle ci-dessus n'en déclenche plus par équipe
+        // (P2-13 a rendu conditionnel celui de `getOrCreateSystemTags`, qui partait N fois
+        // pour N équipes importées).
         //
         // ⚠ Deux conséquences assumées. (1) Un échec d'écriture des tags remonte
         // désormais dans le `flush()` appelant et peut annuler la transaction englobante

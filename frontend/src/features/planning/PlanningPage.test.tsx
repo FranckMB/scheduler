@@ -187,7 +187,7 @@ describe("PlanningPage (integration)", () => {
     vi.mocked(listSchedules).mockResolvedValue([
       { id: SID, name: "Version de période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
     ]);
-    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Reprise d'été S1", startDate: "2026-08-17", calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: true }];
+    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Reprise d'été S1", startDate: "2026-08-17", calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: true, hasVersions: false }];
     usePlanningStore.setState({ selectedScheduleId: SID });
     renderWithProviders(<PlanningPage />);
 
@@ -268,7 +268,7 @@ describe("PlanningPage (integration)", () => {
     vi.mocked(listSchedules).mockResolvedValue([
       { id: SID, name: "Période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
     ]);
-    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
+    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true, hasVersions: false }];
     // La séance par défaut (slot-1) est placée dans venue-1, que l'on désactive ensuite.
     venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
     usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
@@ -283,7 +283,7 @@ describe("PlanningPage (integration)", () => {
     vi.mocked(listSchedules).mockResolvedValue([
       { id: SID, name: "Période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
     ]);
-    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
+    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true, hasVersions: false }];
     // DEUX gymnases : sans un gymnase qui RESTE, la grille est vide et l'assertion
     // négative passerait pour la mauvaise raison (rien ne s'affiche).
     vi.mocked(getVenues).mockResolvedValue([

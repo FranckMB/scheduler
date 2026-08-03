@@ -86,6 +86,16 @@ class SchedulePlanResource
     #[Groups(['read'])]
     public bool $teamSelectionInitialized = false;
 
+    /**
+     * Ce plan porte-t-il au moins une version ? DÉRIVÉ, jamais stocké — rempli en
+     * LOT par le provider (patron `Team.isEngaged`). ⚠ Différent de
+     * `chosenScheduleId` : un plan peut avoir des versions sans qu'aucune soit
+     * pointée. Le client n'a plus à tirer toute la collection des schedules pour
+     * répondre à cette question (P4-23).
+     */
+    #[Groups(['read'])]
+    public bool $hasVersions = false;
+
     public static function fromEntity(SchedulePlan $entity): self
     {
         $dto = new self;

@@ -127,6 +127,29 @@ final class SchedulePlanReadModelTest extends WebTestCase
         self::assertNull($me['seasonPlan'], 'aucun plan → null, jamais une erreur');
     }
 
+    /**
+     * P4-23 — `hasVersions` est DÉRIVÉ et batché par le provider : le client n'a
+     * plus à tirer toute la collection des schedules pour savoir si un plan porte
+     * une version. ⚠ Distinct de `chosenScheduleId` : un plan peut avoir des
+     * versions sans qu'aucune ne soit pointée — c'est même l'état courant d'un
+     * espace de travail.
+     */
+    public function testSchedulePlanExposesWhetherItCarriesVersions(): void
+    {
+        [$user, , $season] = $this->seed('RDM9');
+
+        $plans = $this->schedulePlans($user);
+        self::assertCount(1, $plans, 'la saison porte son plan SEASON');
+        self::assertFalse($plans[0]['hasVersions'], 'plan neuf : aucune version');
+        self::assertNull($plans[0]['chosenScheduleId']);
+
+        $this->version($season, ScheduleStatus::COMPLETED);
+
+        $plans = $this->schedulePlans($user);
+        self::assertTrue($plans[0]['hasVersions'], 'une version pend au plan');
+        self::assertNull($plans[0]['chosenScheduleId'], 'porter une version n\'est PAS être validé');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -135,6 +158,16 @@ final class SchedulePlanReadModelTest extends WebTestCase
         $this->provisioner = $container->get(SchedulePlanProvisioner::class);
         $this->hasher = $container->get(UserPasswordHasherInterface::class);
         $this->jwt = $container->get(JWTTokenManagerInterface::class);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function schedulePlans(User $user): array
+    {
+        $this->client->request('GET', '/api/schedule_plans', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $this->jwt->create($user)]);
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        return $data['member'] ?? $data;
     }
 
     private function validate(User $user, Schedule $schedule): void

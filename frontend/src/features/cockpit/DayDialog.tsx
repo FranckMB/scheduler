@@ -2,7 +2,7 @@ import { CalendarOff, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useNavigate } from "react-router";
 
-import { useSchedules, useVenues } from "@/features/planning/queries";
+import { useVenues } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
@@ -50,7 +50,6 @@ export function DayDialog({ iso, entries, holiday, publicHoliday, onClose }: Day
 
 function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entries: CalendarEntry[]; holiday?: SchoolHoliday; publicHoliday?: PublicHoliday; onCreate: (m: Mode) => void; onClose: () => void }) {
   const deleteEntry = useDeleteEntry();
-  const schedulesQuery = useSchedules();
   const [toDelete, setToDelete] = useState<CalendarEntry | null>(null);
   // Plannings couvrant ce jour (retour fondateur 2026-07-19) : une entrée qui PORTE
   // un plan (fermeture / semaine de vacances) devient accessible en AJUSTER (plan
@@ -72,7 +71,6 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
       planByEntry.set(p.calendarEntryId, p);
     }
   }
-  const plansWithVersions = new Set((schedulesQuery.data ?? []).map((s) => s.schedulePlanId));
   const adjust = (entryId: string) => {
     startPeriodMode(entryId);
     onClose();
@@ -102,7 +100,6 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
   // version validée. « Porte des versions » se dérive du plan de la période (schedulePlanId),
   // plus d'un pointeur sur l'entrée (lot D-b). Un plan vide (aucune version) ne perd rien → bénin.
   const planQuery = useSchedulePlanForEntry(toDelete?.id ?? null);
-  const toDeletePlanId = planQuery.data?.id ?? null;
   // Restreint aux types OVERLAYABLES : seuls closure/holiday portent un plan (inv. 9) —
   // cutoff/mutualisation/custom et les événements n'en ont jamais, donc aucune cascade à
   // annoncer (les avertir serait un faux positif alarmant).
@@ -114,8 +111,10 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
   // TanStack bascule en error sur un refetch d'arrière-plan tout en gardant la donnée périmée
   // — s'y fier sur-avertirait un plan vide après un simple blip. (usePeriodAnchor n'expose pas
   // cet état → lecture directe des deux requêtes ici.)
-  const versionsResolved = undefined !== planQuery.data && undefined !== schedulesQuery.data;
-  const toDeleteHasVersions = overlayCapable && (!versionsResolved || (null !== toDeletePlanId && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === toDeletePlanId)));
+  // P4-23 : `hasVersions` voyage avec le PLAN (dérivé serveur, batché) — une seule
+  // requête à surveiller au lieu de deux, et plus de collection entière tirée.
+  const versionsResolved = undefined !== planQuery.data;
+  const toDeleteHasVersions = overlayCapable && (!versionsResolved || true === planQuery.data?.hasVersions);
 
   const confirmDelete = () => {
     if (!toDelete) return;
@@ -153,7 +152,9 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
             // geste crée le plan puis ouvre le wizard. Événement/coupure : rien.
             const plan = planByEntry.get(entry.id) ?? null;
             const chosen = plan?.chosenScheduleId ?? null;
-            const planHasVersions = null !== plan && plansWithVersions.has(plan.id);
+            // P4-23 — champ DÉRIVÉ batché par le serveur : tirer toute la collection
+            // des schedules pour ce booléen coûtait une requête par ouverture du dialog.
+            const planHasVersions = true === plan?.hasVersions;
             const adaptable = null === plan && null === entry.parentEntryId && ("closure" === entry.periodType || "holiday" === entry.periodType);
             // Gating (#5/F3) : AJUSTER une fermeture PAS ENCORE commencée (0 version)
             // reste bloqué tant que la saison n'est pas validée ; reprendre un travail
@@ -286,23 +287,23 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const { data: allPlans } = useSchedulePlans();
   // Index une fois (revue dette F2, même règle que DayList) : plan (id + version
   // validée) par entrée-enfant — plutôt qu'un .find par chip rendu. Premier-gagne.
-  const planByChildEntry = new Map<string, { planId: string; chosen: string | null }>();
+  const planByChildEntry = new Map<string, { planId: string; chosen: string | null; hasVersions: boolean }>();
   for (const p of allPlans ?? []) {
     if (null !== p.calendarEntryId && !planByChildEntry.has(p.calendarEntryId)) {
-      planByChildEntry.set(p.calendarEntryId, { planId: p.id, chosen: p.chosenScheduleId });
+      planByChildEntry.set(p.calendarEntryId, { planId: p.id, chosen: p.chosenScheduleId, hasVersions: p.hasVersions });
     }
   }
   const chosenOfChild = (childId: string): string | null => planByChildEntry.get(childId)?.chosen ?? null;
-  // Générée « d'un bloc » ? (versions sur le plan de la mère → pas de découpage.)
-  const schedulesQuery = useSchedules();
-  const schedulesResolved = undefined !== schedulesQuery.data;
   // « en cours » par semaine (parité radar startedEntryIds) : plan avec ≥1 version,
   // non validé. Sert au libellé 3 états ET au gating (reprendre un travail commencé
   // n'est jamais bloqué par le socle — même règle que la carte radar).
-  const plansWithVersionsSet = new Set((schedulesQuery.data ?? []).map((s) => s.schedulePlanId));
+  // P4-23 : `hasVersions` est DÉRIVÉ par le serveur et voyage avec le plan — la
+  // collection entière des schedules n'est plus tirée pour ce booléen. La garde
+  // fail-closed devient donc « allPlans pas résolu », un seul état à surveiller.
+  const plansResolved = undefined !== allPlans;
   const wipOfChild = (childId: string): boolean => {
     const p = planByChildEntry.get(childId);
-    return undefined !== p && null === p.chosen && plansWithVersionsSet.has(p.planId);
+    return undefined !== p && null === p.chosen && p.hasVersions;
   };
   // Suppression d'UNE semaine — intégrée à l'encart (fondateur 2026-07-24). Même
   // avertissement fort que DayList : fail-closed sur l'ABSENCE de donnée (plans ou
@@ -311,8 +312,8 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const [weekToDelete, setWeekToDelete] = useState<CalendarEntry | null>(null);
   const weekToDeleteHasVersions =
     null !== weekToDelete
-    && (undefined === allPlans || !schedulesResolved
-      || (() => { const p = planByChildEntry.get(weekToDelete.id); return undefined !== p && plansWithVersionsSet.has(p.planId); })());
+    && (!plansResolved
+      || (() => { const p = planByChildEntry.get(weekToDelete.id); return undefined !== p && p.hasVersions; })());
   const confirmWeekDelete = () => {
     if (null === weekToDelete) return;
     deleteEntry.mutate(weekToDelete.id, { onSuccess: () => toast.success("Semaine retirée du calendrier") });
@@ -323,7 +324,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   // déjà générée en bloc (revue #262 round 3). entry null (aucune période encore)
   // = résolu par définition : la query est désactivée.
   const planResolved = null === entry || undefined !== plan.data;
-  const blockGenerated = undefined !== plan.data && null !== plan.data && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === plan.data?.id);
+  const blockGenerated = true === plan.data?.hasVersions;
   const adapt = (entryId: string) => {
     startPeriodMode(entryId);
     onClose();
@@ -344,7 +345,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   // direct aussi (fail-open du picker = 422 en série, revue #262 round 2).
   const requestAdapt = (target: CalendarEntry) => {
     const multiWeek = null !== workingSeason && periodWeeksToAdjust(target.startDate, target.endDate, workingSeason, "holiday", today).length > 1;
-    if (multiWeek && childrenResolved && 0 === weekChildren.length && schedulesResolved && planResolved && !blockGenerated) {
+    if (multiWeek && childrenResolved && 0 === weekChildren.length && plansResolved && planResolved && !blockGenerated) {
       setPickerFor(target);
       return;
     }

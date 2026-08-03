@@ -22,14 +22,14 @@ const startPeriodMode = vi.fn();
 const setSelectedScheduleId = vi.fn();
 const weekChildrenMutate = vi.fn();
 // Plans couvrant le jour (B1) : DayList lit chosenScheduleId par calendarEntryId.
-let allPlansMock: { id: string; calendarEntryId: string | null; chosenScheduleId: string | null }[] = [];
+let allPlansMock: { id: string; calendarEntryId: string | null; chosenScheduleId: string | null; hasVersions?: boolean }[] = [];
 
 // ADR-0002 lot D-b : « overlay validé » (HolidayBlock « Voir le planning ») = plan de
 // période avec chosenScheduleId ; « porte des versions » (garde destructive de suppression)
-// = une Schedule pend au plan (schedulePlanId). Les deux se dérivent du plan, plus de
-// pointeur sur l'entrée.
-let plansByEntry: Record<string, { id: string; chosenScheduleId: string | null }> = {};
-let schedulesData: { id: string; schedulePlanId: string | null }[] = [];
+// = `plan.hasVersions`, champ DÉRIVÉ que le serveur batche (P4-23 — avant, le front
+// tirait toute la collection des schedules pour ce booléen). Les deux se dérivent du
+// plan, plus de pointeur sur l'entrée.
+let plansByEntry: Record<string, { id: string; chosenScheduleId: string | null; hasVersions?: boolean }> = {};
 // undefined data = requêtes pas encore résolues (1er chargement ou 1er échec sans donnée) →
 // fail-closed. Le code clé sur la PRÉSENCE de `data`, pas sur le statut (une donnée périmée
 // après un refetch en échec reste exploitable).
@@ -53,7 +53,6 @@ vi.mock("./queries", () => ({
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
-  useSchedules: () => ({ data: queriesNoData ? undefined : schedulesData }),
 }));
 vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: (sel: (s: unknown) => unknown) => sel({ startPeriodMode }) }));
@@ -105,7 +104,6 @@ describe("DayDialog — deletion is always confirmed", () => {
     meData = { seasonPlan: { chosenScheduleId: "s-season" } };
     allPlansMock = [];
     plansByEntry = {};
-    schedulesData = [];
     queriesNoData = false;
     childEntriesData = [];
   });
@@ -135,8 +133,7 @@ describe("DayDialog — deletion is always confirmed", () => {
   it("warns that deleting a period cascades to its plan and all its versions", async () => {
     // Décision fondateur : la suppression emporte le plan ET toutes ses versions —
     // on avertit dès qu'une version pend au plan (brouillon inclus), pas seulement validée.
-    plansByEntry = { p1: { id: "plan-p1", chosenScheduleId: null } };
-    schedulesData = [{ id: "draft1", schedulePlanId: "plan-p1" }];
+    plansByEntry = { p1: { id: "plan-p1", chosenScheduleId: null, hasVersions: true } }; // brouillon pendu au plan
     renderDialog([entry({ id: "p1", kind: "period", periodType: "closure", title: "Gym fermé" })]);
 
     await userEvent.click(screen.getByRole("button", { name: "Supprimer Gym fermé" }));
@@ -145,8 +142,7 @@ describe("DayDialog — deletion is always confirmed", () => {
   });
 
   it("keeps the benign message when the period plan carries no version yet", async () => {
-    plansByEntry = { p2: { id: "plan-p2", chosenScheduleId: null } };
-    schedulesData = []; // plan vide → la suppression ne perd rien
+    plansByEntry = { p2: { id: "plan-p2", chosenScheduleId: null, hasVersions: false } }; // plan vide → la suppression ne perd rien
     renderDialog([entry({ id: "p2", kind: "period", periodType: "closure", title: "Vide" })]);
 
     await userEvent.click(screen.getByRole("button", { name: "Supprimer Vide" }));
@@ -159,7 +155,6 @@ describe("DayDialog — deletion is always confirmed", () => {
     // sous-avertir ferait perdre des versions après un message bénin (régression P4-19).
     queriesNoData = true;
     plansByEntry = {}; // plan pas encore résolu
-    schedulesData = [];
     renderDialog([entry({ id: "p3", kind: "period", periodType: "closure", title: "En cours" })]);
 
     await userEvent.click(screen.getByRole("button", { name: "Supprimer En cours" }));
@@ -170,8 +165,7 @@ describe("DayDialog — deletion is always confirmed", () => {
   it("resolved data stays benign for an empty plan even if a background refetch errors (keys on data, not status)", async () => {
     // TanStack passe en error sur un refetch d'arrière-plan en gardant la donnée : un plan
     // VIDE résolu doit rester bénin — s'y fier sur isSuccess sur-avertirait à chaque blip.
-    plansByEntry = { p4: { id: "plan-p4", chosenScheduleId: null } };
-    schedulesData = []; // plan résolu et vide → rien à perdre
+    plansByEntry = { p4: { id: "plan-p4", chosenScheduleId: null, hasVersions: false } }; // plan résolu et vide → rien à perdre
     renderDialog([entry({ id: "p4", kind: "period", periodType: "holiday", title: "Vacances" })]);
 
     await userEvent.click(screen.getByRole("button", { name: "Supprimer Vacances" }));
@@ -299,7 +293,6 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     meData = { seasonPlan: { chosenScheduleId: "s-season" } };
     allPlansMock = [];
     plansByEntry = {};
-    schedulesData = [];
     queriesNoData = false;
     childEntriesData = [];
   });
@@ -502,7 +495,6 @@ describe("DayDialog — holiday block chips (3 states) and integrated week delet
     meData = { seasonPlan: { chosenScheduleId: "s-season" } };
     allPlansMock = [];
     plansByEntry = {};
-    schedulesData = [];
     queriesNoData = false;
     childEntriesData = [];
   });
@@ -513,8 +505,7 @@ describe("DayDialog — holiday block chips (3 states) and integrated week delet
   it("shows « · en cours » on a week whose plan has versions but no validated one, clickable even if the season plan is reopened", async () => {
     meData = { seasonPlan: { chosenScheduleId: null } }; // socle non validé
     childEntriesData = [mother(), week()];
-    allPlansMock = [{ id: "wp1", calendarEntryId: "wk1", chosenScheduleId: null }];
-    schedulesData = [{ id: "s1", schedulePlanId: "wp1" }]; // versions → en cours
+    allPlansMock = [{ id: "wp1", calendarEntryId: "wk1", chosenScheduleId: null, hasVersions: true }]; // versions → en cours
     renderDialog([mother(), week()], { holiday: schoolHoliday() });
 
     const chip = await screen.findByRole("button", { name: /sem\. du 11 mai .*· en cours/ });

@@ -119,7 +119,11 @@ final class TeamTagServiceTest extends TestCase
                 }
             });
 
-        $this->entityManager->expects(self::once())->method('flush');
+        // P2-13 — `syncTeamTags` ne flushe PLUS de lui-même : le seul flush du chemin
+        // servait au backfill d'axe (aucun ici, les tags du mock en ont un). Les
+        // assignations partent avec le flush de fin de lot du `TeamTagSyncListener`,
+        // celui que son commentaire déclare indispensable.
+        $this->entityManager->expects(self::never())->method('flush');
 
         $this->service->syncTeamTags($team, 'season-1');
 
@@ -172,7 +176,11 @@ final class TeamTagServiceTest extends TestCase
                 }
             });
 
-        $this->entityManager->expects(self::once())->method('flush');
+        // P2-13 — `syncTeamTags` ne flushe PLUS de lui-même : le seul flush du chemin
+        // servait au backfill d'axe (aucun ici, les tags du mock en ont un). Les
+        // assignations partent avec le flush de fin de lot du `TeamTagSyncListener`,
+        // celui que son commentaire déclare indispensable.
+        $this->entityManager->expects(self::never())->method('flush');
 
         $this->service->syncTeamTags($team, 'season-1');
 
@@ -212,7 +220,11 @@ final class TeamTagServiceTest extends TestCase
                 $removedEntities[] = $entity;
             });
 
-        $this->entityManager->expects(self::once())->method('flush');
+        // P2-13 — `syncTeamTags` ne flushe PLUS de lui-même : le seul flush du chemin
+        // servait au backfill d'axe (aucun ici, les tags du mock en ont un). Les
+        // assignations partent avec le flush de fin de lot du `TeamTagSyncListener`,
+        // celui que son commentaire déclare indispensable.
+        $this->entityManager->expects(self::never())->method('flush');
 
         $this->service->syncTeamTags($team, 'season-1');
 
@@ -240,7 +252,11 @@ final class TeamTagServiceTest extends TestCase
         $this->sportCategoryRepository->method('find')
             ->willReturn(null);
 
-        $this->entityManager->expects(self::once())->method('flush');
+        // P2-13 — `syncTeamTags` ne flushe PLUS de lui-même : le seul flush du chemin
+        // servait au backfill d'axe (aucun ici, les tags du mock en ont un). Les
+        // assignations partent avec le flush de fin de lot du `TeamTagSyncListener`,
+        // celui que son commentaire déclare indispensable.
+        $this->entityManager->expects(self::never())->method('flush');
 
         $this->service->syncTeamTags($team, 'season-1');
 
@@ -406,6 +422,35 @@ final class TeamTagServiceTest extends TestCase
         }
 
         return $tags;
+    }
+
+    /**
+     * P2-13 — le flush restant a UNE seule raison d'être : le backfill d'axe sur un tag
+     * antérieur au lot B (`insertMissingSystemTags` écrit en SQL brut, hors unit of work).
+     * Il doit donc partir quand un axe manque, et ne plus partir sinon — sans quoi on
+     * flushait une fois PAR ÉQUIPE à chaque import ou bascule de catégorie.
+     */
+    public function testFlushesOnlyWhenAnAxisIsBackfilled(): void
+    {
+        $team = new Team;
+        $team->setClubId('club-1');
+        $team->setSeasonId('season-1');
+        $team->setSportCategoryId('cat-u15');
+        $team->setGender(Gender::F);
+
+        // Catalogue complet, mais UN tag privé de son axe (ligne d'avant le lot B).
+        $tags = $this->systemTagsKeyedByName();
+        $tags[0]->setAxis(null);
+
+        $this->assignmentRepository->method('findBy')->willReturn([]);
+        $this->teamTagRepository->method('findBy')->willReturn($tags);
+        $this->sportCategoryRepository->method('find')->willReturn(null);
+
+        $this->entityManager->expects(self::once())->method('flush');
+
+        $this->service->syncTeamTags($team, 'season-1');
+
+        self::assertNotNull($tags[0]->getAxis(), 'l\'axe manquant doit être backfillé');
     }
 
     /**

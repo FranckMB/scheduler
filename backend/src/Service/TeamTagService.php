@@ -121,6 +121,7 @@ final class TeamTagService
     {
         $tags = $this->readClubTags($clubId);
 
+        $axisBackfilled = false;
         foreach ($tags as $tag) {
             // Backfill de l'axe sur un tag antérieur au lot B (idempotent).
             //
@@ -131,6 +132,7 @@ final class TeamTagService
             // et lui poser son axe le sort de la section « Autres » du sélecteur de cible.
             if (null === $tag->getAxis() && isset(self::SYSTEM_TAG_AXES[$tag->getName()])) {
                 $tag->setAxis(self::SYSTEM_TAG_AXES[$tag->getName()]);
+                $axisBackfilled = true;
             }
         }
 
@@ -167,8 +169,15 @@ final class TeamTagService
             $this->insertMissingSystemTags($clubId, $manquants);
         }
 
-        // Le backfill d'axe ci-dessus est une écriture ORM ordinaire : il part avec ce flush.
-        $this->entityManager->flush();
+        // Le backfill d'axe ci-dessus est une écriture ORM ordinaire : il part avec ce
+        // flush — et c'est la SEULE chose que ce flush ait à porter (`insertMissingSystemTags`
+        // écrit en SQL brut, hors unit of work). P2-13 : il était inconditionnel, donc
+        // exécuté à CHAQUE `syncTeamTags` — c'est-à-dire une fois PAR ÉQUIPE d'un import
+        // FFBB ou d'une bascule de saison — alors que le backfill ne concerne que des tags
+        // antérieurs au lot B, une fois dans la vie du club.
+        if ($axisBackfilled) {
+            $this->entityManager->flush();
+        }
 
         if ([] === $manquants) {
             return $tags;
