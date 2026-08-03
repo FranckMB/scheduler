@@ -15,6 +15,8 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamLink;
+use App\Entity\TeamMatchHabit;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
@@ -26,6 +28,7 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
 use App\Enum\TeamCoachRole;
+use App\Enum\TeamLinkType;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\SeasonAlreadyTransitionedException;
 use App\Service\SeasonResolver;
@@ -86,6 +89,21 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         self::assertSame($newVenues[0]->getId(), $newWindow?->getVenueId());
         self::assertSame('14:00', $newWindow?->getStartTime()->format('H:i'));
         self::assertNull($this->em->getRepository(VenueUnavailability::class)->findOneBy(['seasonId' => $target->getId()]));
+
+        // P1-4 PR C — habitude remappée (équipe + gymnase), passerelle remappée
+        // des DEUX côtés et toujours normalisée (teamAId < teamBId).
+        $newTeamsById = $this->em->getRepository(Team::class)->findBy(['seasonId' => $target->getId()]);
+        $newTeamIds = array_map(static fn (Team $t): string => $t->getId(), $newTeamsById);
+        $newHabit = $this->em->getRepository(TeamMatchHabit::class)->findOneBy(['seasonId' => $target->getId()]);
+        self::assertNotNull($newHabit);
+        self::assertContains($newHabit->getTeamId(), $newTeamIds);
+        self::assertSame('15:30', $newHabit->getKickoffTime()->format('H:i'));
+        self::assertSame($newVenues[0]->getId(), $newHabit->getVenueId());
+        $newTeamLink = $this->em->getRepository(TeamLink::class)->findOneBy(['seasonId' => $target->getId()]);
+        self::assertNotNull($newTeamLink);
+        self::assertContains($newTeamLink->getTeamAId(), $newTeamIds);
+        self::assertContains($newTeamLink->getTeamBId(), $newTeamIds);
+        self::assertLessThan(0, strcasecmp($newTeamLink->getTeamAId(), $newTeamLink->getTeamBId()));
 
         // Team: forcedVenueId remapped to the copied venue, name untouched.
         $newTeams = $this->em->getRepository(Team::class)->findBy(['seasonId' => $target->getId()], ['name' => 'ASC']);
@@ -352,6 +370,26 @@ final class SeasonTransitionServiceTest extends KernelTestCase
 
         $teamA = $this->team($club, $season, 'SM1', $category->getId(), (int) $tier->getId(), $venueA->getId());
         $teamB = $this->team($club, $season, 'U13', $category->getId(), (int) $tier->getId(), null);
+
+        // P1-4 PR C — habitude (avec gymnase) + passerelle : recopiées remappées.
+        $habit = new TeamMatchHabit;
+        $habit->setClubId($club->getId());
+        $habit->setSeasonId($season->getId());
+        $habit->setTeamId($teamA->getId());
+        $habit->setDayOfWeek(6);
+        $habit->setKickoffTime(new DateTimeImmutable('15:30'));
+        $habit->setVenueId($venueA->getId());
+        $this->em->persist($habit);
+
+        $teamLink = new TeamLink;
+        $teamLink->setClubId($club->getId());
+        $teamLink->setSeasonId($season->getId());
+        $ids = [$teamA->getId(), $teamB->getId()];
+        sort($ids);
+        $teamLink->setTeamAId($ids[0]);
+        $teamLink->setTeamBId($ids[1]);
+        $teamLink->setLinkType(TeamLinkType::NOT_SIMULTANEOUS);
+        $this->em->persist($teamLink);
 
         $link = new TeamCoach;
         $link->setClubId($club->getId());

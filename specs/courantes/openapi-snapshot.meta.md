@@ -4,6 +4,10 @@ Snapshot régénéré depuis le backend vivant le 2026-08-03 : `php bin/console 
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P1-4 PR C (2026-08-03)** : couche préférences matchs — +`/api/team_match_habits` et
+  +`/api/team_links` (CRUD API Platform, 5-fichiers) ; l'enum du radar gagne `TEAM_LINK_OVERLAP`
+  et les vues fixture du radar portent `estimatedKickoff` (heure empruntée à l'habitude).
+  Détail : [`module-matchs.md`](module-matchs.md) §Habitudes + passerelles.
 - **P1-4 PR B (2026-08-03)** : couche capacité matchs — +`/api/venue_match_windows` et
   +`/api/venue_unavailabilities` (CRUD API Platform, 5-fichiers), +`/api/venue-unavailability-impact`
   (route contrôleur, **déclarée dans `CustomRoutesOpenApiFactory`** — le déclencheur « route custom ⇒

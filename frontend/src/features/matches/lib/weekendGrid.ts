@@ -1,4 +1,4 @@
-import type { Fixture, Team, Venue } from "../api";
+import type { Fixture, Team, TeamMatchHabit, Venue } from "../api";
 import { isoWeekday, timeToMinutes } from "./envelope";
 
 /** Home match footprint (spec §4bis): warm-up before kickoff + play after. */
@@ -72,6 +72,9 @@ export interface WeekendCell {
   kickoffLabel: string;
   footprintLabel: string;
   outOfEnvelope: boolean;
+  /** P1-4 PR C — a HABIT ghost, not a match: the team's protected window on a
+   * weekend its calendar has not reached yet. Purely visual, never blocking. */
+  ghost: boolean;
 }
 
 export interface WeekendGridRow {
@@ -140,21 +143,63 @@ function dateLabel(dateKey: string): string {
   return new Date(`${dateKey}T00:00:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
 }
 
+/** The date (Y-m-d) of an ISO weekday inside the bucket week of a Saturday key. */
+function dateOfWeekday(saturdayKey: string, isoDay: number): string {
+  const date = new Date(`${saturdayKey}T00:00:00`);
+  date.setDate(date.getDate() - (6 - isoDay));
+  return toYmd(date);
+}
+
+interface GhostSlot {
+  dateKey: string;
+  venueId: string;
+  teamId: string;
+  kickoffMin: number;
+}
+
+/**
+ * Habit ghosts of a weekend bucket (P1-4 PR C): one per venue-anchored habit
+ * whose team has NO fixture on that weekday's date — the reality (any fixture,
+ * home OR away) dissolves the ghost: an away match FREES the habitual slot
+ * (« la fenêtre se libère — signalée, comblable »).
+ */
+function ghostSlots(habits: TeamMatchHabit[], fixtures: Fixture[], weekendKey: string | null): GhostSlot[] {
+  if (null === weekendKey) {
+    return [];
+  }
+  const ghosts: GhostSlot[] = [];
+  for (const habit of habits) {
+    if (null === habit.venueId) {
+      continue; // the grid is venue-columned — a day+time habit has no column
+    }
+    const dateKey = dateOfWeekday(weekendKey, habit.dayOfWeek);
+    if (fixtures.some((f) => f.teamId === habit.teamId && f.matchDate === dateKey)) {
+      continue;
+    }
+    ghosts.push({ dateKey, venueId: habit.venueId, teamId: habit.teamId, kickoffMin: timeToMinutes(habit.kickoffTime) });
+  }
+  return ghosts;
+}
+
 /**
  * Pure layout of the placed home matches of ONE weekend. A date is a super-column
  * split into one sub-column per venue used that date; rows are 15-min steps from
  * the earliest footprint start to the latest end. Each match block spans its full
  * 2h15 footprint (kickoff−30 → kickoff+105), labelled at the kickoff time.
+ * Habit ghosts (P1-4 PR C) join the layout as translucent, non-blocking blocks.
  */
 export function buildWeekendGrid(
   fixtures: Fixture[],
   venues: Map<string, Venue>,
   teams: Map<string, Team>,
   outOfEnvelope: Set<string> = new Set(),
+  habits: TeamMatchHabit[] = [],
+  weekendKey: string | null = null,
   stepMin = 15,
 ): WeekendGridModel {
   const placed = fixtures.filter(isPlacedOnGrid);
-  if (0 === placed.length) {
+  const ghosts = ghostSlots(habits, fixtures, weekendKey);
+  if (0 === placed.length && 0 === ghosts.length) {
     return { columns: [], dateGroups: [], rows: [], cells: [], startMin: 0, stepMin, empty: true };
   }
 
@@ -165,16 +210,21 @@ export function buildWeekendGrid(
     min = Math.min(min, start);
     max = Math.max(max, start + WARMUP_MINUTES + MATCH_MINUTES);
   }
+  for (const ghost of ghosts) {
+    min = Math.min(min, ghost.kickoffMin - WARMUP_MINUTES);
+    max = Math.max(max, ghost.kickoffMin + MATCH_MINUTES);
+  }
   const startMin = Math.floor(min / 60) * 60;
   const endMin = Math.ceil(max / 60) * 60;
 
-  const dateKeys = [...new Set(placed.map((f) => f.matchDate))].sort();
+  const dateKeys = [...new Set([...placed.map((f) => f.matchDate), ...ghosts.map((g) => g.dateKey)])].sort();
   const columns: WeekendColumn[] = [];
   const dateGroups: DateGroup[] = [];
   let cssColumn = 2; // col 1 is the time gutter
   for (const dateKey of dateKeys) {
     const dayFixtures = placed.filter((f) => f.matchDate === dateKey);
-    const venueIds = [...new Set(dayFixtures.map((f) => f.venueId as string))].sort((a, b) =>
+    const dayGhosts = ghosts.filter((g) => g.dateKey === dateKey);
+    const venueIds = [...new Set([...dayFixtures.map((f) => f.venueId as string), ...dayGhosts.map((g) => g.venueId)])].sort((a, b) =>
       (venues.get(a)?.name ?? "").localeCompare(venues.get(b)?.name ?? "", "fr"),
     );
     dateGroups.push({ dateKey, label: dateLabel(dateKey), startColumn: cssColumn, span: venueIds.length });
@@ -216,6 +266,37 @@ export function buildWeekendGrid(
       kickoffLabel: formatMinutes(kickoff),
       footprintLabel: `${formatMinutes(start)}–${formatMinutes(end)}`,
       outOfEnvelope: outOfEnvelope.has(fixture.id),
+      ghost: false,
+    };
+    cells.push(cell);
+    intervals.push({ startMin: start, endMin: end, cell });
+  }
+
+  // Habit ghosts share the lane layout so a manual placement lands BESIDE the
+  // protected window instead of hiding it.
+  for (const ghost of ghosts) {
+    const idx = columnIndex.get(`${ghost.dateKey}:${ghost.venueId}`);
+    if (undefined === idx) {
+      continue;
+    }
+    const start = ghost.kickoffMin - WARMUP_MINUTES;
+    const end = ghost.kickoffMin + MATCH_MINUTES;
+    const cell: WeekendCell = {
+      key: `ghost:${ghost.teamId}:${ghost.dateKey}`,
+      fixtureId: "",
+      gridColumn: 2 + idx,
+      gridRowStart: 3 + Math.round((start - startMin) / stepMin),
+      gridRowSpan: Math.max(1, Math.round((end - start) / stepMin)),
+      lane: 0,
+      laneCount: 1,
+      teamLabel: teams.get(ghost.teamId)?.name ?? "Équipe ?",
+      opponentLabel: "",
+      venueLabel: venues.get(ghost.venueId)?.name ?? "Gymnase ?",
+      venueColor: venues.get(ghost.venueId)?.color ?? null,
+      kickoffLabel: formatMinutes(ghost.kickoffMin),
+      footprintLabel: `${formatMinutes(start)}–${formatMinutes(end)}`,
+      outOfEnvelope: false,
+      ghost: true,
     };
     cells.push(cell);
     intervals.push({ startMin: start, endMin: end, cell });

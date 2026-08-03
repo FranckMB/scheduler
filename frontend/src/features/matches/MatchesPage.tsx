@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, DoorOpen, Lock, Plus, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, DoorOpen, Lock, Plus, Repeat, Upload } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
@@ -12,11 +12,12 @@ import type { Category, Coach, Fixture, Team, Venue } from "./api";
 import { ConflictRadar } from "./ConflictRadar";
 import { FixtureFormDialog } from "./FixtureFormDialog";
 import { ImportFbiDialog } from "./ImportFbiDialog";
+import { HabitsLinksDialog } from "./HabitsLinksDialog";
 import { isInEnvelope, resolveEnvelope } from "./lib/envelope";
 import { buildWeekendGrid, isPlacedOnGrid, listWeekends, weekendKeyOf, weekendLabel } from "./lib/weekendGrid";
 import { MatchWindowsEditor } from "./MatchWindowsEditor";
 import { PlacementPanel } from "./PlacementPanel";
-import { useCategories, useCoaches, useCompetitions, useConflicts, useFixtures, useLeagueWindows, usePlaceFixture, usePriorityTiers, useTeams, useVenueMatchWindows, useVenues, useVenueUnavailabilities } from "./queries";
+import { useCategories, useCoaches, useCompetitions, useConflicts, useFixtures, useLeagueWindows, usePlaceFixture, usePriorityTiers, useTeamMatchHabits, useTeams, useVenueMatchWindows, useVenues, useVenueUnavailabilities } from "./queries";
 import { useMatchesStore } from "./store";
 import { UnplacedList } from "./UnplacedList";
 import { WeekendGrid } from "./WeekendGrid";
@@ -38,11 +39,13 @@ export function MatchesPage() {
   const coaches = useCoaches();
   const matchWindows = useVenueMatchWindows();
   const unavailabilities = useVenueUnavailabilities();
+  const habitsQuery = useTeamMatchHabits();
   const placeFixture = usePlaceFixture();
   // Second entry point of the match-access editor (founder 2026-08-03: wizard
   // for onboarding, HERE when working the matches) — local UI state only.
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
   const [accessVenueId, setAccessVenueId] = useState("");
+  const [habitsDialogOpen, setHabitsDialogOpen] = useState(false);
 
   const { selectedWeekend, selectedFixtureId, fixtureFormOpen, importDialogOpen, setSelectedWeekend, setSelectedFixtureId, setFixtureFormOpen, setImportDialogOpen } =
     useMatchesStore();
@@ -79,7 +82,10 @@ export function MatchesPage() {
     [allFixtures, activeWeekend],
   );
 
-  const grid = useMemo(() => buildWeekendGrid(weekendFixtures, venuesMap, teamsMap, outOfEnvelope), [weekendFixtures, venuesMap, teamsMap, outOfEnvelope]);
+  const grid = useMemo(
+    () => buildWeekendGrid(weekendFixtures, venuesMap, teamsMap, outOfEnvelope, habitsQuery.data ?? [], activeWeekend),
+    [weekendFixtures, venuesMap, teamsMap, outOfEnvelope, habitsQuery.data, activeWeekend],
+  );
 
   const selectedFixture = allFixtures.find((f) => f.id === selectedFixtureId) ?? null;
   const selectedEnvelope = useMemo(
@@ -112,6 +118,10 @@ export function MatchesPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="border-l-[3px] border-accent pl-3 text-lg font-semibold">Matchs</h1>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => setHabitsDialogOpen(true)}>
+            <Repeat className="size-4" />
+            Habitudes & passerelles
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -152,6 +162,7 @@ export function MatchesPage() {
               venues={venues.data ?? []}
               matchWindows={matchWindows.data ?? []}
               unavailabilities={unavailabilities.data ?? []}
+              habits={habitsQuery.data ?? []}
               teamLabel={teamsMap.get(selectedFixture.teamId)?.name ?? "Équipe ?"}
               categoryLabel={categoriesMap.get(teamsMap.get(selectedFixture.teamId)?.sportCategoryId ?? "")?.name ?? "—"}
               envelope={selectedEnvelope}
@@ -207,6 +218,9 @@ export function MatchesPage() {
 
       {fixtureFormOpen ? <FixtureFormDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} competitions={competitions.data ?? []} onClose={() => setFixtureFormOpen(false)} /> : null}
       {importDialogOpen ? <ImportFbiDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} onClose={() => setImportDialogOpen(false)} /> : null}
+      {habitsDialogOpen ? (
+        <HabitsLinksDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} venues={venues.data ?? []} fixtures={allFixtures} onClose={() => setHabitsDialogOpen(false)} />
+      ) : null}
       {accessDialogOpen ? (
         <Modal label="Accès match" title="Accès match des gymnases" onClose={() => setAccessDialogOpen(false)}>
           <div className="flex flex-col gap-3">

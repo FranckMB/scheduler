@@ -59,6 +59,27 @@ final class MatchFootprint
      * timestamp delta — a footprint spanning a DST transition must still report
      * its wall-clock duration, not the ±60 min the offset shift would add.
      */
+    /**
+     * The occupancy window for an EXPLICIT kickoff time — the estimation path
+     * (P1-4 PR C): an away fixture without a real hour borrows its team's
+     * habitual kickoff. `occupancy()` stays the real-hour path, untouched;
+     * nothing is ever written back to the fixture.
+     *
+     * @return array{start: DateTimeImmutable, end: DateTimeImmutable}
+     */
+    public function occupancyAt(Fixture $fixture, DateTimeImmutable $kickoffTime, int $roundTripTravelMinutes = 0): array
+    {
+        $kickoff = $fixture->getMatchDate()->setTime(
+            (int) $kickoffTime->format('H'),
+            (int) $kickoffTime->format('i'),
+        );
+
+        return [
+            'start' => $kickoff->modify(\sprintf('-%d minutes', $this->minutesBefore($fixture, $roundTripTravelMinutes))),
+            'end' => $kickoff->modify(\sprintf('+%d minutes', $this->minutesAfter($fixture, $roundTripTravelMinutes))),
+        ];
+    }
+
     public function occupancyMinutes(Fixture $fixture, int $roundTripTravelMinutes = 0): ?int
     {
         if (!$this->kickoffMoment($fixture) instanceof DateTimeImmutable) {

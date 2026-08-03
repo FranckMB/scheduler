@@ -7,7 +7,11 @@ namespace App\Service;
 use App\Entity\Fixture;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\TeamCoach;
+use App\Entity\TeamLink;
+use App\Entity\TeamMatchHabit;
 use App\Entity\VenueUnavailability;
+use App\Enum\FixtureHomeAway;
+use App\Enum\TeamLinkType;
 use DateInterval;
 use DateTimeImmutable;
 
@@ -28,6 +32,18 @@ use DateTimeImmutable;
  *   date (all-circumstances closure posed on the club calendar AFTER the match
  *   was placed — the real-life case the placement guard cannot catch). Coach-
  *   independent, kickoff-independent: the DATE falling in the range suffices.
+ * - TEAM_LINK_OVERLAP (P1-4 PR C): two fixtures of two DECLARED-linked teams
+ *   (« SM1 et SM2 partagent des joueurs ») whose footprints overlap. Only
+ *   NOT_SIMULTANEOUS links raise it — BACK_TO_BACK is a preference the PR D
+ *   solver consumes, not an objective rule.
+ *
+ * Away-kickoff ESTIMATION (P1-4 PR C, resorbs the PR-2 blind spot): an AWAY
+ * fixture without a real hour borrows its team's HABITUAL kickoff when a habit
+ * exists on the match's weekday — the footprint is born, conflicts become
+ * visible, flagged `estimatedKickoff: true`. Nothing is persisted. No habit
+ * on that weekday → still no footprint (told apart in PR E's graded
+ * diagnostic). Unplaced HOME fixtures are NOT estimated: their hour is the
+ * manager's next gesture, estimating it would be noise.
  *
  * Pure/stateless: the controller loads the scoped data and passes it in; this
  * class only crosses and overlaps, so it is unit-testable without a kernel.
@@ -50,6 +66,8 @@ final class MatchConflictDetector
      *                                                                                                                 active period windows (ordered), scheduleId = their overlay or null
      * @param array<string, list<ScheduleSlotTemplate>>                                              $slotsBySchedule  slots indexed by their scheduleId
      * @param list<VenueUnavailability>                                                              $unavailabilities scoped all-circumstances closures
+     * @param list<TeamMatchHabit>                                                                   $habits           scoped habitual windows (estimation source)
+     * @param list<TeamLink>                                                                         $teamLinks        scoped declared bridges
      *
      * @return list<array<string, mixed>> conflict items ready to serialize
      */
@@ -60,33 +78,103 @@ final class MatchConflictDetector
         array $activePeriods,
         array $slotsBySchedule,
         array $unavailabilities = [],
+        array $habits = [],
+        array $teamLinks = [],
     ): array {
         $coachesByTeam = [];
         foreach ($teamCoachRows as $link) {
             $coachesByTeam[$link->getTeamId()][$link->getCoachId()] = true;
         }
 
-        // Placed fixtures = those with a footprint (kickoff known). Attach the
-        // coaches of the fixture's team; a fixture whose team has no coach cannot
-        // clash with anyone, so it is dropped here.
+        /** @var array<string, array<int, TeamMatchHabit>> $habitByTeamDay */
+        $habitByTeamDay = [];
+        foreach ($habits as $habit) {
+            $habitByTeamDay[$habit->getTeamId()][$habit->getDayOfWeek()] = $habit;
+        }
+
+        // Fixtures with a footprint: a real kickoff, or (P1-4 PR C) an AWAY
+        // fixture borrowing its team's habitual kickoff for the match weekday.
+        // Coaches attached for the coach conflicts; a coach-less fixture still
+        // gets a view (team links don't need a coach).
         $views = [];
         foreach ($fixtures as $fixture) {
+            $estimated = false;
             $window = $this->footprint->occupancy($fixture);
+            if (null === $window
+                && FixtureHomeAway::AWAY === $fixture->getHomeAway()
+                && null === $fixture->getKickoffTime()
+            ) {
+                $habit = $habitByTeamDay[$fixture->getTeamId()][(int) $fixture->getMatchDate()->format('N')] ?? null;
+                if ($habit instanceof TeamMatchHabit) {
+                    $window = $this->footprint->occupancyAt($fixture, $habit->getKickoffTime());
+                    $estimated = true;
+                }
+            }
             if (null === $window) {
                 continue;
             }
-            $coachIds = array_keys($coachesByTeam[$fixture->getTeamId()] ?? []);
-            if ([] === $coachIds) {
-                continue;
-            }
-            $views[] = ['fixture' => $fixture, 'window' => $window, 'coachIds' => $coachIds];
+            $views[] = [
+                'fixture' => $fixture,
+                'window' => $window,
+                'estimated' => $estimated,
+                'coachIds' => array_keys($coachesByTeam[$fixture->getTeamId()] ?? []),
+            ];
         }
+        $coachViews = array_values(array_filter($views, static fn (array $view): bool => [] !== $view['coachIds']));
 
         return [
-            ...$this->matchMatchConflicts($views),
-            ...$this->matchTrainingConflicts($views, $coachesByTeam, $seasonScheduleId, $activePeriods, $slotsBySchedule),
+            ...$this->matchMatchConflicts($coachViews),
+            ...$this->matchTrainingConflicts($coachViews, $coachesByTeam, $seasonScheduleId, $activePeriods, $slotsBySchedule),
             ...$this->venueUnavailableConflicts($fixtures, $unavailabilities),
+            ...$this->teamLinkConflicts($views, $teamLinks),
         ];
+    }
+
+    /**
+     * Two fixtures of two DECLARED-linked teams overlapping (NOT_SIMULTANEOUS
+     * only — BACK_TO_BACK is a solver preference, diagnosing its non-respect
+     * without a solver would invent a rule). Coach-independent.
+     *
+     * @param list<array{fixture: Fixture, window: array{start: DateTimeImmutable, end: DateTimeImmutable}, estimated: bool, coachIds: list<string>}> $views
+     * @param list<TeamLink>                                                                                                                          $teamLinks
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function teamLinkConflicts(array $views, array $teamLinks): array
+    {
+        if ([] === $teamLinks) {
+            return [];
+        }
+
+        /** @var array<string, list<array{fixture: Fixture, window: array{start: DateTimeImmutable, end: DateTimeImmutable}, estimated: bool}>> $byTeam */
+        $byTeam = [];
+        foreach ($views as $view) {
+            $byTeam[$view['fixture']->getTeamId()][] = $view;
+        }
+
+        $conflicts = [];
+        foreach ($teamLinks as $link) {
+            if (TeamLinkType::NOT_SIMULTANEOUS !== $link->getLinkType()) {
+                continue;
+            }
+            foreach ($byTeam[$link->getTeamAId()] ?? [] as $left) {
+                foreach ($byTeam[$link->getTeamBId()] ?? [] as $right) {
+                    if (!$this->overlaps($left['window'], $right['window'])) {
+                        continue;
+                    }
+                    $conflicts[] = [
+                        'type' => 'TEAM_LINK_OVERLAP',
+                        'teamLinkId' => $link->getId(),
+                        'start' => $this->maxMoment($left['window']['start'], $right['window']['start'])->format(DateTimeImmutable::ATOM),
+                        'end' => $this->minMoment($left['window']['end'], $right['window']['end'])->format(DateTimeImmutable::ATOM),
+                        'left' => $this->fixtureView($left['fixture'], $left['window'], $left['estimated']),
+                        'right' => $this->fixtureView($right['fixture'], $right['window'], $right['estimated']),
+                    ];
+                }
+            }
+        }
+
+        return $conflicts;
     }
 
     /**
@@ -143,7 +231,7 @@ final class MatchConflictDetector
     }
 
     /**
-     * @param list<array{fixture: Fixture, window: array{start: DateTimeImmutable, end: DateTimeImmutable}, coachIds: list<string>}> $views
+     * @param list<array{fixture: Fixture, window: array{start: DateTimeImmutable, end: DateTimeImmutable}, estimated: bool, coachIds: list<string>}> $views
      *
      * @return list<array<string, mixed>>
      */
@@ -165,8 +253,8 @@ final class MatchConflictDetector
                         'coachId' => $coachId,
                         'start' => $this->maxMoment($left['window']['start'], $right['window']['start'])->format(DateTimeImmutable::ATOM),
                         'end' => $this->minMoment($left['window']['end'], $right['window']['end'])->format(DateTimeImmutable::ATOM),
-                        'left' => $this->fixtureView($left['fixture'], $left['window']),
-                        'right' => $this->fixtureView($right['fixture'], $right['window']),
+                        'left' => $this->fixtureView($left['fixture'], $left['window'], $left['estimated']),
+                        'right' => $this->fixtureView($right['fixture'], $right['window'], $right['estimated']),
                     ];
                 }
             }
@@ -176,10 +264,10 @@ final class MatchConflictDetector
     }
 
     /**
-     * @param list<array{fixture: Fixture, window: array{start: DateTimeImmutable, end: DateTimeImmutable}, coachIds: list<string>}> $views
-     * @param array<string, array<string, true>>                                                                                     $coachesByTeam
-     * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string|null}>                                 $activePeriods
-     * @param array<string, list<ScheduleSlotTemplate>>                                                                              $slotsBySchedule
+     * @param list<array{fixture: Fixture, window: array{start: DateTimeImmutable, end: DateTimeImmutable}, estimated: bool, coachIds: list<string>}> $views
+     * @param array<string, array<string, true>>                                                                                                      $coachesByTeam
+     * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string|null}>                                                  $activePeriods
+     * @param array<string, list<ScheduleSlotTemplate>>                                                                                               $slotsBySchedule
      *
      * @return list<array<string, mixed>>
      */
@@ -228,7 +316,7 @@ final class MatchConflictDetector
                             'coachId' => $coachId,
                             'start' => $this->maxMoment($view['window']['start'], $trainingWindow['start'])->format(DateTimeImmutable::ATOM),
                             'end' => $this->minMoment($view['window']['end'], $trainingWindow['end'])->format(DateTimeImmutable::ATOM),
-                            'fixture' => $this->fixtureView($view['fixture'], $view['window']),
+                            'fixture' => $this->fixtureView($view['fixture'], $view['window'], $view['estimated']),
                             'training' => [
                                 'slotTemplateId' => $slot->getId(),
                                 'scheduleId' => $slot->getScheduleId(),
@@ -307,7 +395,7 @@ final class MatchConflictDetector
      *
      * @return array<string, mixed>
      */
-    private function fixtureView(Fixture $fixture, array $window): array
+    private function fixtureView(Fixture $fixture, array $window, bool $estimated = false): array
     {
         return [
             'fixtureId' => $fixture->getId(),
@@ -315,6 +403,9 @@ final class MatchConflictDetector
             'homeAway' => $fixture->getHomeAway()->value,
             'matchDate' => $fixture->getMatchDate()->format('Y-m-d'),
             'kickoffTime' => $fixture->getKickoffTime()?->format('H:i'),
+            // P1-4 PR C — the window was built on the team's HABITUAL kickoff,
+            // not a real hour: the UI must say « heure estimée ».
+            'estimatedKickoff' => $estimated,
             'windowStart' => $window['start']->format(DateTimeImmutable::ATOM),
             'windowEnd' => $window['end']->format(DateTimeImmutable::ATOM),
         ];

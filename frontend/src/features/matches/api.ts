@@ -63,6 +63,9 @@ export interface ConflictFixtureView {
   homeAway: HomeAway;
   matchDate: string;
   kickoffTime: string | null;
+  /** P1-4 PR C — the window borrows the team's HABITUAL kickoff (away match
+   * without a real hour): say « heure estimée ». */
+  estimatedKickoff?: boolean;
   windowStart: string;
   windowEnd: string;
 }
@@ -86,12 +89,16 @@ export interface ConflictUnavailableFixtureView {
   homeAway: HomeAway;
   matchDate: string;
   kickoffTime: string | null;
+  /** Never set on this variant (no window, so nothing to estimate). */
+  estimatedKickoff?: boolean;
   status: FixtureStatus;
 }
 
 export interface Conflict {
-  type: "MATCH_MATCH" | "MATCH_TRAINING" | "VENUE_UNAVAILABLE";
+  type: "MATCH_MATCH" | "MATCH_TRAINING" | "VENUE_UNAVAILABLE" | "TEAM_LINK_OVERLAP";
   coachId?: string;
+  /** TEAM_LINK_OVERLAP only. */
+  teamLinkId?: string;
   /** Overlap segment (ISO datetimes) — coach conflicts only. */
   start?: string;
   end?: string;
@@ -262,6 +269,44 @@ export const deleteVenueUnavailability = (id: string): Promise<void> => api.dele
 /** Alert-only impact feed (cockpit card): what each unavailability affects. */
 export const getUnavailabilityImpact = (): Promise<UnavailabilityImpactResponse> =>
   api.get("venue-unavailability-impact").json<UnavailabilityImpactResponse>();
+
+// ── Preferences layer (P1-4 PR C) ────────────────────────────────────────────
+
+/** A team's habitual match window — one per weekday, venue optional. */
+export interface TeamMatchHabit {
+  id: string;
+  teamId: string;
+  /** ISO 1..7 */
+  dayOfWeek: number;
+  /** HH:MM — an instant, not a range. */
+  kickoffTime: string;
+  venueId: string | null;
+}
+
+export type TeamLinkType = "NOT_SIMULTANEOUS" | "BACK_TO_BACK";
+
+/** A declared team bridge — symmetric (teamAId < teamBId), one per couple. */
+export interface TeamLink {
+  id: string;
+  teamAId: string;
+  teamBId: string;
+  linkType: TeamLinkType;
+}
+
+export const getTeamMatchHabits = (): Promise<TeamMatchHabit[]> =>
+  (async () => (await collectionAll<TeamMatchHabit>("team_match_habits")).map((h) => ({ ...h, venueId: h.venueId ?? null })))();
+
+export const createTeamMatchHabit = (input: { teamId: string; dayOfWeek: number; kickoffTime: string; venueId?: string }): Promise<TeamMatchHabit> =>
+  api.post("team_match_habits", { json: input }).json<TeamMatchHabit>();
+
+export const deleteTeamMatchHabit = (id: string): Promise<void> => api.delete(`team_match_habits/${id}`).then(() => undefined);
+
+export const getTeamLinks = (): Promise<TeamLink[]> => collectionAll<TeamLink>("team_links");
+
+export const createTeamLink = (input: { teamAId: string; teamBId: string; linkType: TeamLinkType }): Promise<TeamLink> =>
+  api.post("team_links", { json: input }).json<TeamLink>();
+
+export const deleteTeamLink = (id: string): Promise<void> => api.delete(`team_links/${id}`).then(() => undefined);
 
 /** One division group of the analyzed file, resolved (or not) against the
  * persisted Division↔team mapping. `fbiTeamLabel` is only set when TWO club

@@ -46,6 +46,8 @@ final class RgpdExportService
         'competition',
         'fixture',
         'team_coach',
+        'team_match_habit',
+        'team_link',
         'coach_player_membership',
         'team_tag',
         'sport_category',

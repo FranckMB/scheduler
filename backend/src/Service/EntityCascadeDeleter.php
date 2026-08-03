@@ -18,6 +18,8 @@ use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamLink;
+use App\Entity\TeamMatchHabit;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
@@ -65,6 +67,11 @@ final class EntityCascadeDeleter
             $this->deleteByField(Reservation::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteByField(TeamCoach::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteByField(CoachPlayerMembership::class, 'teamId', $teamId, $clubId, $seasonId);
+            // P1-4 PR C — habits + links follow their team (links on BOTH sides:
+            // the couple is normalized, the team may sit on either column).
+            $this->deleteByField(TeamMatchHabit::class, 'teamId', $teamId, $clubId, $seasonId);
+            $this->deleteByField(TeamLink::class, 'teamAId', $teamId, $clubId, $seasonId);
+            $this->deleteByField(TeamLink::class, 'teamBId', $teamId, $clubId, $seasonId);
             $this->deleteByField(ScheduleSlotTemplate::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteByField(ScheduleDiagnostic::class, 'teamId', $teamId, $clubId, $seasonId);
             // Match module: a team's fixtures + competition enrolments key on teamId.

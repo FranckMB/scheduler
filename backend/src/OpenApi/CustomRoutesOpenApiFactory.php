@@ -315,7 +315,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'clubId' => ['type' => 'string'],
                         'seasonId' => ['type' => 'string', 'nullable' => true],
                         'conflicts' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
-                            'type' => ['type' => 'string', 'enum' => ['MATCH_MATCH', 'MATCH_TRAINING', 'VENUE_UNAVAILABLE']],
+                            'type' => ['type' => 'string', 'enum' => ['MATCH_MATCH', 'MATCH_TRAINING', 'VENUE_UNAVAILABLE', 'TEAM_LINK_OVERLAP']],
                             'coachId' => ['type' => 'string'],
                             'start' => ['type' => 'string', 'format' => 'date-time', 'description' => 'Overlap segment start'],
                             'end' => ['type' => 'string', 'format' => 'date-time', 'description' => 'Overlap segment end'],

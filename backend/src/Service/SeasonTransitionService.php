@@ -10,6 +10,8 @@ use App\Entity\Constraint;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamLink;
+use App\Entity\TeamMatchHabit;
 use App\Entity\Venue;
 use App\Entity\VenueMatchWindow;
 use App\Entity\VenueTrainingSlot;
@@ -273,6 +275,46 @@ final class SeasonTransitionService
             $copy->setIsActive($membership->getIsActive());
             $this->entityManager->persist($copy);
             ++$memberships;
+        }
+
+        // P1-4 PR C — « nous sommes des êtres d'habitude » : habitudes ET
+        // passerelles suivent la saison (remap équipe + gymnase), même statut
+        // que les fenêtres d'accès mairie.
+        foreach ($this->rows(TeamMatchHabit::class, $clubId, $sourceId) as $habit) {
+            $teamId = $teamMap[$habit->getTeamId()] ?? null;
+            if (null === $teamId) {
+                continue;
+            }
+            $copy = new TeamMatchHabit;
+            $copy->setClubId($clubId);
+            $copy->setSeasonId($target->getId());
+            $copy->setTeamId($teamId);
+            $copy->setDayOfWeek($habit->getDayOfWeek());
+            $copy->setKickoffTime($habit->getKickoffTime());
+            // A dangling venue reference degrades to a day+time habit — the
+            // habit survives, its venue anchor does not.
+            $copy->setVenueId(null !== $habit->getVenueId() ? ($venueMap[$habit->getVenueId()] ?? null) : null);
+            $this->entityManager->persist($copy);
+        }
+
+        foreach ($this->rows(TeamLink::class, $clubId, $sourceId) as $link) {
+            $teamAId = $teamMap[$link->getTeamAId()] ?? null;
+            $teamBId = $teamMap[$link->getTeamBId()] ?? null;
+            if (null === $teamAId || null === $teamBId) {
+                continue;
+            }
+            // The copies keep the normalized order invariant (teamAId < teamBId):
+            // the remapped uuids are new, so re-normalize.
+            if (strcasecmp($teamAId, $teamBId) > 0) {
+                [$teamAId, $teamBId] = [$teamBId, $teamAId];
+            }
+            $copy = new TeamLink;
+            $copy->setClubId($clubId);
+            $copy->setSeasonId($target->getId());
+            $copy->setTeamAId($teamAId);
+            $copy->setTeamBId($teamBId);
+            $copy->setLinkType($link->getLinkType());
+            $this->entityManager->persist($copy);
         }
 
         $maps = ['venues' => $venueMap, 'coaches' => $coachMap, 'teams' => $teamMap];
