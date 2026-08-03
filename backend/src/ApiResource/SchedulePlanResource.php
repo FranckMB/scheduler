@@ -86,12 +86,13 @@ class SchedulePlanResource
     #[Groups(['read'])]
     public bool $teamSelectionInitialized = false;
 
+    // Publié dans /api/docs (cf. ⚠️ en tête) : le docblock reste factuel. Le comment :
+    // DÉRIVÉ, jamais stocké, rempli en LOT par `SchedulePlanStateProvider::provide`
+    // (patron `TeamStateProvider::isEngaged`, une requête `DISTINCT schedulePlanId`) —
+    // le cockpit tirait toute la collection des schedules pour ce booléen (P4-23).
     /**
-     * Ce plan porte-t-il au moins une version ? DÉRIVÉ, jamais stocké — rempli en
-     * LOT par le provider (patron `Team.isEngaged`). ⚠ Différent de
-     * `chosenScheduleId` : un plan peut avoir des versions sans qu'aucune soit
-     * pointée. Le client n'a plus à tirer toute la collection des schedules pour
-     * répondre à cette question (P4-23).
+     * Ce plan porte-t-il au moins une version ? ⚠ Différent de `chosenScheduleId` :
+     * un plan peut porter des versions sans qu'aucune soit pointée.
      */
     #[Groups(['read'])]
     public bool $hasVersions = false;
