@@ -20,6 +20,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
+use RuntimeException;
 
 #[Group('unit')]
 final class TeamTagServiceTest extends TestCase
@@ -371,6 +372,41 @@ final class TeamTagServiceTest extends TestCase
         $this->service->syncTeamTags($team, 'season-1');
 
         self::assertNotNull($tags[0]->getAxis(), 'l\'axe manquant doit être backfillé');
+    }
+
+    /**
+     * P2-13 — l'échec fort de la relecture des tags doit précéder TOUTE destruction.
+     *
+     * Le `RuntimeException` de `getOrCreateSystemTags` existe pour ne pas laisser une équipe
+     * sans assignations. Tant qu'il partait APRÈS la boucle de `remove()`, il laissait
+     * exactement l'état qu'il prétend éviter — commité sous l'ancien flush inconditionnel,
+     * simplement en attente depuis. Ce test épingle l'ORDRE : inverser les deux blocs de
+     * `syncTeamTags` le fait rougir.
+     */
+    public function testFailsBeforeRemovingAnythingWhenSystemTagsCannotBeReadBack(): void
+    {
+        $team = new Team;
+        $team->setClubId('club-1');
+        $team->setSeasonId('season-1');
+        $team->setSportCategoryId('cat-u15');
+        $team->setGender(Gender::F);
+
+        $existing = new TeamTagAssignment;
+        $existing->setTeamId($team->getId());
+        $existing->setSeasonId('season-1');
+        $this->assignmentRepository->method('findBy')->willReturn([$existing]);
+
+        // Une base qui PERD ses écritures : l'insertion passe, la relecture ne rend rien.
+        // C'est le seul scénario qui arme la garde.
+        $this->teamTagRepository->method('findBy')->willReturn([]);
+        $this->sportCategoryRepository->method('find')->willReturn(null);
+
+        $this->entityManager->expects(self::never())->method('remove');
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('rien n\'a encore été supprimé');
+
+        $this->service->syncTeamTags($team, 'season-1');
     }
 
     protected function setUp(): void

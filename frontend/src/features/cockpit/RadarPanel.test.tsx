@@ -60,7 +60,7 @@ const validatedPlan = (calendarEntryId: string, chosenScheduleId: string): Sched
   startDate: FUTURE,
   calendarEntryId,
   chosenScheduleId,
-  teamSelectionInitialized: false, hasVersions: false,
+  teamSelectionInitialized: false,
 });
 
 const FUTURE = "2999-01-05";
@@ -130,7 +130,7 @@ describe("RadarPanel", () => {
     const startedIso = started.toISOString().slice(0, 10);
     // Période DÉJÀ COMMENCÉE (startDate < today) : le filtre « à venir » l'écarterait —
     // la carte « en cours » doit survivre tant que la période n'est pas finie.
-    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false, hasVersions: false }];
+    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false }];
     schedulesData = [{ schedulePlanId: "pl-h1" }];
     renderRadar({ entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", startDate: startedIso, endDate: addDays(todayISO(), 3) })] });
     expect(screen.getByText("Planning en cours — à finaliser")).toBeInTheDocument();
@@ -144,7 +144,7 @@ describe("RadarPanel", () => {
     meData = { seasonPlan: { chosenScheduleId: null } };
     const started = new Date();
     started.setDate(started.getDate() - 2);
-    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false, hasVersions: false }];
+    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false }];
     schedulesData = [{ schedulePlanId: "pl-h1" }];
     renderRadar({ entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", startDate: started.toISOString().slice(0, 10), endDate: addDays(todayISO(), 3) })] });
 
@@ -155,7 +155,7 @@ describe("RadarPanel", () => {
   // encore générée (0 version) doit rester visible « en cours » — sinon le
   // gestionnaire ne peut plus la reprendre.
   it("a whole-block holiday plan with ZERO generated version still shows an « en cours » card", () => {
-    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false, hasVersions: false }];
+    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false }];
     schedulesData = []; // aucune version générée
     renderRadar({ entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", startDate: todayISO(), endDate: addDays(todayISO(), 5) })] });
 
@@ -168,7 +168,7 @@ describe("RadarPanel", () => {
   // lui, reste reprenable (couvert par le test « keeps Reprendre enabled » plus haut).
   it("disables « Reprendre » on a ZERO-version card while the season plan is not validated", () => {
     meData = { seasonPlan: { chosenScheduleId: null } };
-    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false, hasVersions: false }];
+    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false }];
     schedulesData = []; // 0 version
     renderRadar({ entries: [closure({ id: "h1", periodType: "holiday", title: "Vacances de Noël", startDate: todayISO(), endDate: addDays(todayISO(), 5) })] });
 
@@ -178,7 +178,7 @@ describe("RadarPanel", () => {
   it("a CLOSURE with an in-progress plan keeps its rich impact card (sessions count) with « Reprendre »", () => {
     // La carte générique gommerait le détail des séances touchées (revue #260) :
     // la fermeture garde ClosureRadarItem, marquée « en cours », CTA Reprendre.
-    plansData = [{ id: "pl-c1", type: "CLOSURE", name: "Plan", startDate: FUTURE, calendarEntryId: "c1", chosenScheduleId: null, teamSelectionInitialized: false, hasVersions: false }];
+    plansData = [{ id: "pl-c1", type: "CLOSURE", name: "Plan", startDate: FUTURE, calendarEntryId: "c1", chosenScheduleId: null, teamSelectionInitialized: false }];
     schedulesData = [{ schedulePlanId: "pl-c1" }];
     conflictsData = { conflicts: [{ dates: ["2999-01-06", "2999-01-07"] }], seasonPlanChosen: true };
     renderRadar({ entries: [closure({})] });
@@ -226,8 +226,8 @@ describe("RadarPanel", () => {
     const w1s = mondayOf("2999-01-15");
     const w2s = addDays(w1s, 7);
     plansData = [
-      { id: "pl-w1", type: "CLOSURE", name: "S1", startDate: FUTURE, calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false, hasVersions: false },
-      { id: "pl-w2", type: "CLOSURE", name: "S2", startDate: FUTURE, calendarEntryId: "w2", chosenScheduleId: null, teamSelectionInitialized: false, hasVersions: false },
+      { id: "pl-w1", type: "CLOSURE", name: "S1", startDate: FUTURE, calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
+      { id: "pl-w2", type: "CLOSURE", name: "S2", startDate: FUTURE, calendarEntryId: "w2", chosenScheduleId: null, teamSelectionInitialized: false },
     ];
     renderRadar({
       entries: [
@@ -252,7 +252,7 @@ describe("RadarPanel", () => {
     const user = userEvent.setup();
     const w1s = mondayOf("2999-01-15");
     plansData = [
-      { id: "pl-w1", type: "CLOSURE", name: "S1", startDate: FUTURE, calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false, hasVersions: false },
+      { id: "pl-w1", type: "CLOSURE", name: "S1", startDate: FUTURE, calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
     ];
     renderRadar({
       entries: [
@@ -269,7 +269,7 @@ describe("RadarPanel", () => {
   it("a fully covered split mother leaves the radar (to-do, not inventory)", () => {
     const w1s = mondayOf("2999-01-15");
     plansData = [
-      { id: "pl-w1", type: "CLOSURE", name: "S1", startDate: FUTURE, calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false, hasVersions: false },
+      { id: "pl-w1", type: "CLOSURE", name: "S1", startDate: FUTURE, calendarEntryId: "w1", chosenScheduleId: "ov1", teamSelectionInitialized: false },
     ];
     conflictsData = { conflicts: [], seasonPlanChosen: true };
     renderRadar({
@@ -304,7 +304,7 @@ describe("RadarPanel", () => {
   // gestionnaire ce qu'il a déjà entamé, ce qui serait bien pire que le bruit corrigé.
   it("garde une vacance lointaine dès que son planning est commencé", () => {
     setTodayOverride("2998-10-01"); // hors horizon
-    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false, hasVersions: false }];
+    plansData = [{ id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "h1", chosenScheduleId: null, teamSelectionInitialized: false }];
     schedulesData = [{ schedulePlanId: "pl-h1" }];
     renderRadar({
       holidays: [holiday],
@@ -385,7 +385,7 @@ describe("RadarPanel", () => {
     const user = userEvent.setup();
     const w1s = mondayOf("2999-01-04");
     setTodayOverride(w1s); // le lundi même ; la fermeture ne commence que le mercredi
-    plansData = [{ id: "pl-w2", type: "CLOSURE", name: "S2", startDate: FUTURE, calendarEntryId: "w2", chosenScheduleId: "ov", teamSelectionInitialized: false, hasVersions: false }];
+    plansData = [{ id: "pl-w2", type: "CLOSURE", name: "S2", startDate: FUTURE, calendarEntryId: "w2", chosenScheduleId: "ov", teamSelectionInitialized: false }];
     renderRadar({
       entries: [
         closure({ id: "m1", title: "Barros en travaux", startDate: addDays(w1s, 2), endDate: addDays(w1s, 9) }),

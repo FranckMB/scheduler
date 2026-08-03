@@ -39,10 +39,6 @@ export interface SchedulePlan {
   chosenScheduleId: string | null;
   /** Period-editable structure: has this plan's team selection been configured once (seed guard)? */
   teamSelectionInitialized: boolean;
-  /** Ce plan porte-t-il au moins une version ? Dérivé côté serveur, batché
-   *  (P4-23) — ⚠ différent de `chosenScheduleId` : un plan peut avoir des
-   *  versions sans qu'aucune soit pointée. */
-  hasVersions: boolean;
 }
 
 /** Le plan d'une période. null si l'entrée n'en porte pas (cutoff/mutualisation — inv. 9). */

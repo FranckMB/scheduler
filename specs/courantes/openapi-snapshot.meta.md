@@ -4,10 +4,6 @@ Snapshot régénéré depuis le backend vivant le 2026-08-03 : `php bin/console 
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
-- **P4-23 (2026-08-03)** : +`hasVersions` (booléen dérivé) sur les trois schémas
-  `SchedulePlan`, paths inchangés. ⚠ **Piège de regen** : l'opcache de `php-fpm` survit à
-  `cache:clear` et fait réexporter l'ANCIEN docblock, même quand le conteneur voit le
-  fichier neuf — `docker compose restart php-fpm` avant l'export.
 - **P1-4 PR F2 (2026-08-03)** : regen vérifiée, **JSON inchangé** (105 paths) — l'analyze/import
   FBI sont des opérations multipart dont l'export ne détaille pas le corps de réponse ; les
   nouveaux champs (`suggestedTeamId`, `pouleError`, `pouleUnknownOpponents`, `completeness`,

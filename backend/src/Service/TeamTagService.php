@@ -48,6 +48,17 @@ final class TeamTagService
         $clubId = $team->getClubId();
         $teamId = $team->getId();
 
+        // ⚠ LES TAGS D'ABORD, LES SUPPRESSIONS ENSUITE — l'ordre porte une garantie.
+        //
+        // `getOrCreateSystemTags` peut ÉCHOUER FORT (`RuntimeException`, voir sa relecture) :
+        // tant qu'il passait APRÈS la suppression, l'équipe était déjà dépouillée quand
+        // l'exception partait. Sous l'ancien flush inconditionnel, ces suppressions étaient
+        // même déjà COMMITÉES — perte sèche. Depuis P2-13 elles resteraient simplement en
+        // attente dans l'unit of work, ce qui n'est pas mieux : un flush ultérieur sur le
+        // même EntityManager les commiterait sans rien pour les remplacer. En lisant les
+        // tags d'abord, l'échec précède toute destruction : il n'y a rien à réparer.
+        $systemTags = $this->getOrCreateSystemTags($clubId);
+
         // Remove existing assignments for this team/season
         $existingAssignments = $this->entityManager->getRepository(TeamTagAssignment::class)->findBy([
             'teamId' => $teamId,
@@ -57,9 +68,6 @@ final class TeamTagService
         foreach ($existingAssignments as $assignment) {
             $this->entityManager->remove($assignment);
         }
-
-        // Get or create system tags for this club
-        $systemTags = $this->getOrCreateSystemTags($clubId);
 
         // Determine which tags apply to this team
         $tagNames = $this->determineTagNames($team);
@@ -196,12 +204,16 @@ final class TeamTagService
         // Avant P4-64 la boucle construisait toujours l'objet en mémoire : un nom système ne
         // pouvait pas manquer, et le `continue` de `syncTeamTags` était du code mort. Depuis
         // que le jeu vient d'une RELECTURE, un nom qu'elle manquerait serait simplement sauté
-        // — or `syncTeamTags` a DÉJÀ supprimé les anciennes assignations et le flush ci-dessus
-        // les a commitées. L'équipe perdrait donc le tag, définitivement, sans exception ni
-        // log. Le pire mode de panne, et exactement celui que ce lot combat.
+        // et l'équipe perdrait ce tag, sans exception ni log. Le pire mode de panne, et
+        // exactement celui que ce lot combat.
+        //
+        // ⚠ La portée de cette garde tient à l'ORDRE dans `syncTeamTags`, qui appelle cette
+        // méthode AVANT de supprimer quoi que ce soit : quand l'exception part, les anciennes
+        // assignations sont intactes (P2-13 — auparavant elles étaient déjà supprimées, et
+        // même commitées par le flush inconditionnel d'alors).
         $introuvables = array_diff(array_keys($manquants), array_keys($tags));
         if ([] !== $introuvables) {
-            throw new RuntimeException(\sprintf('Tags système introuvables après insertion pour le club %s : %s. Abandonner ici évite de laisser des équipes sans leurs assignations, que le flush a déjà supprimées.', $clubId, implode(', ', $introuvables)));
+            throw new RuntimeException(\sprintf('Tags système introuvables après insertion pour le club %s : %s. Abandonner ici laisse les assignations existantes intactes — rien n\'a encore été supprimé.', $clubId, implode(', ', $introuvables)));
         }
 
         return $tags;
