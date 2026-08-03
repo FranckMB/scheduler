@@ -139,6 +139,7 @@ export type ConflictType =
   | "VENUE_UNAVAILABLE"
   | "ACCESS_WINDOW_LOST"
   | "TEAM_LINK_OVERLAP"
+  | "COMPETITION_INCOMPLETE"
   | "AWAY_NO_FOOTPRINT";
 
 export interface Conflict {
@@ -165,6 +166,12 @@ export interface Conflict {
   unavailableUntil?: string;
   /** LEAGUE_WINDOW_VIOLATION — the windows the placement violates. */
   windows?: { dayOfWeek: number; kickoffMin: string; kickoffMax: string }[];
+  /** COMPETITION_INCOMPLETE (severity 6) — paired-competition completeness. */
+  competitionId?: string;
+  competitionName?: string;
+  teamId?: string;
+  imported?: number;
+  expected?: number;
 }
 
 export interface ConflictsResponse {
@@ -387,6 +394,14 @@ export interface ImportAnalysisDivision {
   rowCount: number;
   teamId: string | null;
   competitionId: string | null;
+  /** P1-4 PR F2 (6.3) — unmapped division whose label matches a paired
+   * competition's canonical FFBB name: a suggestion, never a resolution. */
+  suggestedTeamId: string | null;
+  suggestedCompetitionId: string | null;
+  /** P1-4 PR F2 (6.1) — blocking poule mismatch: the division will be SKIPPED. */
+  pouleError: string | null;
+  /** Non-blocking mismatch (≤ 50 % unknown opponents). */
+  pouleUnknownOpponents: string[];
 }
 
 export interface ImportFbiAnalysis {
@@ -397,7 +412,7 @@ export interface ImportFbiAnalysis {
 }
 
 export interface ImportFbiWarning {
-  type: "RESCHEDULED" | "SWITCHED";
+  type: "RESCHEDULED" | "SWITCHED" | "POULE_MISMATCH";
   division: string;
   externalRef: string;
   message: string;
@@ -412,6 +427,8 @@ export interface ImportFbiResult {
   errors: string[];
   warnings: ImportFbiWarning[];
   unmappedDivisions: { name: string; fbiTeamLabel: string | null; rowCount: number }[];
+  /** P1-4 PR F2 (6.2) — paired competitions still short of their expectation. */
+  completeness: { competitionId: string; name: string; imported: number; expected: number }[];
 }
 
 /** A manager's mapping choice for one division group of the analyze step. */
@@ -419,6 +436,9 @@ export interface FbiMapping {
   division: string;
   fbiTeamLabel: string | null;
   teamId: string;
+  /** Rides along when the FFBB suggestion is accepted untouched: the pairing
+   * (refs, expectation, poule) is REUSED server-side, never duplicated. */
+  competitionId?: string | null;
 }
 
 /** Dry-run: parse the club-wide FBI export and return its mapping table. */

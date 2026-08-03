@@ -197,6 +197,100 @@ final class FbiFixtureImporterTest extends KernelTestCase
         }
     }
 
+    // ── Poule guard + completeness + suggestion (P1-4 PR F2) ─────────────────
+
+    public function testWrongFileOnAPairedDivisionIsRefusedNamedAndSkipped(): void
+    {
+        // The division is paired to a poule whose clubs are known; the file's
+        // opponents are ALL foreign (> 50 %) → error NAMED, division SKIPPED,
+        // the other division still imports (founder decision 2026-08-03).
+        $paired = $this->pairedCompetition('D2', ['AS VOISINS', 'BC RIVAUX', 'ES AILLEURS'], 12);
+        $file = $this->xlsx([
+            ['D2', 'X1', 'BC TESTVILLE - 1', 'US INCONNU', '03/10/2026', '', ''],
+            ['D2', 'X2', 'BC TESTVILLE - 1', 'CS MYSTERE', '10/10/2026', '', ''],
+            ['D3', 'Y1', 'BC TESTVILLE - 1', 'AS Libre', '03/10/2026', '', ''],
+        ]);
+        $teamTwo = $this->createTeam('U15-2');
+
+        $result = $this->importer->import($file, $this->club, [
+            ['division' => 'D3', 'fbiTeamLabel' => null, 'teamId' => $teamTwo->getId()],
+        ]);
+
+        self::assertSame(1, $result['created'], 'the healthy division imports');
+        self::assertNull($this->em->getRepository(Fixture::class)->findOneBy(['externalRef' => 'X1']), 'the faulty division is skipped');
+        $pouleErrors = array_values(array_filter($result['errors'], static fn (string $e): bool => str_contains($e, 'hors de la poule')));
+        self::assertCount(1, $pouleErrors);
+        self::assertStringContainsString('Division « D2 » ignorée', $pouleErrors[0]);
+        self::assertStringContainsString('US INCONNU', $pouleErrors[0]);
+        self::assertSame($paired->getId(), $this->em->getRepository(Competition::class)->findOneBy(['name' => 'D2'])?->getId());
+    }
+
+    public function testMinorPouleDriftIsAWarningNotARefusal(): void
+    {
+        // 1 unknown out of 3 distinct (≤ 50 %) → POULE_MISMATCH warning, import passes.
+        $this->pairedCompetition('D2', ['AS VOISINS', 'BC RIVAUX', 'ES AILLEURS'], 12);
+        $file = $this->xlsx([
+            ['D2', 'X1', 'BC TESTVILLE - 1', 'AS VOISINS', '03/10/2026', '', ''],
+            ['D2', 'X2', 'BC TESTVILLE - 1', 'BC RIVAUX', '10/10/2026', '', ''],
+            ['D2', 'X3', 'BC TESTVILLE - 1', 'US INTRUS', '17/10/2026', '', ''],
+        ]);
+
+        $result = $this->importer->import($file, $this->club, []);
+
+        self::assertSame(3, $result['created']);
+        $mismatch = array_values(array_filter($result['warnings'], static fn (array $w): bool => 'POULE_MISMATCH' === $w['type']));
+        self::assertCount(1, $mismatch);
+        self::assertStringContainsString('US INTRUS', $mismatch[0]['message']);
+    }
+
+    public function testDivisionWithoutPairingIsNeverChecked(): void
+    {
+        // No FFBB refs on the competition → today's behaviour, zero control.
+        $file = $this->xlsx([
+            ['D2', 'X1', 'BC TESTVILLE - 1', 'N IMPORTE QUI', '03/10/2026', '', ''],
+        ]);
+        $result = $this->importer->import($file, $this->club, [
+            ['division' => 'D2', 'fbiTeamLabel' => null, 'teamId' => $this->team->getId()],
+        ]);
+
+        self::assertSame(1, $result['created']);
+        self::assertSame([], array_filter($result['errors'], static fn (string $e): bool => str_contains($e, 'poule')));
+    }
+
+    public function testCompletenessNamesThePartialFile(): void
+    {
+        // Expectation frozen at pairing: 22 matchdays; the file brings 2 → named.
+        $this->pairedCompetition('D2', ['AS VOISINS', 'BC RIVAUX'], 22);
+        $file = $this->xlsx([
+            ['D2', 'X1', 'BC TESTVILLE - 1', 'AS VOISINS', '03/10/2026', '', ''],
+            ['D2', 'X2', 'BC TESTVILLE - 1', 'BC RIVAUX', '10/10/2026', '', ''],
+        ]);
+
+        $result = $this->importer->import($file, $this->club, []);
+
+        self::assertCount(1, $result['completeness']);
+        self::assertSame(2, $result['completeness'][0]['imported']);
+        self::assertSame(22, $result['completeness'][0]['expected']);
+    }
+
+    public function testAnalyzeSuggestsThePairedCompetitionForAnUnmappedDivision(): void
+    {
+        // The real inter-phase case: the stored competition carries the OLD FBI
+        // division label as its name (« RM2 »), the pairing gave it the CANONICAL
+        // FFBB name — the NEW phase's file uses the canonical wording. The name
+        // resolver misses, the canonical suggester hits → suggestion, never a
+        // resolution (teamId stays null, the manager confirms).
+        $this->pairedCompetition('RM2', ['AS VOISINS'], 14, canonicalName: 'Pré régionale masculine');
+        $file = $this->xlsx([
+            ['PRE REGIONALE MASCULINE', 'X1', 'BC TESTVILLE - 1', 'AS VOISINS', '03/10/2026', '', ''],
+        ]);
+
+        $analysis = $this->importer->analyze($file, $this->club);
+
+        self::assertNull($analysis['divisions'][0]['teamId']);
+        self::assertSame($this->team->getId(), $analysis['divisions'][0]['suggestedTeamId']);
+    }
+
     public function testARemapWithADriftedLabelUpdatesTheStoredOne(): void
     {
         // Multi-label division mapped once with « - 1 »… then the FBI export
@@ -464,6 +558,85 @@ final class FbiFixtureImporterTest extends KernelTestCase
         $this->importer->analyze($this->write($spreadsheet), $this->club);
     }
 
+    public function testAWrongMappingRefusedByTheGuardIsNotPersisted(): void
+    {
+        // Revue F2 round 1 : le garde-fou PRÉCÈDE l'écriture — un mapping dont
+        // la division est refusée ne colle pas (le dialog n'a pas de re-mapping).
+        $paired = $this->pairedCompetition('RM2', ['AS VOISINS'], 14, canonicalName: 'Pré régionale masculine');
+        $file = $this->xlsx([
+            ['PRE REGIONALE MASCULINE', 'X1', 'BC TESTVILLE - 1', 'US INCONNU', '03/10/2026', '', ''],
+        ]);
+
+        $result = $this->importer->import($file, $this->club, [
+            ['division' => 'PRE REGIONALE MASCULINE', 'fbiTeamLabel' => null, 'teamId' => $this->team->getId(), 'competitionId' => $paired->getId()],
+        ]);
+
+        self::assertSame(0, $result['created']);
+        self::assertCount(1, array_filter($result['errors'], static fn (string $e): bool => str_contains($e, 'hors de la poule')));
+        self::assertSame([], $result['unmappedDivisions'], 'une division refusée n\'est pas re-signalée « à mapper »');
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Competition::class)->findOneBy(['id' => $paired->getId()]);
+        self::assertSame('RM2', $reloaded?->getName(), 'le mapping refusé n\'a pas renommé la compétition appariée');
+        self::assertCount(1, $this->em->getRepository(Competition::class)->findBy(['teamId' => $this->team->getId()]), 'et n\'a rien créé');
+    }
+
+    public function testAcceptedSuggestionReusesThePairedCompetition(): void
+    {
+        // Revue F2 round 1 : la suggestion voyage AVEC son competitionId — la
+        // compétition appariée est RÉUTILISÉE (renommée vers le libellé FBI,
+        // réfs/attendus/poule conservés), jamais dupliquée.
+        $paired = $this->pairedCompetition('RM2', ['AS VOISINS'], 14, canonicalName: 'Pré régionale masculine');
+        $file = $this->xlsx([
+            ['PRE REGIONALE MASCULINE', 'X1', 'BC TESTVILLE - 1', 'AS VOISINS', '03/10/2026', '', ''],
+        ]);
+
+        $result = $this->importer->import($file, $this->club, [
+            ['division' => 'PRE REGIONALE MASCULINE', 'fbiTeamLabel' => null, 'teamId' => $this->team->getId(), 'competitionId' => $paired->getId()],
+        ]);
+
+        self::assertSame(1, $result['created']);
+        $competitions = $this->em->getRepository(Competition::class)->findBy(['teamId' => $this->team->getId()]);
+        self::assertCount(1, $competitions, 'pas de doublon non apparié');
+        self::assertSame('PRE REGIONALE MASCULINE', $competitions[0]->getName(), 'le libellé FBI devient la clé du résolveur');
+        self::assertSame('Pré régionale masculine', $competitions[0]->getFfbbCompetitionName(), 'le nom canonique reste');
+        self::assertSame(14, $competitions[0]->getExpectedMatchdays(), 'l\'appariement est conservé');
+        self::assertSame($competitions[0]->getId(), $this->em->getRepository(Fixture::class)->findOneBy(['externalRef' => 'X1'])?->getCompetitionId());
+    }
+
+    public function testTwoMappingsToTheSameTeamAndDivisionInOneBatchCreateOneCompetition(): void
+    {
+        // Revue F2 round 1 : le dedupe DB ne voit pas les frères non flushés —
+        // garde en mémoire dans le lot.
+        $file = $this->xlsx([
+            ['D2', 'A1', 'BC TESTVILLE - 1', 'AS X', '03/10/2026', '', ''],
+            ['D2', 'A2', 'BC TESTVILLE - 2', 'AS Y', '03/10/2026', '', ''],
+        ]);
+
+        $this->importer->import($file, $this->club, [
+            ['division' => 'D2', 'fbiTeamLabel' => 'BC TESTVILLE - 1', 'teamId' => $this->team->getId()],
+            ['division' => 'D2', 'fbiTeamLabel' => 'BC TESTVILLE - 2', 'teamId' => $this->team->getId()],
+        ]);
+
+        self::assertCount(1, $this->em->getRepository(Competition::class)->findBy(['teamId' => $this->team->getId(), 'name' => 'D2']));
+    }
+
+    public function testNoSuggestionForAMultiLabelDivision(): void
+    {
+        // Revue F2 round 1 : le nom canonique ne sait pas dire LAQUELLE des deux
+        // équipes du club — aucune suggestion aveugle.
+        $this->pairedCompetition('RM2', ['AS VOISINS'], 14, canonicalName: 'D2');
+        $file = $this->xlsx([
+            ['D2', 'A1', 'BC TESTVILLE - 1', 'AS X', '03/10/2026', '', ''],
+            ['D2', 'A2', 'BC TESTVILLE - 2', 'AS Y', '03/10/2026', '', ''],
+        ]);
+
+        $analysis = $this->importer->analyze($file, $this->club);
+
+        foreach ($analysis['divisions'] as $division) {
+            self::assertNull($division['suggestedTeamId']);
+        }
+    }
+
     // ── Setup & helpers ────────────────────────────────────────────────────
 
     protected function setUp(): void
@@ -483,6 +656,27 @@ final class FbiFixtureImporterTest extends KernelTestCase
             @unlink($file);
         }
         parent::tearDown();
+    }
+
+    /** A competition of $this->team paired to a FFBB poule (refs + frozen data). */
+    private function pairedCompetition(string $name, array $pouleClubs, int $expectedMatchdays, ?string $canonicalName = null): Competition
+    {
+        $competition = new Competition;
+        $competition->setClubId($this->club->getId());
+        $competition->setSeasonId($this->team->getSeasonId());
+        $competition->setTeamId($this->team->getId());
+        $competition->setName($name);
+        $competition->setCompetitionType(CompetitionType::CHAMPIONSHIP);
+        $competition->setFfbbCompetitionId('ffbb-' . md5($name));
+        $competition->setFfbbPouleId('poule-' . md5($name));
+        $competition->setFfbbPouleName('Poule T');
+        $competition->setFfbbCompetitionName($canonicalName ?? $name);
+        $competition->setExpectedMatchdays($expectedMatchdays);
+        $competition->setFfbbPouleOpponents($pouleClubs);
+        $this->em->persist($competition);
+        $this->em->flush();
+
+        return $competition;
     }
 
     /**

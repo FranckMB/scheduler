@@ -22,6 +22,7 @@ const GROUP_TITLES: Record<number, string> = {
   3: "Coach principal en double",
   4: "Placement fragilisé",
   5: "À surveiller",
+  6: "Calendriers incomplets",
   7: "Angles morts",
 };
 
@@ -32,7 +33,8 @@ function toneOf(severity: number): DiagnosticGroup["tone"] {
   return severity <= 5 ? "warning" : "muted";
 }
 
-/** Sort by severity (1 first) and group; severity 7 comes folded with a count. */
+/** Sort by severity (1 first) and group; severities 6-7 come folded with a count
+ * (structural information, not collisions — N teams must read as N lines max). */
 export function groupBySeverity(conflicts: Conflict[]): DiagnosticGroup[] {
   const bySeverity = new Map<number, Conflict[]>();
   for (const conflict of conflicts) {
@@ -48,7 +50,7 @@ export function groupBySeverity(conflicts: Conflict[]): DiagnosticGroup[] {
       severity,
       title: GROUP_TITLES[severity] ?? "Autres",
       tone: toneOf(severity),
-      folded: 7 === severity,
+      folded: severity >= 6,
       conflicts: items,
     }));
 }

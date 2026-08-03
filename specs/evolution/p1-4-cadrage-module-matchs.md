@@ -1,5 +1,11 @@
 # P1-4 — Cadrage du module matchs, tranché sur pièces
 
+> ✅ **LOT LIVRÉ (2026-08-03, 8 PR — cadrage + A→F2).** Ce fichier reste comme TRACE du cadrage (les
+> décisions fondateur y sont datées et l'ADR-0003 + l'état des lieux y renvoient) — il n'est plus un
+> fichier de détail ACTIF de la roadmap. Le comportement livré vit dans
+> [`../courantes/module-matchs.md`](../courantes/module-matchs.md) ; « est-ce fait ? » se répond dans
+> [`../courantes/etat-des-lieux.md`](../courantes/etat-des-lieux.md) §3.
+
 > **Cadrage fondateur, 2026-08-02.** Posé en réponse à la ligne roadmap P1-4 (« besoin à valider et à
 > re-spécifier AVANT tout plan »), au fil d'un échange de challenge, **avec un vrai export FBI sur la
 > table** (`specs/initiales/rechercherRencontre.xlsx`, 124 rencontres, saison 2026-27 de BCCL).

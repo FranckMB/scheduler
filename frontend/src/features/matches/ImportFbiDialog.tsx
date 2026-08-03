@@ -35,6 +35,12 @@ export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps)
 
   const teamName = (id: string | null): string => teams.find((t) => t.id === id)?.name ?? "?";
 
+  // A suggestion is usable ONLY when its team is offerable by the select —
+  // otherwise the select would render blank while the submit sent an invisible
+  // value (« what the select displays is what gets imported »).
+  const usableSuggestion = (d: { suggestedTeamId: string | null }): string | null =>
+    null !== d.suggestedTeamId && teams.some((t) => t.id === d.suggestedTeamId) ? d.suggestedTeamId : null;
+
   const onFileChange = (next: File | null): void => {
     setFile(next);
     setAnalysis(null);
@@ -50,11 +56,20 @@ export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps)
       return;
     }
     // Only the NEW choices ride along — already-resolved divisions are persisted.
+    // A FFBB suggestion left untouched IS the choice shown on screen (F2, 6.3):
+    // what the select displays is what gets imported. When the suggestion is
+    // kept, its competitionId rides along so the PAIRED competition is reused
+    // server-side (refs, expectation, poule) instead of duplicated.
     const mappings = analysis.divisions
       .filter((d) => null === d.teamId)
       .flatMap((d) => {
-        const teamId = choices[divisionKey(d)];
-        return undefined === teamId || "" === teamId ? [] : [{ division: d.name, fbiTeamLabel: d.fbiTeamLabel, teamId }];
+        const suggestion = usableSuggestion(d);
+        const teamId = choices[divisionKey(d)] ?? suggestion ?? "";
+        if ("" === teamId) {
+          return [];
+        }
+        const competitionId = teamId === suggestion ? d.suggestedCompetitionId : null;
+        return [{ division: d.name, fbiTeamLabel: d.fbiTeamLabel, teamId, competitionId }];
       });
     importFbi.mutate({ file, mappings }, { onSuccess: setReport });
   };
@@ -102,19 +117,43 @@ export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps)
                   {null !== division.teamId ? (
                     <span className="shrink-0 text-xs text-muted-foreground">→ {teamName(division.teamId)}</span>
                   ) : (
-                    <TeamSelect
-                      aria-label={`Équipe pour ${division.name}${null !== division.fbiTeamLabel ? ` (${division.fbiTeamLabel})` : ""}`}
-                      className="w-40 shrink-0"
-                      teams={teams}
-                      tiers={tiers}
-                      placeholder="Associer à…"
-                      value={choices[divisionKey(division)] ?? ""}
-                      onChange={(e) => setChoices((prev) => ({ ...prev, [divisionKey(division)]: e.target.value }))}
-                    />
+                    <span className="flex shrink-0 flex-col items-end gap-0.5">
+                      <TeamSelect
+                        aria-label={`Équipe pour ${division.name}${null !== division.fbiTeamLabel ? ` (${division.fbiTeamLabel})` : ""}`}
+                        className="w-40 shrink-0"
+                        teams={teams}
+                        tiers={tiers}
+                        placeholder="Associer à…"
+                        value={choices[divisionKey(division)] ?? usableSuggestion(division) ?? ""}
+                        onChange={(e) => setChoices((prev) => ({ ...prev, [divisionKey(division)]: e.target.value }))}
+                      />
+                      {null !== usableSuggestion(division) && undefined === choices[divisionKey(division)] ? (
+                        <span className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide text-muted-foreground">proposé par la FFBB</span>
+                      ) : null}
+                    </span>
                   )}
                 </li>
               ))}
             </ul>
+            {/* P1-4 PR F2 (6.1) — poule guard verdicts of the dry-run. */}
+            {analysis.divisions.some((d) => null !== d.pouleError || d.pouleUnknownOpponents.length > 0) ? (
+              <ul className="max-h-32 flex-col gap-0.5 overflow-y-auto text-xs">
+                {analysis.divisions
+                  .filter((d) => null !== d.pouleError)
+                  .map((d) => (
+                    <li key={`pe-${divisionKey(d)}`} className="text-destructive">
+                      {d.pouleError}
+                    </li>
+                  ))}
+                {analysis.divisions
+                  .filter((d) => null === d.pouleError && d.pouleUnknownOpponents.length > 0)
+                  .map((d) => (
+                    <li key={`pw-${divisionKey(d)}`} className="text-warning-foreground">
+                      {d.name} : hors poule — {d.pouleUnknownOpponents.join(", ")}
+                    </li>
+                  ))}
+              </ul>
+            ) : null}
             {analysis.errors.length > 0 ? (
               <ul className="max-h-32 list-inside list-disc overflow-y-auto text-xs text-destructive">
                 {analysis.errors.map((error, i) => (
@@ -136,6 +175,15 @@ export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps)
               <ul className="max-h-40 list-inside list-disc overflow-y-auto text-xs text-warning-foreground">
                 {report.warnings.map((warning, i) => (
                   <li key={i}>{warning.message}</li>
+                ))}
+              </ul>
+            ) : null}
+            {report.completeness.length > 0 ? (
+              <ul className="text-xs text-muted-foreground">
+                {report.completeness.map((c) => (
+                  <li key={c.competitionId}>
+                    {c.name} : {c.imported}/{c.expected} journées — fichier partiel ou phase pas encore sortie.
+                  </li>
                 ))}
               </ul>
             ) : null}

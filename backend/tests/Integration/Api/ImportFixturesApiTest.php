@@ -51,7 +51,18 @@ final class ImportFixturesApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         $analysis = $this->responseData();
         self::assertSame(2, $analysis['totalRows']);
-        self::assertSame([['name' => 'D2 Poule A', 'fbiTeamLabel' => null, 'rowCount' => 2, 'teamId' => null, 'competitionId' => null]], $analysis['divisions']);
+        self::assertSame([[
+            'name' => 'D2 Poule A',
+            'fbiTeamLabel' => null,
+            'rowCount' => 2,
+            'teamId' => null,
+            'competitionId' => null,
+            // P1-4 PR F2 — suggestion + poule-guard verdicts of the dry-run.
+            'suggestedTeamId' => null,
+            'suggestedCompetitionId' => null,
+            'pouleError' => null,
+            'pouleUnknownOpponents' => [],
+        ]], $analysis['divisions']);
 
         $this->client->request('GET', '/api/fixtures', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertCount(0, $this->responseData()['member'] ?? [], 'analyze must write nothing');

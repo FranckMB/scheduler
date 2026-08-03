@@ -27,9 +27,11 @@ describe("groupBySeverity (P1-4 PR E2)", () => {
     expect(groups.map((g) => g.tone)).toEqual(["destructive", "destructive", "warning", "muted"]);
   });
 
-  it("only folds the severity-7 group (N blind matches = one line, not N alerts)", () => {
-    const groups = groupBySeverity([conflict("AWAY_NO_FOOTPRINT", 7), conflict("VENUE_OVERLAP", 1)]);
+  it("folds the structural groups 6 and 7 (N teams = N lines max, not N alerts)", () => {
+    const groups = groupBySeverity([conflict("AWAY_NO_FOOTPRINT", 7), conflict("COMPETITION_INCOMPLETE", 6), conflict("VENUE_OVERLAP", 1)]);
     expect(groups.find((g) => 7 === g.severity)?.folded).toBe(true);
+    expect(groups.find((g) => 6 === g.severity)?.folded).toBe(true);
+    expect(groups.find((g) => 6 === g.severity)?.title).toBe("Calendriers incomplets");
     expect(groups.find((g) => 1 === g.severity)?.folded).toBe(false);
   });
 

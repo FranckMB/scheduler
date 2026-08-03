@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Entity\Competition;
 use App\Entity\Fixture;
 use App\Entity\SportCategory;
 use App\Entity\Team;
@@ -81,6 +82,9 @@ final class FixtureConflictsController extends AbstractController
         $categories = $this->entityManager->getRepository(SportCategory::class)->findBy([]);
         $league = $this->clubRepository->find($clubId)?->getLeague();
         $envelope = $this->envelopeResolver->resolve($teams, $categories, $this->leagueWindowRepository->findEnvelopeForLeague($league));
+        // P1-4 PR F2 — severity 6 (completeness of PAIRED competitions).
+        /** @var list<Competition> $competitions */
+        $competitions = $this->entityManager->getRepository(Competition::class)->findBy([]);
 
         $season = $this->seasonResolver->selectedOrCurrent($this->requestStack->getCurrentRequest(), $clubId);
         // ADR-0002 context (chosen season version, active periods + overlays,
@@ -98,6 +102,7 @@ final class FixtureConflictsController extends AbstractController
             $teamLinks,
             $matchWindows,
             $envelope,
+            $competitions,
         );
 
         return $this->json([
