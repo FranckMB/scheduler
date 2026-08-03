@@ -154,6 +154,47 @@ def test_full_venue_is_named() -> None:
     assert result["unplaced"][0]["reason"] == "venue_full"
 
 
+def test_colliding_fixed_anchors_never_sink_the_whole_solve() -> None:
+    # NR P1-4 PR E1 (bug caught by smoke-place-matches): the manual loop NEVER
+    # blocks a collision (founder decision — the diagnostic alerts), so two
+    # manual anchors CAN overlap on the same venue+date. As fixed NoOverlap
+    # intervals they made the model INFEASIBLE and every other match came back
+    # venue_full. Anchors must prune candidates, not sink the solve.
+    result = solve_match_placement(
+        payload(
+            matches=[
+                {"id": "fx1", "teamId": "t1", "date": SATURDAY, "kind": "FIXED", "venueId": "v1", "kickoff": "15:00"},
+                {"id": "fx2", "teamId": "t2", "date": SATURDAY, "kind": "FIXED", "venueId": "v1", "kickoff": "15:00"},
+                to_place("m1", "t3", SUNDAY),
+            ],
+            venues=[venue(windows=[{"dayOfWeek": 6, "start": "14:00", "end": "18:00"}, {"dayOfWeek": 7, "start": "14:00", "end": "18:00"}])],
+            teams=[team("t1"), team("t2"), team("t3")],
+        )
+    )
+    assert result["status"] == "completed"
+    assert result["unplaced"] == []
+    assert kickoff_of(result, "m1") >= "14:30"
+
+
+def test_candidates_under_a_fixed_anchor_are_pruned_not_infeasible() -> None:
+    # Same collision, and a TO_PLACE on the SAME day: the anchors eat 14:30-17:15
+    # of the 14:00-18:00 window (kickoffs 14:30..16:15 all overlap 15:00's
+    # footprint) → venue_full NAMED, the solve still completes.
+    result = solve_match_placement(
+        payload(
+            matches=[
+                {"id": "fx1", "teamId": "t1", "date": SATURDAY, "kind": "FIXED", "venueId": "v1", "kickoff": "15:00"},
+                {"id": "fx2", "teamId": "t2", "date": SATURDAY, "kind": "FIXED", "venueId": "v1", "kickoff": "15:00"},
+                to_place("m1", "t3"),
+            ],
+            venues=[venue()],
+            teams=[team("t1"), team("t2"), team("t3")],
+        )
+    )
+    assert result["status"] == "completed"
+    assert result["unplaced"][0]["reason"] == "venue_full"
+
+
 def test_habit_time_and_venue_attract_the_placement() -> None:
     result = solve_match_placement(
         payload(

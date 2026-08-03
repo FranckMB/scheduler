@@ -1,8 +1,9 @@
-import { AlertTriangle, Check, X } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Check, Lock, LockOpen, Pencil, Trash2, Undo2, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 
 import type { Fixture, PlaceFixtureInput, TeamMatchHabit, Venue, VenueMatchWindow, VenueUnavailability } from "./api";
 import { isInEnvelope, isoWeekday } from "./lib/envelope";
@@ -22,6 +23,12 @@ interface PlacementPanelProps {
   busy: boolean;
   onClose: () => void;
   onPlace: (input: PlaceFixtureInput) => void;
+  /** P1-4 PR E1 — manual loop on an already-placed match. */
+  onUnplace: () => void;
+  onToggleLock: () => void;
+  onStartSwap: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }
 
 const fieldClass = "h-9 rounded-md border border-input bg-background px-2 text-sm";
@@ -54,12 +61,30 @@ function EnvelopeHint({ envelope, kickoff }: { envelope: EnvelopeResult; kickoff
 }
 
 /**
- * Place a home fixture: pick venue + kickoff. Two HARD guards: the league
- * envelope (when the team maps) and the club's own capacity data (P1-4 PR B —
- * match access windows + unavailabilities; the club declared them itself, no
- * degradation). A club with no window anywhere keeps the full venue list.
+ * Place / re-place a home fixture and drive the manual loop (P1-4 PR E1):
+ * unplace, lock/hand back to the solver, swap, edit, delete. Two HARD guards on
+ * the placement gesture itself: the league envelope (when the team maps) and the
+ * club's capacity data (PR B). A SUBMITTED/VALIDATED match is read-only — it is
+ * filed with the federation.
  */
-export function PlacementPanel({ fixture, venues, matchWindows, unavailabilities, habits, teamLabel, categoryLabel, envelope, busy, onClose, onPlace }: PlacementPanelProps) {
+export function PlacementPanel({
+  fixture,
+  venues,
+  matchWindows,
+  unavailabilities,
+  habits,
+  teamLabel,
+  categoryLabel,
+  envelope,
+  busy,
+  onClose,
+  onPlace,
+  onUnplace,
+  onToggleLock,
+  onStartSwap,
+  onEdit,
+  onDelete,
+}: PlacementPanelProps) {
   // Masquer n'est légitime que pour un CHOIX (§7.2.3) : le sélecteur n'offre
   // que les gymnases de match — mais seulement si le club a déclaré des
   // fenêtres quelque part (sinon liste complète, donnée non adoptée).
@@ -77,17 +102,26 @@ export function PlacementPanel({ fixture, venues, matchWindows, unavailabilities
     return "" === initial || selectableVenues.some((v) => v.id === initial) ? initial : (selectableVenues[0]?.id ?? "");
   });
   const [kickoff, setKickoff] = useState(fixture.kickoffTime ?? habit?.kickoffTime ?? "");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const placed = "PLACED" === fixture.status;
+  const readonly = "SUBMITTED" === fixture.status || "VALIDATED" === fixture.status;
+  const locked = placed && "SOLVER" !== fixture.placementSource;
 
   const hasKickoff = "" !== kickoff;
   const envelopeBlocked = envelope.mapped && hasKickoff && !isInEnvelope(envelope, kickoff);
   const venueName = venues.find((v) => v.id === venueId)?.name ?? "ce gymnase";
   const accessError = "" === venueId ? null : venueAccessError(venueId, venueName, fixture.matchDate, kickoff, matchWindows, unavailabilities);
-  const canPlace = "" !== venueId && hasKickoff && !envelopeBlocked && null === accessError && !busy;
+  const unchanged = placed && venueId === (fixture.venueId ?? "") && kickoff === (fixture.kickoffTime ?? "");
+  const canPlace = "" !== venueId && hasKickoff && !envelopeBlocked && null === accessError && !busy && !unchanged;
 
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
-        <CardTitle>{teamLabel}</CardTitle>
+        <CardTitle className="flex items-center gap-1.5">
+          {locked ? <Lock aria-label="Ancre manuelle" className="size-3.5 text-muted-foreground" /> : null}
+          {teamLabel}
+        </CardTitle>
         <button type="button" onClick={onClose} aria-label="Fermer" className="text-muted-foreground hover:text-foreground">
           <X className="size-4" />
         </button>
@@ -97,40 +131,93 @@ export function PlacementPanel({ fixture, venues, matchWindows, unavailabilities
         <Row label="Adversaire" value={fixture.opponentLabel} />
         <Row label="Date" value={fixture.matchDate} />
 
-        <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
-          <div className="grid grid-cols-2 gap-2">
-            <select aria-label="Gymnase" value={venueId} onChange={(e) => setVenueId(e.target.value)} className={fieldClass}>
-              <option value="" disabled>
-                Gymnase…
-              </option>
-              {selectableVenues.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
+        {readonly ? (
+          <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+            Match déposé à la fédération — il ne se modifie plus ici.
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+            <div className="grid grid-cols-2 gap-2">
+              <select aria-label="Gymnase" value={venueId} onChange={(e) => setVenueId(e.target.value)} className={fieldClass}>
+                <option value="" disabled>
+                  Gymnase…
                 </option>
-              ))}
-            </select>
-            <input aria-label="Heure de coup d'envoi" type="time" value={kickoff} onChange={(e) => setKickoff(e.target.value)} className={fieldClass} />
+                {selectableVenues.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
+              <input aria-label="Heure de coup d'envoi" type="time" value={kickoff} onChange={(e) => setKickoff(e.target.value)} className={fieldClass} />
+            </div>
+
+            {null !== habit ? (
+              <p className="text-xs text-muted-foreground">
+                Habitude : {habit.kickoffTime}
+                {null !== habit.venueId ? ` · ${venues.find((v) => v.id === habit.venueId)?.name ?? "?"}` : ""}
+              </p>
+            ) : null}
+            {hasKickoff ? <EnvelopeHint envelope={envelope} kickoff={kickoff} /> : null}
+            {null !== accessError ? (
+              <p className="flex items-center gap-1 text-xs text-warning">
+                <AlertTriangle className="size-3.5" />
+                {accessError}
+              </p>
+            ) : null}
+
+            <Button size="sm" disabled={!canPlace} onClick={() => onPlace({ venueId, kickoffTime: kickoff })}>
+              {placed ? "Déplacer" : "Placer"}
+            </Button>
+
+            {placed ? (
+              <div className="grid grid-cols-2 gap-1.5">
+                <Button variant="outline" size="sm" disabled={busy} onClick={onUnplace}>
+                  <Undo2 className="size-3.5" />
+                  Dé-placer
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  title={locked ? "Le solveur pourra re-placer ce match au prochain passage" : "Figer ce placement — le solveur ne le bougera plus"}
+                  onClick={onToggleLock}
+                >
+                  {locked ? <LockOpen className="size-3.5" /> : <Lock className="size-3.5" />}
+                  {locked ? "Rendre au solveur" : "Verrouiller"}
+                </Button>
+                <Button variant="outline" size="sm" disabled={busy} className="col-span-2" onClick={onStartSwap}>
+                  <ArrowLeftRight className="size-3.5" />
+                  Échanger avec…
+                </Button>
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-2 gap-1.5 border-t border-border pt-2">
+              <Button variant="outline" size="sm" disabled={busy} onClick={onEdit}>
+                <Pencil className="size-3.5" />
+                Modifier
+              </Button>
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => setConfirmDelete(true)}>
+                <Trash2 className="size-3.5" />
+                Supprimer
+              </Button>
+            </div>
           </div>
-
-          {null !== habit ? (
-            <p className="text-xs text-muted-foreground">
-              Habitude : {habit.kickoffTime}
-              {null !== habit.venueId ? ` · ${venues.find((v) => v.id === habit.venueId)?.name ?? "?"}` : ""}
-            </p>
-          ) : null}
-          {hasKickoff ? <EnvelopeHint envelope={envelope} kickoff={kickoff} /> : null}
-          {null !== accessError ? (
-            <p className="flex items-center gap-1 text-xs text-warning">
-              <AlertTriangle className="size-3.5" />
-              {accessError}
-            </p>
-          ) : null}
-
-          <Button size="sm" disabled={!canPlace} onClick={() => onPlace({ venueId, kickoffTime: kickoff })}>
-            Placer
-          </Button>
-        </div>
+        )}
       </CardContent>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title={`Supprimer le match contre « ${fixture.opponentLabel} » ?`}
+        description="Le match disparaît du calendrier. S'il vient d'un import FBI, le prochain import le recréera."
+        confirmLabel="Supprimer"
+        destructive
+        onConfirm={() => {
+          setConfirmDelete(false);
+          onDelete();
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </Card>
   );
 }

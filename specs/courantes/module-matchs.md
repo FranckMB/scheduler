@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement)
+Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés
@@ -258,6 +258,35 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
 - **UI** : bouton « Placer automatiquement » sur `/matchs` (spinner pendant le solve, toast « N placés ·
   M non plaçables », raisons par match dans la liste À placer).
 
+## Boucle manuelle — P1-4 PR E1 (2026-08-03)
+
+- **Chaque match de la grille est cliquable** (badge cadenas = ancre manuelle) et ouvre le panneau,
+  étendu aux matchs placés : **Déplacer** (salle/heure, gardes du placement initial souveraines),
+  **Dé-placer** (retour « À placer », marqueur effacé), **Verrouiller / Rendre au solveur**,
+  **Échanger avec…** (mode swap : bandeau + 2e clic sur un autre match placé), **Modifier**
+  (`FixtureFormDialog` en édition), **Supprimer** (confirmation). Un match `SUBMITTED`/`VALIDATED`
+  est en lecture seule — déposé à la fédération.
+- **Verrou = `placementSource`** (aucun nouveau champ) : cadenas = PUT écho (le stamp MANUAL existant
+  fait le travail) ; « rendre au solveur » = PUT écho + `placementSource: "SOLVER"`, accepté par le
+  serveur **seulement à placement (salle/heure/date) inchangé et statut PLACED** — 422 sinon (on ne
+  peut pas étiqueter SOLVER un placement choisi à la main ; `FixtureStateProcessor`). À la création,
+  `SOLVER` est refusé (422). `null` legacy = manuel (cadenas affiché).
+- **Éditer** : équipe figée (une autre équipe = un autre engagement — supprimer + recréer) ; **changer
+  la date à la main CONSERVE le placement** (le gestionnaire EST la décision, à l'inverse du ré-import
+  FBI qui dé-place) — le radar signale ce que la nouvelle date casse. **Exception** : basculer
+  domicile → extérieur libère le créneau (même règle que le switch du ré-import ; règle pure
+  `editFixtureBody`, testée unitairement).
+- **Échanger** = swap (salle + heure), **jamais les dates** (elles appartiennent à la ligue). Deux PUT
+  séquentiels côté client, pas d'endpoint transactionnel : rien n'étant bloquant, un échec réseau au
+  milieu laisse un état visible et rattrapable (invalidation en `onSettled`, toast d'alerte).
+- **Rien ne bloque** : une collision de salle créée à la main passe (décision fondateur 2026-08-03) —
+  le diagnostic gradué (PR E2) l'affichera en sévérité max. ⚠ Conséquence engine (bug attrapé par le
+  smoke) : les ancres FIXED **élaguent les candidats** au lieu d'entrer au NoOverlap — deux ancres en
+  collision ne rendent plus le solve entier infaisable (ADR-0003 §5, amendé).
+- Suppression d'un match : DELETE direct (la garde socle ne s'applique qu'aux écritures) ;
+  l'engagement étant **dérivé**, supprimer le dernier match d'une équipe la rend à nouveau supprimable
+  (aucune garde ne survit à tort — NR `EngagedTeamGuardTest`).
+
 ## Vérifs / gardes
 
 - NR bloquant (phase1, CI) : `MatchTenantIsolationTest` (Competition/Fixture scopés club+saison, POST stampe,
@@ -290,6 +319,18 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   Front : `habitInference.test` (seuils, non-horodatés ignorés, jour déclaré non re-suggéré, gymnase ≥ 50 %),
   `weekendGrid.test` (fantôme rendu/dissous par la réalité/lanes partagées), `PlacementPanel.test`
   (pré-remplissage + gardes souveraines).
+- Boucle manuelle (PR E1) : `FixtureApiTest` +6 (**phase1** — déverrou accepté sur écho seul, 422 si
+  le placement bouge ou si le statut quitte PLACED, écho → MANUAL, UNPLACED → null, SOLVER refusé au
+  POST), `MatchPlacementContractSchemaTest` +1 (**phase1, NR contrat** — verrou/déverrou bascule les
+  kinds FIXED/TO_PLACE du payload), `EngagedTeamGuardTest` +1 (**phase1, NR périmètre engagé** —
+  DELETE fixture ≠ DELETE équipe, engagement dérivé relâché au dernier match), engine
+  `test_colliding_fixed_anchors_never_sink_the_whole_solve` + `…pruned_not_infeasible` (NR — ancres
+  en collision n'évincent plus tout le solve). Front : `editFixtureBody.test` (date conservée,
+  HOME→AWAY libère), `weekendGrid.test` (badge verrou, null = manuel), `PlacementPanel.test` +6
+  (Déplacer désactivé sans changement, actions, bascule verrou, confirmation de suppression,
+  SUBMITTED lecture seule), `FixtureFormDialog.test` +2 (édition pré-remplie équipe figée, warning
+  bascule extérieur), `MatchesPage.test` +1 (clic grille → panneau boucle manuelle). E2e : verrou
+  aller-retour + dé-placer sur la vraie stack.
 - Placement (PR D) : `MatchPlacementContractSchemaTest` (**phase1** : forme du payload 2.2 ; groupe
   `contract` : POST au VRAI engine, kickoff rendu DANS la fenêtre — sémantique, pas un 200),
   `PlaceMatchesControllerTest` (gardes 403/409, samedi placé dans [14:30,16:15] + dimanche

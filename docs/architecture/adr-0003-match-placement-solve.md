@@ -60,6 +60,15 @@ manuelle ajuste) ; l'applier recharge chaque fixture et n'écrit que si le solve
 un geste manuel pendant les secondes du solve gagne toujours. Un match déposé qui a PERDU sa salle
 (DOC-2) n'est ni ancre ni plaçable : ignoré du payload.
 
+**Amendement 2026-08-03 (PR E1, bug attrapé par `smoke-place-matches.sh`)** : dans le modèle, les
+ancres FIXED **élaguent les candidats** qu'elles couvrent au lieu d'entrer dans le NoOverlap comme
+intervalles fixes. La boucle manuelle ne bloque jamais une collision (décision fondateur — le
+diagnostic alerte), donc deux ancres manuelles PEUVENT se chevaucher : en intervalles fixes, ce
+chevauchement rendait le modèle entier INFAISABLE et tout ressortait `venue_full`. NR :
+`test_colliding_fixed_anchors_never_sink_the_whole_solve`. Le geste UI : cadenas (re-stamp MANUAL) /
+« rendre au solveur » (SOLVER, accepté par le serveur SEULEMENT à placement inchangé — 422 sinon :
+on ne peut pas étiqueter SOLVER un placement qu'on vient de choisir à la main).
+
 ### 6. Le backend PROJETTE, l'engine reste plat
 
 Les règles métier ne traversent pas la frontière : occupations d'entraînement **datées** projetées par

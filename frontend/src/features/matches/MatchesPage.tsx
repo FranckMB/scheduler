@@ -17,7 +17,7 @@ import { isInEnvelope, resolveEnvelope } from "./lib/envelope";
 import { buildWeekendGrid, isPlacedOnGrid, listWeekends, weekendKeyOf, weekendLabel } from "./lib/weekendGrid";
 import { MatchWindowsEditor } from "./MatchWindowsEditor";
 import { PlacementPanel } from "./PlacementPanel";
-import { useCategories, useCoaches, useCompetitions, useConflicts, useFixtures, useLeagueWindows, usePlaceFixture, usePlaceMatches, usePriorityTiers, useTeamMatchHabits, useTeams, useVenueMatchWindows, useVenues, useVenueUnavailabilities } from "./queries";
+import { useCategories, useCoaches, useCompetitions, useConflicts, useDeleteFixture, useFixtures, useLeagueWindows, useLockFixture, useMoveFixture, usePlaceFixture, usePlaceMatches, usePriorityTiers, useSwapFixtures, useTeamMatchHabits, useTeams, useUnlockFixture, useUnplaceFixture, useVenueMatchWindows, useVenues, useVenueUnavailabilities } from "./queries";
 import { toast } from "@/shared/stores/toastStore";
 import { useMatchesStore } from "./store";
 import { UnplacedList } from "./UnplacedList";
@@ -43,6 +43,14 @@ export function MatchesPage() {
   const habitsQuery = useTeamMatchHabits();
   const placeFixture = usePlaceFixture();
   const placeMatches = usePlaceMatches();
+  const moveFixture = useMoveFixture();
+  const unplaceFixture = useUnplaceFixture();
+  const lockFixture = useLockFixture();
+  const unlockFixture = useUnlockFixture();
+  const deleteFixture = useDeleteFixture();
+  const swapFixtures = useSwapFixtures();
+  // P1-4 PR E1 — fixture whose identity fields are being edited (dialog).
+  const [editFixture, setEditFixture] = useState<Fixture | null>(null);
   // Reasons of the LAST auto-placement (non-persisted — PR E grades them).
   const [unplacedReasons, setUnplacedReasons] = useState<Map<string, string>>(new Map());
   // Second entry point of the match-access editor (founder 2026-08-03: wizard
@@ -51,8 +59,18 @@ export function MatchesPage() {
   const [accessVenueId, setAccessVenueId] = useState("");
   const [habitsDialogOpen, setHabitsDialogOpen] = useState(false);
 
-  const { selectedWeekend, selectedFixtureId, fixtureFormOpen, importDialogOpen, setSelectedWeekend, setSelectedFixtureId, setFixtureFormOpen, setImportDialogOpen } =
-    useMatchesStore();
+  const {
+    selectedWeekend,
+    selectedFixtureId,
+    swapSourceId,
+    fixtureFormOpen,
+    importDialogOpen,
+    setSelectedWeekend,
+    setSelectedFixtureId,
+    setSwapSourceId,
+    setFixtureFormOpen,
+    setImportDialogOpen,
+  } = useMatchesStore();
 
   const teamsMap = useMemo<Map<string, Team>>(() => byId(teams.data), [teams.data]);
   const venuesMap = useMemo<Map<string, Venue>>(() => byId(venues.data), [venues.data]);
@@ -96,6 +114,35 @@ export function MatchesPage() {
     () => (null === selectedFixture ? null : resolveEnvelope(selectedFixture, teamsMap, categoriesMap, windows)),
     [selectedFixture, teamsMap, categoriesMap, windows],
   );
+
+  const swapSource = allFixtures.find((f) => f.id === swapSourceId) ?? null;
+  const mutating =
+    placeFixture.isPending || moveFixture.isPending || unplaceFixture.isPending || lockFixture.isPending || unlockFixture.isPending || deleteFixture.isPending || swapFixtures.isPending;
+
+  // P1-4 PR E1 — a grid click either picks the swap partner (swap mode) or opens
+  // the panel of the clicked match.
+  function onGridSelect(fixtureId: string): void {
+    if (null !== swapSource) {
+      if (fixtureId === swapSource.id) {
+        setSwapSourceId(null);
+        return;
+      }
+      const target = allFixtures.find((f) => f.id === fixtureId) ?? null;
+      if (null === target || "PLACED" !== target.status) {
+        return;
+      }
+      swapFixtures.mutate(
+        { a: swapSource, b: target },
+        {
+          onSuccess: () => toast.success("Placements échangés (salle + heure — les dates ne bougent pas)"),
+        },
+      );
+      setSwapSourceId(null);
+      setSelectedFixtureId(null);
+      return;
+    }
+    setSelectedFixtureId(fixtureId);
+  }
 
   if (fixtures.isLoading || teams.isLoading || venues.isLoading) {
     return (
@@ -188,11 +235,20 @@ export function MatchesPage() {
               teamLabel={teamsMap.get(selectedFixture.teamId)?.name ?? "Équipe ?"}
               categoryLabel={categoriesMap.get(teamsMap.get(selectedFixture.teamId)?.sportCategoryId ?? "")?.name ?? "—"}
               envelope={selectedEnvelope}
-              busy={placeFixture.isPending}
+              busy={mutating}
               onClose={() => setSelectedFixtureId(null)}
-              onPlace={(input) =>
-                placeFixture.mutate({ fixture: selectedFixture, input }, { onSuccess: () => setSelectedFixtureId(null) })
-              }
+              onPlace={(input) => {
+                const mutation = "PLACED" === selectedFixture.status ? moveFixture : placeFixture;
+                mutation.mutate({ fixture: selectedFixture, input }, { onSuccess: () => setSelectedFixtureId(null) });
+              }}
+              onUnplace={() => unplaceFixture.mutate(selectedFixture)}
+              onToggleLock={() => {
+                const mutation = "SOLVER" === selectedFixture.placementSource ? lockFixture : unlockFixture;
+                mutation.mutate(selectedFixture);
+              }}
+              onStartSwap={() => setSwapSourceId(selectedFixture.id)}
+              onEdit={() => setEditFixture(selectedFixture)}
+              onDelete={() => deleteFixture.mutate(selectedFixture.id, { onSuccess: () => setSelectedFixtureId(null) })}
             />
           ) : null}
 
@@ -232,13 +288,26 @@ export function MatchesPage() {
               <ChevronRight className="size-4" />
             </Button>
           </div>
+          {null !== swapSource ? (
+            <p className="flex items-center justify-between gap-2 rounded-md border border-accent/50 bg-accent/10 px-3 py-2 text-sm">
+              <span>
+                Échange : cliquez le match à échanger avec <strong>{teamsMap.get(swapSource.teamId)?.name ?? "?"}</strong> (salle + heure — les dates ne bougent pas).
+              </span>
+              <Button variant="outline" size="sm" onClick={() => setSwapSourceId(null)}>
+                Annuler
+              </Button>
+            </p>
+          ) : null}
           <div className="h-[32rem]">
-            <WeekendGrid model={grid} />
+            <WeekendGrid model={grid} onSelectFixture={onGridSelect} selectedFixtureId={swapSourceId ?? selectedFixtureId} />
           </div>
         </div>
       </div>
 
       {fixtureFormOpen ? <FixtureFormDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} competitions={competitions.data ?? []} onClose={() => setFixtureFormOpen(false)} /> : null}
+      {null !== editFixture ? (
+        <FixtureFormDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} competitions={competitions.data ?? []} fixture={editFixture} onClose={() => setEditFixture(null)} />
+      ) : null}
       {importDialogOpen ? <ImportFbiDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} onClose={() => setImportDialogOpen(false)} /> : null}
       {habitsDialogOpen ? (
         <HabitsLinksDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} venues={venues.data ?? []} fixtures={allFixtures} onClose={() => setHabitsDialogOpen(false)} />

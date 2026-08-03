@@ -74,6 +74,73 @@ export function usePlaceFixture() {
   });
 }
 
+// ── Manual loop (P1-4 PR E1) ─────────────────────────────────────────────────
+
+export function useUpdateFixture() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ fixture, input }: { fixture: Fixture; input: matchesApi.EditFixtureInput }) => matchesApi.updateFixture(fixture, input),
+    onSuccess: () => invalidateFixtures(queryClient),
+    onError: () => toast.error("Modification du match impossible"),
+  });
+}
+
+export function useDeleteFixture() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => matchesApi.deleteFixture(id),
+    onSuccess: () => invalidateFixtures(queryClient),
+    onError: () => toast.error("Suppression du match impossible"),
+  });
+}
+
+export function useUnplaceFixture() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (fixture: Fixture) => matchesApi.unplaceFixture(fixture),
+    onSuccess: () => invalidateFixtures(queryClient),
+    onError: () => toast.error("Dé-placement impossible"),
+  });
+}
+
+export function useMoveFixture() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ fixture, input }: { fixture: Fixture; input: PlaceFixtureInput }) => matchesApi.moveFixture(fixture, input),
+    onSuccess: () => invalidateFixtures(queryClient),
+    onError: () => toast.error("Déplacement impossible"),
+  });
+}
+
+export function useLockFixture() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (fixture: Fixture) => matchesApi.lockFixture(fixture),
+    onSuccess: () => invalidateFixtures(queryClient),
+    onError: () => toast.error("Verrouillage impossible"),
+  });
+}
+
+export function useUnlockFixture() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (fixture: Fixture) => matchesApi.unlockFixture(fixture),
+    onSuccess: () => invalidateFixtures(queryClient),
+    onError: () => toast.error("Impossible de rendre le match au solveur"),
+  });
+}
+
+export function useSwapFixtures() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ a, b }: { a: Fixture; b: Fixture }) => matchesApi.swapFixtures(a, b),
+    // A failed second PUT still moved the first match — refresh in BOTH outcomes
+    // so the grid always shows the real state.
+    onSettled: () => invalidateFixtures(queryClient),
+    onError: () => toast.error("Échange interrompu — vérifiez la grille, l'état affiché est le réel"),
+  });
+}
+
 // ── Capacity layer (P1-4 PR B) ───────────────────────────────────────────────
 
 /** Match access windows of the club's venues — consumed by the placement panel,

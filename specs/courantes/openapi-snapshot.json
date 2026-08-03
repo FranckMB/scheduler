@@ -17764,6 +17764,17 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "placementSource": {
+                        "enum": [
+                            "MANUAL",
+                            "SOLVER"
+                        ],
+                        "description": "P1-4 PR E \u2014 \"rendre au solveur\": SOLVER is accepted on an update ONLY when\nthe placement (venue/kickoff/date) is untouched and the match stays PLACED;\nany other manual write keeps stamping MANUAL. MANUAL is accepted as a\nno-op echo (the stamp rule produces it anyway).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },

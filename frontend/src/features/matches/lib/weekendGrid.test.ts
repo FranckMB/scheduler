@@ -80,6 +80,20 @@ describe("buildWeekendGrid", () => {
   });
 });
 
+describe("lock badge (P1-4 PR E1)", () => {
+  it("marks MANUAL and legacy-null placements as locked anchors, SOLVER as free", () => {
+    const grid = buildWeekendGrid(
+      [fixture({ id: "m", placementSource: "MANUAL" }), fixture({ id: "n", kickoffTime: "18:00", placementSource: null }), fixture({ id: "s", kickoffTime: "20:00", placementSource: "SOLVER" })],
+      venues,
+      teams,
+    );
+    const byId = new Map(grid.cells.map((c) => [c.fixtureId, c.locked]));
+    expect(byId.get("m")).toBe(true);
+    expect(byId.get("n")).toBe(true); // null legacy = manual: never move what we cannot attribute
+    expect(byId.get("s")).toBe(false);
+  });
+});
+
 describe("habit ghosts (P1-4 PR C)", () => {
   const habit = (over: Partial<import("../api").TeamMatchHabit> = {}): import("../api").TeamMatchHabit => ({
     id: "h-1",

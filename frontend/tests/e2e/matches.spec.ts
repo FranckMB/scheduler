@@ -85,7 +85,9 @@ test("matches: create a fixture, place it, radar renders", async ({ page }) => {
   await page.getByRole("button", { name: "Créer" }).click();
 
   // The new home fixture shows in the to-do list; open its placement panel.
-  const todo = page.getByRole("button", { name: new RegExp(opponent) });
+  // Names disambiguate the two buttons carrying the opponent: the to-do entry
+  // reads « date · vs X », the grid cell (PR E1) reads « HH:MM · X ».
+  const todo = page.getByRole("button", { name: new RegExp(`vs ${opponent}`) });
   await expect(todo).toBeVisible({ timeout: 15_000 });
   await todo.click();
 
@@ -100,7 +102,23 @@ test("matches: create a fixture, place it, radar renders", async ({ page }) => {
 
   if (await place.isEnabled()) {
     await place.click();
-    await expect(page.getByRole("button", { name: new RegExp(opponent) })).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByRole("button", { name: new RegExp(`vs ${opponent}`) })).toHaveCount(0, { timeout: 15_000 });
+
+    // ── Manual loop (P1-4 PR E1): the placed match is a clickable grid cell. ──
+    const cell = page.getByRole("button", { name: new RegExp(`\\d\\d:\\d\\d · ${opponent}`) });
+    await expect(cell).toBeVisible({ timeout: 15_000 });
+    await cell.click();
+
+    // Lock round-trip: a manual placement is an anchor → hand it back to the
+    // solver, the button flips to Verrouiller; lock it again, it flips back.
+    await page.getByRole("button", { name: "Rendre au solveur" }).click();
+    await expect(page.getByRole("button", { name: "Verrouiller" })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Verrouiller" }).click();
+    await expect(page.getByRole("button", { name: "Rendre au solveur" })).toBeVisible({ timeout: 15_000 });
+
+    // Dé-placer: the match leaves the grid and returns to the to-do list.
+    await page.getByRole("button", { name: "Dé-placer" }).click();
+    await expect(page.getByRole("button", { name: new RegExp(`vs ${opponent}`) })).toBeVisible({ timeout: 15_000 });
   } else {
     await expect(page.getByText(/Hors fenêtre autorisée/)).toBeVisible();
   }

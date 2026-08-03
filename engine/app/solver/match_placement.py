@@ -146,22 +146,31 @@ def solve_match_placement(input_data: MatchPlacementInputSchema) -> dict[str, An
 
     solvable = [m for m in to_place if m.id in candidates]
 
-    # 2. Venue no-overlap per (venue, date): optional intervals for candidates,
-    # fixed intervals for FIXED matches.
-    intervals_by_group: dict[tuple[str, date], list[cp_model.IntervalVar]] = {}
-    for match in solvable:
-        for cand in candidates[match.id]:
-            start = cand.kickoff_min - BEFORE_KICKOFF_MIN
-            interval = model.new_optional_fixed_size_interval_var(
-                start, FOOTPRINT_MIN, cand.var, f"iv_{match.id}_{cand.venue_id}_{cand.kickoff_min}"
-            )
-            intervals_by_group.setdefault((cand.venue_id, match.match_date), []).append(interval)
+    # 2. Venue no-overlap per (venue, date). FIXED anchors are DATA, not model
+    # variables: they PRUNE the candidates they cover instead of entering the
+    # NoOverlap as fixed intervals — two manual anchors may legitimately collide
+    # (the manual loop never blocks, the diagnostic alerts), and a fixed-interval
+    # pair in overlap would make the WHOLE model infeasible and unplace
+    # everything (bug caught by smoke-place-matches, P1-4 PR E1).
+    fixed_busy: dict[tuple[str, date], list[tuple[int, int]]] = {}
     for match in fixed:
         if match.venue_id is None or match.kickoff is None:  # guarded by schema
             continue
         start = _minutes(match.kickoff) - BEFORE_KICKOFF_MIN
-        interval = model.new_fixed_size_interval_var(start, FOOTPRINT_MIN, f"fixed_{match.id}")
-        intervals_by_group.setdefault((match.venue_id, match.match_date), []).append(interval)
+        fixed_busy.setdefault((match.venue_id, match.match_date), []).append((start, start + FOOTPRINT_MIN))
+
+    intervals_by_group: dict[tuple[str, date], list[cp_model.IntervalVar]] = {}
+    for match in solvable:
+        for cand in candidates[match.id]:
+            start = cand.kickoff_min - BEFORE_KICKOFF_MIN
+            busy = fixed_busy.get((cand.venue_id, match.match_date), [])
+            if any(start < b_end and b_start < start + FOOTPRINT_MIN for b_start, b_end in busy):
+                model.add(cand.var == 0)
+                continue
+            interval = model.new_optional_fixed_size_interval_var(
+                start, FOOTPRINT_MIN, cand.var, f"iv_{match.id}_{cand.venue_id}_{cand.kickoff_min}"
+            )
+            intervals_by_group.setdefault((cand.venue_id, match.match_date), []).append(interval)
     for group in intervals_by_group.values():
         if len(group) > 1:
             model.add_no_overlap(group)

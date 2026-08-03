@@ -14,6 +14,8 @@ use App\Entity\TeamMatchHabit;
 use App\Entity\Venue;
 use App\Entity\VenueMatchWindow;
 use App\Enum\FixtureHomeAway;
+use App\Enum\FixturePlacementSource;
+use App\Enum\FixtureStatus;
 use App\Service\MatchPlacementPayloadBuilder;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
@@ -100,7 +102,42 @@ final class MatchPlacementContractSchemaTest extends KernelTestCase
     }
 
     /**
-     * @return array{0: array{payload: array<string, mixed>, toPlaceCount: int, infoDiagnostics: list<array<string, mixed>>}}
+     * NR P1-4 PR E (§7.1 contrat backend↔engine) : le verrou/déverrou pilote les
+     * kinds du payload. PLACED+SOLVER = TO_PLACE re-plaçable (avec son placement
+     * courant) ; le CADENAS (re-stamp MANUAL) le fige en FIXED ; « rendre au
+     * solveur » (SOLVER) le rouvre en TO_PLACE. Si cette bascule casse, le solveur
+     * déplace des ancres ou fige tout le calendrier.
+     */
+    #[Group('phase1')]
+    public function testLockAndHandBackFlipThePayloadKind(): void
+    {
+        [, $fixture, $club, $season, $builder, $venue] = $this->buildFromSeededClub();
+        $em = self::getContainer()->get('doctrine.orm.entity_manager');
+
+        $fixture->setStatus(FixtureStatus::PLACED);
+        $fixture->setVenueId($venue->getId());
+        $fixture->setKickoffTime(new DateTimeImmutable('15:30'));
+        $fixture->setPlacementSource(FixturePlacementSource::SOLVER);
+        $em->flush();
+
+        $match = $builder->build($club, $season->getId())['payload']['matches'][0];
+        self::assertSame('TO_PLACE', $match['kind'], 'un placement SOLVER reste re-plaçable');
+        self::assertSame($venue->getId(), $match['currentVenueId'], 'et porte son placement courant (stabilité)');
+        self::assertSame('15:30', $match['currentKickoff']);
+
+        $fixture->setPlacementSource(FixturePlacementSource::MANUAL);
+        $em->flush();
+        $match = $builder->build($club, $season->getId())['payload']['matches'][0];
+        self::assertSame('FIXED', $match['kind'], 'le cadenas (MANUAL) fige le match en ancre');
+        self::assertSame('15:30', $match['kickoff']);
+
+        $fixture->setPlacementSource(FixturePlacementSource::SOLVER);
+        $em->flush();
+        self::assertSame('TO_PLACE', $builder->build($club, $season->getId())['payload']['matches'][0]['kind'], 'rendre au solveur rouvre le placement');
+    }
+
+    /**
+     * @return array{0: array{payload: array<string, mixed>, toPlaceCount: int, infoDiagnostics: list<array<string, mixed>>}, 1: Fixture, 2: Club, 3: Season, 4: MatchPlacementPayloadBuilder, 5: Venue}
      */
     private function buildFromSeededClub(): array
     {
@@ -188,6 +225,6 @@ final class MatchPlacementContractSchemaTest extends KernelTestCase
         $em->persist($fixture);
         $em->flush();
 
-        return [$builder->build($club, $season->getId())];
+        return [$builder->build($club, $season->getId()), $fixture, $club, $season, $builder, $venue];
     }
 }
