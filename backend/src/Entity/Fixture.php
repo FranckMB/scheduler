@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Entity;
 
 use App\Enum\FixtureHomeAway;
+use App\Enum\FixturePlacementSource;
 use App\Enum\FixtureStatus;
 use App\Repository\FixtureRepository;
 use DateTimeImmutable;
@@ -91,6 +92,13 @@ class Fixture implements TenantOwnedInterface
      */
     #[ORM\Column(length: 180, nullable: true)]
     private ?string $fbiVenueLabel = null;
+
+    /**
+     * Who placed it (P1-4 PR D): MANUAL = untouchable anchor at re-solve;
+     * SOLVER = re-arrangeable. Null = never placed / legacy (treated MANUAL).
+     */
+    #[ORM\Column(length: 10, nullable: true, enumType: FixturePlacementSource::class)]
+    private ?FixturePlacementSource $placementSource = null;
 
     public function __construct()
     {
@@ -275,6 +283,18 @@ class Fixture implements TenantOwnedInterface
     public function getFbiVenueLabel(): ?string
     {
         return $this->fbiVenueLabel;
+    }
+
+    public function getPlacementSource(): ?FixturePlacementSource
+    {
+        return $this->placementSource;
+    }
+
+    public function setPlacementSource(?FixturePlacementSource $placementSource): self
+    {
+        $this->placementSource = $placementSource;
+
+        return $this;
     }
 
     public function setFbiVenueLabel(?string $fbiVenueLabel): self

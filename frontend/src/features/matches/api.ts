@@ -27,6 +27,8 @@ export interface Fixture {
   externalRef: string | null;
   /** Raw FBI « Salle » label, HOME and AWAY — never a Venue reference. */
   fbiVenueLabel: string | null;
+  /** MANUAL | SOLVER | null — who placed it (re-solve anchor marker, PR D). */
+  placementSource: "MANUAL" | "SOLVER" | null;
 }
 
 export interface Competition {
@@ -188,6 +190,7 @@ function normalizeFixture(raw: Fixture): Fixture {
     kickoffTime: raw.kickoffTime ?? null,
     externalRef: raw.externalRef ?? null,
     fbiVenueLabel: raw.fbiVenueLabel ?? null,
+    placementSource: raw.placementSource ?? null,
   };
 }
 
@@ -307,6 +310,22 @@ export const createTeamLink = (input: { teamAId: string; teamBId: string; linkTy
   api.post("team_links", { json: input }).json<TeamLink>();
 
 export const deleteTeamLink = (id: string): Promise<void> => api.delete(`team_links/${id}`).then(() => undefined);
+
+// ── Auto-placement (P1-4 PR D) ───────────────────────────────────────────────
+
+export type UnplacedReason = "no_access_window" | "no_league_intersection" | "venue_unavailable" | "venue_full";
+
+export interface PlaceMatchesResult {
+  placed: number;
+  /** Placements refused at write time — a manual gesture won during the solve. */
+  skipped: number;
+  unplaced: { matchId: string; reason: UnplacedReason; message: string }[];
+  diagnostics: { type: string; severity: string; message: string }[];
+}
+
+/** Synchronous solve: the engine places every placeable home match (seconds).
+ * A non-placeable match is NOT an error — it comes back named in `unplaced`. */
+export const placeMatches = (): Promise<PlaceMatchesResult> => api.post("fixtures/place").json<PlaceMatchesResult>();
 
 /** One division group of the analyzed file, resolved (or not) against the
  * persisted Division↔team mapping. `fbiTeamLabel` is only set when TWO club

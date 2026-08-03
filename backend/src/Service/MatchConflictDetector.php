@@ -10,7 +10,6 @@ use App\Entity\TeamCoach;
 use App\Entity\TeamLink;
 use App\Entity\TeamMatchHabit;
 use App\Entity\VenueUnavailability;
-use App\Enum\FixtureHomeAway;
 use App\Enum\TeamLinkType;
 use DateInterval;
 use DateTimeImmutable;
@@ -56,6 +55,7 @@ final class MatchConflictDetector
     public function __construct(
         private readonly MatchFootprint $footprint,
         private readonly EffectiveScheduleResolver $effectiveScheduleResolver,
+        private readonly AwayKickoffEstimator $awayKickoffEstimator,
     ) {}
 
     /**
@@ -86,27 +86,22 @@ final class MatchConflictDetector
             $coachesByTeam[$link->getTeamId()][$link->getCoachId()] = true;
         }
 
-        /** @var array<string, array<int, TeamMatchHabit>> $habitByTeamDay */
-        $habitByTeamDay = [];
-        foreach ($habits as $habit) {
-            $habitByTeamDay[$habit->getTeamId()][$habit->getDayOfWeek()] = $habit;
-        }
+        $habitByTeamDay = $this->awayKickoffEstimator->indexHabits($habits);
 
         // Fixtures with a footprint: a real kickoff, or (P1-4 PR C) an AWAY
-        // fixture borrowing its team's habitual kickoff for the match weekday.
-        // Coaches attached for the coach conflicts; a coach-less fixture still
-        // gets a view (team links don't need a coach).
+        // fixture borrowing its team's habitual kickoff for the match weekday
+        // (rule extracted to AwayKickoffEstimator — the placement payload
+        // consumes the SAME estimation, PR D). Coaches attached for the coach
+        // conflicts; a coach-less fixture still gets a view (team links don't
+        // need a coach).
         $views = [];
         foreach ($fixtures as $fixture) {
             $estimated = false;
             $window = $this->footprint->occupancy($fixture);
-            if (null === $window
-                && FixtureHomeAway::AWAY === $fixture->getHomeAway()
-                && null === $fixture->getKickoffTime()
-            ) {
-                $habit = $habitByTeamDay[$fixture->getTeamId()][(int) $fixture->getMatchDate()->format('N')] ?? null;
-                if ($habit instanceof TeamMatchHabit) {
-                    $window = $this->footprint->occupancyAt($fixture, $habit->getKickoffTime());
+            if (null === $window) {
+                $estimatedKickoff = $this->awayKickoffEstimator->estimate($fixture, $habitByTeamDay);
+                if ($estimatedKickoff instanceof DateTimeImmutable) {
+                    $window = $this->footprint->occupancyAt($fixture, $estimatedKickoff);
                     $estimated = true;
                 }
             }

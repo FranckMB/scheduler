@@ -45,7 +45,7 @@ final class ScheduleConstraintBuilder
      */
     public const VENUE_CONFIG_KEYS = ['forcedVenueId', 'preferredVenueId', 'minAtVenueId', 'forbiddenVenueId', 'setVenueId'];
     private const CACHE_TTL_SECONDS = 14_400;
-    private const SCHEMA_VERSION = '2.1';
+    private const SCHEMA_VERSION = '2.2';
     private const DEFAULT_SOLVER_SEED = 42;
     /**
      * Upper bound on the solve budget (seconds), aligned with the engine input

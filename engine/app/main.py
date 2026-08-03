@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.config import get_settings
 from app.schemas.input_schema import ScheduleInputSchema
+from app.schemas.match_input_schema import MatchPlacementInputSchema
+from app.schemas.match_output_schema import MatchPlacementOutputSchema
 from app.schemas.output_schema import ScheduleOutputSchema
 from app.solver.constraints import (
     add_level_1_hard_constraints,
@@ -20,6 +22,7 @@ from app.solver.constraints import (
     diagnose_locked_slot_violations,
     parse_v2_constraints,
 )
+from app.solver.match_placement import solve_match_placement
 from app.solver.model import DEFAULT_SESSION_MINUTES, ScheduleCpModel, _time_to_minutes, build_model
 from app.solver.objective import (
     LEVEL_2_OBJECTIVE_WEIGHTS,
@@ -512,6 +515,28 @@ async def generate_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSc
     lock = await get_club_lock(input_data.club_id)
     async with lock:
         return await build_schedule(input_data)
+
+
+@app.post("/place-matches", response_model=MatchPlacementOutputSchema)
+async def place_matches(input_data: MatchPlacementInputSchema) -> MatchPlacementOutputSchema:
+    """P1-4 PR D (ADR-0003) — the dated match-placement solve, SEPARATE from the
+    weekly /generate problem. Same MAJOR-only contract check; the club lock is
+    prefixed so a long weekly solve never blocks a 3-second placement (the
+    global semaphore still bounds CPU)."""
+    contract_version = read_contract_version()
+    if input_data.version.split(".")[0] != contract_version.split(".")[0]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unsupported contract version {input_data.version!r}; engine speaks {contract_version}.",
+        )
+
+    lock = await get_club_lock(f"matches:{input_data.club_id}")
+    async with lock, _solve_semaphore:
+        logger.info(
+            "match placement start club=%s matches=%d", input_data.club_id, len(input_data.matches)
+        )
+        result = await asyncio.to_thread(solve_match_placement, input_data)
+    return MatchPlacementOutputSchema.model_validate(result)
 
 
 @app.post("/implicit-constraints")
