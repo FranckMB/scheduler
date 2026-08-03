@@ -14,7 +14,14 @@ const TAG_LABELS: Record<string, string> = {
   MIXTE: "Mixte",
   // ÂGE
   SENIOR: "Adulte",
-  JEUNE: "Jeune (U13-U21)",
+  // ⚠ « Jeune (U13-U21) » MENTAIT jusqu'à P4-63 : la règle serveur branche JEUNE sur
+  // `ageMin <= 18` (`TeamTagService::determineTagNames`) et U21 a `ageMin` 19
+  // (`CategoryCatalog`) — il est donc tagué SENIOR. Un gestionnaire qui posait une
+  // contrainte « Jeune » croyait couvrir ses U21 : elle ne les atteignait pas.
+  // Décision fondateur (2026-08-03) : corriger l'ÉTIQUETTE, pas la règle — déplacer
+  // U21 vers JEUNE aurait élargi en silence la portée de contraintes DÉJÀ écrites.
+  // Viser les U21 reste possible explicitement, par le tag `U21`.
+  JEUNE: "Jeune (U13-U18)",
   // ⚠ « EMB (U9-U11) » MENTAIT jusqu'à P4-42 : la règle serveur taguait EMB toute
   // catégorie d'`ageMax <= 12`, donc U5 et U7 aussi. Le lot a rétréci le tag au lieu de
   // corriger l'étiquette — c'est elle qui disait le besoin. Ne pas l'élargir « pour
