@@ -42,6 +42,8 @@ function conflictTitle(conflict: Conflict, coaches: Map<string, Coach>): string 
       return "L'accès mairie ne couvre plus ce match";
     case "TEAM_LINK_OVERLAP":
       return "Passerelle violée";
+    case "COMPETITION_INCOMPLETE":
+      return "Calendrier incomplet";
     case "AWAY_NO_FOOTPRINT":
       return "Extérieur sans heure ni habitude";
     default:
@@ -68,6 +70,9 @@ function conflictSummary(conflict: Conflict, teams: Map<string, Team>): string {
   }
   if ("TEAM_LINK_OVERLAP" === conflict.type && conflict.left && conflict.right) {
     return `Équipes liées en même temps — ${teamName(teams, conflict.left.teamId)} et ${teamName(teams, conflict.right.teamId)} (joueurs partagés)`;
+  }
+  if ("COMPETITION_INCOMPLETE" === conflict.type && undefined !== conflict.teamId) {
+    return `${conflict.competitionName ?? "?"} (${teamName(teams, conflict.teamId)}) — ${conflict.imported ?? 0}/${conflict.expected ?? "?"} journées : fichier partiel ou phase pas encore sortie`;
   }
   if ("AWAY_NO_FOOTPRINT" === conflict.type && conflict.fixture) {
     return `${teamName(teams, conflict.fixture.teamId)} · ${frDate(conflict.fixture.matchDate)} — invisible du radar, déclarez une habitude`;

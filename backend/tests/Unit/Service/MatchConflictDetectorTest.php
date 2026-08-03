@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Unit\Service;
 
+use App\Entity\Competition;
 use App\Entity\Fixture;
 use App\Entity\LeagueMatchWindow;
 use App\Entity\ScheduleSlotTemplate;
@@ -12,6 +13,7 @@ use App\Entity\TeamLink;
 use App\Entity\TeamMatchHabit;
 use App\Entity\VenueMatchWindow;
 use App\Entity\VenueUnavailability;
+use App\Enum\CompetitionType;
 use App\Enum\FixtureHomeAway;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLinkType;
@@ -395,6 +397,29 @@ final class MatchConflictDetectorTest extends TestCase
         self::assertSame('MAIN', $mixed[0]['coachRole']);
     }
 
+    public function testAPairedCompetitionShortOfItsExpectationIsNamed(): void
+    {
+        // P1-4 PR F2 (cadrage §8.6) — severity 6: 22 matchdays frozen at
+        // pairing, 1 fixture in base → the manager must not count by hand.
+        $competition = $this->competition('comp-1', 22);
+        $fx = $this->fixture('fx-1', self::TEAM_1, '2026-10-03', '15:00');
+        $fx->setCompetitionId('comp-1');
+
+        $items = $this->detect([$fx], [], null, [], [], [], [], [], [], [], [$competition]);
+
+        self::assertSame(['COMPETITION_INCOMPLETE'], array_column($items, 'type'));
+        self::assertSame(6, $items[0]['severity']);
+        self::assertSame(1, $items[0]['imported']);
+        self::assertSame(22, $items[0]['expected']);
+    }
+
+    public function testACompetitionWithoutPairingExpectationStaysSilent(): void
+    {
+        // No expectedMatchdays (never paired) → no way to judge, no noise.
+        $competition = $this->competition('comp-1', null);
+        self::assertSame([], $this->detect([], [], null, [], [], [], [], [], [], [], [$competition]));
+    }
+
     public function testARealKickoffIsNeverOverriddenByAHabit(): void
     {
         // The away match HAS a real hour (20:30, clear of the training) — the
@@ -459,6 +484,20 @@ final class MatchConflictDetectorTest extends TestCase
         self::assertSame([], $viaNotSimultaneous);
     }
 
+    private function competition(string $id, ?int $expectedMatchdays): Competition
+    {
+        $competition = new Competition;
+        $this->setId($competition, $id);
+        $competition->setClubId('club');
+        $competition->setSeasonId('season');
+        $competition->setTeamId(self::TEAM_1);
+        $competition->setName('D2');
+        $competition->setCompetitionType(CompetitionType::CHAMPIONSHIP);
+        $competition->setExpectedMatchdays($expectedMatchdays);
+
+        return $competition;
+    }
+
     private function habit(string $teamId, int $dayOfWeek, string $kickoff): TeamMatchHabit
     {
         $habit = new TeamMatchHabit;
@@ -513,10 +552,10 @@ final class MatchConflictDetectorTest extends TestCase
      *
      * @return list<array<string, mixed>>
      */
-    private function detect(array $fixtures, array $links, ?string $baselineScheduleId = null, array $overlayPeriods = [], array $slotsBySchedule = [], array $unavailabilities = [], array $habits = [], array $teamLinks = [], array $matchWindows = [], array $envelope = []): array
+    private function detect(array $fixtures, array $links, ?string $baselineScheduleId = null, array $overlayPeriods = [], array $slotsBySchedule = [], array $unavailabilities = [], array $habits = [], array $teamLinks = [], array $matchWindows = [], array $envelope = [], array $competitions = []): array
     {
         return new MatchConflictDetector(new MatchFootprint, new EffectiveScheduleResolver, new AwayKickoffEstimator)
-            ->detect($fixtures, $links, $baselineScheduleId, $overlayPeriods, $slotsBySchedule, $unavailabilities, $habits, $teamLinks, $matchWindows, $envelope);
+            ->detect($fixtures, $links, $baselineScheduleId, $overlayPeriods, $slotsBySchedule, $unavailabilities, $habits, $teamLinks, $matchWindows, $envelope, $competitions);
     }
 
     private function leagueWindow(int $dayOfWeek, string $min, string $max): LeagueMatchWindow

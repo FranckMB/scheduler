@@ -82,7 +82,7 @@ final class FbiFixtureImporter
      * the persisted mapping. Writes nothing.
      *
      * @return array{
-     *     divisions: list<array{name: string, fbiTeamLabel: string|null, rowCount: int, teamId: string|null, competitionId: string|null}>,
+     *     divisions: list<array{name: string, fbiTeamLabel: string|null, rowCount: int, teamId: string|null, competitionId: string|null, suggestedTeamId: string|null, suggestedCompetitionId: string|null, pouleError: string|null, pouleUnknownOpponents: list<string>}>,
      *     totalRows: int,
      *     exempted: int,
      *     errors: list<string>,
@@ -94,16 +94,25 @@ final class FbiFixtureImporter
 
         $groups = $this->groupRows($parsed['rows']);
         $resolver = $this->buildCompetitionResolver();
+        $suggester = $this->buildSuggestionResolver();
 
         $divisions = [];
         foreach ($groups as $group) {
             $competition = $resolver($group['divisionKey'], $group['labelKey'], $group['multiLabel']);
+            // Pre-fill (6.3): an UNMAPPED division whose label matches a paired
+            // competition's canonical FFBB name → suggestion, never a resolution.
+            $suggested = $competition instanceof Competition ? null : $suggester($group['divisionKey']);
+            $guard = $competition instanceof Competition ? $this->pouleGuard($competition, $group['rows'], $group['name']) : null;
             $divisions[] = [
                 'name' => $group['name'],
                 'fbiTeamLabel' => $group['multiLabel'] ? $group['label'] : null,
                 'rowCount' => $group['rowCount'],
                 'teamId' => $competition?->getTeamId(),
                 'competitionId' => $competition?->getId(),
+                'suggestedTeamId' => $suggested?->getTeamId(),
+                'suggestedCompetitionId' => $suggested?->getId(),
+                'pouleError' => null !== $guard && $guard['blocking'] ? $guard['message'] : null,
+                'pouleUnknownOpponents' => null !== $guard && !$guard['blocking'] ? $guard['unknown'] : [],
             ];
         }
 
@@ -129,6 +138,7 @@ final class FbiFixtureImporter
      *     errors: list<string>,
      *     warnings: list<array{type: string, division: string, externalRef: string, message: string}>,
      *     unmappedDivisions: list<array{name: string, fbiTeamLabel: string|null, rowCount: int}>,
+     *     completeness: list<array{competitionId: string, name: string, imported: int, expected: int}>,
      * }
      */
     public function import(string $filePath, Club $club, array $mappings): array
@@ -159,6 +169,7 @@ final class FbiFixtureImporter
         /** @var array<string, true> $seenInFile intra-file duplicate guard, team|ref */
         $seenInFile = [];
 
+        $touchedCompetitions = [];
         foreach ($groups as $group) {
             $competition = $resolver($group['divisionKey'], $group['labelKey'], $group['multiLabel']);
             if (!$competition instanceof Competition) {
@@ -169,7 +180,25 @@ final class FbiFixtureImporter
                 ];
                 continue;
             }
+            // Poule guard (P1-4 PR F2, 6.1 — founder decision): a division whose
+            // opponents do not belong to the PAIRED poule is a wrong file/team/
+            // phase — refused NAMED and SKIPPED, the other divisions go through.
+            // Offline by construction: the poule club list was copied at pairing.
+            $guard = $this->pouleGuard($competition, $group['rows'], $group['name']);
+            if (null !== $guard) {
+                if ($guard['blocking']) {
+                    $errors[] = $guard['message'];
+                    continue;
+                }
+                $warnings[] = [
+                    'type' => 'POULE_MISMATCH',
+                    'division' => $group['name'],
+                    'externalRef' => '',
+                    'message' => $guard['message'],
+                ];
+            }
             $teamId = $competition->getTeamId();
+            $touchedCompetitions[$competition->getId()] = $competition;
 
             foreach ($group['rows'] as $row) {
                 $key = $teamId . '|' . $row['numero'];
@@ -211,6 +240,26 @@ final class FbiFixtureImporter
             $this->entityManager->flush();
         }
 
+        // Completeness (6.2): « 9/22 journées — fichier partiel ou phase pas
+        // sortie » — counted on the PERSISTED fixtures (the data that is true),
+        // only for competitions carrying a pairing expectation.
+        $completeness = [];
+        foreach ($touchedCompetitions as $competition) {
+            $expected = $competition->getExpectedMatchdays();
+            if (null === $expected) {
+                continue;
+            }
+            $imported = \count($this->entityManager->getRepository(Fixture::class)->findBy(['competitionId' => $competition->getId()]));
+            if ($imported < $expected) {
+                $completeness[] = [
+                    'competitionId' => $competition->getId(),
+                    'name' => $competition->getName(),
+                    'imported' => $imported,
+                    'expected' => $expected,
+                ];
+            }
+        }
+
         return [
             'created' => $created,
             'updated' => $updated,
@@ -219,7 +268,95 @@ final class FbiFixtureImporter
             'errors' => $errors,
             'warnings' => $warnings,
             'unmappedDivisions' => $unmapped,
+            'completeness' => $completeness,
         ];
+    }
+
+    /**
+     * The poule guard (6.1): confront the division's DISTINCT opponents to the
+     * paired poule's club list (whole-word normalized containment, the
+     * `containsClub` idiom — « FIRMINY CHAZEAU-FAYOL AL - 1 » matches the poule
+     * club « FIRMINY CHAZEAU-FAYOL AL »). > 50 % unknown → blocking; 1..50 % →
+     * warning; competition without a paired opponent list → never checked
+     * (today's behaviour). Null = nothing to report.
+     *
+     * @param list<array{numero: string, matchDate: DateTimeImmutable, homeAway: FixtureHomeAway, opponentLabel: string, kickoffTime: DateTimeImmutable|null, venueLabel: string|null}> $rows
+     *
+     * @return array{blocking: bool, message: string, unknown: list<string>}|null
+     */
+    private function pouleGuard(Competition $competition, array $rows, string $divisionName): ?array
+    {
+        $pouleClubs = $competition->getFfbbPouleOpponents();
+        if (null === $pouleClubs || [] === $pouleClubs) {
+            return null;
+        }
+        $needles = array_map(fn (string $club): string => $this->normalizeLabel($club), $pouleClubs);
+
+        $unknown = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            $key = $this->normalizeLabel($row['opponentLabel']);
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $known = false;
+            foreach ($needles as $needle) {
+                if ('' !== $needle && str_contains(' ' . $key . ' ', ' ' . $needle . ' ')) {
+                    $known = true;
+                    break;
+                }
+            }
+            if (!$known) {
+                $unknown[] = $row['opponentLabel'];
+            }
+        }
+
+        if ([] === $unknown) {
+            return null;
+        }
+        $total = \count($seen);
+        $blocking = \count($unknown) * 2 > $total;
+        $pouleName = $competition->getFfbbPouleName() ?? '?';
+        $message = $blocking
+            ? \sprintf(
+                'Division « %s » ignorée : %d adversaire(s) sur %d hors de la poule « %s » (%s) — mauvais fichier, mauvaise équipe ou mauvaise phase ? Données de la ligue — un écart se corrige auprès d\'elle.',
+                $divisionName,
+                \count($unknown),
+                $total,
+                $pouleName,
+                implode(', ', \array_slice($unknown, 0, 5)),
+            )
+            : \sprintf(
+                'Division « %s » : %d adversaire(s) sur %d hors de la poule « %s » (%s).',
+                $divisionName,
+                \count($unknown),
+                $total,
+                $pouleName,
+                implode(', ', \array_slice($unknown, 0, 5)),
+            );
+
+        return ['blocking' => $blocking, 'message' => $message, 'unknown' => $unknown];
+    }
+
+    /**
+     * Suggestion resolver (6.3): normalized division label → a competition whose
+     * CANONICAL FFBB name matches. A suggestion, never a resolution — the
+     * manager confirms in the dialog (mapping stays the contract).
+     */
+    private function buildSuggestionResolver(): callable
+    {
+        /** @var list<Competition> $competitions */
+        $competitions = $this->entityManager->getRepository(Competition::class)->findBy([]);
+        $byCanonical = [];
+        foreach ($competitions as $competition) {
+            $canonical = $competition->getFfbbCompetitionName();
+            if (null !== $canonical) {
+                $byCanonical[$this->normalizeLabel($canonical)] = $competition;
+            }
+        }
+
+        return static fn (string $divisionKey): ?Competition => $byCanonical[$divisionKey] ?? null;
     }
 
     /**

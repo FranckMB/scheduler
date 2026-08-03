@@ -4,20 +4,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
-import type { PriorityTier, Team } from "./api";
+import type { ImportFbiAnalysis, ImportFbiResult, PriorityTier, Team } from "./api";
 import { ImportFbiDialog } from "./ImportFbiDialog";
 
 const { analyzeFbiFixtures, importFbiFixtures } = vi.hoisted(() => ({
   analyzeFbiFixtures: vi.fn(() =>
     Promise.resolve({
       divisions: [
-        { name: "DF2", fbiTeamLabel: null, rowCount: 22, teamId: null, competitionId: null },
-        { name: "PNM", fbiTeamLabel: null, rowCount: 10, teamId: "team-1", competitionId: "comp-1" },
+        { name: "DF2", fbiTeamLabel: null, rowCount: 22, teamId: null, competitionId: null, suggestedTeamId: null, suggestedCompetitionId: null, pouleError: null, pouleUnknownOpponents: [] },
+        { name: "PNM", fbiTeamLabel: null, rowCount: 10, teamId: "team-1", competitionId: "comp-1", suggestedTeamId: null, suggestedCompetitionId: null, pouleError: null, pouleUnknownOpponents: [] },
       ],
       totalRows: 34,
       exempted: 2,
       errors: [],
-    }),
+    } satisfies ImportFbiAnalysis as ImportFbiAnalysis),
   ),
   importFbiFixtures: vi.fn(() =>
     Promise.resolve({
@@ -29,7 +29,8 @@ const { analyzeFbiFixtures, importFbiFixtures } = vi.hoisted(() => ({
       errors: ["Ligne 4 : aucune équipe ne correspond au club « BC Test »."],
       warnings: [{ type: "RESCHEDULED", division: "PNM", externalRef: "101137", message: "PNM n°101137 : re-programmé du 28/11/2026 au 05/12/2026." }],
       unmappedDivisions: [],
-    }),
+      completeness: [],
+    } satisfies ImportFbiResult as ImportFbiResult),
   ),
 }));
 
@@ -92,5 +93,68 @@ describe("ImportFbiDialog", () => {
     await waitFor(() => expect(screen.getByText(/22 créés · 1 mis à jour · 9 inchangés/)).toBeInTheDocument());
     expect(screen.getByText(/PNM n°101137 : re-programmé/)).toBeInTheDocument();
     expect(screen.getByText(/Ligne 4 : aucune équipe ne correspond/)).toBeInTheDocument();
+  });
+
+  // ── FFBB pairing feedback (P1-4 PR F2) ────────────────────────────────────
+
+  it("pre-fills the FFBB suggestion, sends it as the mapping, and shows the badge", async () => {
+    const user = userEvent.setup();
+    analyzeFbiFixtures.mockResolvedValueOnce({
+      divisions: [
+        { name: "DF2", fbiTeamLabel: null, rowCount: 22, teamId: null, competitionId: null, suggestedTeamId: "team-2", suggestedCompetitionId: "comp-9", pouleError: null, pouleUnknownOpponents: [] },
+      ],
+      totalRows: 22,
+      exempted: 0,
+      errors: [],
+    });
+    renderWithProviders(<ImportFbiDialog teams={teams} tiers={tiers} onClose={vi.fn()} />);
+
+    await pickFile(user);
+    await waitFor(() => expect(screen.getByLabelText("Équipe pour DF2")).toHaveValue("team-2"));
+    expect(screen.getByText("proposé par la FFBB")).toBeInTheDocument();
+
+    // What the select DISPLAYS is what gets imported — untouched suggestion included.
+    await user.click(screen.getByRole("button", { name: "Importer" }));
+    expect(importFbiFixtures).toHaveBeenCalledWith(expect.any(File), [{ division: "DF2", fbiTeamLabel: null, teamId: "team-2" }]);
+  });
+
+  it("shows the blocking poule error and the minor drift on the analyze table", async () => {
+    const user = userEvent.setup();
+    analyzeFbiFixtures.mockResolvedValueOnce({
+      divisions: [
+        { name: "D2", fbiTeamLabel: null, rowCount: 11, teamId: "team-1", competitionId: "c1", suggestedTeamId: null, suggestedCompetitionId: null, pouleError: "Division « D2 » ignorée : 8 adversaires sur 11 hors de la poule « Poule B2 » — mauvais fichier ?", pouleUnknownOpponents: [] },
+        { name: "D3", fbiTeamLabel: null, rowCount: 9, teamId: "team-2", competitionId: "c2", suggestedTeamId: null, suggestedCompetitionId: null, pouleError: null, pouleUnknownOpponents: ["US INTRUS"] },
+      ],
+      totalRows: 20,
+      exempted: 0,
+      errors: [],
+    });
+    renderWithProviders(<ImportFbiDialog teams={teams} tiers={tiers} onClose={vi.fn()} />);
+
+    await pickFile(user);
+    await waitFor(() => expect(screen.getByText(/Division « D2 » ignorée/)).toBeInTheDocument());
+    expect(screen.getByText(/D3 : hors poule — US INTRUS/)).toBeInTheDocument();
+  });
+
+  it("reports the completeness of paired competitions after the import", async () => {
+    const user = userEvent.setup();
+    importFbiFixtures.mockResolvedValueOnce({
+      message: "Import terminé.",
+      created: 9,
+      updated: 0,
+      unchanged: 0,
+      exempted: 0,
+      errors: [],
+      warnings: [],
+      unmappedDivisions: [],
+      completeness: [{ competitionId: "c1", name: "PNM", imported: 9, expected: 22 }],
+    });
+    renderWithProviders(<ImportFbiDialog teams={teams} tiers={tiers} onClose={vi.fn()} />);
+
+    await pickFile(user);
+    await waitFor(() => expect(screen.getByLabelText("Équipe pour DF2")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Importer" }));
+
+    await waitFor(() => expect(screen.getByText(/PNM : 9\/22 journées — fichier partiel ou phase pas encore sortie/)).toBeInTheDocument());
   });
 });

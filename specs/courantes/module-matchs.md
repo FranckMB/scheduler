@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle · PR E2 diagnostic gradué · PR F1 appariement FFBB)
+Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle · PR E2 diagnostic gradué · PR F1 appariement FFBB · PR F2 garde-fou poule + complétude — **lot P1-4 SOLDÉ**)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés
@@ -304,7 +304,7 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   la règle empreinte du solveur : un match que le panneau vient d'autoriser ne doit pas alerter) ·
   5 coach ASSISTANT + `TEAM_LINK_OVERLAP` · 7 **`AWAY_NO_FOOTPRINT`** (dette (v) : l'angle mort —
   extérieur sans heure ni habitude du bon jour — est NOMMÉ, plus un silence pris pour de la santé).
-  La sévérité 6 (complétude par poule) attend l'appariement FFBB (PR F).
+  La sévérité 6 (`COMPETITION_INCOMPLETE`, PR F2) juge les compétitions APPARIÉES sous leur attendu.
 - **Enveloppe fiable côté UI (dette (iv) soldée)** : `GET /api/league-match-windows` porte
   `resolvedTeamWindows` (teamId → ids de fenêtres), calculé par le MÊME `LeagueEnvelopeResolver` que
   le solveur et le diagnostic — la jointure n'existe qu'à UN endroit ; `lib/envelope.ts` devient un
@@ -339,8 +339,20 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   serveur** — un client forgé ne peut pas éteindre la complétude. Un engagement = une équipe : ré-apparier
   ailleurs efface les réfs de l'ancienne ligne (ses fixtures survivent). Champs exposés en LECTURE sur
   `CompetitionResource`, jamais écrits par le CRUD.
-- **Reste PR F2** : garde-fou poule à l'analyze/import (division fautive refusée NOMMÉE et sautée),
-  complétude au rapport d'import + sévérité 6 du diagnostic, pré-remplissage de l'analyze.
+- **Garde-fou poule (PR F2, 6.1)** : à l'analyze ET à l'import, pour une division résolue vers une
+  compétition APPARIÉE, les adversaires DISTINCTS du fichier sont confrontés à la liste des clubs de
+  la poule (containment mot-entier normalisé, l'idiome `containsClub` — « FIRMINY … - 1 » matche le
+  club de poule « FIRMINY … »). **> 50 % d'inconnus → division refusée NOMMÉE et SAUTÉE** (« mauvais
+  fichier, mauvaise équipe ou mauvaise phase ? ») — les autres divisions passent ; **1..50 % → warning
+  `POULE_MISMATCH`** listant les inconnus ; division sans appariement = jamais contrôlée. **Hors-réseau
+  par construction** (la liste fut copiée à l'appariement).
+- **Complétude (PR F2, 6.2)** : au rapport d'import (« 9/22 journées — fichier partiel ou phase pas
+  encore sortie », compté sur les `Fixture` PERSISTÉS) ET en **sévérité 6** du diagnostic
+  (`COMPETITION_INCOMPLETE`, groupe « Calendriers incomplets » replié) — seules les compétitions à
+  `expectedMatchdays` sont jugées.
+- **Pré-remplissage de l'analyze (PR F2, 6.3)** : division NON mappée dont le libellé égale (normalisé)
+  le **nom canonique FFBB** d'une compétition appariée → `suggestedTeamId` (badge « proposé par la
+  FFBB ») — une suggestion, jamais une résolution ; ce que le sélecteur AFFICHE est ce qui s'importe.
 
 ## Vérifs / gardes
 

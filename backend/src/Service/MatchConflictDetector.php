@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\Competition;
 use App\Entity\Fixture;
 use App\Entity\LeagueMatchWindow;
 use App\Entity\ScheduleSlotTemplate;
@@ -94,6 +95,7 @@ final class MatchConflictDetector
      * @param list<TeamLink>                                                                         $teamLinks        scoped declared bridges
      * @param list<VenueMatchWindow>                                                                 $matchWindows     scoped access windows (ACCESS_WINDOW_LOST)
      * @param array<string, list<LeagueMatchWindow>>                                                 $envelope         teamId → resolved league windows ([] = unmapped)
+     * @param list<Competition>                                                                      $competitions     scoped competitions (COMPETITION_INCOMPLETE — severity 6)
      *
      * @return list<array<string, mixed>> conflict items ready to serialize
      */
@@ -108,6 +110,7 @@ final class MatchConflictDetector
         array $teamLinks = [],
         array $matchWindows = [],
         array $envelope = [],
+        array $competitions = [],
     ): array {
         $coachesByTeam = [];
         // teamId → coachId → role; a coach both MAIN and ASSISTANT on one team
@@ -160,8 +163,54 @@ final class MatchConflictDetector
             ...$this->venueUnavailableConflicts($fixtures, $unavailabilities),
             ...$this->accessWindowLostConflicts($fixtures, $matchWindows),
             ...$this->teamLinkConflicts($views, $teamLinks),
+            ...$this->competitionIncompleteItems($fixtures, $competitions),
             ...$this->awayNoFootprintItems($fixtures, $habitByTeamDay),
         ];
+    }
+
+    /**
+     * Severity 6 (P1-4 PR F2, cadrage §8.6) — a PAIRED competition holding fewer
+     * fixtures than its frozen expectation (2×(N−1) matchdays): partial file, or
+     * a phase not out yet — either way, the manager should not have to count by
+     * hand across 14 teams × 3 phases. Competitions without a pairing are silent.
+     *
+     * @param list<Fixture>     $fixtures
+     * @param list<Competition> $competitions
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function competitionIncompleteItems(array $fixtures, array $competitions): array
+    {
+        $countByCompetition = [];
+        foreach ($fixtures as $fixture) {
+            $competitionId = $fixture->getCompetitionId();
+            if (null !== $competitionId) {
+                $countByCompetition[$competitionId] = ($countByCompetition[$competitionId] ?? 0) + 1;
+            }
+        }
+
+        $items = [];
+        foreach ($competitions as $competition) {
+            $expected = $competition->getExpectedMatchdays();
+            if (null === $expected) {
+                continue;
+            }
+            $imported = $countByCompetition[$competition->getId()] ?? 0;
+            if ($imported >= $expected) {
+                continue;
+            }
+            $items[] = [
+                'type' => 'COMPETITION_INCOMPLETE',
+                'severity' => 6,
+                'competitionId' => $competition->getId(),
+                'competitionName' => $competition->getName(),
+                'teamId' => $competition->getTeamId(),
+                'imported' => $imported,
+                'expected' => $expected,
+            ];
+        }
+
+        return $items;
     }
 
     /**

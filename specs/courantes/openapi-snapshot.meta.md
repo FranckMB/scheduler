@@ -4,6 +4,11 @@ Snapshot régénéré depuis le backend vivant le 2026-08-03 : `php bin/console 
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P1-4 PR F2 (2026-08-03)** : regen vérifiée, **JSON inchangé** (105 paths) — l'analyze/import
+  FBI sont des opérations multipart dont l'export ne détaille pas le corps de réponse ; les
+  nouveaux champs (`suggestedTeamId`, `pouleError`, `pouleUnknownOpponents`, `completeness`,
+  warning `POULE_MISMATCH`, finding `COMPETITION_INCOMPLETE` du diagnostic) sont documentés dans
+  [`module-matchs.md`](module-matchs.md) §Appariement FFBB (même gap connu que P4-47).
 - **P1-4 PR F1 (2026-08-03)** : appariement FFBB — +`GET /api/ffbb/engagements` et
   +`POST /api/ffbb/engagements/confirm` (routes contrôleur, **déclarées dans
   `CustomRoutesOpenApiFactory`** — 103 → 105 paths) ; `Competition` expose les réfs FFBB en lecture
