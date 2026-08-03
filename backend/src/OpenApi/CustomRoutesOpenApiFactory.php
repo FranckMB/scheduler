@@ -386,6 +386,62 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             summary: 'Auto-place the unplaced home matches (writes PLACED+SOLVER; manual anchors never move)',
         )));
 
+        $paths->addPath('/api/ffbb/engagements', new PathItem(get: new Operation(
+            operationId: 'listFfbbEngagements',
+            tags: ['Match'],
+            responses: [
+                '200' => $this->jsonResponse('The club\'s FFBB engagements of the current season (P1-4 PR F) — on-demand, never cached; each row carries a pre-fill suggestion', [
+                    'type' => 'object',
+                    'properties' => [
+                        'engagements' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                            'ffbbCompetitionId' => ['type' => 'string'],
+                            'ffbbCompetitionCode' => ['type' => 'string'],
+                            'competitionName' => ['type' => 'string'],
+                            'ffbbPouleId' => ['type' => 'string'],
+                            'pouleName' => ['type' => 'string'],
+                            'category' => ['type' => 'string', 'nullable' => true],
+                            'level' => ['type' => 'string', 'nullable' => true],
+                            'gender' => ['type' => 'string', 'nullable' => true],
+                            'pouleSize' => ['type' => 'integer'],
+                            'pouleOpponents' => ['type' => 'array', 'items' => ['type' => 'string']],
+                            'suggestedTeamId' => ['type' => 'string', 'nullable' => true],
+                            'suggestedCompetitionId' => ['type' => 'string', 'nullable' => true],
+                        ]]],
+                    ],
+                ]),
+                '400' => new Response('No club/season in context'),
+                '401' => new Response('Unauthorized (missing/expired JWT)'),
+                '403' => new Response('Not a management member (SEC-07)'),
+                '422' => new Response('The club has no FFBB code'),
+                '502' => new Response('FFBB unreachable — retry later'),
+            ],
+            summary: 'List the club\'s FFBB engagements to pair (league data — corrections happen with the league)',
+        )));
+
+        $paths->addPath('/api/ffbb/engagements/confirm', new PathItem(post: new Operation(
+            operationId: 'confirmFfbbPairings',
+            tags: ['Match'],
+            responses: [
+                '200' => $this->jsonResponse('Pairings written on each team\'s Competition (refs + frozen expectedMatchdays + poule opponents, all from a server-side re-read)', [
+                    'type' => 'object',
+                    'properties' => [
+                        'confirmed' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                            'competitionId' => ['type' => 'string'],
+                            'teamId' => ['type' => 'string'],
+                            'ffbbCompetitionId' => ['type' => 'string'],
+                        ]]],
+                    ],
+                ]),
+                '400' => new Response('No club/season in context'),
+                '401' => new Response('Unauthorized (missing/expired JWT)'),
+                '403' => new Response('Not a management member (SEC-07)'),
+                '409' => new Response('Season plan not chosen, or archived season'),
+                '422' => new Response('Unknown engagement for this season, foreign/unknown team, or malformed pairing — nothing written'),
+                '502' => new Response('FFBB unreachable — retry later'),
+            ],
+            summary: 'Confirm the FFBB pairings in block (re-paired at each phase — 1 click)',
+        )));
+
         return $openApi;
     }
 

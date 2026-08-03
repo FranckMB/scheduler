@@ -1,4 +1,4 @@
-import { CalendarRange, ChevronLeft, ChevronRight, DoorOpen, Lock, Plus, Repeat, Upload, Wand2 } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, DoorOpen, Link2, Lock, Plus, Repeat, Upload, Wand2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
@@ -11,6 +11,7 @@ import { Spinner } from "@/shared/components/ui/spinner";
 import type { Category, Coach, Fixture, Team, Venue } from "./api";
 import { AwayList } from "./AwayList";
 import { ConflictRadar } from "./ConflictRadar";
+import { FfbbEngagementsDialog } from "./FfbbEngagementsDialog";
 import { FixtureFormDialog } from "./FixtureFormDialog";
 import { buildTypicalWeekend } from "./lib/typicalWeekend";
 import { TypicalWeekendGrid } from "./TypicalWeekendGrid";
@@ -63,6 +64,8 @@ export function MatchesPage() {
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
   const [accessVenueId, setAccessVenueId] = useState("");
   const [habitsDialogOpen, setHabitsDialogOpen] = useState(false);
+  // P1-4 PR F — the FFBB pairing dialog (fetches on open only).
+  const [ffbbDialogOpen, setFfbbDialogOpen] = useState(false);
 
   const {
     selectedWeekend,
@@ -209,6 +212,10 @@ export function MatchesPage() {
             <DoorOpen className="size-4" />
             Accès match
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setFfbbDialogOpen(true)}>
+            <Link2 className="size-4" />
+            Engagements FFBB
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setImportDialogOpen(true)}>
             <Upload className="size-4" />
             Importer FBI
@@ -339,6 +346,7 @@ export function MatchesPage() {
         <FixtureFormDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} competitions={competitions.data ?? []} fixture={editFixture} onClose={() => setEditFixture(null)} />
       ) : null}
       {importDialogOpen ? <ImportFbiDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} onClose={() => setImportDialogOpen(false)} /> : null}
+      {ffbbDialogOpen ? <FfbbEngagementsDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} onClose={() => setFfbbDialogOpen(false)} /> : null}
       {habitsDialogOpen ? (
         <HabitsLinksDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} venues={venues.data ?? []} fixtures={allFixtures} onClose={() => setHabitsDialogOpen(false)} />
       ) : null}

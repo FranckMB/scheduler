@@ -27,6 +27,7 @@
 | **Doléance** (`CoachWish`) | Souhait exprimé par un coach pour une semaine : nombre de séances voulues, jours indisponibles, commentaire libre. **Ce n'est PAS une contrainte** — aucun effet solveur : c'est une saisie que le gestionnaire lit avant de décider. |
 | **Campagne de doléances** (`CoachWishCampaign`) | Collecte bornée ouverte par le gestionnaire : semaines × équipes × date limite. |
 | **Lien coach** (`CoachWishToken`) | Lien personnel `/doleances/{token}`, **sans login**. Le token est un secret aléatoire **stocké en clair** (décision fondateur : le gestionnaire doit pouvoir le recopier pour le renvoyer) ; son privilège est minuscule et borné par construction — il n'écrit que des souhaits, dans le périmètre du token (ce coach, ses équipes ∩ campagne, les semaines de la campagne), et meurt à la date limite. |
+| **Appariement FFBB** | Le rattachement d'un **engagement** fédéral (une équipe du club vue par la ligue : compétition + poule) à une équipe de l'app — écrit les réfs sur sa `Competition`, fige `expectedMatchdays` (2×(N−1)) et la liste des clubs de la poule. **Ré-apparié à chaque phase** (1 clic, pré-rempli) ; ligne non rattachée = rien modélisé. Données de la ligue : un écart se corrige auprès d'elle |
 | **Socle** | Le calendrier de la saison en vigueur : la version que **pointe** le plan `SEASON`. Les modules (matchs, plans secondaires) l'exigent. Se lit sur le pointeur — il n'y a pas de jalon qui le dise. |
 | **FFBB / FBI / ARA** | Fédération / son outil de gestion (import matchs `externalRef`) / code d'affiliation club. |
 

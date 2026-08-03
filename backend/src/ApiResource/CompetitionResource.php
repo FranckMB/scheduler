@@ -63,6 +63,24 @@ class CompetitionResource
     #[Groups(['read'])]
     public ?string $fbiTeamLabel = null;
 
+    // ── FFBB pairing refs (P1-4 PR F) — read-only: written by the pairing
+    // confirm endpoint, never by this CRUD. ──
+
+    #[Groups(['read'])]
+    public ?string $ffbbCompetitionId = null;
+
+    #[Groups(['read'])]
+    public ?string $ffbbPouleId = null;
+
+    #[Groups(['read'])]
+    public ?string $ffbbPouleName = null;
+
+    #[Groups(['read'])]
+    public ?string $ffbbCompetitionName = null;
+
+    #[Groups(['read'])]
+    public ?int $expectedMatchdays = null;
+
     public static function fromEntity(Competition $entity): self
     {
         $dto = new self;
@@ -77,6 +95,11 @@ class CompetitionResource
         $dto->startDate = $entity->getStartDate()?->format('Y-m-d');
         $dto->endDate = $entity->getEndDate()?->format('Y-m-d');
         $dto->fbiTeamLabel = $entity->getFbiTeamLabel();
+        $dto->ffbbCompetitionId = $entity->getFfbbCompetitionId();
+        $dto->ffbbPouleId = $entity->getFfbbPouleId();
+        $dto->ffbbPouleName = $entity->getFfbbPouleName();
+        $dto->ffbbCompetitionName = $entity->getFfbbCompetitionName();
+        $dto->expectedMatchdays = $entity->getExpectedMatchdays();
 
         return $dto;
     }

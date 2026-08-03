@@ -6238,6 +6238,154 @@
                 }
             }
         },
+        "/api/ffbb/engagements": {
+            "get": {
+                "operationId": "listFfbbEngagements",
+                "tags": [
+                    "Match"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The club's FFBB engagements of the current season (P1-4 PR F) \u2014 on-demand, never cached; each row carries a pre-fill suggestion",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "engagements": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "ffbbCompetitionId": {
+                                                        "type": "string"
+                                                    },
+                                                    "ffbbCompetitionCode": {
+                                                        "type": "string"
+                                                    },
+                                                    "competitionName": {
+                                                        "type": "string"
+                                                    },
+                                                    "ffbbPouleId": {
+                                                        "type": "string"
+                                                    },
+                                                    "pouleName": {
+                                                        "type": "string"
+                                                    },
+                                                    "category": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "level": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "gender": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "pouleSize": {
+                                                        "type": "integer"
+                                                    },
+                                                    "pouleOpponents": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "suggestedTeamId": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "suggestedCompetitionId": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "No club/season in context"
+                    },
+                    "401": {
+                        "description": "Unauthorized (missing/expired JWT)"
+                    },
+                    "403": {
+                        "description": "Not a management member (SEC-07)"
+                    },
+                    "422": {
+                        "description": "The club has no FFBB code"
+                    },
+                    "502": {
+                        "description": "FFBB unreachable \u2014 retry later"
+                    }
+                },
+                "summary": "List the club's FFBB engagements to pair (league data \u2014 corrections happen with the league)"
+            }
+        },
+        "/api/ffbb/engagements/confirm": {
+            "post": {
+                "operationId": "confirmFfbbPairings",
+                "tags": [
+                    "Match"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pairings written on each team's Competition (refs + frozen expectedMatchdays + poule opponents, all from a server-side re-read)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "confirmed": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "competitionId": {
+                                                        "type": "string"
+                                                    },
+                                                    "teamId": {
+                                                        "type": "string"
+                                                    },
+                                                    "ffbbCompetitionId": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "No club/season in context"
+                    },
+                    "401": {
+                        "description": "Unauthorized (missing/expired JWT)"
+                    },
+                    "403": {
+                        "description": "Not a management member (SEC-07)"
+                    },
+                    "409": {
+                        "description": "Season plan not chosen, or archived season"
+                    },
+                    "422": {
+                        "description": "Unknown engagement for this season, foreign/unknown team, or malformed pairing \u2014 nothing written"
+                    },
+                    "502": {
+                        "description": "FFBB unreachable \u2014 retry later"
+                    }
+                },
+                "summary": "Confirm the FFBB pairings in block (re-paired at each phase \u2014 1 click)"
+            }
+        },
         "/api/fixtures/conflicts": {
             "get": {
                 "operationId": "getFixtureConflicts",
@@ -16614,6 +16762,36 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "ffbbCompetitionId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ffbbPouleId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ffbbPouleName": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ffbbCompetitionName": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "expectedMatchdays": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -16725,6 +16903,36 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "ffbbCompetitionId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ffbbPouleId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ffbbPouleName": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "ffbbCompetitionName": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "expectedMatchdays": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -16784,6 +16992,36 @@
                                 "description": "FBI club-team label \u2014 disambiguates two club teams in one division.",
                                 "type": [
                                     "string",
+                                    "null"
+                                ]
+                            },
+                            "ffbbCompetitionId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "ffbbPouleId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "ffbbPouleName": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "ffbbCompetitionName": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "expectedMatchdays": {
+                                "type": [
+                                    "integer",
                                     "null"
                                 ]
                             }

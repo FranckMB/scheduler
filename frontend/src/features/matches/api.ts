@@ -38,7 +38,39 @@ export interface Competition {
   competitionType: string;
   /** FBI club-team label — set when two club teams share one division. */
   fbiTeamLabel?: string | null;
+  /** FFBB pairing refs (P1-4 PR F) — read-only, written by the pairing confirm. */
+  ffbbCompetitionId?: string | null;
+  ffbbPouleId?: string | null;
+  ffbbPouleName?: string | null;
+  ffbbCompetitionName?: string | null;
+  expectedMatchdays?: number | null;
 }
+
+// ── FFBB pairing (P1-4 PR F) ─────────────────────────────────────────────────
+
+export interface FfbbEngagement {
+  ffbbCompetitionId: string;
+  ffbbCompetitionCode: string;
+  competitionName: string;
+  ffbbPouleId: string;
+  pouleName: string;
+  category: string | null;
+  level: string | null;
+  gender: string | null;
+  pouleSize: number;
+  pouleOpponents: string[];
+  /** Pre-fill: the team already paired to this competition (or its next phase). */
+  suggestedTeamId: string | null;
+  suggestedCompetitionId: string | null;
+}
+
+export const getFfbbEngagements = (): Promise<{ engagements: FfbbEngagement[] }> =>
+  api.get("ffbb/engagements").json<{ engagements: FfbbEngagement[] }>();
+
+export const confirmFfbbPairings = (pairings: { ffbbCompetitionId: string; teamId: string }[]): Promise<void> =>
+  api
+    .post("ffbb/engagements/confirm", { json: { pairings } })
+    .then(() => undefined);
 
 export interface LeagueWindow {
   id: string;
