@@ -1,5 +1,4 @@
-import type { Category, Fixture, LeagueWindow, Team } from "../api";
-import { stripDiacritics } from "@/shared/lib/utils";
+import type { Fixture, LeagueWindow } from "../api";
 
 /** Time-ish string ("18:00", "18:00:00", ISO) → minutes since midnight. */
 export function timeToMinutes(time: string | null | undefined): number {
@@ -14,14 +13,6 @@ export function timeToMinutes(time: string | null | undefined): number {
 export function isoWeekday(dateStr: string): number {
   const day = new Date(`${dateStr}T00:00:00`).getDay(); // 0=Sun..6=Sat
   return 0 === day ? 7 : day;
-}
-
-/** Normalize a label for a tolerant join (case/accents/spacing agnostic). */
-function normalize(value: string): string {
-  return stripDiacritics(value)
-    .toLowerCase()
-    .replace(/\s+/g, "")
-    .trim();
 }
 
 export interface EnvelopeResult {
@@ -39,35 +30,20 @@ export interface EnvelopeResult {
  * Resolve the league-envelope windows that apply to a fixture's team and expose
  * day/time validators.
  *
- * The join is tolerant: it matches the team's (category, level, gender) against
- * the catalog labels, normalized. Because the club category/level labels are not
- * guaranteed to align 1:1 with the AURA catalog, `mapped` may be false — the UI
- * then shows the windows as an advisory reference and does NOT block placement
- * (degradation validated with the product). The server-side conflict radar stays
- * the hard source of truth.
+ * P1-4 PR E2 (dette iv): the team↔window join lives on the SERVER
+ * (`LeagueEnvelopeResolver`, the same resolution the solver enforces as HARD) —
+ * the client only looks up `resolvedTeamWindows` from GET /api/league-match-windows.
+ * The old client-side tolerant join is gone: two implementations of the same
+ * join had already started to diverge. An unmapped team ([] or absent) keeps
+ * the PR-2 degradation: advisory reference, never a block.
  */
 export function resolveEnvelope(
   fixture: Fixture,
-  teams: Map<string, Team>,
-  categories: Map<string, Category>,
+  resolvedTeamWindows: Record<string, string[]>,
   windows: LeagueWindow[],
 ): EnvelopeResult {
-  const team = teams.get(fixture.teamId);
-  const categoryName = team ? categories.get(team.sportCategoryId)?.name : undefined;
-
-  const matched =
-    undefined === team || undefined === categoryName
-      ? []
-      : windows.filter((w) => {
-          const categoryMatch = normalize(w.category) === normalize(categoryName);
-          // An unknown team level/gender must NOT match every window — that would
-          // map the team to levels/genders it does not belong to and mis-flag the
-          // envelope. Require the axis to be known and equal (a gender-null window
-          // is catalog-wide and still applies).
-          const levelMatch = null !== team.level && normalize(w.level) === normalize(team.level);
-          const genderMatch = null === w.gender || (null !== team.gender && normalize(w.gender) === normalize(team.gender));
-          return categoryMatch && levelMatch && genderMatch;
-        });
+  const ids = new Set(resolvedTeamWindows[fixture.teamId] ?? []);
+  const matched = windows.filter((w) => ids.has(w.id));
 
   const day = isoWeekday(fixture.matchDate);
   const dayWindows = matched.filter((w) => w.dayOfWeek === day);

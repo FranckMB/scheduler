@@ -51,6 +51,10 @@ final class FixtureConflictsApiTest extends WebTestCase
         self::assertSame($coachAId, $conflicts[0]['coachId']);
         self::assertArrayHasKey('left', $conflicts[0]);
         self::assertArrayHasKey('right', $conflicts[0]);
+        // P1-4 PR E2 — gravity is emitted by the SERVER (the UI only groups):
+        // a MAIN coach double-booked = severity 3.
+        self::assertSame(3, $conflicts[0]['severity']);
+        self::assertSame('MAIN', $conflicts[0]['coachRole']);
     }
 
     public function testConflictsAreScopedToTheCallersClub(): void

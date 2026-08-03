@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Fixture;
+use App\Entity\LeagueMatchWindow;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\TeamCoach;
 use App\Entity\TeamLink;
 use App\Entity\TeamMatchHabit;
+use App\Entity\VenueMatchWindow;
 use App\Entity\VenueUnavailability;
+use App\Enum\FixtureHomeAway;
+use App\Enum\TeamCoachRole;
 use App\Enum\TeamLinkType;
 use DateInterval;
 use DateTimeImmutable;
@@ -44,6 +48,26 @@ use DateTimeImmutable;
  * diagnostic). Unplaced HOME fixtures are NOT estimated: their hour is the
  * manager's next gesture, estimating it would be noise.
  *
+ * GRADED diagnostic (P1-4 PR E2, cadrage §8): every finding carries a
+ * `severity` (1 = worst), emitted by the SERVER — the UI groups and labels, it
+ * never re-derives gravity. Coach findings carry `coachRole`: MAIN when the
+ * coach is MAIN on ANY involved team (the worst engagement counts) → severity
+ * 3, else ASSISTANT → 5. New finding kinds:
+ * - VENUE_OVERLAP (1): two placed fixtures, same venue, overlapping footprints —
+ *   the manual loop never blocks a collision (founder decision), the diagnostic
+ *   screams instead.
+ * - LEAGUE_WINDOW_VIOLATION (2): a placed HOME fixture of a MAPPED team whose
+ *   day/kickoff sit outside every resolved league window (same
+ *   LeagueEnvelopeResolver join as the solver — unmapped team = silent).
+ * - ACCESS_WINDOW_LOST (4, dette ii): a placed HOME fixture whose kickoff no
+ *   longer falls in any access window of (venue, weekday) — the window changed
+ *   AFTER the placement. Mirrors the PANEL rule (kickoff point, half-open,
+ *   club-without-any-window = nothing to enforce), NOT the solver's
+ *   full-footprint rule: a match the panel just allowed must not alert.
+ * - AWAY_NO_FOOTPRINT (7, dette v): an AWAY fixture with no hour and no habit
+ *   on its weekday — the residual blind spot is now NAMED (info; the UI folds
+ *   the group).
+ *
  * Pure/stateless: the controller loads the scoped data and passes it in; this
  * class only crosses and overlaps, so it is unit-testable without a kernel.
  *
@@ -68,6 +92,8 @@ final class MatchConflictDetector
      * @param list<VenueUnavailability>                                                              $unavailabilities scoped all-circumstances closures
      * @param list<TeamMatchHabit>                                                                   $habits           scoped habitual windows (estimation source)
      * @param list<TeamLink>                                                                         $teamLinks        scoped declared bridges
+     * @param list<VenueMatchWindow>                                                                 $matchWindows     scoped access windows (ACCESS_WINDOW_LOST)
+     * @param array<string, list<LeagueMatchWindow>>                                                 $envelope         teamId → resolved league windows ([] = unmapped)
      *
      * @return list<array<string, mixed>> conflict items ready to serialize
      */
@@ -80,10 +106,19 @@ final class MatchConflictDetector
         array $unavailabilities = [],
         array $habits = [],
         array $teamLinks = [],
+        array $matchWindows = [],
+        array $envelope = [],
     ): array {
         $coachesByTeam = [];
+        // teamId → coachId → role; a coach both MAIN and ASSISTANT on one team
+        // counts MAIN (the worst engagement wins, cadrage §8).
+        $rolesByTeam = [];
         foreach ($teamCoachRows as $link) {
             $coachesByTeam[$link->getTeamId()][$link->getCoachId()] = true;
+            $current = $rolesByTeam[$link->getTeamId()][$link->getCoachId()] ?? null;
+            if (TeamCoachRole::MAIN !== $current) {
+                $rolesByTeam[$link->getTeamId()][$link->getCoachId()] = $link->getRole();
+            }
         }
 
         $habitByTeamDay = $this->awayKickoffEstimator->indexHabits($habits);
@@ -118,10 +153,197 @@ final class MatchConflictDetector
         $coachViews = array_values(array_filter($views, static fn (array $view): bool => [] !== $view['coachIds']));
 
         return [
-            ...$this->matchMatchConflicts($coachViews),
-            ...$this->matchTrainingConflicts($coachViews, $coachesByTeam, $seasonScheduleId, $activePeriods, $slotsBySchedule),
+            ...$this->venueOverlapConflicts($views),
+            ...$this->leagueWindowViolations($fixtures, $envelope),
+            ...$this->matchMatchConflicts($coachViews, $rolesByTeam),
+            ...$this->matchTrainingConflicts($coachViews, $coachesByTeam, $rolesByTeam, $seasonScheduleId, $activePeriods, $slotsBySchedule),
             ...$this->venueUnavailableConflicts($fixtures, $unavailabilities),
+            ...$this->accessWindowLostConflicts($fixtures, $matchWindows),
             ...$this->teamLinkConflicts($views, $teamLinks),
+            ...$this->awayNoFootprintItems($fixtures, $habitByTeamDay),
+        ];
+    }
+
+    /**
+     * Severity 1 — two fixtures on the SAME venue with overlapping footprints.
+     * The manual loop lets this happen on purpose (a derogation or the league
+     * can impose it); the diagnostic makes it the loudest finding instead.
+     *
+     * @param list<array{fixture: Fixture, window: array{start: DateTimeImmutable, end: DateTimeImmutable}, estimated: bool, coachIds: list<string>}> $views
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function venueOverlapConflicts(array $views): array
+    {
+        $withVenue = array_values(array_filter($views, static fn (array $view): bool => null !== $view['fixture']->getVenueId()));
+        $conflicts = [];
+        $count = \count($withVenue);
+        for ($i = 0; $i < $count; ++$i) {
+            for ($j = $i + 1; $j < $count; ++$j) {
+                $left = $withVenue[$i];
+                $right = $withVenue[$j];
+                if ($left['fixture']->getVenueId() !== $right['fixture']->getVenueId() || !$this->overlaps($left['window'], $right['window'])) {
+                    continue;
+                }
+                $conflicts[] = [
+                    'type' => 'VENUE_OVERLAP',
+                    'severity' => 1,
+                    'venueId' => $left['fixture']->getVenueId(),
+                    'start' => $this->maxMoment($left['window']['start'], $right['window']['start'])->format(DateTimeImmutable::ATOM),
+                    'end' => $this->minMoment($left['window']['end'], $right['window']['end'])->format(DateTimeImmutable::ATOM),
+                    'left' => $this->fixtureView($left['fixture'], $left['window'], $left['estimated']),
+                    'right' => $this->fixtureView($right['fixture'], $right['window'], $right['estimated']),
+                ];
+            }
+        }
+
+        return $conflicts;
+    }
+
+    /**
+     * Severity 2 — a placed HOME fixture of a MAPPED team outside every resolved
+     * league window (day or kickoff). Unmapped team ([] envelope) = silent, same
+     * tolerance as the solver and the placement screen.
+     *
+     * @param list<Fixture>                          $fixtures
+     * @param array<string, list<LeagueMatchWindow>> $envelope
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function leagueWindowViolations(array $fixtures, array $envelope): array
+    {
+        $conflicts = [];
+        foreach ($fixtures as $fixture) {
+            $kickoffTime = $fixture->getKickoffTime();
+            if (FixtureHomeAway::HOME !== $fixture->getHomeAway() || !$kickoffTime instanceof DateTimeImmutable) {
+                continue;
+            }
+            $windows = $envelope[$fixture->getTeamId()] ?? [];
+            if ([] === $windows) {
+                continue;
+            }
+            $day = (int) $fixture->getMatchDate()->format('N');
+            $kickoff = $kickoffTime->format('H:i');
+            $inside = false;
+            foreach ($windows as $window) {
+                if ($window->getDayOfWeek() === $day
+                    && $kickoff >= $window->getKickoffMin()->format('H:i')
+                    && $kickoff <= $window->getKickoffMax()->format('H:i')
+                ) {
+                    $inside = true;
+                    break;
+                }
+            }
+            if ($inside) {
+                continue;
+            }
+            $conflicts[] = [
+                'type' => 'LEAGUE_WINDOW_VIOLATION',
+                'severity' => 2,
+                'windows' => array_map(static fn (LeagueMatchWindow $w): array => [
+                    'dayOfWeek' => $w->getDayOfWeek(),
+                    'kickoffMin' => $w->getKickoffMin()->format('H:i'),
+                    'kickoffMax' => $w->getKickoffMax()->format('H:i'),
+                ], $windows),
+                'fixture' => $this->bareFixtureView($fixture),
+            ];
+        }
+
+        return $conflicts;
+    }
+
+    /**
+     * Severity 4 (dette ii) — a placed HOME fixture whose kickoff no longer sits
+     * in any access window of (venue, weekday): the window moved AFTER the
+     * placement. PANEL rule mirrored exactly (kickoff point, half-open end,
+     * no window anywhere = data not adopted = nothing to enforce).
+     *
+     * @param list<Fixture>          $fixtures
+     * @param list<VenueMatchWindow> $matchWindows
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function accessWindowLostConflicts(array $fixtures, array $matchWindows): array
+    {
+        if ([] === $matchWindows) {
+            return [];
+        }
+
+        $conflicts = [];
+        foreach ($fixtures as $fixture) {
+            $venueId = $fixture->getVenueId();
+            $kickoffTime = $fixture->getKickoffTime();
+            if (FixtureHomeAway::HOME !== $fixture->getHomeAway() || null === $venueId || !$kickoffTime instanceof DateTimeImmutable) {
+                continue;
+            }
+            $day = (int) $fixture->getMatchDate()->format('N');
+            $kickoff = $kickoffTime->format('H:i');
+            $inside = false;
+            foreach ($matchWindows as $window) {
+                if ($window->getVenueId() === $venueId
+                    && $window->getDayOfWeek() === $day
+                    && $kickoff >= $window->getStartTime()->format('H:i')
+                    && $kickoff < $window->getEndTime()->format('H:i')
+                ) {
+                    $inside = true;
+                    break;
+                }
+            }
+            if ($inside) {
+                continue;
+            }
+            $conflicts[] = [
+                'type' => 'ACCESS_WINDOW_LOST',
+                'severity' => 4,
+                'venueId' => $venueId,
+                'fixture' => $this->bareFixtureView($fixture),
+            ];
+        }
+
+        return $conflicts;
+    }
+
+    /**
+     * Severity 7 (dette v, info) — an AWAY fixture with no hour and no habit on
+     * its weekday: no footprint, so the radar is BLIND to it. Named so the
+     * manager declares a habit instead of trusting a silence.
+     *
+     * @param list<Fixture>                             $fixtures
+     * @param array<string, array<int, TeamMatchHabit>> $habitByTeamDay
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function awayNoFootprintItems(array $fixtures, array $habitByTeamDay): array
+    {
+        $items = [];
+        foreach ($fixtures as $fixture) {
+            if (FixtureHomeAway::AWAY !== $fixture->getHomeAway() || $fixture->getKickoffTime() instanceof DateTimeImmutable) {
+                continue;
+            }
+            $day = (int) $fixture->getMatchDate()->format('N');
+            if (isset($habitByTeamDay[$fixture->getTeamId()][$day])) {
+                continue;
+            }
+            $items[] = [
+                'type' => 'AWAY_NO_FOOTPRINT',
+                'severity' => 7,
+                'fixture' => $this->bareFixtureView($fixture),
+            ];
+        }
+
+        return $items;
+    }
+
+    /** @return array<string, mixed> */
+    private function bareFixtureView(Fixture $fixture): array
+    {
+        return [
+            'fixtureId' => $fixture->getId(),
+            'teamId' => $fixture->getTeamId(),
+            'homeAway' => $fixture->getHomeAway()->value,
+            'matchDate' => $fixture->getMatchDate()->format('Y-m-d'),
+            'kickoffTime' => $fixture->getKickoffTime()?->format('H:i'),
+            'status' => $fixture->getStatus()->value,
         ];
     }
 
@@ -159,6 +381,7 @@ final class MatchConflictDetector
                     }
                     $conflicts[] = [
                         'type' => 'TEAM_LINK_OVERLAP',
+                        'severity' => 5,
                         'teamLinkId' => $link->getId(),
                         'start' => $this->maxMoment($left['window']['start'], $right['window']['start'])->format(DateTimeImmutable::ATOM),
                         'end' => $this->minMoment($left['window']['end'], $right['window']['end'])->format(DateTimeImmutable::ATOM),
@@ -205,6 +428,7 @@ final class MatchConflictDetector
                 }
                 $conflicts[] = [
                     'type' => 'VENUE_UNAVAILABLE',
+                    'severity' => 4,
                     'venueId' => $venueId,
                     'unavailabilityId' => $unavailability->getId(),
                     'label' => $unavailability->getLabel(),
@@ -227,10 +451,11 @@ final class MatchConflictDetector
 
     /**
      * @param list<array{fixture: Fixture, window: array{start: DateTimeImmutable, end: DateTimeImmutable}, estimated: bool, coachIds: list<string>}> $views
+     * @param array<string, array<string, TeamCoachRole>>                                                                                             $rolesByTeam
      *
      * @return list<array<string, mixed>>
      */
-    private function matchMatchConflicts(array $views): array
+    private function matchMatchConflicts(array $views, array $rolesByTeam): array
     {
         $conflicts = [];
         $count = \count($views);
@@ -243,8 +468,11 @@ final class MatchConflictDetector
                 }
                 // A coach shared by both fixtures' teams is double-booked.
                 foreach (array_intersect($left['coachIds'], $right['coachIds']) as $coachId) {
+                    $role = $this->worstRole($rolesByTeam, $coachId, [$left['fixture']->getTeamId(), $right['fixture']->getTeamId()]);
                     $conflicts[] = [
                         'type' => 'MATCH_MATCH',
+                        'severity' => TeamCoachRole::MAIN === $role ? 3 : 5,
+                        'coachRole' => $role->value,
                         'coachId' => $coachId,
                         'start' => $this->maxMoment($left['window']['start'], $right['window']['start'])->format(DateTimeImmutable::ATOM),
                         'end' => $this->minMoment($left['window']['end'], $right['window']['end'])->format(DateTimeImmutable::ATOM),
@@ -261,6 +489,7 @@ final class MatchConflictDetector
     /**
      * @param list<array{fixture: Fixture, window: array{start: DateTimeImmutable, end: DateTimeImmutable}, estimated: bool, coachIds: list<string>}> $views
      * @param array<string, array<string, true>>                                                                                                      $coachesByTeam
+     * @param array<string, array<string, TeamCoachRole>>                                                                                             $rolesByTeam
      * @param list<array{start: DateTimeImmutable, end: DateTimeImmutable, scheduleId: string|null}>                                                  $activePeriods
      * @param array<string, list<ScheduleSlotTemplate>>                                                                                               $slotsBySchedule
      *
@@ -269,6 +498,7 @@ final class MatchConflictDetector
     private function matchTrainingConflicts(
         array $views,
         array $coachesByTeam,
+        array $rolesByTeam,
         ?string $seasonScheduleId,
         array $activePeriods,
         array $slotsBySchedule,
@@ -306,8 +536,11 @@ final class MatchConflictDetector
                     }
 
                     foreach ($coachIds as $coachId) {
+                        $role = $this->worstRole($rolesByTeam, $coachId, [$view['fixture']->getTeamId(), $slot->getTeamId()]);
                         $conflicts[] = [
                             'type' => 'MATCH_TRAINING',
+                            'severity' => TeamCoachRole::MAIN === $role ? 3 : 5,
+                            'coachRole' => $role->value,
                             'coachId' => $coachId,
                             'start' => $this->maxMoment($view['window']['start'], $trainingWindow['start'])->format(DateTimeImmutable::ATOM),
                             'end' => $this->minMoment($view['window']['end'], $trainingWindow['end'])->format(DateTimeImmutable::ATOM),
@@ -373,6 +606,23 @@ final class MatchConflictDetector
     {
         // Half-open: back-to-back windows (endA == startB) do NOT conflict.
         return $a['start'] < $b['end'] && $b['start'] < $a['end'];
+    }
+
+    /**
+     * MAIN on ANY involved team beats ASSISTANT — the worst engagement counts.
+     *
+     * @param array<string, array<string, TeamCoachRole>> $rolesByTeam
+     * @param list<string>                                $teamIds
+     */
+    private function worstRole(array $rolesByTeam, string $coachId, array $teamIds): TeamCoachRole
+    {
+        foreach ($teamIds as $teamId) {
+            if (TeamCoachRole::MAIN === ($rolesByTeam[$teamId][$coachId] ?? null)) {
+                return TeamCoachRole::MAIN;
+            }
+        }
+
+        return TeamCoachRole::ASSISTANT;
     }
 
     private function maxMoment(DateTimeImmutable $a, DateTimeImmutable $b): DateTimeImmutable

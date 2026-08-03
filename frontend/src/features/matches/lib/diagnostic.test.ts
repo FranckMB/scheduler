@@ -1,0 +1,40 @@
+import { describe, expect, it } from "vitest";
+
+import type { Conflict } from "../api";
+import { groupBySeverity } from "./diagnostic";
+
+const conflict = (type: Conflict["type"], severity: number): Conflict => ({ type, severity });
+
+describe("groupBySeverity (P1-4 PR E2)", () => {
+  it("sorts groups worst-first and keeps the server's severity as-is", () => {
+    const groups = groupBySeverity([
+      conflict("AWAY_NO_FOOTPRINT", 7),
+      conflict("MATCH_MATCH", 3),
+      conflict("VENUE_OVERLAP", 1),
+      conflict("MATCH_MATCH", 3),
+    ]);
+    expect(groups.map((g) => g.severity)).toEqual([1, 3, 7]);
+    expect(groups[1]?.conflicts).toHaveLength(2);
+  });
+
+  it("grades the tone: 1-2 destructive, 3-5 warning, 7 muted", () => {
+    const groups = groupBySeverity([
+      conflict("VENUE_OVERLAP", 1),
+      conflict("LEAGUE_WINDOW_VIOLATION", 2),
+      conflict("VENUE_UNAVAILABLE", 4),
+      conflict("AWAY_NO_FOOTPRINT", 7),
+    ]);
+    expect(groups.map((g) => g.tone)).toEqual(["destructive", "destructive", "warning", "muted"]);
+  });
+
+  it("only folds the severity-7 group (N blind matches = one line, not N alerts)", () => {
+    const groups = groupBySeverity([conflict("AWAY_NO_FOOTPRINT", 7), conflict("VENUE_OVERLAP", 1)]);
+    expect(groups.find((g) => 7 === g.severity)?.folded).toBe(true);
+    expect(groups.find((g) => 1 === g.severity)?.folded).toBe(false);
+  });
+
+  it("a conflict without severity falls in the watch group (5), never crashes", () => {
+    const legacy = { type: "MATCH_MATCH" } as Conflict;
+    expect(groupBySeverity([legacy])[0]?.severity).toBe(5);
+  });
+});

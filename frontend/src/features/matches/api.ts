@@ -56,6 +56,9 @@ export interface LeagueWindow {
 export interface LeagueWindowsResponse {
   league: string;
   items: LeagueWindow[];
+  /** P1-4 PR E2 (dette iv) — teamId → applicable window ids, resolved by the
+   * SERVER with the same join as the solver ([] = unmapped → advisory only). */
+  resolvedTeamWindows: Record<string, string[]>;
 }
 
 /** One side of a conflict — the fixture and its computed occupancy window. */
@@ -96,8 +99,22 @@ export interface ConflictUnavailableFixtureView {
   status: FixtureStatus;
 }
 
+export type ConflictType =
+  | "VENUE_OVERLAP"
+  | "LEAGUE_WINDOW_VIOLATION"
+  | "MATCH_MATCH"
+  | "MATCH_TRAINING"
+  | "VENUE_UNAVAILABLE"
+  | "ACCESS_WINDOW_LOST"
+  | "TEAM_LINK_OVERLAP"
+  | "AWAY_NO_FOOTPRINT";
+
 export interface Conflict {
-  type: "MATCH_MATCH" | "MATCH_TRAINING" | "VENUE_UNAVAILABLE" | "TEAM_LINK_OVERLAP";
+  type: ConflictType;
+  /** P1-4 PR E2 — gravity emitted by the SERVER (1 = worst … 7 = info). */
+  severity: number;
+  /** MATCH_MATCH / MATCH_TRAINING — MAIN or ASSISTANT (worst engagement wins). */
+  coachRole?: "MAIN" | "ASSISTANT";
   coachId?: string;
   /** TEAM_LINK_OVERLAP only. */
   teamLinkId?: string;
@@ -108,12 +125,14 @@ export interface Conflict {
   right?: ConflictFixtureView;
   fixture?: ConflictFixtureView | ConflictUnavailableFixtureView;
   training?: ConflictTrainingView;
-  /** VENUE_UNAVAILABLE only. */
+  /** VENUE_OVERLAP / VENUE_UNAVAILABLE / ACCESS_WINDOW_LOST. */
   venueId?: string;
   unavailabilityId?: string;
   label?: string | null;
   unavailableFrom?: string;
   unavailableUntil?: string;
+  /** LEAGUE_WINDOW_VIOLATION — the windows the placement violates. */
+  windows?: { dayOfWeek: number; kickoffMin: string; kickoffMax: string }[];
 }
 
 export interface ConflictsResponse {

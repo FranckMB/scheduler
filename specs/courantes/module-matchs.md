@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle)
+Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle · PR E2 diagnostic gradué)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés
@@ -200,7 +200,8 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
     habituelle de son équipe **du même jour de semaine** → l'empreinte naît (`MatchFootprint::occupancyAt`),
     les conflits deviennent visibles, marqués **`estimatedKickoff: true`** (« heure estimée » dans le
     radar). **Rien n'est persisté** (écrire l'estimation dans `kickoffTime` la ferait passer pour une heure
-    réelle et polluerait le diff de ré-import F2). Pas d'habitude ce jour-là → l'angle mort demeure (PR E).
+    réelle et polluerait le diff de ré-import F2). Pas d'habitude ce jour-là → pas d'empreinte, mais
+    l'angle mort est NOMMÉ au diagnostic (`AWAY_NO_FOOTPRINT`, PR E2).
     Une heure RÉELLE n'est jamais supplantée. Un HOME non placé n'est pas estimé (son heure est le prochain
     geste du gestionnaire).
   - **Finding `TEAM_LINK_OVERLAP`** : deux matchs d'équipes liées `NOT_SIMULTANEOUS` dont les empreintes
@@ -287,6 +288,37 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   l'engagement étant **dérivé**, supprimer le dernier match d'une équipe la rend à nouveau supprimable
   (aucune garde ne survit à tort — NR `EngagedTeamGuardTest`).
 
+## Diagnostic gradué + extérieur visible + week-end type — P1-4 PR E2 (2026-08-03)
+
+- **La sévérité est émise par le SERVEUR** (`MatchConflictDetector`, `severity` 1..7 + `coachRole`
+  MAIN/ASSISTANT — MAIN sur N'IMPORTE quelle équipe impliquée gagne) ; l'UI groupe et libelle
+  (`lib/diagnostic.ts`, pur), elle ne re-dérive JAMAIS la gravité. Groupes triés pire-d'abord, tons
+  1-2 rouges / 3-5 warning / 7 neutre, **groupe 7 replié avec compteur** (40 extérieurs aveugles =
+  une ligne, pas 40 cartes).
+- **Échelle (cadrage §8)** : 1 `VENUE_OVERLAP` (deux matchs même gymnase qui se chevauchent — la
+  boucle manuelle ne bloque jamais, le diagnostic crie) · 2 `LEAGUE_WINDOW_VIOLATION` (domicile placé
+  d'une équipe MAPPÉE hors de toute fenêtre ligue — non mappée = silencieuse, même tolérance que le
+  solveur) · 3 coach **MAIN** (`MATCH_MATCH`/`MATCH_TRAINING`) · 4 `VENUE_UNAVAILABLE` +
+  **`ACCESS_WINDOW_LOST`** (dette (ii) soldée : placé dont la fenêtre mairie a changé APRÈS — règle du
+  PANNEAU mirrorée : heure-point, demi-ouvert, club sans aucune fenêtre = rien à faire respecter, PAS
+  la règle empreinte du solveur : un match que le panneau vient d'autoriser ne doit pas alerter) ·
+  5 coach ASSISTANT + `TEAM_LINK_OVERLAP` · 7 **`AWAY_NO_FOOTPRINT`** (dette (v) : l'angle mort —
+  extérieur sans heure ni habitude du bon jour — est NOMMÉ, plus un silence pris pour de la santé).
+  La sévérité 6 (complétude par poule) attend l'appariement FFBB (PR F).
+- **Enveloppe fiable côté UI (dette (iv) soldée)** : `GET /api/league-match-windows` porte
+  `resolvedTeamWindows` (teamId → ids de fenêtres), calculé par le MÊME `LeagueEnvelopeResolver` que
+  le solveur et le diagnostic — la jointure n'existe qu'à UN endroit ; `lib/envelope.ts` devient un
+  simple lookup (la jointure tolérante CLIENTE est supprimée — deux implémentations avaient déjà
+  commencé à diverger). Non résolue = indicatif, jamais bloquant (inchangé).
+- **Extérieur visible** : bande « À l'extérieur ce week-end » sous la grille (`AwayList`) — équipe,
+  date, adversaire + salle FBI (`fbiVenueLabel`), heure réelle sinon habituelle taguée « heure
+  estimée » (même règle que le radar), sinon « heure inconnue » ; Modifier/Supprimer (confirmation).
+- **Vue « week-end type »** (reformulation fondateur de « semaine type ») : bascule sur `/matchs` —
+  le gabarit IDÉAL du gestionnaire, toutes les habitudes Sam/Dim × gymnases, sans dates, empreintes
+  2h15, chevauchements posés côte à côte (une collision de gabarit doit se VOIR). Lecture seule
+  (`lib/typicalWeekend.ts` pur + `TypicalWeekendGrid`) — l'édition reste dans « Habitudes &
+  passerelles » ; habitudes sans gymnase listées à part.
+
 ## Vérifs / gardes
 
 - NR bloquant (phase1, CI) : `MatchTenantIsolationTest` (Competition/Fixture scopés club+saison, POST stampe,
@@ -319,6 +351,17 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   Front : `habitInference.test` (seuils, non-horodatés ignorés, jour déclaré non re-suggéré, gymnase ≥ 50 %),
   `weekendGrid.test` (fantôme rendu/dissous par la réalité/lanes partagées), `PlacementPanel.test`
   (pré-remplissage + gardes souveraines).
+- Diagnostic gradué (PR E2) : `MatchConflictDetectorTest` +4 (unit — VENUE_OVERLAP sévérité 1,
+  LEAGUE_WINDOW_VIOLATION mappée-seulement, ACCESS_WINDOW_LOST parité panneau — dedans/demi-ouvert/
+  club-sans-fenêtre, coachRole MAIN-gagne-partout 3 vs 5 ; + l'ancien NR « AWAY sans habitude
+  invisible » amendé : plus de conflit horaire mais AWAY_NO_FOOTPRINT nommé),
+  `FixtureConflictsApiTest` (severity+coachRole au contrat HTTP, **phase1**),
+  `LeagueMatchWindowsApiTest` +1 (**phase1** — `resolvedTeamWindows` : U13 mappée → ids du
+  catalogue, « Loisir » → []). Front : `envelope.test` réécrit (lookup serveur : [], absente, id
+  fantôme), `diagnostic.test` (tri, tons, repli sév. 7, legacy sans severity → 5),
+  `typicalWeekend.test` (empreinte, hors week-end exclu, lanes, sans-gymnase à part),
+  `AwayList.test` (salle FBI + heure estimée/réelle/inconnue, suppression confirmée),
+  `MatchesPage.test` +1 (bande extérieur + bascule week-end type).
 - Boucle manuelle (PR E1) : `FixtureApiTest` +6 (**phase1** — déverrou accepté sur écho seul, 422 si
   le placement bouge ou si le statut quitte PLACED, écho → MANUAL, UNPLACED → null, SOLVER refusé au
   POST), `MatchPlacementContractSchemaTest` +1 (**phase1, NR contrat** — verrou/déverrou bascule les

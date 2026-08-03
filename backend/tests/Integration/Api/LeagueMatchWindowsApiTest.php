@@ -7,8 +7,14 @@ namespace App\Tests\Integration\Api;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\LeagueMatchWindow;
+use App\Entity\Season;
+use App\Entity\Sport;
+use App\Entity\SportCategory;
+use App\Entity\Team;
 use App\Entity\User;
+use App\Enum\TeamLevel;
 use App\Service\LeagueResolver;
+use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -71,6 +77,46 @@ final class LeagueMatchWindowsApiTest extends WebTestCase
         self::assertNotEmpty($idsA);
     }
 
+    public function testResolvedTeamWindowsUseTheServerJoin(): void
+    {
+        // P1-4 PR E2 (dette iv): the response resolves each team's envelope with
+        // the SAME LeagueEnvelopeResolver the solver uses — a « U13 »
+        // DEPARTEMENTAL team maps to the AURA U13 window, a category outside the
+        // catalog resolves to [] (unmapped = advisory on screen, no HARD).
+        $user = $this->clubUser('AURA');
+        $club = $this->em->getRepository(ClubUser::class)->findOneBy(['userId' => $user->getId()]);
+        \assert(null !== $club);
+        $clubId = $club->getClubId();
+
+        $season = new Season;
+        $season->setClubId($clubId);
+        $year = SeasonResolver::seasonYear(new DateTimeImmutable('today'));
+        $season->setName((string) $year);
+        $season->setStartDate(new DateTimeImmutable($year . '-08-01'));
+        $season->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'));
+        $season->setStatus('active');
+        $season->setTransitionData([]);
+        $this->em->persist($season);
+
+        $sport = new Sport;
+        $sport->setName('Basket ' . uniqid('', true));
+        $sport->setSlug('basket-' . uniqid('', true));
+        $sport->setIsActive(true);
+        $this->em->persist($sport);
+        $this->em->flush();
+
+        $mapped = $this->team($clubId, $season->getId(), $sport->getId(), 'U13', TeamLevel::DEPARTEMENTAL);
+        $loisir = $this->team($clubId, $season->getId(), $sport->getId(), 'Loisir', TeamLevel::DEPARTEMENTAL);
+
+        $this->client->request('GET', '/api/league-match-windows', [], [], $this->authHeaders($user));
+        self::assertResponseStatusCodeSame(200);
+        $data = $this->responseData();
+
+        $auraIds = array_column(array_values(array_filter($data['items'], static fn (array $item): bool => 'U13' === $item['category'])), 'id');
+        self::assertSame($auraIds, $data['resolvedTeamWindows'][$mapped]);
+        self::assertSame([], $data['resolvedTeamWindows'][$loisir]);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -80,6 +126,30 @@ final class LeagueMatchWindowsApiTest extends WebTestCase
         $this->window('AURA', 'U13', 6, '13:00', '18:00');
         $this->window('GEST', 'U13', 6, '14:00', '19:00');
         $this->em->flush();
+    }
+
+    private function team(string $clubId, string $seasonId, string $sportId, string $categoryName, TeamLevel $level): string
+    {
+        $category = new SportCategory;
+        $category->setClubId($clubId);
+        $category->setSportId($sportId);
+        $category->setName($categoryName);
+        $this->em->persist($category);
+        $this->em->flush();
+
+        $team = new Team;
+        $team->setClubId($clubId);
+        $team->setSeasonId($seasonId);
+        $team->setSportCategoryId($category->getId());
+        $team->setPriorityTierId(3);
+        $team->setName('Équipe ' . $categoryName);
+        $team->setSessionsPerWeek(2);
+        $team->setIsActive(true);
+        $team->setLevel($level);
+        $this->em->persist($team);
+        $this->em->flush();
+
+        return $team->getId();
     }
 
     private function window(string $league, string $category, int $day, string $min, string $max): void

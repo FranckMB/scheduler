@@ -4,6 +4,11 @@ Snapshot régénéré depuis le backend vivant le 2026-08-03 : `php bin/console 
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P1-4 PR E2 (2026-08-03)** : regen vérifiée, **JSON inchangé** (103 paths) — les deux routes
+  qui évoluent sont des contrôleurs custom dont l'export ne porte pas le schéma de réponse :
+  `GET /api/fixtures/conflicts` gagne `severity`/`coachRole` + 4 types de findings,
+  `GET /api/league-match-windows` gagne `resolvedTeamWindows`. Contrat de réponse documenté dans
+  [`module-matchs.md`](module-matchs.md) §Diagnostic gradué (même gap connu que P4-47).
 - **P1-4 PR E1 (2026-08-03)** : boucle manuelle — `Fixture.FixtureInput` gagne `placementSource`
   (écriture : `SOLVER` = « rendre au solveur », accepté SEULEMENT sur un PUT à placement inchangé
   et statut PLACED, 422 sinon ; refusé au POST ; `MANUAL` = écho no-op). Aucun path nouveau — la

@@ -1,8 +1,11 @@
-import { AlertTriangle, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, ShieldCheck } from "lucide-react";
+import { useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { cn } from "@/shared/lib/utils";
 
 import type { Coach, Conflict, Team } from "./api";
+import { groupBySeverity } from "./lib/diagnostic";
 
 interface ConflictRadarProps {
   conflicts: Conflict[];
@@ -25,9 +28,30 @@ function whenLabel(iso: string): string {
   return date.toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+function conflictTitle(conflict: Conflict, coaches: Map<string, Coach>): string {
+  if (undefined !== conflict.coachId) {
+    const role = "ASSISTANT" === conflict.coachRole ? " (assistant)" : "";
+    return `${coachName(coaches, conflict.coachId)}${role}`;
+  }
+  switch (conflict.type) {
+    case "VENUE_OVERLAP":
+      return "Deux matchs sur le même créneau";
+    case "LEAGUE_WINDOW_VIOLATION":
+      return "Hors fenêtre autorisée par la ligue";
+    case "ACCESS_WINDOW_LOST":
+      return "L'accès mairie ne couvre plus ce match";
+    case "TEAM_LINK_OVERLAP":
+      return "Passerelle violée";
+    case "AWAY_NO_FOOTPRINT":
+      return "Extérieur sans heure ni habitude";
+    default:
+      return `Gymnase indisponible${null != conflict.label && "" !== conflict.label ? ` (${conflict.label})` : ""}`;
+  }
+}
+
 function conflictSummary(conflict: Conflict, teams: Map<string, Team>): string {
-  if ("MATCH_MATCH" === conflict.type && conflict.left && conflict.right) {
-    return `Deux matchs — ${teamName(teams, conflict.left.teamId)} et ${teamName(teams, conflict.right.teamId)}`;
+  if (("MATCH_MATCH" === conflict.type || "VENUE_OVERLAP" === conflict.type) && conflict.left && conflict.right) {
+    return `${teamName(teams, conflict.left.teamId)} et ${teamName(teams, conflict.right.teamId)} — ${frDate(conflict.left.matchDate)}`;
   }
   if ("MATCH_TRAINING" === conflict.type && conflict.fixture && conflict.training) {
     return `Match ${teamName(teams, conflict.fixture.teamId)} × entraînement ${teamName(teams, conflict.training.teamId)}`;
@@ -35,8 +59,18 @@ function conflictSummary(conflict: Conflict, teams: Map<string, Team>): string {
   if ("VENUE_UNAVAILABLE" === conflict.type && conflict.fixture) {
     return `Match ${teamName(teams, conflict.fixture.teamId)} du ${frDate(conflict.fixture.matchDate)} — gymnase indisponible, à repositionner`;
   }
+  if ("ACCESS_WINDOW_LOST" === conflict.type && conflict.fixture) {
+    return `Match ${teamName(teams, conflict.fixture.teamId)} du ${frDate(conflict.fixture.matchDate)} à ${conflict.fixture.kickoffTime ?? "?"} — la fenêtre d'accès a changé après le placement`;
+  }
+  if ("LEAGUE_WINDOW_VIOLATION" === conflict.type && conflict.fixture) {
+    const windows = (conflict.windows ?? []).map((w) => `${w.kickoffMin}–${w.kickoffMax}`).join(", ");
+    return `Match ${teamName(teams, conflict.fixture.teamId)} du ${frDate(conflict.fixture.matchDate)} à ${conflict.fixture.kickoffTime ?? "?"} (fenêtres : ${windows}) — dérogation à demander tôt`;
+  }
   if ("TEAM_LINK_OVERLAP" === conflict.type && conflict.left && conflict.right) {
     return `Équipes liées en même temps — ${teamName(teams, conflict.left.teamId)} et ${teamName(teams, conflict.right.teamId)} (joueurs partagés)`;
+  }
+  if ("AWAY_NO_FOOTPRINT" === conflict.type && conflict.fixture) {
+    return `${teamName(teams, conflict.fixture.teamId)} · ${frDate(conflict.fixture.matchDate)} — invisible du radar, déclarez une habitude`;
   }
   return "Conflit";
 }
@@ -50,14 +84,27 @@ function frDate(ymd: string): string {
   return new Date(`${ymd}T12:00:00Z`).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-/** The same-coach conflict radar (server-computed). Empty = green "no clash" state. */
+const TONE_CLASSES = {
+  destructive: "border-destructive/40 bg-destructive/5",
+  warning: "border-warning/30 bg-warning/5",
+  muted: "border-border bg-muted/30",
+} as const;
+
+/**
+ * The GRADED diagnostic (P1-4 PR E2): server-computed findings grouped by
+ * severity (1 = worst first), severity 7 folded behind a count — 40 blind away
+ * matches must read as one line, not 40 alerts. Empty = green "no clash".
+ */
 export function ConflictRadar({ conflicts, teams, coaches }: ConflictRadarProps) {
+  const groups = groupBySeverity(conflicts);
+  const [unfolded, setUnfolded] = useState<Set<number>>(new Set());
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <AlertTriangle className="size-4 text-warning" />
-          Radar de conflits
+          Diagnostic
           {conflicts.length > 0 ? <span className="rounded-full bg-warning/15 px-2 text-xs text-warning">{conflicts.length}</span> : null}
         </CardTitle>
       </CardHeader>
@@ -68,29 +115,63 @@ export function ConflictRadar({ conflicts, teams, coaches }: ConflictRadarProps)
             Aucun conflit détecté.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {conflicts.map((conflict, index) => (
-              <li key={`${conflict.type}-${conflict.coachId ?? conflict.unavailabilityId ?? ""}-${index}`} className="rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-sm">
-                {/* VENUE_UNAVAILABLE porte une indispo, pas un coach ni une fenêtre. */}
-                <p className="font-medium">
-                  {undefined !== conflict.coachId
-                    ? coachName(coaches, conflict.coachId)
-                    : "TEAM_LINK_OVERLAP" === conflict.type
-                      ? "Passerelle violée"
-                      : `Gymnase indisponible${null != conflict.label && "" !== conflict.label ? ` (${conflict.label})` : ""}`}
-                </p>
-                <p className="text-muted-foreground">
-                  {conflictSummary(conflict, teams)}
-                  {estimatedTag(conflict) ? <span className="ml-1 rounded bg-muted px-1 text-[10px] uppercase tracking-wide">heure estimée</span> : null}
-                </p>
-                {undefined !== conflict.start && undefined !== conflict.end ? (
-                  <p className="text-xs text-muted-foreground">
-                    {whenLabel(conflict.start)} → {whenLabel(conflict.end)}
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          <div className="flex flex-col gap-3">
+            {groups.map((group) => {
+              const folded = group.folded && !unfolded.has(group.severity);
+              return (
+                <section key={group.severity}>
+                  <h3 className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {group.folded ? (
+                      <button
+                        type="button"
+                        className="flex items-center gap-1.5"
+                        aria-expanded={!folded}
+                        onClick={() => {
+                          const next = new Set(unfolded);
+                          if (next.has(group.severity)) {
+                            next.delete(group.severity);
+                          } else {
+                            next.add(group.severity);
+                          }
+                          setUnfolded(next);
+                        }}
+                      >
+                        {folded ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
+                        {group.title}
+                        <span className="rounded-full bg-muted px-1.5">{group.conflicts.length}</span>
+                      </button>
+                    ) : (
+                      <>
+                        {group.title}
+                        <span className="rounded-full bg-muted px-1.5">{group.conflicts.length}</span>
+                      </>
+                    )}
+                  </h3>
+                  {folded ? null : (
+                    <ul className="flex flex-col gap-2">
+                      {group.conflicts.map((conflict, index) => (
+                        <li
+                          key={`${conflict.type}-${conflict.coachId ?? conflict.unavailabilityId ?? ""}-${index}`}
+                          className={cn("rounded-md border px-3 py-2 text-sm", TONE_CLASSES[group.tone])}
+                        >
+                          <p className="font-medium">{conflictTitle(conflict, coaches)}</p>
+                          <p className="text-muted-foreground">
+                            {conflictSummary(conflict, teams)}
+                            {estimatedTag(conflict) ? <span className="ml-1 rounded bg-muted px-1 text-[10px] uppercase tracking-wide">heure estimée</span> : null}
+                          </p>
+                          {undefined !== conflict.start && undefined !== conflict.end ? (
+                            <p className="text-xs text-muted-foreground">
+                              {whenLabel(conflict.start)} → {whenLabel(conflict.end)}
+                            </p>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              );
+            })}
+          </div>
         )}
       </CardContent>
     </Card>

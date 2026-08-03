@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, DoorOpen, Lock, Plus, Repeat, Upload, Wand2 } from "lucide-react";
+import { CalendarRange, ChevronLeft, ChevronRight, DoorOpen, Lock, Plus, Repeat, Upload, Wand2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
@@ -9,8 +9,11 @@ import { Select } from "@/shared/components/ui/select";
 import { Spinner } from "@/shared/components/ui/spinner";
 
 import type { Category, Coach, Fixture, Team, Venue } from "./api";
+import { AwayList } from "./AwayList";
 import { ConflictRadar } from "./ConflictRadar";
 import { FixtureFormDialog } from "./FixtureFormDialog";
+import { buildTypicalWeekend } from "./lib/typicalWeekend";
+import { TypicalWeekendGrid } from "./TypicalWeekendGrid";
 import { ImportFbiDialog } from "./ImportFbiDialog";
 import { HabitsLinksDialog } from "./HabitsLinksDialog";
 import { isInEnvelope, resolveEnvelope } from "./lib/envelope";
@@ -51,6 +54,8 @@ export function MatchesPage() {
   const swapFixtures = useSwapFixtures();
   // P1-4 PR E1 — fixture whose identity fields are being edited (dialog).
   const [editFixture, setEditFixture] = useState<Fixture | null>(null);
+  // P1-4 PR E2 — grid view: dated weekends, or the date-less « week-end type ».
+  const [typicalView, setTypicalView] = useState(false);
   // Reasons of the LAST auto-placement (non-persisted — PR E grades them).
   const [unplacedReasons, setUnplacedReasons] = useState<Map<string, string>>(new Map());
   // Second entry point of the match-access editor (founder 2026-08-03: wizard
@@ -79,6 +84,8 @@ export function MatchesPage() {
 
   const allFixtures = useMemo<Fixture[]>(() => fixtures.data ?? [], [fixtures.data]);
   const windows = useMemo(() => leagueWindows.data?.items ?? [], [leagueWindows.data]);
+  // P1-4 PR E2 (dette iv) — the team↔window join is resolved by the SERVER.
+  const resolvedTeamWindows = useMemo(() => leagueWindows.data?.resolvedTeamWindows ?? {}, [leagueWindows.data]);
 
   // Placed home fixtures out of their league envelope (only when the team maps).
   const outOfEnvelope = useMemo<Set<string>>(() => {
@@ -87,13 +94,13 @@ export function MatchesPage() {
       if (!isPlacedOnGrid(fixture) || null === fixture.kickoffTime) {
         continue;
       }
-      const envelope = resolveEnvelope(fixture, teamsMap, categoriesMap, windows);
+      const envelope = resolveEnvelope(fixture, resolvedTeamWindows, windows);
       if (envelope.mapped && !isInEnvelope(envelope, fixture.kickoffTime)) {
         set.add(fixture.id);
       }
     }
     return set;
-  }, [allFixtures, teamsMap, categoriesMap, windows]);
+  }, [allFixtures, resolvedTeamWindows, windows]);
 
   const weekends = useMemo(() => listWeekends(allFixtures), [allFixtures]);
   const activeWeekend = selectedWeekend ?? weekends[0] ?? null;
@@ -111,8 +118,8 @@ export function MatchesPage() {
 
   const selectedFixture = allFixtures.find((f) => f.id === selectedFixtureId) ?? null;
   const selectedEnvelope = useMemo(
-    () => (null === selectedFixture ? null : resolveEnvelope(selectedFixture, teamsMap, categoriesMap, windows)),
-    [selectedFixture, teamsMap, categoriesMap, windows],
+    () => (null === selectedFixture ? null : resolveEnvelope(selectedFixture, resolvedTeamWindows, windows)),
+    [selectedFixture, resolvedTeamWindows, windows],
   );
 
   const swapSource = allFixtures.find((f) => f.id === swapSourceId) ?? null;
@@ -274,18 +281,28 @@ export function MatchesPage() {
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
-            <Button variant="outline" size="sm" disabled={weekendIndex <= 0} onClick={() => setSelectedWeekend(weekends[weekendIndex - 1] ?? null)} aria-label="Week-end précédent">
-              <ChevronLeft className="size-4" />
-            </Button>
-            <span className="text-sm font-medium">{null === activeWeekend ? "Aucun match" : weekendLabel(activeWeekend)}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={weekendIndex < 0 || weekendIndex >= weekends.length - 1}
-              onClick={() => setSelectedWeekend(weekends[weekendIndex + 1] ?? null)}
-              aria-label="Week-end suivant"
-            >
-              <ChevronRight className="size-4" />
+            {typicalView ? (
+              <span className="text-sm font-medium">Le gabarit idéal — les habitudes de toutes les équipes, sans dates</span>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={weekendIndex <= 0} onClick={() => setSelectedWeekend(weekends[weekendIndex - 1] ?? null)} aria-label="Week-end précédent">
+                  <ChevronLeft className="size-4" />
+                </Button>
+                <span className="text-sm font-medium">{null === activeWeekend ? "Aucun match" : weekendLabel(activeWeekend)}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={weekendIndex < 0 || weekendIndex >= weekends.length - 1}
+                  onClick={() => setSelectedWeekend(weekends[weekendIndex + 1] ?? null)}
+                  aria-label="Week-end suivant"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            )}
+            <Button variant="outline" size="sm" aria-pressed={typicalView} onClick={() => setTypicalView(!typicalView)}>
+              <CalendarRange className="size-4" />
+              {typicalView ? "Week-ends" : "Week-end type"}
             </Button>
           </div>
           {null !== swapSource ? (
@@ -299,8 +316,21 @@ export function MatchesPage() {
             </p>
           ) : null}
           <div className="h-[32rem]">
-            <WeekendGrid model={grid} onSelectFixture={onGridSelect} selectedFixtureId={swapSourceId ?? selectedFixtureId} />
+            {typicalView ? (
+              <TypicalWeekendGrid model={buildTypicalWeekend(habitsQuery.data ?? [])} venues={venuesMap} teams={teamsMap} />
+            ) : (
+              <WeekendGrid model={grid} onSelectFixture={onGridSelect} selectedFixtureId={swapSourceId ?? selectedFixtureId} />
+            )}
           </div>
+          {typicalView ? null : (
+            <AwayList
+              fixtures={weekendFixtures}
+              teams={teamsMap}
+              habits={habitsQuery.data ?? []}
+              onEdit={setEditFixture}
+              onDelete={(fixture) => deleteFixture.mutate(fixture.id)}
+            />
+          )}
         </div>
       </div>
 
