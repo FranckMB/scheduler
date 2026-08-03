@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Service;
 
 use App\Entity\Fixture;
+use App\Entity\LeagueMatchWindow;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\TeamCoach;
 use App\Entity\TeamLink;
 use App\Entity\TeamMatchHabit;
+use App\Entity\VenueMatchWindow;
 use App\Entity\VenueUnavailability;
 use App\Enum\FixtureHomeAway;
 use App\Enum\TeamCoachRole;
@@ -282,10 +284,12 @@ final class MatchConflictDetectorTest extends TestCase
         self::assertNull($conflicts[0]['fixture']['kickoffTime']); // nothing persisted
     }
 
-    public function testAwayWithoutHabitOnThatWeekdayStaysInvisible(): void
+    public function testAwayWithoutHabitOnThatWeekdayHasNoFootprintButIsNamed(): void
     {
-        // NR of the PR-2 contract: no habit on the match's weekday → no
-        // estimation, no footprint, no conflict (blind spot told in PR E).
+        // NR of the PR-2 contract, amended by PR E2 (dette v): no habit on the
+        // match's weekday → no estimation, no footprint, NO time conflict — but
+        // the blind spot is now NAMED (AWAY_NO_FOOTPRINT, severity 7 info)
+        // instead of being a silence the manager would mistake for health.
         $away = $this->awayFixture('fx-1', self::TEAM_1, '2026-10-04', null); // Sunday
         $links = [$this->link(self::COACH_A, self::TEAM_1)];
         $slots = [$this->slot('sl-1', self::BASELINE, self::TEAM_1, 7, '18:00', 90, self::COACH_A)];
@@ -300,7 +304,95 @@ final class MatchConflictDetectorTest extends TestCase
             [$this->habit(self::TEAM_1, 6, '15:30')], // Saturday habit only
         );
 
-        self::assertSame([], $conflicts);
+        self::assertCount(1, $conflicts);
+        self::assertSame('AWAY_NO_FOOTPRINT', $conflicts[0]['type']);
+        self::assertSame(7, $conflicts[0]['severity']);
+        self::assertSame('fx-1', $conflicts[0]['fixture']['fixtureId']);
+    }
+
+    // ── Graded diagnostic (P1-4 PR E2, cadrage §8) ───────────────────────────
+
+    public function testVenueOverlapIsTheLoudestFinding(): void
+    {
+        // Two placed matches, SAME venue, overlapping footprints — the manual
+        // loop let it happen (never blocking), the diagnostic screams severity 1.
+        $left = $this->fixture('fx-1', self::TEAM_1, '2026-10-03', '15:00');
+        $left->setVenueId('venue-mateo');
+        $right = $this->fixture('fx-2', self::TEAM_2, '2026-10-03', '16:00');
+        $right->setVenueId('venue-mateo');
+        $elsewhere = $this->fixture('fx-3', self::TEAM_1, '2026-10-03', '15:00');
+        $elsewhere->setVenueId('venue-coubertin');
+
+        $conflicts = $this->detect([$left, $right, $elsewhere], []);
+
+        self::assertCount(1, $conflicts);
+        self::assertSame('VENUE_OVERLAP', $conflicts[0]['type']);
+        self::assertSame(1, $conflicts[0]['severity']);
+        self::assertSame('venue-mateo', $conflicts[0]['venueId']);
+    }
+
+    public function testLeagueWindowViolationOnlyForMappedTeams(): void
+    {
+        // Sunday 17:30 vs a Saturday-only envelope → severity 2. The unmapped
+        // team placed the same way stays SILENT (tolerant join, PR D decision).
+        $mapped = $this->fixture('fx-1', self::TEAM_1, '2026-10-04', '17:30'); // Sunday
+        $mapped->setVenueId('venue-mateo');
+        $unmapped = $this->fixture('fx-2', self::TEAM_2, '2026-10-04', '17:30');
+        $unmapped->setVenueId('venue-mateo');
+        $envelope = [self::TEAM_1 => [$this->leagueWindow(6, '14:00', '20:00')], self::TEAM_2 => []];
+
+        $conflicts = $this->detect([$mapped], [], null, [], [], [], [], [], [], $envelope);
+        self::assertSame(['LEAGUE_WINDOW_VIOLATION'], array_column($conflicts, 'type'));
+        self::assertSame(2, $conflicts[0]['severity']);
+        self::assertSame('fx-1', $conflicts[0]['fixture']['fixtureId']);
+
+        // Inside the window → nothing. Unmapped → nothing.
+        $inside = $this->fixture('fx-3', self::TEAM_1, '2026-10-03', '15:00'); // Saturday
+        $inside->setVenueId('venue-mateo');
+        self::assertSame([], $this->detect([$inside, $unmapped], [], null, [], [], [], [], [], [], $envelope));
+    }
+
+    public function testAccessWindowLostFollowsThePanelRule(): void
+    {
+        // Placed Saturday 15:00, then the mairie window moved to 18:00-20:00 →
+        // severity 4 (dette ii: the guard could not see a change made AFTER).
+        $placed = $this->fixture('fx-1', self::TEAM_1, '2026-10-03', '15:00');
+        $placed->setVenueId('venue-mateo');
+
+        $moved = [$this->matchWindow('venue-mateo', 6, '18:00', '20:00')];
+        $conflicts = $this->detect([$placed], [], null, [], [], [], [], [], $moved);
+        self::assertSame(['ACCESS_WINDOW_LOST'], array_column($conflicts, 'type'));
+        self::assertSame(4, $conflicts[0]['severity']);
+
+        // Panel parity: kickoff inside (half-open end) → nothing; a club with
+        // NO window anywhere has not adopted the data → nothing to enforce.
+        $ok = [$this->matchWindow('venue-mateo', 6, '14:00', '18:00')];
+        self::assertSame([], $this->detect([$placed], [], null, [], [], [], [], [], $ok));
+        self::assertSame([], $this->detect([$placed], [], null, [], [], [], [], [], []));
+        $atEnd = [$this->matchWindow('venue-mateo', 6, '13:00', '15:00')];
+        self::assertSame(['ACCESS_WINDOW_LOST'], array_column($this->detect([$placed], [], null, [], [], [], [], [], $atEnd), 'type'));
+    }
+
+    public function testCoachRoleGradesTheSeverityAndMainWinsAnywhere(): void
+    {
+        // Same coach on both teams, ASSISTANT everywhere → severity 5; MAIN on
+        // ONE side → 3 (the worst engagement counts, cadrage §8).
+        $left = $this->fixture('fx-1', self::TEAM_1, '2026-10-03', '15:00');
+        $right = $this->fixture('fx-2', self::TEAM_2, '2026-10-03', '15:30');
+
+        $assistant = $this->detect([$left, $right], [
+            $this->link(self::COACH_A, self::TEAM_1, TeamCoachRole::ASSISTANT),
+            $this->link(self::COACH_A, self::TEAM_2, TeamCoachRole::ASSISTANT),
+        ]);
+        self::assertSame(5, $assistant[0]['severity']);
+        self::assertSame('ASSISTANT', $assistant[0]['coachRole']);
+
+        $mixed = $this->detect([$left, $right], [
+            $this->link(self::COACH_A, self::TEAM_1, TeamCoachRole::ASSISTANT),
+            $this->link(self::COACH_A, self::TEAM_2, TeamCoachRole::MAIN),
+        ]);
+        self::assertSame(3, $mixed[0]['severity']);
+        self::assertSame('MAIN', $mixed[0]['coachRole']);
     }
 
     public function testARealKickoffIsNeverOverriddenByAHabit(): void
@@ -421,10 +513,37 @@ final class MatchConflictDetectorTest extends TestCase
      *
      * @return list<array<string, mixed>>
      */
-    private function detect(array $fixtures, array $links, ?string $baselineScheduleId = null, array $overlayPeriods = [], array $slotsBySchedule = [], array $unavailabilities = [], array $habits = [], array $teamLinks = []): array
+    private function detect(array $fixtures, array $links, ?string $baselineScheduleId = null, array $overlayPeriods = [], array $slotsBySchedule = [], array $unavailabilities = [], array $habits = [], array $teamLinks = [], array $matchWindows = [], array $envelope = []): array
     {
         return new MatchConflictDetector(new MatchFootprint, new EffectiveScheduleResolver, new AwayKickoffEstimator)
-            ->detect($fixtures, $links, $baselineScheduleId, $overlayPeriods, $slotsBySchedule, $unavailabilities, $habits, $teamLinks);
+            ->detect($fixtures, $links, $baselineScheduleId, $overlayPeriods, $slotsBySchedule, $unavailabilities, $habits, $teamLinks, $matchWindows, $envelope);
+    }
+
+    private function leagueWindow(int $dayOfWeek, string $min, string $max): LeagueMatchWindow
+    {
+        $window = new LeagueMatchWindow;
+        $window->setLeague('AURA');
+        $window->setCategory('U13');
+        $window->setLevel('DEPARTEMENTAL');
+        $window->setGender(null);
+        $window->setDayOfWeek($dayOfWeek);
+        $window->setKickoffMin(DateTimeImmutable::createFromFormat('!H:i', $min) ?: new DateTimeImmutable('00:00'));
+        $window->setKickoffMax(DateTimeImmutable::createFromFormat('!H:i', $max) ?: new DateTimeImmutable('00:00'));
+
+        return $window;
+    }
+
+    private function matchWindow(string $venueId, int $dayOfWeek, string $start, string $end): VenueMatchWindow
+    {
+        $window = new VenueMatchWindow;
+        $window->setClubId('club');
+        $window->setSeasonId('season');
+        $window->setVenueId($venueId);
+        $window->setDayOfWeek($dayOfWeek);
+        $window->setStartTime(DateTimeImmutable::createFromFormat('!H:i', $start) ?: new DateTimeImmutable('00:00'));
+        $window->setEndTime(DateTimeImmutable::createFromFormat('!H:i', $end) ?: new DateTimeImmutable('00:00'));
+
+        return $window;
     }
 
     private function fixture(string $id, string $teamId, string $date, ?string $kickoff): Fixture
@@ -440,14 +559,14 @@ final class MatchConflictDetectorTest extends TestCase
         return $fixture;
     }
 
-    private function link(string $coachId, string $teamId): TeamCoach
+    private function link(string $coachId, string $teamId, TeamCoachRole $role = TeamCoachRole::MAIN): TeamCoach
     {
         $link = new TeamCoach;
         $link->setClubId('club');
         $link->setSeasonId('season');
         $link->setTeamId($teamId);
         $link->setCoachId($coachId);
-        $link->setRole(TeamCoachRole::MAIN);
+        $link->setRole($role);
 
         return $link;
     }

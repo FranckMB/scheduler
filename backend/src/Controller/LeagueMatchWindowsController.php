@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\LeagueMatchWindow;
+use App\Entity\SportCategory;
+use App\Entity\Team;
 use App\Repository\ClubRepository;
 use App\Repository\LeagueMatchWindowRepository;
+use App\Service\LeagueEnvelopeResolver;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -18,7 +22,12 @@ use Symfony\Component\Routing\Attribute\Route;
  * federation-imposed HARD envelope of allowed kickoff windows for the club's
  * derived league, falling back to the federation default (AURA) when that
  * league is not catalogued yet. GLOBAL reference — read-only, display feed for
- * the future placement grid / conflict radar.
+ * the placement grid / conflict radar.
+ *
+ * P1-4 PR E2 (dette iv): the response also carries `resolvedTeamWindows` —
+ * per-team window ids resolved by the SAME LeagueEnvelopeResolver the solver
+ * and the graded diagnostic use. The join exists in ONE place; the frontend
+ * looks it up instead of re-deriving it (absent team = unmapped = advisory).
  */
 final class LeagueMatchWindowsController extends AbstractController
 {
@@ -28,6 +37,8 @@ final class LeagueMatchWindowsController extends AbstractController
         private readonly LeagueMatchWindowRepository $windowRepository,
         private readonly ClubRepository $clubRepository,
         private readonly RequestStack $requestStack,
+        private readonly EntityManagerInterface $entityManager,
+        private readonly LeagueEnvelopeResolver $envelopeResolver,
     ) {}
 
     #[Route('/api/league-match-windows', name: 'api_league_match_windows', methods: ['GET'])]
@@ -40,6 +51,7 @@ final class LeagueMatchWindowsController extends AbstractController
 
         $league = $this->clubRepository->find($clubId)?->getLeague();
         $effectiveLeague = $this->windowRepository->effectiveLeague($league);
+        $windows = $this->windowRepository->findEnvelopeForLeague($league);
 
         $items = array_map(
             static fn (LeagueMatchWindow $w): array => [
@@ -52,9 +64,18 @@ final class LeagueMatchWindowsController extends AbstractController
                 'kickoffMin' => $w->getKickoffMin()->format('H:i'),
                 'kickoffMax' => $w->getKickoffMax()->format('H:i'),
             ],
-            $this->windowRepository->findEnvelopeForLeague($league),
+            $windows,
         );
 
-        return $this->json(['league' => $effectiveLeague, 'items' => $items]);
+        /** @var list<Team> $teams */
+        $teams = $this->entityManager->getRepository(Team::class)->findBy([]);
+        /** @var list<SportCategory> $categories */
+        $categories = $this->entityManager->getRepository(SportCategory::class)->findBy([]);
+        $resolvedTeamWindows = array_map(
+            static fn (array $teamWindows): array => array_map(static fn (LeagueMatchWindow $w): string => $w->getId(), $teamWindows),
+            $this->envelopeResolver->resolve($teams, $categories, $windows),
+        );
+
+        return $this->json(['league' => $effectiveLeague, 'items' => $items, 'resolvedTeamWindows' => $resolvedTeamWindows]);
     }
 }

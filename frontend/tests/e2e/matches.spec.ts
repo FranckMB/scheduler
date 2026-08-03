@@ -74,7 +74,7 @@ test("matches: create a fixture, place it, radar renders", async ({ page }) => {
 
   await page.getByRole("link", { name: "Matchs" }).click();
   await expect(page.getByRole("heading", { name: "Matchs" })).toBeVisible();
-  await expect(page.getByText("Radar de conflits")).toBeVisible();
+  await expect(page.getByText(/^Diagnostic/)).toBeVisible();
 
   // Manual entry (before the FBI import).
   await page.getByRole("button", { name: /Nouveau match/i }).click();

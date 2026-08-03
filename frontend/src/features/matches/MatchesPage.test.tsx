@@ -20,6 +20,8 @@ vi.mock("./api", () => ({
     Promise.resolve([
       { id: "fx-unplaced", teamId: "team-1", seasonId: "s", competitionId: null, matchDate: "2026-10-03", homeAway: "HOME", opponentLabel: "Voisins", status: "UNPLACED", venueId: null, kickoffTime: null },
       { id: "fx-placed", teamId: "team-2", seasonId: "s", competitionId: null, matchDate: "2026-10-03", homeAway: "HOME", opponentLabel: "Rivaux", status: "PLACED", venueId: "venue-1", kickoffTime: "16:00" },
+      // P1-4 PR E2 — an away match of the same weekend (visible in the away band).
+      { id: "fx-away", teamId: "team-1", seasonId: "s", competitionId: null, matchDate: "2026-10-04", homeAway: "AWAY", opponentLabel: "Grenoble", status: "UNPLACED", venueId: null, kickoffTime: null, fbiVenueLabel: "Halle Clemenceau" },
     ]),
   ),
   getCompetitions: vi.fn(() => Promise.resolve([])),
@@ -38,7 +40,7 @@ vi.mock("./api", () => ({
   getVenues: vi.fn(() => Promise.resolve([{ id: "venue-1", name: "Gymnase Alpha", color: "#00aa00" }])),
   getCategories: vi.fn(() => Promise.resolve([{ id: "cat-1", name: "U13" }, { id: "cat-2", name: "Seniors" }])),
   getCoaches: vi.fn(() => Promise.resolve([{ id: "coach-1", firstName: "Jean", lastName: "Dupont" }])),
-  getLeagueWindows: vi.fn(() => Promise.resolve({ league: "AURA", items: [] })),
+  getLeagueWindows: vi.fn(() => Promise.resolve({ league: "AURA", items: [], resolvedTeamWindows: {} })),
   // Capacity layer (P1-4 PR B) — empty: no window declared, nothing blocks.
   getVenueMatchWindows: vi.fn(() => Promise.resolve([])),
   getVenueUnavailabilities: vi.fn(() => Promise.resolve([])),
@@ -61,6 +63,8 @@ vi.mock("./api", () => ({
       conflicts: [
         {
           type: "MATCH_MATCH",
+          severity: 3,
+          coachRole: "MAIN",
           coachId: "coach-1",
           start: "2026-10-03T15:30:00+00:00",
           end: "2026-10-03T16:00:00+00:00",
@@ -93,10 +97,10 @@ describe("MatchesPage (integration)", () => {
     renderWithProviders(<MatchesPage />);
 
     // Unplaced to-do list.
-    expect(await screen.findByText("U13")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /vs Voisins/ })).toBeInTheDocument();
     // Radar shows the same-coach conflict.
     expect(await screen.findByText("Jean Dupont")).toBeInTheDocument();
-    expect(screen.getByText(/Deux matchs/)).toBeInTheDocument();
+    expect(screen.getByText(/U13 et Seniors/)).toBeInTheDocument();
     // Placed match is on the grid.
     expect(screen.getByText("Seniors")).toBeInTheDocument();
   });
@@ -105,7 +109,7 @@ describe("MatchesPage (integration)", () => {
     const user = (await import("@testing-library/user-event")).default.setup();
     renderWithProviders(<MatchesPage />);
 
-    await screen.findByText("U13");
+    await screen.findByRole("button", { name: /vs Voisins/ });
     await user.click(screen.getByRole("button", { name: /Placer automatiquement/ }));
 
     const { placeMatches: placeMatchesMock } = await import("./api");
@@ -119,7 +123,7 @@ describe("MatchesPage (integration)", () => {
     const user = userEvent.setup();
     renderWithProviders(<MatchesPage />);
 
-    await user.click(await screen.findByText("U13"));
+    await user.click(await screen.findByRole("button", { name: /vs Voisins/ }));
 
     const venue = await screen.findByLabelText("Gymnase");
     await user.selectOptions(venue, "venue-1");
@@ -128,6 +132,24 @@ describe("MatchesPage (integration)", () => {
 
     expect(placeFixture).toHaveBeenCalledOnce();
     expect(placeFixture).toHaveBeenCalledWith(expect.objectContaining({ id: "fx-unplaced" }), { venueId: "venue-1", kickoffTime: "15:00" });
+  });
+
+  it("shows the away band with the opponent venue and switches to the week-end type view (P1-4 PR E2)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<MatchesPage />);
+
+    // Away band of the active weekend — the away match is visible at last.
+    expect(await screen.findByText(/à Grenoble \(Halle Clemenceau\)/)).toBeInTheDocument();
+
+    // The graded diagnostic groups by severity (MAIN coach clash = group 3).
+    expect(await screen.findByText("Coach principal en double")).toBeInTheDocument();
+
+    // Toggle to the date-less template view (no habit declared → empty hint).
+    await user.click(screen.getByRole("button", { name: "Week-end type" }));
+    expect(screen.getByText(/Aucune habitude déclarée/)).toBeInTheDocument();
+    expect(screen.queryByText(/à Grenoble/)).not.toBeInTheDocument(); // the away band is a dated-view thing
+    await user.click(screen.getByRole("button", { name: "Week-ends" }));
+    expect(await screen.findByText(/à Grenoble \(Halle Clemenceau\)/)).toBeInTheDocument();
   });
 
   it("clicking a placed grid cell opens the manual-loop panel (P1-4 PR E1)", async () => {

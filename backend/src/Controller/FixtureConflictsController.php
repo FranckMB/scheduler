@@ -5,10 +5,16 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Fixture;
+use App\Entity\SportCategory;
+use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\TeamLink;
 use App\Entity\TeamMatchHabit;
+use App\Entity\VenueMatchWindow;
 use App\Entity\VenueUnavailability;
+use App\Repository\ClubRepository;
+use App\Repository\LeagueMatchWindowRepository;
+use App\Service\LeagueEnvelopeResolver;
 use App\Service\MatchConflictDetector;
 use App\Service\SeasonResolver;
 use App\Service\TrainingCalendarContext;
@@ -40,6 +46,9 @@ final class FixtureConflictsController extends AbstractController
         private readonly SeasonResolver $seasonResolver,
         private readonly MatchConflictDetector $detector,
         private readonly TrainingCalendarContext $trainingCalendarContext,
+        private readonly ClubRepository $clubRepository,
+        private readonly LeagueMatchWindowRepository $leagueWindowRepository,
+        private readonly LeagueEnvelopeResolver $envelopeResolver,
     ) {}
 
     // priority > 0: this static path must win over API Platform's /api/fixtures/{id}
@@ -62,6 +71,16 @@ final class FixtureConflictsController extends AbstractController
         $habits = $this->entityManager->getRepository(TeamMatchHabit::class)->findBy([]);
         /** @var list<TeamLink> $teamLinks */
         $teamLinks = $this->entityManager->getRepository(TeamLink::class)->findBy([]);
+        /** @var list<VenueMatchWindow> $matchWindows */
+        $matchWindows = $this->entityManager->getRepository(VenueMatchWindow::class)->findBy([]);
+        // P1-4 PR E2 — the graded diagnostic needs the league envelope, resolved
+        // by the SAME tolerant join as the solver (one implementation, PR D).
+        /** @var list<Team> $teams */
+        $teams = $this->entityManager->getRepository(Team::class)->findBy([]);
+        /** @var list<SportCategory> $categories */
+        $categories = $this->entityManager->getRepository(SportCategory::class)->findBy([]);
+        $league = $this->clubRepository->find($clubId)?->getLeague();
+        $envelope = $this->envelopeResolver->resolve($teams, $categories, $this->leagueWindowRepository->findEnvelopeForLeague($league));
 
         $season = $this->seasonResolver->selectedOrCurrent($this->requestStack->getCurrentRequest(), $clubId);
         // ADR-0002 context (chosen season version, active periods + overlays,
@@ -77,6 +96,8 @@ final class FixtureConflictsController extends AbstractController
             $unavailabilities,
             $habits,
             $teamLinks,
+            $matchWindows,
+            $envelope,
         );
 
         return $this->json([
