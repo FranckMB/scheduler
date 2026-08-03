@@ -11,6 +11,7 @@ use App\Dto\FixtureInput;
 use App\Entity\Competition;
 use App\Entity\Fixture;
 use App\Enum\FixtureHomeAway;
+use App\Enum\FixturePlacementSource;
 use App\Enum\FixtureStatus;
 use App\Service\SocleGuard;
 use DateTimeImmutable;
@@ -72,6 +73,12 @@ class FixtureStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->status) {
             $entity->setStatus(FixtureStatus::from($input->status));
+            // P1-4 PR D — every status write through the API is the MANAGER's
+            // gesture: a placement becomes a MANUAL anchor (the solver never
+            // moves it again), an un-placement clears the marker.
+            $entity->setPlacementSource(
+                FixtureStatus::UNPLACED === $entity->getStatus() ? null : FixturePlacementSource::MANUAL,
+            );
         }
         $entity->setVenueId('' === $input->venueId ? null : $input->venueId);
         $entity->setKickoffTime($this->parseTime($input->kickoffTime));
@@ -104,6 +111,12 @@ class FixtureStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->status) {
             $entity->setStatus(FixtureStatus::from($input->status));
+            // P1-4 PR D — every status write through the API is the MANAGER's
+            // gesture: a placement becomes a MANUAL anchor (the solver never
+            // moves it again), an un-placement clears the marker.
+            $entity->setPlacementSource(
+                FixtureStatus::UNPLACED === $entity->getStatus() ? null : FixturePlacementSource::MANUAL,
+            );
         }
         if (null !== $input->venueId) {
             $entity->setVenueId('' === $input->venueId ? null : $input->venueId);

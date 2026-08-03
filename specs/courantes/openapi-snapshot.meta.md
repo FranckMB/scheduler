@@ -4,6 +4,12 @@ Snapshot régénéré depuis le backend vivant le 2026-08-03 : `php bin/console 
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P1-4 PR D (2026-08-03)** : solveur de placement — +`POST /api/fixtures/place` (route
+  contrôleur `PlaceMatchesController`, **déclarée dans `CustomRoutesOpenApiFactory`** — le
+  déclencheur « route custom ⇒ entrée factory + regen » est appliqué) ; `Fixture` expose
+  `placementSource` (lecture — `MANUAL`/`SOLVER`/null). ⚠ La première regen l'avait perdu :
+  **cache Symfony périmé dans le conteneur** (gotcha 17 backend/AGENTS.md) — `cache:clear`
+  puis re-export. Détail : [`module-matchs.md`](module-matchs.md) §Solveur de placement.
 - **P1-4 PR C (2026-08-03)** : couche préférences matchs — +`/api/team_match_habits` et
   +`/api/team_links` (CRUD API Platform, 5-fichiers) ; l'enum du radar gagne `TEAM_LINK_OVERLAP`
   et les vues fixture du radar portent `estimatedKickoff` (heure empruntée à l'habitude).

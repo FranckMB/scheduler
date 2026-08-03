@@ -6324,6 +6324,84 @@
                 "summary": "Same-coach match/training conflict radar (read-only, computed on the fly)"
             }
         },
+        "/api/fixtures/place": {
+            "post": {
+                "operationId": "placeMatches",
+                "tags": [
+                    "Match"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Synchronous match placement (P1-4 PR D, ADR-0003): the solver places every placeable UNPLACED home match; the rest comes back named",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "placed": {
+                                            "type": "integer"
+                                        },
+                                        "skipped": {
+                                            "type": "integer",
+                                            "description": "Placements refused at write time (a manual gesture won during the solve)"
+                                        },
+                                        "unplaced": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "matchId": {
+                                                        "type": "string"
+                                                    },
+                                                    "reason": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "no_access_window",
+                                                            "no_league_intersection",
+                                                            "venue_unavailable",
+                                                            "venue_full"
+                                                        ]
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "diagnostics": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        },
+                                        "metrics": {
+                                            "type": "object",
+                                            "nullable": true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "No club in context"
+                    },
+                    "401": {
+                        "description": "Unauthorized (missing/expired JWT)"
+                    },
+                    "403": {
+                        "description": "Not a management member (SEC-07)"
+                    },
+                    "409": {
+                        "description": "Placement already running, season plan not chosen, or archived season"
+                    },
+                    "502": {
+                        "description": "Engine unreachable \u2014 retry, nothing was written"
+                    }
+                },
+                "summary": "Auto-place the unplaced home matches (writes PLACED+SOLVER; manual anchors never move)"
+            }
+        },
         "/api/league-match-windows": {
             "get": {
                 "operationId": "getLeagueMatchWindows",
@@ -17593,6 +17671,13 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "placementSource": {
+                        "description": "MANUAL | SOLVER | null \u2014 who placed it (re-solve anchor marker, PR D).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -17756,6 +17841,13 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "placementSource": {
+                        "description": "MANUAL | SOLVER | null \u2014 who placed it (re-solve anchor marker, PR D).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -17834,6 +17926,13 @@
                             },
                             "fbiVenueLabel": {
                                 "description": "Raw FBI \u00ab Salle \u00bb label, HOME and AWAY \u2014 never a Venue reference.",
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "placementSource": {
+                                "description": "MANUAL | SOLVER | null \u2014 who placed it (re-solve anchor marker, PR D).",
                                 "type": [
                                     "string",
                                     "null"

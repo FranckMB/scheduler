@@ -1,4 +1,4 @@
-import { MapPin } from "lucide-react";
+import { AlertTriangle, MapPin } from "lucide-react";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 
 import type { Fixture, Team } from "./api";
@@ -7,6 +7,9 @@ interface UnplacedListProps {
   fixtures: Fixture[];
   teams: Map<string, Team>;
   selectedFixtureId: string | null;
+  /** P1-4 PR D — per-fixture reason from the last auto-placement (« demandez
+   * votre dérogation tôt »). Not persisted: lives until the next data refresh. */
+  unplacedReasons?: Map<string, string>;
   onSelect: (id: string) => void;
 }
 
@@ -16,7 +19,7 @@ function isUnplacedHome(fixture: Fixture): boolean {
 }
 
 /** The to-do list of home matches to place — clicking one opens the placement panel. */
-export function UnplacedList({ fixtures, teams, selectedFixtureId, onSelect }: UnplacedListProps) {
+export function UnplacedList({ fixtures, teams, selectedFixtureId, unplacedReasons, onSelect }: UnplacedListProps) {
   const unplaced = fixtures.filter(isUnplacedHome).sort((a, b) => a.matchDate.localeCompare(b.matchDate));
 
   if (0 === unplaced.length) {
@@ -40,6 +43,12 @@ export function UnplacedList({ fixtures, teams, selectedFixtureId, onSelect }: U
               <span className="block truncate text-xs text-muted-foreground">
                 {fixture.matchDate} · vs {fixture.opponentLabel}
               </span>
+              {undefined !== unplacedReasons?.get(fixture.id) ? (
+                <span className="mt-0.5 flex items-start gap-1 text-xs text-warning">
+                  <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                  {unplacedReasons.get(fixture.id)}
+                </span>
+              ) : null}
             </span>
             <MapPin className="size-4 shrink-0 text-muted-foreground" />
           </button>

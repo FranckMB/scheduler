@@ -190,6 +190,19 @@ export function useDeleteTeamLink() {
   });
 }
 
+/** « Placer automatiquement » (P1-4 PR D) — synchronous solve; every fixture
+ * surface moves (placements + radar + engagement stays as-is). */
+export function usePlaceMatches() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: matchesApi.placeMatches,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["fixtures"] });
+    },
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
+  });
+}
+
 /** Dry-run — writes nothing server-side, so no invalidation. */
 export function useAnalyzeFbiFixtures() {
   return useMutation({

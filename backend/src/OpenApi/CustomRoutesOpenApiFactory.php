@@ -359,6 +359,33 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             summary: 'Venue unavailability impact (alert-only, computed on the fly — blocks nothing)',
         )));
 
+        $paths->addPath('/api/fixtures/place', new PathItem(post: new Operation(
+            operationId: 'placeMatches',
+            tags: ['Match'],
+            responses: [
+                '200' => $this->jsonResponse('Synchronous match placement (P1-4 PR D, ADR-0003): the solver places every placeable UNPLACED home match; the rest comes back named', [
+                    'type' => 'object',
+                    'properties' => [
+                        'placed' => ['type' => 'integer'],
+                        'skipped' => ['type' => 'integer', 'description' => 'Placements refused at write time (a manual gesture won during the solve)'],
+                        'unplaced' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                            'matchId' => ['type' => 'string'],
+                            'reason' => ['type' => 'string', 'enum' => ['no_access_window', 'no_league_intersection', 'venue_unavailable', 'venue_full']],
+                            'message' => ['type' => 'string'],
+                        ]]],
+                        'diagnostics' => ['type' => 'array', 'items' => ['type' => 'object']],
+                        'metrics' => ['type' => 'object', 'nullable' => true],
+                    ],
+                ]),
+                '400' => new Response('No club in context'),
+                '401' => new Response('Unauthorized (missing/expired JWT)'),
+                '403' => new Response('Not a management member (SEC-07)'),
+                '409' => new Response('Placement already running, season plan not chosen, or archived season'),
+                '502' => new Response('Engine unreachable — retry, nothing was written'),
+            ],
+            summary: 'Auto-place the unplaced home matches (writes PLACED+SOLVER; manual anchors never move)',
+        )));
+
         return $openApi;
     }
 

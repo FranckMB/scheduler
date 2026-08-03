@@ -13,6 +13,7 @@ use App\Entity\VenueUnavailability;
 use App\Enum\FixtureHomeAway;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLinkType;
+use App\Service\AwayKickoffEstimator;
 use App\Service\EffectiveScheduleResolver;
 use App\Service\MatchConflictDetector;
 use App\Service\MatchFootprint;
@@ -422,7 +423,7 @@ final class MatchConflictDetectorTest extends TestCase
      */
     private function detect(array $fixtures, array $links, ?string $baselineScheduleId = null, array $overlayPeriods = [], array $slotsBySchedule = [], array $unavailabilities = [], array $habits = [], array $teamLinks = []): array
     {
-        return new MatchConflictDetector(new MatchFootprint, new EffectiveScheduleResolver)
+        return new MatchConflictDetector(new MatchFootprint, new EffectiveScheduleResolver, new AwayKickoffEstimator)
             ->detect($fixtures, $links, $baselineScheduleId, $overlayPeriods, $slotsBySchedule, $unavailabilities, $habits, $teamLinks);
     }
 

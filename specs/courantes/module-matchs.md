@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles)
+Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés
@@ -9,7 +9,8 @@ Last verified @ 2026-08-03 (P1-4 PR A import réel · PR B capacité · PR C hab
 > notamment : le format FBI livré ici est **invalidé par un vrai export**, et le placement devient
 > solveur + boucle manuelle). Ici = ce qui **existe** aujourd'hui. Module **fonctionnellement autonome** : ses entités, son moteur de conflits et sa
 > grille week-end ne dépendent pas du solveur d'entraînement, et rien de ce module n'entre dans le payload
-> solveur.
+> du solve hebdo. Depuis la PR D il a **son propre solve** (`POST /place-matches`, second problème engine,
+> contrat 2.2 — § Solveur de placement).
 
 > ⚠ **Le module est autonome dans ses DONNÉES, pas dans son OUVERTURE.** Décision fondateur du
 > 2026-07-31 (arbitrage DOC-1) : le couplage livré fait foi, la spec d'évolution a été alignée
@@ -174,7 +175,8 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
 - **Garde de placement** (`PlacementPanel` + `lib/matchAccess.ts`, HARD sans dégradation — donnée du club,
   pas de mapping incertain) : sélecteur restreint aux gymnases de match (repli : club sans AUCUNE fenêtre →
   liste complète, donnée non adoptée) ; bloqué si jour sans fenêtre, heure hors plage, ou gymnase indispo à
-  la date. Pas de verrou serveur (décision fondateur — le solveur PR D posera le HARD définitif).
+  la date. Pas de verrou serveur sur le geste MANUEL (décision fondateur) — le solveur (PR D), lui, ne
+  sort jamais du HARD ; le verrou serveur du geste manuel reste une dette PR E (roadmap, dette (i)).
 - **Source unique ADR-0002** : la règle « quel planning s'applique à telle date » est extraite en
   `EffectiveScheduleResolver` (pur) + `TrainingCalendarContext` (chargement scopé), consommés par le
   radar ET l'impact — deux copies auraient divergé.
@@ -203,7 +205,7 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
     geste du gestionnaire).
   - **Finding `TEAM_LINK_OVERLAP`** : deux matchs d'équipes liées `NOT_SIMULTANEOUS` dont les empreintes
     (réelles ou estimées) se chevauchent (demi-ouvert — enchaînés dos-à-dos = pas de conflit). Indépendant
-    des coachs. `BACK_TO_BACK` ne produit AUCUN finding (préférence PR D, pas une règle).
+    des coachs. `BACK_TO_BACK` ne produit AUCUN finding (préférence du solveur de placement, pas une règle).
   - **Pré-remplissage au placement** : `PlacementPanel` initialise gymnase+heure depuis l'habitude du jour
     du match (champs vides seulement) + ligne « Habitude : samedi 15:30 · Mateo ». **Les gardes restent
     souveraines** (enveloppe, accès, indispo — l'habitude pré-remplit, ne débloque jamais).
@@ -218,8 +220,43 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
     = bouton « Accepter », jamais une écriture ; un jour déjà déclaré n'est pas re-suggéré.
 - **Saisie** : `/matchs` uniquement, bouton « Habitudes & passerelles » (`HabitsLinksDialog`) — l'inférence
   exige des matchs importés, rien au wizard. Écritures non management-gated (patron `VenueMatchWindow`),
-  derrière le verrou socle de la page. **Engine intouché** (aucune donnée PR C au payload,
-  `CONTRACT_VERSION` inchangé — le solveur les consommera en PR D).
+  derrière le verrou socle de la page. Engine intouché par la PR C — habitudes et passerelles sont
+  consommées par le solveur de placement depuis la PR D (§ suivant).
+
+## Solveur de placement — P1-4 PR D (2026-08-03, [ADR-0003](../../docs/architecture/adr-0003-match-placement-solve.md))
+
+- **Second problème solveur engine** : `POST /place-matches` (`engine/app/solver/match_placement.py`,
+  schémas `match_input_schema.py`/`match_output_schema.py`), **un seul** `CONTRACT_VERSION` pour les deux
+  endpoints → bump **2.2**. Le solve hebdo est intouché (mêmes fichiers, mêmes golden).
+- **Rail SYNCHRONE** : `POST /api/fixtures/place` (`PlaceMatchesController` — management + saison
+  écrivable + socle pointé) répond dans la requête, sans Messenger ni Mercure. Anti-double-clic par
+  `MatchPlacementLock` (Redis, préfixe dédié — PAS le verrou de génération). Seuil de bascule async ~20 s
+  (ADR-0003 §2).
+- **Best-effort à poids dominant** : l'objectif maximise `10 000 × Σ placés + SOFT` — **aucune contrainte
+  HARD n'est jamais violée en sortie**. Un match sans candidat licite sort **NOMMÉ**
+  (`no_access_window` · `no_league_intersection` · `venue_unavailable` · `venue_full`), la raison affichée
+  sur sa ligne « À placer ». Ce n'est pas la relaxation qu'interdit ADR-0001 : rien n'est relâché,
+  l'impossible est épelé (le signal dérogation-tôt EST le produit).
+- **HARD** : fenêtres d'accès mairie (l'empreinte 2h15 entière dedans — l'échauffement occupe la salle),
+  indisponibilités gymnase, no-overlap par (gymnase, date), fenêtre ligue quand l'enveloppe est résolue
+  (`LeagueEnvelopeResolver`, portage serveur de la jointure tolérante d'`envelope.ts` — non résolue =
+  aucun HARD + diagnostic INFO `league_envelope_unresolved`). **SOFT** (golden-épinglés — en changer un =
+  changer le PRODUIT) : conflit coach MAIN −60 · passerelle `NOT_SIMULTANEOUS` violée −40 · habitude
+  heure +15 / gymnase +5 · fenêtre habituelle protégée −25 · `BACK_TO_BACK` enchaîné +15 · coach
+  ASSISTANT −10 · stabilité re-solve +8 (+ hint) · compactage −1 par pas de 15 min de trou. Candidats au
+  pas de 15 min, 30 s de budget, 1 worker + seed (bit-stable).
+- **Ancres — `Fixture.placementSource`** (`MANUAL`/`SOLVER`, null legacy = manuel) : tout geste API du
+  gestionnaire stampe MANUAL ; MANUAL + `SUBMITTED`/`VALIDATED` = **FIXED**, consomment leur créneau et ne
+  bougent JAMAIS (un déposé qui a perdu sa salle est ignoré du payload — ni ancre ni plaçable). SOLVER =
+  re-plaçable (bonus stabilité). Écriture directe en `PLACED` (patron du planning) ; l'applier recharge
+  chaque fixture et n'écrit que si le solveur y est encore autorisé — un geste manuel pendant le solve
+  gagne toujours.
+- **Le backend PROJETTE, l'engine reste plat** (`MatchPlacementPayloadBuilder`) : occupations
+  d'entraînement **datées** via `TrainingCalendarContext` + `EffectiveScheduleResolver` (ADR-0002 jamais
+  ré-implémenté côté engine), heure extérieure estimée par le MÊME `AwayKickoffEstimator` que le radar,
+  enveloppe ligue résolue côté serveur.
+- **UI** : bouton « Placer automatiquement » sur `/matchs` (spinner pendant le solve, toast « N placés ·
+  M non plaçables », raisons par match dans la liste À placer).
 
 ## Vérifs / gardes
 
@@ -253,9 +290,18 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   Front : `habitInference.test` (seuils, non-horodatés ignorés, jour déclaré non re-suggéré, gymnase ≥ 50 %),
   `weekendGrid.test` (fantôme rendu/dissous par la réalité/lanes partagées), `PlacementPanel.test`
   (pré-remplissage + gardes souveraines).
+- Placement (PR D) : `MatchPlacementContractSchemaTest` (**phase1** : forme du payload 2.2 ; groupe
+  `contract` : POST au VRAI engine, kickoff rendu DANS la fenêtre — sémantique, pas un 200),
+  `PlaceMatchesControllerTest` (gardes 403/409, samedi placé dans [14:30,16:15] + dimanche
+  `no_access_window`, **ancre manuelle jamais réécrite**, 502 si engine down sans écriture),
+  `LeagueEnvelopeResolverTest` (jointure tolérante). Engine : `test_match_placement.py` (unit),
+  `test_match_placement_semantics.py` (week-end réaliste + invariant `assert_no_hard_violation`),
+  golden épinglé (`test_match_placement_golden.py` — chaîne BACK_TO_BACK sans trou sur ancre 20:30).
 - Unit : `MatchFootprintTest`, `LeagueResolverTest`. Command : `SeedLeagueWindowsCommandTest`. Api :
   `FixtureApiTest`.
-- Smoke-solveur COMPLETED (les nouvelles tables/RLS ne cassent pas le pipeline ; payload solveur inchangé).
+- Smokes : `backend/scripts/smoke-place-matches.sh` (bout-en-bout SÉMANTIQUE : samedi placé
+  SOLVER dans la fenêtre mairie, dimanche non plaçable NOMMÉ — restaure le pointeur socle qu'il pose) **et**
+  smoke-solveur COMPLETED (le pipeline hebdo survit au bump 2.2 ; payload hebdo inchangé).
 
 ## Le périmètre engagé — `TeamEngagementGuard` (2026-07-16)
 
@@ -308,8 +354,9 @@ que l'API refuse ensuite de corriger. Une équipe engagée présente dans la pho
 
 ## Reste palier A (à venir)
 
-`Team.preferredMatchWindow` (backend). **Joueurs** dans le moteur de conflits (nécessite un modèle de
-rattachement joueur→équipes) + paliers B (dérogation + trajet + annuaire adverse global) / C (effet réseau)
-plus tard. ⚠ Envelope strictement HARD & fiable = nécessiterait une clé de jointure normalisée
-équipe↔fenêtre côté backend (aujourd'hui : dégradation indicative en UI). ⚠ Import FBI : format à valider
-contre un vrai export (cf. encadré PR-4) ; update de re-programmation au re-import = évolution.
+**Joueurs** dans le moteur de conflits : décision fermée — pas d'entité joueur, la passerelle déclarée
+(`TeamLink`, PR C) couvre le besoin. Paliers B (dérogation + trajet + annuaire adverse global) / C (effet
+réseau) plus tard. ⚠ Envelope strictement HARD & fiable côté UI = clé de jointure normalisée
+équipe↔fenêtre (dette (iv), PR E — côté solveur la jointure tolérante `LeagueEnvelopeResolver` est
+livrée). *(`Team.preferredMatchWindow` → devenue `TeamMatchHabit` (P3-1 soldée en PR C) ; format FBI
+validé sur vrai export + diff de ré-import → livrés en PR A.)*

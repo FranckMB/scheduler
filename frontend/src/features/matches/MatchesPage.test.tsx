@@ -42,6 +42,15 @@ vi.mock("./api", () => ({
   // Preferences layer (P1-4 PR C) — empty: no habit, no link.
   getTeamMatchHabits: vi.fn(() => Promise.resolve([])),
   getTeamLinks: vi.fn(() => Promise.resolve([])),
+  // Auto-placement (P1-4 PR D).
+  placeMatches: vi.fn(() =>
+    Promise.resolve({
+      placed: 1,
+      skipped: 0,
+      unplaced: [{ matchId: "fx-unplaced", reason: "no_access_window", message: "Aucune fenêtre d'accès match ne contient l'empreinte de 2h15 ce jour-là." }],
+      diagnostics: [],
+    }),
+  ),
   getConflicts: vi.fn(() =>
     Promise.resolve({
       clubId: "c",
@@ -78,6 +87,20 @@ describe("MatchesPage (integration)", () => {
     expect(screen.getByText(/Deux matchs/)).toBeInTheDocument();
     // Placed match is on the grid.
     expect(screen.getByText("Seniors")).toBeInTheDocument();
+  });
+
+  it("auto-places on demand and surfaces the unplaced reason (P1-4 PR D)", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    renderWithProviders(<MatchesPage />);
+
+    await screen.findByText("U13");
+    await user.click(screen.getByRole("button", { name: /Placer automatiquement/ }));
+
+    const { placeMatches: placeMatchesMock } = await import("./api");
+    expect(placeMatchesMock).toHaveBeenCalledOnce();
+    // The named reason lands under the still-unplaced match — the
+    // ask-your-derogation-early signal.
+    expect(await screen.findByText(/Aucune fenêtre d'accès match/)).toBeInTheDocument();
   });
 
   it("opens the placement panel and places a home fixture (venue + kickoff)", async () => {

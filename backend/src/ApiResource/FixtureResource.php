@@ -122,6 +122,10 @@ class FixtureResource
     #[Groups(['read'])]
     public ?string $fbiVenueLabel = null;
 
+    /** MANUAL | SOLVER | null — who placed it (re-solve anchor marker, PR D). */
+    #[Groups(['read'])]
+    public ?string $placementSource = null;
+
     public static function fromEntity(Fixture $entity): self
     {
         $dto = new self;
@@ -140,6 +144,7 @@ class FixtureResource
         $dto->kickoffTime = $entity->getKickoffTime()?->format('H:i');
         $dto->externalRef = $entity->getExternalRef();
         $dto->fbiVenueLabel = $entity->getFbiVenueLabel();
+        $dto->placementSource = $entity->getPlacementSource()?->value;
 
         return $dto;
     }

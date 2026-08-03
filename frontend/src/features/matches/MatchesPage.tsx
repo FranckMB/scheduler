@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, DoorOpen, Lock, Plus, Repeat, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, DoorOpen, Lock, Plus, Repeat, Upload, Wand2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
@@ -17,7 +17,8 @@ import { isInEnvelope, resolveEnvelope } from "./lib/envelope";
 import { buildWeekendGrid, isPlacedOnGrid, listWeekends, weekendKeyOf, weekendLabel } from "./lib/weekendGrid";
 import { MatchWindowsEditor } from "./MatchWindowsEditor";
 import { PlacementPanel } from "./PlacementPanel";
-import { useCategories, useCoaches, useCompetitions, useConflicts, useFixtures, useLeagueWindows, usePlaceFixture, usePriorityTiers, useTeamMatchHabits, useTeams, useVenueMatchWindows, useVenues, useVenueUnavailabilities } from "./queries";
+import { useCategories, useCoaches, useCompetitions, useConflicts, useFixtures, useLeagueWindows, usePlaceFixture, usePlaceMatches, usePriorityTiers, useTeamMatchHabits, useTeams, useVenueMatchWindows, useVenues, useVenueUnavailabilities } from "./queries";
+import { toast } from "@/shared/stores/toastStore";
 import { useMatchesStore } from "./store";
 import { UnplacedList } from "./UnplacedList";
 import { WeekendGrid } from "./WeekendGrid";
@@ -41,6 +42,9 @@ export function MatchesPage() {
   const unavailabilities = useVenueUnavailabilities();
   const habitsQuery = useTeamMatchHabits();
   const placeFixture = usePlaceFixture();
+  const placeMatches = usePlaceMatches();
+  // Reasons of the LAST auto-placement (non-persisted — PR E grades them).
+  const [unplacedReasons, setUnplacedReasons] = useState<Map<string, string>>(new Map());
   // Second entry point of the match-access editor (founder 2026-08-03: wizard
   // for onboarding, HERE when working the matches) — local UI state only.
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
@@ -118,6 +122,24 @@ export function MatchesPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="border-l-[3px] border-accent pl-3 text-lg font-semibold">Matchs</h1>
         <div className="flex gap-2">
+          <Button
+            size="sm"
+            disabled={placeMatches.isPending}
+            onClick={() =>
+              placeMatches.mutate(undefined, {
+                onSuccess: (result) => {
+                  setUnplacedReasons(new Map(result.unplaced.map((u) => [u.matchId, u.message])));
+                  toast.success(
+                    `${result.placed} match${result.placed > 1 ? "s" : ""} placé${result.placed > 1 ? "s" : ""}` +
+                      (result.unplaced.length > 0 ? ` · ${result.unplaced.length} non plaçable${result.unplaced.length > 1 ? "s" : ""}` : ""),
+                  );
+                },
+              })
+            }
+          >
+            <Wand2 className="size-4" />
+            {placeMatches.isPending ? "Placement…" : "Placer automatiquement"}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setHabitsDialogOpen(true)}>
             <Repeat className="size-4" />
             Habitudes & passerelles
@@ -151,7 +173,7 @@ export function MatchesPage() {
               <CardTitle className="text-base">À placer</CardTitle>
             </CardHeader>
             <CardContent>
-              <UnplacedList fixtures={allFixtures} teams={teamsMap} selectedFixtureId={selectedFixtureId} onSelect={setSelectedFixtureId} />
+              <UnplacedList fixtures={allFixtures} teams={teamsMap} selectedFixtureId={selectedFixtureId} unplacedReasons={unplacedReasons} onSelect={setSelectedFixtureId} />
             </CardContent>
           </Card>
 
