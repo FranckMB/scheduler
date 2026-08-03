@@ -13,6 +13,18 @@ describe("tagLabel", () => {
     expect(tagLabel("U15")).toBe("U15");
     expect(tagLabel("CUSTOM_XYZ")).toBe("CUSTOM_XYZ");
   });
+
+  it("annonce la portée RÉELLE des tranches d'âge — jamais plus large que la règle serveur (P4-63)", () => {
+    // La règle serveur (`TeamTagService::determineTagNames`) branche JEUNE sur
+    // `ageMin <= 18` : U21 (`ageMin` 19) est SENIOR. L'étiquette doit le dire —
+    // annoncer « U21 » ferait croire qu'une contrainte « Jeune » couvre des
+    // équipes qu'elle n'atteint pas (le défaut que P4-42 a soldé pour EMB).
+    expect(tagLabel("JEUNE")).toBe("Jeune (U13-U18)");
+    expect(tagLabel("JEUNE")).not.toContain("U21");
+    // Même exigence sur les jumeaux déjà corrigés — la règle vaut pour la famille.
+    expect(tagLabel("EMB")).toBe("EMB (U9-U11)");
+    expect(tagLabel("BABY")).toContain("Baby basket");
+  });
 });
 
 describe("groupTagsByAxis", () => {
