@@ -14,7 +14,7 @@ import { readableForeground } from "@/shared/lib/color";
 import { extractPalette } from "@/shared/lib/palette";
 
 import { LogoCropper } from "./LogoCropper";
-import { useDeleteLogo, useDownloadClubExport, useResetClub, useUpdateAppearance, useUpdateClubInfo, useUploadLogo } from "./queries";
+import { useDeleteLogo, useDownloadClubExport, useFfbbImport, useResetClub, useUpdateAppearance, useUploadLogo } from "./queries";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_ACCENT = "#3b82f6";
@@ -246,111 +246,76 @@ function DangerSection() {
   );
 }
 
-/** One labelled text field bound to local form state. */
-function InfoField({ label, value, onChange, type = "text", placeholder }: { label: string; value: string; onChange: (v: string) => void; type?: string; placeholder?: string }) {
+/** Une donnée FFBB en lecture seule — même gabarit que le Code FFBB. */
+function ReadOnlyField({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
   return (
-    <label className="block">
+    <div>
       <span className="mb-1 block text-xs text-muted-foreground">{label}</span>
-      <Input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
-    </label>
+      <p className={mono ? "font-mono" : undefined}>{value ?? "—"}</p>
+    </div>
   );
 }
 
-const INFO_KEYS = [
-  "committeeCode", "contactPhone", "contactEmail", "address",
-  "correspondentName", "correspondentPhone", "correspondentEmail",
-  "presidentName", "presidentPhone", "presidentEmail",
-  "mainVenueName", "mainVenueAddress",
-] as const;
-
-type InfoKey = (typeof INFO_KEYS)[number];
-
-/** FFBB club info (lot B): read-only identity + editable contacts. */
+/**
+ * Informations du club — TOUT vient de la FFBB, rien ne se saisit ici (décision
+ * fondateur 2026-08-04). Correspondant/président/salle principale ont été
+ * SUPPRIMÉS : l'index organismes ne connaît ni personne physique ni lien
+ * club→salle (cadrage api-ffbb-completion-club §1), et la saisie manuelle
+ * n'était pas voulue. Le geste de correction est le ré-import.
+ */
 function ClubInfoSection({ club }: { club: NonNullable<MeResponse["club"]> }) {
-  const update = useUpdateClubInfo();
-  // Seeded from the server values. The parent remounts this component (key on
-  // the server signature) when ["me"] refetches, so the inputs re-sync after a
-  // save instead of going stale — no effect needed.
-  const [form, setForm] = useState<Record<InfoKey, string>>(
-    () => Object.fromEntries(INFO_KEYS.map((k) => [k, club[k] ?? ""])) as Record<InfoKey, string>,
-  );
-  const set = (k: InfoKey) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-
-  // PATCH is partial: send only the fields the admin actually changed, so a
-  // concurrent edit on an untouched field is not clobbered (last-write-wins).
-  const save = () => {
-    const changed = Object.fromEntries(
-      INFO_KEYS.filter((k) => (form[k].trim() || null) !== (club[k] ?? null)).map((k) => [k, form[k].trim() || null]),
-    );
-    if (Object.keys(changed).length > 0) update.mutate(changed);
-  };
+  const ffbbImport = useFfbbImport();
+  // Compact (retour fondateur) : un téléphone se reconnaît sans sous-titre —
+  // les coordonnées s'empilent nues, comme sur les blocs Comité/Ligue.
+  const contactLines = [
+    [club.address, [club.postalCode, club.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || null,
+    club.contactPhone,
+  ].filter((line): line is string => null !== line);
+  const website = safeHttpUrl(club.website);
 
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Identité</h3>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">Identité</h3>
+          <Button size="sm" variant="outline" onClick={() => ffbbImport.mutate()} disabled={ffbbImport.isPending}>
+            {ffbbImport.isPending ? <Spinner className="size-4" /> : null}
+            Actualiser depuis la FFBB
+          </Button>
+        </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <span className="mb-1 block text-xs text-muted-foreground">Code FFBB</span>
-            <p className="font-mono">{club.ffbbClubCode ?? "—"}</p>
-          </div>
-          <div>
-            <span className="mb-1 block text-xs text-muted-foreground">Ligue</span>
-            <p>{club.league ?? "—"}</p>
-          </div>
-          <div>
-            <span className="mb-1 block text-xs text-muted-foreground">Zone de vacances</span>
-            <p>{club.schoolZone ?? "—"}</p>
-          </div>
-          <InfoField label="Comité" value={form.committeeCode} onChange={set("committeeCode")} placeholder="0069" />
+          <ReadOnlyField label="Code FFBB" value={club.ffbbClubCode} mono />
+          <ReadOnlyField label="Ligue" value={club.league} />
+          <ReadOnlyField label="Zone de vacances" value={club.schoolZone} />
+          <ReadOnlyField label="Comité" value={club.committeeCode} mono />
         </div>
       </div>
 
       <div>
         <h3 className="mb-2 text-sm font-semibold">Contact du club</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <InfoField label="Téléphone" value={form.contactPhone} onChange={set("contactPhone")} type="tel" />
-          <InfoField label="Email" value={form.contactEmail} onChange={set("contactEmail")} type="email" />
-          <label className="col-span-2 block">
-            <span className="mb-1 block text-xs text-muted-foreground">Adresse</span>
-            <Input value={form.address} onChange={(e) => set("address")(e.target.value)} />
-          </label>
-        </div>
-      </div>
-
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">Correspondant</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <InfoField label="Nom" value={form.correspondentName} onChange={set("correspondentName")} />
-          <InfoField label="Téléphone" value={form.correspondentPhone} onChange={set("correspondentPhone")} type="tel" />
-          <InfoField label="Email" value={form.correspondentEmail} onChange={set("correspondentEmail")} type="email" />
-        </div>
-      </div>
-
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">Président</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <InfoField label="Nom" value={form.presidentName} onChange={set("presidentName")} />
-          <InfoField label="Téléphone" value={form.presidentPhone} onChange={set("presidentPhone")} type="tel" />
-          <InfoField label="Email" value={form.presidentEmail} onChange={set("presidentEmail")} type="email" />
-        </div>
-      </div>
-
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">Salle principale</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <InfoField label="Nom" value={form.mainVenueName} onChange={set("mainVenueName")} />
-          <label className="block">
-            <span className="mb-1 block text-xs text-muted-foreground">Adresse</span>
-            <Input value={form.mainVenueAddress} onChange={(e) => set("mainVenueAddress")(e.target.value)} />
-          </label>
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <Button onClick={save} disabled={update.isPending}>
-          Enregistrer
-        </Button>
+        {contactLines.length > 0 || null !== club.contactEmail || null !== website ? (
+          <dl className="space-y-0.5 text-sm">
+            {contactLines.map((line) => (
+              <dd key={line}>{line}</dd>
+            ))}
+            {null !== club.contactEmail ? (
+              <dd>
+                <a href={`mailto:${club.contactEmail}`} className="text-accent underline underline-offset-2">
+                  {club.contactEmail}
+                </a>
+              </dd>
+            ) : null}
+            {null !== website ? (
+              <dd>
+                <a href={website} target="_blank" rel="noreferrer" className="text-accent underline underline-offset-2">
+                  {website}
+                </a>
+              </dd>
+            ) : null}
+          </dl>
+        ) : (
+          <p className="text-xs text-muted-foreground">Données FFBB non disponibles — essayez « Actualiser depuis la FFBB ».</p>
+        )}
       </div>
     </div>
   );
@@ -367,18 +332,18 @@ function safeHttpUrl(url: string | null | undefined): string | null {
   }
 }
 
-/** One read-only FFBB contact block (Club / Comité / Ligue). */
-function ContactBlock({ title, data }: { title: string; data: (FfbbOrganisme & { website?: string | null }) | null }) {
+/** One read-only FFBB contact block (Comité / Ligue).
+ *  Pas d'étiquette « COMITÉ »/« LIGUE » et pas de troncature (retour fondateur
+ *  2026-08-04) : la raison sociale complète — « COMITE DU RHONE… » — dit
+ *  elle-même ce qu'elle est, mieux qu'un titre au-dessus d'un nom coupé. */
+function ContactBlock({ data, fallbackName }: { data: FfbbOrganisme | null; fallbackName: string }) {
   const filled = data && (data.address || data.city || data.phone || data.email);
   const website = safeHttpUrl(data?.website);
   return (
     <div className="rounded-lg border border-border p-3">
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-2 flex items-start gap-2">
         {data?.logoUrl ? <img src={data.logoUrl} alt="" className="h-8 w-8 shrink-0 object-contain" /> : null}
-        <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">{title}</p>
-          <p className="truncate text-sm font-semibold">{data?.name ?? "—"}</p>
-        </div>
+        <p className="min-w-0 text-sm font-semibold leading-snug">{data?.name ?? fallbackName}</p>
       </div>
       {filled ? (
         <dl className="space-y-0.5 text-sm">
@@ -407,25 +372,15 @@ function ContactBlock({ title, data }: { title: string; data: (FfbbOrganisme & {
   );
 }
 
-/** FFBB institutional contacts (lot C): Club · Comité · Ligue, read-only. */
+/** FFBB institutional contacts (lot C): Comité · Ligue, read-only.
+ *  Plus de bloc « Club » (décision fondateur 2026-08-04) : cette section ne
+ *  montre que la hiérarchie AU-DESSUS du club — ses propres coordonnées vivent
+ *  dans « Informations du club », les dupliquer ici créait deux vérités. */
 function ContactsFfbbSection({ club }: { club: NonNullable<MeResponse["club"]> }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <ContactBlock
-        title="Club"
-        data={{
-          name: club.name,
-          address: club.address,
-          postalCode: club.postalCode,
-          city: club.city,
-          phone: club.contactPhone,
-          email: club.contactEmail,
-          logoUrl: club.logoUrl,
-          website: club.website,
-        }}
-      />
-      <ContactBlock title="Comité" data={club.ffbbCommittee} />
-      <ContactBlock title="Ligue" data={club.ffbbLeague} />
+    <div className="grid gap-3 sm:grid-cols-2">
+      <ContactBlock data={club.ffbbCommittee} fallbackName="Comité" />
+      <ContactBlock data={club.ffbbLeague} fallbackName="Ligue" />
     </div>
   );
 }
@@ -479,8 +434,8 @@ function ClubHub({ me }: { me: MeResponse }) {
         </AccordionSection>
         {isAdmin && me.club ? (
           <AccordionSection title="Informations du club">
-            {/* key = server signature: remount (re-seed the form) when ["me"] refetches after a save. */}
-            <ClubInfoSection key={INFO_KEYS.map((k) => me.club![k] ?? "").join("")} club={me.club} />
+            {/* Rendu pur des props (plus aucun formulaire) — pas de key de resync nécessaire. */}
+            <ClubInfoSection club={me.club} />
           </AccordionSection>
         ) : null}
         {isAdmin && me.club ? (

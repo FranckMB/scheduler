@@ -9,7 +9,6 @@ const me: { data: { role: string; club: ClubMock }; isLoading: boolean } = {
   data: { role: "admin", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } },
   isLoading: false,
 };
-const updateClubInfo = vi.fn();
 
 vi.mock("@/features/auth/queries", () => ({
   useMe: () => me,
@@ -18,11 +17,13 @@ vi.mock("@/features/auth/queries", () => ({
   useRejectMember: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+const ffbbImport = vi.fn();
+
 vi.mock("./queries", () => ({
   useUpdateAppearance: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useUploadLogo: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteLogo: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateClubInfo: () => ({ mutate: updateClubInfo, isPending: false }),
+  useFfbbImport: () => ({ mutate: ffbbImport, isPending: false }),
   useResetClub: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -42,7 +43,10 @@ describe("ClubPage", () => {
     expect(screen.getByRole("button", { name: /Visuel/ })).toHaveAttribute("aria-expanded", "false");
   });
 
-  it("shows the FFBB contacts section with the 3 blocks", async () => {
+  it("shows the FFBB contacts section: full names, no CLUB/COMITÉ/LIGUE labels, no club block", async () => {
+    // Décision fondateur 2026-08-04 : la section ne montre que la hiérarchie
+    // AU-DESSUS du club, et la raison sociale COMPLÈTE dit elle-même ce qu'elle
+    // est — pas d'étiquette au-dessus d'un nom tronqué.
     me.data = {
       role: "admin",
       club: {
@@ -55,31 +59,65 @@ describe("ClubPage", () => {
         postalCode: "69100",
         city: "Villeurbanne",
         contactEmail: "contact@bccl.fr",
-        ffbbCommittee: { name: "Comité du Rhône", email: "cdrbb@basketrhone.com", address: null, postalCode: null, city: null, phone: null, logoUrl: null },
-        ffbbLeague: { name: "Ligue AURA", email: null, address: null, postalCode: null, city: null, phone: null, logoUrl: null },
+        ffbbCommittee: { name: "COMITE DU RHONE ET METROPOLE DE LYON DE BASKET-BALL", email: "cdrbb@basketrhone.com", address: null, postalCode: null, city: null, phone: null, logoUrl: null, website: "http://www.basketrhone.com" },
+        ffbbLeague: { name: "LIGUE REGIONALE D'AUVERGNE-RHÔNE-ALPES DE BASKET-BALL", email: null, address: null, postalCode: null, city: null, phone: null, logoUrl: null, website: null },
       },
     };
     const user = userEvent.setup();
     render(<ClubPage />);
     await user.click(screen.getByRole("button", { name: /Contacts FFBB/ }));
-    expect(screen.getByText("Comité du Rhône")).toBeInTheDocument();
-    expect(screen.getByText("Ligue AURA")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "contact@bccl.fr" })).toHaveAttribute("href", "mailto:contact@bccl.fr");
+    // Noms complets, sans troncature CSS.
+    const comite = screen.getByText("COMITE DU RHONE ET METROPOLE DE LYON DE BASKET-BALL");
+    expect(comite).toBeInTheDocument();
+    expect(comite).not.toHaveClass("truncate");
+    expect(screen.getByText("LIGUE REGIONALE D'AUVERGNE-RHÔNE-ALPES DE BASKET-BALL")).toBeInTheDocument();
+    // Plus d'étiquettes de bloc.
+    expect(screen.queryByText(/^Comité$/)).toBeNull();
+    expect(screen.queryByText(/^Ligue$/)).toBeNull();
+    // Le site web du comité (nouvelle donnée urlSiteWeb) est un lien.
+    expect(screen.getByRole("link", { name: "http://www.basketrhone.com/" })).toBeInTheDocument();
+    // Plus de bloc « Club » : son email n'apparaît pas ici.
+    expect(screen.queryByRole("link", { name: "contact@bccl.fr" })).toBeNull();
   });
 
-  it("shows the FFBB club-info section for an admin and saves it", async () => {
-    updateClubInfo.mockClear();
+  it("club info: everything read-only and compact — no inputs, no save, no officer blocks", async () => {
+    // Décision fondateur 2026-08-04 : la FFBB fait autorité ; correspondant/
+    // président/salle principale SUPPRIMÉS (l'API ne les fournira jamais, la
+    // saisie manuelle n'est pas voulue). Contact compact : les coordonnées
+    // s'empilent nues — un téléphone se reconnaît sans sous-titre.
+    me.data = {
+      role: "admin",
+      club: {
+        name: "BC Test",
+        accentColor: null,
+        accentColorDark: null,
+        accentPalette: null,
+        logoUrl: null,
+        committeeCode: "0069",
+        contactPhone: "0643720140",
+        contactEmail: "contact@bccl.fr",
+        address: "5 RUE EMILE DUNIERE",
+        postalCode: "69100",
+        city: "VILLEURBANNE",
+        website: "https://www.bccl.fr",
+      },
+    };
     const user = userEvent.setup();
     render(<ClubPage />);
     await user.click(screen.getByRole("button", { name: /Informations du club/ }));
-    // Read-only identity + editable groups render.
-    expect(screen.getByText("Code FFBB")).toBeInTheDocument();
-    expect(screen.getByText("Correspondant")).toBeInTheDocument();
-    // Editing a field then saving PATCHes only that field (partial update).
-    await user.type(screen.getByLabelText("Comité"), "0069");
-    await user.click(screen.getByRole("button", { name: "Enregistrer" }));
-    expect(updateClubInfo).toHaveBeenCalledOnce();
-    expect(updateClubInfo).toHaveBeenCalledWith({ committeeCode: "0069" });
+    // Valeurs affichées, compactes : l'adresse est UNE ligne, tél sans étiquette.
+    expect(screen.getByText("5 RUE EMILE DUNIERE, 69100 VILLEURBANNE")).toBeInTheDocument();
+    expect(screen.getByText("0643720140")).toBeInTheDocument();
+    expect(screen.queryByText("Téléphone")).toBeNull();
+    expect(screen.getByRole("link", { name: "contact@bccl.fr" })).toHaveAttribute("href", "mailto:contact@bccl.fr");
+    // AUCUN champ saisissable ni bouton Enregistrer dans la section.
+    expect(screen.queryByRole("button", { name: "Enregistrer" })).toBeNull();
+    expect(screen.queryByText("Correspondant")).toBeNull();
+    expect(screen.queryByText("Président")).toBeNull();
+    expect(screen.queryByText("Salle principale")).toBeNull();
+    // Le geste de correction : le ré-import FFBB.
+    await user.click(screen.getByRole("button", { name: "Actualiser depuis la FFBB" }));
+    expect(ffbbImport).toHaveBeenCalledOnce();
   });
 
   it("hides the club-info section for a non-admin", () => {

@@ -184,6 +184,8 @@ final class FfbbClubPopulator
         $entity->setCity($this->city($hit));
         $entity->setPhone($this->str($hit['telephone'] ?? null));
         $entity->setEmail($this->str($hit['mail'] ?? null));
+        // `str()` trime — mesuré : la ligue ARA rend "…com " avec une espace finale.
+        $entity->setWebsite($this->str($hit['urlSiteWeb'] ?? null));
 
         $bytes = $this->logoBytes($hit);
         if (null !== $bytes) {

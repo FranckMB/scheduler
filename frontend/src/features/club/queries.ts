@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "@/shared/stores/toastStore";
 
-import type { AppearancePayload, ClubInfoPayload } from "./api";
+import type { AppearancePayload } from "./api";
 import * as clubApi from "./api";
 
 /** Save the club accent; refetch /me so the theme re-applies live. */
@@ -14,16 +14,21 @@ export function useUpdateAppearance() {
   });
 }
 
-/** Save the FFBB club info; refetch /me so the club section re-renders. */
-export function useUpdateClubInfo() {
+/** Ré-import FFBB (management) : la fédération fait autorité sur les champs qu'elle fournit. */
+export function useFfbbImport() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (body: ClubInfoPayload) => clubApi.updateClubInfo(body),
-    onSuccess: () => {
-      toast.success("Informations du club enregistrées.");
+    mutationFn: () => clubApi.ffbbImport(),
+    onSuccess: (result) => {
+      if (result.populated) {
+        toast.success("Informations actualisées depuis la FFBB.");
+      } else {
+        // 200 avec populated=false : la FFBB a répondu mais n'a rien trouvé pour ce code.
+        toast.error("La FFBB n'a rien renvoyé pour ce club.");
+      }
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     },
-    onError: () => toast.error("L'enregistrement des informations du club a échoué."),
+    onError: () => toast.error("FFBB indisponible, réessayez plus tard."),
   });
 }
 

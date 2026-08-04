@@ -54,10 +54,18 @@ Body:
 | `cartographie.ville` / `commune.libelle` | `Club.city` |
 | `telephone` | `Club.contactPhone` |
 | `mail` | `Club.contactEmail` |
-| `urlSiteWeb` | `Club.website` |
+| `urlSiteWeb` | `Club.website` — et, sur les hits comité/ligue du 2ᵉ `multi-search`, `FfbbCommittee.website` / `FfbbLeague.website` (2026-08-04 ; ⚠ trim — la ligue ARA rend une espace finale) |
 | `logo.id` | uuid → logo réhébergé (§3) |
 | `organisme_id_pere` (`id,nom,adresse,code`) | comité → `FfbbCommittee` |
 | `organisme_id_pere.organisme_id_pere` (`id,nom,code`) | ligue → `FfbbLeague` |
+
+> **La fiche club est 100 % FFBB, rien ne s'y saisit** (décision fondateur 2026-08-04) : tous les champs
+> affichés sont en LECTURE SEULE, le seul geste est `POST /api/club/ffbb-import` (bouton « Actualiser
+> depuis la FFBB »). `PATCH /api/club/info` **a été supprimé** — plus aucun consommateur. Les champs que
+> l'index ne connaît pas (correspondant, président, salle principale — vérifié champ par champ) ont été
+> **retirés de l'écran et de `/api/me`** : pas d'automatique possible + saisie manuelle non voulue = pas
+> de champ (les colonnes restent en base, données intactes). Cadrage complet :
+> [`api-ffbb-completion-club.md`](../../specs/evolution/api-ffbb-completion-club.md).
 
 Champs **ignorés** : `offresPratiques`, `labellisation`, `engagements_*`, `_geo`, `type_association`, `*ClubPro`, `saison`, `dateAffiliation`.
 

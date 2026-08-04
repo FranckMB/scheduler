@@ -16,24 +16,16 @@ export interface AppearanceResult {
 /** Partial update of the club identity (accent), scoped server-side to the JWT club. */
 export const updateAppearance = (body: AppearancePayload): Promise<AppearanceResult> => api.patch("club/appearance", { json: body }).json();
 
-export interface ClubInfoPayload {
-  committeeCode?: string | null;
-  contactPhone?: string | null;
-  contactEmail?: string | null;
-  address?: string | null;
-  correspondentName?: string | null;
-  correspondentPhone?: string | null;
-  correspondentEmail?: string | null;
-  presidentName?: string | null;
-  presidentPhone?: string | null;
-  presidentEmail?: string | null;
-  mainVenueName?: string | null;
-  mainVenueAddress?: string | null;
-  schoolZone?: string | null;
+// La fiche club n'a plus AUCUN champ saisissable (décision fondateur 2026-08-04) :
+// la FFBB fait autorité, le geste de correction est le ré-import ci-dessous.
+// L'ancien PATCH /api/club/info a été supprimé avec ses champs.
+export interface FfbbImportResult {
+  populated: boolean;
+  error?: string;
 }
 
-/** Partial update of the FFBB club info (lot B), scoped server-side to the JWT club. */
-export const updateClubInfo = (body: ClubInfoPayload): Promise<ClubInfoPayload> => api.patch("club/info", { json: body }).json();
+/** Re-import institutionnel depuis la FFBB (management) — écrase les champs dont la fédération fait autorité. */
+export const ffbbImport = (): Promise<FfbbImportResult> => api.post("club/ffbb-import").json();
 
 /** Upload the club logo (multipart); returns its public URL. */
 export const uploadLogo = (file: File): Promise<{ logoUrl: string }> => {

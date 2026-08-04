@@ -28,6 +28,7 @@ export interface FfbbOrganisme {
   phone: string | null;
   email: string | null;
   logoUrl: string | null;
+  website: string | null;
 }
 
 export interface MeResponse {
@@ -52,14 +53,6 @@ export interface MeResponse {
     contactPhone: string | null;
     contactEmail: string | null;
     address: string | null;
-    correspondentName: string | null;
-    correspondentPhone: string | null;
-    correspondentEmail: string | null;
-    presidentName: string | null;
-    presidentPhone: string | null;
-    presidentEmail: string | null;
-    mainVenueName: string | null;
-    mainVenueAddress: string | null;
     // FFBB autofill (lot C): institutional club data + shared league/committee blocks.
     postalCode: string | null;
     city: string | null;

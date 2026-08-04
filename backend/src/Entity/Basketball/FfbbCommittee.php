@@ -52,6 +52,10 @@ class FfbbCommittee
     #[ORM\Column(type: 'string', length: 255, nullable: true)]
     private ?string $logoUrl = null;
 
+    // Site web officiel (`urlSiteWeb` Meilisearch) — cadrage api-ffbb-completion-club §2.
+    #[ORM\Column(type: 'string', length: 255, nullable: true)]
+    private ?string $website = null;
+
     #[ORM\Column(type: 'datetimetz_immutable')]
     private DateTimeImmutable $fetchedAt;
 
@@ -170,6 +174,18 @@ class FfbbCommittee
     public function setLogoUrl(?string $logoUrl): self
     {
         $this->logoUrl = $logoUrl;
+
+        return $this;
+    }
+
+    public function getWebsite(): ?string
+    {
+        return $this->website;
+    }
+
+    public function setWebsite(?string $website): self
+    {
+        $this->website = $website;
 
         return $this;
     }
