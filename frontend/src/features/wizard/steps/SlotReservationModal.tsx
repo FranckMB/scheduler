@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
-import { Select } from "@/shared/components/ui/select";
+import { TeamSelect } from "@/shared/components/ui/team-select";
 
 import type { PriorityTier, Reservation, Team, TeamCoach, Venue, VenueTrainingSlot } from "../api";
 import { conflictingReservation, mainCoachByTeam } from "../lib/coachDoubleBooking";
@@ -257,14 +257,9 @@ export function SlotReservationModal({
         </p>
       ) : occupied < capacity ? (
         pickable.length > 0 ? (
-          <Select aria-label="Ajouter une équipe" className="h-9 w-full" value="" onChange={(e) => pick(e.target.value)} disabled={busy}>
-            <option value="">— ajouter une équipe —</option>
-            {pickable.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
+          // Groupes par rang (demande fondateur 2026-08-04) : 49 équipes à plat sont
+          // illisibles — TeamSelect est le home unique du découpage S/A/B/C/D.
+          <TeamSelect aria-label="Ajouter une équipe" className="h-9 w-full" value="" onChange={(e) => pick(e.target.value)} disabled={busy} teams={pickable} tiers={tiers} placeholder="— ajouter une équipe —" />
         ) : (
           <p className="text-xs text-muted-foreground">Aucune équipe disponible (toutes ont atteint leur nombre de séances ou sont déjà sur ce créneau).</p>
         )
