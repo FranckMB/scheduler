@@ -31,6 +31,11 @@ const config = defineConfig({
     },
   },
   server: {
+    // P4-33 — le service compose `e2e` joint Vite par son nom interne : sans
+    // cette entrée, le host-check de Vite répond 403 « Blocked request ».
+    // Dev-only (le serveur Vite n'existe pas en prod), hostname interne au
+    // réseau compose — rien d'exposé.
+    allowedHosts: ['frontend-dev'],
     // Dev-only proxies — production uses Nginx
     proxy: {
       '/api': {

@@ -386,7 +386,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       ) : null}
 
       {zone === null && !zoneLoading ? (
-        <RadarCard icon={<MapPin className="size-4" />} title="Zone scolaire à renseigner" detail="Renseigne la zone pour voir les vacances.">
+        <RadarCard icon={<MapPin className="size-4" />} title="Zone scolaire à renseigner" detail="Renseignez la zone pour voir les vacances.">
           <Button variant="outline" size="sm" asChild>
             <Link to="/club">Renseigner</Link>
           </Button>

@@ -161,8 +161,8 @@ export function GenerateStep() {
     <div>
       <p className="mb-4 text-sm text-muted-foreground">
         {periodMode
-          ? "Génère le planning de cette période. Il s'applique par-dessus le planning principal sur la fenêtre, sans le modifier."
-          : "Le système place tes équipes dans les créneaux selon tes règles. Lance, puis laisse tourner."}
+          ? "Générez le planning de cette période. Il s'applique par-dessus le planning principal sur la fenêtre, sans le modifier."
+          : "Le système place vos équipes dans les créneaux selon vos règles. Lancez, puis laissez tourner."}
       </p>
 
       {failed ? (
@@ -187,11 +187,11 @@ export function GenerateStep() {
         <div className="flex flex-col items-center gap-4 py-12 text-center">
           <Rocket className="size-12 text-accent" />
           <p className="max-w-sm text-sm text-muted-foreground">
-            {periodMode ? "Tout est prêt. Génère le plan de la période." : "Tout est prêt. Lance la génération de ton planning."}
+            {periodMode ? "Tout est prêt. Générez le plan de la période." : "Tout est prêt. Lancez la génération de votre planning."}
           </p>
           {isFirstOverlay ? (
             <p className="max-w-sm rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-muted-foreground">
-              Premier planning secondaire : il s'appuie sur ton planning principal, qui devient la référence — le modifier ensuite supprimera les plannings secondaires (après confirmation).
+              Premier planning secondaire : il s'appuie sur votre planning principal, qui devient la référence — le modifier ensuite supprimera les plannings secondaires (après confirmation).
             </p>
           ) : null}
           <BlockerList blockers={blockers} className="max-w-md text-left" />

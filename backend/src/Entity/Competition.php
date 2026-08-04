@@ -19,6 +19,11 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'competition')]
 #[ORM\Index(name: 'idx_competition_club_season', columns: ['club_id', 'season_id'])]
 #[ORM\Index(name: 'idx_competition_team', columns: ['team_id'])]
+// P4-67 — deux « DF2 » pour la MÊME équipe rendaient la résolution d'import
+// arbitraire (candidates[0]). Deux équipes en DF2 restent légitimes : la clé
+// porte le teamId. (L'unicité de la réf FFBB est un index PARTIEL — WHERE NOT
+// NULL — posé en migration : Doctrine ne sait pas le déclarer en attribut.)
+#[ORM\UniqueConstraint(name: 'uniq_competition_team_name', columns: ['club_id', 'season_id', 'team_id', 'name'])]
 #[ORM\HasLifecycleCallbacks]
 class Competition implements TenantOwnedInterface
 {
