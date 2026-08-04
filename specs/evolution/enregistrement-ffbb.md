@@ -1,6 +1,6 @@
 # Refonte de l'enregistrement (vérification FFBB + approbation) — besoin à spécifier
 
-> **Statut** : **besoin à spécifier** (discovery **ouverte** — options posées, décisions à trancher avec l'utilisateur). **Pas un plan.**
+> **Statut** : **tranché et en cours de livraison** (décisions fondateur 2026-08-05 : preuve du premier gestionnaire = approbation du CLUB via son mail institutionnel FFBB ; mail introuvable → superadmin ; expiration 7 j, relances 3 j restants + jour J ; superadmin peut approuver à tout moment, y compris une adhésion — passation refusée). **PR A livrée** (cœur backend — voir état des lieux) ; PR B (relances + console) et PR C (frontend) restent, détail roadmap P3-4.
 > **Nature** : refond le point d'entrée du produit — comment un gestionnaire prouve qu'il gère bien *ce* club, et comment on empêche les doublons / l'usurpation. Business + sécurité (anti-squatting de club).
 > **Rattachement roadmap** : **P3-4** — croise **P1-4** et **P2-19** (API FFBB).
 > **Réutilise l'existant** : `Club.ffbbClubCode` · membership `ClubUser` + approbation (`MembershipController`) · mailer (déjà câblé pour le reset mot de passe) · `FfbbExcelImporter` (import équipes).

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Integration\Api;
 
 use App\Entity\Club;
+use App\Entity\ClubCreationRequest;
 use App\Entity\ClubUser;
 use App\Entity\EmailVerificationToken;
 use App\Entity\User;
@@ -188,7 +189,10 @@ final class AuthFlowTest extends WebTestCase
         $this->postJson('/api/register/verify', ['token' => $raw]);
         self::assertResponseStatusCodeSame(400);
 
-        self::assertCount(1, $this->em->getRepository(ClubUser::class)->findBy(['userId' => $user->getId()]), 'exactly one membership');
+        // P3-4 : verify n'octroie plus de membership (le club attend l'approbation) —
+        // l'unicité à garder est celle de la DEMANDE : jamais dupliquée par un replay.
+        self::assertCount(0, $this->em->getRepository(ClubUser::class)->findBy(['userId' => $user->getId()]), 'aucun membership avant approbation');
+        self::assertCount(1, $this->em->getRepository(ClubCreationRequest::class)->findBy(['userId' => $user->getId()]), 'exactement une demande de création');
     }
 
     /**

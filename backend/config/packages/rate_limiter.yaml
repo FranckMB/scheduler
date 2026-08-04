@@ -25,6 +25,12 @@ framework:
             policy: 'sliding_window'
             limit: 20
             interval: '15 minutes'
+        # P3-4 : page publique d'approbation de création de club, par IP. Un
+        # approbateur légitime fait 2-3 requêtes — borne anti-énumération de tokens.
+        club_approval_public:
+            policy: 'sliding_window'
+            limit: 20
+            interval: '15 minutes'
         # SEC-11: global throttle on the authenticated API, keyed PER USER (JWT),
         # applied by ApiRateLimitSubscriber on ^/api. 300/min = 5 req/s — well
         # above legitimate use (the frontend polls a schedule every few seconds)

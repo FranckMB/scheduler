@@ -7,30 +7,23 @@ namespace App\Controller;
 use App\Entity\Basketball\FfbbCommittee;
 use App\Entity\Basketball\FfbbLeague;
 use App\Entity\Club;
-use App\Entity\ClubUser;
+use App\Entity\ClubCreationRequest;
 use App\Entity\EmailVerificationToken;
 use App\Entity\Season;
-use App\Entity\Sport;
-use App\Entity\SportCategory;
 use App\Entity\User;
 use App\Enum\AuditAction;
-use App\Message\Basketball\PopulateClubFromFfbbMessage;
 use App\Repository\Basketball\FfbbCommitteeRepository;
 use App\Repository\Basketball\FfbbLeagueRepository;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
-use App\Repository\SportRepository;
 use App\Service\AuditTrail;
-use App\Service\Basketball\CategoryCatalog;
-use App\Service\DefaultConstraintSeeder;
+use App\Service\ClubApprovalService;
+use App\Service\ClubProvisioner;
 use App\Service\EmailVerifier;
-use App\Service\LeagueResolver;
 use App\Service\PasswordPolicy;
 use App\Service\SchedulePlanProvisioner;
-use App\Service\SchoolZoneResolver;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
-use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
@@ -40,12 +33,10 @@ use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Mailer\MailerInterface;
-use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Mime\Email;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\String\Slugger\AsciiSlugger;
 use Throwable;
 
 final class AuthController extends AbstractController
@@ -62,11 +53,8 @@ final class AuthController extends AbstractController
         private readonly JWTTokenManagerInterface $jwtManager,
         private readonly ClubRepository $clubRepository,
         private readonly ClubUserRepository $clubUserRepository,
-        private readonly SportRepository $sportRepository,
         private readonly RateLimiterFactory $authRegisterLimiter,
         private readonly TenantConnectionContext $tenantConnectionContext,
-        private readonly SchoolZoneResolver $schoolZoneResolver,
-        private readonly LeagueResolver $leagueResolver,
         private readonly SeasonResolver $seasonResolver,
         private readonly ClockInterface $clock,
         private readonly PasswordPolicy $passwordPolicy,
@@ -74,12 +62,12 @@ final class AuthController extends AbstractController
         private readonly EmailVerifier $emailVerifier,
         private readonly RateLimiterFactory $authRegisterVerifyLimiter,
         private readonly string $frontendBaseUrl,
-        private readonly MessageBusInterface $messageBus,
         private readonly FfbbLeagueRepository $ffbbLeagues,
         private readonly FfbbCommitteeRepository $ffbbCommittees,
         private readonly AuditTrail $auditTrail,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
-        private readonly DefaultConstraintSeeder $defaultConstraintSeeder,
+        private readonly ClubProvisioner $clubProvisioner,
+        private readonly ClubApprovalService $clubApprovalService,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -216,9 +204,9 @@ final class AuthController extends AbstractController
         // Materialise the tenant now. Club-scoped inserts need the RLS GUC; set it once
         // the club id is known, always clear afterwards (finally).
         $status = 'pending';
-        $newClubId = null;
+        $pendingRequestId = null;
         try {
-            $this->entityManager->wrapInTransaction(function () use ($tokenId, $userId, $ara, $intentClubName, &$status, &$newClubId): void {
+            $this->entityManager->wrapInTransaction(function () use ($tokenId, $userId, $ara, $intentClubName, &$status, &$pendingRequestId): void {
                 // Serialize concurrent verifies of the SAME token (double-click / retry /
                 // two tabs): the winner holds the write lock and consumes the row; a loser
                 // then re-reads null and only resolves the (already-created) status — no
@@ -259,12 +247,13 @@ final class AuthController extends AbstractController
                     $this->createMembership($existingClub->getId(), $user->getId(), false);
                     $status = 'pending';
                 } else {
-                    $club = $this->createClub($intentClubName ?? $ara, $ara);
-                    $this->tenantConnectionContext->setClubId($club->getId());
-                    $this->createMembership($club->getId(), $user->getId(), true);
-                    $this->seedNewClub($club);
-                    $newClubId = $club->getId();
-                    $status = 'active';
+                    // P3-4 (décision fondateur 2026-08-05) — anti-squatting : un ARA
+                    // inconnu ne crée PLUS le club ici. La demande attend l'approbation
+                    // du CLUB (mail institutionnel FFBB) ou du superadmin ; c'est
+                    // ClubApprovalService::approve qui matérialisera (ClubProvisioner).
+                    $request = $this->clubApprovalService->openRequest($user, $ara, (string) $intentClubName);
+                    $pendingRequestId = $request->getId();
+                    $status = 'club_pending';
                 }
                 $this->emailVerifier->consume($token);
             });
@@ -272,12 +261,16 @@ final class AuthController extends AbstractController
             $this->tenantConnectionContext->clear();
         }
 
-        // Lot C: newly created club → fill its institutional data from the FFBB
-        // API asynchronously (best-effort, non-blocking). Dispatched AFTER commit
-        // so the worker reads a persisted club. Never fires when joining an
-        // existing club.
-        if (null !== $newClubId) {
-            $this->messageBus->dispatch(new PopulateClubFromFfbbMessage($newClubId));
+        // P3-4 (le populate FFBB async — lot C — vit désormais dans
+        // ClubApprovalService::approve, au moment où le club naît réellement.)
+        // P3-4 : le mail « Approuver / Refuser » part APRÈS commit — le lien ne
+        // doit jamais référencer une demande non persistée. Best-effort (service).
+        if (null !== $pendingRequestId) {
+            $request = $this->entityManager->getRepository(ClubCreationRequest::class)->find($pendingRequestId);
+            $requester = $this->entityManager->getRepository(User::class)->find($userId);
+            if (null !== $request && null !== $requester) {
+                $this->clubApprovalService->sendApprovalEmail($request, $requester);
+            }
         }
 
         $user = $this->entityManager->getRepository(User::class)->find($userId);
@@ -406,6 +399,10 @@ final class AuthController extends AbstractController
             'lastName' => $user->getLastName(),
             'membershipStatus' => $membershipStatus,
             'role' => null !== $clubUser ? $clubUser->getRole() : null,
+            // P3-4 : sans membership, l'utilisateur peut porter une demande de
+            // création en cours — le frontend affiche « demande transmise au club »
+            // (et son issue) au lieu d'un état « aucun club » mensonger.
+            'clubRequest' => $this->clubRequestState($user->getId(), $clubUser),
             'club' => $club,
             'seasonPlan' => $seasonPlan,
             'hasGenerated' => null !== $clubEntity && $clubEntity->getGenerationCountSeason() > 0,
@@ -587,29 +584,6 @@ final class AuthController extends AbstractController
         ];
     }
 
-    private function createClub(string $clubName, string $ara): Club
-    {
-        $slug = (string) new AsciiSlugger('fr')->slug($clubName)->lower() . '-' . bin2hex(random_bytes(4));
-
-        $club = new Club;
-        $club->setName($clubName);
-        $club->setSlug($slug);
-        $club->setTimezone('Europe/Paris');
-        $club->setLocale('fr');
-        $club->setOnboardingCompleted(false);
-        $club->setFfbbClubCode($ara);
-        // Best-effort academic zone from the FFBB code (accueil-cockpit-temporel §4bis);
-        // null when undecidable → stays manually editable via Club PATCH.
-        $club->setSchoolZone($this->schoolZoneResolver->resolveFromFfbbCode($ara));
-        // Best-effort FFBB league (région) from the code prefix — drives the
-        // match-window catalog envelope (spec gestion-matchs §6bis); null →
-        // falls back to the federation-default (AURA) at read time.
-        $club->setLeague($this->leagueResolver->resolveFromFfbbCode($ara));
-        $this->entityManager->persist($club);
-
-        return $club;
-    }
-
     /** Aucun membre actif, tous rôles confondus (raw DBAL — club_user se lit cross-tenant). */
     private function clubIsMemberless(string $clubId): bool
     {
@@ -632,69 +606,35 @@ final class AuthController extends AbstractController
         return 0 === (int) $count;
     }
 
+    /**
+     * L'état de la demande de création (P3-4) — la plus récente, pour que le
+     * demandeur voie AUSSI un refus/une expiration (pas seulement l'attente).
+     * Null dès qu'un membership existe : le club est né, la demande est histoire.
+     *
+     * @return array{status: string, clubName: string, ara: string}|null
+     */
+    private function clubRequestState(string $userId, ?object $clubUser): ?array
+    {
+        if (null !== $clubUser) {
+            return null;
+        }
+        $request = $this->entityManager->getRepository(ClubCreationRequest::class)
+            ->findOneBy(['userId' => $userId], ['createdAt' => 'DESC']);
+
+        return $request instanceof ClubCreationRequest ? [
+            'status' => $request->getStatus(),
+            'clubName' => $request->getClubName(),
+            'ara' => $request->getAra(),
+        ] : null;
+    }
+
     private function createMembership(string $clubId, string $userId, bool $isActive): void
     {
-        $clubUser = new ClubUser;
-        $clubUser->setClubId($clubId);
-        $clubUser->setUserId($userId);
-        $clubUser->setRole('admin');
-        $clubUser->setIsActive($isActive);
-        $this->entityManager->persist($clubUser);
+        $this->clubProvisioner->createMembership($clubId, $userId, $isActive);
     }
 
     private function seedNewClub(Club $club): void
     {
-        // La saison COURANTE au sens du pivot système (15 juillet, SeasonResolver) —
-        // pas l'année civile : un club inscrit en janvier 2027 rejoint la saison
-        // 2026-2027 en cours, pas une saison future. Fenêtre alignée sur le pivot
-        // (15/07 → 14/07), nom « 2026-2027 » (décision fondateur 2026-07-24 :
-        // jamais « 2026 » seul — ambigu sur une saison à cheval).
-        $seasonYear = SeasonResolver::seasonYear(new DateTimeImmutable);
-        // P1-5 : la saison de naissance est réputée couverte par l'inscription —
-        // la SUIVANTE exigera le paiement (gate de bascule, SeasonTransitionService).
-        $club->setPaidSeasonYear($seasonYear);
-        $season = new Season;
-        $season->setClubId($club->getId());
-        $season->setName(SeasonResolver::defaultSeasonName(new DateTimeImmutable($seasonYear . '-07-15')));
-        $season->setStartDate(new DateTimeImmutable($seasonYear . '-07-15'));
-        $season->setEndDate(new DateTimeImmutable(($seasonYear + 1) . '-07-14'));
-        $season->setStatus('active');
-        $season->setTransitionData([]);
-        $this->entityManager->persist($season);
-
-        // ADR-0002 Lot A: the onboarded club's season starts with its empty
-        // SEASON plan (flushed with the rest of the seed by the caller).
-        $this->schedulePlanProvisioner->ensureSeasonPlan($season);
-
-        $sport = $this->sportRepository->findOneBy(['slug' => 'basketball']);
-        if (null === $sport) {
-            $sport = new Sport;
-            $sport->setName('Basketball');
-            $sport->setSlug('basketball');
-            $sport->setIsActive(true);
-            $this->entityManager->persist($sport);
-        }
-        // Le club connaît son sport de première main (retour fondateur 2026-07-18) —
-        // basket, seul sport aujourd'hui. Au 2e sport : threader le choix
-        // register → EmailVerificationToken → ici (patron de $intentClubName).
-        $club->setSportId($sport->getId());
-
-        $categories = CategoryCatalog::categories();
-        foreach ($categories as $categoryData) {
-            $sportCategory = new SportCategory;
-            $sportCategory->setClubId($club->getId());
-            $sportCategory->setSportId($sport->getId());
-            $sportCategory->setName($categoryData['name']);
-            $sportCategory->setAgeMin($categoryData['ageMin']);
-            $sportCategory->setAgeMax($categoryData['ageMax']);
-            $sportCategory->setIsCustom(false);
-            $sportCategory->setSortOrder($categoryData['sortOrder']);
-            $this->entityManager->persist($sportCategory);
-        }
-
-        // P2-16 — les contraintes de base (« la page pas vierge »), semées à la
-        // création SEULEMENT : au changement de saison le planning précédent est
-        // copié, le travail est déjà prémâché. Flushées avec le reste du seed.
-        $this->defaultConstraintSeeder->seed($club, $season);
+        $this->clubProvisioner->seedWorkspace($club);
     }
 }

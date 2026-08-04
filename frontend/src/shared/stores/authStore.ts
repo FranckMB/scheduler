@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type MembershipStatus = "none" | "pending" | "active";
+// P3-4 : club_pending = demande de CRÉATION en attente d'approbation (club FFBB ou superadmin).
+export type MembershipStatus = "none" | "pending" | "club_pending" | "active";
 
 interface AuthState {
   token: string | null;

@@ -24,7 +24,7 @@ export function VerifyEmailPage() {
     ran.current = true;
     verify
       .mutateAsync(token)
-      .then((result) => navigate(result.membershipStatus === "pending" ? "/waiting" : "/", { replace: true }))
+      .then((result) => navigate(result.membershipStatus === "active" ? "/" : "/waiting", { replace: true }))
       .catch(async (err) => setError(await apiErrorMessage(err)));
   }, [token, verify, navigate]);
 

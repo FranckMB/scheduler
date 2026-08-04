@@ -21,6 +21,7 @@ use Symfony\Contracts\HttpClient\ResponseStreamInterface;
 final class FfbbHttpClientStub implements HttpClientInterface
 {
     public const CLUB_CODE = 'ARA0000001';
+    public const CLUB_EMAIL = 'club-officiel@stub.ffbb.fr';
     public const COMPETITION_ID = '900000000000001';
     public const COMPETITION_CODE = 'PTM';
     public const POULE_ID = '910000000000001';
@@ -35,6 +36,19 @@ final class FfbbHttpClientStub implements HttpClientInterface
                 return new MockResponse((string) json_encode(['data' => ['key_ms' => 'stub-token']]));
             }
             $body = \is_string($options['body'] ?? null) ? $options['body'] : '';
+
+            // P3-4 : la recherche d'organisme (mail institutionnel du club) — SEUL
+            // le code connu du stub rend un hit ; tout ARA de test aléatoire tombe
+            // sur « introuvable » → clubEmail null → file superadmin.
+            if (str_contains($body, 'ffbbserver_organismes')) {
+                $hits = str_contains($body, self::CLUB_CODE) ? [[
+                    'code' => self::CLUB_CODE,
+                    'nom' => 'CLUB STUB FFBB',
+                    'mail' => self::CLUB_EMAIL,
+                ]] : [];
+
+                return $this->search($hits);
+            }
 
             if (str_contains($body, 'ffbbserver_engagements')) {
                 $hits = str_contains($body, self::CLUB_CODE) ? [[
