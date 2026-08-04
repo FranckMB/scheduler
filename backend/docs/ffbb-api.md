@@ -107,6 +107,19 @@ La jointure complète vit dans `FfbbEngagementReader` (filtre saison via `FfbbSe
 Re-test `ffbbserver_rencontres` du 2026-08-03 : toujours **32 documents de test** (`joue: false`), 0 hit
 pour un code club réel — rien à récupérer, l'import FBI reste le chemin.
 
+## Salles d'une commune (P2-20 — autocomplétion des gymnases du wizard)
+
+- `searchSalles(postalCode)` — index **`ffbbserver_salles`**, filtre `commune.codePostal` (le seul axe :
+  l'index n'est **pas** relié aux clubs — cadrage `api-ffbb-completion-club.md` §3). CP validé `^\d{5}$`
+  avant interpolation dans le filtre (même règle anti-injection que les autres `search*`).
+- Exposé par `GET /api/ffbb/salles?postalCode=` (SEC-07 management ; **défaut = CP du club**, surchargable
+  — une salle peut être dans la commune voisine). Mapping serveur `{name, address, city, externalRef,
+  latitude, longitude}` — jamais le hit brut ; lat/lng convertis en string (format `Venue`).
+- Consommé par la combobox « Nom du gymnase » de l'étape Gymnases : choisir une suggestion crée le
+  gymnase avec son **ancrage FFBB** (`Venue.externalRef` = numéro fédéral + GPS — colonnes préexistantes,
+  zéro migration). La liste **propose, n'impose jamais** : saisie libre intacte, et tout changement
+  manuel du nom efface l'ancre.
+
 ## Ce qui est disponible et NON exploité
 
 La reconnaissance P2-19 a mesuré ce que la même clé `key_ms` rend **en plus** — les index restants

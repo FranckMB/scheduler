@@ -15,10 +15,13 @@ import { toast } from "@/shared/stores/toastStore";
 import { MatchWindowsEditor } from "@/features/matches/MatchWindowsEditor";
 import { useVenueMatchWindows } from "@/features/matches/queries";
 
-import type { Venue, VenueTrainingSlot } from "../api";
+import { useMe } from "@/features/auth/queries";
+
+import type { FfbbSalle, Venue, VenueTrainingSlot } from "../api";
 import { DAYS, durationOptions, DURATIONS, hhmm } from "../lib/days";
+import { filterSalles } from "../lib/salleSuggestions";
 import { slotPlacementError } from "../lib/slotOverlap";
-import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
+import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useFfbbSalles, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodVenues } from "./PeriodStructure";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
@@ -215,6 +218,19 @@ function VenuesEditor() {
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+  // --- Autocomplétion salles FFBB (P2-20) ---
+  const { data: me } = useMe();
+  // CP de recherche : celui du club par défaut, modifiable (une salle peut être
+  // dans la commune voisine — l'index FFBB ne lie les salles qu'aux communes).
+  const [salleCp, setSalleCp] = useState<string | null>(null);
+  const cp = salleCp ?? me?.club?.postalCode ?? "";
+  const sallesQuery = useFfbbSalles(cp);
+  const [nameFocused, setNameFocused] = useState(false);
+  // La salle choisie dans la liste : son ancrage FFBB (numéro fédéral + GPS)
+  // part avec la création. TOUT changement manuel du nom l'efface — un gymnase
+  // renommé à la main n'est plus, de façon sûre, cette salle-là.
+  const [pendingSalle, setPendingSalle] = useState<FfbbSalle | null>(null);
+  const suggestions = nameFocused && null === pendingSalle ? filterSalles(sallesQuery.data?.salles ?? [], name) : [];
   const [selectedId, setSelectedId] = useState("");
   const [duration, setDuration] = useState(90);
   const [venueName, setVenueName] = useState("");
@@ -259,11 +275,15 @@ function VenuesEditor() {
     // in-flight assignments so rapid adds don't collide on the same palette hue.
     const color = nextVenueColor([...venues.map((v) => v.color), ...pendingColorsRef.current]);
     pendingColorsRef.current.push(color);
+    // Ancrage FFBB si le nom vient d'une suggestion (P2-20) — sinon création
+    // libre, strictement comme avant.
+    const anchor = null !== pendingSalle ? { externalRef: pendingSalle.externalRef, latitude: pendingSalle.latitude, longitude: pendingSalle.longitude } : {};
     create.mutate(
-      { name: name.trim(), color, canSplit: false },
+      { name: name.trim(), color, canSplit: false, ...anchor },
       { onSuccess: (created) => setSelectedId(created.id) },
     );
     setName("");
+    setPendingSalle(null);
     // Keep the cursor in the name field to add the next gym without re-clicking.
     nameRef.current?.focus();
   };
@@ -280,24 +300,64 @@ function VenuesEditor() {
         Ajoutez vos gymnases, puis cliquez dans la grille pour poser les créneaux de disponibilité (jour + heure). Un gymnase sans créneau ne peut pas être utilisé.
       </p>
 
-      <form onSubmit={addVenue} className="mb-2 flex items-end gap-2 rounded-lg border border-border bg-card p-3">
-        <Input
-          ref={nameRef}
-          aria-label="Nom du gymnase"
-          aria-invalid={nameError}
-          placeholder="Nom du gymnase"
-          className={`h-8 flex-1 ${nameError ? "border-destructive focus-visible:ring-destructive" : ""}`}
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            if (nameError) {
-              setNameError(false);
-            }
-          }}
-        />
-        <Button type="submit" size="icon" className="size-8" disabled={create.isPending} title="Ajouter un gymnase" aria-label="Ajouter un gymnase">
-          <Plus className="size-4" />
-        </Button>
+      <form onSubmit={addVenue} className="mb-2 rounded-lg border border-border bg-card p-3">
+        <div className="flex items-end gap-2">
+          <Input
+            ref={nameRef}
+            aria-label="Nom du gymnase"
+            aria-invalid={nameError}
+            placeholder="Nom du gymnase"
+            className={`h-8 flex-1 ${nameError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+            value={name}
+            onFocus={() => setNameFocused(true)}
+            onBlur={() => setNameFocused(false)}
+            onChange={(e) => {
+              setName(e.target.value);
+              // Nom retouché à la main → l'ancrage FFBB de la suggestion tombe
+              // (un gymnase renommé n'est plus, de façon sûre, cette salle-là).
+              setPendingSalle(null);
+              if (nameError) {
+                setNameError(false);
+              }
+            }}
+          />
+          <Input
+            aria-label="Commune (code postal)"
+            title="Les salles proposées sont celles de cette commune — changez le code postal pour une salle voisine."
+            placeholder="CP"
+            inputMode="numeric"
+            maxLength={5}
+            className="h-8 w-20"
+            value={cp}
+            onChange={(e) => setSalleCp(e.target.value.replace(/\D/g, ""))}
+          />
+          <Button type="submit" size="icon" className="size-8" disabled={create.isPending} title="Ajouter un gymnase" aria-label="Ajouter un gymnase">
+            <Plus className="size-4" />
+          </Button>
+        </div>
+        {/* Suggestions FFBB (P2-20) — la liste PROPOSE, n'impose jamais : la
+            saisie libre au-dessus marche comme avant. onMouseDown (pas onClick) :
+            le blur du champ retirerait la liste avant que le clic n'aboutisse. */}
+        {suggestions.length > 0 ? (
+          <ul aria-label={`Salles FFBB à ${cp}`} className="mt-2 max-h-48 overflow-y-auto rounded-md border border-border bg-background py-1 text-sm">
+            {suggestions.map((salle) => (
+              <li key={`${salle.externalRef ?? salle.name}-${salle.address ?? ""}`}>
+                <button
+                  type="button"
+                  className="flex w-full items-baseline gap-2 px-2.5 py-1 text-left hover:bg-muted"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setName(salle.name);
+                    setPendingSalle(salle);
+                  }}
+                >
+                  <span className="font-medium">{salle.name}</span>
+                  {salle.address ? <span className="truncate text-xs text-muted-foreground">{salle.address}</span> : null}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </form>
 
       {nameError ? (

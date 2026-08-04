@@ -183,9 +183,11 @@ clubs) alimentent déjà l'appariement P1-4 PR F. `ffbbserver_rencontres` reste 
 
 ## 5. Synthèse — ce qui peut devenir automatique sur la fiche club
 
-> **Livré le 2026-08-04 (lots A+B)** : lecture seule des champs FFBB + refus serveur (422) + bouton
-> « Actualiser depuis la FFBB », bloc « Club » retiré des Contacts FFBB, `website` comité/ligue stocké
-> et affiché. **Reste ouvert : l'autocomplétion salles (roadmap P2-20).**
+> **Livré le 2026-08-04 (lots A+B)** : lecture seule des champs FFBB + bouton « Actualiser depuis la
+> FFBB », blocs manuels supprimés (round 2), bloc « Club » retiré des Contacts FFBB, `website`
+> comité/ligue stocké et affiché. **Lot C livré le même jour (P2-20)** : combobox salles à l'étape
+> Gymnases du wizard, ancre FFBB (`externalRef` + GPS) posée à la création. Ce cadrage est **soldé** —
+> les pistes restantes du §1 (gradient_color, labellisation…) restent des idées non priorisées.
 
 | Bloc écran actuel | Aujourd'hui | Après complétion |
 |---|---|---|
@@ -193,7 +195,7 @@ clubs) alimentent déjà l'appariement P1-4 PR F. `ffbbserver_rencontres` reste 
 | Comité | champ texte ÉDITABLE | 🟢 lecture seule (dérivé du code club, déjà en base) |
 | Contact du club (tél/email/adresse) | ÉDITABLE | 🟢 lecture seule — l'API fait autorité (elle remplit déjà ces champs au register et au ré-import) |
 | Correspondant / Président | éditable | 🔴 **supprimés** (décision fondateur) — l'API ne connaît pas les personnes physiques (vérifié §1) et la saisie manuelle n'est pas voulue |
-| Salle principale | 2 champs texte libres | 🔴 **supprimée** de la fiche en attendant P2-20 (autocomplétion salles) — pas de saisie manuelle |
+| Salle principale | 2 champs texte libres | 🔴 **supprimée** de la fiche — l'autocomplétion salles vit désormais à l'étape Gymnases du wizard (P2-20, livré) |
 | Bloc « Club » de Contacts FFBB | duplique la fiche club | 🔴 à retirer — la section n'a de sens que pour la hiérarchie AU-DESSUS (comité, ligue) |
 | Comité/Ligue de Contacts FFBB | sans site web | 🟢 + `urlSiteWeb` (nouvelle donnée, §2) |
 | Accent du club | choisi à la main / palette du logo | 🟡 `logo.gradient_color` en défaut de register |

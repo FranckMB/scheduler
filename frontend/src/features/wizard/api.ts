@@ -101,7 +101,26 @@ export interface VenuePayload {
   color?: string | null;
   canSplit?: boolean;
   isActive?: boolean;
+  // Ancrage FFBB (P2-20) : posés quand le gymnase est créé depuis une
+  // suggestion de salle — numéro fédéral + GPS, colonnes déjà en base.
+  externalRef?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
 }
+
+/** Une salle FFBB de la commune (P2-20) — mapping serveur, jamais le hit brut. */
+export interface FfbbSalle {
+  name: string;
+  address: string | null;
+  city: string | null;
+  externalRef: string | null;
+  latitude: string | null;
+  longitude: string | null;
+}
+
+/** Les salles FFBB d'un CP (management). Sans CP exploitable : liste vide, pas d'erreur. */
+export const listFfbbSalles = (postalCode: string): Promise<{ postalCode: string | null; salles: FfbbSalle[] }> =>
+  api.get("ffbb/salles", { searchParams: { postalCode } }).json();
 
 export interface SlotPayload {
   venueId: string;

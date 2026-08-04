@@ -102,6 +102,29 @@ final class FfbbApiClient
     }
 
     /**
+     * Les salles d'une COMMUNE (P2-20, autocomplétion des gymnases du wizard).
+     * L'index `ffbbserver_salles` n'est pas relié aux clubs — seulement aux
+     * communes : `commune.codePostal` est le seul filtre utile (mesuré,
+     * cadrage api-ffbb-completion-club §3). Le CP est validé par format avant
+     * toute interpolation dans le filtre (même règle que les autres search*).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function searchSalles(string $postalCode): array
+    {
+        if (1 !== preg_match('/^\d{5}$/', $postalCode)) {
+            return [];
+        }
+
+        return $this->query([
+            'indexUid' => 'ffbbserver_salles',
+            'q' => '',
+            'filter' => \sprintf('commune.codePostal = \'%s\'', $postalCode),
+            'limit' => 50,
+        ]);
+    }
+
+    /**
      * @param array<string, mixed> $searchQuery
      *
      * @return list<array<string, mixed>>
