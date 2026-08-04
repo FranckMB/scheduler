@@ -531,6 +531,66 @@ ses poules. Rejeté par le fondateur, et c'est de ce rejet qu'est née la règle
 
 ---
 
+## 6bis. L'onboarding express — l'ASSEMBLAGE des trois leviers (cadré 2026-08-04)
+
+> **« Je rentre mon code FFBB et magiquement plein de choses sont déjà faites — l'onboarding le moins
+> pénible possible, l'effet waouw. »** (fondateur, 2026-08-04)
+
+Les leviers du §1bis existent un par un ; ce qui manque est leur **assemblage en séquence d'onboarding**.
+Cible : après la vérification d'email, un écran **« Trouvé à la FFBB »** — tout pré-coché, rien d'imposé
+(la limite du §1bis tient : prémâché ≠ décidé).
+
+### Le challenge, posé et intégré
+
+1. **Le waouw ment s'il ne dit pas ce qu'il couvre.** BCCL : 14 engagements pour ~49 équipes réelles —
+   l'API ne voit que la COMPÉTITION ; loisir, baby, U7/U9 non engagés sont invisibles. L'écran doit
+   l'annoncer : « N équipes trouvées — ajoutez vos équipes loisir et école de basket ». Pour un club
+   100 % compétition le waouw est total.
+2. **Le mur du calendrier (§5).** Un club qui s'inscrit en JUIN n'a aucun engagement à importer — le
+   levier équipes ne sert qu'à partir de fin juillet. L'écran doit dégrader proprement : gymnases +
+   contraintes toujours, équipes « reviendront avec les poules » (et l'écran est RÉ-OUVRABLE, §1ter —
+   même exigence d'idempotence que les gymnases).
+3. **Pas d'auto-création silencieuse** — la décision §1/§3 tient : la FFBB propose, le gestionnaire
+   tranche. Le waouw correct = tout pré-coché + UN clic « Tout créer ».
+4. **FBI n'est pas une API.** Fichier xlsx téléchargé à la main, disponible lui aussi seulement après
+   la sortie des calendriers. Pour la LISTE d'équipes, l'API engagements fait strictement mieux (zéro
+   fichier, ids stables) → **proposition : tuer P3-7** (import Excel équipes — sa propre ligne disait
+   « à terme remplacé par l'API FFBB ») ; FBI reste le rail des CALENDRIERS (l'index `rencontres` est
+   vide, re-mesuré 2×).
+
+### Ce qu'une équipe pré-créée porte — et les décisions du 2026-08-04
+
+Un engagement donne : catégorie, sexe, niveau, n° d'équipe, logo, compétition+poule (ids stables).
+
+- ⚑ **Décodage des codes de compétition en repli** (fondateur, 2026-08-04) : les engagements « Brassage »
+  ont les champs structurés VIDES mais tout est dans le code — `RMU13 Brassage` = **R**égional
+  **M**asculin **U13**, `RFU15` = **R**égional **F**éminin **U15**. Grammaire : `R|D|PN…` = niveau,
+  `M|F` = sexe, `U9…U20|SE` = catégorie. Les brassages sont de VRAIES équipes jeunes → **pré-cochés**
+  comme les autres.
+- **Nom d'usage généré** depuis sexe+catégorie+n° (« SM1 », « U13M2 ») — `nomEquipe` est souvent null,
+  et le club a son propre vocabulaire : généré, ÉDITABLE (même principe que les sigles ADN/JDR du §6.9).
+- **Pré-classement par NIVEAU** : pré-nationale > régionale > départementale → proposition de rangs
+  S→D pré-remplie (le fanion se détecte tout seul) — un des gestes les plus coûteux du wizard actuel.
+- **À trancher en cadrant la PR** : `sessionsPerWeek` par défaut (2 ?), et l'appariement compétition
+  posé D'OFFICE sur chaque équipe créée (les réfs `idCompetition`/`idPoule` — le §3 reste vrai : on
+  ré-appariera aux phases suivantes en 1 clic).
+
+### Le découpage proposé (l'ordre est le levier)
+
+| Lot | Contenu | Taille |
+|---|---|---|
+| A | Écran « Trouvé à la FFBB » post-vérification : équipes engagées pré-cochées (nom généré, décodage brassage, logos), pré-classement par niveau, un clic « Créer » ; annonce du manque (loisir/baby) ; dégradation juin (« reviendront avec les poules ») ; ré-ouvrable | M |
+| B | Appariement compétitions posé d'office au même geste (réfs sur chaque équipe créée) | S (avec A) |
+| C | Accent par défaut = `logo.gradient_color` (§6.7) | XS |
+| D | Gymnases proches à cocher (§6.9, rayon auto-élargi) — le levier déjà validé 9/9 | M |
+| E | P2-16 — contraintes de base semées (liste + HARD/PREFERRED à trancher AVANT, §1bis) | M |
+
+Ce qui ne sera JAMAIS pré-rempli, dit une fois : les **coachs** (aucune personne physique dans l'index)
+et les **créneaux** (donnée mairie, hors FFBB) — l'onboarding les annonce comme LES deux saisies
+restantes, c'est aussi ça « le moins pénible possible » : savoir ce qui reste.
+
+---
+
 ## 7. Les gymnases de match — un besoin neuf, avec une collision
 
 > **« Il faut que l'on définisse nos gymnases de match : tous les gymnases d'entraînement ne sont pas des
