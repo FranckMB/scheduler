@@ -31,6 +31,12 @@ final class FfbbSallesController extends AbstractController
 {
     use ResolvesCurrentClubTrait;
 
+    /** Paliers du rayon (§6.9) — mesurés : 3 km = 25 salles à Villeurbanne, 0 à Martiel. */
+    private const RADII_KM = [3, 5, 10, 20];
+
+    /** En-dessous, la liste n'aide pas : l'auto-élargissement continue (§6.9). */
+    private const USEFUL_COUNT = 5;
+
     public function __construct(
         private readonly ClubRepository $clubRepository,
         private readonly FfbbApiClient $api,
@@ -64,6 +70,51 @@ final class FfbbSallesController extends AbstractController
         usort($salles, static fn (array $a, array $b): int => strcasecmp((string) $a['name'], (string) $b['name']));
 
         return $this->json(['postalCode' => $postalCode, 'salles' => $salles]);
+    }
+
+    /**
+     * P2-21 lot D — les salles PROCHES du club, triées par distance (« cochez
+     * vos gymnases parmi ceux d'à côté », validé 9/9 sur BCCL). `radius` en km
+     * (palier manuel) ou absent = AUTO : partir à 3 km et élargir tant que le
+     * résultat est sous le seuil utile — un défaut FIXE montrait une liste
+     * VIDE à un club rural (Martiel : 0 salle à 3 ET 5 km, mesuré) sur son
+     * tout premier écran.
+     */
+    #[Route('/api/ffbb/salles-proches', name: 'api_ffbb_salles_proches', methods: ['GET'])]
+    public function nearby(Request $request): JsonResponse
+    {
+        $this->managementAccessGuard->assertManager(); // SEC-07
+
+        $clubId = $this->resolveCurrentClubId($this->requestStack);
+        $club = null !== $clubId ? $this->clubRepository->find($clubId) : null;
+        $latitude = $club?->getLatitude();
+        $longitude = $club?->getLongitude();
+        if (null === $latitude || null === $longitude) {
+            // Pas de géoloc (la FFBB ne connaissait pas le club) : liste vide,
+            // pas une erreur — la combobox par CP reste le chemin.
+            return $this->json(['radiusKm' => null, 'salles' => []]);
+        }
+
+        $requested = $request->query->get('radius');
+        $radii = null !== $requested && \in_array((int) $requested, self::RADII_KM, true) ? [(int) $requested] : self::RADII_KM;
+
+        try {
+            $hits = [];
+            $radiusKm = $radii[0];
+            foreach ($radii as $radiusKm) {
+                $hits = $this->api->searchSallesNearby((float) $latitude, (float) $longitude, $radiusKm * 1000);
+                if (\count($hits) >= self::USEFUL_COUNT) {
+                    break;
+                }
+            }
+        } catch (Throwable) {
+            return $this->json(['error' => 'FFBB indisponible, réessayez plus tard.'], Response::HTTP_BAD_GATEWAY);
+        }
+
+        // Tri par DISTANCE conservé (l'API trie via _geoPoint) — pas d'usort ici.
+        $salles = array_values(array_filter(array_map($this->mapSalle(...), $hits), static fn (?array $salle): bool => null !== $salle));
+
+        return $this->json(['radiusKm' => $radiusKm, 'salles' => $salles]);
     }
 
     /**

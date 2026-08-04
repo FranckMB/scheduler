@@ -48,6 +48,23 @@ final class FfbbHttpClientStub implements HttpClientInterface
 
                 return $this->search($hits);
             }
+            if (str_contains($body, 'ffbbserver_salles') && str_contains($body, '_geoRadius')) {
+                // P2-21 lot D : la recherche GÉO — 2 salles dans un petit rayon,
+                // une 3e apparaît en élargissant (teste l'auto-élargissement).
+                $small = str_contains($body, '3000)');
+                $hits = [
+                    ['libelle' => 'GYMNASE PROCHE', 'adresse' => '1 rue Près', 'numero' => '900000001',
+                        'cartographie' => ['ville' => 'Testville', 'latitude' => 45.001, 'longitude' => 4.001]],
+                    ['libelle' => 'SALLE VOISINE', 'adresse' => '2 rue À-Côté', 'numero' => '900000002',
+                        'cartographie' => ['ville' => 'Testville', 'latitude' => 45.002, 'longitude' => 4.002]],
+                ];
+                if (!$small) {
+                    $hits[] = ['libelle' => 'GYMNASE LOINTAIN', 'adresse' => '9 route Loin', 'numero' => '900000009',
+                        'cartographie' => ['ville' => 'Ailleurs', 'latitude' => 45.05, 'longitude' => 4.05]];
+                }
+
+                return $this->search($hits);
+            }
             if (str_contains($body, 'ffbbserver_salles')) {
                 // P2-20 : deux salles pour le CP de test, une SANS libellé (le
                 // mapping serveur doit l'écarter au lieu de rendre une ligne vide).

@@ -21,7 +21,7 @@ import type { FfbbSalle, Venue, VenueTrainingSlot } from "../api";
 import { DAYS, durationOptions, DURATIONS, hhmm } from "../lib/days";
 import { filterSalles } from "../lib/salleSuggestions";
 import { slotPlacementError } from "../lib/slotOverlap";
-import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useFfbbSalles, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
+import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useFfbbSalles, useFfbbSallesProches, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodVenues } from "./PeriodStructure";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
@@ -231,6 +231,13 @@ function VenuesEditor() {
   // renommé à la main n'est plus, de façon sûre, cette salle-là.
   const [pendingSalle, setPendingSalle] = useState<FfbbSalle | null>(null);
   const suggestions = nameFocused && null === pendingSalle ? filterSalles(sallesQuery.data?.salles ?? [], name) : [];
+  // P2-21 lot D — « cochez vos gymnases parmi ceux d'à côté » (§6.9, validé 9/9
+  // sur BCCL). radius null = AUTO (3→20 km jusqu'à ~5 salles, côté serveur).
+  const [nearbyRadius, setNearbyRadius] = useState<number | null>(null);
+  const nearbyQuery = useFfbbSallesProches(nearbyRadius);
+  // « Déjà ajouté » se reconnaît au NUMÉRO fédéral, pas au nom : le gestionnaire
+  // renomme ses salles (« ADN », « JDR ») — un rapprochement par libellé échouerait.
+  const importedRefs = new Set(venues.map((v) => v.externalRef).filter((r): r is string => null != r));
   const [selectedId, setSelectedId] = useState("");
   const [duration, setDuration] = useState(90);
   const [venueName, setVenueName] = useState("");
@@ -364,6 +371,53 @@ function VenuesEditor() {
         <p role="alert" className="mb-3 text-sm text-destructive">
           Donnez un nom au gymnase avant de l'ajouter.
         </p>
+      ) : null}
+
+      {/* P2-21 lot D — les gymnases d'à côté, un clic pour les ajouter. La liste
+          PROPOSE, n'impose jamais ; le nom officiel se renomme ensuite à sa main. */}
+      {(nearbyQuery.data?.salles.length ?? 0) > 0 ? (
+        <div className="mb-3 rounded-lg border border-border bg-card p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">
+              Gymnases à proximité (FFBB{null != nearbyQuery.data?.radiusKm ? `, ${nearbyQuery.data.radiusKm} km` : ""}) — cliquez pour ajouter, renommez ensuite à votre main :
+            </span>
+            <Select aria-label="Rayon de recherche" className="ml-auto h-7 w-28 text-xs" value={nearbyRadius ?? "auto"} onChange={(e) => setNearbyRadius("auto" === e.target.value ? null : Number(e.target.value))}>
+              <option value="auto">Auto</option>
+              {[3, 5, 10, 20].map((km) => (
+                <option key={km} value={km}>
+                  {km} km
+                </option>
+              ))}
+            </Select>
+          </div>
+          <ul className="flex max-h-44 flex-col gap-1 overflow-y-auto">
+            {nearbyQuery.data?.salles.map((salle) => {
+              const added = null !== salle.externalRef && importedRefs.has(salle.externalRef);
+              return (
+                <li key={`${salle.externalRef ?? salle.name}-${salle.address ?? ""}`} className="flex items-center gap-2 text-sm">
+                  <Button
+                    size="sm"
+                    variant={added ? "ghost" : "outline"}
+                    className="h-7 shrink-0"
+                    disabled={added || create.isPending}
+                    onClick={() => {
+                      const color = nextVenueColor([...venues.map((v) => v.color), ...pendingColorsRef.current]);
+                      pendingColorsRef.current.push(color);
+                      create.mutate(
+                        { name: salle.name, color, canSplit: false, externalRef: salle.externalRef, latitude: salle.latitude, longitude: salle.longitude },
+                        { onSuccess: (created) => setSelectedId(created.id) },
+                      );
+                    }}
+                  >
+                    {added ? "✓ Ajouté" : "+ Ajouter"}
+                  </Button>
+                  <span className={added ? "text-muted-foreground" : "font-medium"}>{salle.name}</span>
+                  {salle.address ? <span className="truncate text-xs text-muted-foreground">{salle.address}{salle.city ? `, ${salle.city}` : ""}</span> : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       ) : null}
 
       {emptyVenues.length > 0 ? (

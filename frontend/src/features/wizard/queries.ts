@@ -82,6 +82,16 @@ export function useFfbbSalles(postalCode: string) {
   });
 }
 
+/** Salles proches du club (P2-21 lot D) — radius null = auto. Même profil best-effort que useFfbbSalles. */
+export function useFfbbSallesProches(radiusKm: number | null) {
+  return useQuery({
+    queryKey: ["wizard", "ffbb_salles_proches", radiusKm],
+    queryFn: () => wizardApi.listFfbbSallesProches(radiusKm),
+    staleTime: 3_600_000,
+    retry: false,
+  });
+}
+
 export function useCreateVenue() {
   const queryClient = useQueryClient();
   return useMutation({

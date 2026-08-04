@@ -72,6 +72,39 @@ final class FfbbSallesTest extends WebTestCase
         self::assertSame([], $data['salles']);
     }
 
+    public function testNearbyAutoWidensUntilUsefulAndKeepsDistanceOrder(): void
+    {
+        // P2-21 lot D : club géolocalisé, mode AUTO — 3 km ne rend que 2 salles
+        // (< seuil utile 5), l'élargissement continue jusqu'au dernier palier ;
+        // l'ordre par DISTANCE (celui de l'API) est conservé, pas de tri alpha.
+        $this->club->setLatitude(45.0)->setLongitude(4.0);
+        $this->em->flush();
+
+        $data = $this->get('/api/ffbb/salles-proches', $this->adminToken);
+        self::assertSame(20, $data['radiusKm'], 'auto : élargi jusqu\'au dernier palier faute d\'atteindre 5 salles');
+        self::assertSame(['GYMNASE PROCHE', 'SALLE VOISINE', 'GYMNASE LOINTAIN'], array_column($data['salles'], 'name'), 'ordre par distance conservé');
+        self::assertSame('900000001', $data['salles'][0]['externalRef']);
+    }
+
+    public function testNearbyManualRadiusIsRespected(): void
+    {
+        $this->club->setLatitude(45.0)->setLongitude(4.0);
+        $this->em->flush();
+
+        $data = $this->get('/api/ffbb/salles-proches?radius=3', $this->adminToken);
+        self::assertSame(3, $data['radiusKm'], 'palier manuel : pas d\'élargissement');
+        self::assertCount(2, $data['salles']);
+    }
+
+    public function testNearbyWithoutClubGeolocationYieldsEmptyList(): void
+    {
+        // La FFBB ne géolocalisait pas ce club : liste vide, pas une erreur —
+        // la combobox par CP reste le chemin.
+        $data = $this->get('/api/ffbb/salles-proches', $this->adminToken);
+        self::assertNull($data['radiusKm']);
+        self::assertSame([], $data['salles']);
+    }
+
     public function testManagementGate(): void
     {
         $editorToken = $this->makeMember('editor');
@@ -79,6 +112,10 @@ final class FfbbSallesTest extends WebTestCase
             'HTTP_AUTHORIZATION' => 'Bearer ' . $editorToken,
         ]);
         self::assertResponseStatusCodeSame(403, 'SEC-07 : routes FFBB management-only');
+        $this->client->request('GET', '/api/ffbb/salles-proches', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $editorToken,
+        ]);
+        self::assertResponseStatusCodeSame(403, 'SEC-07 : la route géo aussi');
     }
 
     protected function setUp(): void
