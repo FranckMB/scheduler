@@ -119,6 +119,12 @@ pour un code club réel — rien à récupérer, l'import FBI reste le chemin.
   gymnase avec son **ancrage FFBB** (`Venue.externalRef` = numéro fédéral + GPS — colonnes préexistantes,
   zéro migration). La liste **propose, n'impose jamais** : saisie libre intacte, et tout changement
   manuel du nom efface l'ancre.
+- **P2-21 lot D** — `searchSallesNearby(lat, lng, radiusMeters)` : `_geoRadius` + tri `_geoPoint`
+  (bornes lat/lng et rayon validées avant interpolation), exposé par `GET /api/ffbb/salles-proches`
+  (SEC-07 ; géoloc du club, posée par le populate). `radius` = palier manuel (3/5/10/20 km), absent =
+  **AUTO** : 3 km élargi tant que < 5 salles — un défaut fixe montrait une liste vide à un club rural
+  (Martiel : 0 salle à 3 ET 5 km, mesuré §6.9). Panneau « Gymnases à proximité » de l'étape 2 ;
+  « déjà ajouté » reconnu au numéro fédéral, jamais au nom.
 
 ## Ce qui est disponible et NON exploité
 

@@ -83,6 +83,8 @@ export interface Venue {
   color: string | null;
   canSplit: boolean;
   isActive: boolean;
+  /** Numéro fédéral FFBB (ancre P2-20/P2-21) — null pour un gymnase saisi à la main. */
+  externalRef?: string | null;
 }
 
 export interface VenueTrainingSlot {
@@ -121,6 +123,10 @@ export interface FfbbSalle {
 /** Les salles FFBB d'un CP (management). Sans CP exploitable : liste vide, pas d'erreur. */
 export const listFfbbSalles = (postalCode: string): Promise<{ postalCode: string | null; salles: FfbbSalle[] }> =>
   api.get("ffbb/salles", { searchParams: { postalCode } }).json();
+
+/** Les salles PROCHES du club, triées par distance (P2-21 lot D). radius null = auto-élargi 3→20 km. */
+export const listFfbbSallesProches = (radiusKm: number | null): Promise<{ radiusKm: number | null; salles: FfbbSalle[] }> =>
+  api.get("ffbb/salles-proches", null === radiusKm ? undefined : { searchParams: { radius: radiusKm } }).json();
 
 export interface SlotPayload {
   venueId: string;

@@ -51,6 +51,8 @@ final class FfbbClubPopulatorTest extends KernelTestCase
         self::assertSame('0643720140', $reloaded?->getContactPhone());
         self::assertSame('contact@bccl.fr', $reloaded?->getContactEmail());
         self::assertSame('http://www.bccl.fr', $reloaded?->getWebsite());
+        // P2-21 lot C : l'accent par défaut = gradient_color FFBB, normalisé en minuscules.
+        self::assertSame('#c9102e', $reloaded?->getAccentColor());
         self::assertSame('0069', $reloaded?->getCommitteeCode());
         self::assertEqualsWithDelta(45.78017, (float) $reloaded?->getLatitude(), 0.0001);
         self::assertEqualsWithDelta(4.88467, (float) $reloaded?->getLongitude(), 0.0001);
@@ -125,7 +127,7 @@ final class FfbbClubPopulatorTest extends KernelTestCase
     public function testRefreshDoesNotWipeManuallyEnteredFields(): void
     {
         $club = $this->seedClub(self::CLUB_CODE);
-        $club->setContactEmail('manuel@club.fr')->setAddress('Adresse manuelle');
+        $club->setContactEmail('manuel@club.fr')->setAddress('Adresse manuelle')->setAccentColor('#123456');
         $this->em->flush();
 
         // FFBB hit for the right code but WITHOUT address/mail (gaps).
@@ -137,6 +139,8 @@ final class FfbbClubPopulatorTest extends KernelTestCase
         self::assertSame('Adresse manuelle', $reloaded?->getAddress(), 'manual address preserved');
         // Le nom, lui, reste FFBB-autoritaire même au refresh (présent dans le hit).
         self::assertSame('BCCL', $reloaded?->getName(), 'FFBB name applied on refresh');
+        // P2-21 lot C : un accent CHOISI ne se fait jamais écraser par un ré-import.
+        self::assertSame('#123456', $reloaded?->getAccentColor(), 'chosen accent preserved on refresh');
     }
 
     protected function setUp(): void
@@ -208,7 +212,7 @@ final class FfbbClubPopulatorTest extends KernelTestCase
             'cartographie' => ['codePostal' => '69100', 'ville' => 'Villeurbanne'],
             'commune' => ['libelle' => 'VILLEURBANNE', 'codePostal' => '69100', 'departement' => 'Rhône'],
             '_geo' => ['lat' => 45.78017, 'lng' => 4.88467],
-            'logo' => ['id' => '076ee1ea-3e09-43b5-9552-d029a95a4a35'],
+            'logo' => ['id' => '076ee1ea-3e09-43b5-9552-d029a95a4a35', 'gradient_color' => '#C9102E'],
             'organisme_id_pere' => [
                 'id' => '2093', 'nom' => 'COMITE DU RHONE ET METROPOLE DE LYON', 'adresse' => '3 RUE DU COLONEL CHAMBONNET', 'code' => '0069',
                 'organisme_id_pere' => ['id' => '200000002677104', 'nom' => 'LIGUE AUVERGNE RHONE ALPES', 'code' => 'ARA'],

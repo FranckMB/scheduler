@@ -115,6 +115,19 @@ final class FfbbClubPopulator
                 $club->setLogoUrl(LogoUrl::build($club->getId(), $bytes));
             }
         }
+
+        // P2-21 lot C — l'accent par défaut = la couleur dominante du logo selon la
+        // FFBB (`logo.gradient_color`, mesuré : #c9102e pour BCCL). SEULEMENT si le
+        // club n'a encore rien choisi : un accent posé à la main (ou extrait du logo
+        // côté client) ne se fait jamais écraser par un ré-import. Format validé —
+        // une valeur FFBB inattendue ne doit pas casser le thème.
+        if (null === $club->getAccentColor()) {
+            $logo = $this->arr($hit['logo'] ?? null);
+            $gradient = null === $logo ? null : $this->str($logo['gradient_color'] ?? null);
+            if (null !== $gradient && 1 === preg_match('/^#[0-9a-fA-F]{6}$/', $gradient)) {
+                $club->setAccentColor(strtolower($gradient));
+            }
+        }
     }
 
     /** @param callable(?string): mixed $setter */

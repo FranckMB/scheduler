@@ -102,6 +102,32 @@ final class FfbbApiClient
     }
 
     /**
+     * Les salles PROCHES d'un point (P2-21 lot D — « cochez vos gymnases parmi
+     * ceux d'à côté », §6.9, validé 9/9 sur BCCL). `_geoRadius` + tri
+     * `_geoPoint` marchent avec la clé search-only (mesuré). Le rayon vient de
+     * l'appelant (paliers 3/5/10/20 km, auto-élargi côté contrôleur) ; lat/lng
+     * sont des floats FORMATÉS ici — jamais une chaîne d'entrée (anti-injection,
+     * même règle que le CP).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function searchSallesNearby(float $latitude, float $longitude, int $radiusMeters): array
+    {
+        if ($latitude < -90.0 || $latitude > 90.0 || $longitude < -180.0 || $longitude > 180.0 || $radiusMeters < 100 || $radiusMeters > 50_000) {
+            return [];
+        }
+        $point = \sprintf('%.6F, %.6F', $latitude, $longitude);
+
+        return $this->query([
+            'indexUid' => 'ffbbserver_salles',
+            'q' => '',
+            'filter' => \sprintf('_geoRadius(%s, %d)', $point, $radiusMeters),
+            'sort' => [\sprintf('_geoPoint(%s):asc', $point)],
+            'limit' => 60,
+        ]);
+    }
+
+    /**
      * Les salles d'une COMMUNE (P2-20, autocomplétion des gymnases du wizard).
      * L'index `ffbbserver_salles` n'est pas relié aux clubs — seulement aux
      * communes : `commune.codePostal` est le seul filtre utile (mesuré,
