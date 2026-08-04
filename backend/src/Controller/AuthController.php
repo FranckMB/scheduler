@@ -22,6 +22,7 @@ use App\Repository\ClubUserRepository;
 use App\Repository\SportRepository;
 use App\Service\AuditTrail;
 use App\Service\Basketball\CategoryCatalog;
+use App\Service\DefaultConstraintSeeder;
 use App\Service\EmailVerifier;
 use App\Service\LeagueResolver;
 use App\Service\PasswordPolicy;
@@ -78,6 +79,7 @@ final class AuthController extends AbstractController
         private readonly FfbbCommitteeRepository $ffbbCommittees,
         private readonly AuditTrail $auditTrail,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly DefaultConstraintSeeder $defaultConstraintSeeder,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -686,5 +688,10 @@ final class AuthController extends AbstractController
             $sportCategory->setSortOrder($categoryData['sortOrder']);
             $this->entityManager->persist($sportCategory);
         }
+
+        // P2-16 — les contraintes de base (« la page pas vierge »), semées à la
+        // création SEULEMENT : au changement de saison le planning précédent est
+        // copié, le travail est déjà prémâché. Flushées avec le reste du seed.
+        $this->defaultConstraintSeeder->seed($club, $season);
     }
 }

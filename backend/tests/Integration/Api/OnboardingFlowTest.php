@@ -78,6 +78,26 @@ final class OnboardingFlowTest extends WebTestCase
         self::assertSame($seasonYear . '-07-15', $me['seasons'][0]['startDate'], 'la fenêtre démarre au pivot système (15 juillet)');
         self::assertSame(($seasonYear + 1) . '-07-14', $me['seasons'][0]['endDate'], 'la fenêtre finit la veille du pivot suivant');
 
+        // P2-16 (décision fondateur 2026-08-04) — « la page pas vierge » : un club
+        // neuf naît avec ses contraintes de base, TOUTES en PREFERRED (du HARD semé
+        // peut rendre INFEASIBLE un club atypique dès son premier planning), visibles
+        // et supprimables comme n'importe quelle contrainte. La liste exacte est un
+        // contrat : jeunes ≤ 19h30 · baby ≤ 18h30 · EMB ≤ 19h · seniors ≥ 19h ·
+        // pas le dimanche. « Pas après » = maxStartTime (maxEndTime n'existe qu'en HARD).
+        $seeded = $this->get('/api/constraints')['member'];
+        self::assertCount(5, $seeded, 'un club neuf naît avec ses 5 contraintes de base');
+        $byTag = [];
+        foreach ($seeded as $row) {
+            self::assertSame('PREFERRED', $row['ruleType'], 'jamais de HARD semé : ' . $row['name']);
+            self::assertSame('onboarding_seed', $row['source']);
+            $byTag[$row['config']['targetTag'] ?? 'CLUB'] = $row;
+        }
+        self::assertSame('19:30', $byTag['JEUNE']['config']['maxStartTime']);
+        self::assertSame('18:30', $byTag['BABY']['config']['maxStartTime']);
+        self::assertSame('19:00', $byTag['EMB']['config']['maxStartTime']);
+        self::assertSame('19:00', $byTag['SENIOR']['config']['minStartTime']);
+        self::assertSame([7], $byTag['CLUB']['config']['forbiddenDays'], 'le dimanche (7) est exclu pour tout le club');
+
         // 3. Minimal data: one team, one gym with a slot, one coach.
         $categoryId = $this->get('/api/sport_categories')['member'][0]['id'];
         $this->post('/api/teams', ['name' => 'SM1', 'sportCategoryId' => $categoryId, 'priorityTierId' => 1]);

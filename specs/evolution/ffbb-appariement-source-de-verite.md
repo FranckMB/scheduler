@@ -603,7 +603,7 @@ les jeunes.
 | ~~B~~ | ~~Appariement d'office~~ — **abandonné** (liens fragiles sur équipes en cours d'édition ; reste au dialog `/matchs`) | — |
 | C | Accent par défaut = `logo.gradient_color` (§6.7) | XS |
 | D | Gymnases proches à cocher (§6.9, rayon auto-élargi) — le levier déjà validé 9/9 | M |
-| E | P2-16 — contraintes de base semées (liste + HARD/PREFERRED à trancher AVANT, §1bis) | M |
+| E | P2-16 — contraintes de base semées — ⚑ **LIVRÉ le 2026-08-04** (tranché fondateur : tout PREFERRED ; jeunes ≤ 19h30 · baby ≤ 18h30 · EMB ≤ 19h · seniors ≥ 19h · pas le dimanche — voir état des lieux) | M |
 
 Ce qui ne sera JAMAIS pré-rempli, dit une fois : les **coachs** (aucune personne physique dans l'index)
 et les **créneaux** (donnée mairie, hors FFBB) — l'onboarding les annonce comme LES deux saisies
