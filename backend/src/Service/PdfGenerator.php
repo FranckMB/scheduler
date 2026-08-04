@@ -10,8 +10,10 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Export\ExportEmptyWindow;
 use App\Export\ScheduleExportData;
 use App\Export\ScheduleExportDataProvider;
+use App\Storage\LogoStorage;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use finfo;
 use RuntimeException;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
@@ -38,6 +40,7 @@ class PdfGenerator
         private readonly HttpClientInterface $httpClient,
         private readonly ScheduleExportDataProvider $exportData,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly LogoStorage $logoStorage,
     ) {}
 
     /**
@@ -144,6 +147,16 @@ class PdfGenerator
         $header = $this->buildHeader($columns, $venues);
 
         $scopeLabel = null === $venueId ? 'Tous les gymnases' : ($venues[$venueId]['name'] ?? 'Gymnase');
+        // P4-52 — le logo du club en tête de PDF, INLINÉ en data URI : le worker
+        // Puppeteer ne doit dépendre d'aucun fetch réseau (une URL /api/... peut
+        // être injoignable depuis son contexte, et le document doit rester
+        // auto-portant). Best-effort : pas de logo = un en-tête comme avant.
+        $logoBytes = $club instanceof Club ? $this->logoStorage->read($club->getId()) : null;
+        $logoImg = '';
+        if (null !== $logoBytes && '' !== $logoBytes) {
+            $mime = new finfo(\FILEINFO_MIME_TYPE)->buffer($logoBytes) ?: 'image/png';
+            $logoImg = \sprintf('<img class="logo" src="data:%s;base64,%s" alt="">', $mime, base64_encode($logoBytes));
+        }
         // ADR-0002 inv. 12 : le nom VIVANT du plan, jamais la photo `Schedule.name` prise à
         // la création de la version — sinon le document remis aux coachs contredit le nom que
         // l'écran affiche et celui du fichier qui le porte (revue #339 round 2).
@@ -154,7 +167,7 @@ class PdfGenerator
             ? '<p class="empty">Aucun créneau planifié.</p>'
             : \sprintf('<table><thead>%s</thead><tbody>%s</tbody></table>', $header, $rows);
 
-        return $this->wrapDocument($title, htmlspecialchars($scopeLabel), htmlspecialchars($planningName), $body);
+        return $this->wrapDocument($title, htmlspecialchars($scopeLabel), htmlspecialchars($planningName), $body, $logoImg);
     }
 
     /**
@@ -337,7 +350,7 @@ class PdfGenerator
         return $lum > 0.42 ? '#0b0b0c' : '#ffffff';
     }
 
-    private function wrapDocument(string $title, string $scopeLabel, string $scheduleName, string $body): string
+    private function wrapDocument(string $title, string $scopeLabel, string $scheduleName, string $body, string $logoImg = ''): string
     {
         return \sprintf(
             '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
@@ -345,6 +358,7 @@ class PdfGenerator
                 body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 10px; color: #111; }
                 header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; border-bottom: 2px solid #111; padding-bottom: 6px; }
                 header h1 { font-size: 16px; margin: 0; }
+                header .logo { height: 26px; width: 26px; object-fit: contain; align-self: center; }
                 header .scope { font-size: 12px; color: #333; font-weight: bold; }
                 header .sched { font-size: 11px; color: #777; margin-left: auto; }
                 table { width: 100%%; border-collapse: collapse; table-layout: fixed; }
@@ -360,9 +374,10 @@ class PdfGenerator
                 .empty { color: #999; font-style: italic; }
                 td.cell.empty { text-align: center; vertical-align: middle; color: #999; font-style: italic; font-size: 8px; border: 1px dashed #ccc; }
             </style></head><body>
-                <header><h1>%s</h1><span class="scope">%s</span><span class="sched">%s</span></header>
+                <header>%s<h1>%s</h1><span class="scope">%s</span><span class="sched">%s</span></header>
                 %s
             </body></html>',
+            $logoImg,
             $title,
             $scopeLabel,
             $scheduleName,

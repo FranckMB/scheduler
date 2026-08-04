@@ -13,7 +13,10 @@ import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { readableForeground } from "@/shared/lib/color";
 import { extractPalette } from "@/shared/lib/palette";
 
+import { useSlots, useVenues } from "@/features/planning/queries";
+
 import { LogoCropper } from "./LogoCropper";
+import { computeVenueStats, formatHours, seasonWeeks } from "./lib/venueStats";
 import { useDeleteLogo, useDownloadClubExport, useFfbbImport, useResetClub, useUpdateAppearance, useUploadLogo } from "./queries";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -385,6 +388,70 @@ function ContactsFfbbSection({ club }: { club: NonNullable<MeResponse["club"]> }
   );
 }
 
+/**
+ * Statistiques par gymnase (demande fondateur 2026-08-04) : heures et équipes
+ * du planning EN VIGUEUR, hebdo + projection annuelle. Sans socle pointé, la
+ * section DIT pourquoi elle est vide au lieu d'afficher des zéros.
+ */
+function VenueStatsSection({ me }: { me: MeResponse }) {
+  const chosenId = me.seasonPlan?.chosenScheduleId ?? null;
+  const slotsQuery = useSlots(chosenId);
+  const venuesQuery = useVenues();
+  const season = me.club ? me.seasons.find((s) => s.id === me.currentSeasonId) : undefined;
+  const weeks = season ? seasonWeeks(season.startDate, season.endDate) : null;
+
+  if (null === chosenId) {
+    return <p className="text-sm text-muted-foreground">Les statistiques se calculent sur le planning en vigueur — validez d'abord le planning principal de la saison.</p>;
+  }
+  if (slotsQuery.isLoading || venuesQuery.isLoading) {
+    return <p className="text-sm text-muted-foreground">Chargement des statistiques…</p>;
+  }
+  if (slotsQuery.isError || venuesQuery.isError) {
+    return <p className="text-sm text-destructive">Les statistiques n'ont pas pu être chargées.</p>;
+  }
+  const rows = computeVenueStats(slotsQuery.data ?? [], venuesQuery.data ?? []);
+  if (0 === rows.length) {
+    return <p className="text-sm text-muted-foreground">Le planning en vigueur ne place aucune séance.</p>;
+  }
+  const totalHours = rows.reduce((sum, r) => sum + r.hoursPerWeek, 0);
+
+  return (
+    <div className="space-y-3">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+            <th className="py-1.5 font-medium">Gymnase</th>
+            <th className="py-1.5 text-right font-medium">Équipes</th>
+            <th className="py-1.5 text-right font-medium">Heures / semaine</th>
+            {null !== weeks ? <th className="py-1.5 text-right font-medium">Heures / saison</th> : null}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.venueId} className="border-b border-border/50">
+              <td className="py-1.5">{r.name}</td>
+              <td className="py-1.5 text-right">{r.teamCount}</td>
+              <td className="py-1.5 text-right">{formatHours(r.hoursPerWeek)}</td>
+              {null !== weeks ? <td className="py-1.5 text-right">{formatHours(r.hoursPerWeek * weeks)}</td> : null}
+            </tr>
+          ))}
+          <tr className="font-medium">
+            <td className="py-1.5">Total</td>
+            <td className="py-1.5 text-right">—</td>
+            <td className="py-1.5 text-right">{formatHours(totalHours)}</td>
+            {null !== weeks ? <td className="py-1.5 text-right">{formatHours(totalHours * weeks)}</td> : null}
+          </tr>
+        </tbody>
+      </table>
+      {null !== weeks ? (
+        <p className="text-xs text-muted-foreground">
+          Heures / saison = projection sur les {weeks} semaines de la saison (semaine type × {weeks}) — vacances et périodes adaptées non déduites.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** RGPD — portabilité : export JSON complet du workspace du club (management). */
 function ExportClubSection() {
   const exportDownload = useDownloadClubExport();
@@ -444,6 +511,11 @@ function ClubHub({ me }: { me: MeResponse }) {
               Coordonnées récupérées automatiquement depuis la FFBB (lecture seule).
             </p>
             <ContactsFfbbSection club={me.club} />
+          </AccordionSection>
+        ) : null}
+        {isAdmin ? (
+          <AccordionSection title="Statistiques des gymnases">
+            <VenueStatsSection me={me} />
           </AccordionSection>
         ) : null}
         {isManagement ? (
