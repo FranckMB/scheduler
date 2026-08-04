@@ -7,7 +7,7 @@ validées le 2026-08-03).
 ## Contexte
 
 Le module matchs (P1-4) doit placer les matchs domicile — heure + salle sur des **dates réelles imposées
-par la fédération** — sous les contraintes de capacité (fenêtres d'accès mairie, indisponibilités), les
+par la fédération** — sous les contraintes de capacité (fenêtres d'accès match, indisponibilités), les
 fenêtres ligue et les préférences (habitudes, passerelles, coachs). L'objectif produit : « une tâche de
 3 jours pleins qui doit passer à 3 heures ». Le solve hebdo (`/generate`) raisonne en semaine-type sans
 dates : forcer les matchs dedans aurait tordu les deux problèmes.

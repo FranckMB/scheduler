@@ -399,7 +399,7 @@ function VenuesEditor() {
                   className="inline-block size-3 rounded-sm border border-dashed border-accent/60"
                   style={{ backgroundImage: "repeating-linear-gradient(45deg, color-mix(in oklch, var(--accent) 18%, transparent) 0 4px, transparent 4px 9px)" }}
                 />
-                accès match (non modifiable ici)
+                accès match modifiable en bas de l'écran uniquement
               </span>
             ) : null}
           </div>
