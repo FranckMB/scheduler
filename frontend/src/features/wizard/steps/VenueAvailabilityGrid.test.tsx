@@ -94,6 +94,12 @@ describe("VenueAvailabilityGrid — les fenêtres d'accès match", () => {
     // Le fantôme recouvre la cellule de samedi 15:00 — qui doit RESTER posable : un
     // entraînement est parfois accordé dans la plage match. Un fantôme qui bloque le clic
     // supprimerait silencieusement une case de saisie légitime.
+    //
+    // ⚠ Les deux assertions ci-dessous ne se remplacent PAS. jsdom ne calcule aucune mise
+    // en page : il ignore qu'un élément en recouvre un autre, donc le clic passerait même
+    // sans `pointer-events-none`. Le clic garde que la cellule existe et reste câblée ;
+    // c'est la classe, assertée explicitement, qui garde la traversée.
+    expect(ghost).toHaveClass("pointer-events-none");
     await user.click(screen.getByRole("button", { name: "Sam 15:00" }));
     expect(onAdd).toHaveBeenCalledWith(6, "15:00");
   });
