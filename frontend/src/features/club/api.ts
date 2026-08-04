@@ -16,24 +16,9 @@ export interface AppearanceResult {
 /** Partial update of the club identity (accent), scoped server-side to the JWT club. */
 export const updateAppearance = (body: AppearancePayload): Promise<AppearanceResult> => api.patch("club/appearance", { json: body }).json();
 
-// ⚠ Les champs que la FFBB alimente (comité, tél/email/adresse du club) ne sont
-// PAS dans ce payload : le serveur les refuse en 422 (« lecture seule »).
-// Le geste de correction est le ré-import FFBB ci-dessous.
-export interface ClubInfoPayload {
-  correspondentName?: string | null;
-  correspondentPhone?: string | null;
-  correspondentEmail?: string | null;
-  presidentName?: string | null;
-  presidentPhone?: string | null;
-  presidentEmail?: string | null;
-  mainVenueName?: string | null;
-  mainVenueAddress?: string | null;
-  schoolZone?: string | null;
-}
-
-/** Partial update of the FFBB club info (lot B), scoped server-side to the JWT club. */
-export const updateClubInfo = (body: ClubInfoPayload): Promise<ClubInfoPayload> => api.patch("club/info", { json: body }).json();
-
+// La fiche club n'a plus AUCUN champ saisissable (décision fondateur 2026-08-04) :
+// la FFBB fait autorité, le geste de correction est le ré-import ci-dessous.
+// L'ancien PATCH /api/club/info a été supprimé avec ses champs.
 export interface FfbbImportResult {
   populated: boolean;
   error?: string;

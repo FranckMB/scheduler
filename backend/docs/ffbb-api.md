@@ -59,11 +59,13 @@ Body:
 | `organisme_id_pere` (`id,nom,adresse,code`) | comité → `FfbbCommittee` |
 | `organisme_id_pere.organisme_id_pere` (`id,nom,code`) | ligue → `FfbbLeague` |
 
-> **La FFBB fait autorité sur ce qu'elle remplit** (décision fondateur 2026-08-04) : comité, tél/email/
-> adresse du club sont en LECTURE SEULE à l'écran et **refusés en 422 par `PATCH /api/club/info`** — le
-> geste de correction est `POST /api/club/ffbb-import` (bouton « Actualiser depuis la FFBB »). Les champs
-> que l'index ne connaît pas (correspondant, président, salle principale — vérifié champ par champ) restent
-> saisis à la main. Cadrage complet : [`api-ffbb-completion-club.md`](../../specs/evolution/api-ffbb-completion-club.md).
+> **La fiche club est 100 % FFBB, rien ne s'y saisit** (décision fondateur 2026-08-04) : tous les champs
+> affichés sont en LECTURE SEULE, le seul geste est `POST /api/club/ffbb-import` (bouton « Actualiser
+> depuis la FFBB »). `PATCH /api/club/info` **a été supprimé** — plus aucun consommateur. Les champs que
+> l'index ne connaît pas (correspondant, président, salle principale — vérifié champ par champ) ont été
+> **retirés de l'écran et de `/api/me`** : pas d'automatique possible + saisie manuelle non voulue = pas
+> de champ (les colonnes restent en base, données intactes). Cadrage complet :
+> [`api-ffbb-completion-club.md`](../../specs/evolution/api-ffbb-completion-club.md).
 
 Champs **ignorés** : `offresPratiques`, `labellisation`, `engagements_*`, `_geo`, `type_association`, `*ClubPro`, `saison`, `dateAffiliation`.
 

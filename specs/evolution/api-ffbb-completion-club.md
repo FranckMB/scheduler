@@ -88,8 +88,8 @@ Hit complet pour `ARA0069036` (extrait intégral des champs, valeurs réelles) :
 ### Ce que le document ne contient PAS (vérifié sur l'intégralité des clés)
 
 - **Aucun champ président / correspondant / secrétaire** (personne physique). La confirmation ligne par
-  ligne de ce que le lot C affirmait : ces trois blocs de l'écran « Informations du club » ne seront
-  **jamais** remplis par l'API — ils restent de la saisie manuelle.
+  ligne de ce que le lot C affirmait : ces blocs ne seront **jamais** remplis par l'API — le fondateur a
+  tranché (2026-08-04) : **supprimés de l'écran** plutôt que saisis à la main.
 - **Aucun lien club → salles.** `salle.libelle` est déclaré filtrable sur l'index, mais
   `filter: "salle.libelle EXISTS"` → **0 document** sur 4 635 : le champ n'est jamais rempli. La salle
   principale ne peut pas être déduite du document club (voir §3 pour le contournement).
@@ -192,8 +192,8 @@ clubs) alimentent déjà l'appariement P1-4 PR F. `ffbbserver_rencontres` reste 
 | Identité (code, ligue, zone) | lecture seule | inchangé |
 | Comité | champ texte ÉDITABLE | 🟢 lecture seule (dérivé du code club, déjà en base) |
 | Contact du club (tél/email/adresse) | ÉDITABLE | 🟢 lecture seule — l'API fait autorité (elle remplit déjà ces champs au register et au ré-import) |
-| Correspondant / Président | éditable | **reste éditable** — l'API ne connaît pas les personnes physiques (vérifié §1) |
-| Salle principale | 2 champs texte libres | 🟢 autocomplétion depuis `ffbbserver_salles` (CP du club) — éditable, mais proposé |
+| Correspondant / Président | éditable | 🔴 **supprimés** (décision fondateur) — l'API ne connaît pas les personnes physiques (vérifié §1) et la saisie manuelle n'est pas voulue |
+| Salle principale | 2 champs texte libres | 🔴 **supprimée** de la fiche en attendant P2-20 (autocomplétion salles) — pas de saisie manuelle |
 | Bloc « Club » de Contacts FFBB | duplique la fiche club | 🔴 à retirer — la section n'a de sens que pour la hiérarchie AU-DESSUS (comité, ligue) |
 | Comité/Ligue de Contacts FFBB | sans site web | 🟢 + `urlSiteWeb` (nouvelle donnée, §2) |
 | Accent du club | choisi à la main / palette du logo | 🟡 `logo.gradient_color` en défaut de register |

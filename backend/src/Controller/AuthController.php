@@ -320,10 +320,11 @@ final class AuthController extends AbstractController
                     'schoolZone' => $clubEntity->getSchoolZone(),
                 ];
 
-                // FFBB club info (lot B) carries officer personal contacts
-                // (president/correspondent phone+email): exposed ONLY to an active
-                // management member (the /club edit section is admin-only), never
-                // to a pending or non-management member.
+                // FFBB club info: management-only (the /club section is admin-only).
+                // ⚠ Les contacts DIRIGEANTS (correspondant/président) et la salle
+                // principale ne sont PLUS exposés (décision fondateur 2026-08-04) :
+                // l'API FFBB ne les fournit pas, l'app ne les collecte plus, aucun
+                // écran ne les rend — les colonnes restent en base, données intactes.
                 if ($clubUser->getIsActive() && $this->clubUserRepository->isManagementRole($clubUser->getRole())) {
                     $committee = null !== $clubEntity->getCommitteeCode()
                         ? $this->ffbbCommittees->findByCode($clubEntity->getCommitteeCode())
@@ -335,17 +336,9 @@ final class AuthController extends AbstractController
                         'contactPhone' => $clubEntity->getContactPhone(),
                         'contactEmail' => $clubEntity->getContactEmail(),
                         'address' => $clubEntity->getAddress(),
-                        'correspondentName' => $clubEntity->getCorrespondentName(),
-                        'correspondentPhone' => $clubEntity->getCorrespondentPhone(),
-                        'correspondentEmail' => $clubEntity->getCorrespondentEmail(),
-                        'presidentName' => $clubEntity->getPresidentName(),
-                        'presidentPhone' => $clubEntity->getPresidentPhone(),
-                        'presidentEmail' => $clubEntity->getPresidentEmail(),
-                        'mainVenueName' => $clubEntity->getMainVenueName(),
-                        'mainVenueAddress' => $clubEntity->getMainVenueAddress(),
                         // FFBB autofill (lot C): institutional club data + the
-                        // shared league/committee reference blocks (3-block
-                        // "Contacts FFBB" display). league/committee resolved from
+                        // shared league/committee reference blocks ("Contacts FFBB").
+                        // league/committee resolved from
                         // the FFBB club-code prefix + committeeCode.
                         'postalCode' => $clubEntity->getPostalCode(),
                         'city' => $clubEntity->getCity(),
