@@ -39,7 +39,7 @@ function conflictTitle(conflict: Conflict, coaches: Map<string, Coach>): string 
     case "LEAGUE_WINDOW_VIOLATION":
       return "Hors fenêtre autorisée par la ligue";
     case "ACCESS_WINDOW_LOST":
-      return "L'accès mairie ne couvre plus ce match";
+      return "L'accès match ne couvre plus ce match";
     case "TEAM_LINK_OVERLAP":
       return "Passerelle violée";
     case "COMPETITION_INCOMPLETE":

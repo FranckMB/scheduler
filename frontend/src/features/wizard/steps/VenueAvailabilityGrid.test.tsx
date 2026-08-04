@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import type { VenueMatchWindow } from "@/features/matches/api";
+
 import type { Venue, VenueTrainingSlot } from "../api";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 
@@ -9,6 +11,9 @@ const venue: Venue = { id: "v1", name: "Gymnase A", color: "#00aa00", canSplit: 
 
 const slot = (over: Partial<VenueTrainingSlot>): VenueTrainingSlot =>
   ({ id: "s1", venueId: "v1", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, capacity: 1, ...over }) as VenueTrainingSlot;
+
+const matchWindow = (over: Partial<VenueMatchWindow>): VenueMatchWindow =>
+  ({ id: "w1", venueId: "v1", dayOfWeek: 6, startTime: "14:00", endTime: "22:00", ...over }) as VenueMatchWindow;
 
 /**
  * P4-37 — ce que la grille rend POSABLE.
@@ -64,5 +69,53 @@ describe("VenueAvailabilityGrid — les bornes de ce qu'on peut poser", () => {
     // pour la mauvaise raison. Avant P4-37, `WEEK.findIndex` rendait -1 sur un dimanche et
     // le créneau n'était pas rendu du tout.
     expect(screen.getByTitle(/22:00 .* cliquer pour modifier/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Les fenêtres d'accès MATCH, en fantôme.
+ *
+ * Retour terrain 2026-08-04 : on pouvait ajouter une fenêtre match dans l'onglet Gymnases
+ * sans jamais la voir sur la grille — elle ne vivait que dans la liste texte en dessous.
+ */
+describe("VenueAvailabilityGrid — les fenêtres d'accès match", () => {
+  it("pose la fenêtre au bon jour, sur toute sa plage, sans jamais capter le clic", async () => {
+    const onAdd = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <VenueAvailabilityGrid venue={venue} slots={[]} selectedSlotId={null} onAdd={onAdd} onSelect={vi.fn()} matchWindows={[matchWindow({ dayOfWeek: 6, startTime: "14:00", endTime: "22:00" })]} />,
+    );
+
+    // Samedi = 6ᵉ jour → colonne 7 ; 14:00 sur une grille qui commence à 08:00 → ligne
+    // 2 + (360/15) = 26 ; 8 heures → 32 quarts d'heure.
+    const ghost = document.querySelector('[aria-hidden="true"][style*="grid-row"]');
+    expect(ghost).toHaveStyle({ gridColumn: "7", gridRow: "26 / span 32" });
+
+    // Le fantôme recouvre la cellule de samedi 15:00 — qui doit RESTER posable : un
+    // entraînement est parfois accordé dans la plage match. Un fantôme qui bloque le clic
+    // supprimerait silencieusement une case de saisie légitime.
+    await user.click(screen.getByRole("button", { name: "Sam 15:00" }));
+    expect(onAdd).toHaveBeenCalledWith(6, "15:00");
+  });
+
+  it("ÉTEND la grille sur une fenêtre matinale, au lieu de la reloger", () => {
+    // Même piège que le créneau de 07:00 : sans l'union, `grid-row` part en négatif et le
+    // bloc s'affiche en bas de grille sous un libellé qui dit le contraire. En fantôme le
+    // mensonge serait pire — rien à cliquer pour s'en apercevoir.
+    render(
+      <VenueAvailabilityGrid venue={venue} slots={[]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} matchWindows={[matchWindow({ dayOfWeek: 1, startTime: "07:00", endTime: "09:00" })]} />,
+    );
+
+    // La grille commence à 07:00 : la fenêtre est sur la toute première ligne.
+    const ghost = document.querySelector('[aria-hidden="true"][style*="grid-row"]');
+    expect(ghost).toHaveStyle({ gridColumn: "2", gridRow: "2 / span 8" });
+    // …et la grille descend bien jusqu'à 07:00 côté gouttière.
+    expect(screen.getByRole("button", { name: "Lun 07:00" })).toBeInTheDocument();
+  });
+
+  it("ne rend aucun fantôme quand l'appelant ne passe pas de fenêtre (éditeur de période)", () => {
+    render(<VenueAvailabilityGrid venue={venue} slots={[slot({})]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} />);
+
+    expect(document.querySelector('[aria-hidden="true"][style*="grid-row"]')).toBeNull();
   });
 });

@@ -44,8 +44,8 @@ export function MatchWindowsEditor({ venueId }: MatchWindowsEditorProps) {
     <div className="flex flex-col gap-2">
       {0 === windows.length && !windowsQuery.isLoading ? (
         <p className="text-xs text-muted-foreground">
-          Aucune fenêtre d’accès match — ce gymnase n’accueille pas de matchs. Ajoutez les créneaux que la mairie
-          vous accorde les jours de match.
+          Aucune fenêtre d’accès match — ce gymnase n’accueille pas de matchs. Ajoutez les créneaux qui vous sont
+          accordés les jours de match.
         </p>
       ) : null}
 
