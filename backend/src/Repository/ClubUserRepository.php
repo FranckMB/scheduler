@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repository;
 
 use App\Entity\ClubUser;
+use App\Service\TenantConnectionContext;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -20,7 +21,7 @@ final class ClubUserRepository extends ServiceEntityRepository
      */
     private const MANAGEMENT_ROLES = ['owner', 'admin'];
 
-    public function __construct(ManagerRegistry $registry)
+    public function __construct(ManagerRegistry $registry, private readonly TenantConnectionContext $tenantContext)
     {
         parent::__construct($registry, ClubUser::class);
     }
@@ -47,14 +48,22 @@ final class ClubUserRepository extends ServiceEntityRepository
      * ClubStateProvider). club_user is readable across the tenant boundary by
      * design (membership resolution bootstraps the tenant).
      *
+     * SEC-12: the RLS SELECT policy is now scoped whenever the tenant GUC is
+     * set, so this deliberately cross-tenant read steps out of the tenant
+     * context for the duration of the query — the callers (club listing,
+     * account erasure) run with a GUC pointing at ONE club, and the old open
+     * policy silently hid that this query crossed the boundary.
+     *
      * @return list<string>
      */
     public function findActiveClubIds(string $userId): array
     {
         /** @var list<string> $ids */
-        $ids = $this->getEntityManager()->getConnection()->fetchFirstColumn(
-            'SELECT club_id FROM club_user WHERE user_id = :uid AND is_active = true',
-            ['uid' => $userId],
+        $ids = $this->tenantContext->runWithoutTenant(
+            fn (): array => $this->getEntityManager()->getConnection()->fetchFirstColumn(
+                'SELECT club_id FROM club_user WHERE user_id = :uid AND is_active = true',
+                ['uid' => $userId],
+            ),
         );
 
         return $ids;

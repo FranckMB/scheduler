@@ -51,4 +51,40 @@ final readonly class TenantConnectionContext
             // Connection is unusable → its session (and GUC) is gone anyway.
         }
     }
+
+    /**
+     * Runs $fn with the tenant GUC cleared, then restores the previous value.
+     *
+     * SEC-12: the hybrid SELECT policies (club_user, coach_wish_token) are only
+     * open while NO tenant context is set. The few LEGITIMATE cross-tenant reads
+     * (RGPD export of a multi-club user, account erasure) explicitly step out of
+     * the tenant context here instead of relying on a permanently open policy —
+     * the opening is a visible, localised gesture, greppable as such.
+     *
+     * The previous GUC is read from the SESSION (not from a PHP mirror that could
+     * drift), and restored in a finally block so a throwing $fn cannot leave the
+     * connection tenant-less for the rest of the request/message.
+     *
+     * @template T
+     *
+     * @param callable(): T $fn
+     *
+     * @return T
+     */
+    public function runWithoutTenant(callable $fn): mixed
+    {
+        /** @var string $previous '' when the GUC was never set or already cleared. */
+        $previous = (string) $this->connection->fetchOne(
+            'SELECT COALESCE(current_setting(\'app.club_id\', true), \'\')',
+        );
+        $this->connection->executeStatement('SELECT set_config(\'app.club_id\', \'\', false)');
+
+        try {
+            return $fn();
+        } finally {
+            if ('' !== $previous) {
+                $this->setClubId($previous);
+            }
+        }
+    }
 }

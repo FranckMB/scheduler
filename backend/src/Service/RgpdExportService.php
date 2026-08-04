@@ -55,16 +55,24 @@ final class RgpdExportService
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
+        private readonly TenantConnectionContext $tenantContext,
     ) {}
 
     /** @return array<string, mixed> */
     public function exportUser(User $user): array
     {
-        $memberships = $this->connection()->fetchAllAssociative(
-            'SELECT cu.club_id, c.name AS club_name, cu.role, cu.is_active, cu.joined_at, cu.created_at
-             FROM club_user cu JOIN club c ON c.id = cu.club_id
-             WHERE cu.user_id = :uid',
-            ['uid' => $user->getId()],
+        // Art. 15 : l'export d'un USER liste TOUTES ses memberships, pas celle du club
+        // que la requête a résolu. SEC-12 ayant scopé le SELECT de club_user dès que le
+        // GUC est posé, cette lecture cross-tenant volontaire sort explicitement du
+        // contexte tenant — sans quoi l'export d'un user multi-club serait silencieusement
+        // amputé aux lignes du club courant.
+        $memberships = $this->tenantContext->runWithoutTenant(
+            fn (): array => $this->connection()->fetchAllAssociative(
+                'SELECT cu.club_id, c.name AS club_name, cu.role, cu.is_active, cu.joined_at, cu.created_at
+                 FROM club_user cu JOIN club c ON c.id = cu.club_id
+                 WHERE cu.user_id = :uid',
+                ['uid' => $user->getId()],
+            ),
         );
 
         return [
