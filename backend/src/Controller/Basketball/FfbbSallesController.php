@@ -38,33 +38,6 @@ final class FfbbSallesController extends AbstractController
         private readonly RequestStack $requestStack,
     ) {}
 
-    /**
-     * @param array<string, mixed> $hit
-     *
-     * @return array<string, string|null>|null
-     */
-    private static function mapSalle(array $hit): ?array
-    {
-        $name = \is_string($hit['libelle'] ?? null) ? trim($hit['libelle']) : '';
-        if ('' === $name) {
-            return null;
-        }
-        $carto = \is_array($hit['cartographie'] ?? null) ? $hit['cartographie'] : [];
-        $str = static fn (mixed $v): ?string => \is_string($v) && '' !== trim($v) ? trim($v) : null;
-        // Lat/lng viennent en float du JSON Meilisearch ; Venue les stocke en
-        // string (decimal) — on normalise ici, en refusant tout non-numérique.
-        $num = static fn (mixed $v): ?string => \is_int($v) || \is_float($v) ? (string) $v : null;
-
-        return [
-            'name' => $name,
-            'address' => $str($hit['adresse'] ?? null),
-            'city' => $str($carto['ville'] ?? null),
-            'externalRef' => $str($hit['numero'] ?? null),
-            'latitude' => $num($carto['latitude'] ?? null),
-            'longitude' => $num($carto['longitude'] ?? null),
-        ];
-    }
-
     #[Route('/api/ffbb/salles', name: 'api_ffbb_salles', methods: ['GET'])]
     public function __invoke(Request $request): JsonResponse
     {
@@ -87,9 +60,36 @@ final class FfbbSallesController extends AbstractController
             return $this->json(['error' => 'FFBB indisponible, réessayez plus tard.'], Response::HTTP_BAD_GATEWAY);
         }
 
-        $salles = array_values(array_filter(array_map(self::mapSalle(...), $hits), static fn (?array $salle): bool => null !== $salle));
+        $salles = array_values(array_filter(array_map($this->mapSalle(...), $hits), static fn (?array $salle): bool => null !== $salle));
         usort($salles, static fn (array $a, array $b): int => strcasecmp((string) $a['name'], (string) $b['name']));
 
         return $this->json(['postalCode' => $postalCode, 'salles' => $salles]);
+    }
+
+    /**
+     * @param array<string, mixed> $hit
+     *
+     * @return array<string, string|null>|null
+     */
+    private function mapSalle(array $hit): ?array
+    {
+        $name = \is_string($hit['libelle'] ?? null) ? trim($hit['libelle']) : '';
+        if ('' === $name) {
+            return null;
+        }
+        $carto = \is_array($hit['cartographie'] ?? null) ? $hit['cartographie'] : [];
+        $str = static fn (mixed $v): ?string => \is_string($v) && '' !== trim($v) ? trim($v) : null;
+        // Lat/lng viennent en float du JSON Meilisearch ; Venue les stocke en
+        // string (decimal) — on normalise ici, en refusant tout non-numérique.
+        $num = static fn (mixed $v): ?string => \is_int($v) || \is_float($v) ? (string) $v : null;
+
+        return [
+            'name' => $name,
+            'address' => $str($hit['adresse'] ?? null),
+            'city' => $str($carto['ville'] ?? null),
+            'externalRef' => $str($hit['numero'] ?? null),
+            'latitude' => $num($carto['latitude'] ?? null),
+            'longitude' => $num($carto['longitude'] ?? null),
+        ];
     }
 }
