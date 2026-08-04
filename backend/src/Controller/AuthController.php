@@ -318,6 +318,10 @@ final class AuthController extends AbstractController
                     'accentColorDark' => $clubEntity->getAccentColorDark(),
                     'accentPalette' => $clubEntity->getAccentPalette(),
                     'schoolZone' => $clubEntity->getSchoolZone(),
+                    // P2-21 lot A : vérité serveur — la modale « équipes importées »
+                    // du wizard ne s'affiche QUE si l'import FFBB a réellement créé
+                    // les équipes (jamais sur une saisie manuelle).
+                    'ffbbTeamsImported' => null !== $clubEntity->getFfbbTeamsImportedAt(),
                 ];
 
                 // FFBB club info: management-only (the /club section is admin-only).

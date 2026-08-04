@@ -360,12 +360,14 @@ function TeamsEditor() {
 
   // P2-21 lot A — la modale d'annonce de l'import automatique FFBB (décision
   // fondateur 2026-08-04 : « le gestionnaire n'a rien à faire, il constate que
-  // 10 équipes sont déjà chargées »). Heuristique sans migration : dans le flux
-  // d'ONBOARDING (jamais généré), des équipes déjà présentes au premier passage
-  // ne peuvent venir que de l'import — le wizard est le seul autre chemin de
-  // saisie. Le flag localStorage la rend one-shot par club.
+  // 10 équipes sont déjà chargées »). Gate = VÉRITÉ SERVEUR (`ffbbTeamsImported`,
+  // posée par l'importeur) : la seule absence du flag localStorage faisait mentir
+  // la modale à tout club à saisie manuelle vu d'un navigateur vierge — et
+  // bloquait chaque spec e2e (CI suspendue 30 min, 2026-08-04). Le flag
+  // localStorage ne sert plus qu'à la rendre one-shot par club.
   const { data: me } = useMe();
   const clubId = me?.club?.id;
+  const imported = true === me?.club?.ffbbTeamsImported;
   const onboarding = undefined !== me && !me.seasonPlan?.hasFinishedVersion;
   const [noticeDismissed, setNoticeDismissed] = useState(false);
   // Dérivé au render (pas de setState en effect) : le flag n'est posé qu'à la
@@ -374,7 +376,7 @@ function TeamsEditor() {
     () => (undefined === clubId ? true : null !== window.localStorage.getItem(`ffbb-teams-import-notice-${clubId}`)),
     [clubId],
   );
-  const importNotice = onboarding && teams.length > 0 && !noticeSeen && !noticeDismissed;
+  const importNotice = imported && onboarding && teams.length > 0 && !noticeSeen && !noticeDismissed;
   const dismissImportNotice = () => {
     setNoticeDismissed(true);
     if (undefined !== clubId) {

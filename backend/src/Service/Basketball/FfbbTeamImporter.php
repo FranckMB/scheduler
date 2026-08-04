@@ -11,6 +11,7 @@ use App\Entity\Team;
 use App\Enum\Gender;
 use App\Enum\TeamLevel;
 use App\Service\SeasonResolver;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -115,6 +116,11 @@ final class FfbbTeamImporter
             // sessionsPerWeek : défaut d'entité = 2 (décision fondateur 2026-08-04).
             $this->entityManager->persist($team);
             ++$created;
+        }
+        if ($created > 0) {
+            // Vérité serveur : c'est ELLE (pas un flag localStorage) qui autorise
+            // la modale « équipes importées » et l'atterrissage forcé sur Équipes.
+            $club->setFfbbTeamsImportedAt(new DateTimeImmutable);
         }
         $this->entityManager->flush();
 

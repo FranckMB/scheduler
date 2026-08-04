@@ -64,6 +64,11 @@ final class FfbbTeamImporterTest extends KernelTestCase
         // La sénior D : rang C, nom féminin.
         self::assertSame('SF1', $teams[2]->getName());
         self::assertSame(4, $teams[2]->getPriorityTierId());
+
+        // Vérité serveur : le marqueur qui autorise la modale « équipes
+        // importées » côté wizard — sans lui, un club à saisie manuelle la
+        // verrait mentir (et chaque spec e2e restait coincée dessus).
+        self::assertNotNull($this->club->getFfbbTeamsImportedAt());
     }
 
     public function testNonEmptyClubIsNeverTouched(): void
@@ -76,6 +81,7 @@ final class FfbbTeamImporterTest extends KernelTestCase
 
         self::assertSame(0, $this->buildImporter()->importEngagedTeams($this->club));
         self::assertCount(1, $this->em->getRepository(Team::class)->findBy(['clubId' => $this->club->getId()]));
+        self::assertNull($this->club->getFfbbTeamsImportedAt(), 'aucun import → le marqueur ne ment jamais');
     }
 
     protected function setUp(): void

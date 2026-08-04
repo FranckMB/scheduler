@@ -76,6 +76,14 @@ class Club
     #[ORM\Column(type: 'boolean')]
     private bool $onboardingCompleted = false;
 
+    // P2-21 lot A : non-null = les équipes de ce club ont été créées par l'import
+    // FFBB à l'onboarding. Vérité SERVEUR qui gate la modale « équipes importées »
+    // et l'atterrissage forcé sur Équipes — sans ce marqueur, un club à saisie
+    // manuelle (ou une spec e2e) verrait la modale mentir dès que le flag
+    // localStorage manque (revue CI 2026-08-04 : e2e suspendue 30 min).
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?DateTimeImmutable $ffbbTeamsImportedAt = null;
+
     // RGPD (droit à l'effacement) : non-null = purge du workspace programmée à
     // cette date (dernier admin effacé + délai de grâce 30 j). Annulable en la
     // remettant à null tant que app:clubs:purge-erased n'est pas passé.
@@ -375,6 +383,18 @@ class Club
     public function isOnboardingCompleted(): bool
     {
         return $this->onboardingCompleted;
+    }
+
+    public function getFfbbTeamsImportedAt(): ?DateTimeImmutable
+    {
+        return $this->ffbbTeamsImportedAt;
+    }
+
+    public function setFfbbTeamsImportedAt(?DateTimeImmutable $ffbbTeamsImportedAt): self
+    {
+        $this->ffbbTeamsImportedAt = $ffbbTeamsImportedAt;
+
+        return $this;
     }
 
     public function getErasureScheduledAt(): ?DateTimeImmutable

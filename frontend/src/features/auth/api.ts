@@ -47,6 +47,8 @@ export interface MeResponse {
     accentColorDark: string | null;
     accentPalette: string[] | null;
     schoolZone: string | null;
+    /** P2-21 lot A — vérité serveur : les équipes viennent de l'import FFBB. */
+    ffbbTeamsImported?: boolean;
     league: string | null;
     ffbbClubCode: string | null;
     committeeCode: string | null;
