@@ -54,5 +54,4 @@ services:
 
     App\EventListener\CacheInvalidationListener:
         arguments:
-            $tenantCachePool: '@cache.tenant'
             $scheduleCachePool: '@cache.schedule'

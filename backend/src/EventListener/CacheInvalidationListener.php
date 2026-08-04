@@ -10,29 +10,41 @@ use Doctrine\ORM\Event\PostPersistEventArgs;
 use Doctrine\ORM\Event\PostRemoveEventArgs;
 use Doctrine\ORM\Event\PostUpdateEventArgs;
 use Doctrine\ORM\Events;
-use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Cache\Adapter\TagAwareAdapterInterface;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpKernel\Event\TerminateEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\Messenger\Event\WorkerMessageFailedEvent;
+use Symfony\Component\Messenger\Event\WorkerMessageHandledEvent;
 
 /**
- * Purges Redis cache keys prefixed with club:{club_id}: when business entities
- * are modified. This ensures schedule snapshots and tenant data stay fresh.
+ * Purge le cache du payload solveur (`cache.schedule`) quand une entité métier
+ * d'un club change — par TAG club, ce qui couvre toutes les saisons d'un coup
+ * (`SportCategory`/`TeamTag` alimentent le payload sans porter de `seasonId`).
  *
- * Phase 1 stub: listens for all entities; in Phase 2 it will target only
- * Venue, Coach, Team, Schedule and related entities.
+ * P2-12 (2026-08-04) : le pool `cache.tenant` et les clés `tenant_data`/
+ * `schedule_snapshot` ont été SUPPRIMÉS — aucun writer nulle part, le listener
+ * purgait du vide depuis la phase 1. Le seul cache métier réel est
+ * `cache.schedule` (P2-9ter).
+ *
+ * La purge est différée à la FIN du travail (jamais pendant — le même cycle
+ * peut encore lire le cache), sur les DEUX fins possibles :
+ *  - requête HTTP → `kernel.terminate` ;
+ *  - message Messenger → `WorkerMessageHandled`/`Failed` (P2-11 : le worker
+ *    n'émet JAMAIS de TerminateEvent — les invalidations collectées pendant
+ *    `GenerateScheduleHandler` ne partaient jamais, le payload restait périmé
+ *    et `$pendingInvalidations` croissait sur un process long ; `Failed`
+ *    aussi : un handler peut avoir flushé des entités AVANT d'échouer).
  */
 #[AsDoctrineListener(event: Events::postUpdate)]
 #[AsDoctrineListener(event: Events::postPersist)]
 #[AsDoctrineListener(event: Events::postRemove)]
 class CacheInvalidationListener
 {
-    /** @var array<string, string[]> club_id => [cache_keys] */
+    /** @var array<string, true> club ids dont le payload solveur doit être purgé */
     private array $pendingInvalidations = [];
 
     public function __construct(
-        private readonly CacheItemPoolInterface $tenantCachePool,
         // Tag-aware : le payload solveur est purgé par TAG (cf. flushInvalidations).
         private readonly TagAwareAdapterInterface $scheduleCachePool,
     ) {}
@@ -58,17 +70,31 @@ class CacheInvalidationListener
         $this->flushInvalidations();
     }
 
+    #[AsEventListener(event: WorkerMessageHandledEvent::class)]
+    public function onWorkerMessageHandled(WorkerMessageHandledEvent $event): void
+    {
+        $this->flushInvalidations();
+    }
+
+    #[AsEventListener(event: WorkerMessageFailedEvent::class)]
+    public function onWorkerMessageFailed(WorkerMessageFailedEvent $event): void
+    {
+        $this->flushInvalidations();
+    }
+
     /**
-     * Flush collected invalidations. Called on kernel.terminate to avoid
-     * purging cache during the same request that might still read from it.
+     * Flush collected invalidations — différé à la fin du travail pour ne pas
+     * purger un cache que le même cycle est encore en train de lire.
      */
     public function flushInvalidations(): void
     {
-        foreach ($this->pendingInvalidations as $clubId => $keys) {
-            foreach ($keys as $key) {
-                $this->tenantCachePool->deleteItem($key);
-                $this->scheduleCachePool->deleteItem($key);
-            }
+        foreach (array_keys($this->pendingInvalidations) as $clubId) {
+            // TRANSITION DE DÉPLOIEMENT — l'ANCIENNE clé du payload (sans saison,
+            // écrite par le code d'avant P2-9ter). Plus produite, mais des entrées
+            // survivent jusqu'à 4 h (TTL) : un conteneur encore sur l'ancien code
+            // (déploiement en cours, rollback) servirait un payload périmé que plus
+            // rien n'invaliderait. Supprimable un déploiement plus tard.
+            $this->scheduleCachePool->deleteItem(\sprintf('club.%s.schedule_input', $clubId));
             // Le payload solveur : purgé par TAG, toutes saisons du club d'un coup.
             // Indispensable — `SportCategory` et `TeamTag` alimentent le payload mais ne
             // portent PAS de `seasonId`, donc aucune clé par saison ne serait devinable
@@ -86,20 +112,7 @@ class CacheInvalidationListener
             return;
         }
 
-        // P2-9ter — `schedule_input` a QUITTÉ cette liste : sa clé porte désormais la
-        // saison (`ScheduleConstraintBuilder::cacheKey`), donc une clé écrite à la main
-        // ici ne viserait plus rien. Il est purgé par TAG dans flushInvalidations(), ce
-        // qui supprime la possibilité même de désynchroniser les deux côtés.
-        $this->pendingInvalidations[$clubId] = [
-            \sprintf('club.%s.tenant_data', $clubId),
-            \sprintf('club.%s.schedule_snapshot', $clubId),
-            // TRANSITION DE DÉPLOIEMENT — l'ANCIENNE clé du payload (sans saison, écrite
-            // par le code d'avant P2-9ter). Elle n'est plus produite, mais des entrées
-            // survivent jusqu'à 4 h (TTL) : sans ce purge, un conteneur encore sur
-            // l'ancien code (déploiement en cours, ou rollback) servirait un payload
-            // périmé que plus rien n'invaliderait. Supprimable un déploiement plus tard.
-            \sprintf('club.%s.schedule_input', $clubId),
-        ];
+        $this->pendingInvalidations[$clubId] = true;
     }
 
     private function resolveClubId(object $entity): ?string
