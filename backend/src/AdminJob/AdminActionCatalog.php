@@ -35,6 +35,13 @@ final readonly class AdminActionCatalog
                 dangerous: false,
             ),
             new AdminActionDefinition(
+                'mark-season-paid',
+                'Marquer la saison suivante payée',
+                'Enregistre le paiement de la SAISON SUIVANTE du club (abonnement par saison, P1-5) : ouvre le gate de bascule. Idempotent — le marqueur ne recule jamais.',
+                'app:clubs:mark-season-paid',
+                dangerous: false,
+            ),
+            new AdminActionDefinition(
                 'reset-current-season',
                 'Réinitialiser la saison courante',
                 'Vide toutes les données de la saison courante du club (structure, calendrier, plannings). La saison et le club survivent — le club repart au wizard.',

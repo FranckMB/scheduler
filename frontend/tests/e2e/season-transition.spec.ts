@@ -7,6 +7,16 @@ async function registerClub(page: import("@playwright/test").Page): Promise<void
   await registerAndVerify(page, { email: `season-${ara}@e2e.fr`, ara, firstName: "Sonia", lastName: "Saison", clubName: "E2E Saison Club" });
 }
 
+// P1-5 — la bascule est réservée aux saisons PAYÉES : le relais dev du geste
+// support (`/api/dev/mark-season-paid`, 404 en prod) ouvre le gate pour le club
+// fraîchement inscrit. Sans lui, chaque « Préparer » rendrait le 409 du gate.
+async function markNextSeasonPaid(page: import("@playwright/test").Page): Promise<void> {
+  const token = await page.evaluate(() => JSON.parse(localStorage.getItem("cs-auth") ?? "{}")?.state?.token as string | undefined);
+  expect(token).toBeTruthy();
+  const response = await page.request.post("/api/dev/mark-season-paid", { headers: { Authorization: `Bearer ${token}` } });
+  expect(response.ok()).toBeTruthy();
+}
+
 // « Préparer la saison suivante » n'est proposé que du 1er mai (année 2) à la fin de
 // la saison courante (P2-5 D). On fige l'horloge NAVIGATEUR au 1er juin de l'année 2
 // de la saison courante (dérivée du pivot 15 juil, comme côté serveur) pour être
@@ -47,6 +57,18 @@ test("prepare next season: the selector lists both and switches to the draft", a
   const selectorTrigger = page.getByRole("button", { name: "Saison de travail" });
   await expect(selectorTrigger).toBeVisible({ timeout: 15_000 });
 
+  // P1-5 — SANS paiement de la saison suivante, la bascule est refusée et le
+  // motif s'affiche TEL QUEL (pas le toast générique « a échoué ») : le
+  // gestionnaire doit comprendre que c'est une affaire d'abonnement.
+  await selectorTrigger.click();
+  await page.getByRole("menuitem", { name: /Préparer la saison suivante/i }).click();
+  await expect(page.getByText("Préparer la saison suivante ?")).toBeVisible();
+  await page.getByRole("button", { name: "Préparer", exact: true }).click();
+  await expect(page.getByText(/n'est pas réglée/i)).toBeVisible({ timeout: 15_000 });
+
+  // Le paiement enregistré (relais dev du geste support), la bascule passe.
+  await markNextSeasonPaid(page);
+
   // Trigger the transition from the selector menu.
   await selectorTrigger.click();
   await page.getByRole("menuitem", { name: /Préparer la saison suivante/i }).click();
@@ -85,6 +107,9 @@ test("transition offers to re-date N's events into the draft, once", async ({ pa
   });
   expect(created.status()).toBe(201);
 
+  // P1-5 : gate de paiement ouvert d'entrée — ce test couvre la reconduction.
+  await markNextSeasonPaid(page);
+
   // Prepare N+1 → the re-dating dialog opens with the event, date shifted +364.
   await selectorTrigger.click();
   await page.getByRole("menuitem", { name: /Préparer la saison suivante/i }).click();
@@ -113,6 +138,9 @@ test("preparing twice reuses the existing next season (no duplicate)", async ({ 
 
   const selectorTrigger = page.getByRole("button", { name: "Saison de travail" });
   await expect(selectorTrigger).toBeVisible({ timeout: 15_000 });
+
+  // P1-5 : gate de paiement ouvert d'entrée — ce test couvre l'anti-doublon.
+  await markNextSeasonPaid(page);
 
   const prepare = async () => {
     await selectorTrigger.click();

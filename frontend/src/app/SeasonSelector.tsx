@@ -91,7 +91,7 @@ export function SeasonSelector({ today = new Date() }: { today?: Date } = {}) {
       if (error instanceof HTTPError && 409 === error.response.status) {
         // ky 2.x parses the error body into error.data (the stream itself is
         // consumed — response.json() would throw "body stream already read").
-        const body = ((error as { data?: unknown }).data ?? null) as { existingSeasonId?: string } | null;
+        const body = ((error as { data?: unknown }).data ?? null) as { existingSeasonId?: string; error?: string } | null;
         if (body?.existingSeasonId) {
           toast.success("La saison suivante existe déjà — bascule dessus.");
           switchTo(body.existingSeasonId);
@@ -99,6 +99,13 @@ export function SeasonSelector({ today = new Date() }: { today?: Date } = {}) {
           // event (the dialog auto-skips otherwise).
           const existingName = seasons.find((s) => s.id === body.existingSeasonId)?.name ?? "la saison suivante";
           setRedateContext({ sourceSeasonId, targetSeasonId: body.existingSeasonId, targetSeasonName: existingName });
+          return;
+        }
+        // P1-5 : un 409 qui PORTE son motif (« la saison N-N+1 n'est pas réglée »)
+        // s'affiche tel quel — l'avaler dans le message générique laisserait le
+        // gestionnaire face à un échec inexpliqué qu'il croirait technique.
+        if ("string" === typeof body?.error && "" !== body.error) {
+          toast.error(body.error);
           return;
         }
       }

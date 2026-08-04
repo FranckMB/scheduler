@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\Club;
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
@@ -69,6 +70,24 @@ final class SeasonTransitionService
         $current = $this->seasonResolver->currentSeason($clubId, $today);
         if (!$current instanceof Season || $current->getId() !== $source->getId()) {
             throw new ConflictHttpException('Only the current season can be transitioned.');
+        }
+
+        // P1-5 (décision fondateur 2026-08-04) — l'abonnement se paie PAR SAISON :
+        // la bascule vers N+1 exige que N+1 soit réglée. Le gate est LA BASCULE,
+        // pas la génération — générer sa saison suivante dès mai puis résilier
+        // était la fuite. Marqueur avancé par l'action support « Marquer la
+        // saison suivante payée » (paiement en ligne : P1-3). Fail-closed : un
+        // marqueur absent (club d'avant le backfill) bloque aussi.
+        // MÊME année cible que copy() — un club dormant bascule vers l'année de
+        // « demain », pas vers source+1 : le gate doit exiger le paiement de la
+        // saison qui sera réellement créée.
+        $targetYear = max(
+            SeasonResolver::seasonYear($source->getStartDate()) + 1,
+            SeasonResolver::seasonYear($today) + 1,
+        );
+        $club = $this->entityManager->getRepository(Club::class)->find($clubId);
+        if (!$club instanceof Club || ($club->getPaidSeasonYear() ?? \PHP_INT_MIN) < $targetYear) {
+            throw new ConflictHttpException(\sprintf('La saison %d-%d n\'est pas réglée — la bascule est réservée aux saisons payées.', $targetYear, $targetYear + 1));
         }
 
         // The caller's request may have the season_filter enabled on ANY

@@ -14,8 +14,11 @@ use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
+use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Tester\CommandTester;
 
 /**
  * POST /api/seasons/{id}/transition — auth/role/precondition surface.
@@ -55,6 +58,35 @@ final class SeasonTransitionApiTest extends WebTestCase
         self::assertNotSame($season->getId(), $data['seasonId']);
         self::assertSame($season->getStartDate()->modify('+1 year')->format('Y-m-d'), $data['startDate']);
         self::assertIsArray($data['counts']);
+    }
+
+    public function testTransitionIsGatedOnThePaidSeason(): void
+    {
+        // NR P1-5 (axe planning lifecycle / monétisation, décision fondateur
+        // 2026-08-04) — l'abonnement se paie PAR SAISON : la bascule vers N+1
+        // exige que N+1 soit réglée. Générer sa saison suivante dès mai puis
+        // résilier était la fuite ; le gate est LA BASCULE, pas la génération.
+        [$user, $club, $season] = $this->createClubUserSeason('admin');
+        $auth = $this->authHeaders($user);
+
+        // Club en règle pour SA saison seulement (l'état d'une inscription) :
+        // la suivante n'est pas payée → 409 qui NOMME la saison due.
+        $club->setPaidSeasonYear(SeasonResolver::seasonYear($season->getStartDate()));
+        $this->em->flush();
+
+        $this->client->request('POST', '/api/seasons/' . $season->getId() . '/transition', [], [], $auth);
+        self::assertResponseStatusCodeSame(409);
+        self::assertStringContainsString('n\'est pas réglée', (string) $this->responseData()['error']);
+
+        // Le geste support (SA4) : « Marquer la saison suivante payée » ouvre le gate.
+        $tester = new CommandTester(new Application(self::$kernel)->find('app:clubs:mark-season-paid'));
+        self::assertSame(Command::SUCCESS, $tester->execute(['--club' => $club->getId()]));
+
+        $this->client->request('POST', '/api/seasons/' . $season->getId() . '/transition', [], [], $auth);
+        self::assertResponseStatusCodeSame(201);
+
+        // Idempotent, et le marqueur ne recule jamais.
+        self::assertSame(Command::SUCCESS, $tester->execute(['--club' => $club->getId()]));
     }
 
     public function testRerunConflictsWithTheExistingSuccessorId(): void
@@ -156,6 +188,10 @@ final class SeasonTransitionApiTest extends WebTestCase
         $club->setLocale('fr');
         $club->setOnboardingCompleted(true);
         $club->setFfbbClubCode('TRB' . strtoupper(substr(md5($uid), 0, 10)));
+        // P1-5 : en règle très loin par défaut — le gate de paiement a ses
+        // propres tests (testTransitionIsGatedOnThePaidSeason), les autres
+        // couvrent auth/copie/redatage.
+        $club->setPaidSeasonYear(9999);
         $this->em->persist($club);
 
         $user = new User;
