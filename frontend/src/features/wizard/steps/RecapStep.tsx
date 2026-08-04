@@ -8,6 +8,7 @@ import { cn } from "@/shared/lib/utils";
 import { FAMILY_LABEL, FAMILY_ORDER, groupConstraints } from "../lib/constraintOrder";
 import { LEVEL_LABEL } from "../lib/labels";
 import { coachMeta, groupedCoaches } from "../lib/ranking";
+import { sharedSlotStatuses } from "../lib/reservationSlots";
 import { coachTeamNames, countSlotsByVenue } from "../lib/summary";
 import { useStepValidation } from "../lib/useStepValidation";
 import { BlockerList } from "./BlockerList";
@@ -94,6 +95,21 @@ export function RecapStep() {
   const teamName = new Map(allTeams.map((t) => [t.id, t.name]));
   const venueName = new Map(allVenues.map((v) => [v.id, v.name]));
   const coachName = new Map(coaches.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
+  // Créneaux PARTAGÉS (capacité ≥ 2) non ou partiellement réservés — décision P3-8 :
+  // pas d'écran binômes, le récap AVERTIT sans bloquer. Deux messages distincts parce
+  // que les conséquences diffèrent : non réservé = le système choisit (information) ;
+  // partiel = la place restante restera VIDE (ALIGN-07 — une réservation ferme le
+  // créneau entier au système), c'est une perte qu'il faut nommer.
+  // Créneaux et réservations lus sur la MÊME couche (layerPlanId / plan de l'ancre).
+  const sharedSlotNotices = sharedSlotStatuses(slots, reservations, new Map(allVenues.map((v) => [v.id, v.canSplit]))).map((s) => ({
+    key: s.slot.id,
+    partial: "partial" === s.kind,
+    place: `${venueName.get(s.slot.venueId) ?? "?"} · ${dayLabel(s.slot.dayOfWeek)} ${hhmm(s.slot.startTime)}`,
+    message:
+      "partial" === s.kind
+        ? `${s.reservedTeamIds.length} équipe(s) réservée(s) sur ${s.capacity} places — le système ne complétera pas ce créneau, la place restante restera vide. Réservez aussi l'autre équipe, ou retirez la réservation pour laisser le système choisir.`
+        : `créneau partagé (${s.capacity} places) sans réservation — le système associera les équipes lui-même. Pour choisir lesquelles, réservez-les (étape Contraintes, onglet Réserver).`,
+  }));
   // Reservations ordered by team rank (fanion S → A → B → C → D), then day + time.
   const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
   const rankOf = (id: string): number => teamRank.get(id) ?? Number.MAX_SAFE_INTEGER;
@@ -144,6 +160,20 @@ export function RecapStep() {
           className={cn("mb-3 rounded-md px-3 py-2 text-sm", notice.pending ? "text-muted-foreground" : "border border-warning/40 bg-warning/10 text-foreground")}
         >
           {notice.message}
+        </p>
+      ))}
+      {sharedSlotNotices.map((notice) => (
+        <p
+          key={notice.key}
+          className={cn(
+            "mb-3 rounded-md px-3 py-2 text-sm",
+            // Partiel = warning (une place se PERD) ; non réservé = information neutre
+            // (le système fera un choix légitime). Même œil que layerNotices : le ton
+            // visuel suit la gravité, sinon tout bandeau finit par ne plus rien dire.
+            notice.partial ? "border border-warning/40 bg-warning/10 text-foreground" : "border border-border bg-muted/50 text-muted-foreground",
+          )}
+        >
+          <span className="font-medium">{notice.place}</span> : {notice.message}
         </p>
       ))}
 

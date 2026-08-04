@@ -22,7 +22,7 @@ import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useReserv
 import { useWizardStore } from "../store";
 import { PeriodVenues } from "./PeriodStructure";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
-import { CapacitySelect } from "./slotFields";
+import { CapacitySelect, SharedSlotHint } from "./slotFields";
 import { WEEK } from "../lib/weekGrid";
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -157,6 +157,8 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
           </div>
         ) : null}
       </div>
+
+      {canSplit ? <SharedSlotHint capacity={capacity} /> : null}
 
       {null !== error ? (
         <p role="alert" className="mt-3 text-sm text-destructive">

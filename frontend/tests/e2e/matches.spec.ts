@@ -111,10 +111,10 @@ test("matches: create a fixture, place it, radar renders", async ({ page }) => {
 
     // Lock round-trip: a manual placement is an anchor → hand it back to the
     // solver, the button flips to Verrouiller; lock it again, it flips back.
-    await page.getByRole("button", { name: "Rendre au solveur" }).click();
+    await page.getByRole("button", { name: "Rendre au système" }).click();
     await expect(page.getByRole("button", { name: "Verrouiller" })).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: "Verrouiller" }).click();
-    await expect(page.getByRole("button", { name: "Rendre au solveur" })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "Rendre au système" })).toBeVisible({ timeout: 15_000 });
 
     // Dé-placer: the match leaves the grid and returns to the to-do list.
     await page.getByRole("button", { name: "Dé-placer" }).click();

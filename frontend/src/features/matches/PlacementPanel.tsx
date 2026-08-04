@@ -179,11 +179,11 @@ export function PlacementPanel({
                   variant="outline"
                   size="sm"
                   disabled={busy}
-                  title={locked ? "Le solveur pourra re-placer ce match au prochain passage" : "Figer ce placement — le solveur ne le bougera plus"}
+                  title={locked ? "Le système pourra re-placer ce match au prochain passage" : "Figer ce placement — le système ne le bougera plus"}
                   onClick={onToggleLock}
                 >
                   {locked ? <LockOpen className="size-3.5" /> : <Lock className="size-3.5" />}
-                  {locked ? "Rendre au solveur" : "Verrouiller"}
+                  {locked ? "Rendre au système" : "Verrouiller"}
                 </Button>
                 <Button variant="outline" size="sm" disabled={busy} className="col-span-2" onClick={onStartSwap}>
                   <ArrowLeftRight className="size-3.5" />

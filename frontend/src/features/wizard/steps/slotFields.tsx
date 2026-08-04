@@ -22,3 +22,23 @@ export function CapacitySelect({ value, onChange, canSplit, className }: { value
     </Select>
   );
 }
+
+/**
+ * Guidance affichée dès qu'une capacité ≥ 2 est CHOISIE (valeur du select, pas la valeur
+ * enregistrée) : c'est au moment où le gestionnaire crée un créneau partagé qu'il faut lui
+ * dire où se choisit QUI le partage — sans réservation, le système associe les équipes
+ * lui-même (la capacité dit combien, jamais avec qui — décision P3-8). Module partagé pour
+ * la même raison que `CapacitySelect` : les éditeurs de saison ET de période l'affichent.
+ * ⚠ « le système », jamais « le solveur » : vocabulaire gestionnaire (docs/glossary.md).
+ */
+export function SharedSlotHint({ capacity }: { capacity: number }) {
+  if (capacity < 2) {
+    return null;
+  }
+  return (
+    <p className="mt-3 rounded-md border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+      Créneau partagé : choisissez les {capacity} équipes qui l'occuperont en les réservant (étape Contraintes, onglet
+      Réserver). Sans réservation, le système associera les équipes lui-même.
+    </p>
+  );
+}

@@ -162,7 +162,7 @@ export function GenerateStep() {
       <p className="mb-4 text-sm text-muted-foreground">
         {periodMode
           ? "Génère le planning de cette période. Il s'applique par-dessus le planning principal sur la fenêtre, sans le modifier."
-          : "Le solveur place tes équipes dans les créneaux selon tes règles. Lance, puis laisse tourner."}
+          : "Le système place tes équipes dans les créneaux selon tes règles. Lance, puis laisse tourner."}
       </p>
 
       {failed ? (

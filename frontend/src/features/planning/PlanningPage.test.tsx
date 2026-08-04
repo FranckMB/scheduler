@@ -350,7 +350,7 @@ describe("PlanningPage (integration)", () => {
     const user = userEvent.setup();
     renderWithProviders(<PlanningPage />);
     // Diagnostics collapsed by default → open the panel first (user request).
-    await user.click(await screen.findByRole("button", { name: /Diagnostics du solveur/ }));
+    await user.click(await screen.findByRole("button", { name: /Diagnostics du système/ }));
     const group = await screen.findByRole("button", { name: /Erreurs/ });
     expect(within(group).getByText("1")).toBeInTheDocument();
   });
@@ -364,7 +364,7 @@ describe("PlanningPage (integration)", () => {
     renderWithProviders(<PlanningPage embedded />);
 
     // Panneau déplié : son titre est un en-tête, pas le bouton de la barre repliée.
-    expect(await screen.findByRole("heading", { name: "Diagnostics du solveur" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Diagnostics du système" })).toBeInTheDocument();
 
     // ⚠ ET le groupe le plus sévère est DÉPLIÉ. Sans cette seconde assertion, le test
     // restait vert en supprimant `openMostSevere` : le titre du panneau est rendu quoi
@@ -383,15 +383,15 @@ describe("PlanningPage (integration)", () => {
     // La grille est bien là — donc la page a fini de charger…
     expect(await screen.findByText("U11")).toBeInTheDocument();
     // …et l'aside est resté la barre compacte, pas le panneau.
-    expect(screen.queryByRole("heading", { name: "Diagnostics du solveur" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Diagnostics du système" })).not.toBeInTheDocument();
   });
 
   it("laisse les diagnostics REPLIÉS en boucle de travail", async () => {
     renderWithProviders(<PlanningPage />);
 
     // Barre compacte : un bouton qui rouvre, pas le panneau lui-même.
-    expect(await screen.findByRole("button", { name: /Diagnostics du solveur/ })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Diagnostics du solveur" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Diagnostics du système/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Diagnostics du système" })).not.toBeInTheDocument();
   });
 
   it("renders defined-but-unfilled windows as 'vide' cells alongside the solver's unused_slot warning", async () => {
@@ -400,7 +400,7 @@ describe("PlanningPage (integration)", () => {
     // ts-2 (Gymnase Alpha, Mardi 19:00) has no placement → a `vide` cell in the grid.
     expect(await screen.findByText("vide")).toBeInTheDocument();
     // The solver's own unused_slot warning is listed under "Alertes" (panel opened).
-    await user.click(await screen.findByRole("button", { name: /Diagnostics du solveur/ }));
+    await user.click(await screen.findByRole("button", { name: /Diagnostics du système/ }));
     const warnGroup = await screen.findByRole("button", { name: /Alertes/ });
     expect(within(warnGroup).getByText("1")).toBeInTheDocument();
   });

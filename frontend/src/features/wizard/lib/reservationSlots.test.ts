@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PriorityTier, Reservation, Team, VenueTrainingSlot } from "../api";
-import { assignableTeams, effectiveSlotCapacity, reservedTeamsBySlot, teamReservationCount } from "./reservationSlots";
+import { assignableTeams, effectiveSlotCapacity, reservedTeamsBySlot, sharedSlotStatuses, teamReservationCount } from "./reservationSlots";
 
 const slot = (id: string, venueId: string, dayOfWeek: number, startTime: string, capacity = 1): VenueTrainingSlot =>
   ({ id, venueId, dayOfWeek, startTime, durationMinutes: 90, capacity }) as VenueTrainingSlot;
@@ -72,5 +72,43 @@ describe("assignableTeams", () => {
     const isoSlot = slot("s", "v1", 2, "1970-01-01T20:30:00+00:00", 1);
     const reservations = [resa("s1", "v1", 2, "20:30")];
     expect(assignableTeams(teams, TIERS, isoSlot, reservations, NON_SPLIT)).toEqual([]); // slot full via the HH:MM reservation
+  });
+});
+
+/**
+ * Décision P3-8 (2026-08-04) — le récap AVERTIT sur les créneaux partagés, sans bloquer.
+ * Deux cas distincts parce que leurs conséquences diffèrent : non réservé = le système
+ * choisit les équipes (information) ; PARTIELLEMENT réservé = ALIGN-07 ferme le créneau
+ * entier au système, la place restante est PERDUE (avertissement).
+ */
+describe("sharedSlotStatuses — les avertissements du récap sur créneau partagé", () => {
+  it("signale « unreserved » un créneau capacité 2 sans réservation", () => {
+    const statuses = sharedSlotStatuses([slot("s", "v1", 2, "18:00", 2)], [], SPLIT);
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]).toMatchObject({ kind: "unreserved", capacity: 2, reservedTeamIds: [] });
+  });
+
+  it("signale « partial » un créneau capacité 2 réservé par UNE seule équipe", () => {
+    const statuses = sharedSlotStatuses([slot("s", "v1", 2, "18:00", 2)], [resa("s1", "v1", 2, "18:00")], SPLIT);
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]).toMatchObject({ kind: "partial", reservedTeamIds: ["s1"] });
+  });
+
+  it("se tait sur un créneau plein (2/2) comme sur un créneau capacité 1", () => {
+    const full = [resa("a", "v1", 2, "18:00"), resa("b", "v1", 2, "18:00")];
+    expect(sharedSlotStatuses([slot("s", "v1", 2, "18:00", 2)], full, SPLIT)).toEqual([]);
+    expect(sharedSlotStatuses([slot("s", "v1", 2, "18:00", 1)], [], SPLIT)).toEqual([]);
+  });
+
+  it("ignore la capacité 2 STOCKÉE d'un gymnase non divisible (effectiveSlotCapacity force 1)", () => {
+    expect(sharedSlotStatuses([slot("s", "v1", 2, "18:00", 2)], [], NON_SPLIT)).toEqual([]);
+  });
+
+  it("croise un start ISO côté créneau avec le HH:MM d'une réservation (forme prod)", () => {
+    // Sans la normalisation, la réservation ne serait pas vue et le créneau crierait
+    // « sans réservation » alors qu'il est plein.
+    const isoSlot = slot("s", "v1", 2, "1970-01-01T20:30:00+00:00", 2);
+    const full = [resa("a", "v1", 2, "20:30"), resa("b", "v1", 2, "20:30")];
+    expect(sharedSlotStatuses([isoSlot], full, SPLIT)).toEqual([]);
   });
 });
