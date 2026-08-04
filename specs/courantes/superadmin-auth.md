@@ -233,8 +233,11 @@ toutes les 10 minutes.
 
 `GET /api/admin/actions` publie un **catalogue fermé** (`AdminActionCatalog`) : clé,
 libellé, description et un drapeau `dangerous` qui pilote la confirmation côté UI.
-Les trois actions livrées sont `reset-generation-quota` (remise à zéro du compteur de
-générations de la saison, non destructive), `reset-current-season` (vide la saison
+Les quatre actions livrées sont `reset-generation-quota` (remise à zéro du compteur de
+générations de la saison, non destructive), `ffbb-resync` (P2-18, 2026-08-04 : ré-importe
+l'identité FFBB du club — nom, coordonnées, logo, comité/ligue — le même `FfbbClubPopulator`
+en mode refresh que le bouton de la fiche club ; échec FRANC si l'organisme est introuvable,
+jamais un succès silencieux), `reset-current-season` (vide la saison
 courante — le club repart au wizard, la saison et le club survivent) et
 `purge-old-seasons` (supprime les saisons au-delà de la rétention).
 
