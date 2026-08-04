@@ -162,21 +162,6 @@ export function RecapStep() {
           {notice.message}
         </p>
       ))}
-      {sharedSlotNotices.map((notice) => (
-        <p
-          key={notice.key}
-          className={cn(
-            "mb-3 rounded-md px-3 py-2 text-sm",
-            // Partiel = warning (une place se PERD) ; non réservé = information neutre
-            // (le système fera un choix légitime). Même œil que layerNotices : le ton
-            // visuel suit la gravité, sinon tout bandeau finit par ne plus rien dire.
-            notice.partial ? "border border-warning/40 bg-warning/10 text-foreground" : "border border-border bg-muted/50 text-muted-foreground",
-          )}
-        >
-          <span className="font-medium">{notice.place}</span> : {notice.message}
-        </p>
-      ))}
-
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Counter label="Équipes" value={teams.length} />
         <Counter label="Gymnases" value={venues.length} />
@@ -283,6 +268,23 @@ export function RecapStep() {
         </AccordionSection>
       </div>
 
+      {/* Encarts créneaux partagés AVEC les bloqueurs, au-dessus du bouton (demande
+          fondateur 2026-08-04) : tout ce qui pèse sur la décision de lancer vit au
+          même endroit — en haut ils étaient incohérents avec les warnings du bas. */}
+      {sharedSlotNotices.map((notice) => (
+        <p
+          key={notice.key}
+          className={cn(
+            "mb-3 rounded-md px-3 py-2 text-sm",
+            // Partiel = warning (une place se PERD) ; non réservé = information neutre
+            // (le système fera un choix légitime). Même œil que layerNotices : le ton
+            // visuel suit la gravité, sinon tout bandeau finit par ne plus rien dire.
+            notice.partial ? "border border-warning/40 bg-warning/10 text-foreground" : "border border-border bg-muted/50 text-muted-foreground",
+          )}
+        >
+          <span className="font-medium">{notice.place}</span> : {notice.message}
+        </p>
+      ))}
       {blockers.length > 0 ? (
         <BlockerList blockers={blockers} className="mb-4" />
       ) : (

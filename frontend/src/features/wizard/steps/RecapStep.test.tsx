@@ -197,6 +197,14 @@ describe("RecapStep — créneaux partagés", () => {
     expect(screen.getByText(/Gymnase A · Sam 14:00/)).toBeInTheDocument();
   });
 
+  it("place l'encart EN BAS, avec la zone de décision — pas au-dessus des compteurs (UX fondateur 2026-08-04)", () => {
+    renderWithProviders(<RecapStep />);
+    const notice = screen.getByText(/le système associera les équipes lui-même/);
+    const counters = screen.getAllByText("Équipes")[0];
+    // compareDocumentPosition : FOLLOWING = l'encart vient APRÈS les compteurs dans le DOM.
+    expect(counters.compareDocumentPosition(notice.closest("p") ?? notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("avertit qu'un créneau partagé PARTIELLEMENT réservé gardera sa place vide (ALIGN-07)", () => {
     h.reservations = [{ id: "r1", teamId: "t1", venueId: "v1", dayOfWeek: 6, startTime: "14:00" }];
     renderWithProviders(<RecapStep />);
