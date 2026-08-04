@@ -18,6 +18,8 @@ final class FfbbExcelImporter
     private const DEFAULT_PRIORITY_TIER_ID = 5;
     private const DEFAULT_SESSIONS_PER_WEEK = 2;
 
+    private ?int $nextSortOrderValue = null;
+
     public function __construct(private readonly EntityManagerInterface $entityManager) {}
 
     /**
@@ -64,6 +66,17 @@ final class FfbbExcelImporter
         $skipped = 0;
         $errors = [];
 
+        // P4-35 — l'identité d'une équipe est (club, saison, NOM). L'ancien test
+        // `findOneBy([clubId, seasonId])` demandait « cette saison a-t-elle UNE
+        // équipe ? » : saison vierge + 4 lignes → created=2/skipped=2 selon l'ordre
+        // du fichier (mesuré). On précharge les noms existants UNE fois et on suit
+        // ceux du lot en cours — le flush étant unique et final, le repository ne
+        // voit pas les équipes de ce lot.
+        $knownNames = [];
+        foreach ($this->entityManager->getRepository(Team::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
+            $knownNames[mb_strtolower($team->getName(), 'UTF-8')] = true;
+        }
+
         foreach ($rows as $rowIndex => $row) {
             /** @var array<mixed> $row */
             $nom = $this->stringValue($row[$columnMap['nom']] ?? null);
@@ -87,15 +100,12 @@ final class FfbbExcelImporter
                 throw ImportRejectedException::unprocessable(\sprintf('Identity theft prevention: extracted club code "%s" does not match club code "%s".', $extractedClubCode, $expectedClubCode));
             }
 
-            $existingTeam = $this->entityManager->getRepository(Team::class)->findOneBy([
-                'clubId' => $clubId,
-                'seasonId' => $seasonId,
-            ]);
-
-            if ($existingTeam instanceof Team) {
+            $nameKey = mb_strtolower($nom, 'UTF-8');
+            if (isset($knownNames[$nameKey])) {
                 ++$skipped;
                 continue;
             }
+            $knownNames[$nameKey] = true;
 
             $sportCategory = $this->findOrCreateSportCategory($categorie, $clubId, $sport->getId());
 
@@ -112,9 +122,11 @@ final class FfbbExcelImporter
             ++$created;
         }
 
-        if ($created > 0) {
-            $this->entityManager->flush();
-        }
+        // Flush UNIQUE et FINAL (P4-35) : l'import est tout-ou-rien. L'ancien
+        // `flush()` au fil des catégories laissait des écritures partielles quand
+        // une ligne ultérieure jetait (code club étranger → 422 avec la moitié du
+        // fichier déjà en base). Il couvre aussi les catégories créées sans équipe.
+        $this->entityManager->flush();
 
         return ['created' => $created, 'skipped' => $skipped, 'errors' => $errors];
     }
@@ -198,12 +210,34 @@ final class FfbbExcelImporter
             ->setClubId($clubId)
             ->setSportId($sportId)
             ->setIsCustom(true)
-            ->setSortOrder(0);
+            // Comme SportCategoryStateProcessor::nextSortOrder : une catégorie créée se
+            // range APRÈS le catalogue (0 = la place de « Vétéran », elle sautait en tête
+            // de tous les sélecteurs). Pas de flush ici — l'import est tout-ou-rien, et
+            // l'UUID naît au constructeur (P4-35).
+            ->setSortOrder($this->nextSortOrder());
 
         $this->entityManager->persist($category);
-        $this->entityManager->flush();
 
         return $category;
+    }
+
+    /**
+     * Le rang d'affichage suivant (même règle que SportCategoryStateProcessor).
+     * Mémorisé puis incrémenté : le flush étant final, MAX(sortOrder) ne voit pas
+     * les catégories du lot en cours — sans le compteur elles seraient ex æquo.
+     */
+    private function nextSortOrder(): int
+    {
+        if (null === $this->nextSortOrderValue) {
+            $max = $this->entityManager->createQueryBuilder()
+                ->select('MAX(c.sortOrder)')
+                ->from(SportCategory::class, 'c')
+                ->getQuery()
+                ->getSingleScalarResult();
+            $this->nextSortOrderValue = null === $max ? 0 : ((int) $max) + 1;
+        }
+
+        return $this->nextSortOrderValue++;
     }
 
     /** @param array<mixed> $row */
