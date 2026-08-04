@@ -28,6 +28,7 @@ export interface FfbbOrganisme {
   phone: string | null;
   email: string | null;
   logoUrl: string | null;
+  website: string | null;
 }
 
 export interface MeResponse {

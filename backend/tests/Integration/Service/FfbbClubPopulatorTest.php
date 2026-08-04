@@ -60,11 +60,14 @@ final class FfbbClubPopulatorTest extends KernelTestCase
         self::assertSame('69500', $committee?->getPostalCode());
         self::assertSame('cdrbb@basketrhone.com', $committee?->getEmail());
         self::assertSame('ARA', $committee?->getLeagueCode());
+        self::assertSame('http://www.basketrhone.com', $committee?->getWebsite());
         self::assertNotNull($committee?->getLogoUrl());
 
         $league = self::getContainer()->get(FfbbLeagueRepository::class)->findByCode('ARA');
         self::assertSame('secretariat@aurabasketball.com', $league?->getEmail());
         self::assertStringContainsString('/api/ffbb-logos/league/ARA', (string) $league?->getLogoUrl());
+        // Mesuré le 2026-08-04 : la FFBB rend l'URL de la ligue avec une espace FINALE — str() trime.
+        self::assertSame('https://www.aurabasketball.com', $league?->getWebsite());
     }
 
     public function testCacheFirstReusesExistingReferences(): void
@@ -193,10 +196,10 @@ final class FfbbClubPopulatorTest extends KernelTestCase
     private function hitFor(string $searchBody): array
     {
         if (str_contains($searchBody, 'COMITE')) {
-            return ['code' => '0069', 'nom' => 'COMITE DU RHONE', 'adresse' => '3 RUE DU COLONEL CHAMBONNET', 'telephone' => '0478740634', 'mail' => 'cdrbb@basketrhone.com', 'commune' => ['libelle' => 'BRON', 'codePostal' => '69500'], 'logo' => ['id' => 'b0be226e-b2c7-42bc-85bb-05282ecd75b4'], 'type' => 'Comité'];
+            return ['code' => '0069', 'nom' => 'COMITE DU RHONE', 'adresse' => '3 RUE DU COLONEL CHAMBONNET', 'telephone' => '0478740634', 'mail' => 'cdrbb@basketrhone.com', 'urlSiteWeb' => 'http://www.basketrhone.com', 'commune' => ['libelle' => 'BRON', 'codePostal' => '69500'], 'logo' => ['id' => 'b0be226e-b2c7-42bc-85bb-05282ecd75b4'], 'type' => 'Comité'];
         }
         if (str_contains($searchBody, 'LIGUE')) {
-            return ['code' => 'ARA', 'nom' => 'LIGUE AURA', 'adresse' => '3 AVENUE COLONEL CHAMBONNET', 'telephone' => '0977423620', 'mail' => 'secretariat@aurabasketball.com', 'commune' => ['libelle' => 'BRON', 'codePostal' => '69500'], 'logo' => ['id' => '4e73cd36-6058-44e8-b66c-79da4923b4c6'], 'type' => 'Ligue'];
+            return ['code' => 'ARA', 'nom' => 'LIGUE AURA', 'adresse' => '3 AVENUE COLONEL CHAMBONNET', 'telephone' => '0977423620', 'mail' => 'secretariat@aurabasketball.com', 'urlSiteWeb' => 'https://www.aurabasketball.com ', 'commune' => ['libelle' => 'BRON', 'codePostal' => '69500'], 'logo' => ['id' => '4e73cd36-6058-44e8-b66c-79da4923b4c6'], 'type' => 'Ligue'];
         }
 
         return [

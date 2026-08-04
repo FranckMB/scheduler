@@ -16,11 +16,10 @@ export interface AppearanceResult {
 /** Partial update of the club identity (accent), scoped server-side to the JWT club. */
 export const updateAppearance = (body: AppearancePayload): Promise<AppearanceResult> => api.patch("club/appearance", { json: body }).json();
 
+// ⚠ Les champs que la FFBB alimente (comité, tél/email/adresse du club) ne sont
+// PAS dans ce payload : le serveur les refuse en 422 (« lecture seule »).
+// Le geste de correction est le ré-import FFBB ci-dessous.
 export interface ClubInfoPayload {
-  committeeCode?: string | null;
-  contactPhone?: string | null;
-  contactEmail?: string | null;
-  address?: string | null;
   correspondentName?: string | null;
   correspondentPhone?: string | null;
   correspondentEmail?: string | null;
@@ -34,6 +33,14 @@ export interface ClubInfoPayload {
 
 /** Partial update of the FFBB club info (lot B), scoped server-side to the JWT club. */
 export const updateClubInfo = (body: ClubInfoPayload): Promise<ClubInfoPayload> => api.patch("club/info", { json: body }).json();
+
+export interface FfbbImportResult {
+  populated: boolean;
+  error?: string;
+}
+
+/** Re-import institutionnel depuis la FFBB (management) — écrase les champs dont la fédération fait autorité. */
+export const ffbbImport = (): Promise<FfbbImportResult> => api.post("club/ffbb-import").json();
 
 /** Upload the club logo (multipart); returns its public URL. */
 export const uploadLogo = (file: File): Promise<{ logoUrl: string }> => {

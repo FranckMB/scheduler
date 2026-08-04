@@ -30,9 +30,6 @@ final class ClubInfoController extends AbstractController
 
     /** body key → [setter, max length]. Free-text fields. */
     private const TEXT_FIELDS = [
-        'committeeCode' => ['setCommitteeCode', 24],
-        'contactPhone' => ['setContactPhone', 32],
-        'address' => ['setAddress', 255],
         'correspondentName' => ['setCorrespondentName', 180],
         'correspondentPhone' => ['setCorrespondentPhone', 32],
         'presidentName' => ['setPresidentName', 180],
@@ -43,10 +40,19 @@ final class ClubInfoController extends AbstractController
 
     /** body key → setter for email fields (validated). */
     private const EMAIL_FIELDS = [
-        'contactEmail' => 'setContactEmail',
         'correspondentEmail' => 'setCorrespondentEmail',
         'presidentEmail' => 'setPresidentEmail',
     ];
+
+    /**
+     * Champs dont la FFBB fait autorité (décision fondateur 2026-08-04, cadrage
+     * api-ffbb-completion-club §5) : remplis par FfbbClubPopulator au register et
+     * au ré-import — l'écran les affiche en lecture seule, et le serveur REFUSE
+     * de les écrire plutôt que de les ignorer en silence (un client qui les
+     * envoie croit avoir sauvé ; le 422 nomme la règle). Le geste de correction
+     * est `POST /api/club/ffbb-import`, pas la saisie.
+     */
+    private const FFBB_AUTHORITATIVE_FIELDS = ['committeeCode', 'contactPhone', 'contactEmail', 'address'];
 
     public function __construct(
         private readonly ClubRepository $clubRepository,
@@ -72,6 +78,12 @@ final class ClubInfoController extends AbstractController
         $data = json_decode((string) $this->requestStack->getCurrentRequest()?->getContent(), true);
         if (!\is_array($data)) {
             return $this->json(['error' => 'Invalid JSON.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        foreach (self::FFBB_AUTHORITATIVE_FIELDS as $key) {
+            if (\array_key_exists($key, $data)) {
+                return $this->unprocessable(\sprintf('%s est alimenté par la FFBB — lecture seule (utilisez le ré-import FFBB).', $key));
+            }
         }
 
         // Partial: only the keys present are touched. A string is trimmed

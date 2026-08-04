@@ -33,15 +33,14 @@ final class ClubInfoTest extends WebTestCase
 
     public function testPartialUpdatePersistsAndResets(): void
     {
-        $this->patch(['correspondentName' => 'Clemence H.', 'contactEmail' => 'contact@bccl.fr', 'mainVenueName' => 'Gymnase Mateo', 'committeeCode' => '0069']);
+        $this->patch(['correspondentName' => 'Clemence H.', 'mainVenueName' => 'Gymnase Mateo', 'presidentEmail' => 'president@bccl.fr']);
         self::assertResponseIsSuccessful();
 
         $this->em->clear();
         $reloaded = $this->em->getRepository(Club::class)->find($this->club->getId());
         self::assertSame('Clemence H.', $reloaded?->getCorrespondentName());
-        self::assertSame('contact@bccl.fr', $reloaded?->getContactEmail());
         self::assertSame('Gymnase Mateo', $reloaded?->getMainVenueName());
-        self::assertSame('0069', $reloaded?->getCommitteeCode());
+        self::assertSame('president@bccl.fr', $reloaded?->getPresidentEmail());
         // Untouched key stays null (partial).
         self::assertNull($reloaded?->getPresidentName());
 
@@ -50,6 +49,31 @@ final class ClubInfoTest extends WebTestCase
         self::assertResponseIsSuccessful();
         $this->em->clear();
         self::assertNull($this->em->getRepository(Club::class)->find($this->club->getId())?->getCorrespondentName());
+    }
+
+    public function testFfbbAuthoritativeFieldsAreRejected(): void
+    {
+        // Décision fondateur 2026-08-04 (cadrage api-ffbb-completion-club §5) :
+        // comité, tél/email/adresse du club sont alimentés par la FFBB — le
+        // serveur REFUSE la saisie (422 nommant la règle) au lieu de l'ignorer
+        // en silence : un client qui les envoie croirait avoir sauvé. Le geste
+        // de correction est POST /api/club/ffbb-import.
+        foreach (['committeeCode' => '0069', 'contactPhone' => '0600000000', 'contactEmail' => 'x@y.fr', 'address' => '1 rue X'] as $key => $value) {
+            $this->patch([$key => $value]);
+            self::assertResponseStatusCodeSame(422, $key . ' doit être refusé');
+            $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+            self::assertIsArray($body);
+            self::assertStringContainsString('FFBB', (string) ($body['error'] ?? ''), $key . ' : le 422 doit nommer la règle');
+        }
+
+        // Et rien n'a été écrit — y compris quand la clé refusée accompagnait
+        // un champ légitime (tout-ou-rien : le refus précède toute écriture).
+        $this->patch(['correspondentName' => 'Zoe', 'contactPhone' => '0600000000']);
+        self::assertResponseStatusCodeSame(422);
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Club::class)->find($this->club->getId());
+        self::assertNull($reloaded?->getContactPhone());
+        self::assertNull($reloaded?->getCorrespondentName(), 'le champ légitime du même PATCH refusé ne doit pas être écrit');
     }
 
     public function testInvalidEmailIsRejected(): void
@@ -70,13 +94,13 @@ final class ClubInfoTest extends WebTestCase
     {
         // Seed a value, then send a JSON number for the same key: it must 422
         // (not silently wipe the column to null).
-        $this->patch(['committeeCode' => '0069']);
+        $this->patch(['correspondentName' => 'Clemence H.']);
         self::assertResponseIsSuccessful();
 
-        $this->patch(['committeeCode' => 69]);
+        $this->patch(['correspondentName' => 69]);
         self::assertResponseStatusCodeSame(422);
         $this->em->clear();
-        self::assertSame('0069', $this->em->getRepository(Club::class)->find($this->club->getId())?->getCommitteeCode());
+        self::assertSame('Clemence H.', $this->em->getRepository(Club::class)->find($this->club->getId())?->getCorrespondentName());
     }
 
     public function testMeExposesOfficerContactsOnlyToManagement(): void

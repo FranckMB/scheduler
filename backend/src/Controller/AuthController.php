@@ -584,6 +584,7 @@ final class AuthController extends AbstractController
             'phone' => $organisme->getPhone(),
             'email' => $organisme->getEmail(),
             'logoUrl' => $organisme->getLogoUrl(),
+            'website' => $organisme->getWebsite(),
         ];
     }
 

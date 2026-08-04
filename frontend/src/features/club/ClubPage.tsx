@@ -14,7 +14,7 @@ import { readableForeground } from "@/shared/lib/color";
 import { extractPalette } from "@/shared/lib/palette";
 
 import { LogoCropper } from "./LogoCropper";
-import { useDeleteLogo, useDownloadClubExport, useResetClub, useUpdateAppearance, useUpdateClubInfo, useUploadLogo } from "./queries";
+import { useDeleteLogo, useDownloadClubExport, useFfbbImport, useResetClub, useUpdateAppearance, useUpdateClubInfo, useUploadLogo } from "./queries";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_ACCENT = "#3b82f6";
@@ -256,8 +256,11 @@ function InfoField({ label, value, onChange, type = "text", placeholder }: { lab
   );
 }
 
+// Seuls les champs que la FFBB NE CONNAÎT PAS restent saisissables (décision
+// fondateur 2026-08-04, cadrage api-ffbb-completion-club §1 : aucune personne
+// physique dans l'index, aucun lien club→salle). Le reste est en lecture seule,
+// corrigeable par le ré-import — le serveur refuse d'ailleurs de l'écrire (422).
 const INFO_KEYS = [
-  "committeeCode", "contactPhone", "contactEmail", "address",
   "correspondentName", "correspondentPhone", "correspondentEmail",
   "presidentName", "presidentPhone", "presidentEmail",
   "mainVenueName", "mainVenueAddress",
@@ -265,9 +268,20 @@ const INFO_KEYS = [
 
 type InfoKey = (typeof INFO_KEYS)[number];
 
+/** Une donnée FFBB en lecture seule — même gabarit que le Code FFBB. */
+function ReadOnlyField({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
+  return (
+    <div>
+      <span className="mb-1 block text-xs text-muted-foreground">{label}</span>
+      <p className={mono ? "font-mono" : undefined}>{value ?? "—"}</p>
+    </div>
+  );
+}
+
 /** FFBB club info (lot B): read-only identity + editable contacts. */
 function ClubInfoSection({ club }: { club: NonNullable<MeResponse["club"]> }) {
   const update = useUpdateClubInfo();
+  const ffbbImport = useFfbbImport();
   // Seeded from the server values. The parent remounts this component (key on
   // the server signature) when ["me"] refetches, so the inputs re-sync after a
   // save instead of going stale — no effect needed.
@@ -287,34 +301,38 @@ function ClubInfoSection({ club }: { club: NonNullable<MeResponse["club"]> }) {
 
   return (
     <div className="space-y-5">
+      {/* Identité + contact : la FFBB fait autorité — lecture seule, le geste de
+          correction est le ré-import (le serveur refuse la saisie en 422). */}
       <div>
-        <h3 className="mb-2 text-sm font-semibold">Identité</h3>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold">Identité</h3>
+          <Button size="sm" variant="outline" onClick={() => ffbbImport.mutate()} disabled={ffbbImport.isPending}>
+            {ffbbImport.isPending ? <Spinner className="size-4" /> : null}
+            Actualiser depuis la FFBB
+          </Button>
+        </div>
         <div className="grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <span className="mb-1 block text-xs text-muted-foreground">Code FFBB</span>
-            <p className="font-mono">{club.ffbbClubCode ?? "—"}</p>
-          </div>
-          <div>
-            <span className="mb-1 block text-xs text-muted-foreground">Ligue</span>
-            <p>{club.league ?? "—"}</p>
-          </div>
-          <div>
-            <span className="mb-1 block text-xs text-muted-foreground">Zone de vacances</span>
-            <p>{club.schoolZone ?? "—"}</p>
-          </div>
-          <InfoField label="Comité" value={form.committeeCode} onChange={set("committeeCode")} placeholder="0069" />
+          <ReadOnlyField label="Code FFBB" value={club.ffbbClubCode} mono />
+          <ReadOnlyField label="Ligue" value={club.league} />
+          <ReadOnlyField label="Zone de vacances" value={club.schoolZone} />
+          <ReadOnlyField label="Comité" value={club.committeeCode} mono />
         </div>
       </div>
 
       <div>
         <h3 className="mb-2 text-sm font-semibold">Contact du club</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <InfoField label="Téléphone" value={form.contactPhone} onChange={set("contactPhone")} type="tel" />
-          <InfoField label="Email" value={form.contactEmail} onChange={set("contactEmail")} type="email" />
-          <label className="col-span-2 block">
+        <p className="mb-2 text-xs text-muted-foreground">Coordonnées officielles FFBB — lecture seule, actualisables via le bouton ci-dessus.</p>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <ReadOnlyField label="Téléphone" value={club.contactPhone} />
+          <ReadOnlyField label="Email" value={club.contactEmail} />
+          <div className="col-span-2">
             <span className="mb-1 block text-xs text-muted-foreground">Adresse</span>
-            <Input value={form.address} onChange={(e) => set("address")(e.target.value)} />
-          </label>
+            <p>{[club.address, [club.postalCode, club.city].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "—"}</p>
+          </div>
+          <div className="col-span-2">
+            <span className="mb-1 block text-xs text-muted-foreground">Site web</span>
+            <p className="truncate">{club.website ?? "—"}</p>
+          </div>
         </div>
       </div>
 
@@ -367,8 +385,8 @@ function safeHttpUrl(url: string | null | undefined): string | null {
   }
 }
 
-/** One read-only FFBB contact block (Club / Comité / Ligue). */
-function ContactBlock({ title, data }: { title: string; data: (FfbbOrganisme & { website?: string | null }) | null }) {
+/** One read-only FFBB contact block (Comité / Ligue). */
+function ContactBlock({ title, data }: { title: string; data: FfbbOrganisme | null }) {
   const filled = data && (data.address || data.city || data.phone || data.email);
   const website = safeHttpUrl(data?.website);
   return (
@@ -407,23 +425,13 @@ function ContactBlock({ title, data }: { title: string; data: (FfbbOrganisme & {
   );
 }
 
-/** FFBB institutional contacts (lot C): Club · Comité · Ligue, read-only. */
+/** FFBB institutional contacts (lot C): Comité · Ligue, read-only.
+ *  Plus de bloc « Club » (décision fondateur 2026-08-04) : cette section ne
+ *  montre que la hiérarchie AU-DESSUS du club — ses propres coordonnées vivent
+ *  dans « Informations du club », les dupliquer ici créait deux vérités. */
 function ContactsFfbbSection({ club }: { club: NonNullable<MeResponse["club"]> }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <ContactBlock
-        title="Club"
-        data={{
-          name: club.name,
-          address: club.address,
-          postalCode: club.postalCode,
-          city: club.city,
-          phone: club.contactPhone,
-          email: club.contactEmail,
-          logoUrl: club.logoUrl,
-          website: club.website,
-        }}
-      />
+    <div className="grid gap-3 sm:grid-cols-2">
       <ContactBlock title="Comité" data={club.ffbbCommittee} />
       <ContactBlock title="Ligue" data={club.ffbbLeague} />
     </div>
