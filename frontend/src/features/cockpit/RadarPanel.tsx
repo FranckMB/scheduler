@@ -2,7 +2,7 @@ import { AlertTriangle, CalendarClock, CalendarOff, ChevronDown, MapPin, Message
 import { Link, useNavigate } from "react-router";
 
 import { useWorkingSeason } from "@/features/auth/queries";
-import { useSchedules } from "@/features/planning/queries";
+import { useSchedules, useSlots } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
@@ -321,9 +321,28 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // Disruption reminders, no CTA: a cutoff means "no training", there is no plan to prepare.
   const cutoffs = upcomingPeriods("cutoff");
 
-  const upcomingPublicHolidays = publicHolidays
+  // P4-9 (décision fondateur 2026-08-04) — un férié ne mérite une carte que s'il
+  // TOMBE un jour où le planning EN VIGUEUR a des séances, et la carte dit
+  // l'IMPACT (« 2 séances ce jour-là ») au lieu de répéter la date. Sans socle
+  // pointé : aucune séance à protéger → aucune carte férié.
+  const seasonChosenId = (plansQuery.data ?? []).find((p) => "SEASON" === p.type)?.chosenScheduleId ?? null;
+  const holidaysInHorizon = publicHolidays
     .filter((h) => h.date >= today && daysUntil(today, h.date) <= PUBLIC_HOLIDAY_HORIZON_DAYS)
     .sort((a, b) => a.date.localeCompare(b.date));
+  // Lecture des séances du socle : seulement s'il y a des fériés à qualifier.
+  const seasonSlotsQuery = useSlots(holidaysInHorizon.length > 0 ? seasonChosenId : null);
+  const slotsPerIsoDay = new Map<number, number>();
+  for (const slot of seasonSlotsQuery.data ?? []) {
+    slotsPerIsoDay.set(slot.dayOfWeek, (slotsPerIsoDay.get(slot.dayOfWeek) ?? 0) + 1);
+  }
+  // Date ISO « yyyy-mm-dd » → jour ISO 1-7 (UTC : la date est un jour civil, pas un instant).
+  const isoDayOf = (date: string): number => {
+    const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+    return 0 === day ? 7 : day;
+  };
+  const upcomingPublicHolidays = holidaysInHorizon
+    .map((h) => ({ ...h, sessionCount: slotsPerIsoDay.get(isoDayOf(h.date)) ?? 0 }))
+    .filter((h) => h.sessionCount > 0);
 
   // P3-11 — le panneau reste NU tant que ces lectures sont en vol : ni carte, ni « Rien à
   // l'horizon » (le masquage est voulu — ne pas faire clignoter une carte qui va
@@ -336,8 +355,11 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // un premier chargement en échec. Bâtir le squelette dessus transformait une erreur de
   // lecture en « Chargement… » perpétuel — l'écran affirmait qu'il travaillait alors qu'il
   // avait renoncé. On distingue donc les deux, et l'échec se DIT.
+  // P4-9 : tant que les séances du socle sont en vol, l'impact d'un férié est
+  // inconnu — squelette, jamais un « Tout roule » suivi d'une carte qui surgit.
+  const holidayImpactLoading = holidaysInHorizon.length > 0 && null !== seasonChosenId && seasonSlotsQuery.isLoading;
   const stillLoading =
-    readLoading(plansQuery) || readLoading(schedulesQuery) || readLoading(campaignsQuery) || closureImpactsPending || zoneLoading || publicHolidaysLoading;
+    readLoading(plansQuery) || readLoading(schedulesQuery) || readLoading(campaignsQuery) || closureImpactsPending || zoneLoading || publicHolidaysLoading || holidayImpactLoading;
   const readsFailed = readFailed(plansQuery) || readFailed(schedulesQuery) || readFailed(campaignsQuery);
 
   const isEmpty =
@@ -358,6 +380,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     undefined !== campaignsQuery.data &&
     cutoffs.length === 0 &&
     upcomingPublicHolidays.length === 0 &&
+    !holidayImpactLoading &&
     zone !== null &&
     !zoneLoading &&
     !publicHolidaysLoading;
@@ -571,7 +594,12 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
       ))}
 
       {upcomingPublicHolidays.map((h) => (
-        <RadarCard key={h.id} icon={<CalendarOff className="size-4 text-destructive" />} title={h.label} detail={`Dans ${daysUntil(today, h.date)} j · jour férié`} />
+        <RadarCard
+          key={h.id}
+          icon={<CalendarOff className="size-4 text-destructive" />}
+          title={h.label}
+          detail={`Dans ${daysUntil(today, h.date)} j · ${h.sessionCount} séance${h.sessionCount > 1 ? "s" : ""} ce jour-là`}
+        />
       ))}
 
       {/* P3-11 : squelette tant qu'on ne sait pas — jamais en même temps que « Tout roule »
