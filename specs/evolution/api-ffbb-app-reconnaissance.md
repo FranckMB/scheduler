@@ -1,5 +1,9 @@
 # Reconnaissance de l'API FFBB — P2-19
 
+> ✅ **SOLDÉ (2026-08-04)** — toutes les actions de ce cadrage sont livrées : engagements/compétitions
+> exploités (P1-4 PR F), salles exploitées (P2-20), `rencontres` re-testé (toujours un index de test).
+> Le fichier reste comme **référence de mesure** pour P2-18 et P4-35 qui le citent — rien à exécuter ici.
+
 > **Livrable de cadrage**, pas du code. Alimente [P1-4](roadmap.md) (module matchs) et P2-18 (resynchronisation FFBB).
 > Mesures faites le **2026-08-02** sur le club réel **`ARA0069036`** (B Charpennes Croix Luizet).
 >

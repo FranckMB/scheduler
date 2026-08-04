@@ -34,6 +34,7 @@ cd backend && make test    # PHPStan(lvl8) + CS-Fixer + PHPUnit `--testsuite Uni
 cd backend && make phpstan | cs-fix | rector | tests-complete | migration-diff | migration-migrate | jwt-keys | db-init
 cd engine  && make test    # ruff + mypy + bandit + pytest (+ coverage)   |  make format
 make -C frontend dev        # Dockerized Vite :5173 (proxies /api, /exports, /.well-known/mercure — never /engine)
+make -C frontend e2e        # Playwright e2e ENTIÈREMENT dockerisé (P4-33) — exige stack + `dev` lancés ; l'hôte n'a plus besoin de Node
 ```
 
 ## 4. CI order (`.github/workflows/ci.yml`)

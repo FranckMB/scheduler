@@ -16,11 +16,13 @@ use App\Service\EntityCascadeDeleter;
 use App\Service\ManagementAccessGuard;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
 use ReflectionClass;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Contracts\Service\Attribute\Required;
 
@@ -175,7 +177,16 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         }
 
         $this->entityManager->persist($entity);
-        $this->entityManager->flush();
+
+        try {
+            $this->entityManager->flush();
+        } catch (UniqueConstraintViolationException) {
+            // P4-67 — les contraintes d'unicité en base (Competition, TeamTag…)
+            // transforment un doublon en erreur SQL : la nommer en 409 plutôt
+            // que de laisser fuir un 500 (le doublon vient toujours du client —
+            // double-clic, re-soumission).
+            throw new ConflictHttpException('Cet élément existe déjà (doublon).');
+        }
         $this->afterPersist($entity);
 
         return $this->mapEntityToOutput($entity);

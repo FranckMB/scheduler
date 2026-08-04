@@ -190,13 +190,18 @@ final class OverlayManager
         }
     }
 
-    /** Le nom que le gestionnaire voit : celui de la période, sinon celui de la version. */
+    /**
+     * P3-18 — le nom que le gestionnaire voit est celui du PLAN (même source que
+     * les exports, `displayNameOf`), plus le titre de la CalendarEntry : l'ADR-0002
+     * distingue le FAIT (« Gymnase A — fermé ») de la RÉPONSE qu'est le plan, et
+     * deux dialogues qui nomment le même planning autrement font deux vérités.
+     * (La popup `overlays_exist` de la réouverture, elle, liste volontairement les
+     * TITRES de périodes : on y choisit de détruire des périodes, le fait est le
+     * bon repère — écart assumé, tracé en décision fermée.).
+     */
     private function periodLabelOf(Schedule $schedule): string
     {
-        $entryId = $this->schedulePlanProvisioner->periodEntryIdOf($schedule);
-        $entry = null === $entryId ? null : $this->entityManager->getRepository(CalendarEntry::class)->find($entryId);
-
-        return $entry?->getTitle() ?? $schedule->getName();
+        return $this->schedulePlanProvisioner->displayNameOf($schedule);
     }
 
     private function purgeArtifacts(string $scheduleId): void
