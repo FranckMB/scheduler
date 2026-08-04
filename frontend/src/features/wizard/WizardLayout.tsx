@@ -182,7 +182,20 @@ export function WizardPage() {
     const withSlot = new Set(slotList.map((s) => s.venueId));
     const matchVenues = new Set((matchWindows.data ?? []).map((w) => w.venueId));
     let gap: WizardStepId | null = null;
-    if (0 === (teams.data ?? []).length) {
+    // P2-21 lot A — des équipes importées AUTOMATIQUEMENT que le gestionnaire
+    // n'a pas encore vues : l'atterrissage vise Équipes (la modale d'annonce y
+    // vit), sinon le « premier trou » (gymnases) court-circuiterait l'écran que
+    // la modale invite justement à corriger. Gate = vérité serveur
+    // `ffbbTeamsImported` (jamais la seule absence du flag localStorage — elle
+    // capturait toute saisie manuelle vue d'un navigateur vierge, e2e comprises) ;
+    // même flag one-shot que TeamsStep.
+    const clubId = me?.club?.id;
+    const importUnseen =
+      true === me?.club?.ffbbTeamsImported &&
+      (teams.data ?? []).length > 0 &&
+      undefined !== clubId &&
+      null === window.localStorage.getItem(`ffbb-teams-import-notice-${clubId}`);
+    if (0 === (teams.data ?? []).length || importUnseen) {
       gap = "teams";
     } else if (0 === venueList.length || venueList.some((v) => !withSlot.has(v.id) && !matchVenues.has(v.id))) {
       gap = "venues";
@@ -197,7 +210,7 @@ export function WizardPage() {
       // génération step — a remount must not yank them off the progress view).
       jumpTo("recap");
     }
-  }, [guided, ready, stepId, teams.data, venues.data, slots.data, coaches.data, matchWindows.data, jumpTo]);
+  }, [guided, ready, stepId, teams.data, venues.data, slots.data, coaches.data, matchWindows.data, jumpTo, me?.club?.id, me?.club?.ffbbTeamsImported]);
 
   // ── Abandon d'un ajustement de période jamais généré (retour fondateur 2026-07-18) ──
   // « Adapter » crée la période AVANT le wizard (ADR-0002 : le plan naît du geste) ;

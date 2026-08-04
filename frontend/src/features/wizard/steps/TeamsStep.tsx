@@ -2,9 +2,11 @@ import { closestCorners, DndContext, type DragEndEvent, DragOverlay, KeyboardSen
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { Input } from "@/shared/components/ui/input";
@@ -355,6 +357,32 @@ function TeamsEditor() {
   const del = useDeleteTeam();
   const reorder = useReorderTeams();
   const [toDelete, setToDelete] = useState<Team | null>(null);
+
+  // P2-21 lot A — la modale d'annonce de l'import automatique FFBB (décision
+  // fondateur 2026-08-04 : « le gestionnaire n'a rien à faire, il constate que
+  // 10 équipes sont déjà chargées »). Gate = VÉRITÉ SERVEUR (`ffbbTeamsImported`,
+  // posée par l'importeur) : la seule absence du flag localStorage faisait mentir
+  // la modale à tout club à saisie manuelle vu d'un navigateur vierge — et
+  // bloquait chaque spec e2e (CI suspendue 30 min, 2026-08-04). Le flag
+  // localStorage ne sert plus qu'à la rendre one-shot par club.
+  const { data: me } = useMe();
+  const clubId = me?.club?.id;
+  const imported = true === me?.club?.ffbbTeamsImported;
+  const onboarding = undefined !== me && !me.seasonPlan?.hasFinishedVersion;
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
+  // Dérivé au render (pas de setState en effect) : le flag n'est posé qu'à la
+  // FERMETURE — un refresh avant lecture re-montre la modale, c'est voulu.
+  const noticeSeen = useMemo(
+    () => (undefined === clubId ? true : null !== window.localStorage.getItem(`ffbb-teams-import-notice-${clubId}`)),
+    [clubId],
+  );
+  const importNotice = imported && onboarding && teams.length > 0 && !noticeSeen && !noticeDismissed;
+  const dismissImportNotice = () => {
+    setNoticeDismissed(true);
+    if (undefined !== clubId) {
+      window.localStorage.setItem(`ffbb-teams-import-notice-${clubId}`, "1");
+    }
+  };
 
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState(false);
@@ -797,6 +825,16 @@ function TeamsEditor() {
         </>
       )}
 
+      {/* P2-21 lot A — l'annonce de l'import automatique, dans les mots du fondateur. */}
+      <ConfirmDialog
+        open={importNotice}
+        title="Équipes importées depuis la FFBB"
+        description="Les équipes ont été importées automatiquement depuis la FFBB. Des erreurs ont pu se glisser — merci de corriger et de compléter cet écran (vos équipes loisir et école de basket ne sont pas connues de la fédération)."
+        confirmLabel="Compris"
+        cancelLabel="Fermer"
+        onConfirm={dismissImportNotice}
+        onCancel={dismissImportNotice}
+      />
       <DeleteConfirm
         open={toDelete !== null}
         entityName={toDelete?.name ?? ""}
