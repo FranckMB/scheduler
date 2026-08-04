@@ -537,8 +537,16 @@ ses poules. Rejeté par le fondateur, et c'est de ce rejet qu'est née la règle
 > pénible possible, l'effet waouw. »** (fondateur, 2026-08-04)
 
 Les leviers du §1bis existent un par un ; ce qui manque est leur **assemblage en séquence d'onboarding**.
-Cible : après la vérification d'email, un écran **« Trouvé à la FFBB »** — tout pré-coché, rien d'imposé
-(la limite du §1bis tient : prémâché ≠ décidé).
+
+⚑ **La forme, TRANCHÉE (fondateur, 2026-08-04) — pas d'écran de sélection pour les équipes** : elles se
+créent AUTOMATIQUEMENT à l'arrivée, le gestionnaire atterrit sur l'étape Équipes **déjà peuplée** et une
+modale annonce : *« Les équipes ont été importées automatiquement depuis la FFBB. Des erreurs ont pu se
+glisser — corrigez et complétez cet écran. »* *« Le gestionnaire n'a rien à faire, il constate tout de
+suite que 10 équipes sont déjà chargées. »* C'est une RÉVISION assumée du « tout pré-coché » du §1bis
+pour CE levier : la création tombe dans un club VIDE (rien à écraser), la modale est l'annonce, et
+l'écran d'atterrissage EST l'écran de correction — le gestionnaire reste le juge, juste après le fait.
+⚠ La borne : ce comportement vaut à l'onboarding d'un club vide UNIQUEMENT — toute ré-exécution sur un
+club peuplé repasse par une proposition explicite (l'idempotence du §1ter).
 
 ### Le challenge, posé et intégré
 
@@ -581,18 +589,18 @@ les jeunes.
 - **Pré-classement par NIVEAU** : pré-nationale > régionale > départementale → proposition de rangs
   S→D pré-remplie (le fanion se détecte tout seul) — un des gestes les plus coûteux du wizard actuel.
 - **`sessionsPerWeek` par défaut = 2** (décision fondateur, 2026-08-04) — éditable comme tout le reste.
-- **À trancher en cadrant la PR** : l'appariement compétition posé D'OFFICE sur chaque équipe créée
-  (les réfs `idCompetition`/`idPoule` sur `Competition` — ce que fait aujourd'hui le dialog
-  « Engagements FFBB » de `/matchs` en 1 clic par équipe ; créée DEPUIS son engagement, l'équipe peut
-  naître appariée, et l'import FBI d'août tombe alors sans étape d'appariement. Le §3 reste vrai : on
-  ré-appariera aux phases suivantes en 1 clic).
+- ⚑ **PAS d'appariement à l'onboarding — TRANCHÉ (fondateur, 2026-08-04)** : *« si le gestionnaire
+  casse tout en éditant à la volée les équipes, on va avoir de mauvais liens entre les deux. »* Une
+  équipe fraîchement créée va être renommée, supprimée, fusionnée — un lien posé à cet instant est un
+  lien fragile. L'appariement reste où il est : le dialog « Engagements FFBB » de `/matchs`, en août,
+  1 clic par équipe (§3), sur des équipes STABILISÉES.
 
 ### Le découpage proposé (l'ordre est le levier)
 
 | Lot | Contenu | Taille |
 |---|---|---|
-| A | Écran « Trouvé à la FFBB » post-vérification : équipes engagées pré-cochées (nom généré, décodage brassage, logos), pré-classement par niveau, un clic « Créer » ; annonce du manque (loisir/baby) ; dégradation juin (« reviendront avec les poules ») ; ré-ouvrable | M |
-| B | Appariement compétitions posé d'office au même geste (réfs sur chaque équipe créée) | S (avec A) |
+| A | **Création AUTOMATIQUE des équipes engagées à l'arrivée** (décodage brassage, noms générés, pré-classement par niveau, 2 séances) + modale d'annonce sur l'étape Équipes peuplée ; annonce du manque (loisir/baby) ; dégradation juin (« reviendront avec les poules ») | M |
+| ~~B~~ | ~~Appariement d'office~~ — **abandonné** (liens fragiles sur équipes en cours d'édition ; reste au dialog `/matchs`) | — |
 | C | Accent par défaut = `logo.gradient_color` (§6.7) | XS |
 | D | Gymnases proches à cocher (§6.9, rayon auto-élargi) — le levier déjà validé 9/9 | M |
 | E | P2-16 — contraintes de base semées (liste + HARD/PREFERRED à trancher AVANT, §1bis) | M |
