@@ -204,7 +204,9 @@ export function RecapStep() {
                       <span className={cn("flex flex-wrap items-baseline gap-x-2", paused && "text-muted-foreground")}>
                         <span className={cn(paused && "line-through")}>{t.name}</span>
                         {paused ? <span className="text-xs italic">en pause pour cette période</span> : null}
-                        {coach ? <span className="text-xs italic text-muted-foreground">{coach}</span> : null}
+                        {/* P4-58 (c) — l'absence se DIT : une équipe sans coach affichait
+                            un blanc, indistinguable d'un oubli de rendu. */}
+                        <span className="text-xs italic text-muted-foreground">{coach ?? "Sans coach"}</span>
                         {t.level ? <span className="text-xs italic text-muted-foreground">· {LEVEL_LABEL[t.level]}</span> : null}
                       </span>
                     }

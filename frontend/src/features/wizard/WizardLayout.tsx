@@ -1,5 +1,5 @@
 import { HTTPError } from "ky";
-import { AlertTriangle, CalendarClock, ChevronsDown, ChevronsUp, Lock, MessageSquare, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, ChevronsDown, ChevronsUp, Lock, MessageSquare, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useBlocker, useNavigate } from "react-router";
 
@@ -111,6 +111,23 @@ export function WizardPage() {
   // it locked while the verdict is still loading (fail-closed).
   const recapValidation = useStepValidation("recap");
   const generateBlocked = recapValidation.errors.length > 0 || true === recapValidation.pending;
+
+  // P4-58 (b) — coches « étape terminée » dans le rail : mêmes verdicts que les
+  // gates (une source, useStepValidation — un rail qui compterait autrement que
+  // les portes ferait deux vérités, §7.2). Une coche n'apparaît qu'un verdict
+  // RENDU (pas pendant le chargement — fail-silent, jamais fail-vert). La
+  // génération n'en porte pas : c'est l'action, pas une saisie à terminer.
+  const teamsValidation = useStepValidation("teams");
+  const venuesValidation = useStepValidation("venues");
+  const coachesValidation = useStepValidation("coaches");
+  const constraintsValidation = useStepValidation("constraints");
+  const stepDone: Partial<Record<WizardStepId, boolean>> = {
+    teams: 0 === teamsValidation.errors.length && true !== teamsValidation.pending,
+    venues: 0 === venuesValidation.errors.length && true !== venuesValidation.pending,
+    coaches: 0 === coachesValidation.errors.length && true !== coachesValidation.pending,
+    constraints: 0 === constraintsValidation.errors.length && true !== constraintsValidation.pending,
+    recap: 0 === recapValidation.errors.length && true !== recapValidation.pending,
+  };
 
   // « On part » — lu par le prédicat du blocker au moment de la navigation (les
   // valeurs de render y sont STALE : react-router enregistre le prédicat en
@@ -362,6 +379,7 @@ export function WizardPage() {
           <ol className="flex flex-col gap-1">
             {WIZARD_STEPS.map((step, i) => {
               const locked = (guided && i > maxIndex) || ("generate" === step.id && generateBlocked);
+              const done = true === stepDone[step.id];
               return (
                 <li key={step.id}>
                   <button
@@ -369,13 +387,24 @@ export function WizardPage() {
                     disabled={locked}
                     onClick={() => setStep(step.id)}
                     aria-current={step.id === stepId ? "step" : undefined}
+                    // WCAG 2.5.3 : le nom accessible CONTIENT le texte visible, l'état s'ajoute.
+                    aria-label={done ? `${step.label} — étape terminée` : undefined}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition",
                       step.id === stepId ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60",
                       locked ? "cursor-not-allowed opacity-40 hover:bg-transparent" : "",
                     )}
                   >
-                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full border border-border text-xs">{i + 1}</span>
+                    {/* P4-58 (b) — la pastille dit l'ÉTAT : ✓ = étape complète (même
+                        verdict que sa porte), numéro sinon. */}
+                    <span
+                      className={cn(
+                        "flex size-5 shrink-0 items-center justify-center rounded-full border text-xs",
+                        done ? "border-success text-success" : "border-border",
+                      )}
+                    >
+                      {done ? <Check className="size-3" aria-hidden="true" /> : i + 1}
+                    </span>
                     <span className="flex-1">{step.label}</span>
                     {locked ? <Lock className="size-3" /> : null}
                   </button>

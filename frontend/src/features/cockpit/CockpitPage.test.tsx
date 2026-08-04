@@ -17,6 +17,7 @@ vi.mock("@/features/auth/queries", () => ({
 }));
 
 vi.mock("@/features/planning/queries", () => ({
+  useSlots: () => ({ data: [], isLoading: false }),
   useSchedules: () => ({ data: [{ id: "s1", name: "Planning A", status: "COMPLETED", score: 9011, createdAt: "", updatedAt: "", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true }] }),
   useReopenSchedule: () => ({ mutate: vi.fn(), isPending: false }),
 }));

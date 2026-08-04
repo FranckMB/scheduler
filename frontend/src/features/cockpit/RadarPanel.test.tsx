@@ -24,6 +24,8 @@ let conflictsPending = false;
 // PRÉSENCE de donnée, pas sur le statut (une donnée périmée après un refetch en échec reste
 // affichable).
 let plansData: SchedulePlan[] | undefined = [];
+// P4-9 — les séances du socle EN VIGUEUR (useSlots) : l'impact d'un férié se compte dessus.
+let seasonSlotsData: Array<{ id: string; dayOfWeek: number }> = [];
 const plansState = { failed: false };
 // Versions existantes par plan (retour fondateur 2026-07-18 : « planning en cours »
 // = plan avec versions mais sans version validée → carte toujours visible).
@@ -43,7 +45,7 @@ vi.mock("./queries", () => ({
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
   useSchedulePlans: () => ({ data: plansState.failed ? undefined : plansData, isError: plansState.failed }),
 }));
-vi.mock("@/features/planning/queries", () => ({ useSchedules: () => ({ data: schedulesData }) }));
+vi.mock("@/features/planning/queries", () => ({ useSchedules: () => ({ data: schedulesData }), useSlots: () => ({ data: seasonSlotsData, isLoading: false }) }));
 vi.mock("@/features/coach-wishes/campaignQueries", () => ({ useCoachWishCampaigns: () => ({ data: campaignsData, isError: false }) }));
 // Saison de travail couvrant les fixtures FUTURE (2999) : le clamp saison des
 // créations de vacances (revue #260 round 1) laisse passer les dates de test.
@@ -117,6 +119,7 @@ describe("RadarPanel", () => {
     conflictsData = undefined;
     conflictsPending = false;
     plansData = [];
+    seasonSlotsData = [];
     schedulesData = [];
     campaignsData = [];
     plansState.failed = false;
@@ -691,17 +694,39 @@ describe("RadarPanel", () => {
     expect(screen.queryByText("Rien à l'horizon. Tout roule.")).not.toBeInTheDocument();
   });
 
-  it("reminds about public holidays within 30 days, ignores farther ones", () => {
+  it("P4-9 — un férié n'a de carte que s'il TOMBE un jour d'entraînement, et la carte dit l'impact", () => {
+    // Décision fondateur 2026-08-04 : « 14 juillet · jour férié » sans impact ne
+    // dit rien à faire. La carte n'existe que si le planning EN VIGUEUR a des
+    // séances ce jour-là, et elle les COMPTE.
     const today = todayISO();
+    const nearDate = addDays(today, 10);
+    const isoDay = ((d: string) => { const w = new Date(`${d}T00:00:00Z`).getUTCDay(); return 0 === w ? 7 : w; })(nearDate);
+    plansData = [{ id: "pl-season", type: "SEASON", name: "Saison", startDate: today, calendarEntryId: null, chosenScheduleId: "sched-1", teamSelectionInitialized: true }];
+    seasonSlotsData = [
+      { id: "sl1", dayOfWeek: isoDay },
+      { id: "sl2", dayOfWeek: isoDay },
+      { id: "sl3", dayOfWeek: (isoDay % 7) + 1 }, // un autre jour — ne compte pas
+    ];
     renderRadar({
       publicHolidays: [
-        { id: "ph1", date: addDays(today, 10), label: "Férié proche", national: true },
+        { id: "ph1", date: nearDate, label: "Férié proche", national: true },
         { id: "ph2", date: addDays(today, 60), label: "Férié lointain", national: true },
       ],
     });
 
     expect(screen.getByText("Férié proche")).toBeInTheDocument();
-    expect(screen.getByText(/jour férié/)).toBeInTheDocument();
+    expect(screen.getByText(/2 séances ce jour-là/)).toBeInTheDocument();
     expect(screen.queryByText("Férié lointain")).not.toBeInTheDocument();
+  });
+
+  it("P4-9 — un férié SANS séance ce jour-là disparaît (rien à protéger)", () => {
+    const today = todayISO();
+    const nearDate = addDays(today, 10);
+    const isoDay = ((d: string) => { const w = new Date(`${d}T00:00:00Z`).getUTCDay(); return 0 === w ? 7 : w; })(nearDate);
+    plansData = [{ id: "pl-season", type: "SEASON", name: "Saison", startDate: today, calendarEntryId: null, chosenScheduleId: "sched-1", teamSelectionInitialized: true }];
+    seasonSlotsData = [{ id: "sl1", dayOfWeek: (isoDay % 7) + 1 }]; // séances un AUTRE jour
+    renderRadar({ publicHolidays: [{ id: "ph1", date: nearDate, label: "Férié sans séance", national: true }] });
+
+    expect(screen.queryByText("Férié sans séance")).not.toBeInTheDocument();
   });
 });
