@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Basketball;
 
 use App\Entity\Club;
+use App\Entity\Season;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Enum\Gender;
@@ -57,7 +58,7 @@ final class FfbbTeamImporter
     {
         $clubCode = $club->getFfbbClubCode();
         $season = $this->seasonResolver->currentSeason($club->getId());
-        if (null === $clubCode || null === $season) {
+        if (null === $clubCode || !$season instanceof Season) {
             return 0;
         }
         // Borne « club vide » : une équipe existe → un humain (ou un import) est
