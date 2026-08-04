@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\Repository\ClubUserRepository;
 use App\Service\TenantConnectionContext;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\DriverException;
@@ -121,15 +122,18 @@ final class RlsIsolationTest extends KernelTestCase
         // consommerait son entrée, neutralisant à la fois la garde ET la
         // bidirectionnalité). Une policy au nom inattendu tombe donc dans le fail.
 
-        // D2 : SELECT ouvert (USING true) DÉLIBÉRÉ et JUSTIFIÉ. Ces tables restent
-        // soumises au canon pour INSERT/UPDATE/DELETE (vérifié par le balayage).
-        $openSelectAllowlist = [
-            // Bootstrap du tenant depuis les memberships AVANT de connaître le club
-            // (listener, register, /api/me) → SELECT ouvert requis.
-            'club_user.club_user_read.SELECT' => 'true',
-            // Route publique sans JWT : le token porte le club, il faut le lire AVANT
-            // de poser le GUC app.club_id → SELECT ouvert requis.
-            'coach_wish_token.coach_wish_token_read.SELECT' => 'true',
+        // D2 / SEC-12 (résiduel, soldé 2026-08-04) : SELECT HYBRIDE — ouvert quand AUCUN
+        // contexte tenant n'est posé (GUC absent ou vidé par clear()), scopé au canon dès
+        // qu'il l'est. Le besoin d'ouverture (bootstrap du tenant depuis les memberships,
+        // lookup du token public qui PORTE le club) ne vaut qu'AVANT la pose du GUC — le
+        // `USING (true)` historique ouvrait aussi tout le reste de la requête. Composé À
+        // PARTIR du canon runtime (patron D4) : le sous-prédicat NULLIF en est extrait,
+        // pas réécrit — robuste au déparseur.
+        self::assertSame(1, preg_match('/^\(club_id = \((?<expr>.+)\)::uuid\)$/', $canon, $canonParts), 'canon must have the form (club_id = (<NULLIF expr>)::uuid) — extraction du sous-prédicat impossible, adapter la regex');
+        $hybridSelectPredicate = \sprintf('((%s IS NULL) OR %s)', $canonParts['expr'], $canon);
+        $selectPredicateOverrides = [
+            'club_user.club_user_read.SELECT' => $hybridSelectPredicate,
+            'coach_wish_token.coach_wish_token_read.SELECT' => $hybridSelectPredicate,
         ];
 
         // D4 : audit_log INSERT n'est PAS ouvert mais s'écarte du canon par FORME —
@@ -211,22 +215,24 @@ final class RlsIsolationTest extends KernelTestCase
                 continue;
             }
 
-            // D2 : SELECT ouvert allowlisté (bootstrap club_user / coach_wish_token).
-            if (isset($openSelectAllowlist[$key])) {
+            // D2 : SELECT hybride dérogé (bootstrap club_user / coach_wish_token) — la
+            // forme EXACTE est exigée : un retour au USING (true) d'avant SEC-12 tombe
+            // dans ce même assert et rougit en nommant l'attendu.
+            if (isset($selectPredicateOverrides[$key])) {
                 self::assertSame(
-                    $openSelectAllowlist[$key],
+                    $selectPredicateOverrides[$key],
                     $qual,
                     \sprintf(
-                        '%s : allowlistée comme SELECT ouvert mais le prédicat est %s, pas le %s attendu. Scoper au GUC, ou corriger la dérogation.',
+                        '%s : dérogée comme SELECT hybride mais le prédicat est %s, pas le %s attendu. Scoper au GUC, ou corriger la dérogation.',
                         $where,
                         '' === $qual ? '<none>' : $qual,
-                        $openSelectAllowlist[$key],
+                        $selectPredicateOverrides[$key],
                     ),
                 );
                 self::assertSame(
                     '',
                     $withCheck,
-                    \sprintf('%s : dérogation SELECT ouvert mais WITH CHECK non vide (%s) — la seconde moitié du prédicat échapperait au contrôle.', $where, $withCheck),
+                    \sprintf('%s : dérogation SELECT hybride mais WITH CHECK non vide (%s) — la seconde moitié du prédicat échapperait au contrôle.', $where, $withCheck),
                 );
                 $consumedAllowlist[$key] = true;
 
@@ -243,15 +249,15 @@ final class RlsIsolationTest extends KernelTestCase
             ));
         }
 
-        // D3 : allowlist BIDIRECTIONNELLE — une entrée qui n'a été consommée par
-        // aucune policy réellement ouverte est périmée (le durcissement a été fait,
-        // ou la table/policy a disparu ou été renommée). Une allowlist qui ne peut
-        // pas se périmer ment.
-        foreach (array_keys($openSelectAllowlist) as $key) {
+        // D3 : dérogations BIDIRECTIONNELLES — une entrée qui n'a été consommée par
+        // aucune policy réellement hors-canon est périmée (le durcissement a été fait,
+        // ou la table/policy a disparu ou été renommée). Une liste qui ne peut pas se
+        // périmer ment.
+        foreach (array_keys($selectPredicateOverrides) as $key) {
             self::assertArrayHasKey(
                 $key,
                 $consumedAllowlist,
-                \sprintf('allowlist périmée : aucune policy SELECT ouverte pour \'%s\' — retirer l\'entrée de $openSelectAllowlist.', $key),
+                \sprintf('dérogation périmée : aucune policy SELECT hors-canon pour \'%s\' — retirer l\'entrée de $selectPredicateOverrides.', $key),
             );
         }
         foreach (array_keys($insertPredicateOverrides) as $key) {
@@ -334,6 +340,69 @@ final class RlsIsolationTest extends KernelTestCase
         self::assertSame(1, $count, 'club_user must stay readable without a GUC (tenant bootstrap)');
     }
 
+    public function testClubUserSelectIsTenantScopedOnceGucIsSet(): void
+    {
+        // SEC-12 (résiduel) — l'autre moitié du contrat hybride : dès qu'un contexte
+        // tenant existe, club_user redevient étanche. Avant ce durcissement le SELECT
+        // était ouvert en permanence et l'isolation de cette table ne tenait qu'au
+        // filtre Doctrine (une couche au lieu de deux). coach_wish_token porte le MÊME
+        // prédicat, exigé à l'identique par testEveryPolicyOnClubIdTablesIsTenantScoped
+        // (dérogation partagée) : le comportement est prouvé ici une fois, l'égalité de
+        // texte fait le reste — semer un token exige la chaîne campagne/coach/saison,
+        // coût sans gain de preuve.
+        $userId = $this->seedUserWithMembershipInBothClubs();
+
+        $this->guc->setClubId(self::CLUB_A);
+        /** @var list<string> $clubIds */
+        $clubIds = $this->connection->fetchFirstColumn(
+            'SELECT club_id FROM club_user WHERE user_id = ? ORDER BY club_id',
+            [$userId],
+        );
+        self::assertSame([self::CLUB_A], $clubIds, 'GUC posé → club_user ne montre que les memberships du tenant courant');
+    }
+
+    public function testRunWithoutTenantSeesAcrossClubsThenRestoresGuc(): void
+    {
+        // Le geste EXPLICITE qui remplace l'ouverture permanente : la lecture
+        // cross-tenant légitime (export RGPD, effacement de compte, liste des clubs
+        // d'un user) sort du contexte le temps d'une requête — et le REND, sinon la
+        // suite de la requête HTTP tournerait sans tenant, fail-closed partout.
+        $userId = $this->seedUserWithMembershipInBothClubs();
+
+        $this->guc->setClubId(self::CLUB_A);
+        /** @var list<string> $clubIds */
+        $clubIds = $this->guc->runWithoutTenant(
+            fn (): array => $this->connection->fetchFirstColumn(
+                'SELECT club_id FROM club_user WHERE user_id = ? ORDER BY club_id',
+                [$userId],
+            ),
+        );
+        self::assertSame([self::CLUB_A, self::CLUB_B], $clubIds, 'runWithoutTenant doit voir les memberships de TOUS les clubs');
+
+        self::assertSame(
+            self::CLUB_A,
+            $this->connection->fetchOne('SELECT current_setting(\'app.club_id\', true)'),
+            'le GUC doit être RESTAURÉ après runWithoutTenant',
+        );
+    }
+
+    public function testFindActiveClubIdsStaysCrossClubWithGucSet(): void
+    {
+        // LE consommateur qui aurait cassé en silence : ClubStateProvider liste les
+        // clubs d'un user multi-club alors que le GUC pointe UN club. Le repository
+        // doit sortir du contexte lui-même (SEC-12) — sans ça, l'écran « mes clubs »
+        // d'un user multi-club se réduirait au club actif, sans erreur nulle part.
+        $userId = $this->seedUserWithMembershipInBothClubs();
+        $repository = self::getContainer()->get(ClubUserRepository::class);
+        self::assertInstanceOf(ClubUserRepository::class, $repository);
+
+        $this->guc->setClubId(self::CLUB_A);
+        $clubIds = $repository->findActiveClubIds($userId);
+        sort($clubIds);
+
+        self::assertSame([self::CLUB_A, self::CLUB_B], $clubIds, 'findActiveClubIds doit rester cross-club même GUC posé');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -356,6 +425,29 @@ final class RlsIsolationTest extends KernelTestCase
             'INSERT' => $withCheck === $canon,
             default => false,
         };
+    }
+
+    /** Un user actif dans les DEUX clubs — le cas multi-club que SEC-12 ne doit pas casser. */
+    private function seedUserWithMembershipInBothClubs(): string
+    {
+        $this->seedTwoClubsWithOneTeamEach();
+        $userId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+        $this->connection->executeStatement(
+            'INSERT INTO app_user (id, version, created_at, updated_at, email, password_hash, first_name, last_name) VALUES (?, 1, now(), now(), ?, ?, ?, ?)',
+            [$userId, 'rls-multiclub@test.fr', 'x', 'R', 'M'],
+        );
+        foreach ([self::CLUB_A => 'f1f1f1f1-f1f1-4f1f-8f1f-f1f1f1f1f1f1', self::CLUB_B => 'f2f2f2f2-f2f2-4f2f-8f2f-f2f2f2f2f2f2'] as $clubId => $membershipId) {
+            // L'INSERT de club_user est tenant-gardé (WITH CHECK) : on pose le GUC
+            // club par club, comme AccountErasureService le fait pour ses UPDATE.
+            $this->guc->setClubId($clubId);
+            $this->connection->executeStatement(
+                'INSERT INTO club_user (id, version, created_at, updated_at, club_id, user_id, role, joined_at, is_active) VALUES (?, 1, now(), now(), ?, ?, ?, now(), true)',
+                [$membershipId, $clubId, $userId, 'admin'],
+            );
+        }
+        $this->guc->clear();
+
+        return $userId;
     }
 
     private function seedTwoClubsWithOneTeamEach(): void
