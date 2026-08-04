@@ -553,10 +553,11 @@ Cible : après la vérification d'email, un écran **« Trouvé à la FFBB »** 
 3. **Pas d'auto-création silencieuse** — la décision §1/§3 tient : la FFBB propose, le gestionnaire
    tranche. Le waouw correct = tout pré-coché + UN clic « Tout créer ».
 4. **FBI n'est pas une API.** Fichier xlsx téléchargé à la main, disponible lui aussi seulement après
-   la sortie des calendriers. Pour la LISTE d'équipes, l'API engagements fait strictement mieux (zéro
-   fichier, ids stables) → **proposition : tuer P3-7** (import Excel équipes — sa propre ligne disait
-   « à terme remplacé par l'API FFBB ») ; FBI reste le rail des CALENDRIERS (l'index `rencontres` est
-   vide, re-mesuré 2×).
+   la sortie des calendriers. Une première rédaction proposait de tuer P3-7 (import Excel équipes) —
+   **REJETÉ par le fondateur (2026-08-04)** : *« on ne sait pas quand un club va souscrire — l'API peut
+   répondre un grand nombre ou AUCUNE équipe selon la date, il faut pallier. L'API est une aide, pas la
+   source de vérité. »* **P3-7 est GARDÉ** comme rail de secours de la saisie d'équipes ; FBI reste par
+   ailleurs le rail des CALENDRIERS (l'index `rencontres` est vide, re-mesuré 2×).
 
 ### Ce qu'une équipe pré-créée porte — et les décisions des 2026-08-04
 
