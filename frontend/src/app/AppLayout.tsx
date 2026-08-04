@@ -2,6 +2,7 @@ import { CalendarCheck2, LogOut, Menu as MenuIcon, Moon, Settings, Sun, User, Sh
 import { NavLink, Outlet, useNavigation } from "react-router";
 
 import { useLogout, useMe } from "@/features/auth/queries";
+import { Button } from "@/shared/components/ui/button";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { useApplyClubTheme } from "@/shared/hooks/useApplyClubTheme";
 import { cn } from "@/shared/lib/utils";
@@ -67,15 +68,21 @@ export function AppLayout() {
                 Matchs
               </span>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={mode === "dark" ? "Activer le thème clair" : "Activer le thème sombre"}
+              title={mode === "dark" ? "Thème clair" : "Thème sombre"}
+              onClick={toggleMode}
+            >
+              {mode === "dark" ? <Sun /> : <Moon />}
+            </Button>
             <Menu label="Menu du compte" trigger={<MenuIcon />}>
               <MenuItem to="/club" icon={<Settings />}>
                 Club
               </MenuItem>
               <MenuItem to="/profile" icon={<User />}>
                 Profil
-              </MenuItem>
-              <MenuItem icon={mode === "dark" ? <Sun /> : <Moon />} onSelect={toggleMode}>
-                {mode === "dark" ? "Thème clair" : "Thème sombre"}
               </MenuItem>
               <MenuItem to="/confidentialite" icon={<ShieldCheck />}>
                 Confidentialité

@@ -354,7 +354,7 @@ export function MatchesPage() {
         <Modal label="Accès match" title="Accès match des gymnases" onClose={() => setAccessDialogOpen(false)}>
           <div className="flex flex-col gap-3">
             <p className="text-xs text-muted-foreground">
-              Les créneaux que la mairie accorde les jours de match — un gymnase sans fenêtre n'accueille pas de
+              Les créneaux accordés les jours de match — un gymnase sans fenêtre n'accueille pas de
               matchs. Même éditeur que l'étape Gymnases du wizard.
             </p>
             <Select aria-label="Gymnase des accès match" value={accessVenueId} onChange={(e) => setAccessVenueId(e.target.value)}>

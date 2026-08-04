@@ -229,6 +229,10 @@ function VenuesEditor() {
   // (just-created, list refetching) so the panel never flashes "no venue".
   const selected = (selectedId ? venues.find((v) => v.id === selectedId) : null) ?? venues[0] ?? null;
   const venueSlots = null === selected ? [] : slots.filter((s) => s.venueId === selected.id);
+  // Les fenêtres match du gymnase affiché : la grille les rend en fantôme, la légende
+  // n'apparaît que s'il y en a. Une seule dérivation pour les deux — sinon la légende
+  // et la grille peuvent finir par ne pas parler du même gymnase.
+  const venueMatchWindows = null === selected ? [] : (matchWindowsQuery.data ?? []).filter((w) => w.venueId === selected.id);
 
   // Drop pending colours that the refetched venue list now carries.
   useEffect(() => {
@@ -382,12 +386,28 @@ function VenuesEditor() {
             {/* L'indice manquait : la barre annonçait une durée sans dire ce qu'on en fait
                 (retour terrain). Il vit ICI, là où le regard est déjà au moment où la
                 question se pose. */}
-            <span className="text-xs text-muted-foreground">— cliquez la grille pour ajouter un créneau</span>
+            {/* « un créneau » tout court devenait ambigu dès qu'une plage match s'affiche
+                dans la même grille : on dit ce que le clic pose. */}
+            <span className="text-xs text-muted-foreground">— cliquez la grille pour ajouter un créneau d'entraînement</span>
+            {/* La hachure est un motif MUET sans ce mot : elle apparaît dans la grille sans
+                que rien n'en dise le sens. La légende ne s'affiche que s'il y a quelque
+                chose à légender. */}
+            {0 < venueMatchWindows.length ? (
+              <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span
+                  aria-hidden="true"
+                  className="inline-block size-3 rounded-sm border border-dashed border-accent/60"
+                  style={{ backgroundImage: "repeating-linear-gradient(45deg, color-mix(in oklch, var(--accent) 18%, transparent) 0 4px, transparent 4px 9px)" }}
+                />
+                accès match modifiable en bas de l'écran uniquement
+              </span>
+            ) : null}
           </div>
 
           <VenueAvailabilityGrid
             venue={selected}
             slots={venueSlots}
+            matchWindows={venueMatchWindows}
             selectedSlotId={editingSlot?.id ?? null}
             onAdd={(dayOfWeek, startTime) => {
               const invalid = slotPlacementError(venueSlots, dayOfWeek, startTime, duration);
@@ -404,12 +424,15 @@ function VenuesEditor() {
             <SlotEditor key={editingSlot.id} slot={editingSlot} canSplit={selected.canSplit} otherSlots={venueSlots.filter((s) => s.id !== editingSlot.id)} onClose={() => setEditingSlot(null)} />
           ) : null}
 
-          {/* P1-4 PR B — accès MATCH du gymnase : la lettre de la mairie qui
-              donne les créneaux d'entraînement donne aussi les accès des jours
-              de match — un document, un écran. Même éditeur que la page matchs. */}
+          {/* P1-4 PR B — accès MATCH du gymnase : le document qui donne les
+              créneaux d'entraînement donne aussi les accès des jours de match —
+              un document, un écran. Même éditeur que la page matchs.
+              ⚠ Le libellé ne nomme PAS le propriétaire des lieux (« la mairie ») :
+              c'est le cas du BCCL, pas de tous les clubs — certains dépendent
+              d'un conseil départemental, d'un lycée ou d'une salle privée. */}
           <div className="mt-3 rounded-lg border border-border bg-card p-3">
             <div className="mb-2 text-xs font-medium text-muted-foreground">
-              Accès match de « {selected.name} » (créneaux accordés par la mairie les jours de match)
+              Accès match de « {selected.name} » (créneaux accordés les jours de match)
             </div>
             <MatchWindowsEditor venueId={selected.id} />
           </div>

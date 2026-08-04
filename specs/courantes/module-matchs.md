@@ -155,9 +155,11 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
 ## Couche capacité (P1-4 PR B, 2026-08-03)
 
 - **Fenêtres d'accès match** (`VenueMatchWindow`, tenant+saison, RLS) : jour ISO 1-7 + plage `start<end`
-  même jour (famille P4-61) — les créneaux que la mairie accorde LES JOURS DE MATCH, distincts des créneaux
-  d'entraînement. **Gymnase de match = dérivé** (≥ 1 fenêtre), aucun booléen sur `Venue`. **Recopiées à la
-  bascule de saison** (`SeasonTransitionService` — la convention mairie se renouvelle). Saisie à DEUX
+  même jour (famille P4-61) — les créneaux accordés LES JOURS DE MATCH, distincts des créneaux
+  d'entraînement. ⚠ Les libellés **ne nomment pas le propriétaire des lieux** (« la mairie ») : c'est le cas
+  du BCCL, pas de tous les clubs — conseil départemental, lycée, salle privée (2026-08-04).
+  **Gymnase de match = dérivé** (≥ 1 fenêtre), aucun booléen sur `Venue`. **Recopiées à la
+  bascule de saison** (`SeasonTransitionService` — la convention se renouvelle). Saisie à DEUX
   endroits (décision fondateur) : section « Accès match » de l'étape Gymnases du wizard, et dialog
   « Accès match » de `/matchs` — même composant `MatchWindowsEditor`, une seule vérité.
 - **Règle wizard assouplie** : « gymnase sans créneau » devient « sans créneau d'entraînement NI fenêtre
@@ -238,7 +240,7 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   (`no_access_window` · `no_league_intersection` · `venue_unavailable` · `venue_full`), la raison affichée
   sur sa ligne « À placer ». Ce n'est pas la relaxation qu'interdit ADR-0001 : rien n'est relâché,
   l'impossible est épelé (le signal dérogation-tôt EST le produit).
-- **HARD** : fenêtres d'accès mairie (l'empreinte 2h15 entière dedans — l'échauffement occupe la salle),
+- **HARD** : fenêtres d'accès match (l'empreinte 2h15 entière dedans — l'échauffement occupe la salle),
   indisponibilités gymnase, no-overlap par (gymnase, date), fenêtre ligue quand l'enveloppe est résolue
   (`LeagueEnvelopeResolver`, portage serveur de la jointure tolérante d'`envelope.ts` — non résolue =
   aucun HARD + diagnostic INFO `league_envelope_unresolved`). **SOFT** (golden-épinglés — en changer un =
@@ -299,7 +301,7 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   boucle manuelle ne bloque jamais, le diagnostic crie) · 2 `LEAGUE_WINDOW_VIOLATION` (domicile placé
   d'une équipe MAPPÉE hors de toute fenêtre ligue — non mappée = silencieuse, même tolérance que le
   solveur) · 3 coach **MAIN** (`MATCH_MATCH`/`MATCH_TRAINING`) · 4 `VENUE_UNAVAILABLE` +
-  **`ACCESS_WINDOW_LOST`** (dette (ii) soldée : placé dont la fenêtre mairie a changé APRÈS — règle du
+  **`ACCESS_WINDOW_LOST`** (dette (ii) soldée : placé dont la fenêtre d'accès a changé APRÈS — règle du
   PANNEAU mirrorée : heure-point, demi-ouvert, club sans aucune fenêtre = rien à faire respecter, PAS
   la règle empreinte du solveur : un match que le panneau vient d'autoriser ne doit pas alerter) ·
   5 coach ASSISTANT + `TEAM_LINK_OVERLAP` · 7 **`AWAY_NO_FOOTPRINT`** (dette (v) : l'angle mort —
@@ -430,7 +432,7 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
 - Unit : `MatchFootprintTest`, `LeagueResolverTest`. Command : `SeedLeagueWindowsCommandTest`. Api :
   `FixtureApiTest`.
 - Smokes : `backend/scripts/smoke-place-matches.sh` (bout-en-bout SÉMANTIQUE : samedi placé
-  SOLVER dans la fenêtre mairie, dimanche non plaçable NOMMÉ — restaure le pointeur socle qu'il pose) **et**
+  SOLVER dans la fenêtre d'accès, dimanche non plaçable NOMMÉ — restaure le pointeur socle qu'il pose) **et**
   smoke-solveur COMPLETED (le pipeline hebdo survit au bump 2.2 ; payload hebdo inchangé).
 
 ## Le périmètre engagé — `TeamEngagementGuard` (2026-07-16)

@@ -1,3 +1,4 @@
+import type { VenueMatchWindow } from "@/features/matches/api";
 import { formatDuration } from "@/shared/lib/duration";
 import { cn } from "@/shared/lib/utils";
 
@@ -11,9 +12,16 @@ interface Props {
   selectedSlotId: string | null;
   onAdd: (dayOfWeek: number, startTime: string) => void;
   onSelect: (slot: VenueTrainingSlot) => void;
+  /**
+   * Fenêtres d'accès MATCH du gymnase, rendues en fantôme derrière les créneaux.
+   * Optionnel et vide par défaut : une fenêtre match est saison-globale (aucun
+   * `schedulePlanId` sur `VenueMatchWindow`), donc l'éditeur de PÉRIODE ne la
+   * passe pas — il n'a rien à montrer dont il puisse répondre.
+   */
+  matchWindows?: VenueMatchWindow[];
 }
 
-export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onSelect }: Props) {
+export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onSelect, matchWindows = [] }: Props) {
   const color = venue.color ?? "var(--accent)";
 
   // La plage verticale est l'UNION de la plage de saisie (08h→23h) et de ce que les
@@ -30,8 +38,13 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
   //
   // Étendre la grille est la seule réponse qui ne cache ni ne déplace rien — et c'est déjà
   // ce que fait `ReservationGrid`, dont la plage suit ses données.
-  const starts = slots.map((s) => startMinutes(s.startTime));
-  const ends = slots.map((s) => startMinutes(s.startTime) + s.durationMinutes);
+  //
+  // Les fenêtres MATCH entrent dans cette union au même titre que les créneaux : une
+  // fenêtre 07:00→09:00 hors plage rejouerait mot pour mot le `grid-row: -2` ci-dessus,
+  // à ceci près qu'un fantôme relogé ment sans qu'on puisse le cliquer pour s'en rendre
+  // compte. Ce qui est rendu borne la grille — sans exception.
+  const starts = [...slots.map((s) => startMinutes(s.startTime)), ...matchWindows.map((w) => startMinutes(w.startTime))];
+  const ends = [...slots.map((s) => startMinutes(s.startTime) + s.durationMinutes), ...matchWindows.map((w) => startMinutes(w.endTime))];
   const gridStart = Math.min(START_MIN, ...starts.map((m) => Math.floor(m / 60) * 60));
   const gridEnd = Math.max(END_MIN, ...ends.map((m) => Math.ceil(m / 60) * 60));
   const rows = Array.from({ length: (gridEnd - gridStart) / STEP }, (_, i) => gridStart + i * STEP);
@@ -79,6 +92,42 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
             />
           )),
         )}
+
+        {/* Fenêtres d'accès MATCH — fantôme, jamais un objet manipulable.
+            Rendues APRÈS les cellules vides (elles se voient par-dessus) mais AVANT les
+            créneaux, qui restent à z-10 et passent donc devant : un créneau ne peut pas
+            être avalé par une plage match qui l'englobe.
+            `pointer-events-none` est le cœur du compromis : un entraînement peut être
+            accordé DANS la plage match, donc les cellules dessous doivent rester
+            posables — le clic traverse le fantôme et atteint la cellule.
+            `aria-hidden` sans perte : `MatchWindowsEditor` liste ces mêmes fenêtres en
+            texte intégral juste sous la grille, avec leur bouton de suppression. Un
+            lecteur d'écran n'y perd rien ; il éviterait ici un doublon décoratif. */}
+        {matchWindows.map((window) => {
+          const di = WEEK.findIndex((d) => d.n === window.dayOfWeek);
+          if (di < 0) {
+            return null;
+          }
+          const startRow = 2 + Math.round((startMinutes(window.startTime) - gridStart) / STEP);
+          const span = Math.max(1, Math.round((startMinutes(window.endTime) - startMinutes(window.startTime)) / STEP));
+          return (
+            <div
+              key={`mw-${window.id}`}
+              aria-hidden="true"
+              className="pointer-events-none z-0 m-px overflow-hidden rounded border border-dashed border-accent/60 px-1 pt-0.5 text-[9px] font-medium leading-tight text-accent/80"
+              style={{
+                gridColumn: 2 + di,
+                gridRow: `${startRow} / span ${span}`,
+                // Hachures : le motif dit « réservé ailleurs » sans jamais ressembler à un
+                // créneau posé, qui lui est un aplat opaque.
+                backgroundImage:
+                  "repeating-linear-gradient(45deg, color-mix(in oklch, var(--accent) 18%, transparent) 0 4px, transparent 4px 9px)",
+              }}
+            >
+              match
+            </div>
+          );
+        })}
 
         {/* Slots */}
         {slots.map((slot) => {
