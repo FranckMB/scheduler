@@ -558,21 +558,32 @@ Cible : après la vérification d'email, un écran **« Trouvé à la FFBB »** 
    « à terme remplacé par l'API FFBB ») ; FBI reste le rail des CALENDRIERS (l'index `rencontres` est
    vide, re-mesuré 2×).
 
-### Ce qu'une équipe pré-créée porte — et les décisions du 2026-08-04
+### Ce qu'une équipe pré-créée porte — et les décisions des 2026-08-04
 
-Un engagement donne : catégorie, sexe, niveau, n° d'équipe, logo, compétition+poule (ids stables).
+⚠ Aligné sur les MESURES du §2 — la première rédaction de cette section leur contredisait deux points :
+il n'existe PAS de logo par équipe (l'engagement recopie le logo du CLUB, vérifié sur les 14), et les
+champs structurés catégorie/sexe/niveau ne sont remplis que **7/14** (les seniors) — les 7 vides sont
+les jeunes.
 
-- ⚑ **Décodage des codes de compétition en repli** (fondateur, 2026-08-04) : les engagements « Brassage »
-  ont les champs structurés VIDES mais tout est dans le code — `RMU13 Brassage` = **R**égional
-  **M**asculin **U13**, `RFU15` = **R**égional **F**éminin **U15**. Grammaire : `R|D|PN…` = niveau,
-  `M|F` = sexe, `U9…U20|SE` = catégorie. Les brassages sont de VRAIES équipes jeunes → **pré-cochés**
-  comme les autres.
-- **Nom d'usage généré** depuis sexe+catégorie+n° (« SM1 », « U13M2 ») — `nomEquipe` est souvent null,
-  et le club a son propre vocabulaire : généré, ÉDITABLE (même principe que les sigles ADN/JDR du §6.9).
+- **Principe re-confirmé par le fondateur (2026-08-04)** : *« l'API/l'import est une AIDE à la saisie —
+  tout faire manuellement reste toujours possible. »* Et le critère d'acceptation, dans ses mots :
+  *« si pour BCCL ça crée automatiquement les équipes en brassage et les équipes senior et que j'ai
+  juste à renommer, c'est tout bénef et ça me suffit amplement. »*
+- ⚑ **Décodage des codes de compétition pour les jeunes** (fondateur, 2026-08-04) : leurs champs
+  structurés sont VIDES mais tout est dans le code — `RMU13 Brassage` = **R**égional **M**asculin
+  **U13**, `RFU15` = **R**égional **F**éminin **U15**. Grammaire : `PN|R|D…` = niveau, `M|F` = sexe,
+  `U9…U20|SE` = catégorie. Les brassages sont de VRAIES équipes jeunes → **pré-cochés** comme les autres.
+- **Nom d'usage généré** depuis sexe+catégorie décodés (« SM? », « U13M ») — `nomEquipe` : 0/14 (§2),
+  le club a son propre vocabulaire : généré, ÉDITABLE (« j'ai juste à renommer » — mêmes sigles
+  ADN/JDR qu'au §6.9). ⚠ Le `numeroEquipe` (6/14, « sans signification » — décision §2) ne sert PAS au
+  rang ; s'en servir pour suffixer le nom (« SM3 ») est à valider sur données réelles en cadrant la PR.
 - **Pré-classement par NIVEAU** : pré-nationale > régionale > départementale → proposition de rangs
   S→D pré-remplie (le fanion se détecte tout seul) — un des gestes les plus coûteux du wizard actuel.
-- **À trancher en cadrant la PR** : `sessionsPerWeek` par défaut (2 ?), et l'appariement compétition
-  posé D'OFFICE sur chaque équipe créée (les réfs `idCompetition`/`idPoule` — le §3 reste vrai : on
+- **`sessionsPerWeek` par défaut = 2** (décision fondateur, 2026-08-04) — éditable comme tout le reste.
+- **À trancher en cadrant la PR** : l'appariement compétition posé D'OFFICE sur chaque équipe créée
+  (les réfs `idCompetition`/`idPoule` sur `Competition` — ce que fait aujourd'hui le dialog
+  « Engagements FFBB » de `/matchs` en 1 clic par équipe ; créée DEPUIS son engagement, l'équipe peut
+  naître appariée, et l'import FBI d'août tombe alors sans étape d'appariement. Le §3 reste vrai : on
   ré-appariera aux phases suivantes en 1 clic).
 
 ### Le découpage proposé (l'ordre est le levier)
