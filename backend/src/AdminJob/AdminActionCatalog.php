@@ -28,6 +28,13 @@ final readonly class AdminActionCatalog
                 dangerous: false,
             ),
             new AdminActionDefinition(
+                'ffbb-resync',
+                'Resynchroniser depuis la FFBB',
+                'Ré-importe l\'identité FFBB du club (nom, coordonnées, logo, comité/ligue) — le même ré-import que le bouton de la fiche club, déclenché par le support.',
+                'app:clubs:ffbb-resync',
+                dangerous: false,
+            ),
+            new AdminActionDefinition(
                 'reset-current-season',
                 'Réinitialiser la saison courante',
                 'Vide toutes les données de la saison courante du club (structure, calendrier, plannings). La saison et le club survivent — le club repart au wizard.',

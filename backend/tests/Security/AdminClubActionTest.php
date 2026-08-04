@@ -151,6 +151,19 @@ final class AdminClubActionTest extends WebTestCase
         self::assertSame(Command::FAILURE, $unknown->execute(['--club' => Uuid::v4()->toRfc4122()]));
     }
 
+    public function testFfbbResyncCommandFailsFrankOnUnknownClubOrInvalidCode(): void
+    {
+        // P2-18 — le refresh support doit ÉCHOUER FRANC quand rien n'a été
+        // rafraîchi (club fantôme, ou code FFBB absent/malformé → populate rend
+        // false sans toucher le réseau) : un succès silencieux ferait croire au
+        // support que la fiche est à jour.
+        $clubId = $this->seedClub('Club resync SA4', generationCount: 0); // seedClub ne pose aucun ffbb_club_code
+        $application = new Application(self::$kernel);
+
+        self::assertSame(Command::FAILURE, new CommandTester($application->find('app:clubs:ffbb-resync'))->execute(['--club' => $clubId]), 'code FFBB absent → rien à rafraîchir → échec nommé');
+        self::assertSame(Command::FAILURE, new CommandTester($application->find('app:clubs:ffbb-resync'))->execute(['--club' => Uuid::v4()->toRfc4122()]), 'club inconnu → échec');
+    }
+
     public function testResetSeasonCommandResolvesTheCurrentSeasonAndDryRunDeletesNothing(): void
     {
         [$clubId, $seasonId] = $this->seedRuntimeClubWithCurrentSeason('Club reset SA4');
