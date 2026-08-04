@@ -169,3 +169,46 @@ describe("RecapStep — read-only summary", () => {
     expect(within(sHeader.parentElement as HTMLElement).getByText("Fanion")).toBeInTheDocument();
   });
 });
+
+/**
+ * Décision P3-8 (2026-08-04) — le récap avertit sur les créneaux PARTAGÉS sans bloquer.
+ * La règle vit en fonction pure (`sharedSlotStatuses`, testée à part) ; ici on garde le
+ * CÂBLAGE : l'écran rend bien les deux messages, nommés par gymnase · jour · heure.
+ */
+describe("RecapStep — créneaux partagés", () => {
+  const sharedSlot = { id: "sl1", venueId: "v1", dayOfWeek: 6, startTime: "14:00", durationMinutes: 90, capacity: 2 };
+
+  beforeEach(() => {
+    h.reservations = [];
+    recapLayer.teams = [team("t1", "SM1", 3), team("t2", "Fanion", 1)];
+    recapLayer.pausedIds = [];
+    // canSplit ABSENT du mock d'origine : on le pose, c'est lui qui arme la capacité 2.
+    recapLayer.venues = [{ id: "v1", name: "Gymnase A", color: null, isActive: true, canSplit: true }];
+    recapLayer.slots = [sharedSlot];
+    recapLayer.teamsRead = "ready";
+    recapLayer.venuesRead = "ready";
+    anchorState.value = { state: "period", planId: "plan-1" };
+    storeState.value = { mode: "season", calendarEntryId: null };
+  });
+
+  it("annonce qu'un créneau partagé SANS réservation sera composé par le système", () => {
+    renderWithProviders(<RecapStep />);
+    expect(screen.getByText(/le système associera les équipes lui-même/)).toBeInTheDocument();
+    expect(screen.getByText(/Gymnase A · Sam 14:00/)).toBeInTheDocument();
+  });
+
+  it("avertit qu'un créneau partagé PARTIELLEMENT réservé gardera sa place vide (ALIGN-07)", () => {
+    h.reservations = [{ id: "r1", teamId: "t1", venueId: "v1", dayOfWeek: 6, startTime: "14:00" }];
+    renderWithProviders(<RecapStep />);
+    expect(screen.getByText(/le système ne complétera pas ce créneau/)).toBeInTheDocument();
+  });
+
+  it("se tait quand le créneau partagé est plein", () => {
+    h.reservations = [
+      { id: "r1", teamId: "t1", venueId: "v1", dayOfWeek: 6, startTime: "14:00" },
+      { id: "r2", teamId: "t2", venueId: "v1", dayOfWeek: 6, startTime: "14:00" },
+    ];
+    renderWithProviders(<RecapStep />);
+    expect(screen.queryByText(/créneau partagé|ne complétera pas/)).not.toBeInTheDocument();
+  });
+});

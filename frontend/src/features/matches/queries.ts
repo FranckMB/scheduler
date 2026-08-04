@@ -126,7 +126,7 @@ export function useUnlockFixture() {
   return useMutation({
     mutationFn: (fixture: Fixture) => matchesApi.unlockFixture(fixture),
     onSuccess: () => invalidateFixtures(queryClient),
-    onError: () => toast.error("Impossible de rendre le match au solveur"),
+    onError: () => toast.error("Impossible de rendre le match au système"),
   });
 }
 

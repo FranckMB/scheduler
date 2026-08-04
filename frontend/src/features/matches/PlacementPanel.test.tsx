@@ -207,18 +207,18 @@ describe("PlacementPanel", () => {
     expect(onStartSwap).toHaveBeenCalledOnce();
   });
 
-  it("shows « Rendre au solveur » on a manual anchor", async () => {
+  it("shows « Rendre au système » on a manual anchor", async () => {
     const user = userEvent.setup();
     const onToggleLock = vi.fn();
     renderPanel(openEnvelope, vi.fn(), { fixture: placedFixture, onToggleLock });
-    await user.click(screen.getByRole("button", { name: "Rendre au solveur" }));
+    await user.click(screen.getByRole("button", { name: "Rendre au système" }));
     expect(onToggleLock).toHaveBeenCalledOnce();
   });
 
   it("shows « Verrouiller » on a SOLVER placement", () => {
     renderPanel(openEnvelope, vi.fn(), { fixture: { ...placedFixture, placementSource: "SOLVER" } });
     expect(screen.getByRole("button", { name: "Verrouiller" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Rendre au solveur" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rendre au système" })).not.toBeInTheDocument();
   });
 
   it("deletes only after the confirmation dialog", async () => {

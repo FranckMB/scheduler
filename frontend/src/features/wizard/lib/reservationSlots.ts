@@ -39,6 +39,48 @@ export function effectiveSlotCapacity(slot: VenueTrainingSlot, venueCanSplit: Ma
   return false === venueCanSplit.get(slot.venueId) ? 1 : slot.capacity;
 }
 
+/** Un créneau partagé et l'état de ses réservations, pour les avertissements du récap. */
+export interface SharedSlotStatus {
+  slot: VenueTrainingSlot;
+  /** Équipes réservées sur le créneau (ordre d'insertion). */
+  reservedTeamIds: string[];
+  /** Capacité EFFECTIVE (canSplit appliqué) — toujours ≥ 2 ici. */
+  capacity: number;
+  /**
+   * `unreserved` — personne n'a choisi : le système associera les équipes lui-même
+   * (information, pas un défaut). `partial` — réservé en dessous de la capacité :
+   * ALIGN-07 fait qu'une réservation ferme le créneau ENTIER au système, la ou les
+   * places restantes resteront VIDES (avertissement, la conséquence est une perte).
+   */
+  kind: "unreserved" | "partial";
+}
+
+/**
+ * Les créneaux partagés (capacité effective ≥ 2) qui méritent un mot au récap : non
+ * réservés ou PARTIELLEMENT réservés. Un créneau plein n'apparaît pas. Règle extraite en
+ * fonction pure (§7.2) : le test la falsifie sans monter l'écran.
+ */
+export function sharedSlotStatuses(
+  slots: VenueTrainingSlot[],
+  reservations: Reservation[],
+  venueCanSplit: Map<string, boolean>,
+): SharedSlotStatus[] {
+  const bySlot = reservedTeamsBySlot(reservations);
+  const statuses: SharedSlotStatus[] = [];
+  for (const slot of slots) {
+    const capacity = effectiveSlotCapacity(slot, venueCanSplit);
+    if (capacity < 2) {
+      continue;
+    }
+    const reservedTeamIds = bySlot.get(slotKey(slot.venueId, slot.dayOfWeek, slot.startTime)) ?? [];
+    if (reservedTeamIds.length >= capacity) {
+      continue;
+    }
+    statuses.push({ slot, reservedTeamIds, capacity, kind: 0 === reservedTeamIds.length ? "unreserved" : "partial" });
+  }
+  return statuses;
+}
+
 /**
  * Teams the manager may still assign to `slot`, in canonical rank order (fanion
  * S → A → B → C → D). Excludes: teams already on the slot, and teams that reached

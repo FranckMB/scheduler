@@ -56,7 +56,7 @@ function ValidateDialog({ hasAlerts, siblingCount, busy, onConfirm, onCancel }: 
     >
       <p className="mt-2 text-sm text-muted-foreground">
         {hasAlerts
-          ? "Ce planning présente des alertes du solveur (créneaux non placés, contraintes non satisfaites…). En le validant, vous assumez ces contre-indications sous votre responsabilité. Le planning passera en lecture seule."
+          ? "Ce planning présente des alertes du système (créneaux non placés, contraintes non satisfaites…). En le validant, vous assumez ces contre-indications sous votre responsabilité. Le planning passera en lecture seule."
           : "Le planning passera en lecture seule (« Validé »). Vous pourrez le rouvrir pour le modifier."}
       </p>
       {siblingCount > 0 ? (
@@ -573,7 +573,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                         className="flex shrink-0 items-center gap-2 self-start rounded-md border border-border px-2 py-1 text-sm hover:bg-muted"
                       >
                         <AlertTriangle className={`size-4 ${diagnostics.length > 0 ? "text-warning" : "text-muted-foreground"}`} />
-                        Diagnostics du solveur
+                        Diagnostics du système
                         {diagnostics.length > 0 ? <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{diagnostics.length}</span> : null}
                       </button>
                     ) : null}

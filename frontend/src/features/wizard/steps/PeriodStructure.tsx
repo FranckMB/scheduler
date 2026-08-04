@@ -50,7 +50,7 @@ import {
 } from "../queries";
 import { SectionCountTitle } from "./StructureSummary";
 import { WEEK } from "../lib/weekGrid";
-import { CapacitySelect } from "./slotFields";
+import { CapacitySelect, SharedSlotHint } from "./slotFields";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 import { claimPeriodSeed, periodSeedWasClaimed } from "./periodSeed";
 import { PeriodAnchorGate } from "./PeriodAnchorGate";
@@ -591,7 +591,7 @@ function PeriodVenuePanel({
       {offGridSlots.length > 0 && !isDisabled ? (
         <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-2">
           <p role="alert" className="mb-1 text-xs font-medium text-destructive">
-            Créneau(x) sur un jour non affichable — servi au solveur mais invisible sur la grille. Supprimez-le pour ne pas planifier ce jour-là.
+            Créneau(x) sur un jour non affichable — servi au système mais invisible sur la grille. Supprimez-le pour ne pas planifier ce jour-là.
           </p>
           <ul className="flex flex-col gap-1">
             {offGridSlots.map((sl) => (
@@ -769,6 +769,8 @@ function PeriodSlotEditor({
           </div>
         ) : null}
       </div>
+
+      {canSplit ? <SharedSlotHint capacity={capacity} /> : null}
 
       {null !== error ? (
         <p role="alert" className="mt-3 text-sm text-destructive">

@@ -107,7 +107,7 @@ export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups,
   return (
     <Card className="flex h-full min-h-0 flex-col">
       <CardHeader className="shrink-0 flex-row items-center justify-between gap-2 pb-3">
-        <CardTitle className="text-base">Diagnostics du solveur</CardTitle>
+        <CardTitle className="text-base">Diagnostics du système</CardTitle>
         {onCollapse ? (
           <button type="button" onClick={onCollapse} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Réduire les diagnostics" title="Réduire (plus de place pour la grille)">
             <PanelRightClose className="size-4" />

@@ -433,7 +433,7 @@ export function ConstraintsStep() {
   return (
     <div>
       <p className="mb-4 text-sm text-muted-foreground">
-        Le solveur gère déjà les règles de base (pas 2 équipes au même endroit, coach jamais en double…). Ici, ajoutez vos préférences et restrictions : ciblez
+        Le système gère déjà les règles de base (pas 2 équipes au même endroit, coach jamais en double…). Ici, ajoutez vos préférences et restrictions : ciblez
         <strong> tout le club</strong>, un <strong>groupe</strong> (ex. les jeunes → pas de créneau après 19h50) ou une <strong>équipe</strong> précise. La capacité d'un gymnase se règle
         sur l'écran <strong>Gymnases</strong> (1 ou 2 équipes par créneau).
       </p>
