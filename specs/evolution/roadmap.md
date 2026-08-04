@@ -1,9 +1,14 @@
-# Roadmap — ce qui reste à faire
+# Roadmap (54) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
 > [`../courantes/etat-des-lieux.md`](../courantes/etat-des-lieux.md), avec le comportement documenté dans la
 > spec courante qui le reçoit.
+>
+> **Le (N) du titre = le nombre de lignes ouvertes du backlog** (entrées `| Pn-x |` / `SEC-n` / `DOC-n`),
+> à titre indicatif (décision fondateur 2026-08-04 — exception assumée à la règle « pas de décompte volatil »).
+> **Chaque MOVE l'entretient** : supprimer une ligne → décrémenter, en ajouter une → incrémenter.
+> Vérification d'une commande quand un doute : `grep -cE '^\| (P[0-9]+|SEC|DOC)-' specs/evolution/roadmap.md`.
 >
 > **Corollaire à ne pas contourner** : si vous cherchez « est-ce que X est fait ? », ce fichier ne répond pas —
 > [`etat-des-lieux.md`](../courantes/etat-des-lieux.md) répond. Et si un sujet a été **tranché contre** une option

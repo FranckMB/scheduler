@@ -68,7 +68,7 @@ Three buckets, distinct meaning — keep them true:
 - **`evolution/`** — what the app will do **later** (future/vision). When an item is delivered, **remove it from evolution** (it has graduated into `courantes`).
 
 **Purge des items livrés (mandatory each run) — the MOVE, in four steps.** For every item delivered since the last pass:
-1. **Delete the backlog line** (P*x-y*, DOC-n, SEC-n…) from `roadmap.md`. Do **not** flip it to ✅ and leave it there — the roadmap holds no ✅. The id is never reused: a numbering hole means delivered, by design.
+1. **Delete the backlog line** (P*x-y*, DOC-n, SEC-n…) from `roadmap.md`. Do **not** flip it to ✅ and leave it there — the roadmap holds no ✅. The id is never reused: a numbering hole means delivered, by design. **Entretenir le compteur du titre** (« Roadmap (N) — … », exception fondateur 2026-08-04 à la règle anti-décompte) : chaque ligne supprimée décrémente N, chaque ligne ajoutée l'incrémente — en cas de doute, `grep -cE '^\| (P[0-9]+|SEC|DOC)-' specs/evolution/roadmap.md` fait foi.
 2. **Add one trace line** to `etat-des-lieux.md` §3 (date · id · subject · pointer to the `courantes/` file that now holds the behaviour). A delivered item MUST leave a dated trace — deletion without trace is the failure mode this step blocks.
 3. **Update the capability map** (`etat-des-lieux.md` §1) if the delivery changed what the app can do. It is a **map**: pointers and one-liners, never behavioural detail.
 4. **Detail file** — if a `specs/evolution/*.md` detail file is now fully delivered, delete it (history lives in git) and drop its entry from the roadmap header's active-files list.
