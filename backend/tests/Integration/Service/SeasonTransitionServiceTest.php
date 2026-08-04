@@ -299,6 +299,8 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $club->setLocale('fr');
         $club->setOnboardingCompleted(true);
         $club->setFfbbClubCode('TRA' . strtoupper(substr(md5($uid), 0, 10)));
+        // P1-5 : en règle très loin — ces tests couvrent la copie, pas le gate.
+        $club->setPaidSeasonYear(9999);
         $this->em->persist($club);
 
         $sport = new Sport;
@@ -485,6 +487,9 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $club->setLocale('fr');
         $club->setOnboardingCompleted(true);
         $club->setFfbbClubCode('JUN' . strtoupper(substr(md5($uid), 0, 10)));
+        // P1-5 : ces tests couvrent la COPIE, pas le gate de paiement — club
+        // réputé en règle très loin (le gate a ses propres tests, ApiTest).
+        $club->setPaidSeasonYear(9999);
         $this->em->persist($club);
         $this->em->flush();
         $this->scopeGucToClub($club->getId());

@@ -16,6 +16,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -66,6 +67,11 @@ final class SeasonTransitionController extends AbstractController
                 'error' => $e->getMessage(),
                 'existingSeasonId' => $e->getExistingSeasonId(),
             ], Response::HTTP_CONFLICT);
+        } catch (ConflictHttpException $e) {
+            // Préconditions du service (saison non courante, saison suivante non
+            // payée — P1-5) : un 409 JSON qui PORTE le message, pas la page
+            // d'erreur générique — le frontend l'affiche tel quel.
+            return $this->json(['error' => $e->getMessage()], Response::HTTP_CONFLICT);
         }
 
         return $this->json([

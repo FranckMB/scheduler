@@ -34,6 +34,11 @@ final class SeasonClockThreadingTest extends WebTestCase
         self::assertCount(1, $seasons, 'a fresh club starts with exactly one season');
         $sourceId = $seasons[0]['id'];
 
+        // P1-5 : la bascule est réservée aux saisons payées — relais dev du geste
+        // support (ce test couvre l'horloge, pas le gate, qui a ses propres NR).
+        $this->request('POST', '/api/dev/mark-season-paid', $token);
+        self::assertResponseStatusCodeSame(200);
+
         $this->request('POST', '/api/seasons/' . $sourceId . '/transition', $token);
         self::assertResponseStatusCodeSame(201);
 

@@ -650,6 +650,9 @@ final class AuthController extends AbstractController
         // (15/07 → 14/07), nom « 2026-2027 » (décision fondateur 2026-07-24 :
         // jamais « 2026 » seul — ambigu sur une saison à cheval).
         $seasonYear = SeasonResolver::seasonYear(new DateTimeImmutable);
+        // P1-5 : la saison de naissance est réputée couverte par l'inscription —
+        // la SUIVANTE exigera le paiement (gate de bascule, SeasonTransitionService).
+        $club->setPaidSeasonYear($seasonYear);
         $season = new Season;
         $season->setClubId($club->getId());
         $season->setName(SeasonResolver::defaultSeasonName(new DateTimeImmutable($seasonYear . '-07-15')));

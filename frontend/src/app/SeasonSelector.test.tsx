@@ -18,6 +18,8 @@ vi.mock("@/features/auth/queries", () => ({
 vi.mock("@/features/auth/api", () => ({
   transitionSeason: (id: string) => transitionMock(id),
 }));
+// Toasts espionnés (P1-5) : on vérifie QUEL message part, pas son rendu DOM.
+vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 // The re-dating step has its own tests; here we only assert WHEN it opens.
 vi.mock("@/features/season-transition/RedateEventsDialog", () => ({
   RedateEventsDialog: ({ sourceSeasonId, targetSeasonId }: { sourceSeasonId: string; targetSeasonId: string }) => (
@@ -55,6 +57,7 @@ describe("SeasonSelector", () => {
   beforeEach(() => {
     meData = undefined;
     transitionMock.mockReset();
+    vi.clearAllMocks();
     useSeasonStore.getState().clear();
     useTransitionUiStore.setState({ confirmOpen: false });
   });
@@ -165,6 +168,28 @@ describe("SeasonSelector", () => {
 
     await waitFor(() => expect(useSeasonStore.getState().selectedSeasonId).toBe("sD"));
     expect(screen.getByTestId("redate-dialog")).toHaveTextContent("sN->sD");
+  });
+
+  it("affiche TEL QUEL le motif d'un 409 sans successeur (P1-5 : saison non réglée)", async () => {
+    // NR P1-5 : le gate de paiement rend un 409 qui PORTE son motif — l'avaler
+    // dans le toast générique laisserait le gestionnaire croire à une panne.
+    meData = { currentSeasonId: "sN", seasons: [season({})] };
+    const { HTTPError } = await import("ky");
+    const message = "La saison 2027-2028 n'est pas réglée — la bascule est réservée aux saisons payées.";
+    const response = new Response(JSON.stringify({ error: message }), { status: 409 });
+    const httpError = new HTTPError(response, new Request("http://t/api/seasons/sN/transition"), {} as never);
+    (httpError as unknown as { data: unknown }).data = { error: message };
+    transitionMock.mockRejectedValue(httpError);
+    const { toast } = await import("@/shared/stores/toastStore");
+    renderSelector();
+
+    await userEvent.click(screen.getByRole("button", { name: "Saison de travail" }));
+    await userEvent.click(screen.getByText("Préparer la saison suivante…"));
+    await userEvent.click(screen.getByRole("button", { name: "Préparer" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(message));
+    // Et surtout PAS le message générique par-dessus.
+    expect(toast.error).toHaveBeenCalledTimes(1);
   });
 
   it("shows the confirm when opened externally via the shared store (banner CTA)", async () => {

@@ -76,6 +76,16 @@ class Club
     #[ORM\Column(type: 'boolean')]
     private bool $onboardingCompleted = false;
 
+    // P1-5 — l'abonnement se paie PAR SAISON (décision fondateur 2026-08-04) :
+    // l'année-pivot de la DERNIÈRE saison réglée (2026 = saison 2026-2027). La
+    // bascule vers la saison N+1 exige paidSeasonYear >= N+1 — le gate est la
+    // BASCULE, pas la génération : préparer la saison suivante dès mai sans la
+    // payer était la fuite. Posée à l'inscription (saison de naissance couverte),
+    // avancée par l'action support « Marquer la saison suivante payée » en
+    // attendant le paiement en ligne (P1-3).
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $paidSeasonYear = null;
+
     // P2-21 lot A : non-null = les équipes de ce club ont été créées par l'import
     // FFBB à l'onboarding. Vérité SERVEUR qui gate la modale « équipes importées »
     // et l'atterrissage forcé sur Équipes — sans ce marqueur, un club à saisie
@@ -383,6 +393,18 @@ class Club
     public function isOnboardingCompleted(): bool
     {
         return $this->onboardingCompleted;
+    }
+
+    public function getPaidSeasonYear(): ?int
+    {
+        return $this->paidSeasonYear;
+    }
+
+    public function setPaidSeasonYear(?int $paidSeasonYear): self
+    {
+        $this->paidSeasonYear = $paidSeasonYear;
+
+        return $this;
     }
 
     public function getFfbbTeamsImportedAt(): ?DateTimeImmutable
