@@ -1,0 +1,229 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Service\Basketball;
+
+use App\Entity\Club;
+use App\Entity\SportCategory;
+use App\Entity\Team;
+use App\Enum\Gender;
+use App\Enum\TeamLevel;
+use App\Service\SeasonResolver;
+use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
+
+/**
+ * P2-21 lot A — crée AUTOMATIQUEMENT les équipes engagées d'un club neuf à
+ * l'onboarding (cadrage ffbb-appariement-source-de-verite §6bis).
+ *
+ * Décisions fondateur (2026-08-04) :
+ *  - création automatique + modale d'annonce côté wizard — « le gestionnaire
+ *    n'a rien à faire, il constate que 10 équipes sont déjà chargées » ;
+ *  - l'API est une AIDE, pas la source de vérité : tout est éditable, le
+ *    manuel et l'import Excel restent (P3-7 gardé) ;
+ *  - PAS d'appariement compétition ici — une équipe fraîchement créée va être
+ *    renommée/supprimée, un lien posé maintenant serait un lien fragile ;
+ *  - décodage des codes de compétition pour les JEUNES (champs structurés
+ *    vides — mesuré 7/14 sur BCCL) : `RMU13` = Régional Masculin U13.
+ *
+ * Bornes :
+ *  - CLUB VIDE uniquement : la moindre équipe existante → no-op (jamais de
+ *    doublon silencieux ; la ré-exécution passera par une proposition
+ *    explicite, cf. §1ter) ;
+ *  - un engagement non mappable (catégorie inconnue du catalogue) est SAUTÉ
+ *    et loggé — jamais deviné ;
+ *  - juin : les poules n'existent pas encore → le reader rend 0 ligne, no-op
+ *    naturel (§5).
+ */
+final class FfbbTeamImporter
+{
+    /** Niveau décodé → rang proposé (S=1 … D=5). Le fanion se détecte tout seul. */
+    private const LEVEL_TIER = ['PN' => 1, 'R' => 2, 'PR' => 3, 'D' => 4];
+
+    private const LEVEL_ENUM = ['PN' => TeamLevel::NATIONAL, 'R' => TeamLevel::REGIONAL, 'PR' => TeamLevel::PRE_REGION, 'D' => TeamLevel::DEPARTEMENTAL];
+
+    public function __construct(
+        private readonly EntityManagerInterface $entityManager,
+        private readonly FfbbEngagementReader $reader,
+        private readonly SeasonResolver $seasonResolver,
+        private readonly LoggerInterface $logger,
+    ) {}
+
+    /**
+     * @return int the number of teams created (0 = nothing to do / not empty)
+     */
+    public function importEngagedTeams(Club $club): int
+    {
+        $clubCode = $club->getFfbbClubCode();
+        $season = $this->seasonResolver->currentSeason($club->getId());
+        if (null === $clubCode || null === $season) {
+            return 0;
+        }
+        // Borne « club vide » : une équipe existe → un humain (ou un import) est
+        // déjà passé, on ne mélange pas nos créations aux siennes.
+        if ([] !== $this->entityManager->getRepository(Team::class)->findBy(['clubId' => $club->getId()], [], 1)) {
+            return 0;
+        }
+
+        $rows = $this->reader->read($clubCode, SeasonResolver::seasonYear($season->getStartDate()));
+        if ([] === $rows) {
+            return 0;
+        }
+
+        /** @var list<SportCategory> $categories */
+        $categories = $this->entityManager->getRepository(SportCategory::class)->findBy(['clubId' => $club->getId()]);
+
+        // Décodage + tri : niveau (PN > R > PR > D) puis âge décroissant — les
+        // seniors du plus haut niveau d'abord, c'est l'ordre des rangs S→D.
+        $decoded = [];
+        foreach ($rows as $row) {
+            $parsed = $this->decode($row);
+            if (null === $parsed) {
+                continue;
+            }
+            $category = $this->matchCategory($categories, $parsed['categoryToken']);
+            if (!$category instanceof SportCategory) {
+                $this->logger->warning('FFBB team import: unmapped category, engagement skipped', [
+                    'clubId' => $club->getId(),
+                    'competition' => $row['competitionName'],
+                    'categoryToken' => $parsed['categoryToken'],
+                ]);
+
+                continue;
+            }
+            $decoded[] = [...$parsed, 'category' => $category, 'competitionName' => $row['competitionName']];
+        }
+        usort($decoded, static fn (array $a, array $b): int => [$a['tierRank'], -$a['ageMax']] <=> [$b['tierRank'], -$b['ageMax']]);
+
+        $created = 0;
+        $usedNames = [];
+        foreach ($decoded as $order => $entry) {
+            $name = $this->uniqueName($this->baseName($entry), $usedNames);
+            $usedNames[$name] = true;
+
+            $team = new Team;
+            $team->setClubId($club->getId());
+            $team->setSeasonId($season->getId());
+            $team->setSportCategoryId($entry['category']->getId());
+            $team->setName($name);
+            $team->setGender($entry['gender']);
+            $team->setLevel($entry['level']);
+            $team->setPriorityTierId($entry['tierRank']);
+            $team->setTierOrder($order);
+            // sessionsPerWeek : défaut d'entité = 2 (décision fondateur 2026-08-04).
+            $this->entityManager->persist($team);
+            ++$created;
+        }
+        $this->entityManager->flush();
+
+        return $created;
+    }
+
+    /**
+     * Décode un engagement : champs structurés d'abord (les seniors), grammaire
+     * du code de compétition en repli (les jeunes — `RMU13` = R + M + U13).
+     *
+     * @param array{ffbbCompetitionCode: string, category: ?string, level: ?string, gender: ?string} $row
+     *
+     * @return array{categoryToken: string, gender: ?Gender, level: ?TeamLevel, tierRank: int, ageMax: int}|null
+     */
+    private function decode(array $row): ?array
+    {
+        $code = strtoupper($row['ffbbCompetitionCode']);
+        preg_match('/^(PN|PR|R|D)(M|F)?(U\d{1,2})?/', $code, $m);
+        $levelToken = '' !== ($m[1] ?? '') ? $m[1] : null;
+        $genderToken = '' !== ($m[2] ?? '') ? $m[2] : null;
+        $categoryToken = '' !== ($m[3] ?? '') ? $m[3] : null;
+
+        // Structuré d'abord — le code ne sert que là où la FFBB n'a rien rempli.
+        $gender = match ($row['gender']) {
+            'Masculin' => Gender::M,
+            'Féminin' => Gender::F,
+            default => null !== $genderToken ? Gender::from($genderToken) : null,
+        };
+        $category = match (true) {
+            null !== $row['category'] && str_starts_with($row['category'], 'Senior') => 'SE',
+            null !== $categoryToken => $categoryToken,
+            null !== $row['category'] && 1 === preg_match('/U\d{1,2}/', $row['category'], $cm) => $cm[0],
+            default => null,
+        };
+        if (null === $category) {
+            return null;
+        }
+
+        return [
+            'categoryToken' => $category,
+            'gender' => $gender,
+            'level' => null !== $levelToken ? self::LEVEL_ENUM[$levelToken] : null,
+            'tierRank' => null !== $levelToken ? self::LEVEL_TIER[$levelToken] : 5,
+            'ageMax' => 'SE' === $category ? 99 : (int) substr($category, 1),
+        ];
+    }
+
+    /**
+     * La catégorie du CLUB qui contient l'âge décodé — `U20` → U21, `U17` → U18
+     * (le catalogue n'a pas toutes les bornes FFBB, le plus proche CONTENANT
+     * gagne ; rien ne contient → null, l'engagement sera sauté).
+     *
+     * @param list<SportCategory> $categories
+     */
+    private function matchCategory(array $categories, string $token): ?SportCategory
+    {
+        if ('SE' === $token) {
+            foreach ($categories as $category) {
+                if ('Senior' === $category->getName()) {
+                    return $category;
+                }
+            }
+
+            return null;
+        }
+        $age = (int) substr($token, 1);
+        $best = null;
+        foreach ($categories as $category) {
+            $min = $category->getAgeMin();
+            $max = $category->getAgeMax();
+            if (null === $min || null === $max || $age < $min || $age > $max || $max >= 99) {
+                continue; // les catégories sans bornes jeunes (Senior/Vétéran/Loisir) ne captent pas un U-token
+            }
+            if (null === $best || $max < $best->getAgeMax()) {
+                $best = $category; // la plus SERRÉE qui contient l'âge
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * « SM »/« SF » pour les seniors, « U13M »/« U13F » pour les jeunes.
+     *
+     * @param array{categoryToken: string, gender: ?Gender} $entry
+     */
+    private function baseName(array $entry): string
+    {
+        $genderSuffix = match ($entry['gender']) {
+            Gender::M => 'M',
+            Gender::F => 'F',
+            default => '',
+        };
+        if ('SE' === $entry['categoryToken']) {
+            return 'S' . ('' !== $genderSuffix ? $genderSuffix : 'E');
+        }
+
+        return $entry['categoryToken'] . $genderSuffix;
+    }
+
+    /** @param array<string, true> $used */
+    private function uniqueName(string $base, array $used): string
+    {
+        // « SM1 » d'office : le club aura probablement plusieurs équipes du même
+        // moule, autant numéroter dès la première (c'est le vocabulaire usuel).
+        for ($i = 1;; ++$i) {
+            $candidate = $base . $i;
+            if (!isset($used[$candidate])) {
+                return $candidate;
+            }
+        }
+    }
+}
