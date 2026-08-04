@@ -64,6 +64,24 @@ export function useVenueSlots() {
   return useQuery({ queryKey: ["wizard", "venue_slots"], queryFn: wizardApi.listVenueSlots, staleTime: 30_000 });
 }
 
+/**
+ * Les salles FFBB d'un CP (P2-20 — combobox de l'étape Gymnases). Désactivée
+ * tant que le CP n'a pas 5 chiffres (le serveur refuserait de toute façon).
+ * staleTime long : le référentiel des salles d'une commune ne bouge pas
+ * pendant une session de saisie — une requête par commune consultée.
+ */
+export function useFfbbSalles(postalCode: string) {
+  return useQuery({
+    queryKey: ["wizard", "ffbb_salles", postalCode],
+    queryFn: () => wizardApi.listFfbbSalles(postalCode),
+    enabled: /^\d{5}$/.test(postalCode),
+    staleTime: 3_600_000,
+    // Best-effort comme au register : la FFBB en panne ne doit ni retenter en
+    // boucle ni faire du bruit — la saisie libre reste le chemin.
+    retry: false,
+  });
+}
+
 export function useCreateVenue() {
   const queryClient = useQueryClient();
   return useMutation({

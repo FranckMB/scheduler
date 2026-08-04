@@ -27,6 +27,32 @@ final class FfbbApiClientTest extends TestCase
         self::assertFalse(FfbbApiClient::isValidClubCode(''));
     }
 
+    public function testSearchSallesValidatesPostalCodeAndFiltersByCommune(): void
+    {
+        // P2-20 : le CP est interpolé dans le filtre Meilisearch — un format
+        // invalide ne doit JAMAIS atteindre la requête (même règle que le code
+        // club) : liste vide, zéro appel réseau.
+        $bodies = [];
+        $client = new FfbbApiClient(new MockHttpClient(function (string $method, string $url, array $options) use (&$bodies): MockResponse {
+            if (str_contains($url, 'configuration')) {
+                return new MockResponse((string) json_encode(['data' => ['key_ms' => 't']]));
+            }
+            $bodies[] = (string) $options['body'];
+
+            return new MockResponse((string) json_encode(['results' => [['hits' => [['libelle' => 'GYMNASE MATEO']]]]]));
+        }));
+
+        self::assertSame([], $client->searchSalles('691000'), '6 chiffres → refusé');
+        self::assertSame([], $client->searchSalles('69100\' OR 1'), 'injection de filtre → refusée');
+        self::assertSame([], $bodies, 'aucun appel réseau sur CP invalide');
+
+        $hits = $client->searchSalles('69100');
+        self::assertSame('GYMNASE MATEO', $hits[0]['libelle'] ?? null);
+        self::assertCount(1, $bodies);
+        self::assertStringContainsString('ffbbserver_salles', $bodies[0]);
+        self::assertStringContainsString('commune.codePostal = \'69100\'', (string) json_decode($bodies[0], true)['queries'][0]['filter']);
+    }
+
     public function testOnlyTalksToFixedFfbbHosts(): void
     {
         $hosts = [];

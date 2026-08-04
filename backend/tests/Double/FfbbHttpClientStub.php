@@ -48,6 +48,21 @@ final class FfbbHttpClientStub implements HttpClientInterface
 
                 return $this->search($hits);
             }
+            if (str_contains($body, 'ffbbserver_salles')) {
+                // P2-20 : deux salles pour le CP de test, une SANS libellé (le
+                // mapping serveur doit l'écarter au lieu de rendre une ligne vide).
+                // ⚠ Ne pas matcher les apostrophes du filtre : l'encodeur JSON de
+                // Symfony les sérialise en ' — on matche le CP seul.
+                $hits = str_contains($body, '69100') ? [
+                    ['libelle' => 'SALLE ZOLA', 'adresse' => '251 cours Émile Zola', 'numero' => '166900001',
+                        'cartographie' => ['ville' => 'Villeurbanne', 'latitude' => 45.76672, 'longitude' => 4.9076]],
+                    ['libelle' => 'GYMNASE MATEO', 'adresse' => '5 BIS RUE EMILE DUNIERE', 'numero' => '166926604',
+                        'cartographie' => ['ville' => 'Villeurbanne', 'latitude' => 45.78017, 'longitude' => 4.88467]],
+                    ['libelle' => '', 'adresse' => 'sans nom'],
+                ] : [];
+
+                return $this->search($hits);
+            }
             if (str_contains($body, 'ffbbserver_competitions')) {
                 $hits = str_contains($body, self::COMPETITION_CODE) ? [[
                     'id' => self::COMPETITION_ID,
