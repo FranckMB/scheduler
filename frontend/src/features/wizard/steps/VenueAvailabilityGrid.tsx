@@ -87,7 +87,16 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
               type="button"
               aria-label={`${d.label} ${fmt(m)}`}
               onClick={() => onAdd(d.n, fmt(m))}
-              className={cn("border-l border-t border-border/40 hover:bg-muted", 0 === m % 60 ? "border-t-border/70" : "")}
+              className={cn(
+                // Frontière de JOUR épaissie (retour fondateur 2026-08-05 : isoler un
+                // jour d'un coup d'œil) + pause méridienne 12h-14h en fond rosé —
+                // TEINTE DE FOND seulement : les créneaux (z-10, fond opaque) passent
+                // devant et gardent leur couleur.
+                "border-l border-t border-border/40 hover:bg-muted",
+                0 === m % 60 ? "border-t-border/70" : "",
+                "border-l-2 border-l-border",
+                m >= 12 * 60 && m < 14 * 60 ? "bg-destructive/5 hover:bg-muted" : "",
+              )}
               style={{ gridColumn: 2 + di, gridRow: 2 + ri }}
             />
           )),
