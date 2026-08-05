@@ -39,11 +39,11 @@ jobs:
             fi
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
               -v "$PWD/.trivyignore:/.trivyignore" \
-              aquasec/trivy:latest image --severity HIGH,CRITICAL --ignore-unfixed \
+              aquasec/trivy:latest image --ignorefile /.trivyignore --severity HIGH,CRITICAL --ignore-unfixed \
               --scanners vuln "$img" || true
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
               -v "$PWD/.trivyignore:/.trivyignore" \
-              aquasec/trivy:latest image --severity CRITICAL --ignore-unfixed \
+              aquasec/trivy:latest image --ignorefile /.trivyignore --severity CRITICAL --ignore-unfixed \
               --exit-code 1 --quiet --scanners vuln "$img" || FAILED=1
           done
           exit $FAILED
