@@ -1,0 +1,3 @@
+# Trivy — exceptions du projet (SEC A19). Règle : chaque entrée porte sa CVE, sa
+# date et sa justification. Une entrée sans justification se retire.
+# (vide — aucun CRITICAL fixable ignoré à ce jour)

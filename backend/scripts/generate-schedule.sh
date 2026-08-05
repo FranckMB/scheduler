@@ -3,7 +3,17 @@ set -euo pipefail
 
 API_BASE="http://localhost:8080/api"
 CLUB_ID="77e1e118-e702-4839-8a9c-7c34187541e6"
-TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpYXQiOjE3ODI4ODc2MTUsImV4cCI6MTgxNDQyMzYxNSwicm9sZXMiOlsiUk9MRV9BRE1JTiJdLCJ1c2VybmFtZSI6Im1hcmEubWJAYmNjbC5mciJ9.FqpK2t0iliPw_HwAxcbhLKrQbw6YaleLOaKVEqxhXNHG4Dr3jFMIozC4TN2N9PWJ3ma_otp2Qox_HWU3hzVwygPB-QP-4HD7HlwfkSmSUAXTBu-5ezWsFHPbga3bhS9eqOWzzfRVOTiq2WWr8RrICauCBg6NbFw9L9vmcnZ3Ahx-FPgEdfb9G12y--_jGDDRZcvHVRcS4rEhVRJqjDpMVLrgyi8XNViym06IkookjCKweW5lOcNQMVB2Bt98nWWFSYx-eX2PEwGtrjxnG6lTuVcSA2WjB6VLFgjnwt3a6n9oTz3kJ5Q6OG7zot1TN5gCG1QzSchcWZBsFm1m1Atx7w"
+# P3-4/SEC : plus jamais de jeton en dur dans un script versionné (Gitleaks l'a
+# épinglé dans l'historique). Fournir SCHEDULER_TOKEN, ou SCHEDULER_EMAIL +
+# SCHEDULER_PASSWORD pour un login à la volée.
+TOKEN="${SCHEDULER_TOKEN:-}"
+if [[ -z "$TOKEN" && -n "${SCHEDULER_EMAIL:-}" ]]; then
+  TOKEN=$(curl -s -X POST "$API_BASE/login" -H 'Content-Type: application/json'     -d "{\"email\":\"$SCHEDULER_EMAIL\",\"password\":\"$SCHEDULER_PASSWORD\"}"     | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))')
+fi
+if [[ -z "$TOKEN" ]]; then
+  echo "SCHEDULER_TOKEN ou SCHEDULER_EMAIL/SCHEDULER_PASSWORD requis." >&2
+  exit 1
+fi
 SCHEDULE_ID=""
 CLUB_ID_ARG=""
 POLL_INTERVAL=5

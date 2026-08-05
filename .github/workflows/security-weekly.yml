@@ -1,0 +1,49 @@
+# SEC A19 (2026-08-05) — balayage HEBDO des images prod PUBLIÉES (ghcr.io).
+# Pourquoi un cron en plus du scan au build : une CVE naît APRÈS le build — les
+# images n'ont pas changé, le monde autour si. Ce workflow attrape ce que le
+# gate de build ne peut pas voir. Il liste TOUT (CRITICAL + HIGH, fixables) et
+# échoue sur CRITICAL fixable — l'échec envoie la notification GitHub standard.
+# Les images scannées = celles que le déploiement tire (docs/ops/deploy.md).
+name: Security Weekly
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # lundi 06:00 UTC
+  workflow_dispatch: {} # relançable à la main depuis l'onglet Actions
+
+jobs:
+  trivy-published-images:
+    name: Trivy (published prod images)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Log in to ghcr
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Scan published images
+        run: |
+          set -e
+          FAILED=0
+          for img in \
+            ghcr.io/${{ github.repository_owner }}/scheduler-php:latest \
+            ghcr.io/${{ github.repository_owner }}/scheduler-nginx:latest \
+            ghcr.io/${{ github.repository_owner }}/scheduler-frontend:latest \
+            ghcr.io/${{ github.repository_owner }}/scheduler-postgres:latest \
+            ghcr.io/${{ github.repository_owner }}/scheduler-engine:latest \
+            ghcr.io/${{ github.repository_owner }}/scheduler-pdf-worker:latest; do
+            echo "=== $img"
+            if ! docker pull "$img" 2>/dev/null; then
+              echo "(image absente — pas encore publiée, ignorée)"
+              continue
+            fi
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$PWD/.trivyignore:/.trivyignore" \
+              aquasec/trivy:latest image --severity HIGH,CRITICAL --ignore-unfixed \
+              --scanners vuln "$img" || true
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$PWD/.trivyignore:/.trivyignore" \
+              aquasec/trivy:latest image --severity CRITICAL --ignore-unfixed \
+              --exit-code 1 --quiet --scanners vuln "$img" || FAILED=1
+          done
+          exit $FAILED

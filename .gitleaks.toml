@@ -1,0 +1,42 @@
+# Gitleaks — allowlist du projet (SEC A19, 2026-08-05).
+# Règle : on n'allowliste QUE des findings analysés un par un. Un nouveau secret
+# doit faire rougir le job `secrets-scan` — ne jamais élargir ces exceptions
+# « pour faire passer la CI ».
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Findings historiques analysés (scan one-shot du 2026-08-05) + canaris de test"
+
+# 1. EnvHygieneTest ÉPINGLE volontairement un APP_SECRET jadis commité et DÉJÀ
+#    TOURNÉ, pour interdire son retour — c'est un canari, pas une fuite.
+# 2. ProfileEndpointsTest : mots de passe de FIXTURE (newPassword123!…), pas des
+#    secrets.
+paths = [
+  '''backend/tests/Security/EnvHygieneTest\.php''',
+  '''backend/tests/Security/ProfileEndpointsTest\.php''',
+]
+
+# Findings HISTORIQUES traités (immuables dans git — on les documente ici plutôt
+# que de réécrire l'historique) :
+#  - 83f70693 / 5035f83f : APP_SECRET de dev/test d'époque, remplacés depuis par
+#    des placeholders « insecure-not-a-real-secret » ; le vrai secret prod vit
+#    en variable d'environnement (INF-03), jamais dans git.
+#  - 034c87f1 / b01954d9 / (+ HEAD antérieurs) : JWT de DEV en dur dans
+#    generate-schedule.sh — signé par la paire JWT LOCALE (config/jwt/ est
+#    gitignoré, jamais publiée) donc invérifiable ailleurs ; le script lit
+#    désormais SCHEDULER_TOKEN/SCHEDULER_EMAIL (ce commit).
+commits = [
+  "83f706934de050c2d09b81660e4d5cc4242ea8cd",
+  "5035f83fc5ecf5284002904a12d5fe96796c8a3e",
+  "034c87f189aef71e6817b81a6923efe6043ce9c3",
+  "b01954d960711d3321f2eac810e0c5fae0e38b9b",
+]
+
+# Le même JWT historique apparaît dans chaque commit qui a transporté le fichier
+# entre son introduction et sa purge : on allowliste sa signature exacte plutôt
+# que le fichier (un NOUVEAU secret dans ce script doit rougir).
+regexes = [
+  '''FqpK2t0iliPw_HwAxcbhLKrQbw6YaleLOaKVEqxhXNHG4Dr3jFMIozC4TN2N9PWJ''',
+]
