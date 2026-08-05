@@ -3,7 +3,8 @@ import { Select } from "@/shared/components/ui/select";
 const CAP_HINT = "Nombre d'équipes pouvant s'entraîner en même temps sur ce créneau (2 = terrain coupé en deux).";
 
 /**
- * Sélecteur de capacité — seul un gymnase divisible (canSplit) accueille 2 équipes ;
+ * Sélecteur de capacité — seul un gymnase divisible (canSplit) accueille 2 ou 3
+ * équipes (terrains en travers — retour fondateur 2026-08-05 : ADN se divise en 3) ;
  * sinon la capacité vaut toujours 1 et le contrôle disparaît.
  *
  * Extrait dans ce module partagé pour que l'éditeur de période le réutilise sans importer
@@ -18,7 +19,8 @@ export function CapacitySelect({ value, onChange, canSplit, className }: { value
   return (
     <Select aria-label="Capacité" title={CAP_HINT} className={className} value={value} onChange={(e) => onChange(Number(e.target.value))}>
       <option value={1}>1 équipe (terrain entier)</option>
-      <option value={2}>2 équipes (terrain divisé)</option>
+      <option value={2}>2 équipes (terrain divisé en 2)</option>
+      <option value={3}>3 équipes (terrain divisé en 3)</option>
     </Select>
   );
 }

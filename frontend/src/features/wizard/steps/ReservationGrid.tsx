@@ -55,7 +55,7 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
 
         {/* Inert grid lines — no create-on-click here (unlike the Gymnases grid). */}
         {WEEK.map((d, di) =>
-          gridRows.map((m, ri) => <div key={`g${d.n}-${m}`} className={cn("border-l border-t border-border/40", 0 === m % 60 ? "border-t-border/70" : "")} style={{ gridColumn: 2 + di, gridRow: 2 + ri }} aria-hidden="true" />),
+          gridRows.map((m, ri) => <div key={`g${d.n}-${m}`} className={cn("border-l border-t border-border/40 border-l-2 border-l-border", 0 === m % 60 ? "border-t-border/70" : "", m >= 12 * 60 && m < 14 * 60 ? "bg-destructive/5" : "")} style={{ gridColumn: 2 + di, gridRow: 2 + ri }} aria-hidden="true" />),
         )}
 
         {/* Slots */}
