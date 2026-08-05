@@ -611,7 +611,7 @@ final class AuthController extends AbstractController
      * demandeur voie AUSSI un refus/une expiration (pas seulement l'attente).
      * Null dès qu'un membership existe : le club est né, la demande est histoire.
      *
-     * @return array{status: string, clubName: string, ara: string}|null
+     * @return array{status: string, clubName: string, ara: string, clubEmailKnown: bool}|null
      */
     private function clubRequestState(string $userId, ?object $clubUser): ?array
     {
@@ -625,6 +625,9 @@ final class AuthController extends AbstractController
             'status' => $request->getStatus(),
             'clubName' => $request->getClubName(),
             'ara' => $request->getAra(),
+            // false = mail FFBB introuvable : c'est le SUPPORT qui validera — l'écran
+            // d'attente ne doit pas prétendre qu'un email est parti au club.
+            'clubEmailKnown' => null !== $request->getClubEmail(),
         ] : null;
     }
 
