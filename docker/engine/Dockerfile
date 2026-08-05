@@ -17,4 +17,7 @@ RUN pip install --upgrade pip && pip install ".[dev]"
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# SEC-15 (roadmap) : durcissement USER non-root à tester stack complète — php-fpm
+# abandonne déjà root pour ses workers (www-data), engine/pdf-worker sont des
+# conteneurs internes jamais exposés.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"] # nosemgrep: dockerfile.security.missing-user.missing-user

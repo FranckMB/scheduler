@@ -1,0 +1,26 @@
+# Semgrep — exclusions du projet (SEC-14, triage du 2026-08-05). Règle : ne
+# JAMAIS élargir pour faire passer la CI — les cas ponctuels utilisent un
+# commentaire inline `nosemgrep: <rule>` avec sa justification, sur place.
+
+# Valeurs par défaut (semgrep n'applique PLUS les siennes dès que ce fichier existe)
+node_modules/
+vendor/
+var/
+.git/
+dist/
+storybook-static/
+test-results/
+
+# Outillage de dev jamais expédié : scripts de capture Puppeteer (URLs et
+# arguments en dur, aucun input externe) et vérification de contrats API.
+frontend/scripts/
+
+# .npmrc : la règle réclame `minimum-release-age`, une option pnpm — npm
+# l'ignorerait en silence (placebo). Le risque couvert = paquet fraîchement
+# publié piégé, tenu par le cooldown Dependabot 7 j (.github/dependabot.yml).
+frontend/.npmrc
+
+# Code de TEST, jamais expédié : nettoyages de fixtures temporaires (unlink),
+# canari de secret volontaire (EnvHygieneTest), regex dynamiques de harnais.
+backend/tests/
+frontend/tests/
