@@ -90,6 +90,12 @@ export const routes: RouteObject[] = [
         lazy: async () => ({ Component: (await import("@/features/auth/VerifyEmailPage")).VerifyEmailPage }),
       },
       {
+        // P3-4 PR C — page PUBLIQUE d'approbation de création de club (le token
+        // du mail officiel FFBB est l'identité, pas de compte).
+        path: "/club-approval/:token",
+        lazy: async () => ({ Component: (await import("@/features/auth/ClubApprovalPage")).ClubApprovalPage }),
+      },
+      {
         path: "/waiting",
         lazy: async () => ({ Component: (await import("@/features/auth/WaitingApprovalPage")).WaitingApprovalPage }),
       },

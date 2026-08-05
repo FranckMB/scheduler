@@ -38,6 +38,8 @@ export interface MeResponse {
   lastName: string;
   membershipStatus: MembershipStatus;
   role: string | null;
+  /** P3-4 : la demande de CRÉATION du club (la plus récente) — null dès qu'un membership existe. */
+  clubRequest: { status: "pending" | "approved" | "refused" | "expired"; clubName: string; ara: string; clubEmailKnown: boolean } | null;
   club: {
     id: string;
     name: string;
@@ -171,4 +173,20 @@ export function approveMember(id: string): Promise<unknown> {
 
 export async function rejectMember(id: string): Promise<void> {
   await api.post(`memberships/${id}/reject`);
+}
+
+/** P3-4 PR C — la page publique d'approbation (le token EST l'identité, pas de JWT). */
+export interface ClubApprovalInfo {
+  clubName: string;
+  ara: string;
+  requesterName: string;
+  expiresAt: string;
+}
+
+export function getClubApproval(token: string): Promise<ClubApprovalInfo> {
+  return api.get(`club-approvals/${encodeURIComponent(token)}`).json();
+}
+
+export function decideClubApproval(token: string, decision: "approve" | "refuse"): Promise<{ status: string }> {
+  return api.post(`club-approvals/${encodeURIComponent(token)}`, { json: { decision } }).json();
 }
