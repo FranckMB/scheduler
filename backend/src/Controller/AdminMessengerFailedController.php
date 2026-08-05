@@ -178,7 +178,10 @@ final readonly class AdminMessengerFailedController
 
         $decoded = json_decode($raw, true);
         if (!\is_array($decoded)) {
-            $unserialized = @unserialize($raw);
+            // SEC-14 : jamais d'instanciation depuis un payload stocké — on ne veut
+            // qu'une CHAÎNE (les objets deviennent __PHP_Incomplete_Class, écartés par
+            // le is_string juste dessous).
+            $unserialized = @unserialize($raw, ['allowed_classes' => false]); // nosemgrep: php.lang.security.unserialize-use.unserialize-use -- allowed_classes=false : aucune instanciation possible, seul un résultat string est consommé
             if (\is_string($unserialized)) {
                 $decoded = json_decode($unserialized, true);
             }

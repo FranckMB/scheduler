@@ -41,7 +41,10 @@ async function generateFiles(html, filename, landscape) {
     const scale = Math.min(1, availH / contentH, availW / contentW);
 
     // PDF — single A4 page, given scale, no auto-pagination overflow.
-    const pdfPath = path.join(OUTPUT_DIR, filename);
+    // SEC-14 : le filename vient de la requête — basename() interdit la
+    // traversée (../../) même si l'appelant interne était compromis.
+    // nosemgrep: javascript.lang.security.audit.path-traversal.path-join-resolve-traversal.path-join-resolve-traversal -- basename() interdit la traversée
+    const pdfPath = path.join(OUTPUT_DIR, path.basename(filename));
     await page.pdf({
       path: pdfPath,
       format: 'A4',
@@ -58,7 +61,7 @@ async function generateFiles(html, filename, landscape) {
       document.body.style.transform = `scale(${s})`;
     }, scale);
     await page.setViewport({ width: pageW, height: pageH });
-    const pngFilename = filename.replace(/\.pdf$/, '.png');
+    const pngFilename = path.basename(filename).replace(/\.pdf$/, '.png');
     const pngPath = path.join(OUTPUT_DIR, pngFilename);
     await page.screenshot({ path: pngPath, type: 'png', clip: { x: 0, y: 0, width: pageW, height: pageH } });
   } finally {

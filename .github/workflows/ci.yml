@@ -11,7 +11,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |
@@ -32,9 +32,9 @@ jobs:
     name: Frontend (build + unit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
@@ -69,7 +69,7 @@ jobs:
     name: Secrets Scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: Run gitleaks (full history)
@@ -77,28 +77,28 @@ jobs:
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.0
           git /repo --no-banner -c /repo/.gitleaks.toml
 
-  # SEC A19 — Semgrep (motifs de sécurité : taint, injections) NON-BLOQUANT le
-  # temps du triage des faux positifs ; promotion en gate après stabilisation
-  # (patron du gate Rector). Zéro token IA — c'est le filet qui remplace la
-  # revue systématique retirée du cycle (décision fondateur 2026-08-05).
+  # SEC-14 (2026-08-05) — Semgrep PROMU EN GATE après triage des 69 findings
+  # initiaux (corrigés ou justifiés : .semgrepignore + nosemgrep inline motivés).
+  # Zéro token IA — le filet qui remplace la revue systématique retirée du
+  # cycle. Un nouveau finding = --error → rouge.
   semgrep:
-    name: Semgrep (advisory)
+    name: Semgrep (security gate)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Run semgrep
         run: >
           docker run --rm -v "$PWD:/src" semgrep/semgrep:latest
           semgrep scan --config p/default --config p/security-audit
           --config p/react --config p/python --config p/php
-          --timeout 120 --metrics=off
+          --error --timeout 120 --metrics=off
           --exclude 'node_modules' --exclude 'vendor' --exclude 'var'
 
   dependency-audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |
@@ -107,7 +107,7 @@ jobs:
 
       # PHP — reads composer.lock, no vendor install needed. --abandoned=ignore: an
       # abandoned package is not a vulnerability (Composer 2.7+ would fail on it by default).
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: '8.4'
           tools: composer:v2
@@ -118,7 +118,7 @@ jobs:
       # Node — reads package-lock, no install needed. All deps are scanned (a runtime lib
       # misfiled under devDependencies still ships to browsers), gated at high+ so an
       # unfixable low/moderate advisory doesn't block every unrelated PR.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
@@ -131,7 +131,7 @@ jobs:
       # fresh unpinned resolve. `pip freeze` omits pip/setuptools tooling by default, and
       # auditing the frozen list via an isolated pipx-run pip-audit means the tool never
       # perturbs (upgrades) the set it is meant to check. The local non-PyPI package is stripped.
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.12'
       - name: pip-audit
@@ -151,7 +151,7 @@ jobs:
     name: PHPStan & CS-Fixer
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |
@@ -187,7 +187,7 @@ jobs:
     name: Rector (style gate)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |
@@ -211,7 +211,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, phpstan]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |
@@ -326,7 +326,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: blocking-tests
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |
@@ -352,7 +352,7 @@ jobs:
     name: Engine Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |
@@ -380,7 +380,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: engine-tests
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |
@@ -398,7 +398,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: blocking-tests
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |
@@ -442,7 +442,7 @@ jobs:
       - name: Start messenger worker
         run: docker compose up -d --wait messenger-worker
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: npm
@@ -472,7 +472,7 @@ jobs:
 
       - name: Upload traces on failure
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: playwright-results
           path: frontend/test-results/
@@ -496,7 +496,7 @@ jobs:
     name: Smoke Tests (semantic e2e)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |
@@ -551,7 +551,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [blocking-tests, engine-tests]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Prepare .env
         run: |

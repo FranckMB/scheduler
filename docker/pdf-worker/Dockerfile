@@ -22,4 +22,8 @@ COPY frontend/worker.js ./worker.js
 # Heartbeat admin (builtins uniquement — AUCUNE dépendance npm, voir worker-heartbeat.js).
 COPY frontend/worker-heartbeat.js ./worker-heartbeat.js
 
+# SEC-15 (roadmap) : durcissement USER non-root à tester stack complète — php-fpm
+# abandonne déjà root pour ses workers (www-data), engine/pdf-worker sont des
+# conteneurs internes jamais exposés.
+# nosemgrep: dockerfile.security.missing-user.missing-user
 CMD ["node", "worker.js"]

@@ -59,6 +59,10 @@ COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
 EXPOSE 9000
 
+# SEC-15 (roadmap) : durcissement USER non-root à tester stack complète — php-fpm
+# abandonne déjà root pour ses workers (www-data), engine/pdf-worker sont des
+# conteneurs internes jamais exposés.
+# nosemgrep: dockerfile.security.missing-user.missing-user
 CMD ["php-fpm"]
 
 # ---------------------------------------------------------------------------

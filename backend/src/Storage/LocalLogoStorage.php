@@ -38,7 +38,7 @@ final class LocalLogoStorage implements LogoStorage
     {
         $path = $this->path($clubId);
         if (is_file($path)) {
-            unlink($path);
+            unlink($path); // nosemgrep: php.lang.security.unlink-use.unlink-use -- chemin construit sur basename() d'une clé interne (UUID club / code FFBB validé)
         }
     }
 

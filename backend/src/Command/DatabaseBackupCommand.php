@@ -86,7 +86,7 @@ final class DatabaseBackupCommand extends Command
             if (false !== $mtime && $mtime < time() - 3600) {
                 // Log gardé par le RETOUR d'unlink : annoncer une suppression qui a
                 // échoué (permissions) masquerait l'accumulation (round 3, finding 2).
-                if (@unlink($orphan)) {
+                if (@unlink($orphan)) { // nosemgrep: php.lang.security.unlink-use.unlink-use -- rotation de dumps internes (chemins construits par la commande, jamais depuis une entrée)
                     $io->writeln(\sprintf('Removed orphaned partial %s.', basename($orphan)));
                 } else {
                     $io->warning(\sprintf('Could not remove orphaned partial %s — check permissions on the backup dir.', basename($orphan)));
@@ -144,7 +144,7 @@ final class DatabaseBackupCommand extends Command
                 // Succès → promotion atomique + mtime = début du snapshot ; échec → purge.
                 if (isset($process) && $process->isSuccessful()) {
                     if (!rename($partial, $final)) {
-                        @unlink($partial);
+                        @unlink($partial); // nosemgrep: php.lang.security.unlink-use.unlink-use -- rotation de dumps internes (chemins construits par la commande, jamais depuis une entrée)
                     } elseif (!touch($final, (int) $snapshotStart->format('U'))) {
                         // ⚠️ mtime resté à la FIN du dump = SUR-couverture : une écriture
                         // faite PENDANT le dump (absente du snapshot pris au début) serait
@@ -154,7 +154,7 @@ final class DatabaseBackupCommand extends Command
                         $io->warning('Could not set the dump mtime to snapshot start — writes made DURING this dump may be treated as covered. Run app:db:backup --force to be safe.');
                     }
                 } else {
-                    @unlink($partial);
+                    @unlink($partial); // nosemgrep: php.lang.security.unlink-use.unlink-use -- rotation de dumps internes (chemins construits par la commande, jamais depuis une entrée)
                 }
             }
         }
@@ -183,7 +183,7 @@ final class DatabaseBackupCommand extends Command
         sort($files);
         $excess = \count($files) - self::RETENTION;
         for ($i = 0; $i < $excess; ++$i) {
-            @unlink($files[$i]);
+            @unlink($files[$i]); // nosemgrep: php.lang.security.unlink-use.unlink-use -- rotation de dumps internes (chemins construits par la commande, jamais depuis une entrée)
             $io->writeln(\sprintf('Retention: removed %s.', basename($files[$i])));
         }
     }
