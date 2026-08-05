@@ -59,7 +59,7 @@ final class ConflictDetectionServiceTest extends TestCase
         self::assertCount(1, $conflicts);
         self::assertSame($c1, $conflicts[0]['constraint1']);
         self::assertSame($c2, $conflicts[0]['constraint2']);
-        self::assertSame('Contradictory day constraints: allowed days overlap with forbidden days.', $conflicts[0]['reason']);
+        self::assertSame('Contradiction : un même jour est à la fois autorisé et interdit pour la même cible.', $conflicts[0]['reason']);
     }
 
     public function testDetectsHardHardTimeConflict(): void
@@ -81,7 +81,7 @@ final class ConflictDetectionServiceTest extends TestCase
         $conflicts = $this->service->detectConflicts([$c1, $c2]);
 
         self::assertCount(1, $conflicts);
-        self::assertSame('Contradictory time constraints: maxStartTime is less than minStartTime.', $conflicts[0]['reason']);
+        self::assertSame('Contradiction : l\'heure de début au plus tard est AVANT l\'heure de début au plus tôt pour la même cible.', $conflicts[0]['reason']);
     }
 
     public function testNoConflictWithDifferentScopeTargetIds(): void

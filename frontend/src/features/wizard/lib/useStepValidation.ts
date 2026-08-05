@@ -4,7 +4,6 @@ import { readFailed, readLoading } from "@/shared/lib/readState";
 import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
 import { useConstraintValidation, usePeriodSlots, useReservations, useTeamPeriodOverrides, useVenuePeriodOverrides, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
-import { humanizeConstraintError } from "./constraintErrors";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
 
 const DAY_LABELS = ["", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
@@ -250,10 +249,12 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
     }
     if (constraintValidation && !constraintValidation.valid) {
       for (const messages of Object.values(constraintValidation.errors)) {
-        errors.push(...messages.map(humanizeConstraintError));
+        // Messages FRANÇAIS et nommés par le serveur (source unique depuis le
+        // 2026-08-05 — la carte de traduction locale avait dérivé en silence).
+        errors.push(...messages);
       }
       for (const conflict of constraintValidation.conflicts) {
-        errors.push(humanizeConstraintError(conflict.reason));
+        errors.push(conflict.reason);
       }
       // P2-9 PR B — impossibilités physiques (un coach à deux endroits en même temps).
       // Déjà formulées par le serveur, avec le gymnase et l'heure : pas de humanize, il

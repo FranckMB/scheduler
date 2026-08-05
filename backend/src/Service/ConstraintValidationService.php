@@ -8,6 +8,13 @@ use App\Entity\Constraint;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintScope;
 
+/**
+ * ⚠ Les messages de ce service sont AFFICHÉS TELS QUELS au gestionnaire (récap,
+ * « À corriger avant de générer ») : FRANÇAIS, vocabulaire gestionnaire, jamais
+ * de clé de config (minAtVenueId…). La carte de traduction frontend a été
+ * SUPPRIMÉE (2026-08-05) après une dérive silencieuse — le backend est la
+ * source unique du fond ET de la forme.
+ */
 final class ConstraintValidationService
 {
     /**
@@ -22,11 +29,11 @@ final class ConstraintValidationService
         $scopeTargetId = $constraint->getScopeTargetId();
 
         if (ConstraintScope::CLUB !== $scope && null === $scopeTargetId) {
-            $errors[] = \sprintf('Scope %s requires a scope_target_id.', $scope->value);
+            $errors[] = 'Cette contrainte doit cibler une équipe, un coach ou un gymnase précis.';
         }
 
         if (ConstraintScope::CLUB === $scope && null !== $scopeTargetId) {
-            $errors[] = 'Scope CLUB should not have a scope_target_id.';
+            $errors[] = 'Une contrainte « toutes les équipes » ne doit pas cibler une équipe précise.';
         }
 
         // Validate config based on family
@@ -37,19 +44,19 @@ final class ConstraintValidationService
             case ConstraintFamily::TIME:
                 // maxEndTime = "finir avant X h" (l'engine calcule fin = début + durée).
                 if (!isset($config['maxStartTime']) && !isset($config['minStartTime']) && !isset($config['maxEndTime'])) {
-                    $errors[] = 'TIME family requires maxStartTime, minStartTime or maxEndTime in config.';
+                    $errors[] = 'Une contrainte d\'horaire doit préciser au moins une heure (début au plus tôt, au plus tard, ou fin).';
                 }
                 // maxEndTime is honored by the engine ONLY on HARD/LOCK rules (the
                 // soft path add_preferred_time_bonus reads only min/maxStartTime).
                 // A PREFERRED end-bound would be accepted here yet silently ignored.
                 if (isset($config['maxEndTime']) && !\in_array($constraint->getRuleType()->value, ['HARD', 'LOCK'], true)) {
-                    $errors[] = 'maxEndTime requires an obligatory (HARD/LOCK) rule — the soft path ignores it.';
+                    $errors[] = '« Fini avant » n\'existe qu\'en règle OBLIGATOIRE — passez la contrainte en obligatoire, sinon elle serait ignorée.';
                 }
                 break;
 
             case ConstraintFamily::DAY:
                 if (!isset($config['allowedDays']) && !isset($config['forbiddenDays']) && !isset($config['forcedDays'])) {
-                    $errors[] = 'DAY family requires allowedDays, forbiddenDays or forcedDays in config.';
+                    $errors[] = 'Une contrainte de jour doit préciser au moins un jour (autorisé, à éviter ou imposé).';
                 }
                 break;
 
@@ -60,24 +67,29 @@ final class ConstraintValidationService
                 // ici — un compte, pas un forçage). A bare `venueId` is honored by NO
                 // engine branch, so it is not accepted here.
                 if (!isset($config['forcedVenueId']) && !isset($config['forbiddenVenueId']) && !isset($config['preferredVenueId']) && !isset($config['minAtVenueId'])) {
-                    $errors[] = 'FACILITY family requires forcedVenueId, forbiddenVenueId, preferredVenueId or minAtVenueId in config.';
+                    $errors[] = 'Une contrainte de gymnase doit désigner un gymnase.';
                 }
                 // minAtVenueId ("au moins N ici") is honored by the engine ONLY as
                 // a per-TEAM, HARD/LOCK count. A CLUB-scoped or PREFERRED one is
                 // accepted nowhere in parse_v2_constraints → silently dropped.
                 if (isset($config['minAtVenueId'])) {
                     if (!\in_array($constraint->getRuleType()->value, ['HARD', 'LOCK'], true)) {
-                        $errors[] = 'minAtVenueId requires an obligatory (HARD/LOCK) rule — the soft path ignores it.';
+                        $errors[] = '« Au moins N séances dans ce gymnase » n\'existe qu\'en règle OBLIGATOIRE — passez la contrainte en obligatoire.';
                     }
-                    if (ConstraintScope::TEAM !== $scope) {
-                        $errors[] = 'minAtVenueId requires a team target (scope TEAM) — "au moins N ici" is per-team.';
+                    // Une équipe précise, OU un groupe (tag) : l'éclatement CLUB+targetTag
+                    // produit des lignes PAR ÉQUIPE qui portent minAtVenueId — l'engine
+                    // les lit (retour fondateur 2026-08-05 : le groupe est légitime).
+                    // Seul « toutes les équipes » sans tag reste fermé : rien n'éclate,
+                    // l'engine jette la ligne en silence.
+                    if (ConstraintScope::TEAM !== $scope && !isset($config['targetTag'])) {
+                        $errors[] = '« Au moins N séances dans ce gymnase » se pose sur une équipe ou un groupe — pas sur « toutes les équipes ».';
                     }
                 }
                 break;
 
             case ConstraintFamily::COACH_AVAILABILITY:
                 if (!isset($config['coachId']) && !isset($config['targetTag'])) {
-                    $errors[] = 'COACH_AVAILABILITY family requires coachId or targetTag in config.';
+                    $errors[] = 'Une contrainte de disponibilité doit cibler un coach.';
                 }
                 // Lot C: optional time window (fromTime / untilTime, HH:MM). Absent = whole day.
                 $from = $config['fromTime'] ?? null;
@@ -88,20 +100,20 @@ final class ConstraintValidationService
                         continue;
                     }
                     if (!\is_string($value) || 1 !== preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $value)) {
-                        $errors[] = \sprintf('%s must be a HH:MM time.', $key);
+                        $errors[] = \sprintf('L\'heure « %s » doit être au format HH:MM.', 'fromTime' === $key ? 'à partir de' : 'jusqu\'à');
                         $bothValid = false;
                     }
                 }
                 // Only compare bounds once both parse as HH:MM — otherwise a
                 // malformed "25:99" would emit a second, misleading "before" error.
                 if ($bothValid && \is_string($from) && \is_string($until) && $from >= $until) {
-                    $errors[] = 'fromTime must be before untilTime.';
+                    $errors[] = 'L\'heure de début doit précéder l\'heure de fin.';
                 }
                 break;
 
             case ConstraintFamily::FACILITY_CAPACITY:
                 if (!isset($config['maxTeams'])) {
-                    $errors[] = 'FACILITY_CAPACITY family requires maxTeams in config.';
+                    $errors[] = 'Une contrainte de capacité doit préciser un nombre maximum d\'équipes.';
                 }
                 break;
         }
@@ -109,7 +121,7 @@ final class ConstraintValidationService
         // Validate rule type consistency
         $ruleType = $constraint->getRuleType();
         if ('LOCK' === $ruleType->value && ConstraintFamily::TIME !== $family && ConstraintFamily::DAY !== $family) {
-            $errors[] = 'LOCK rule type is only valid for TIME or DAY family.';
+            $errors[] = 'Le verrouillage n\'est possible que sur une contrainte d\'horaire ou de jour.';
         }
 
         return $errors;
@@ -197,7 +209,7 @@ final class ConstraintValidationService
                 if (\count(array_intersect($allowed1, $forbidden2)) > 0
                     || \count(array_intersect($allowed2, $forbidden1)) > 0
                 ) {
-                    return 'Contradictory day constraints: allowed days overlap with forbidden days.';
+                    return 'Contradiction : un même jour est à la fois autorisé et interdit pour la même cible.';
                 }
             }
 
@@ -212,7 +224,7 @@ final class ConstraintValidationService
                 if ((null !== $max1 && null !== $min2 && $max1 < $min2)
                     || (null !== $max2 && null !== $min1 && $max2 < $min1)
                 ) {
-                    return 'Contradictory time constraints: maxStartTime is less than minStartTime.';
+                    return 'Contradiction : l\'heure de début au plus tard est AVANT l\'heure de début au plus tôt pour la même cible.';
                 }
             }
         }

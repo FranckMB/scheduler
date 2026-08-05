@@ -28,7 +28,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('Scope TEAM requires a scope_target_id.', $errors);
+        self::assertContains('Cette contrainte doit cibler une équipe, un coach ou un gymnase précis.', $errors);
     }
 
     public function testCoachScopeRequiresScopeTargetId(): void
@@ -42,7 +42,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('Scope COACH requires a scope_target_id.', $errors);
+        self::assertContains('Cette contrainte doit cibler une équipe, un coach ou un gymnase précis.', $errors);
     }
 
     public function testCoachAvailabilityAcceptsAValidTimeWindow(): void
@@ -67,13 +67,13 @@ final class ConstraintValidationServiceTest extends TestCase
         $constraint->setConfig(['coachId' => 'coach-1', 'unavailableDays' => [2], 'fromTime' => '25:99', 'untilTime' => '20:00']);
 
         $errors = $this->service->validate($constraint);
-        self::assertContains('fromTime must be a HH:MM time.', $errors);
+        self::assertContains('L\'heure « à partir de » doit être au format HH:MM.', $errors);
         // A malformed bound must NOT also trigger the "before" comparison — that
         // would emit a second, misleading error for one bad field (Lot C review).
-        self::assertNotContains('fromTime must be before untilTime.', $errors);
+        self::assertNotContains('L\'heure de début doit précéder l\'heure de fin.', $errors);
 
         $constraint->setConfig(['coachId' => 'coach-1', 'fromTime' => '20:00', 'untilTime' => '18:00']);
-        self::assertContains('fromTime must be before untilTime.', $this->service->validate($constraint));
+        self::assertContains('L\'heure de début doit précéder l\'heure de fin.', $this->service->validate($constraint));
     }
 
     public function testFacilityScopeRequiresScopeTargetId(): void
@@ -87,7 +87,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('Scope FACILITY requires a scope_target_id.', $errors);
+        self::assertContains('Cette contrainte doit cibler une équipe, un coach ou un gymnase précis.', $errors);
     }
 
     public function testClubScopeShouldNotHaveScopeTargetId(): void
@@ -101,7 +101,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('Scope CLUB should not have a scope_target_id.', $errors);
+        self::assertContains('Une contrainte « toutes les équipes » ne doit pas cibler une équipe précise.', $errors);
     }
 
     public function testValidTeamScopeWithTargetIdHasNoScopeError(): void
@@ -115,8 +115,8 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertNotContains('Scope TEAM requires a scope_target_id.', $errors);
-        self::assertNotContains('Scope CLUB should not have a scope_target_id.', $errors);
+        self::assertNotContains('Cette contrainte doit cibler une équipe, un coach ou un gymnase précis.', $errors);
+        self::assertNotContains('Une contrainte « toutes les équipes » ne doit pas cibler une équipe précise.', $errors);
     }
 
     public function testTimeFamilyRequiresMaxOrMinStartTime(): void
@@ -129,7 +129,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('TIME family requires maxStartTime, minStartTime or maxEndTime in config.', $errors);
+        self::assertContains('Une contrainte d\'horaire doit préciser au moins une heure (début au plus tôt, au plus tard, ou fin).', $errors);
     }
 
     public function testDayFamilyRequiresAllowedOrForbiddenDays(): void
@@ -142,7 +142,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('DAY family requires allowedDays, forbiddenDays or forcedDays in config.', $errors);
+        self::assertContains('Une contrainte de jour doit préciser au moins un jour (autorisé, à éviter ou imposé).', $errors);
     }
 
     public function testFacilityFamilyRequiresAVenueKey(): void
@@ -155,7 +155,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('FACILITY family requires forcedVenueId, forbiddenVenueId, preferredVenueId or minAtVenueId in config.', $errors);
+        self::assertContains('Une contrainte de gymnase doit désigner un gymnase.', $errors);
     }
 
     public function testFacilityFamilyAcceptsTheThreeEngineHonoredKeys(): void
@@ -180,7 +180,7 @@ final class ConstraintValidationServiceTest extends TestCase
         $constraint->setRuleType(ConstraintRuleType::HARD);
         $constraint->setConfig(['venueId' => 42]);
 
-        self::assertContains('FACILITY family requires forcedVenueId, forbiddenVenueId, preferredVenueId or minAtVenueId in config.', $this->service->validate($constraint));
+        self::assertContains('Une contrainte de gymnase doit désigner un gymnase.', $this->service->validate($constraint));
     }
 
     public function testCoachAvailabilityFamilyRequiresCoachIdOrTargetTag(): void
@@ -193,7 +193,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('COACH_AVAILABILITY family requires coachId or targetTag in config.', $errors);
+        self::assertContains('Une contrainte de disponibilité doit cibler un coach.', $errors);
     }
 
     public function testFacilityCapacityFamilyRequiresMaxTeams(): void
@@ -206,7 +206,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('FACILITY_CAPACITY family requires maxTeams in config.', $errors);
+        self::assertContains('Une contrainte de capacité doit préciser un nombre maximum d\'équipes.', $errors);
     }
 
     public function testLockRuleTypeOnlyValidForTimeOrDay(): void
@@ -219,7 +219,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertContains('LOCK rule type is only valid for TIME or DAY family.', $errors);
+        self::assertContains('Le verrouillage n\'est possible que sur une contrainte d\'horaire ou de jour.', $errors);
     }
 
     public function testLockRuleTypeValidForTimeFamily(): void
@@ -232,7 +232,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertNotContains('LOCK rule type is only valid for TIME or DAY family.', $errors);
+        self::assertNotContains('Le verrouillage n\'est possible que sur une contrainte d\'horaire ou de jour.', $errors);
     }
 
     public function testLockRuleTypeValidForDayFamily(): void
@@ -245,7 +245,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
         $errors = $this->service->validate($constraint);
 
-        self::assertNotContains('LOCK rule type is only valid for TIME or DAY family.', $errors);
+        self::assertNotContains('Le verrouillage n\'est possible que sur une contrainte d\'horaire ou de jour.', $errors);
     }
 
     public function testTimeFamilyAcceptsMaxEndTime(): void
@@ -264,20 +264,20 @@ final class ConstraintValidationServiceTest extends TestCase
     {
         // The engine only honors maxEndTime on HARD/LOCK — a PREFERRED end-bound is a placebo (C4).
         $constraint = (new Constraint)->setScope(ConstraintScope::CLUB)->setFamily(ConstraintFamily::TIME)->setRuleType(ConstraintRuleType::PREFERRED)->setConfig(['maxEndTime' => '20:30']);
-        self::assertContains('maxEndTime requires an obligatory (HARD/LOCK) rule — the soft path ignores it.', $this->service->validate($constraint));
+        self::assertContains('« Fini avant » n\'existe qu\'en règle OBLIGATOIRE — passez la contrainte en obligatoire, sinon elle serait ignorée.', $this->service->validate($constraint));
     }
 
     public function testMinAtVenueIdAtPreferredIsRejected(): void
     {
         $constraint = (new Constraint)->setScope(ConstraintScope::TEAM)->setScopeTargetId('t')->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::PREFERRED)->setConfig(['minAtVenueId' => 'v']);
-        self::assertContains('minAtVenueId requires an obligatory (HARD/LOCK) rule — the soft path ignores it.', $this->service->validate($constraint));
+        self::assertContains('« Au moins N séances dans ce gymnase » n\'existe qu\'en règle OBLIGATOIRE — passez la contrainte en obligatoire.', $this->service->validate($constraint));
     }
 
     public function testMinAtVenueIdAtClubScopeIsRejected(): void
     {
         // CLUB-scoped minAtVenueId is dropped by parse_v2_constraints (TEAM-only) — reject it (C3).
         $constraint = (new Constraint)->setScope(ConstraintScope::CLUB)->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)->setConfig(['minAtVenueId' => 'v']);
-        self::assertContains('minAtVenueId requires a team target (scope TEAM) — "au moins N ici" is per-team.', $this->service->validate($constraint));
+        self::assertContains('« Au moins N séances dans ce gymnase » se pose sur une équipe ou un groupe — pas sur « toutes les équipes ».', $this->service->validate($constraint));
     }
 
     public function testVenueMinimumErrorWhenCountExceedsSessions(): void
