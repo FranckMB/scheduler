@@ -6,6 +6,7 @@ import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
+import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { Select } from "@/shared/components/ui/select";
 import { VenueSelect } from "@/shared/components/ui/venue-select";
@@ -208,7 +209,14 @@ export function VenuesStep() {
 }
 
 function VenuesEditor() {
-  const { data: venues = [] } = useWizardVenues();
+  const { data: venues = [], isSuccess: venuesLoaded } = useWizardVenues();
+  // Accordéon « Ajouter un gymnase » (demande fondateur 2026-08-05 : l'encart
+  // prenait trop de place). Ouvert par défaut UNIQUEMENT pour un club sans
+  // gymnase — capturé UNE fois au premier rendu chargé, sinon l'ajout du 1er
+  // gymnase replierait la section sous la souris.
+  // defaultOpen n'est lu qu'au MONTAGE de l'accordéon : en ne le rendant
+  // qu'une fois les gymnases chargés, la valeur capturée est la bonne — et
+  // l'ajout du 1er gymnase ne replie rien (pas de remontage).
   const { data: slots = [] } = useVenueSlots();
   const matchWindowsQuery = useVenueMatchWindows();
   const { data: reservations = [] } = useReservations();
@@ -240,6 +248,13 @@ function VenuesEditor() {
   // « Déjà ajouté » se reconnaît au NUMÉRO fédéral, pas au nom : le gestionnaire
   // renomme ses salles (« ADN », « JDR ») — un rapprochement par libellé échouerait.
   const importedRefs = new Set(venues.map((v) => v.externalRef).filter((r): r is string => null != r));
+  // Le champ « Nom du gymnase » FILTRE les salles à l'écran en direct (demande
+  // fondateur : un seul geste — je tape, ça filtre ; inconnu → j'ajoute avec +).
+  const norm = (v: string) => v.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const nearbyFilter = norm(name.trim());
+  const filteredNearby = (nearbyQuery.data?.salles ?? []).filter(
+    (salle) => "" === nearbyFilter || norm(`${salle.name} ${salle.address ?? ""} ${salle.city ?? ""}`).includes(nearbyFilter),
+  );
   const [selectedId, setSelectedId] = useState("");
   const [duration, setDuration] = useState(90);
   const [venueName, setVenueName] = useState("");
@@ -309,6 +324,12 @@ function VenuesEditor() {
         Ajoutez vos gymnases, puis cliquez dans la grille pour poser les créneaux de disponibilité (jour + heure). Un gymnase sans créneau ne peut pas être utilisé.
       </p>
 
+      {venuesLoaded ? (
+      <AccordionSection
+        title="Ajouter un gymnase"
+        defaultOpen={0 === venues.length}
+        className="mb-3"
+      >
       <form onSubmit={addVenue} className="mb-2 rounded-lg border border-border bg-card p-3">
         <div className="flex items-end gap-2">
           <Input
@@ -378,7 +399,7 @@ function VenuesEditor() {
       {/* P2-21 lot D — les gymnases d'à côté, un clic pour les ajouter. La liste
           PROPOSE, n'impose jamais ; le nom officiel se renomme ensuite à sa main. */}
       {(nearbyQuery.data?.salles.length ?? 0) > 0 ? (
-        <div className="mb-3 rounded-lg border border-border bg-card p-3">
+        <div className="rounded-lg border border-border bg-card p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">
               Gymnases à proximité (FFBB{null != nearbyQuery.data?.radiusKm ? `, ${nearbyQuery.data.radiusKm} km` : ""}) — cliquez pour ajouter, renommez ensuite à votre main :
@@ -393,7 +414,10 @@ function VenuesEditor() {
             </Select>
           </div>
           <ul className="flex max-h-44 flex-col gap-1 overflow-y-auto">
-            {nearbyQuery.data?.salles.map((salle) => {
+            {0 === filteredNearby.length ? (
+              <li className="text-xs text-muted-foreground">Aucune salle FFBB ne correspond à « {name.trim()} » — ajoutez-le comme gymnase avec le bouton +.</li>
+            ) : null}
+            {filteredNearby.map((salle) => {
               const added = null !== salle.externalRef && importedRefs.has(salle.externalRef);
               return (
                 <li key={`${salle.externalRef ?? salle.name}-${salle.address ?? ""}`} className="flex items-center gap-2 text-sm">
@@ -447,6 +471,8 @@ function VenuesEditor() {
             })}
           </ul>
         </div>
+      ) : null}
+      </AccordionSection>
       ) : null}
 
       {emptyVenues.length > 0 ? (

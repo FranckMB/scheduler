@@ -17,7 +17,7 @@ import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { SectionCountTitle, SummaryRow, TeamTierAccordion } from "./StructureSummary";
 import { useActiveTeams, useActiveVenues, useGridSlots, usePriorityTiers, useReservations, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
-import { groupTeamsByTier } from "@/shared/lib/teamTiers";
+import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
 
 // Manager-facing labels for the FFBB play levels (mirrors the teams step).
@@ -243,7 +243,9 @@ export function RecapStep() {
             ? empty
             : constraintFamilies.map((group) => (
                 <div key={group.family} className="mb-3 last:mb-0">
-                  <p className="px-1 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-foreground">{FAMILY_LABEL[group.family] ?? "Autres"}</p>
+                  {/* Bandeau de TITRE (demande fondateur 2026-08-05) : « Horaires/Jours/
+                      Gymnase » ne se démarquait pas — fond accentué + liseré gauche. */}
+                  <p className="mb-1 rounded-md border-l-4 border-accent bg-accent/10 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-foreground">{FAMILY_LABEL[group.family] ?? "Autres"}</p>
                   {group.sections.map((section) => (
                     <div key={section.key} className="mb-1 last:mb-0">
                       <p className="px-2 text-[11px] font-medium text-muted-foreground">{section.label}</p>
@@ -258,13 +260,37 @@ export function RecapStep() {
         <AccordionSection title={<SectionCountTitle label="Réservations" count={reservations.length} />}>
           {0 === sortedReservations.length
             ? empty
-            : sortedReservations.map((r) => (
-                <SummaryRow
-                  key={r.id}
-                  label={teamName.get(r.teamId) ?? "?"}
-                  meta={`${venueName.get(r.venueId) ?? "?"} · ${dayLabel(r.dayOfWeek)} ${hhmm(r.startTime)}`}
-                />
-              ))}
+            : (() => {
+                // Sections PAR RANG (demande fondateur 2026-08-05) — le tri seul ne se
+                // lisait pas : mêmes titres S/A/B/C/D que l'accordéon Équipes, une
+                // réservation d'équipe hors couche (en pause) atterrit dans « Autres ».
+                const groups = groupTeamsByTier(teams, tiers);
+                const grouped = groups
+                  .map((g) => ({ g, rows: sortedReservations.filter((r) => g.teams.some((t) => t.id === r.teamId)) }))
+                  .filter(({ rows }) => rows.length > 0);
+                const known = new Set(grouped.flatMap(({ rows }) => rows.map((r) => r.id)));
+                const orphanRows = sortedReservations.filter((r) => !known.has(r.id));
+                return (
+                  <>
+                    {grouped.map(({ g, rows }) => (
+                      <div key={g.tier?.id ?? "orphan"} className="mb-2 last:mb-0">
+                        <p className="px-1 pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">{tierGroupLabel(g.tier)}</p>
+                        {rows.map((r) => (
+                          <SummaryRow key={r.id} label={teamName.get(r.teamId) ?? "?"} meta={`${venueName.get(r.venueId) ?? "?"} · ${dayLabel(r.dayOfWeek)} ${hhmm(r.startTime)}`} />
+                        ))}
+                      </div>
+                    ))}
+                    {orphanRows.length > 0 ? (
+                      <div className="mb-2 last:mb-0">
+                        <p className="px-1 pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Autres</p>
+                        {orphanRows.map((r) => (
+                          <SummaryRow key={r.id} label={teamName.get(r.teamId) ?? "?"} meta={`${venueName.get(r.venueId) ?? "?"} · ${dayLabel(r.dayOfWeek)} ${hhmm(r.startTime)}`} />
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
+                );
+              })()}
         </AccordionSection>
       </div>
 
@@ -290,6 +316,8 @@ export function RecapStep() {
       ) : (
         <p className="text-sm text-success">Tout est prêt. Utilisez « Continuer vers la génération » en bas pour lancer.</p>
       )}
+      {/* Respiration avant la barre du bouton « Continuer » (demande fondateur). */}
+      <div className="h-4" aria-hidden />
     </div>
   );
 }
