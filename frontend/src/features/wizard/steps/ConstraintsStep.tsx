@@ -7,6 +7,7 @@ import { PeriodAnchorGate } from "./PeriodAnchorGate";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
+import { VenueSelect } from "@/shared/components/ui/venue-select";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 
 import { groupConstraints } from "../lib/constraintOrder";
@@ -568,15 +569,15 @@ export function ConstraintsStep() {
                 <Input aria-label="Nombre de séances" type="number" min={1} className="mt-0.5 h-8 w-16" value={venueMinCount} onChange={(e) => setVenueMinCount(Math.max(1, Number(e.target.value) || 1))} />
               </label>
             )}
-            <Select aria-label="Gymnase" className="h-8 w-44" value={venueId} onChange={(e) => setVenueId(e.target.value)}>
-              <option value="">— gymnase —</option>
-              {[...editVenues].sort((a, b) => a.name.localeCompare(b.name, "fr")).map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                  {disabledIds.has(v.id) ? " (désactivé pour cette période)" : ""}
-                </option>
-              ))}
-            </Select>
+            <VenueSelect
+              aria-label="Gymnase"
+              className="h-8"
+              wrapperClassName="w-48"
+              placeholder="— gymnase —"
+              venues={[...editVenues].sort((a, b) => a.name.localeCompare(b.name, "fr")).map((v) => ({ id: v.id, name: v.name + (disabledIds.has(v.id) ? " (désactivé pour cette période)" : ""), color: v.color }))}
+              value={venueId}
+              onChange={(e) => setVenueId(e.target.value)}
+            />
           </>
         )}
 
