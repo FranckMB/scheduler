@@ -139,6 +139,11 @@ USER www-data
 # the build context would silently miss it in a clean CI checkout, breaking
 # /api/docs assets in every ghcr-built image).
 FROM nginx:1.27-alpine AS nginx-prod
+# SEC A19 — l'image de base traîne parfois des paquets Alpine troués (1er run
+# Trivy : OpenSSL 3.3.3 avec CVE-2026-31789 CRITICAL, correctif déjà publié
+# côté Alpine). L'upgrade au build ramène les paquets au niveau des dépôts —
+# le gate Trivy de build-docker vérifie derrière.
+RUN apk upgrade --no-cache
 
 COPY docker/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --from=prod /app/backend/public /app/backend/public

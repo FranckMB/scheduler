@@ -61,6 +61,39 @@ jobs:
   # against an unchanged package therefore reds only THIS check — which requires human
   # triage (bump the dep, or explicitly ignore the advisory) — without gating the image
   # build or the functional jobs on a commit that changed nothing.
+  # SEC A19 (2026-08-05) — Gitleaks sur TOUT l'historique, BLOQUANT, sans needs
+  # (même forme que dependency-audit) : un secret commité doit rougir dans la
+  # minute — chaque heure passée exige de le révoquer. Les findings historiques
+  # analysés vivent dans .gitleaks.toml, jamais d'élargissement « pour passer ».
+  secrets-scan:
+    name: Secrets Scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks (full history)
+        run: >
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.0
+          git /repo --no-banner -c /repo/.gitleaks.toml
+
+  # SEC A19 — Semgrep (motifs de sécurité : taint, injections) NON-BLOQUANT le
+  # temps du triage des faux positifs ; promotion en gate après stabilisation
+  # (patron du gate Rector). Zéro token IA — c'est le filet qui remplace la
+  # revue systématique retirée du cycle (décision fondateur 2026-08-05).
+  semgrep:
+    name: Semgrep (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run semgrep
+        run: >
+          docker run --rm -v "$PWD:/src" semgrep/semgrep:latest
+          semgrep scan --config p/default --config p/security-audit
+          --config p/react --config p/python --config p/php
+          --timeout 120 --metrics=off
+          --exclude 'node_modules' --exclude 'vendor' --exclude 'var'
+
   dependency-audit:
     name: Dependency Audit
     runs-on: ubuntu-latest
@@ -534,7 +567,23 @@ jobs:
       # this job even though no dev build uses those targets.
       - name: Build prod images
         run: |
-          docker build --target prod -f docker/php/Dockerfile .
-          docker build --target nginx-prod -f docker/php/Dockerfile .
-          docker build --target prod -f docker/frontend/Dockerfile .
-          docker build -f docker/postgres/Dockerfile.prod .
+          docker build --target prod -f docker/php/Dockerfile -t scan/php-prod .
+          docker build --target nginx-prod -f docker/php/Dockerfile -t scan/nginx-prod .
+          docker build --target prod -f docker/frontend/Dockerfile -t scan/frontend-prod .
+          docker build -f docker/postgres/Dockerfile.prod -t scan/postgres-prod .
+
+      # SEC A19 — Trivy sur les images PROD fraîchement construites : les paquets
+      # OS (openssl, libc, nginx…) sont l'angle mort de dependency-audit, qui ne
+      # voit que composer/npm/pip. Gate = CRITICAL fixables seulement (HIGH en
+      # rapport) ; les exceptions vivent dans .trivyignore, datées et justifiées.
+      # Le monde bouge même quand l'image ne change pas : le balayage HEBDO des
+      # images ghcr publiées vit dans security-weekly.yml.
+      - name: Trivy scan (prod images, CRITICAL gate)
+        run: |
+          for img in scan/php-prod scan/nginx-prod scan/frontend-prod scan/postgres-prod; do
+            echo "--- $img"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+              -v "$PWD/.trivyignore:/.trivyignore" \
+              aquasec/trivy:latest image --ignorefile /.trivyignore --severity CRITICAL --ignore-unfixed \
+              --exit-code 1 --scanners vuln "$img"
+          done

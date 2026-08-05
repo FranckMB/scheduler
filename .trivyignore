@@ -1,0 +1,11 @@
+# Trivy — exceptions du projet (SEC A19). Règle : chaque entrée porte sa CVE, sa
+# date et sa justification. Une entrée sans justification se retire.
+
+# 2026-08-05 — /usr/local/bin/gosu de l'image OFFICIELLE postgres:16-alpine :
+# binaire Go statique compilé avec stdlib 1.24.6 (correctif 1.24.13). Ni apk ni
+# nous ne pouvons le recompiler — seul un rebuild upstream de l'image postgres
+# le corrigera. Exposition réelle négligeable : gosu ne sert qu'au démarrage du
+# conteneur pour abandonner root, aucun trafic réseau ne l'atteint. À RETIRER
+# dès qu'un `docker pull postgres:16-alpine` propre passe (le balayage hebdo le
+# rappellera tant que l'upstream n'a pas bougé).
+CVE-2025-68121

@@ -14,6 +14,9 @@ FROM tooling AS build
 RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime
+# SEC A19 — même règle que nginx-prod backend : ramener les paquets Alpine au
+# niveau des dépôts (le gate Trivy vérifie derrière).
+RUN apk upgrade --no-cache
 
 COPY docker/frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/frontend/security-headers.conf /etc/nginx/snippets/security-headers.conf
