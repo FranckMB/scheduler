@@ -10,10 +10,6 @@ TOKEN="${SCHEDULER_TOKEN:-}"
 if [[ -z "$TOKEN" && -n "${SCHEDULER_EMAIL:-}" ]]; then
   TOKEN=$(curl -s -X POST "$API_BASE/login" -H 'Content-Type: application/json'     -d "{\"email\":\"$SCHEDULER_EMAIL\",\"password\":\"$SCHEDULER_PASSWORD\"}"     | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))')
 fi
-if [[ -z "$TOKEN" ]]; then
-  echo "SCHEDULER_TOKEN ou SCHEDULER_EMAIL/SCHEDULER_PASSWORD requis." >&2
-  exit 1
-fi
 SCHEDULE_ID=""
 CLUB_ID_ARG=""
 POLL_INTERVAL=5
@@ -193,6 +189,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# La garde vit APRÈS le parsing : --token (smoke-solver) surcharge TOKEN.
+if [[ -z "$TOKEN" ]]; then
+  echo "Token requis : --token, SCHEDULER_TOKEN, ou SCHEDULER_EMAIL/SCHEDULER_PASSWORD." >&2
+  exit 1
+fi
 
 if [[ -n "$SCHEDULE_ID" && -n "$CLUB_ID_ARG" ]]; then
   die "--schedule-id et --club-id sont mutuellement exclusifs"
