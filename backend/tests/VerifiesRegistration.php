@@ -44,6 +44,20 @@ trait VerifiesRegistration
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode(['token' => $raw], \JSON_THROW_ON_ERROR));
 
-        return json_decode((string) $client->getResponse()->getContent(), true)['token'] ?? '';
+        $body = json_decode((string) $client->getResponse()->getContent(), true);
+        $jwt = \is_array($body) ? ($body['token'] ?? '') : '';
+
+        // P3-4 : un ARA inconnu ne matérialise plus le club à la vérification — la
+        // demande attend l'approbation du club (mail FFBB) ou du superadmin. Les
+        // suites qui appellent ce trait testent l'APRÈS-création : on approuve via
+        // le relais dev (le même que les e2e), qui est le vrai service d'approbation.
+        // Le flux d'approbation lui-même a ses propres NR (ClubApprovalFlowTest).
+        if (\is_array($body) && 'club_pending' === ($body['membershipStatus'] ?? null) && '' !== $jwt) {
+            $client->request('POST', '/api/dev/approve-club-request', [], [], [
+                'HTTP_AUTHORIZATION' => 'Bearer ' . $jwt, 'REMOTE_ADDR' => $ip,
+            ]);
+        }
+
+        return \is_string($jwt) ? $jwt : '';
     }
 }

@@ -59,6 +59,9 @@ security:
         # #10 C2 : page publique de collecte des doléances — le token (pas de JWT) porte
         # l'identité et le club. GET+POST publics ; tiret (coach-wishes) != /api/coach_wishes.
         - { path: ^/api/coach-wishes/public/, methods: [GET, POST], roles: PUBLIC_ACCESS }
+        # P3-4 : page publique d'approbation de création de club — le token (mail
+        # institutionnel FFBB, pas de compte) porte l'identité. 404 byte-identique.
+        - { path: ^/api/club-approvals/, methods: [GET, POST], roles: PUBLIC_ACCESS }
         - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
 
 when@test:

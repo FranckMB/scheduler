@@ -46,6 +46,13 @@ TOKEN=$(curl -s -X POST "$API/register/verify" -H 'Content-Type: application/jso
 H=(-H "Authorization: Bearer $TOKEN")
 JC=(-H "Content-Type: application/json")
 
+# P3-4: verification no longer materialises the club — the request awaits the
+# club's approval (FFBB mail) or the superadmin. Approve via the dev relay
+# (the real approval service, 404 in prod) so the smoke tests the AFTER-creation.
+info "approve club creation request (dev relay)"
+CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/dev/approve-club-request" "${H[@]}")
+[[ "$CODE" == "200" ]] || die "dev approval returned $CODE (expected 200)"
+
 # Isolation: a fresh club must be empty.
 COUNT=$(curl -s "$API/teams" "${H[@]}" | python3 -c 'import sys,json;d=json.load(sys.stdin);print(len(d.get("member",d)))')
 [[ "$COUNT" == "0" ]] || die "fresh club is not empty (isolation leak): $COUNT teams"
