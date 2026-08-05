@@ -173,6 +173,38 @@ export interface AdminActionsResponse {
   items: AdminAction[];
 }
 
+/** P3-4 PR B — demande de création de club en attente d'arbitrage. */
+export interface AdminClubRequest {
+  id: string;
+  clubName: string;
+  ara: string;
+  /** null = mail FFBB introuvable — la console est la SEULE voie. */
+  clubEmail: string | null;
+  status: "pending" | "expired";
+  requesterName: string;
+  requesterEmail: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
+export interface AdminClubRequestsResponse {
+  items: AdminClubRequest[];
+}
+
+/** P3-4 PR B — adhésion en attente (le gestionnaire en place n'a pas tranché). */
+export interface AdminPendingMembership {
+  id: string;
+  clubName: string;
+  ara: string;
+  userName: string;
+  userEmail: string;
+  createdAt: string;
+}
+
+export interface AdminPendingMembershipsResponse {
+  items: AdminPendingMembership[];
+}
+
 export interface AdminClubActionRunResponse {
   key: string;
   clubId: string;
@@ -298,4 +330,20 @@ export function getAdminMessengerFailed(page: number, limit: number): Promise<Ad
 
 export function getAdminSystemErrors(page: number, limit: number): Promise<AdminSystemErrorsResponse> {
   return adminApi.get("system-errors", { searchParams: { page, limit } }).json();
+}
+
+export function getAdminClubRequests(): Promise<AdminClubRequestsResponse> {
+  return adminApi.get("club-requests").json();
+}
+
+export function decideAdminClubRequest(id: string, decision: "approve" | "refuse", csrfToken: string): Promise<{ status: string }> {
+  return adminApi.post(`club-requests/${encodeURIComponent(id)}/decision`, { json: { decision }, headers: { "X-CSRF-Token": csrfToken } }).json();
+}
+
+export function getAdminPendingMemberships(): Promise<AdminPendingMembershipsResponse> {
+  return adminApi.get("pending-memberships").json();
+}
+
+export function activateAdminMembership(id: string, csrfToken: string): Promise<{ status: string }> {
+  return adminApi.post(`pending-memberships/${encodeURIComponent(id)}/activate`, { headers: { "X-CSRF-Token": csrfToken } }).json();
 }

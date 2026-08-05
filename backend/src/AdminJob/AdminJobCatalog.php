@@ -45,6 +45,9 @@ final class AdminJobCatalog
             new AdminJobDefinition('db-backup', 'Sauvegarde base de données', 'app:db:backup', AdminJobSchedule::daily(1)),
             new AdminJobDefinition('coach-wish-digest', 'Digest des doléances coachs', 'app:coach-wishes:digest', AdminJobSchedule::daily(7)),
             new AdminJobDefinition('period-reminders', 'Rappels de périodes', 'app:periods:remind', AdminJobSchedule::daily(8)),
+            // P3-4 PR B : relances des demandes de création de club (3 j restants +
+            // jour J) et expiration à 7 j — la console superadmin garde la main après.
+            new AdminJobDefinition('club-approval-digest', 'Relances d’approbation de club', 'app:club-approvals:digest', AdminJobSchedule::daily(8, 30), manualTriggerAllowed: true),
             new AdminJobDefinition('transition-reminders', 'Rappels de transition de saison', 'app:seasons:remind-transition', AdminJobSchedule::daily(8)),
             new AdminJobDefinition('purge-unverified-users', 'Purge des comptes non vérifiés', 'app:users:purge-unverified', AdminJobSchedule::daily(2)),
             new AdminJobDefinition('purge-erased-clubs', 'Purge des clubs effacés', 'app:clubs:purge-erased', AdminJobSchedule::daily(2, 15)),

@@ -30,6 +30,7 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { AdminAction, AdminClub, AdminFreshnessResponse, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
 import { useAdminActions, useAdminClubs, useAdminFreshness, useAdminHealth, useAdminJobs, useAdminOverview, useRunAdminClubAction, useRunAdminJob } from "./queries";
+import { ClubRequestsSection } from "./sections/ClubRequestsSection";
 import { ContainersSection } from "./sections/ContainersSection";
 import { ExternalDepsSection } from "./sections/ExternalDepsSection";
 import { AuditSubtab } from "./Journaux/AuditSubtab";
@@ -155,7 +156,9 @@ export function AdminDashboardPage() {
         <FreshnessSection data={freshness.data} loading={freshness.isPending} error={freshness.isError} retry={() => void freshness.refetch()} />
       </TabPanel>
 
-      <TabPanel variant="console" tabId="clubs" idPrefix="admin" active={activeTab === "clubs"} className="space-y-4 pt-6">
+      <TabPanel variant="console" tabId="clubs" idPrefix="admin" active={activeTab === "clubs"} className="space-y-8 pt-6">
+        {/* P3-4 PR B : les arbitrages (créations + adhésions) vivent avec le parc. */}
+        <ClubRequestsSection />
         <section aria-labelledby="clubs-heading" className="space-y-4">
           <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
             <div>

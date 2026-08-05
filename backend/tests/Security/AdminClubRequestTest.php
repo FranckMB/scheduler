@@ -1,0 +1,234 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Security;
+
+use App\Entity\ClubCreationRequest;
+use App\Entity\SuperAdmin;
+use App\Entity\User;
+use App\Security\TotpService;
+use App\Tests\TenantGucTrait;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\ParameterType;
+use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\Persistence\ManagerRegistry;
+use PHPUnit\Framework\Attributes\Group;
+use Symfony\Bundle\FrameworkBundle\KernelBrowser;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
+use Symfony\Component\Uid\Uuid;
+
+/**
+ * NR P3-4 PR B (surface /api/admin — la plus sensible) : l'arbitrage superadmin
+ * des demandes de création (« le superadmin peut valider si besoin » — y compris
+ * EXPIRÉES, le lien public étant mort) et l'activation d'une adhésion pending
+ * (« gestionnaire parti fâché, pas de passation » — décisions fondateur
+ * 2026-08-05). Gardes : firewall admin (401 sans session), CSRF (403 sans
+ * token), et l'approbation console PROVISIONNE comme la page publique.
+ */
+#[Group('phase1')]
+#[Group('integration')]
+final class AdminClubRequestTest extends WebTestCase
+{
+    use TenantGucTrait;
+
+    private KernelBrowser $client;
+
+    private EntityManagerInterface $em;
+
+    private string $requestIp;
+
+    private string $adminId;
+
+    /** @var list<string> */
+    private array $clubAras = [];
+
+    /** @var list<string> */
+    private array $userIds = [];
+
+    public function testSurfaceIsUnreachableWithoutAnAdminSession(): void
+    {
+        $this->client->request('GET', '/api/admin/club-requests');
+        self::assertResponseStatusCodeSame(401);
+        $this->client->request('POST', '/api/admin/club-requests/' . Uuid::v4()->toRfc4122() . '/decision');
+        self::assertResponseStatusCodeSame(401);
+        $this->client->request('POST', '/api/admin/pending-memberships/' . Uuid::v4()->toRfc4122() . '/activate');
+        self::assertResponseStatusCodeSame(401);
+    }
+
+    public function testExpiredRequestStaysActionableAndConsoleApprovalProvisions(): void
+    {
+        [$secret] = $this->createSuperAdmin('club-req@example.test', 'VeryStrongPassword!');
+        $csrf = $this->authenticate('club-req@example.test', 'VeryStrongPassword!', $secret);
+
+        $request = $this->seedRequest(status: ClubCreationRequest::STATUS_EXPIRED);
+
+        // Sans CSRF → 403, rien exécuté.
+        $this->client->request('POST', "/api/admin/club-requests/{$request->getId()}/decision", [], [], ['CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $this->requestIp], (string) json_encode(['decision' => 'approve']));
+        self::assertResponseStatusCodeSame(403);
+
+        // La liste sert pending ET expirées (la console garde la main après J+7).
+        $this->client->request('GET', '/api/admin/club-requests', [], [], ['REMOTE_ADDR' => $this->requestIp]);
+        self::assertResponseIsSuccessful();
+        $ids = array_column(json_decode((string) $this->client->getResponse()->getContent(), true)['items'], 'id');
+        self::assertContains($request->getId(), $ids);
+
+        // Approbation console d'une demande EXPIRÉE → le club naît, provisionné.
+        $this->client->request('POST', "/api/admin/club-requests/{$request->getId()}/decision", [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_CSRF_TOKEN' => $csrf, 'REMOTE_ADDR' => $this->requestIp], (string) json_encode(['decision' => 'approve']));
+        self::assertResponseIsSuccessful();
+        $clubId = json_decode((string) $this->client->getResponse()->getContent(), true)['clubId'];
+        // Lectures sur la connexion PAR DÉFAUT : sous DAMA, l'écriture d'approbation
+        // vit dans la transaction de test — la connexion admin ne la voit pas.
+        self::assertSame(1, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM club WHERE id = :id', ['id' => $clubId]));
+        $this->scopeGucToClub($clubId);
+        self::assertSame(1, (int) $this->em->getConnection()->fetchOne('SELECT COUNT(*) FROM season WHERE club_id = :id', ['id' => $clubId]), 'provisionné comme la page publique');
+
+        // Déjà décidée → 404 (même anonymat que la page publique).
+        $this->client->request('POST', "/api/admin/club-requests/{$request->getId()}/decision", [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X_CSRF_TOKEN' => $csrf, 'REMOTE_ADDR' => $this->requestIp], (string) json_encode(['decision' => 'approve']));
+        self::assertResponseStatusCodeSame(404);
+    }
+
+    public function testPendingMembershipCanBeActivatedByTheSuperAdmin(): void
+    {
+        [$secret] = $this->createSuperAdmin('memb@example.test', 'VeryStrongPassword!');
+        $csrf = $this->authenticate('memb@example.test', 'VeryStrongPassword!', $secret);
+
+        // Un club + une adhésion pending, semés par la porte admin (cross-tenant).
+        $clubId = Uuid::v4()->toRfc4122();
+        $ara = 'ADH' . strtoupper(substr(md5(uniqid()), 0, 7));
+        $this->clubAras[] = $ara;
+        $this->admin()->executeStatement(
+            'INSERT INTO club (id, version, created_at, updated_at, name, slug, generation_count_season, timezone, locale, onboarding_completed, ffbb_club_code) VALUES (:id, 1, NOW(), NOW(), :name, :slug, 0, :tz, :loc, FALSE, :ara)',
+            ['id' => $clubId, 'name' => 'Club Adhésion', 'slug' => 'club-adh-' . strtolower($ara), 'tz' => 'Europe/Paris', 'loc' => 'fr', 'ara' => $ara],
+        );
+        // Utilisateur semé par la porte ADMIN : la liste lit par cette connexion,
+        // et un user en transaction DAMA (EM) serait invisible à son JOIN.
+        $userId = Uuid::v4()->toRfc4122();
+        $this->userIds[] = $userId;
+        $this->admin()->executeStatement(
+            'INSERT INTO app_user (id, version, created_at, updated_at, email, password_hash, first_name, last_name) VALUES (:id, 1, NOW(), NOW(), :email, :hash, :fn, :ln)',
+            ['id' => $userId, 'email' => 'memb-' . strtolower(substr($ara, 0, 8)) . '@t.fr', 'hash' => 'x', 'fn' => 'Mem', 'ln' => 'Ber'],
+        );
+        $membershipId = Uuid::v4()->toRfc4122();
+        $this->admin()->executeStatement(
+            'INSERT INTO club_user (id, version, created_at, updated_at, joined_at, club_id, user_id, role, is_active) VALUES (:id, 1, NOW(), NOW(), NOW(), :club, :user, :role, FALSE)',
+            ['id' => $membershipId, 'club' => $clubId, 'user' => $userId, 'role' => 'admin'],
+        );
+
+        // Listée…
+        $this->client->request('GET', '/api/admin/pending-memberships', [], [], ['REMOTE_ADDR' => $this->requestIp]);
+        self::assertResponseIsSuccessful();
+        $ids = array_column(json_decode((string) $this->client->getResponse()->getContent(), true)['items'], 'id');
+        self::assertContains($membershipId, $ids);
+
+        // … activée (le déblocage sans passation), une seule fois.
+        $this->client->request('POST', "/api/admin/pending-memberships/{$membershipId}/activate", [], [], ['HTTP_X_CSRF_TOKEN' => $csrf, 'REMOTE_ADDR' => $this->requestIp]);
+        self::assertResponseIsSuccessful();
+        self::assertTrue((bool) $this->admin()->fetchOne('SELECT is_active FROM club_user WHERE id = :id', ['id' => $membershipId]));
+        $this->client->request('POST', "/api/admin/pending-memberships/{$membershipId}/activate", [], [], ['HTTP_X_CSRF_TOKEN' => $csrf, 'REMOTE_ADDR' => $this->requestIp]);
+        self::assertResponseStatusCodeSame(404, 'déjà active → 404, pas un no-op silencieux');
+    }
+
+    protected function setUp(): void
+    {
+        $this->client = self::createClient();
+        $this->em = self::getContainer()->get(EntityManagerInterface::class);
+        // Throttle admin par IP (SA0) : une IP fraîche par test, sinon les suites
+        // se polluent entre elles (gotcha connu du rate-limiter Redis).
+        $this->requestIp = \sprintf('10.%d.%d.%d', random_int(1, 254), random_int(0, 254), random_int(1, 254));
+    }
+
+    protected function tearDown(): void
+    {
+        foreach ($this->clubAras as $ara) {
+            $clubId = $this->admin()->fetchOne('SELECT id FROM club WHERE ffbb_club_code = :ara', ['ara' => $ara]);
+            if (\is_string($clubId)) {
+                $this->admin()->executeStatement('DELETE FROM club WHERE id = :id', ['id' => $clubId]);
+            }
+        }
+        foreach ($this->userIds as $userId) {
+            $this->admin()->executeStatement('DELETE FROM app_user WHERE id = :id', ['id' => $userId]);
+        }
+        if (isset($this->adminId)) {
+            $this->admin()->executeStatement('DELETE FROM admin_audit_log WHERE super_admin_id = :id OR super_admin_id IS NULL', ['id' => $this->adminId]);
+            $this->admin()->executeStatement('DELETE FROM super_admin WHERE id = :id', ['id' => $this->adminId]);
+        }
+        parent::tearDown();
+    }
+
+    private function seedRequest(string $status): ClubCreationRequest
+    {
+        $user = $this->seedUser();
+        $ara = 'REQ' . strtoupper(substr(md5(uniqid()), 0, 7));
+        $this->clubAras[] = $ara;
+        $request = new ClubCreationRequest;
+        $request->setUserId($user->getId());
+        $request->setAra($ara);
+        $request->setClubName('Club Console');
+        $request->setStatus($status);
+        $this->em->persist($request);
+        $this->em->flush();
+
+        return $request;
+    }
+
+    private function seedUser(): User
+    {
+        $uid = uniqid('', true);
+        $user = new User;
+        $user->setEmail('console-' . $uid . '@t.fr');
+        $user->setFirstName('Co');
+        $user->setLastName('Nsole');
+        $user->setPasswordHash('x');
+        $this->em->persist($user);
+        $this->em->flush();
+
+        return $user;
+    }
+
+    /** @return array{0: string} */
+    private function createSuperAdmin(string $email, string $password): array
+    {
+        $this->adminId = Uuid::v4()->toRfc4122();
+        $totp = self::getContainer()->get(TotpService::class);
+        $secret = $totp->generateSecret();
+        $identity = new SuperAdmin($this->adminId, $email, '', $totp->encrypt($secret));
+        $identity->setPasswordHash(self::getContainer()->get(UserPasswordHasherInterface::class)->hashPassword($identity, $password));
+        $this->admin()->executeStatement(
+            'INSERT INTO super_admin (id, email, password_hash, totp_secret, enabled, created_at) VALUES (:id, :email, :password, :secret, :enabled, NOW())',
+            ['id' => $this->adminId, 'email' => $email, 'password' => $identity->getPassword(), 'secret' => $identity->getTotpSecret(), 'enabled' => true],
+            ['enabled' => ParameterType::BOOLEAN],
+        );
+
+        return [$secret];
+    }
+
+    private function authenticate(string $email, string $password, string $secret): string
+    {
+        $this->json('POST', '/api/admin/auth/password', ['email' => $email, 'password' => $password]);
+        self::assertResponseIsSuccessful();
+        $totp = self::getContainer()->get(TotpService::class);
+        $this->json('POST', '/api/admin/auth/totp', ['code' => $totp->code($secret, time())]);
+        self::assertResponseIsSuccessful();
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+        $csrfToken = \is_array($body) ? ($body['csrfToken'] ?? null) : null;
+        self::assertIsString($csrfToken);
+
+        return $csrfToken;
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function json(string $method, string $uri, array $payload): void
+    {
+        $this->client->request($method, $uri, [], [], ['CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $this->requestIp], (string) json_encode($payload));
+    }
+
+    private function admin(): Connection
+    {
+        $connection = self::getContainer()->get(ManagerRegistry::class)->getConnection('admin');
+        \assert($connection instanceof Connection);
+
+        return $connection;
+    }
+}

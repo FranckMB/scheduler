@@ -81,7 +81,7 @@ final class ClubApprovalService
      * APRÈS commit (le lien ne doit jamais référencer une demande non persistée).
      * Sans mail connu : rien à envoyer, la demande attend le superadmin (PR B).
      */
-    public function sendApprovalEmail(ClubCreationRequest $request, User $requester): void
+    public function sendApprovalEmail(ClubCreationRequest $request, User $requester, bool $reminder = false): void
     {
         $clubEmail = $request->getClubEmail();
         if (null === $clubEmail) {
@@ -94,7 +94,7 @@ final class ClubApprovalService
                 (new Email)
                     ->from(self::FROM)
                     ->to($clubEmail)
-                    ->subject(\sprintf('%s demande à créer l\'espace ClubScheduler de %s', $requesterName, $request->getClubName()))
+                    ->subject(($reminder ? 'Rappel — ' : '') . \sprintf('%s demande à créer l\'espace ClubScheduler de %s', $requesterName, $request->getClubName()))
                     ->text(\sprintf(
                         "Bonjour,\n\n%s (%s) demande à créer et gérer l'espace ClubScheduler du club %s (code FFBB %s).\n\nSi cette personne est bien un gestionnaire de votre club, approuvez sa demande :\n%s\n\nSinon, refusez-la depuis la même page. Sans réponse, la demande expire le %s.\n\nClubScheduler",
                         $requesterName,
