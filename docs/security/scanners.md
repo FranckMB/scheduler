@@ -30,8 +30,9 @@ Rien n'est installé sur le poste : tout tourne en GitHub Actions ou via image D
 - **Trivy** : exceptions dans `.trivyignore`, datées et justifiées CVE par CVE.
   Gate = CRITICAL **fixables** seulement (`--ignore-unfixed`) — un CRITICAL sans
   correctif disponible ne bloque pas, il se surveille via le rapport hebdo.
-- **Semgrep** : advisory tant que le bruit n'est pas mesuré ; passer `continue-on-error`
-  à `false` quand deux ou trois semaines de runs sont propres.
+- **Semgrep** : advisory (les findings vivent dans le LOG du job, jamais d'échec) tant
+  que le triage n'est pas fait. Premier run 2026-08-05 : 69 findings, profil surtout
+  infra — le triage et la promotion en gate sont la ligne roadmap **SEC-14**.
 
 ## Rituel pré-production (ZAP + Nuclei) — roadmap SEC-13
 

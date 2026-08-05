@@ -84,7 +84,6 @@ jobs:
   semgrep:
     name: Semgrep (advisory)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - name: Run semgrep
@@ -92,7 +91,7 @@ jobs:
           docker run --rm -v "$PWD:/src" semgrep/semgrep:latest
           semgrep scan --config p/default --config p/security-audit
           --config p/react --config p/python --config p/php
-          --error --timeout 120 --metrics=off
+          --timeout 120 --metrics=off
           --exclude 'node_modules' --exclude 'vendor' --exclude 'var'
 
   dependency-audit:
