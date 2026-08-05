@@ -226,7 +226,7 @@ function VenuesEditor() {
   const addSlot = useCreateSlot();
 
   const [name, setName] = useState("");
-  const [nameError, setNameError] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   // --- Autocomplétion salles FFBB (P2-20) ---
   const { data: me } = useMe();
@@ -288,11 +288,22 @@ function VenuesEditor() {
     event.preventDefault();
     if ("" === name.trim()) {
       // Silent no-op was frustrating: surface why + jump to the empty field.
-      setNameError(true);
+      setAddError("Donnez un nom au gymnase avant de l'ajouter.");
       nameRef.current?.focus();
       return;
     }
-    setNameError(false);
+    // Anti-doublon (retour fondateur 2026-08-05 : « je peux quand même ajouter à
+    // nouveau, c'est pas logique ») — une salle FFBB déjà LIÉE à un gymnase ne se
+    // ré-ajoute pas, et un nom déjà pris non plus (l'existant se renomme/associe).
+    if (null !== pendingSalle && null !== pendingSalle.externalRef && importedRefs.has(pendingSalle.externalRef)) {
+      setAddError("Cette salle FFBB est déjà liée à un de vos gymnases.");
+      return;
+    }
+    if (venues.some((v) => norm(v.name) === norm(name.trim()))) {
+      setAddError("Un gymnase porte déjà ce nom — utilisez l'existant, ou choisissez un autre nom.");
+      return;
+    }
+    setAddError(null);
     // Select the freshly created venue so the slot grid targets it — otherwise
     // the selection stays on the previous gym and slots land on the wrong one.
     // A new gym gets a distinct rainbow colour by default (not flat grey); count
@@ -304,7 +315,7 @@ function VenuesEditor() {
     const anchor = null !== pendingSalle ? { externalRef: pendingSalle.externalRef, latitude: pendingSalle.latitude, longitude: pendingSalle.longitude } : {};
     create.mutate(
       { name: name.trim(), color, canSplit: false, ...anchor },
-      { onSuccess: (created) => setSelectedId(created.id) },
+      { onSuccess: (created) => (setSelectedId(created.id), toast.success(`Gymnase « ${created.name} » ajouté.`)) },
     );
     setName("");
     setPendingSalle(null);
@@ -335,9 +346,9 @@ function VenuesEditor() {
           <Input
             ref={nameRef}
             aria-label="Nom du gymnase"
-            aria-invalid={nameError}
+            aria-invalid={null !== addError}
             placeholder="Nom du gymnase"
-            className={`h-8 flex-1 ${nameError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+            className={`h-8 flex-1 ${null !== addError ? "border-destructive focus-visible:ring-destructive" : ""}`}
             value={name}
             onFocus={() => setNameFocused(true)}
             onBlur={() => setNameFocused(false)}
@@ -346,8 +357,8 @@ function VenuesEditor() {
               // Nom retouché à la main → l'ancrage FFBB de la suggestion tombe
               // (un gymnase renommé n'est plus, de façon sûre, cette salle-là).
               setPendingSalle(null);
-              if (nameError) {
-                setNameError(false);
+              if (null !== addError) {
+                setAddError(null);
               }
             }}
           />
@@ -370,29 +381,37 @@ function VenuesEditor() {
             le blur du champ retirerait la liste avant que le clic n'aboutisse. */}
         {suggestions.length > 0 ? (
           <ul aria-label={`Salles FFBB à ${cp}`} className="mt-2 max-h-48 overflow-y-auto rounded-md border border-border bg-background py-1 text-sm">
-            {suggestions.map((salle) => (
-              <li key={`${salle.externalRef ?? salle.name}-${salle.address ?? ""}`}>
-                <button
-                  type="button"
-                  className="flex w-full items-baseline gap-2 px-2.5 py-1 text-left hover:bg-muted"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    setName(salle.name);
-                    setPendingSalle(salle);
-                  }}
-                >
-                  <span className="font-medium">{salle.name}</span>
-                  {salle.address ? <span className="truncate text-xs text-muted-foreground">{salle.address}</span> : null}
-                </button>
-              </li>
-            ))}
+            {suggestions.map((salle) => {
+              // Déjà lié à un gymnase du club : la ligne reste LISIBLE (nommer)
+              // mais fermée au geste fautif — re-choisir referait un doublon.
+              const linked = null !== salle.externalRef && importedRefs.has(salle.externalRef);
+              return (
+                <li key={`${salle.externalRef ?? salle.name}-${salle.address ?? ""}`}>
+                  <button
+                    type="button"
+                    disabled={linked}
+                    className="flex w-full items-baseline gap-2 px-2.5 py-1 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      if (linked) return;
+                      setName(salle.name);
+                      setPendingSalle(salle);
+                    }}
+                  >
+                    <span className="font-medium">{salle.name}</span>
+                    {salle.address ? <span className="truncate text-xs text-muted-foreground">{salle.address}</span> : null}
+                    {linked ? <span className="ml-auto shrink-0 text-xs text-muted-foreground">déjà lié ✓</span> : null}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ) : null}
       </form>
 
-      {nameError ? (
+      {null !== addError ? (
         <p role="alert" className="mb-3 text-sm text-destructive">
-          Donnez un nom au gymnase avant de l'ajouter.
+          {addError}
         </p>
       ) : null}
 
@@ -431,7 +450,7 @@ function VenuesEditor() {
                       pendingColorsRef.current.push(color);
                       create.mutate(
                         { name: salle.name, color, canSplit: false, externalRef: salle.externalRef, latitude: salle.latitude, longitude: salle.longitude },
-                        { onSuccess: (created) => setSelectedId(created.id) },
+                        { onSuccess: (created) => (setSelectedId(created.id), toast.success(`Gymnase « ${created.name} » ajouté.`)) },
                       );
                     }}
                   >
@@ -453,10 +472,13 @@ function VenuesEditor() {
                           key={v.id}
                           icon={<VenueSwatch color={v.color ?? DEFAULT_VENUE_COLOR} className="size-2.5" />}
                           onSelect={() =>
-                            update.mutate({
-                              id: v.id,
-                              body: { name: v.name, color: v.color, canSplit: v.canSplit, isActive: v.isActive, externalRef: salle.externalRef, latitude: salle.latitude, longitude: salle.longitude },
-                            })
+                            update.mutate(
+                              {
+                                id: v.id,
+                                body: { name: v.name, color: v.color, canSplit: v.canSplit, isActive: v.isActive, externalRef: salle.externalRef, latitude: salle.latitude, longitude: salle.longitude },
+                              },
+                              { onSuccess: () => toast.success(`« ${salle.name} » associé à « ${v.name} ».`) },
+                            )
                           }
                         >
                           {v.name}
