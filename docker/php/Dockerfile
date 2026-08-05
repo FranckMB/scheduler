@@ -62,7 +62,8 @@ EXPOSE 9000
 # SEC-15 (roadmap) : durcissement USER non-root à tester stack complète — php-fpm
 # abandonne déjà root pour ses workers (www-data), engine/pdf-worker sont des
 # conteneurs internes jamais exposés.
-CMD ["php-fpm"] # nosemgrep: dockerfile.security.missing-user.missing-user
+# nosemgrep: dockerfile.security.missing-user.missing-user
+CMD ["php-fpm"]
 
 # ---------------------------------------------------------------------------
 # prod — self-contained image: the code and vendor/ live IN the image, no bind
