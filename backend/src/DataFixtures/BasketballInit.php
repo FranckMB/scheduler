@@ -265,12 +265,13 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // SECTION 2 — VENUES
         // ============================================================
         // [name, var, color (hex), canSplit, ref (n° fédéral FFBB), lat, lng] —
-        // Matéo + JDR are divisible gyms. Refs/GPS = l'état LIÉ du 2026-08-05
+        // Matéo + JDR (en 2) et ADN (en 3, en travers) are divisible gyms.
+        // Refs/GPS = l'état LIÉ du 2026-08-05
         // (« Associer à… », salles FFBB de Villeurbanne) — le nom d'usage reste
         // celui du club, seule l'ancre fédérale est portée.
         $venuesData = [
             ['name' => 'Armand', 'var' => 'vArmand', 'color' => '#1E88E5', 'canSplit' => false, 'ref' => '166926610', 'lat' => '45.77935', 'lng' => '4.88604'],
-            ['name' => 'ADN', 'var' => 'vAdn', 'color' => '#FDD835', 'canSplit' => false, 'ref' => '6926617', 'lat' => '45.77184', 'lng' => '4.87672'],
+            ['name' => 'ADN', 'var' => 'vAdn', 'color' => '#FDD835', 'canSplit' => true, 'ref' => '6926617', 'lat' => '45.77184', 'lng' => '4.87672'],
             ['name' => 'Debarros', 'var' => 'vDebarros', 'color' => '#2E7D32', 'canSplit' => false, 'ref' => '166926603', 'lat' => '45.76799', 'lng' => '4.88853'],
             ['name' => 'Annexe', 'var' => 'vDebarrosAnnexe', 'color' => '#66BB6A', 'canSplit' => false, 'ref' => '166926616', 'lat' => '45.76294', 'lng' => '4.91014'],
             ['name' => 'Jean Vilar', 'var' => 'vJeanVilar', 'color' => '#1A237E', 'canSplit' => false, 'ref' => '166926613', 'lat' => '45.77926', 'lng' => '4.90377'],
