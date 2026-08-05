@@ -243,6 +243,16 @@ ouvre le gate de bascule ; idempotente, le marqueur ne recule jamais), `reset-cu
 courante — le club repart au wizard, la saison et le club survivent) et
 `purge-old-seasons` (supprime les saisons au-delà de la rétention).
 
+**Arbitrages P3-4 (PR B, 2026-08-05)** : `GET /api/admin/club-requests` liste les demandes
+de création de club **pending ET expirées** (« le superadmin peut valider si besoin » — le
+lien public meurt à J+7, pas la console) ; `POST /api/admin/club-requests/{id}/decision`
+approuve (provisionne, comme la page publique) ou refuse — mêmes gardes que les actions
+(session + CSRF + audit posé avant toute garde). `GET /api/admin/pending-memberships` +
+`POST /api/admin/pending-memberships/{id}/activate` : **activer une adhésion** quand la
+passation n'a pas lieu (gestionnaire parti fâché — décision fondateur). Le job planifié
+`club-approval-digest` (quotidien 08:30, relançable) porte les relances (3 j restants +
+jour J) et l'expiration.
+
 `POST /api/admin/clubs/{clubId}/actions/{key}` exécute l'action. La route **n'accepte
 jamais un nom de commande brut** : elle prend la commande et ses arguments **fixes** du
 catalogue, et n'ajoute qu'un seul argument runtime, le club — lui-même validé. L'ordre

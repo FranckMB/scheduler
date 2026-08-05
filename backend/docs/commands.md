@@ -48,6 +48,7 @@ Toutes manuelles sauf mention. Détail : `ls backend/src/Command/`.
 | `app:school-holidays:seed` / `app:school-holidays:import` | Vacances scolaires : seed offline / import API Éducation nationale — idempotents ; import **auto trimestriel (1er janv./avr./juil./oct. à 04:00)** |
 | `app:league-windows:seed` | Catalogue des fenêtres de matchs par ligue (JSON AURA) — idempotent |
 | `app:clubs:backfill-school-zone` | Déduit `Club.schoolZone` du code FFBB (dry-run sans `--apply`) |
+| `app:club-approvals:digest` | P3-4 PR B : relance les demandes de création de club (3 j restants + jour J) et expire les échues (la console superadmin garde la main) ; `--dry-run`, `--date` — **auto, quotidien à 08:30** |
 | `app:clubs:ffbb-resync` | SA4/P2-18 : ré-importe l'identité FFBB de `--club=<id>` (FfbbClubPopulator refresh — nom, coordonnées, logo, comité/ligue) ; échec franc si organisme introuvable — action support, aussi déclenchable depuis la console admin |
 | `app:clubs:mark-season-paid` | SA4/P1-5 : marque la saison SUIVANTE de `--club=<id>` comme payée (abonnement par saison — ouvre le gate de bascule) ; idempotent, le marqueur ne recule jamais — action support, aussi déclenchable depuis la console admin |
 | `app:clubs:reset-quota` | SA4 : remet `generationCountSeason` à 0 pour `--club=<id>` (déblocage quota Découverte) — action support, aussi déclenchable depuis la console admin |

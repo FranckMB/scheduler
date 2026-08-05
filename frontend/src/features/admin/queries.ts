@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getAdminActions, getAdminAuditLog, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminMessengerFailed, getAdminOverview, getAdminSession, getAdminSystemErrors, runAdminClubAction, runAdminJob } from "./api";
+import { activateAdminMembership, decideAdminClubRequest, getAdminActions, getAdminAuditLog, getAdminClubRequests, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminMessengerFailed, getAdminOverview, getAdminPendingMemberships, getAdminSession, getAdminSystemErrors, runAdminClubAction, runAdminJob } from "./api";
 import { useAdminStore } from "./store";
 
 export function useAdminSession() {
@@ -133,3 +133,57 @@ export function useAdminSystemErrors(page: number, limit: number) {
   });
 }
 
+/** P3-4 PR B — les demandes de création (pending + expirées : la console garde la main). */
+export function useAdminClubRequests() {
+  return useQuery({
+    queryKey: ["admin-club-requests"],
+    queryFn: getAdminClubRequests,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useDecideAdminClubRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, decision }: { id: string; decision: "approve" | "refuse" }) => {
+      const csrfToken = useAdminStore.getState().csrfToken;
+      if (!csrfToken) {
+        return Promise.reject(new Error("Missing super-admin CSRF token."));
+      }
+
+      return decideAdminClubRequest(id, decision, csrfToken);
+    },
+    // Approuver crée un club → la liste des demandes ET le parc bougent.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin-club-requests"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-clubs"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-pending-memberships"] });
+    },
+  });
+}
+
+/** P3-4 PR B — les adhésions en attente, tous clubs. */
+export function useAdminPendingMemberships() {
+  return useQuery({
+    queryKey: ["admin-pending-memberships"],
+    queryFn: getAdminPendingMemberships,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useActivateAdminMembership() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => {
+      const csrfToken = useAdminStore.getState().csrfToken;
+      if (!csrfToken) {
+        return Promise.reject(new Error("Missing super-admin CSRF token."));
+      }
+
+      return activateAdminMembership(id, csrfToken);
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["admin-pending-memberships"] }),
+  });
+}
