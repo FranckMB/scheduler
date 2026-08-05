@@ -337,7 +337,7 @@ function VenuesEditor() {
 
       {venuesLoaded ? (
       <AccordionSection
-        title="Ajouter un gymnase"
+        title="Ajouter des gymnases"
         defaultOpen={0 === venues.length}
         className="mb-3"
       >
