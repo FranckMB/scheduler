@@ -264,17 +264,20 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         // ============================================================
         // SECTION 2 — VENUES
         // ============================================================
-        // [name, var, color (hex), canSplit] — Matéo + JDR are divisible gyms.
+        // [name, var, color (hex), canSplit, ref (n° fédéral FFBB), lat, lng] —
+        // Matéo + JDR are divisible gyms. Refs/GPS = l'état LIÉ du 2026-08-05
+        // (« Associer à… », salles FFBB de Villeurbanne) — le nom d'usage reste
+        // celui du club, seule l'ancre fédérale est portée.
         $venuesData = [
-            ['name' => 'Armand', 'var' => 'vArmand', 'color' => '#1E88E5', 'canSplit' => false],
-            ['name' => 'ADN', 'var' => 'vAdn', 'color' => '#FDD835', 'canSplit' => false],
-            ['name' => 'Debarros', 'var' => 'vDebarros', 'color' => '#2E7D32', 'canSplit' => false],
-            ['name' => 'Annexe', 'var' => 'vDebarrosAnnexe', 'color' => '#66BB6A', 'canSplit' => false],
-            ['name' => 'Jean Vilar', 'var' => 'vJeanVilar', 'color' => '#1A237E', 'canSplit' => false],
-            ['name' => 'Tonkin', 'var' => 'vTonkin', 'color' => '#FB8C00', 'canSplit' => false],
-            ['name' => 'JDR', 'var' => 'vJdr', 'color' => '#F8BBD0', 'canSplit' => true],
-            ['name' => 'Matéo', 'var' => 'vMateo', 'color' => '#E53935', 'canSplit' => true],
-            ['name' => 'Camus', 'var' => 'vCamus', 'color' => '#8E24AA', 'canSplit' => false],
+            ['name' => 'Armand', 'var' => 'vArmand', 'color' => '#1E88E5', 'canSplit' => false, 'ref' => '166926610', 'lat' => '45.77935', 'lng' => '4.88604'],
+            ['name' => 'ADN', 'var' => 'vAdn', 'color' => '#FDD835', 'canSplit' => false, 'ref' => '6926617', 'lat' => '45.77184', 'lng' => '4.87672'],
+            ['name' => 'Debarros', 'var' => 'vDebarros', 'color' => '#2E7D32', 'canSplit' => false, 'ref' => '166926603', 'lat' => '45.76799', 'lng' => '4.88853'],
+            ['name' => 'Annexe', 'var' => 'vDebarrosAnnexe', 'color' => '#66BB6A', 'canSplit' => false, 'ref' => '166926616', 'lat' => '45.76294', 'lng' => '4.91014'],
+            ['name' => 'Jean Vilar', 'var' => 'vJeanVilar', 'color' => '#1A237E', 'canSplit' => false, 'ref' => '166926613', 'lat' => '45.77926', 'lng' => '4.90377'],
+            ['name' => 'Tonkin', 'var' => 'vTonkin', 'color' => '#FB8C00', 'canSplit' => false, 'ref' => '166926601', 'lat' => '45.77591', 'lng' => '4.86471'],
+            ['name' => 'JDR', 'var' => 'vJdr', 'color' => '#F8BBD0', 'canSplit' => true, 'ref' => '6926616', 'lat' => '45.76499', 'lng' => '4.90510'],
+            ['name' => 'Matéo', 'var' => 'vMateo', 'color' => '#E53935', 'canSplit' => true, 'ref' => '166926608', 'lat' => '45.77999', 'lng' => '4.88473'],
+            ['name' => 'Camus', 'var' => 'vCamus', 'color' => '#8E24AA', 'canSplit' => false, 'ref' => '166926606', 'lat' => '45.75222', 'lng' => '4.91417'],
         ];
 
         $venues = [];
@@ -294,9 +297,12 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
                 $venue->setIsActive(true);
                 $manager->persist($venue);
             }
-            // Identity colour + divisibility (seeded, re-applied on re-run).
+            // Identity colour + divisibility + ancre FFBB (seeded, re-applied on re-run).
             $venue->setColor($vd['color']);
             $venue->setCanSplit($vd['canSplit']);
+            $venue->setExternalRef($vd['ref']);
+            $venue->setLatitude($vd['lat']);
+            $venue->setLongitude($vd['lng']);
             $venues[$vd['var']] = $venue;
         }
         $manager->flush();
@@ -319,6 +325,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
         /** @var list<array{string, int, string, int, int}> $trainingSlots */
         $trainingSlots = [
             // Matéo — Mon
+            ['vMateo', 1, '16:00', 90, 1],
             ['vMateo', 1, '17:30', 90, 2],
             ['vMateo', 1, '19:00', 90, 1],
             ['vMateo', 1, '20:30', 120, 1],
@@ -327,15 +334,18 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['vMateo', 2, '19:00', 90, 1],
             ['vMateo', 2, '20:30', 120, 1],
             // Matéo — Wed
+            ['vMateo', 3, '09:30', 75, 1],
             ['vMateo', 3, '16:00', 90, 1],
             ['vMateo', 3, '17:30', 90, 1],
             ['vMateo', 3, '19:00', 90, 1],
             ['vMateo', 3, '20:30', 120, 1],
             // Matéo — Thu
+            ['vMateo', 4, '16:00', 90, 1],
             ['vMateo', 4, '17:30', 90, 1],
             ['vMateo', 4, '19:00', 90, 1],
             ['vMateo', 4, '20:30', 120, 1],
             // Matéo — Fri
+            ['vMateo', 5, '16:00', 90, 1],
             ['vMateo', 5, '17:30', 90, 1],
             ['vMateo', 5, '19:00', 90, 1],
             ['vMateo', 5, '20:30', 120, 1],
@@ -360,14 +370,16 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['vJdr', 6, '10:15', 75, 1],
             ['vJdr', 6, '11:30', 75, 1],
             // Armand — Mon
-            ['vArmand', 1, '17:30', 90, 1],
+            ['vArmand', 1, '17:30', 90, 2],
             ['vArmand', 1, '19:00', 90, 1],
             ['vArmand', 1, '20:30', 120, 1],
             // Armand — Tue
             ['vArmand', 2, '17:30', 90, 1],
             ['vArmand', 2, '19:00', 90, 1],
             // Armand — Wed
-            ['vArmand', 3, '16:00', 75, 1],
+            // Mer après-midi réel 2026-08-05 : 14:00 (105', partagé U13F1/F2) puis 15:45.
+            ['vArmand', 3, '14:00', 105, 2],
+            ['vArmand', 3, '15:45', 90, 1],
             ['vArmand', 3, '17:15', 90, 1],
             ['vArmand', 3, '18:45', 90, 1],
             ['vArmand', 3, '20:15', 135, 1],
@@ -397,10 +409,12 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['vDebarros', 2, '19:00', 90, 1],
             ['vDebarros', 2, '20:30', 120, 1],
             // Debarros — Thu
+            ['vDebarros', 4, '16:00', 90, 1],
             ['vDebarros', 4, '17:30', 90, 1],
             ['vDebarros', 4, '19:00', 90, 1],
             ['vDebarros', 4, '20:30', 120, 1],
             // Debarros — Fri
+            ['vDebarros', 5, '16:00', 90, 1],
             ['vDebarros', 5, '17:30', 90, 1],
             ['vDebarros', 5, '19:00', 90, 1],
             ['vDebarros', 5, '20:30', 120, 1],
@@ -411,6 +425,7 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['vDebarrosAnnexe', 2, '19:00', 90, 1],
             // Annexe — Wed
             ['vDebarrosAnnexe', 3, '17:30', 90, 1],
+            ['vDebarrosAnnexe', 3, '10:45', 75, 1],
             ['vDebarrosAnnexe', 3, '19:00', 90, 1],
             ['vDebarrosAnnexe', 3, '20:30', 120, 1],
             // Annexe — Fri
@@ -486,6 +501,11 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['name' => 'Loisir Feminine', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::F],
             ['name' => '3x3', 'sportCategory' => $loisir, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
             ['name' => 'Training Individuel', 'sportCategory' => $senior, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            // --- Sections ajoutées sur le terrain (2026-08-05) ---
+            ['name' => 'Basket Santé', 'sportCategory' => $veteran, 'level' => TeamLevel::LOISIR_ADULTE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+            ['name' => 'Section J.Macé', 'sportCategory' => $u15, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 3, 'priorityTierId' => 5, 'gender' => null],
+            ['name' => 'U18M Fays', 'sportCategory' => $u18, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::M],
+            ['name' => 'U18F Fays', 'sportCategory' => $u18, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::F],
             // --- CEC Groups (joint training sessions — youth teams without individual EMB teams) ---
             // CEC Groupe 1 = joint training for U9F1 + U9F2 + U9M2 players (no individual teams exist)
             ['name' => 'CEC Groupe 1 (U9F1/U9F2/U9M2)', 'sportCategory' => $u9, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
@@ -924,6 +944,25 @@ final class BasketballInit implements FixtureInterface, ORMFixtureInterface
             ['team' => $cecGroupe2, 'venue' => 'vMateo', 'day' => 3, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
             // CEC Groupe 1 — Mateo Wednesday 17:30
             ['team' => $cecGroupe3, 'venue' => 'vMateo', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            // --- Réservations posées sur le terrain (état 2026-08-05) ---
+            ['team' => $teams['Basket Santé'], 'venue' => 'vDebarrosAnnexe', 'day' => 3, 'startTime' => '10:45', 'duration' => 75, 'lock' => LockLevel::HARD],
+            ['team' => $teams['Section J.Macé'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['Section J.Macé'], 'venue' => 'vMateo', 'day' => 4, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['Section J.Macé'], 'venue' => 'vMateo', 'day' => 5, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U18M Fays'], 'venue' => 'vDebarros', 'day' => 5, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U18F Fays'], 'venue' => 'vDebarros', 'day' => 4, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U13M1'], 'venue' => 'vArmand', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U13M2'], 'venue' => 'vArmand', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U13F1'], 'venue' => 'vArmand', 'day' => 3, 'startTime' => '14:00', 'duration' => 105, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U13F2'], 'venue' => 'vArmand', 'day' => 3, 'startTime' => '14:00', 'duration' => 105, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U13F2'], 'venue' => 'vJdr', 'day' => 2, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U13F3'], 'venue' => 'vJdr', 'day' => 2, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U18F3'], 'venue' => 'vJdr', 'day' => 2, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U18F3'], 'venue' => 'vArmand', 'day' => 5, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U9F1'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U9F2'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U9M1'], 'venue' => 'vJdr', 'day' => 4, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U9M2'], 'venue' => 'vJdr', 'day' => 4, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
             // mercredi shark a mateo
             ['team' => $teams['Mercredi Shark U9-U11'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '09:30', 'duration' => 75, 'lock' => LockLevel::HARD],
         ];

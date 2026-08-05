@@ -6,6 +6,7 @@ import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
+import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { Select } from "@/shared/components/ui/select";
 import { VenueSelect } from "@/shared/components/ui/venue-select";
@@ -208,7 +209,14 @@ export function VenuesStep() {
 }
 
 function VenuesEditor() {
-  const { data: venues = [] } = useWizardVenues();
+  const { data: venues = [], isSuccess: venuesLoaded } = useWizardVenues();
+  // Accordéon « Ajouter un gymnase » (demande fondateur 2026-08-05 : l'encart
+  // prenait trop de place). Ouvert par défaut UNIQUEMENT pour un club sans
+  // gymnase — capturé UNE fois au premier rendu chargé, sinon l'ajout du 1er
+  // gymnase replierait la section sous la souris.
+  // defaultOpen n'est lu qu'au MONTAGE de l'accordéon : en ne le rendant
+  // qu'une fois les gymnases chargés, la valeur capturée est la bonne — et
+  // l'ajout du 1er gymnase ne replie rien (pas de remontage).
   const { data: slots = [] } = useVenueSlots();
   const matchWindowsQuery = useVenueMatchWindows();
   const { data: reservations = [] } = useReservations();
@@ -218,7 +226,7 @@ function VenuesEditor() {
   const addSlot = useCreateSlot();
 
   const [name, setName] = useState("");
-  const [nameError, setNameError] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   // --- Autocomplétion salles FFBB (P2-20) ---
   const { data: me } = useMe();
@@ -240,6 +248,13 @@ function VenuesEditor() {
   // « Déjà ajouté » se reconnaît au NUMÉRO fédéral, pas au nom : le gestionnaire
   // renomme ses salles (« ADN », « JDR ») — un rapprochement par libellé échouerait.
   const importedRefs = new Set(venues.map((v) => v.externalRef).filter((r): r is string => null != r));
+  // Le champ « Nom du gymnase » FILTRE les salles à l'écran en direct (demande
+  // fondateur : un seul geste — je tape, ça filtre ; inconnu → j'ajoute avec +).
+  const norm = (v: string) => v.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const nearbyFilter = norm(name.trim());
+  const filteredNearby = (nearbyQuery.data?.salles ?? []).filter(
+    (salle) => "" === nearbyFilter || norm(`${salle.name} ${salle.address ?? ""} ${salle.city ?? ""}`).includes(nearbyFilter),
+  );
   const [selectedId, setSelectedId] = useState("");
   const [duration, setDuration] = useState(90);
   const [venueName, setVenueName] = useState("");
@@ -273,11 +288,22 @@ function VenuesEditor() {
     event.preventDefault();
     if ("" === name.trim()) {
       // Silent no-op was frustrating: surface why + jump to the empty field.
-      setNameError(true);
+      setAddError("Donnez un nom au gymnase avant de l'ajouter.");
       nameRef.current?.focus();
       return;
     }
-    setNameError(false);
+    // Anti-doublon (retour fondateur 2026-08-05 : « je peux quand même ajouter à
+    // nouveau, c'est pas logique ») — une salle FFBB déjà LIÉE à un gymnase ne se
+    // ré-ajoute pas, et un nom déjà pris non plus (l'existant se renomme/associe).
+    if (null !== pendingSalle && null !== pendingSalle.externalRef && importedRefs.has(pendingSalle.externalRef)) {
+      setAddError("Cette salle FFBB est déjà liée à un de vos gymnases.");
+      return;
+    }
+    if (venues.some((v) => norm(v.name) === norm(name.trim()))) {
+      setAddError("Un gymnase porte déjà ce nom — utilisez l'existant, ou choisissez un autre nom.");
+      return;
+    }
+    setAddError(null);
     // Select the freshly created venue so the slot grid targets it — otherwise
     // the selection stays on the previous gym and slots land on the wrong one.
     // A new gym gets a distinct rainbow colour by default (not flat grey); count
@@ -289,7 +315,7 @@ function VenuesEditor() {
     const anchor = null !== pendingSalle ? { externalRef: pendingSalle.externalRef, latitude: pendingSalle.latitude, longitude: pendingSalle.longitude } : {};
     create.mutate(
       { name: name.trim(), color, canSplit: false, ...anchor },
-      { onSuccess: (created) => setSelectedId(created.id) },
+      { onSuccess: (created) => (setSelectedId(created.id), toast.success(`Gymnase « ${created.name} » ajouté.`)) },
     );
     setName("");
     setPendingSalle(null);
@@ -309,14 +335,20 @@ function VenuesEditor() {
         Ajoutez vos gymnases, puis cliquez dans la grille pour poser les créneaux de disponibilité (jour + heure). Un gymnase sans créneau ne peut pas être utilisé.
       </p>
 
+      {venuesLoaded ? (
+      <AccordionSection
+        title="Ajouter des gymnases"
+        defaultOpen={0 === venues.length}
+        className="mb-3"
+      >
       <form onSubmit={addVenue} className="mb-2 rounded-lg border border-border bg-card p-3">
         <div className="flex items-end gap-2">
           <Input
             ref={nameRef}
             aria-label="Nom du gymnase"
-            aria-invalid={nameError}
+            aria-invalid={null !== addError}
             placeholder="Nom du gymnase"
-            className={`h-8 flex-1 ${nameError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+            className={`h-8 flex-1 ${null !== addError ? "border-destructive focus-visible:ring-destructive" : ""}`}
             value={name}
             onFocus={() => setNameFocused(true)}
             onBlur={() => setNameFocused(false)}
@@ -325,8 +357,8 @@ function VenuesEditor() {
               // Nom retouché à la main → l'ancrage FFBB de la suggestion tombe
               // (un gymnase renommé n'est plus, de façon sûre, cette salle-là).
               setPendingSalle(null);
-              if (nameError) {
-                setNameError(false);
+              if (null !== addError) {
+                setAddError(null);
               }
             }}
           />
@@ -349,36 +381,44 @@ function VenuesEditor() {
             le blur du champ retirerait la liste avant que le clic n'aboutisse. */}
         {suggestions.length > 0 ? (
           <ul aria-label={`Salles FFBB à ${cp}`} className="mt-2 max-h-48 overflow-y-auto rounded-md border border-border bg-background py-1 text-sm">
-            {suggestions.map((salle) => (
-              <li key={`${salle.externalRef ?? salle.name}-${salle.address ?? ""}`}>
-                <button
-                  type="button"
-                  className="flex w-full items-baseline gap-2 px-2.5 py-1 text-left hover:bg-muted"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    setName(salle.name);
-                    setPendingSalle(salle);
-                  }}
-                >
-                  <span className="font-medium">{salle.name}</span>
-                  {salle.address ? <span className="truncate text-xs text-muted-foreground">{salle.address}</span> : null}
-                </button>
-              </li>
-            ))}
+            {suggestions.map((salle) => {
+              // Déjà lié à un gymnase du club : la ligne reste LISIBLE (nommer)
+              // mais fermée au geste fautif — re-choisir referait un doublon.
+              const linked = null !== salle.externalRef && importedRefs.has(salle.externalRef);
+              return (
+                <li key={`${salle.externalRef ?? salle.name}-${salle.address ?? ""}`}>
+                  <button
+                    type="button"
+                    disabled={linked}
+                    className="flex w-full items-baseline gap-2 px-2.5 py-1 text-left hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      if (linked) return;
+                      setName(salle.name);
+                      setPendingSalle(salle);
+                    }}
+                  >
+                    <span className="font-medium">{salle.name}</span>
+                    {salle.address ? <span className="truncate text-xs text-muted-foreground">{salle.address}</span> : null}
+                    {linked ? <span className="ml-auto shrink-0 text-xs text-muted-foreground">déjà lié ✓</span> : null}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ) : null}
       </form>
 
-      {nameError ? (
+      {null !== addError ? (
         <p role="alert" className="mb-3 text-sm text-destructive">
-          Donnez un nom au gymnase avant de l'ajouter.
+          {addError}
         </p>
       ) : null}
 
       {/* P2-21 lot D — les gymnases d'à côté, un clic pour les ajouter. La liste
           PROPOSE, n'impose jamais ; le nom officiel se renomme ensuite à sa main. */}
       {(nearbyQuery.data?.salles.length ?? 0) > 0 ? (
-        <div className="mb-3 rounded-lg border border-border bg-card p-3">
+        <div className="rounded-lg border border-border bg-card p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium text-muted-foreground">
               Gymnases à proximité (FFBB{null != nearbyQuery.data?.radiusKm ? `, ${nearbyQuery.data.radiusKm} km` : ""}) — cliquez pour ajouter, renommez ensuite à votre main :
@@ -393,7 +433,10 @@ function VenuesEditor() {
             </Select>
           </div>
           <ul className="flex max-h-44 flex-col gap-1 overflow-y-auto">
-            {nearbyQuery.data?.salles.map((salle) => {
+            {0 === filteredNearby.length ? (
+              <li className="text-xs text-muted-foreground">Aucune salle FFBB ne correspond à « {name.trim()} » — ajoutez-le comme gymnase avec le bouton +.</li>
+            ) : null}
+            {filteredNearby.map((salle) => {
               const added = null !== salle.externalRef && importedRefs.has(salle.externalRef);
               return (
                 <li key={`${salle.externalRef ?? salle.name}-${salle.address ?? ""}`} className="flex items-center gap-2 text-sm">
@@ -407,7 +450,7 @@ function VenuesEditor() {
                       pendingColorsRef.current.push(color);
                       create.mutate(
                         { name: salle.name, color, canSplit: false, externalRef: salle.externalRef, latitude: salle.latitude, longitude: salle.longitude },
-                        { onSuccess: (created) => setSelectedId(created.id) },
+                        { onSuccess: (created) => (setSelectedId(created.id), toast.success(`Gymnase « ${created.name} » ajouté.`)) },
                       );
                     }}
                   >
@@ -429,10 +472,13 @@ function VenuesEditor() {
                           key={v.id}
                           icon={<VenueSwatch color={v.color ?? DEFAULT_VENUE_COLOR} className="size-2.5" />}
                           onSelect={() =>
-                            update.mutate({
-                              id: v.id,
-                              body: { name: v.name, color: v.color, canSplit: v.canSplit, isActive: v.isActive, externalRef: salle.externalRef, latitude: salle.latitude, longitude: salle.longitude },
-                            })
+                            update.mutate(
+                              {
+                                id: v.id,
+                                body: { name: v.name, color: v.color, canSplit: v.canSplit, isActive: v.isActive, externalRef: salle.externalRef, latitude: salle.latitude, longitude: salle.longitude },
+                              },
+                              { onSuccess: () => toast.success(`« ${salle.name} » associé à « ${v.name} ».`) },
+                            )
                           }
                         >
                           {v.name}
@@ -447,6 +493,8 @@ function VenuesEditor() {
             })}
           </ul>
         </div>
+      ) : null}
+      </AccordionSection>
       ) : null}
 
       {emptyVenues.length > 0 ? (
