@@ -1,4 +1,5 @@
 import { Lock, LockOpen, X } from "lucide-react";
+import { VenueSelect } from "@/shared/components/ui/venue-select";
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
@@ -65,13 +66,13 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, busy, readOnly =
               ))}
             </select>
             <input aria-label="Heure" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm" />
-            <select aria-label="Gymnase" value={venueId} onChange={(e) => setVenueId(e.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
-              {venues.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
+            <VenueSelect
+              aria-label="Gymnase"
+              className="h-9"
+              venues={venues.map((v) => ({ id: v.id, name: v.name, color: v.color }))}
+              value={venueId}
+              onChange={(e) => setVenueId(e.target.value)}
+            />
           </div>
 
           <div className="flex gap-2">

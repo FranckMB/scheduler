@@ -1,8 +1,7 @@
 import { useState } from "react";
 
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
-import { Select } from "@/shared/components/ui/select";
-import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
+import { VenueSelect } from "@/shared/components/ui/venue-select";
 
 import type { PriorityTier, Team, Venue, VenueTrainingSlot } from "../api";
 import { reservedTeamsBySlot, effectiveSlotCapacity, slotKey } from "../lib/reservationSlots";
@@ -67,23 +66,17 @@ export function ReservationPanel({
 
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Gymnase</span>
-        <VenueSwatch color={selected.color ?? "transparent"} className="size-3 border border-border" />
-        <Select
+        <VenueSelect
           aria-label="Gymnase"
-          className="h-8 w-48"
+          className="h-8"
+          wrapperClassName="w-52"
+          venues={venues.map((v) => ({ id: v.id, name: v.name + (disabledVenueIds?.has(v.id) ? " (désactivé pour cette période)" : ""), color: v.color }))}
           value={selected.id}
           onChange={(e) => {
             setActiveSlot(null); // never leave a modal open on a slot from the previous venue
             setVenueId(e.target.value);
           }}
-        >
-          {venues.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-              {disabledVenueIds?.has(v.id) ? " (désactivé pour cette période)" : ""}
-            </option>
-          ))}
-        </Select>
+        />
       </div>
 
       {/* Ce gymnase ne sert plus la période : il reste ici pour qu'on puisse RETIRER

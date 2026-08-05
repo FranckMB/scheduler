@@ -6,7 +6,9 @@ import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
+import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { Select } from "@/shared/components/ui/select";
+import { VenueSelect } from "@/shared/components/ui/venue-select";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { nextVenueColor } from "@/shared/lib/color";
 import { formatDuration } from "@/shared/lib/duration";
@@ -411,6 +413,33 @@ function VenuesEditor() {
                   >
                     {added ? "✓ Ajouté" : "+ Ajouter"}
                   </Button>
+                  {/* « Associer à… » (demande fondateur 2026-08-05) : cette salle EST un
+                      gymnase déjà saisi à la main — on pose numéro fédéral + GPS sur LE
+                      SIEN, sans jamais le renommer (le nom d'usage reste roi). Offert
+                      seulement s'il reste des gymnases non liés ; pastilles DANS la
+                      liste (menu custom — le natif ne sait pas les rendre). */}
+                  {!added && null !== salle.externalRef && venues.some((v) => null == v.externalRef) ? (
+                    <Menu
+                      label={`Associer ${salle.name} à un gymnase existant`}
+                      trigger={<span className="text-xs">Associer à…</span>}
+                      triggerClassName="h-7 w-auto shrink-0 rounded-md border border-input px-2 text-xs"
+                    >
+                      {venues.filter((v) => null == v.externalRef).map((v) => (
+                        <MenuItem
+                          key={v.id}
+                          icon={<VenueSwatch color={v.color ?? DEFAULT_VENUE_COLOR} className="size-2.5" />}
+                          onSelect={() =>
+                            update.mutate({
+                              id: v.id,
+                              body: { name: v.name, color: v.color, canSplit: v.canSplit, isActive: v.isActive, externalRef: salle.externalRef, latitude: salle.latitude, longitude: salle.longitude },
+                            })
+                          }
+                        >
+                          {v.name}
+                        </MenuItem>
+                      ))}
+                    </Menu>
+                  ) : null}
                   <span className={added ? "text-muted-foreground" : "font-medium"}>{salle.name}</span>
                   {salle.address ? <span className="truncate text-xs text-muted-foreground">{salle.address}{salle.city ? `, ${salle.city}` : ""}</span> : null}
                 </li>
@@ -439,10 +468,13 @@ function VenuesEditor() {
             <label className="text-sm font-medium" htmlFor="venue-picker">
               Gymnase :
             </label>
-            <Select
+            {/* Pastille AVANT le nom (demande fondateur 2026-08-05) — VenueSelect partagé. */}
+            <VenueSelect
               id="venue-picker"
               aria-label="Gymnase"
-              className="h-9 w-56"
+              className="h-9"
+              wrapperClassName="w-60"
+              venues={venues.map((v) => ({ id: v.id, name: v.name, color: v.color ?? DEFAULT_VENUE_COLOR }))}
               value={selected.id}
               onChange={(e) => {
                 setSelectedId(e.target.value);
@@ -451,14 +483,7 @@ function VenuesEditor() {
                 // typed for the previous one onto the newly selected gym.
                 setVenueName("");
               }}
-            >
-              {venues.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </Select>
-            <VenueSwatch color={selected.color ?? DEFAULT_VENUE_COLOR} className="size-4 border border-input" />
+            />
           </div>
 
           {/* Edit card — properties of the SELECTED gym (distinct block). */}

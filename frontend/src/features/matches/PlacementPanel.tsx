@@ -1,4 +1,5 @@
 import { AlertTriangle, ArrowLeftRight, Check, Lock, LockOpen, Pencil, Trash2, Undo2, X } from "lucide-react";
+import { VenueSelect } from "@/shared/components/ui/venue-select";
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
@@ -138,16 +139,17 @@ export function PlacementPanel({
         ) : (
           <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
             <div className="grid grid-cols-2 gap-2">
-              <select aria-label="Gymnase" value={venueId} onChange={(e) => setVenueId(e.target.value)} className={fieldClass}>
-                <option value="" disabled>
+              <VenueSelect
+                aria-label="Gymnase"
+                className={fieldClass}
+                venues={selectableVenues.map((v) => ({ id: v.id, name: v.name, color: v.color }))}
+                value={venueId}
+                onChange={(e) => setVenueId(e.target.value)}
+              >
+                <option value="" disabled hidden>
                   Gymnase…
                 </option>
-                {selectableVenues.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name}
-                  </option>
-                ))}
-              </select>
+              </VenueSelect>
               <input aria-label="Heure de coup d'envoi" type="time" value={kickoff} onChange={(e) => setKickoff(e.target.value)} className={fieldClass} />
             </div>
 

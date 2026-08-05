@@ -11,6 +11,7 @@ import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
 import { Select } from "@/shared/components/ui/select";
+import { VenueSelect } from "@/shared/components/ui/venue-select";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
@@ -416,23 +417,18 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
         <label className="text-sm font-medium" htmlFor="period-venue-picker">
           Gymnase :
         </label>
-        <Select
+        <VenueSelect
           id="period-venue-picker"
           aria-label="Gymnase"
-          className="h-9 w-56"
+          className="h-9"
+          wrapperClassName="w-60"
+          venues={venues.map((v) => ({ id: v.id, name: v.name + (closed.has(v.id) ? " — INTERDIT cette période" : ""), color: v.color }))}
           value={selected.id}
           onChange={(e) => {
             setSelectedId(e.target.value);
             setEditingSlot(null); // ne jamais laisser l'éditeur ouvert sur un créneau d'un autre gymnase
           }}
-        >
-          {venues.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-              {closed.has(v.id) ? " — INTERDIT cette période" : ""}
-            </option>
-          ))}
-        </Select>
+        />
         <VenueSwatch color={selected.color ?? "transparent"} className="size-4 border border-input" />
       </div>
 
