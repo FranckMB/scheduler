@@ -2,5 +2,7 @@
 # scripts are baked into the image (dev bind-mounts docker/postgres/init; the
 # prod VM has no repo checkout). Scripts run once on first cluster init only.
 FROM postgres:16-alpine
+# SEC A19 — même règle : paquets Alpine au niveau des dépôts.
+RUN apk upgrade --no-cache
 
 COPY docker/postgres/init /docker-entrypoint-initdb.d
