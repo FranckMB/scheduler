@@ -420,7 +420,9 @@ def _solve(
                 cast(Any, model).Add(sum(team_vars) <= max(0, remaining_sessions))
 
     # Add objective function.
-    preferred_venues: dict[str, str] = parsed.get("preferred_venues", {})
+    # PR B — SET of preferred venues per team: the bonus fires when the session
+    # lands in ANY of them (same weight for each — no ranking between preferred).
+    preferred_venues: dict[str, set[str]] = parsed.get("preferred_venues", {})
     # Soft "avoid this venue" rules (ENG-11): a TRUE MALUS on the avoided slot
     # ("avoided_venue" < 0) — a complement bonus on every other venue would give
     # the team a flat per-session advantage and bias cross-team allocation.
@@ -432,8 +434,8 @@ def _solve(
     for slot_key, var in model.x.items():
         team_id = str(slot_key[0])
         venue_id = str(slot_key[1])
-        preferred_venue_id = preferred_venues.get(team_id)
-        if preferred_venue_id is not None and venue_id == preferred_venue_id:
+        preferred_set = preferred_venues.get(team_id)
+        if preferred_set is not None and venue_id in preferred_set:
             soft_terms.append((var, "preferred"))
         avoided_set = avoided_by_team.get(team_id)
         if avoided_set is not None and venue_id in avoided_set:
