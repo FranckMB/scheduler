@@ -127,6 +127,13 @@ def _violates(cell: MatrixCell, slot: dict[str, Any]) -> bool:
     if key == "minAtVenueId":
         # 1-session team: the floor of "≥1 at venue" coincides with "is at venue".
         return slot["venueId"] != config["minAtVenueId"]
+    if key in ("fromTime", "untilTime"):
+        # P3-17 — la fenêtre ne vaut QUE sur les jours listés : hors d'eux, rien n'est
+        # bloqué. `fromTime` bloque [from, 24:00), `untilTime` bloque [00:00, until).
+        if int(slot["dayOfWeek"]) not in set(config["unavailableDays"]):
+            return False
+        start = str(slot["startTime"])[:5]
+        return start >= str(config["fromTime"]) if key == "fromTime" else start < str(config["untilTime"])
     if key in ("forbiddenDays", "unavailableDays"):
         return int(slot["dayOfWeek"]) in set(config[key])
     if key == "availableDays":

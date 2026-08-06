@@ -271,6 +271,33 @@ MATRIX: tuple[MatrixCell, ...] = (
         config={"availableDays": [1]},
         lock_silence=LockSilence.DIAGNOSED,
     ),
+    # P4-93 (repris de la PR #407, 2026-08-14) — la FENÊTRE HORAIRE de l'indisponibilité,
+    # livrée au lot C (#195, bump 2.0→2.1) mais jamais entrée dans la matrice : l'offre du
+    # wizard avait bougé sans que son verrou suive. Ces deux cellules figent les DEUX
+    # bornes — une indispo « le mercredi À PARTIR DE 17h » ne doit pas se comporter comme
+    # « le mercredi ».
+    MatrixCell(
+        "COACH_AVAILABILITY",
+        "HARD",
+        "fromTime",
+        "COACH",
+        Expectation.HONORED_HARD,
+        True,
+        note="lot C #195: window lower bound — blocked interval is [fromTime, 24:00) on those days",
+        config={"unavailableDays": [3], "fromTime": "17:00"},
+        lock_silence=LockSilence.DIAGNOSED,
+    ),
+    MatrixCell(
+        "COACH_AVAILABILITY",
+        "HARD",
+        "untilTime",
+        "COACH",
+        Expectation.HONORED_HARD,
+        True,
+        note="lot C #195: window upper bound — blocked interval is [00:00, untilTime) on those days",
+        config={"unavailableDays": [3], "untilTime": "19:00"},
+        lock_silence=LockSilence.DIAGNOSED,
+    ),
     # --- Legacy / guard cells ---------------------------------------------------
     MatrixCell(
         "DAY",
