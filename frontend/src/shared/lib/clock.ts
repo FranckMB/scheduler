@@ -46,6 +46,10 @@ function isRealDate(iso: string): boolean {
 }
 
 let override: string | null = null;
+// Le `?today=` de dev PRIME sur la date serveur : celui qui rejoue un écran à la main
+// doit gagner sur l'automatisme (et en prod ce drapeau ne peut jamais être vrai — le
+// bloc d'amorçage est éliminé du bundle).
+let devParamActive = false;
 
 /**
  * Fixe le « aujourd'hui » du front, ou le relâche avec `null`.
@@ -63,9 +67,25 @@ export function todayISO(): string {
   return override ?? toISODate(new Date());
 }
 
+/**
+ * P4-16/P2-4 — l'« aujourd'hui » SERVEUR d'un club démo (`/api/me` → `club.demoToday`).
+ *
+ * Ouvre l'horloge simulée EN PROD, mais jamais à la main de l'utilisateur : la seule
+ * source est la réponse authentifiée de `/api/me`, posée côté serveur par le support
+ * (commande `app:demo:clock`) — un vrai club a `demoToday` null et cet appel relâche
+ * l'override. Le `?today=` de dev garde la priorité (rejouer à la main doit gagner).
+ */
+export function applyServerToday(iso: string | null): void {
+  if (devParamActive) {
+    return;
+  }
+  setTodayOverride(iso);
+}
+
 // Amorçage : lu UNE fois au chargement du module. En prod, `import.meta.env.DEV` est faux
 // et le bundler élimine tout ce bloc — l'override n'est alors atteignable que par un appel
 // explicite à `setTodayOverride` (ce que seuls les tests font).
 if (import.meta.env.DEV && "undefined" !== typeof window) {
   setTodayOverride(new URLSearchParams(window.location.search).get("today"));
+  devParamActive = null !== override;
 }

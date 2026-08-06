@@ -94,6 +94,14 @@ class Club
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?DateTimeImmutable $ffbbTeamsImportedAt = null;
 
+    // P4-16 / P2-4 — l'« aujourd'hui » SIMULÉ d'un club de démonstration. Non-null =
+    // toute l'application (serveur : DemoAwareClock ; front : /api/me → clock.ts) vit
+    // à cette date pour CE club — rejouer « à trois semaines des vacances » en plein
+    // été. Null = horloge réelle, le cas de tous les vrais clubs. Posé par la commande
+    // app:demo:clock (console superadmin à venir, PR 2 du lot démo).
+    #[ORM\Column(type: 'date_immutable', nullable: true)]
+    private ?DateTimeImmutable $demoToday = null;
+
     // RGPD (droit à l'effacement) : non-null = purge du workspace programmée à
     // cette date (dernier admin effacé + délai de grâce 30 j). Annulable en la
     // remettant à null tant que app:clubs:purge-erased n'est pas passé.
@@ -410,6 +418,18 @@ class Club
     public function getFfbbTeamsImportedAt(): ?DateTimeImmutable
     {
         return $this->ffbbTeamsImportedAt;
+    }
+
+    public function getDemoToday(): ?DateTimeImmutable
+    {
+        return $this->demoToday;
+    }
+
+    public function setDemoToday(?DateTimeImmutable $demoToday): self
+    {
+        $this->demoToday = $demoToday;
+
+        return $this;
     }
 
     public function setFfbbTeamsImportedAt(?DateTimeImmutable $ffbbTeamsImportedAt): self

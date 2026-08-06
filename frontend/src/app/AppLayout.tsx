@@ -5,6 +5,7 @@ import { useLogout, useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { useApplyClubTheme } from "@/shared/hooks/useApplyClubTheme";
+import { useApplyDemoClock } from "@/shared/hooks/useApplyDemoClock";
 import { cn } from "@/shared/lib/utils";
 import { useThemeStore } from "@/shared/stores/themeStore";
 
@@ -33,6 +34,7 @@ export function AppLayout() {
   const { data } = useMe();
   const logout = useLogout();
   useApplyClubTheme();
+  useApplyDemoClock();
   const mode = useThemeStore((state) => state.mode);
   const toggleMode = useThemeStore((state) => state.toggleMode);
 
