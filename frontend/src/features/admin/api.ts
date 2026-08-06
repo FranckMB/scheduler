@@ -105,6 +105,8 @@ export interface AdminClub {
   name: string;
   slug: string;
   ffbbClubCode: string | null;
+  /** P2-4 — club de démonstration : badgé dans la liste, exclu des KPI. */
+  isDemo: boolean;
   planId: number | null;
   billingCycle: string | null;
   generationCountSeason: number;

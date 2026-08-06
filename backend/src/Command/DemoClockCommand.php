@@ -76,12 +76,14 @@ final class DemoClockCommand extends Command
             $date = $rawDate;
         }
 
+        // P2-4 — RÉSERVÉ aux clubs de démonstration : décaler l'horloge d'un vrai
+        // club mentirait à son gestionnaire (radar, bascule de saison, guards).
         $updated = $this->connection()->executeStatement(
-            'UPDATE club SET demo_today = :date WHERE id = :id',
+            'UPDATE club SET demo_today = :date WHERE id = :id AND is_demo = TRUE',
             ['date' => $date, 'id' => $clubId],
         );
         if (0 === $updated) {
-            $io->error(\sprintf('Club %s not found.', $clubId));
+            $io->error(\sprintf('Club %s not found — or not a DEMO club (the simulated clock is demo-only).', $clubId));
 
             return Command::FAILURE;
         }
