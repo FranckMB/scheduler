@@ -44,7 +44,9 @@ class ParsedConstraints(TypedDict):
     # falls in ANY interval (Lot C: coach unavailability with time windows).
     coach_unavailability: dict[str, set[tuple[int, int, int]]]
     forced_venues: dict[str, str]
-    preferred_venues: dict[str, str]
+    # PR B (2026-08-06) — un ENSEMBLE par équipe : les règles PREFERRED se cumulent
+    # (« privilégier Vilar ET Tonkin »), elles ne s'écrasent plus en last-wins.
+    preferred_venues: dict[str, set[str]]
     avoided_venues: list[dict[str, str]]
     venue_minimums: list[dict[str, Any]]
     venue_capacity_caps: dict[str, int]
@@ -1670,7 +1672,8 @@ def _set_venue_rule(
 ) -> None:
     """Single-venue-per-team rule maps are last-wins by structure — surface a
     conflicting overwrite instead of silently dropping the earlier rule (the
-    same silent-overwrite class as ENG-13)."""
+    same silent-overwrite class as ENG-13). Since PR B this only guards the
+    HARD map (`forced_venues`) — soft preferences accumulate into a set."""
     existing = rules.get(team_id)
     if existing is not None and existing != venue_id:
         warnings.append(_not_honored_warning(
@@ -1873,7 +1876,11 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             and scope == "TEAM"
             and scope_target_id
         ):
-            _set_venue_rule(result["preferred_venues"], scope_target_id, config["preferredVenueId"], c, result["parse_warnings"])
+            # PR B — les préférences SOFT se CUMULENT (un club vit sur 3-4 gymnases
+            # « à privilégier ») : ensemble par équipe, bonus si la séance tombe dans
+            # L'UN d'eux. Le last-wins + warning ne vaut plus que pour les règles
+            # DURES (`forced_venues`), où deux gymnases sont une vraie contradiction.
+            result["preferred_venues"].setdefault(str(scope_target_id), set()).add(str(config["preferredVenueId"]))
 
         elif family == "FACILITY" and config.get("forbiddenVenueId"):
             # rule_type decides HOW hard "avoid this venue" is (ENG-11 — this

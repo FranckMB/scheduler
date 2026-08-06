@@ -151,7 +151,7 @@ Sous-schemas clés :
 | `family == "COACH_AVAILABILITY"` | `coach_unavailability[scopeTargetId]` → `unavailableDays` |
 | `family == "FACILITY"` + `preferredVenueId` + `HARD` + `scope=TEAM` | `forced_venues[scopeTargetId]` = `preferredVenueId` |
 | `family == "FACILITY"` + `forcedVenueId` + `HARD` + `scope=TEAM` | `forced_venues[scopeTargetId]` = `forcedVenueId` |
-| `family == "FACILITY"` + `preferredVenueId` + `PREFERRED` + `scope=TEAM` | `preferred_venues[scopeTargetId]` = `preferredVenueId` |
+| `family == "FACILITY"` + `preferredVenueId` + `PREFERRED` + `scope=TEAM` | `preferred_venues[scopeTargetId]` → **ensemble** de gymnases (PR B 2026-08-06 : les préférences se CUMULENT, bonus si la séance tombe dans l'un d'eux ; le last-wins + INFO ne reste que sur `forced_venues`) |
 | `family == "FACILITY"` + `forbiddenVenueId` | `forbidden_assignments` → `[{scope_target_id, venue_id}]` |
 | `family == "FACILITY"` + `forbiddenVenueId` + `PREFERRED` + cible | `avoided_venues` → `[{scope_target_id, venue_id}]` (malus objectif, poids `avoided_venue`). **Même clé** que l'interdiction dure : c'est le `ruleType` qui décide dur/soft (il n'existe **pas** de clé `avoidedVenueId`) |
 | `family == "FACILITY"` + `minAtVenueId` (+ `minAtVenueCount`, défaut 1) + HARD/LOCK + `scope=TEAM` | `venue_minimums` → plancher `somme(vars équipe@gymnase) ≥ N` (ALIGN-05) |

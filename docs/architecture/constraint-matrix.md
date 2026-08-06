@@ -105,5 +105,6 @@ pas de bump `CONTRACT_VERSION`. **`SCORE_FORMULA_VERSION` actuel : V7** (`engine
 bonus-complément sur les autres gymnases biaisait l'arbitrage inter-équipes) ; V6→V7 : poids
 `spacing` (ALIGN-06). Sémantiques d'agrégation : indispos coach =
 **union des blacklists ∩ des whitelists** ; plusieurs « éviter tel jour » soft = **union par équipe**
-(deux compléments indépendants s'annulaient) ; double règle de gymnase sur une équipe → diagnostic
-INFO (last-wins signalé).
+(deux compléments indépendants s'annulaient) ; double règle de gymnase sur une équipe : les
+PREFERRED se **cumulent en ensemble** (bonus si la séance tombe dans l'un d'eux — PR B 2026-08-06),
+seules les règles DURES (`forced_venues`) restent last-wins avec diagnostic INFO.
