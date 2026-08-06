@@ -100,13 +100,22 @@ def coach_availability(
     *,
     unavailable_days: list[int] | None = None,
     available_days: list[int] | None = None,
+    from_time: str | None = None,
+    until_time: str | None = None,
 ) -> dict[str, Any]:
-    """A COACH_AVAILABILITY constraint scoped to a coach."""
+    """A COACH_AVAILABILITY constraint scoped to a coach.
+
+    ``from_time``/``until_time`` = la FENÊTRE horaire du lot C (#195) : absente, la
+    règle vaut pour la journée entière (comportement d'origine)."""
     config: dict[str, Any] = {"coachId": coach_id}
     if unavailable_days is not None:
         config["unavailableDays"] = unavailable_days
     if available_days is not None:
         config["availableDays"] = available_days
+    if from_time is not None:
+        config["fromTime"] = from_time
+    if until_time is not None:
+        config["untilTime"] = until_time
     return {
         "id": constraint_id,
         "scope": "COACH",
