@@ -6,6 +6,7 @@ namespace App\Tests\Security;
 
 use App\Entity\Club;
 use App\Entity\Coach;
+use App\Entity\Constraint;
 use App\Entity\PriorityTier;
 use App\Entity\Reservation;
 use App\Entity\Season;
@@ -14,6 +15,9 @@ use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\Venue;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Enum\TeamCoachRole;
 use App\Service\CoachDoubleBookingDetector;
 use App\Tests\TenantGucTrait;
@@ -128,6 +132,63 @@ final class CoachDoubleBookingTest extends KernelTestCase
         self::assertSame([], $this->detector->detect([$a, $b], $ctx['clubId'], $ctx['seasonId']));
     }
 
+    // ── PR A (2026-08-06) — coach INDISPONIBLE × créneau réservé en dur ──────────
+    // Même doctrine que detect() (coach MAIN, intervalles demi-ouverts), mais un
+    // AVERTISSEMENT : le verrou est souverain, la génération passera — on prévient
+    // AVANT au lieu de le découvrir en INFO post-solve.
+
+    /** Le cas nominal : indisponible toute la journée du mardi, réservation le mardi. */
+    public function testReservationOnCoachUnavailableDayWarns(): void
+    {
+        $ctx = $this->seed();
+        $reservation = $this->reserve($ctx, $ctx['teamA'], $ctx['venue1'], 2, '17:00', 90);
+        $constraint = $this->unavailability($ctx, ['unavailableDays' => [2]]);
+
+        $clashes = $this->detector->detectUnavailabilityClashes([$reservation], [$constraint], $ctx['clubId'], $ctx['seasonId']);
+
+        self::assertCount(1, $clashes);
+        $message = $this->detector->describeUnavailabilityForRecap($clashes[0]);
+        // Le message doit nommer le coach, le jour et la réservation fautive : un
+        // avertissement sans recours actionnable n'aide personne.
+        self::assertStringContainsString('Maxime', $message);
+        self::assertStringContainsString('mardi', $message);
+        self::assertStringContainsString('Gymnase Un', $message);
+    }
+
+    /** Fenêtre horaire : indisponible à partir de 18h30, la réservation FINIT à 18h30 — pas de chevauchement (demi-ouvert). */
+    public function testReservationEndingWhenUnavailabilityStartsDoesNotWarn(): void
+    {
+        $ctx = $this->seed();
+        $reservation = $this->reserve($ctx, $ctx['teamA'], $ctx['venue1'], 2, '17:00', 90); // → 18h30
+        $adjacent = $this->unavailability($ctx, ['unavailableDays' => [2], 'fromTime' => '18:30']);
+
+        self::assertSame([], $this->detector->detectUnavailabilityClashes([$reservation], [$adjacent], $ctx['clubId'], $ctx['seasonId']));
+
+        // Témoin : la même fenêtre 30 min plus tôt chevauche, et rougit bien.
+        $overlapping = $this->unavailability($ctx, ['unavailableDays' => [2], 'fromTime' => '18:00']);
+        self::assertCount(1, $this->detector->detectUnavailabilityClashes([$reservation], [$overlapping], $ctx['clubId'], $ctx['seasonId']));
+    }
+
+    /** `availableDays` non vide = liste blanche : tout AUTRE jour est bloqué (miroir du parse moteur). */
+    public function testAvailableDaysWhitelistBlocksTheComplement(): void
+    {
+        $ctx = $this->seed();
+        $reservation = $this->reserve($ctx, $ctx['teamA'], $ctx['venue1'], 2, '17:00', 90);
+        $constraint = $this->unavailability($ctx, ['availableDays' => [3]]); // dispo mercredi SEULEMENT
+
+        self::assertCount(1, $this->detector->detectUnavailabilityClashes([$reservation], [$constraint], $ctx['clubId'], $ctx['seasonId']));
+    }
+
+    /** Une contrainte DÉSACTIVÉE ne bloque rien : le moteur la saute aussi. */
+    public function testInactiveUnavailabilityDoesNotWarn(): void
+    {
+        $ctx = $this->seed();
+        $reservation = $this->reserve($ctx, $ctx['teamA'], $ctx['venue1'], 2, '17:00', 90);
+        $constraint = $this->unavailability($ctx, ['unavailableDays' => [2]], isActive: false);
+
+        self::assertSame([], $this->detector->detectUnavailabilityClashes([$reservation], [$constraint], $ctx['clubId'], $ctx['seasonId']));
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -213,6 +274,28 @@ final class CoachDoubleBookingTest extends KernelTestCase
             'venue1' => $venueIds[0], 'venue2' => $venueIds[1],
             'coachId' => $coachId,
         ];
+    }
+
+    /**
+     * @param array{clubId: string, seasonId: string, coachId: string} $ctx
+     * @param array<string, mixed>                                     $config
+     */
+    private function unavailability(array $ctx, array $config, bool $isActive = true): Constraint
+    {
+        $constraint = new Constraint;
+        $constraint->setClubId($ctx['clubId']);
+        $constraint->setSeasonId($ctx['seasonId']);
+        $constraint->setName('Maxime indisponible');
+        $constraint->setScope(ConstraintScope::COACH);
+        $constraint->setScopeTargetId($ctx['coachId']);
+        $constraint->setFamily(ConstraintFamily::COACH_AVAILABILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setConfig(['coachId' => $ctx['coachId'], ...$config]);
+        $constraint->setIsActive($isActive);
+        $this->em->persist($constraint);
+        $this->em->flush();
+
+        return $constraint;
     }
 
     private function createCoach(string $clubId, string $seasonId, string $firstName): string

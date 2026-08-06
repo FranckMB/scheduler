@@ -7,17 +7,22 @@ namespace App\Tests\Integration\Api;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Coach;
 use App\Entity\Constraint;
+use App\Entity\Reservation;
 use App\Entity\Season;
 use App\Entity\Team;
+use App\Entity\TeamCoach;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Enum\TeamCoachRole;
 use App\Enum\VenuePeriodMode;
 use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
@@ -97,6 +102,90 @@ final class ValidateConstraintsTest extends WebTestCase
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertFalse($data['valid']);
         self::assertNotEmpty($data['errors'], 'the impossible venue minimum must surface as an error');
+    }
+
+    /**
+     * PR A (2026-08-06) — saturation des « au moins » par gymnase. Deux équipes exigent
+     * chacune 1 séance à Matéo (2 places demandées) ; le gymnase a 2 créneaux mais une
+     * réservation en verrouille un (un triplet verrouillé n'a de variable pour PERSONNE,
+     * `model.py:62-63`) : 1 place libre pour 2 demandées → INFEASIBLE certain, BLOQUEUR.
+     * C'est le scénario BCCL du jour, découvert en échec de génération muet.
+     */
+    public function testVenueMinimumsSaturatedByReservationsBlock(): void
+    {
+        $venueId = $this->venue('Matéo');
+        $this->trainingSlot($venueId, dayOfWeek: 1, start: '18:00');
+        $this->trainingSlot($venueId, dayOfWeek: 2, start: '18:00');
+        $teamA = $this->team(sessionsPerWeek: 1);
+        $teamB = $this->team(sessionsPerWeek: 1);
+        $this->minAtVenue($teamA, $venueId);
+        $this->minAtVenue($teamB, $venueId);
+        $this->reservation($teamA, $venueId, dayOfWeek: 1, start: '18:00');
+
+        $this->client->loginUser($this->user);
+        $this->client->request('POST', '/api/constraints/validate', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+
+        self::assertResponseStatusCodeSame(422);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertFalse($data['valid']);
+        $blockers = implode(' | ', $data['blockers']);
+        self::assertStringContainsString('Matéo', $blockers, 'le bloqueur doit nommer le gymnase saturé');
+        self::assertStringContainsString('2 places', $blockers);
+    }
+
+    /** Témoin du cas ci-dessus : sans la réservation, 2 places libres pour 2 demandées — rien ne bloque. */
+    public function testVenueMinimumsWithinFreeCapacityDoNotBlock(): void
+    {
+        $venueId = $this->venue('Matéo');
+        $this->trainingSlot($venueId, dayOfWeek: 1, start: '18:00');
+        $this->trainingSlot($venueId, dayOfWeek: 2, start: '18:00');
+        $this->minAtVenue($this->team(sessionsPerWeek: 1), $venueId);
+        $this->minAtVenue($this->team(sessionsPerWeek: 1), $venueId);
+
+        $this->client->loginUser($this->user);
+        $this->client->request('POST', '/api/constraints/validate', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+
+        self::assertResponseStatusCodeSame(200);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertTrue($data['valid']);
+        self::assertSame([], $data['blockers']);
+    }
+
+    /**
+     * PR A (2026-08-06) — coach indisponible × créneau réservé en dur : AVERTISSEMENT
+     * avant génération (le verrou est souverain, la séance se posera quand même — mais
+     * on le dit AVANT, pas en INFO post-solve). N'invalide rien : `valid` reste vrai.
+     */
+    public function testReservationOnCoachUnavailableDayWarnsButStaysValid(): void
+    {
+        $venueId = $this->venue('Matéo');
+        $teamId = $this->team(sessionsPerWeek: 1);
+        $coachId = $this->mainCoach($teamId, 'Emerick');
+        $this->reservation($teamId, $venueId, dayOfWeek: 2, start: '17:00');
+
+        $constraint = new Constraint;
+        $constraint->setClubId($this->club->getId());
+        $constraint->setSeasonId($this->season->getId());
+        $constraint->setName('Emerick indisponible le mardi');
+        $constraint->setScope(ConstraintScope::COACH);
+        $constraint->setScopeTargetId($coachId);
+        $constraint->setFamily(ConstraintFamily::COACH_AVAILABILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setConfig(['coachId' => $coachId, 'unavailableDays' => [2]]);
+        $constraint->setIsActive(true);
+        $this->em->persist($constraint);
+        $this->em->flush();
+
+        $this->client->loginUser($this->user);
+        $this->client->request('POST', '/api/constraints/validate', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+
+        self::assertResponseStatusCodeSame(200);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertTrue($data['valid'], 'un avertissement n\'invalide rien — le verrou est souverain');
+        $warnings = implode(' | ', $data['warnings']);
+        self::assertStringContainsString('Emerick', $warnings);
+        self::assertStringContainsString('mardi', $warnings);
+        self::assertStringContainsString('Matéo', $warnings);
     }
 
     public function testOverlayValidationIncludesInheritedPermanentConstraints(): void
@@ -282,6 +371,76 @@ final class ValidateConstraintsTest extends WebTestCase
         $this->em->flush();
 
         return $venue->getId();
+    }
+
+    /** Un créneau SAISONNIER (schedulePlanId null) — celui que `buildForClubSeason` sérialise. */
+    private function trainingSlot(string $venueId, int $dayOfWeek, string $start): void
+    {
+        $slot = new VenueTrainingSlot;
+        $slot->setClubId($this->club->getId());
+        $slot->setSeasonId($this->season->getId());
+        $slot->setVenueId($venueId);
+        $slot->setDayOfWeek($dayOfWeek);
+        $slot->setStartTime(new DateTimeImmutable($start));
+        $slot->setDurationMinutes(90);
+        $slot->setCapacity(1);
+        $this->em->persist($slot);
+        $this->em->flush();
+    }
+
+    /** « Au moins 1 séance dans ce gymnase » pour l'équipe — la contrainte du scénario BCCL. */
+    private function minAtVenue(string $teamId, string $venueId): void
+    {
+        $constraint = new Constraint;
+        $constraint->setClubId($this->club->getId());
+        $constraint->setSeasonId($this->season->getId());
+        $constraint->setName('Au moins 1 à Matéo');
+        $constraint->setScope(ConstraintScope::TEAM);
+        $constraint->setScopeTargetId($teamId);
+        $constraint->setFamily(ConstraintFamily::FACILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setConfig(['minAtVenueId' => $venueId, 'minAtVenueCount' => 1]);
+        $constraint->setIsActive(true);
+        $this->em->persist($constraint);
+        $this->em->flush();
+    }
+
+    /** Une réservation du socle (schedulePlanId null) — un verrou HARD pour le solveur. */
+    private function reservation(string $teamId, string $venueId, int $dayOfWeek, string $start): void
+    {
+        $reservation = new Reservation;
+        $reservation->setClubId($this->club->getId());
+        $reservation->setSeasonId($this->season->getId());
+        $reservation->setTeamId($teamId);
+        $reservation->setVenueId($venueId);
+        $reservation->setDayOfWeek($dayOfWeek);
+        $reservation->setStartTime(new DateTimeImmutable($start));
+        $reservation->setDurationMinutes(90);
+        $this->em->persist($reservation);
+        $this->em->flush();
+    }
+
+    /** Un coach MAIN pour l'équipe, retourne son id. */
+    private function mainCoach(string $teamId, string $firstName): string
+    {
+        $coach = new Coach;
+        $coach->setClubId($this->club->getId());
+        $coach->setSeasonId($this->season->getId());
+        $coach->setFirstName($firstName);
+        $coach->setLastName('Dupont');
+        $this->em->persist($coach);
+        $this->em->flush();
+
+        $link = new TeamCoach;
+        $link->setClubId($this->club->getId());
+        $link->setSeasonId($this->season->getId());
+        $link->setTeamId($teamId);
+        $link->setCoachId($coach->getId());
+        $link->setRole(TeamCoachRole::MAIN);
+        $this->em->persist($link);
+        $this->em->flush();
+
+        return $coach->getId();
     }
 
     /** Le geste « ce gymnase ne sert pas cette période » (réglage sparse ancré au plan). */
