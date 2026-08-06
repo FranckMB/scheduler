@@ -73,6 +73,19 @@ final class OrphanPinGuard
             }
             $available[$this->key($slot->getVenueId(), $slot->getDayOfWeek(), $slot->getStartTime()->format('H:i'))] = true;
         }
+        // P3-20 (décision fondateur 2026-08-06) — un épinglage sur un gymnase DÉSACTIVÉ
+        // ne bloque PLUS. Le mode conserve tout (grille, réservations, verrous) pour que
+        // réactiver rende la saisie ; l'écran les masque ; et le solveur ne les verra
+        // jamais puisque `buildForOverlay` retire le gymnase du payload. Refuser la
+        // génération ici enfermait donc le gestionnaire sur un épinglage devenu
+        // INVISIBLE, nommant un gymnase que l'écran ne montre plus — le geste de
+        // désactivation fabriquait lui-même l'impasse (P3-20, revue #342).
+        //
+        // ⚠ La doctrine « on ne fait pas de chose magique » n'est pas relâchée : rien
+        // n'est déplacé en silence (le gymnase ne sert pas du tout), et le récap
+        // continue d'annoncer le surplus de réservations d'une équipe. Les AUTRES causes
+        // d'orphelin — grille vidée, jour de fermeture — bloquent toujours : là, une
+        // séance SERAIT déplacée ailleurs sans le dire.
 
         // Verrous HARD du work-loop de CETTE version. Les placements SOFT/NONE sont des
         // RÉSULTATS de solve, pas des épinglages : les refuser bloquerait toute
@@ -81,12 +94,18 @@ final class OrphanPinGuard
             if (LockLevel::HARD !== $lock->getLockLevel()) {
                 continue;
             }
+            if (isset($disabledVenueIds[$lock->getVenueId()])) {
+                continue;
+            }
             if (!isset($available[$this->key($lock->getVenueId(), $lock->getDayOfWeek(), $lock->getStartTime()->format('H:i'))])) {
                 return $this->message($lock->getVenueId(), $lock->getDayOfWeek());
             }
         }
 
         foreach ($this->entityManager->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $reservation) {
+            if (isset($disabledVenueIds[$reservation->getVenueId()])) {
+                continue;
+            }
             if (!isset($available[$this->key($reservation->getVenueId(), $reservation->getDayOfWeek(), $reservation->getStartTime()->format('H:i'))])) {
                 return $this->message($reservation->getVenueId(), $reservation->getDayOfWeek());
             }

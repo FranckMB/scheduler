@@ -187,6 +187,7 @@ final class ValidateConstraintsController extends AbstractController
         // n'a jamais choisi que son coach se dédouble. Décision fondateur : ça BLOQUE.
         $blockers = [
             ...$saturationBlockers,
+            ...$this->overBookedTeamBlockers($reservations, $clubId, $seasonId),
             ...array_map(
                 fn (array $conflict): string => $this->coachDoubleBookingDetector->describeForRecap($conflict),
                 $this->coachDoubleBookingDetector->detect($reservations, $clubId, $seasonId),
@@ -455,6 +456,54 @@ final class ValidateConstraintsController extends AbstractController
                 $venueNames[$venueId] ?? $venueId,
                 $this->plural($free, 'place', 'places'),
                 1 === $free ? '' : 's',
+            );
+        }
+
+        return $blockers;
+    }
+
+    /**
+     * P3-20 (décision fondateur 2026-08-06) — « si j'ai déclaré 3 réservations alors que
+     * l'équipe ne veut que 2 créneaux, on bloque : c'est une INCOHÉRENCE gestionnaire ».
+     *
+     * Ce n'est pas une préférence bafouée : le gestionnaire a ordonné plus de séances que
+     * ce qu'il a lui-même déclaré pour l'équipe. Le solveur ne peut pas arbitrer — un
+     * verrou est pré-placé hors modèle (ALIGN-07), donc les trois s'imposeraient et
+     * l'équipe jouerait plus que prévu, en silence. D'où le BLOQUEUR, aux côtés du coach
+     * dédoublé.
+     *
+     * Le cas naît naturellement du geste de désactivation : un gymnase désactivé conserve
+     * ses réservations (elles reviennent à la réactivation) ; déplacer la séance ailleurs
+     * entre-temps en fabrique une de trop, et c'est ICI qu'on l'attrape.
+     *
+     * @param list<Reservation> $reservations le périmètre EXACT qui partira au solveur
+     *
+     * @return list<string>
+     */
+    private function overBookedTeamBlockers(array $reservations, string $clubId, string $seasonId): array
+    {
+        if ([] === $reservations) {
+            return [];
+        }
+
+        $countByTeam = [];
+        foreach ($reservations as $reservation) {
+            $countByTeam[$reservation->getTeamId()] = ($countByTeam[$reservation->getTeamId()] ?? 0) + 1;
+        }
+
+        $blockers = [];
+        foreach ($this->teamRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
+            $reserved = $countByTeam[$team->getId()] ?? 0;
+            $sessions = $team->getSessionsPerWeek();
+            if ($reserved <= $sessions) {
+                continue;
+            }
+            $blockers[] = \sprintf(
+                '%s a %s pour %s par semaine : retirez %s, ou augmentez le nombre de séances de l\'équipe.',
+                $team->getName(),
+                $this->plural($reserved, 'réservation', 'réservations'),
+                $this->plural($sessions, 'séance', 'séances'),
+                $this->plural($reserved - $sessions, 'réservation', 'réservations'),
             );
         }
 

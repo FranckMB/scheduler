@@ -30,7 +30,7 @@ export function ReservationPanel({
   schedulePlanId: string | null;
   /** Équipes en pause pour la période : NOMMÉES (un épinglage existant reste lisible) mais jamais proposées. */
   pausedTeamIds?: ReadonlySet<string>;
-  /** Gymnases désactivés pour la période : ATTEIGNABLES (pour retirer un épinglage) mais marqués, et fermés à l'ajout. */
+  /** Gymnases désactivés pour la période : ATTEIGNABLES (pour retirer une réservation — le geste correctif) mais marqués, et fermés à l'ajout. */
   disabledVenueIds?: ReadonlySet<string>;
 }) {
   // La grille de la couche éditée — jamais celle de la saison depuis une période :
@@ -79,12 +79,15 @@ export function ReservationPanel({
         />
       </div>
 
-      {/* Ce gymnase ne sert plus la période : il reste ici pour qu'on puisse RETIRER
-          l'épinglage qui bloque la génération (`OrphanPinGuard`, 422), pas pour en poser
-          un nouveau — la modale ferme l'ajout. */}
+      {/* P3-20 (2026-08-06) — ce gymnase ne sert plus la période. Ses réservations ne
+          bloquent PLUS la génération (`OrphanPinGuard` les ignore : le solveur ne les
+          verra jamais) et elles sont CONSERVÉES — réactiver rend la saisie telle quelle.
+          L'écran reste atteignable pour le geste CORRECTIF (retirer), fermé au geste
+          fautif (ajouter) : §7.2 pt 3. L'ancien texte annonçait un blocage qui n'existe
+          plus — le laisser aurait fait courir le gestionnaire après un faux problème. */}
       {disabledVenueIds?.has(selected.id) ? (
         <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
-          {selected.name} est désactivé pour cette période : ses réservations empêchent la génération. Retirez-les — on ne peut plus en ajouter ici.
+          {selected.name} est désactivé pour cette période : ses créneaux et ses réservations ne partiront pas au système. Elles sont conservées — réactiver le gymnase les rend telles quelles. On ne peut plus en ajouter ici.
         </p>
       ) : null}
 
