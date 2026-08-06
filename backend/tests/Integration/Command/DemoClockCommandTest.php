@@ -56,6 +56,18 @@ final class DemoClockCommandTest extends KernelTestCase
         self::assertSame(1, $this->tester->execute(['--club' => '00000000-0000-4000-8000-000000000000', '--date' => '2026-12-15']));
     }
 
+    // P2-4 — l'horloge simulée est RÉSERVÉE aux clubs de démonstration : sur un
+    // vrai club, ce serait mentir à son gestionnaire (radar, bascule de saison).
+    public function testRealClubIsRefused(): void
+    {
+        $realClubId = $this->club(isDemo: false);
+
+        self::assertSame(1, $this->tester->execute(['--club' => $realClubId, '--date' => '2026-12-15']));
+        self::assertStringContainsString('demo-only', $this->tester->getDisplay());
+        $this->em->clear();
+        self::assertNull($this->em->find(Club::class, $realClubId)?->getDemoToday(), 'le vrai club reste à l\'heure réelle');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -64,10 +76,11 @@ final class DemoClockCommandTest extends KernelTestCase
         $this->tester = new CommandTester($application->find('app:demo:clock'));
     }
 
-    private function club(): string
+    private function club(bool $isDemo = true): string
     {
         $suffix = bin2hex(random_bytes(4));
         $club = (new Club)->setName('Demo ' . $suffix)->setSlug('demo-cmd-' . $suffix)->setTimezone('Europe/Paris')->setLocale('fr');
+        $club->setIsDemo($isDemo);
         $this->em->persist($club);
         $this->em->flush();
         $this->scopeGucToClub($club->getId());

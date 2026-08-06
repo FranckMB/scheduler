@@ -85,6 +85,7 @@ const clubs: AdminClubsResponse = {
       name: "Basket Club des Lacs",
       slug: "basket-club-des-lacs",
       ffbbClubCode: "ARA001",
+      isDemo: false,
       planId: null,
       billingCycle: null,
       generationCountSeason: 3,

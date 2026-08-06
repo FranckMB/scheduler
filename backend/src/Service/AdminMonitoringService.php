@@ -36,6 +36,9 @@ final readonly class AdminMonitoringService
                 COUNT(*) FILTER (WHERE unsubscribed_at IS NULL AND created_at >= NOW() - INTERVAL '7 days') AS new_7d,
                 COUNT(*) FILTER (WHERE unsubscribed_at IS NOT NULL) AS unsubscribed
             FROM club
+            -- P2-4 : un club de démonstration n'est pas un client — le compter
+            -- gonflerait chaque KPI d'adoption à chaque rendez-vous commercial.
+            WHERE is_demo = FALSE
             SQL);
         $solver = $this->connection()->fetchAssociative(<<<'SQL'
             SELECT
@@ -230,6 +233,7 @@ final readonly class AdminMonitoringService
                 c.name,
                 c.slug,
                 c.ffbb_club_code,
+                c.is_demo,
                 c.plan_id,
                 c.billing_cycle,
                 c.generation_count_season,
@@ -312,6 +316,7 @@ final readonly class AdminMonitoringService
             'name' => (string) $row['name'],
             'slug' => (string) $row['slug'],
             'ffbbClubCode' => $this->nullableString($row, 'ffbb_club_code'),
+            'isDemo' => (bool) ($row['is_demo'] ?? false),
             'planId' => $this->nullableInteger($row, 'plan_id'),
             'billingCycle' => $this->nullableString($row, 'billing_cycle'),
             'generationCountSeason' => $this->integer($row, 'generation_count_season'),

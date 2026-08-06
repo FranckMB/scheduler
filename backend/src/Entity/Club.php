@@ -94,6 +94,13 @@ class Club
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?DateTimeImmutable $ffbbTeamsImportedAt = null;
 
+    // P2-4 — club de DÉMONSTRATION (vendeur) : hors métriques réelles de la console,
+    // horloge simulable (demo_today), et — quand le bridage Découverte existera (P1-3) —
+    // exempté de tout quota. Jamais posé par un parcours utilisateur : seule la
+    // commande support app:demo:create le crée.
+    #[ORM\Column(type: 'boolean', options: ['default' => false])]
+    private bool $isDemo = false;
+
     // P4-16 / P2-4 — l'« aujourd'hui » SIMULÉ d'un club de démonstration. Non-null =
     // toute l'application (serveur : DemoAwareClock ; front : /api/me → clock.ts) vit
     // à cette date pour CE club — rejouer « à trois semaines des vacances » en plein
@@ -418,6 +425,18 @@ class Club
     public function getFfbbTeamsImportedAt(): ?DateTimeImmutable
     {
         return $this->ffbbTeamsImportedAt;
+    }
+
+    public function isDemo(): bool
+    {
+        return $this->isDemo;
+    }
+
+    public function setIsDemo(bool $isDemo): self
+    {
+        $this->isDemo = $isDemo;
+
+        return $this;
     }
 
     public function getDemoToday(): ?DateTimeImmutable
