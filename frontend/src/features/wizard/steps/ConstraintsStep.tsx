@@ -193,6 +193,11 @@ export function ConstraintsStep() {
   const scope: "CLUB" | "TEAM" = "" !== teamTargetId ? "TEAM" : "CLUB";
   const scopeTargetId = "" !== teamTargetId ? teamTargetId : null;
   const tagConfig: Record<string, string> = isTag ? { targetTag: tagName } : {};
+  // « au moins » n'existe que par équipe : si la cible quitte l'équipe APRÈS le
+  // choix du mode, la valeur retombe d'elle-même sur « préfère » (dérivé au
+  // rendu — jamais un état qui pourrait rester coincé sur l'option désactivée).
+  const minAllowed = "TEAM" === scope || isTag;
+  const effectiveVenueMode = "min" === venueMode && !minAllowed ? "preferred" : venueMode;
   const who = "" !== teamTargetId ? (teamName.get(teamTargetId) ?? "?") : isTag ? `Groupe ${tagName}` : "Toutes les équipes";
   const toggleDay = (n: number) => setDays((prev) => (prev.has(n) ? new Set([...prev].filter((x) => x !== n)) : new Set([...prev, n])));
   const dayNames = (set: Set<number>) => [...set].sort((a, b) => a - b).map(dayLabel).join(", ");
@@ -234,18 +239,18 @@ export function ConstraintsStep() {
       if ("" === venueId) {
         return null;
       }
-      if ("forced" === venueMode) {
+      if ("forced" === effectiveVenueMode) {
         // "impose" = doit se dérouler dans ce gymnase (forcedVenueId), toujours dur.
         return { name: `${who} · impose ${venueName.get(venueId)}`, scope, scopeTargetId, family, ruleType: "HARD", config: { ...tagConfig, forcedVenueId: venueId } };
       }
-      if ("min" === venueMode) {
+      if ("min" === effectiveVenueMode) {
         // "au moins N séances ici" = compte plancher (minAtVenueId + minAtVenueCount),
         // toujours dur. Le backend refuse N > séances/semaine de l'équipe avant génération.
         const count = Math.max(1, venueMinCount);
         return { name: `${who} · au moins ${count} à ${venueName.get(venueId)}`, scope, scopeTargetId, family, ruleType: "HARD", config: { ...tagConfig, minAtVenueId: venueId, minAtVenueCount: count } };
       }
-      const config = { ...tagConfig, ...("preferred" === venueMode ? { preferredVenueId: venueId } : { forbiddenVenueId: venueId }) };
-      const verb = "preferred" === venueMode ? "préfère" : "évite";
+      const config = { ...tagConfig, ...("preferred" === effectiveVenueMode ? { preferredVenueId: venueId } : { forbiddenVenueId: venueId }) };
+      const verb = "preferred" === effectiveVenueMode ? "préfère" : "évite";
       return { name: `${who} · ${verb} ${venueName.get(venueId)}`, scope, scopeTargetId, family, ruleType, config };
     }
     // COACH_AVAILABILITY
@@ -557,13 +562,19 @@ export function ConstraintsStep() {
 
         {"FACILITY" === family && (
           <>
-            <Select aria-label="Préférence" className="h-8 w-28" value={venueMode} onChange={(e) => setVenueMode(e.target.value as "preferred" | "forbidden" | "forced" | "min")}>
+            <Select aria-label="Préférence" className="h-8 w-28" value={effectiveVenueMode} onChange={(e) => setVenueMode(e.target.value as "preferred" | "forbidden" | "forced" | "min")}>
               <option value="preferred">préfère</option>
               <option value="forbidden">évite</option>
               <option value="forced">impose</option>
-              <option value="min">au moins</option>
+              {/* « Au moins N ici » = un compte PAR ÉQUIPE. Une équipe précise ou un
+                  GROUPE conviennent (l'éclatement par tag produit N contraintes par
+                  équipe) ; seul « Toutes les équipes » se ferme — avant, la contrainte
+                  se créait puis bloquait le récap (BCCL 2026-08-05, en anglais brut). */}
+              <option value="min" disabled={!minAllowed} title={!minAllowed ? "Choisissez une équipe ou un groupe dans « Cible »" : undefined}>
+                au moins{!minAllowed ? " (équipe ou groupe requis)" : ""}
+              </option>
             </Select>
-            {"min" === venueMode && (
+            {"min" === effectiveVenueMode && (
               <label className="text-xs text-muted-foreground">
                 Combien
                 <Input aria-label="Nombre de séances" type="number" min={1} className="mt-0.5 h-8 w-16" value={venueMinCount} onChange={(e) => setVenueMinCount(Math.max(1, Number(e.target.value) || 1))} />
@@ -620,7 +631,7 @@ export function ConstraintsStep() {
           </>
         )}
 
-        {"COACH_AVAILABILITY" === family || ("TIME" === family && "" !== endTime) || ("DAY" === family && "forced" === dayMode) || ("FACILITY" === family && ("forced" === venueMode || "min" === venueMode)) ? (
+        {"COACH_AVAILABILITY" === family || ("TIME" === family && "" !== endTime) || ("DAY" === family && "forced" === dayMode) || ("FACILITY" === family && ("forced" === effectiveVenueMode || "min" === effectiveVenueMode)) ? (
           // Coach availability + "impose"/"uniquement" + "Fini avant" are ALWAYS
           // hard (a person can't be in two places; a forced venue/day and a
           // gym-closing end-bound are musts, not nudges) — the payload pins HARD,

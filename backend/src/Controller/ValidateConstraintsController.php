@@ -106,7 +106,13 @@ final class ValidateConstraintsController extends AbstractController
                 $messages[] = $venueMinError;
             }
             if ([] !== $messages) {
-                $errors[$constraint->getId()] = $messages;
+                // PRÉCISION (retour fondateur 2026-08-05) : une erreur sans le nom de
+                // SA contrainte est introuvable dans une liste de 45 — chaque message
+                // nomme la ligne à corriger.
+                $errors[$constraint->getId()] = array_map(
+                    static fn (string $message): string => \sprintf('« %s » : %s', $constraint->getName(), $message),
+                    $messages,
+                );
             }
         }
 
@@ -114,7 +120,9 @@ final class ValidateConstraintsController extends AbstractController
             static fn (array $c): array => [
                 'constraint1Id' => $c['constraint1']->getId(),
                 'constraint2Id' => $c['constraint2']->getId(),
-                'reason' => $c['reason'],
+                // Les DEUX contraintes nommées : sans ça le gestionnaire sait qu'il y a
+                // contradiction, pas OÙ la corriger.
+                'reason' => \sprintf('« %s » et « %s » — %s', $c['constraint1']->getName(), $c['constraint2']->getName(), $c['reason']),
             ],
             $this->validationService->detectConflicts($constraints),
         );

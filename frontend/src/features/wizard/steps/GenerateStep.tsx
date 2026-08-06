@@ -8,7 +8,7 @@ import type { ScheduleStatus } from "@/features/planning/api";
 import { isSeasonPlanType } from "@/features/planning/lib/versions";
 import { GenerationWaiting } from "@/features/planning/GenerationWaiting";
 import { PlanningPage } from "@/features/planning/PlanningPage";
-import { useSchedules } from "@/features/planning/queries";
+import { useDiagnostics, useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
 import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
@@ -117,6 +117,14 @@ export function GenerateStep() {
 
   const launching = launch.isPending;
   const failed = !launching && !showPlanning && (launch.isError || "FAILED" === status || timedOut);
+  // Un solve FAILED a des DIAGNOSTICS en base (le moteur explique : contraintes
+  // impossibles, capacité, verrous) — les afficher au lieu du générique
+  // « une erreur est survenue » (retour fondateur 2026-08-05 : « en prod ça ne
+  // passera pas »). Chargés seulement dans ce cas ; lancement/timeout gardent
+  // leur motif propre.
+  const failedDiagnostics = useDiagnostics("FAILED" === status ? scheduleId : null);
+  const failureExplanations = (failedDiagnostics.data ?? []).filter((d) => "ERROR" === d.severity);
+  const failureSuggestions = failureExplanations.flatMap((d) => (Array.isArray(d.suggestions) ? d.suggestions.filter((x): x is string => "string" === typeof x) : []));
   const waiting = !showPlanning && (launching || (null !== scheduleId && "FAILED" !== status && !timedOut));
 
   const initial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
@@ -168,13 +176,30 @@ export function GenerateStep() {
       {failed ? (
         <div className="flex flex-col items-center gap-4 py-12 text-center">
           <AlertTriangle className="size-14 text-destructive" />
-          <div className="space-y-1">
+          <div className="space-y-2">
             <p className="text-lg font-medium">La génération n'a pas abouti.</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              {timedOut
-                ? "Le service met trop de temps à répondre. Vérifie que le moteur tourne, puis réessaie."
-                : (launchReason ?? "Une erreur est survenue (données ou moteur indisponible). Tu peux réessayer.")}
-            </p>
+            {failureExplanations.length > 0 ? (
+              <div className="max-w-xl space-y-2 text-left">
+                {failureExplanations.map((d) => (
+                  <p key={d.id} className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-foreground">
+                    {d.message}
+                  </p>
+                ))}
+                {failureSuggestions.length > 0 ? (
+                  <ul className="list-disc space-y-0.5 pl-5 text-sm text-muted-foreground">
+                    {[...new Set(failureSuggestions)].map((sugg) => (
+                      <li key={sugg}>{sugg}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : (
+              <p className="max-w-md text-sm text-muted-foreground">
+                {timedOut
+                  ? "Le service met trop de temps à répondre. Vérifie que le moteur tourne, puis réessaie."
+                  : (launchReason ?? ("FAILED" === status && failedDiagnostics.isLoading ? "Lecture du motif de l'échec…" : (launchReason ?? "Une erreur est survenue (données ou moteur indisponible). Tu peux réessayer.")))}
+              </p>
+            )}
           </div>
           <Button size="lg" onClick={start}>
             <Rocket className="size-4" />
