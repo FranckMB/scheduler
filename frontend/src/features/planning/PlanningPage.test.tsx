@@ -69,13 +69,15 @@ vi.mock("./api", () => {
 const navigate = vi.fn();
 vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
 
-const { meState, renameSpy, plansState, venueOverridesState } = vi.hoisted(() => ({
+const { meState, renameSpy, plansState, venueOverridesState, reservationsState } = vi.hoisted(() => ({
   meState: { chosenScheduleId: null as string | null },
   renameSpy: vi.fn(),
   // Typé sur le VRAI contrat : un type inline recopié laisserait passer un champ ajouté à
   // `SchedulePlan` sans que ces fixtures soient recalées (revue #339 round 3).
   plansState: { plans: [] as SchedulePlan[] },
   venueOverridesState: { rows: [] as { id: string; venueId: string; mode: string }[], isError: false },
+  // Réservations servies sur un planning FAILED (pseudo-créneaux lecture seule).
+  reservationsState: { rows: [] as { id: string; schedulePlanId: string | null; teamId: string; venueId: string; dayOfWeek: number; startTime: string; durationMinutes: number }[] },
 }));
 
 // P2-15 : les réglages de gymnases de la période — un gymnase DÉSACTIVÉ garde ses
@@ -83,6 +85,7 @@ const { meState, renameSpy, plansState, venueOverridesState } = vi.hoisted(() =>
 vi.mock("@/features/wizard/queries", async (orig) => ({
   ...(await orig<typeof import("@/features/wizard/queries")>()),
   useVenuePeriodOverrides: () => ({ data: venueOverridesState.rows, isError: venueOverridesState.isError }),
+  useReservations: () => ({ data: reservationsState.rows }),
 }));
 
 // Partiel : seul `useSchedulePlans` est simulé (l'en-tête y lit le nom du plan
@@ -112,6 +115,7 @@ beforeEach(() => {
   plansState.plans = [];
   venueOverridesState.rows = [];
   venueOverridesState.isError = false;
+  reservationsState.rows = [];
   // Ré-armement explicite : ces trois-là sont réécrits par des cas (couche de période,
   // gymnase désactivé) et `mockResolvedValue` SURVIT au test suivant — une fuite qui
   // rendrait un échec ultérieur incompréhensible.
@@ -277,6 +281,59 @@ describe("PlanningPage (integration)", () => {
     expect(await screen.findByText(/1 séance\(s\) de ce planning sont placées dans un gymnase désactivé/)).toBeInTheDocument();
     // La séance est TOUJOURS là : l'export la contient, l'écran ne doit pas la nier.
     expect(screen.getByText("Gymnase Alpha")).toBeInTheDocument();
+  });
+
+  // Génération en ÉCHEC : « par défaut il y a au moins les créneaux réservés qui
+  // doivent s'afficher » (fondateur 2026-08-05). Les réservations sont des verrous
+  // posés par le gestionnaire — elles existent indépendamment du résultat du solveur.
+  it("affiche les créneaux réservés (lecture seule) quand la génération est en échec", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Planning A", status: "FAILED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+    ]);
+    vi.mocked(getSlots).mockResolvedValue([]); // l'échec ne produit AUCUN créneau
+    reservationsState.rows = [
+      { id: "res-1", schedulePlanId: null, teamId: "team-1", venueId: "venue-1", dayOfWeek: 1, startTime: "18:00", durationMinutes: 90 },
+    ];
+    usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "equipe" });
+    renderWithProviders(<PlanningPage />);
+
+    // La réservation s'affiche dans la grille (équipe résolue), et le bandeau dit que
+    // ce ne sont QUE les réservations — pas un planning généré, et l'export est vide.
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    expect(screen.getByText(/La génération a échoué/)).toBeInTheDocument();
+    expect(screen.getByText(/Seuls vos créneaux réservés sont affichés/)).toBeInTheDocument();
+    expect(screen.queryByText("Planning vide")).not.toBeInTheDocument();
+  });
+
+  it("échec SANS réservation : état vide dédié, pas « Planning vide »", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Planning A", status: "FAILED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+    ]);
+    vi.mocked(getSlots).mockResolvedValue([]);
+    usePlanningStore.setState({ selectedScheduleId: SID });
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText("Génération en échec")).toBeInTheDocument();
+    expect(screen.queryByText("Planning vide")).not.toBeInTheDocument();
+  });
+
+  it("une réservation d'un gymnase désactivé pour la période ne s'affiche pas sur un échec", async () => {
+    // Miroir du payload : `reservationsInScope` écarte les réservations d'un gymnase
+    // désactivé — l'écran ne doit pas montrer un créneau que le solveur n'a jamais vu.
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Période", status: "FAILED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
+    ]);
+    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
+    vi.mocked(getSlots).mockResolvedValue([]);
+    venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
+    reservationsState.rows = [
+      { id: "res-1", schedulePlanId: "ete-plan", teamId: "team-1", venueId: "venue-1", dayOfWeek: 1, startTime: "18:00", durationMinutes: 90 },
+    ];
+    usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "equipe" });
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText("Génération en échec")).toBeInTheDocument();
+    expect(screen.queryByText("U11")).not.toBeInTheDocument();
   });
 
   it("n'affiche pas un gymnase désactivé pour la période", async () => {

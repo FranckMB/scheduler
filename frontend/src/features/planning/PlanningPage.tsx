@@ -9,7 +9,7 @@ import { useWizardStore } from "@/features/wizard/store";
 import { usePriorityTiers } from "@/features/matches/queries";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { useSchedulePlans } from "@/features/cockpit/queries";
-import { useVenuePeriodOverrides } from "@/features/wizard/queries";
+import { useReservations, useVenuePeriodOverrides } from "@/features/wizard/queries";
 import { readFailed, readLoading } from "@/shared/lib/readState";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -17,7 +17,7 @@ import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import { OverlaysExistError } from "./api";
+import { OverlaysExistError, type Slot } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
@@ -119,7 +119,48 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const displayed = schedules.find((s) => s.id === validScheduleId) ?? null;
   const slotLayerId = null !== displayed && !isSeasonPlanType(displayed.planType) ? (displayed.schedulePlanId ?? null) : null;
 
-  const { data: slots = [] } = useSlots(validScheduleId);
+  const { data: generatedSlots = [] } = useSlots(validScheduleId);
+
+  // Génération en ÉCHEC : aucun créneau généré, mais les réservations (verrous HARD
+  // posés par le gestionnaire) existent indépendamment du résultat — « par défaut il y
+  // a au moins les créneaux réservés qui doivent s'afficher » (fondateur, 2026-08-05).
+  // Elles entrent dans la grille en pseudo-créneaux HARD, LECTURE SEULE (ids
+  // `reservation-*` : aucun PATCH slot ne doit les viser), sur la MÊME couche que le
+  // payload du solveur : socle = réservations permanentes, période = celles de son plan.
+  const isFailed = "FAILED" === displayed?.status;
+  // P2-15 — un gymnase DÉSACTIVÉ pour la période garde ses créneaux en base (le backend
+  // les écarte du payload, il ne les supprime pas) : sans ce filtre, l'écran de génération
+  // affichait TOUS les gymnases du club alors qu'un seul sert — « du bruit pour rien ».
+  // On filtre à la SOURCE : la grille, ses fenêtres vides et le sélecteur en dérivent tous.
+  // FAIL-CLOSED : lecture ratée sans cache ⇒ on ne masque rien (P4-20). Déclaré ICI (et
+  // non plus après les slots) : les réservations affichées sur un FAILED suivent le même
+  // filtre — le backend les écarte aussi du payload d'une période (`reservationsInScope`).
+  const venueOverrides = useVenuePeriodOverrides(slotLayerId);
+  const disabledVenueIds = useMemo(
+    () => new Set(readFailed(venueOverrides) || readLoading(venueOverrides) ? [] : (venueOverrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId)),
+    [venueOverrides],
+  );
+  const reservationsQuery = useReservations(slotLayerId, isFailed);
+  const reservationSlots = useMemo<Slot[]>(
+    () => !isFailed || null === validScheduleId ? [] : (reservationsQuery.data ?? []).filter((r) => !disabledVenueIds.has(r.venueId)).map((r) => ({
+      id: `reservation-${r.id}`,
+      scheduleId: validScheduleId,
+      teamId: r.teamId,
+      venueId: r.venueId,
+      coachId: null,
+      dayOfWeek: r.dayOfWeek,
+      startTime: r.startTime,
+      durationMinutes: r.durationMinutes,
+      lockLevel: "HARD" as const,
+      temporaryLock: false,
+    })),
+    [isFailed, reservationsQuery.data, validScheduleId, disabledVenueIds],
+  );
+  const slots = useMemo(
+    () => isFailed && 0 === generatedSlots.length ? reservationSlots : generatedSlots,
+    [isFailed, generatedSlots, reservationSlots],
+  );
+
   const diagnosticsQuery = useDiagnostics(validScheduleId);
   // `useMemo` et non `?? []` : le repli littéral fabriquait un tableau NEUF à chaque rendu,
   // ce qui invalidait le `useMemo` du filtrage en aval à chaque fois (avertissement lint).
@@ -303,16 +344,6 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // Defined venue windows the solver left unfilled ("créneaux vides"). Injected
   // into the grid in the GYMNASE view only (they have no team/coach) so they
   // show as `vide` cells even without a click; also listed as warnings below.
-  // P2-15 — un gymnase DÉSACTIVÉ pour la période garde ses créneaux en base (le backend
-  // les écarte du payload, il ne les supprime pas) : sans ce filtre, l'écran de génération
-  // affichait TOUS les gymnases du club alors qu'un seul sert — « du bruit pour rien ».
-  // On filtre à la SOURCE : la grille, ses fenêtres vides et le sélecteur en dérivent tous.
-  // FAIL-CLOSED : lecture ratée sans cache ⇒ on ne masque rien (P4-20).
-  const venueOverrides = useVenuePeriodOverrides(slotLayerId);
-  const disabledVenueIds = useMemo(
-    () => new Set(readFailed(venueOverrides) || readLoading(venueOverrides) ? [] : (venueOverrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId)),
-    [venueOverrides],
-  );
   const layerSlots = useMemo(
     () => (0 === disabledVenueIds.size ? trainingSlots : trainingSlots.filter((ts) => !disabledVenueIds.has(ts.venueId))),
     [trainingSlots, disabledVenueIds],
@@ -329,9 +360,12 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...slots, ...emptySlots] : slots), [viewMode, slots, emptySlots]);
   // Les séances de cette version que la période ne servirait plus : elles restent à
   // l'écran (et dans l'export), mais le gestionnaire doit savoir qu'elles sont périmées.
+  // Sur les créneaux GÉNÉRÉS uniquement : les pseudo-réservations d'un FAILED ne sont
+  // pas des « séances de ce planning » (et celles d'un gymnase désactivé sont déjà
+  // filtrées à la source, comme le fait le payload).
   const staleVenueSessions = useMemo(
-    () => (0 === disabledVenueIds.size ? 0 : slots.filter((s) => disabledVenueIds.has(s.venueId)).length),
-    [slots, disabledVenueIds],
+    () => (0 === disabledVenueIds.size ? 0 : generatedSlots.filter((s) => disabledVenueIds.has(s.venueId)).length),
+    [generatedSlots, disabledVenueIds],
   );
 
   // From gridSlots (incl. empty windows in gymnase view) so a venue that has ONLY
@@ -534,10 +568,23 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             </p>
           ) : null}
 
+          {/* Génération en échec : la grille ne montre que les RÉSERVATIONS (pseudo-créneaux
+              lecture seule) — on le dit, sinon elles passeraient pour un planning généré.
+              Et l'export ne les contient pas : il rend les créneaux du serveur (§7.2 pt 3). */}
+          {!isGenerating && isFailed && slots.length > 0 && 0 === generatedSlots.length ? (
+            <p className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-foreground">
+              La génération a échoué : aucun créneau n'a été placé. Seuls vos créneaux réservés sont affichés — ils restent acquis quoi qu'il arrive. Les exports sont vides pour ce planning.
+            </p>
+          ) : null}
+
           {isGenerating ? (
             <GenerationWaiting initial={clubInitial} logoUrl={me?.club?.logoUrl ?? null} />
           ) : 0 === slots.length ? (
-            <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
+            isFailed ? (
+              <EmptyState title="Génération en échec" description="Aucun créneau n'a été placé, et ce planning n'a aucune réservation à afficher. Corrigez les contraintes signalées puis régénérez." />
+            ) : (
+              <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
+            )
           ) : (
             // grid-rows-[minmax(0,1fr)] gives the single row a DEFINITE size (the
             // container height) — with the default `auto` row the children's h-full
@@ -591,7 +638,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           venues={venues}
                           categoryLabel={categoryLabel}
                           busy={busy}
-                          readOnly={isReadOnly}
+                          // Un pseudo-créneau de réservation (planning FAILED) n'existe pas
+                          // côté serveur : déplacer/verrouiller le viserait dans le vide.
+                          readOnly={isReadOnly || isFailed}
                           onClose={() => setSelectedSlotId(null)}
                           onToggleLock={() => lockMutation.mutate({ id: selectedSlot.id, lockLevel: selectedCell.locked ? "NONE" : "HARD" })}
                           onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
