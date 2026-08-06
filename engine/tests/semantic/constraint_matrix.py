@@ -111,6 +111,16 @@ MATRIX: tuple[MatrixCell, ...] = (
     MatrixCell("COACH_AVAILABILITY", "HARD", "availableDays", "COACH", Expectation.HONORED_HARD, True,
                note="wizard 'coach disponible uniquement' = whitelist (INTERSECTION per coach)",
                config={"availableDays": [1]}),
+    # P3-17 (2026-08-06) — la FENÊTRE HORAIRE de l'indisponibilité, livrée en lot C (#195,
+    # bump de contrat 2.0→2.1) mais jamais entrée dans la matrice : l'offre du wizard a
+    # bougé sans que son verrou suive. Ces deux cellules figent les DEUX bornes — une
+    # indispo « le mercredi À PARTIR DE 17h » ne doit pas se comporter comme « le mercredi ».
+    MatrixCell("COACH_AVAILABILITY", "HARD", "fromTime", "COACH", Expectation.HONORED_HARD, True,
+               note="lot C #195: window lower bound — blocked interval is [fromTime, 24:00) on those days",
+               config={"unavailableDays": [3], "fromTime": "17:00"}),
+    MatrixCell("COACH_AVAILABILITY", "HARD", "untilTime", "COACH", Expectation.HONORED_HARD, True,
+               note="lot C #195: window upper bound — blocked interval is [00:00, untilTime) on those days",
+               config={"unavailableDays": [3], "untilTime": "19:00"}),
     # --- Legacy / guard cells ---------------------------------------------------
     MatrixCell("DAY", "BONUS", "forbiddenDays", "TEAM", Expectation.HONORED_SOFT, False,
                note="ENG-12: BONUS removed from the UI; legacy rows normalize to PREFERRED",
