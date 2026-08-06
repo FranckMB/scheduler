@@ -157,16 +157,41 @@ final class ValidateConstraintsController extends AbstractController
             // métier — c'est le seul endroit où on l'apprendra (revue #341 round 2).
             $this->logger->error('Capacity recap skipped: payload build failed.', ['exception' => $exception]);
             $warnings[] = 'La capacité des gymnases n\'a pas pu être vérifiée — les autres contrôles du récap restent valables.';
+            $capacityPayload = null;
         }
+
+        $reservations = $this->reservationsInScope($clubId, $seasonId, $calendarEntryId, $selection);
+
+        // PR A (2026-08-06) — deux préventions de plus, décision fondateur :
+        // « on peut s'en prémunir » plutôt que le découvrir après génération.
+        //
+        // 1. Coach indisponible × créneau réservé en dur → AVERTISSEMENT : le verrou est
+        //    souverain (ALIGN-07), la génération passera, mais elle posera la séance le
+        //    jour de congé du coach — jusqu'ici on ne l'apprenait qu'en INFO post-solve.
+        $warnings = [
+            ...$warnings,
+            ...array_map(
+                fn (array $clash): string => $this->coachDoubleBookingDetector->describeUnavailabilityForRecap($clash),
+                $this->coachDoubleBookingDetector->detectUnavailabilityClashes($reservations, $constraints, $clubId, $seasonId),
+            ),
+        ];
+
+        // 2. Saturation des « au moins N ici » par gymnase → BLOQUEUR : le moteur exige
+        //    ces séances sur les créneaux NON verrouillés (un pin n'y compte pas — sa
+        //    variable n'existe pas), donc demande > places libres = INFEASIBLE certain.
+        $saturationBlockers = null !== $capacityPayload ? $this->venueMinimumSaturation($capacityPayload) : [];
 
         // P2-9 PR B — IMPOSSIBILITÉ PHYSIQUE : un verrou qui met un coach à deux endroits
         // en même temps. Le solveur ne peut PAS l'attraper (un verrou HARD est pré-placé
         // hors modèle, ALIGN-07), et ce n'est pas une préférence bafouée — le gestionnaire
         // n'a jamais choisi que son coach se dédouble. Décision fondateur : ça BLOQUE.
-        $blockers = array_map(
-            fn (array $conflict): string => $this->coachDoubleBookingDetector->describeForRecap($conflict),
-            $this->coachDoubleBookingDetector->detect($this->reservationsInScope($clubId, $seasonId, $calendarEntryId, $selection), $clubId, $seasonId),
-        );
+        $blockers = [
+            ...$saturationBlockers,
+            ...array_map(
+                fn (array $conflict): string => $this->coachDoubleBookingDetector->describeForRecap($conflict),
+                $this->coachDoubleBookingDetector->detect($reservations, $clubId, $seasonId),
+            ),
+        ];
 
         // #8 (fondateur 2026-07-24) — un avertissement n'invalide RIEN : « SM1 va ailleurs,
         // on ignore la contrainte, mais on AVERTIT ». `valid` et le code HTTP restent
@@ -316,6 +341,124 @@ final class ValidateConstraintsController extends AbstractController
         }
 
         return array_sum($byKey);
+    }
+
+    /**
+     * PR A — saturation des « au moins N ici » PAR GYMNASE, lue sur le payload
+     * (post-éclatement des tags : chaque ligne est déjà TEAM). Miroir de l'algèbre
+     * moteur, dans le sens SÛR uniquement :
+     *
+     * - la DEMANDE est le Σ des minimums (par équipe×gymnase, le MAX quand plusieurs
+     *   règles se cumulent — le moteur pose un `>=` par règle, le max domine). Un pin
+     *   n'en soustrait RIEN : le moteur exige ces séances sur les variables du modèle,
+     *   et un créneau verrouillé n'a pas de variable (`model.py:62-63`) ;
+     * - l'OFFRE est un MAJORANT des places atteignables : capacités dédupliquées par
+     *   triplet + rabot FACILITY_CAPACITY (mêmes deux réductions prouvées que
+     *   `payloadOffer`), MOINS les triplets verrouillés par un pin HARD — exacte,
+     *   celle-là : un triplet bloqué ne porte aucune variable, pour personne.
+     *
+     * `demande > offre` est donc un INFEASIBLE certain → BLOQUEUR, pas avertissement :
+     * c'est le cas BCCL du 2026-08-06 (13 « au moins » à Matéo, ~10 places libres),
+     * découvert en échec de génération muet au lieu d'être arrêté ici.
+     *
+     * @param array<string, mixed> $payload
+     *
+     * @return list<string>
+     */
+    private function venueMinimumSaturation(array $payload): array
+    {
+        /** @var array<string, array<string, int>> $minByVenueTeam venueId => teamId => min */
+        $minByVenueTeam = [];
+        foreach (\is_array($payload['constraints'] ?? null) ? $payload['constraints'] : [] as $row) {
+            if (!\is_array($row) || 'FACILITY' !== ($row['family'] ?? null) || false === ($row['isActive'] ?? true)) {
+                continue;
+            }
+            $config = \is_array($row['config'] ?? null) ? $row['config'] : [];
+            // Mêmes gardes que la branche moteur (`constraints.py:1853-1858`) : HARD/LOCK,
+            // scope TEAM avec cible — ce que le validateur laisse passer d'autre est ignoré là-bas.
+            if (empty($config['minAtVenueId'])
+                || !\in_array($row['ruleType'] ?? null, ['HARD', 'LOCK'], true)
+                || 'TEAM' !== ($row['scope'] ?? null)
+                || empty($row['scopeTargetId'])
+            ) {
+                continue;
+            }
+            $venueId = (string) $config['minAtVenueId'];
+            $teamId = (string) $row['scopeTargetId'];
+            $min = max(1, isset($config['minAtVenueCount']) ? (int) $config['minAtVenueCount'] : 1);
+            $minByVenueTeam[$venueId][$teamId] = max($minByVenueTeam[$venueId][$teamId] ?? 0, $min);
+        }
+
+        if ([] === $minByVenueTeam) {
+            return [];
+        }
+
+        // Triplets fermés par un verrou HARD (réservations + slots épinglés).
+        $pinnedKeys = [];
+        foreach (\is_array($payload['slotTemplates'] ?? null) ? $payload['slotTemplates'] : [] as $pin) {
+            if (!\is_array($pin) || 'HARD' !== ($pin['lockLevel'] ?? null)) {
+                continue;
+            }
+            $pinnedKeys[\sprintf('%s|%s|%s', (string) ($pin['venueId'] ?? ''), $pin['dayOfWeek'] ?? '', substr((string) ($pin['startTime'] ?? ''), 0, 5))] = true;
+        }
+
+        $caps = [];
+        foreach (\is_array($payload['constraints'] ?? null) ? $payload['constraints'] : [] as $row) {
+            if (!\is_array($row) || 'FACILITY_CAPACITY' !== ($row['family'] ?? null) || false === ($row['isActive'] ?? true)) {
+                continue;
+            }
+            $config = \is_array($row['config'] ?? null) ? $row['config'] : [];
+            if (isset($config['venueId'], $config['maxTeams'])) {
+                $venueId = (string) $config['venueId'];
+                $caps[$venueId] = min($caps[$venueId] ?? \PHP_INT_MAX, (int) $config['maxTeams']);
+            }
+        }
+
+        /** @var array<string, array<string, int>> $freeByVenue venueId => triplet => capacité libre */
+        $freeByVenue = [];
+        $venueNames = [];
+        foreach (\is_array($payload['venues'] ?? null) ? $payload['venues'] : [] as $venue) {
+            if (!\is_array($venue)) {
+                continue;
+            }
+            $venueId = (string) ($venue['id'] ?? '');
+            $venueNames[$venueId] = (string) ($venue['name'] ?? $venueId);
+            if (!isset($minByVenueTeam[$venueId])) {
+                continue;
+            }
+            foreach (\is_array($venue['trainingSlots'] ?? null) ? $venue['trainingSlots'] : [] as $slot) {
+                if (!\is_array($slot)) {
+                    continue;
+                }
+                $key = \sprintf('%s|%s|%s', $venueId, $slot['dayOfWeek'] ?? '', substr((string) ($slot['startTime'] ?? ''), 0, 5));
+                if (isset($pinnedKeys[$key])) {
+                    continue;
+                }
+                $capacity = (int) ($slot['capacity'] ?? 0);
+                if (isset($caps[$venueId])) {
+                    $capacity = min($capacity, $caps[$venueId]);
+                }
+                $freeByVenue[$venueId][$key] = $capacity;
+            }
+        }
+
+        $blockers = [];
+        foreach ($minByVenueTeam as $venueId => $minByTeam) {
+            $demand = array_sum($minByTeam);
+            $free = array_sum($freeByVenue[$venueId] ?? []);
+            if ($demand <= $free) {
+                continue;
+            }
+            $blockers[] = \sprintf(
+                'Vos contraintes « au moins » réclament %s à %s, mais il n\'y reste que %s libre%s une fois les réservations déduites : la génération échouera. Ajoutez des créneaux dans ce gymnase, libérez des réservations, ou assouplissez ces contraintes.',
+                $this->plural($demand, 'place de créneau', 'places de créneau'),
+                $venueNames[$venueId] ?? $venueId,
+                $this->plural($free, 'place', 'places'),
+                1 === $free ? '' : 's',
+            );
+        }
+
+        return $blockers;
     }
 
     private function plural(int $count, string $singular, string $plural): string

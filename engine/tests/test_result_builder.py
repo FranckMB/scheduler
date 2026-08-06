@@ -402,6 +402,116 @@ class DiagnosticPrecisionTest(unittest.TestCase):
         # Severity scale normalised to the backend/frontend enum (ENG-09).
         self.assertEqual("ERROR", diags[0]["severity"])
 
+    def test_infeasible_message_counts_places_not_slots(self) -> None:
+        # PR A (2026-08-06) — BCCL: 84 sessions for 82 SLOTS but 87 PLACES (capacity-2
+        # slots). The old len(slots) count claimed « capacité insuffisante », a lie.
+        from app.solver.result_builder import _infeasible_message
+
+        model_data = {
+            "teams": [{"id": "t1", "sessionsPerWeek": 3}],
+            "venues": [
+                {
+                    "id": "v1",
+                    "name": "Matéo",
+                    "trainingSlots": [
+                        {"dayOfWeek": 1, "startTime": "18:00", "capacity": 2},
+                        {"dayOfWeek": 2, "startTime": "18:00", "capacity": 1},
+                    ],
+                }
+            ],
+        }
+        # demand 3 ≤ 3 places (2 slots): no capacity claim.
+        self.assertNotIn("capacité est insuffisante", _infeasible_message(model_data))
+
+        model_data["teams"][0]["sessionsPerWeek"] = 4
+        message = _infeasible_message(model_data)
+        self.assertIn("capacité est insuffisante", message)
+        self.assertIn("3 place(s) de créneau", message)
+
+    def test_infeasible_message_dedupes_slot_triplets_like_the_model(self) -> None:
+        from app.solver.result_builder import _infeasible_message
+
+        model_data = {
+            "teams": [{"id": "t1", "sessionsPerWeek": 2}],
+            "venues": [
+                {
+                    "id": "v1",
+                    "trainingSlots": [
+                        # Same (venue, day, start) twice — model.slot_capacities overwrites.
+                        {"dayOfWeek": 1, "startTime": "18:00", "capacity": 1},
+                        {"dayOfWeek": 1, "startTime": "18:00", "capacity": 1},
+                    ],
+                }
+            ],
+        }
+        message = _infeasible_message(model_data)
+        self.assertIn("capacité est insuffisante", message)
+        self.assertIn("1 place(s)", message)
+
+    def test_infeasible_message_names_the_saturated_venue(self) -> None:
+        # « au moins » minimums need model VARIABLES; a HARD pin blocks its triplet for
+        # everyone (model.py) — so 2 minimums against 1 free place is provably infeasible.
+        from app.solver.result_builder import _infeasible_message
+
+        model_data = {
+            "teams": [
+                {"id": "t1", "sessionsPerWeek": 1},
+                {"id": "t2", "sessionsPerWeek": 1},
+            ],
+            "venues": [
+                {
+                    "id": "v1",
+                    "name": "Matéo",
+                    "trainingSlots": [
+                        {"dayOfWeek": 1, "startTime": "18:00", "capacity": 1},
+                        {"dayOfWeek": 2, "startTime": "18:00", "capacity": 1},
+                    ],
+                },
+                {
+                    "id": "v2",
+                    "name": "Annexe",
+                    "trainingSlots": [
+                        {"dayOfWeek": 3, "startTime": "18:00", "capacity": 2},
+                        {"dayOfWeek": 4, "startTime": "18:00", "capacity": 2},
+                    ],
+                },
+            ],
+            "slotTemplates": [
+                # Pins v1 Monday: its place is gone for every minimum.
+                {"teamId": "t9", "venueId": "v1", "dayOfWeek": 1, "startTime": "18:00", "lockLevel": "HARD"},
+            ],
+            "constraints": [
+                {
+                    "family": "FACILITY",
+                    "ruleType": "HARD",
+                    "scope": "TEAM",
+                    "scopeTargetId": "t1",
+                    "config": {"minAtVenueId": "v1"},
+                },
+                {
+                    "family": "FACILITY",
+                    "ruleType": "HARD",
+                    "scope": "TEAM",
+                    "scopeTargetId": "t2",
+                    "config": {"minAtVenueId": "v1"},
+                },
+            ],
+        }
+        message = _infeasible_message(model_data)
+        self.assertIn("Matéo", message)
+        self.assertIn("réclament 2 place(s)", message)
+        self.assertIn("que 1 de libre(s)", message)
+
+    def test_infeasible_message_generic_when_nothing_measurable(self) -> None:
+        from app.solver.result_builder import _infeasible_message
+
+        model_data = {
+            "teams": [{"id": "t1", "sessionsPerWeek": 1}],
+            "venues": [{"id": "v1", "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "capacity": 1}]}],
+        }
+        message = _infeasible_message(model_data)
+        self.assertIn("contraintes dures", message)
+
 
 if __name__ == "__main__":
     unittest.main()

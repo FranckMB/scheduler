@@ -653,6 +653,85 @@ def _diagnose_conflicts(
     return diagnostics
 
 
+def _slot_capacity_by_key(model_data: Mapping[str, Any] | Any) -> dict[tuple[str, str, str], int]:
+    """PLACES, not slots — mirrors ``model.slot_capacities``: a dict keyed on
+    (venue, day, start), so duplicate triplets overwrite instead of adding, and a
+    2-team slot counts 2. Counting ``len(slots)`` claimed « capacité insuffisante »
+    on a club that had 87 places for 84 sessions (BCCL, 2026-08-06)."""
+    capacities: dict[tuple[str, str, str], int] = {}
+    for venue in _collection(model_data, "venues"):
+        venue_id = str(_get(venue, "id", default=""))
+        for slot in _collection(venue, "training_slots", "trainingSlots"):
+            day = str(_get(slot, "day_of_week", "dayOfWeek", default=""))
+            start = str(_get(slot, "start_time", "startTime", default=""))[:5]
+            raw_capacity = _get(slot, "capacity", default=1)
+            try:
+                capacity = int(raw_capacity) if raw_capacity is not None else 1
+            except (TypeError, ValueError):
+                capacity = 1
+            capacities[(venue_id, day, start)] = max(1, capacity)
+    return capacities
+
+
+def _saturated_venue_minimum(
+    model_data: Mapping[str, Any] | Any,
+    capacities: Mapping[tuple[str, str, str], int],
+) -> tuple[str, int, int] | None:
+    """Name the venue whose « au moins N ici » minimums outgrow its FREE places.
+
+    The model enforces each minimum on its VARIABLES (sum >= N), and a HARD-locked
+    triplet has no variable for anyone (``model.py:62-63``) — so the places a pin
+    consumes are gone for every minimum. Demand = Σ of per-team minimums (max per
+    team×venue: the model posts one ``>=`` per rule, the max dominates); free =
+    Σ capacities of unpinned triplets. demand > free ⇒ provably INFEASIBLE."""
+    min_by_venue_team: dict[str, dict[str, int]] = {}
+    for row in _collection(model_data, "constraints"):
+        config = _get(row, "config", default=None)
+        config = config if isinstance(config, Mapping) else {}
+        if (
+            _get(row, "family", default=None) != "FACILITY"
+            or not config.get("minAtVenueId")
+            or _get(row, "ruleType", "rule_type", default=None) not in ("HARD", "LOCK")
+            or _get(row, "scope", default=None) != "TEAM"
+            or _get(row, "isActive", "is_active", default=True) is False
+        ):
+            continue
+        team_id = _get(row, "scopeTargetId", "scope_target_id", default=None)
+        if not team_id:
+            continue
+        raw_count = config.get("minAtVenueCount")
+        minimum = max(1, int(raw_count) if raw_count is not None else 1)
+        per_team = min_by_venue_team.setdefault(str(config["minAtVenueId"]), {})
+        per_team[str(team_id)] = max(per_team.get(str(team_id), 0), minimum)
+
+    if not min_by_venue_team:
+        return None
+
+    pinned: set[tuple[str, str, str]] = set()
+    for pin in _collection(model_data, "slotTemplates", "slot_templates"):
+        if _get(pin, "lockLevel", "lock_level", default=None) != "HARD":
+            continue
+        pinned.add((
+            str(_get(pin, "venueId", "venue_id", default="")),
+            str(_get(pin, "dayOfWeek", "day_of_week", default="")),
+            str(_get(pin, "startTime", "start_time", default=""))[:5],
+        ))
+
+    venue_names = {
+        str(_get(venue, "id", default="")): str(_get(venue, "name", default="") or _get(venue, "id", default=""))
+        for venue in _collection(model_data, "venues")
+    }
+    for venue_id, min_by_team in min_by_venue_team.items():
+        demand = sum(min_by_team.values())
+        free = sum(
+            capacity for key, capacity in capacities.items()
+            if key[0] == venue_id and key not in pinned
+        )
+        if demand > free:
+            return venue_names.get(venue_id, venue_id), demand, free
+    return None
+
+
 def _infeasible_message(model_data: Mapping[str, Any] | Any) -> str:
     """Explain infeasibility in manager terms, hinting at capacity shortfall."""
     demand = 0
@@ -662,10 +741,8 @@ def _infeasible_message(model_data: Mapping[str, Any] | Any) -> str:
             demand += int(spw) if spw is not None else 0
         except (TypeError, ValueError):
             continue
-    supply = sum(
-        len(_collection(venue, "training_slots", "trainingSlots"))
-        for venue in _collection(model_data, "venues")
-    )
+    capacities = _slot_capacity_by_key(model_data)
+    supply = sum(capacities.values())
 
     base = (
         "Le planning n'a pas pu être généré : les contraintes actuelles sont "
@@ -674,7 +751,16 @@ def _infeasible_message(model_data: Mapping[str, Any] | Any) -> str:
     if demand and supply and demand > supply:
         return (
             f"{base} Il faut placer {demand} séance(s) par semaine pour seulement "
-            f"{supply} créneau(x) de gymnase déclaré(s) : la capacité est insuffisante."
+            f"{supply} place(s) de créneau déclarée(s) (capacités comprises) : "
+            "la capacité est insuffisante."
+        )
+    saturated = _saturated_venue_minimum(model_data, capacities)
+    if saturated is not None:
+        venue_name, min_demand, free = saturated
+        return (
+            f"{base} Vos contraintes « au moins » réclament {min_demand} place(s) au "
+            f"gymnase {venue_name}, qui n'en a que {free} de libre(s) une fois les "
+            "créneaux réservés déduits : ce gymnase est saturé."
         )
     return (
         f"{base} Aucune affectation valide n'existe — cherchez des contraintes dures "

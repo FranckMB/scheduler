@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Coach;
+use App\Entity\Constraint;
 use App\Entity\Reservation;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\Venue;
+use App\Enum\ConstraintFamily;
 use App\Enum\TeamCoachRole;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -124,6 +126,154 @@ final class CoachDoubleBookingDetector
             $conflict['second']['venueName'],
             $conflict['second']['startTime'],
         );
+    }
+
+    /**
+     * PR A (2026-08-06) — « le coach est indisponible et on a un créneau en DUR » :
+     * remonté APRÈS génération en INFO (`diagnose_locked_slot_violations`) alors qu'on
+     * peut s'en prémunir AVANT (décision fondateur). Même doctrine que `detect()` :
+     * coach MAIN seul, le verrou est souverain donc c'est un AVERTISSEMENT (la
+     * génération passera, la réservation écrasera l'indisponibilité), pas un bloqueur.
+     *
+     * Les intervalles bloqués sont le MIROIR du parse moteur (`constraints.py`,
+     * branche COACH_AVAILABILITY) : `unavailableDays` ajoute (jour, from, until) ;
+     * un `availableDays` NON VIDE bloque le complément (autres jours entiers + les
+     * bords hors fenêtre des jours listés) ; vide/absent = aucune restriction. La
+     * clé coach est `scopeTargetId` — comme le moteur, qui ignore `config.coachId`.
+     * Le `ruleType` n'est pas filtré : le moteur applique TOUJOURS une dispo coach
+     * en dur (une personne ne se dédouble pas).
+     *
+     * @param list<Reservation> $reservations le périmètre EXACT qui partira au solveur
+     * @param list<Constraint>  $constraints  le jeu que le payload sérialisera (même source que le gate)
+     *
+     * @return list<array{coachId: string, coachName: string, dayOfWeek: int, teamName: string, venueName: string, startTime: string}>
+     */
+    public function detectUnavailabilityClashes(array $reservations, array $constraints, string $clubId, string $seasonId): array
+    {
+        if ([] === $reservations) {
+            return [];
+        }
+
+        $blocked = $this->blockedIntervalsByCoach($constraints);
+        if ([] === $blocked) {
+            return [];
+        }
+
+        $mainCoachByTeam = $this->mainCoachByTeam($clubId, $seasonId);
+        $relevant = array_values(array_filter(
+            $reservations,
+            static fn (Reservation $r): bool => isset($blocked[$mainCoachByTeam[$r->getTeamId()] ?? '']),
+        ));
+        if ([] === $relevant) {
+            return [];
+        }
+
+        $names = $this->displayNames($relevant, $mainCoachByTeam);
+        $clashes = [];
+        foreach ($relevant as $reservation) {
+            $coachId = $mainCoachByTeam[$reservation->getTeamId()];
+            $start = (int) $reservation->getStartTime()->format('H') * 60 + (int) $reservation->getStartTime()->format('i');
+            $end = $start + $reservation->getDurationMinutes();
+            foreach ($blocked[$coachId] as [$day, $fromMinutes, $untilMinutes]) {
+                // Intervalles demi-ouverts, comme `collide()` : un créneau qui COMMENCE
+                // à la fin de l'indisponibilité ne la chevauche pas.
+                if ($day !== $reservation->getDayOfWeek() || $start >= $untilMinutes || $fromMinutes >= $end) {
+                    continue;
+                }
+                $described = $this->describe($reservation, $names);
+                $clashes[] = [
+                    'coachId' => $coachId,
+                    'coachName' => $names['coach'][$coachId] ?? 'Ce coach',
+                    'dayOfWeek' => $reservation->getDayOfWeek(),
+                    'teamName' => $described['teamName'],
+                    'venueName' => $described['venueName'],
+                    'startTime' => $described['startTime'],
+                ];
+                break; // une réservation = un avertissement, même si plusieurs règles la couvrent
+            }
+        }
+
+        return $clashes;
+    }
+
+    /**
+     * @param array{coachId: string, coachName: string, dayOfWeek: int, teamName: string, venueName: string, startTime: string} $clash
+     */
+    public function describeUnavailabilityForRecap(array $clash): string
+    {
+        return \sprintf(
+            '%s est indisponible le %s à %s, mais une réservation y place %s à %s : le créneau sera maintenu malgré son indisponibilité. Déplacez la réservation, ou ajustez la disponibilité du coach.',
+            $clash['coachName'],
+            self::DAY_NAMES[$clash['dayOfWeek']] ?? 'ce jour',
+            $clash['startTime'],
+            $clash['teamName'],
+            $clash['venueName'],
+        );
+    }
+
+    /**
+     * @param list<Constraint> $constraints
+     *
+     * @return array<string, list<array{0: int, 1: int, 2: int}>> coachId => [jour ISO, début min, fin min]
+     */
+    private function blockedIntervalsByCoach(array $constraints): array
+    {
+        $blocked = [];
+        foreach ($constraints as $constraint) {
+            $coachId = $constraint->getScopeTargetId();
+            if (ConstraintFamily::COACH_AVAILABILITY !== $constraint->getFamily() || !$constraint->getIsActive() || null === $coachId) {
+                continue;
+            }
+            $config = $constraint->getConfig();
+            $fromMinutes = $this->timeToMinutes($config['fromTime'] ?? null, 0);
+            $untilMinutes = $this->timeToMinutes($config['untilTime'] ?? null, 1440);
+
+            foreach ($this->dayIntSet($config['unavailableDays'] ?? null) as $day) {
+                $blocked[$coachId][] = [$day, $fromMinutes, $untilMinutes];
+            }
+
+            $availableSet = $this->dayIntSet($config['availableDays'] ?? null);
+            if ([] !== $availableSet) {
+                foreach (range(1, 7) as $day) {
+                    if (!\in_array($day, $availableSet, true)) {
+                        $blocked[$coachId][] = [$day, 0, 1440];
+                        continue;
+                    }
+                    if ($fromMinutes > 0) {
+                        $blocked[$coachId][] = [$day, 0, $fromMinutes];
+                    }
+                    if ($untilMinutes < 1440) {
+                        $blocked[$coachId][] = [$day, $untilMinutes, 1440];
+                    }
+                }
+            }
+        }
+
+        return $blocked;
+    }
+
+    private function timeToMinutes(mixed $time, int $default): int
+    {
+        if (!\is_string($time) || 1 !== preg_match('/^(\d{2}):(\d{2})/', $time, $matches)) {
+            return $default;
+        }
+
+        return (int) $matches[1] * 60 + (int) $matches[2];
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function dayIntSet(mixed $days): array
+    {
+        if (!\is_array($days)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(
+            static fn (mixed $day): ?int => is_numeric($day) ? (int) $day : null,
+            $days,
+        ), static fn (?int $day): bool => null !== $day));
     }
 
     /**
