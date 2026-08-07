@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Integration\Api;
 
 use App\Service\SeasonResolver;
+use App\Tests\StartsFreshBrowserSession;
 use App\Tests\VerifiesRegistration;
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
@@ -25,6 +26,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class OnboardingFlowTest extends WebTestCase
 {
+    use StartsFreshBrowserSession;
+
     use VerifiesRegistration;
 
     private static int $ip = 0;
@@ -131,6 +134,9 @@ final class OnboardingFlowTest extends WebTestCase
 
     private function register(string $ara): string
     {
+        // SEC-16 : le cookie d’auth de l’identité précédente ne doit pas partir
+        // avec cette inscription (sinon 429 du quota par utilisateur).
+        $this->startFreshBrowserSession($this->client);
         $ip = '10.7.' . intdiv(self::$ip, 254) . '.' . (self::$ip % 254 + 1);
         ++self::$ip;
         $this->client->request('POST', '/api/register', [], [], [

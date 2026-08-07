@@ -80,14 +80,18 @@ export async function registerAndVerify(page: Page, opts: RegisterOpts): Promise
   // l'approbation du club (mail FFBB) ou du superadmin. Les specs testent
   // l'APRÈS-création : on approuve via le relais dev (le vrai service
   // d'approbation, 404 en prod), puis on recharge pour entrer dans l'app.
-  await page.waitForFunction(() => null !== window.localStorage.getItem("cs-auth"));
-  const jwt = await page.evaluate(() => JSON.parse(window.localStorage.getItem("cs-auth") ?? "{}")?.state?.token as string | undefined);
-  if (jwt) {
-    const approved = await page.request.post("/api/dev/approve-club-request", { headers: { Authorization: `Bearer ${jwt}` } });
-    // 404 = pas de demande en attente (ex. adhésion à un club existant) — flux inchangé.
-    if (approved.ok()) {
-      await page.goto("/");
-    }
+  // SEC-16 : le JWT n'est plus lisible depuis le JS (cookie httpOnly). On attend
+  // le DRAPEAU de session, et l'appel API part sans en-tête : `page.request`
+  // partage le bocal à cookies du contexte, donc il est authentifié tout seul —
+  // exactement comme le navigateur du gestionnaire.
+  await page.waitForFunction(() => {
+    const raw = window.localStorage.getItem("cs-auth");
+    return null !== raw && true === (JSON.parse(raw) as { state?: { isAuthenticated?: boolean } })?.state?.isAuthenticated;
+  });
+  const approved = await page.request.post("/api/dev/approve-club-request");
+  // 404 = pas de demande en attente (ex. adhésion à un club existant) — flux inchangé.
+  if (approved.ok()) {
+    await page.goto("/");
   }
 }
 

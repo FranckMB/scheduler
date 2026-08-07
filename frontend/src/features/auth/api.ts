@@ -127,8 +127,8 @@ export interface RegisterResponse {
   status: string;
 }
 
+/** SEC-16 : plus de `token` — l'identité est posée en cookie httpOnly par le serveur. */
 export interface VerifyEmailResponse {
-  token: string;
   membershipStatus: MembershipStatus;
   user: { id: string; email: string };
 }
@@ -141,8 +141,19 @@ export interface PendingMember {
   lastName: string;
 }
 
-export function login(body: { email: string; password: string }): Promise<{ token: string }> {
-  return api.post("login", { json: body }).json();
+/**
+ * SEC-16 : la réponse n'a PLUS DE CORPS — lexik retire le jeton du JSON dès qu'il
+ * le pose en cookie (`remove_token_from_body_when_cookies_used`). Appeler `.json()`
+ * ici jetterait sur un corps vide : le succès se lit sur l'absence d'erreur.
+ */
+export function login(body: { email: string; password: string }): Promise<unknown> {
+  return api.post("login", { json: body });
+}
+
+/** SEC-16 : seul le serveur peut effacer un cookie httpOnly — sans cet appel, la
+ *  session resterait valide jusqu'à son expiration malgré un « Se déconnecter ». */
+export function logout(): Promise<unknown> {
+  return api.post("logout");
 }
 
 export function register(body: RegisterPayload): Promise<RegisterResponse> {

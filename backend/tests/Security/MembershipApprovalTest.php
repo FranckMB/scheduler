@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\Tests\StartsFreshBrowserSession;
 use App\Tests\VerifiesRegistration;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -17,6 +18,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class MembershipApprovalTest extends WebTestCase
 {
+    use StartsFreshBrowserSession;
+
     use VerifiesRegistration;
 
     private static int $ipCounter = 0;
@@ -85,6 +88,9 @@ final class MembershipApprovalTest extends WebTestCase
     /** @param array<string, string> $payload @return array<string, mixed> */
     private function register(array $payload): array
     {
+        // SEC-16 : le cookie d’auth de l’identité précédente ne doit pas partir
+        // avec cette inscription (sinon 429 du quota par utilisateur).
+        $this->startFreshBrowserSession($this->client);
         $ip = '10.1.' . intdiv(self::$ipCounter, 254) . '.' . (self::$ipCounter % 254 + 1);
         ++self::$ipCounter;
         $this->client->request('POST', '/api/register', [], [], [

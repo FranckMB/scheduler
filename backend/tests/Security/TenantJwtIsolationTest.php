@@ -10,6 +10,7 @@ use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
+use App\Tests\StartsFreshBrowserSession;
 use App\Tests\TenantGucTrait;
 use App\Tests\VerifiesRegistration;
 use DateTimeImmutable;
@@ -29,6 +30,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class TenantJwtIsolationTest extends WebTestCase
 {
+    use StartsFreshBrowserSession;
+
     use TenantGucTrait;
     use VerifiesRegistration;
 
@@ -65,6 +68,9 @@ final class TenantJwtIsolationTest extends WebTestCase
 
     private function register(string $ara): string
     {
+        // SEC-16 : le cookie d’auth de l’identité précédente ne doit pas partir
+        // avec cette inscription (sinon 429 du quota par utilisateur).
+        $this->startFreshBrowserSession($this->client);
         $ip = '10.9.' . intdiv(self::$ip, 254) . '.' . (self::$ip % 254 + 1);
         ++self::$ip;
         $this->client->request('POST', '/api/register', [], [], [

@@ -4,6 +4,12 @@ Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console 
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **SEC-16 audit (2026-08-07)** : le JWT applicatif passe en **cookie httpOnly** —
+  `POST /api/login` rend désormais **204 sans corps** (le `200 {token}` était écrit en dur par
+  le décorateur OpenAPI de lexik ; `CustomRoutesOpenApiFactory` le RÉÉCRIT, d'où sa priorité
+  de décoration négative — sans elle la correction était silencieusement écrasée),
+  `POST /api/register/verify` perd `token` de sa réponse, et +`POST /api/logout`
+  (106 → 107 paths). Contrat complet : [`jwt-cookie.md`](../../docs/security/jwt-cookie.md).
 - **FRT-04 (2026-08-07)** : +`GET /api/mercure/auth` (route contrôleur
   `MercureAuthController`, **déclarée dans `CustomRoutesOpenApiFactory`** — 105 → 106 paths) —
   jeton de souscription Mercure en cookie httpOnly + `topicTemplate` dans le corps. Contrat

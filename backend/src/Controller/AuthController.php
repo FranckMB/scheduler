@@ -16,6 +16,7 @@ use App\Repository\Basketball\FfbbCommitteeRepository;
 use App\Repository\Basketball\FfbbLeagueRepository;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
+use App\Security\JwtCookieFactory;
 use App\Service\AuditTrail;
 use App\Service\ClubApprovalService;
 use App\Service\ClubProvisioner;
@@ -51,6 +52,7 @@ final class AuthController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly UserPasswordHasherInterface $passwordHasher,
         private readonly JWTTokenManagerInterface $jwtManager,
+        private readonly JwtCookieFactory $jwtCookieFactory,
         private readonly ClubRepository $clubRepository,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly RateLimiterFactory $authRegisterLimiter,
@@ -278,11 +280,38 @@ final class AuthController extends AbstractController
             return $this->json(['error' => 'Verification failed'], 500);
         }
 
-        return $this->json([
-            'token' => $this->jwtManager->create($user),
+        // SEC-16 (audit) : même sortie que `/api/login` — le jeton part en COOKIE
+        // httpOnly, jamais dans le corps. Ce chemin crée le jeton à la main (il
+        // n'y a pas de handler lexik ici), d'où la fabrique partagée : deux
+        // recettes d'attributs finiraient par diverger.
+        $response = $this->json([
             'membershipStatus' => $status,
             'user' => ['id' => $user->getId(), 'email' => $user->getEmail()],
         ]);
+        $response->headers->setCookie($this->jwtCookieFactory->create($this->jwtManager->create($user)));
+
+        return $response;
+    }
+
+    /**
+     * SEC-16 (audit) — la déconnexion DOIT vivre au serveur.
+     *
+     * Tant que le jeton était en `localStorage`, se déconnecter était un geste
+     * client (vider le store). Le cookie étant httpOnly, le JS ne peut plus
+     * l'effacer : sans cette route, une session resterait valide jusqu'à son
+     * expiration malgré un « Se déconnecter » qui semble avoir marché.
+     *
+     * PUBLIC_ACCESS assumé : le geste est idempotent et ne révèle rien (il pose
+     * un cookie vide). L'exiger authentifié rendrait impossible la déconnexion
+     * d'une session déjà expirée — le cas où l'on en a le plus besoin.
+     */
+    #[Route('/api/logout', name: 'api_logout', methods: ['POST'])]
+    public function logout(): JsonResponse
+    {
+        $response = $this->json(['status' => 'logged_out']);
+        $response->headers->setCookie($this->jwtCookieFactory->clear());
+
+        return $response;
     }
 
     #[Route('/api/me', name: 'api_me', methods: ['GET'])]

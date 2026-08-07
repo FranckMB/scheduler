@@ -20,6 +20,8 @@ use Symfony\Bundle\FrameworkBundle\KernelBrowser;
  */
 trait VerifiesRegistration
 {
+    use ReadsJwtCookie;
+
     /**
      * Drive /api/register/verify for an already-registered (unverified) account and
      * return the issued JWT. Only the email is needed: the pending club intent is read
@@ -45,7 +47,8 @@ trait VerifiesRegistration
         ], json_encode(['token' => $raw], \JSON_THROW_ON_ERROR));
 
         $body = json_decode((string) $client->getResponse()->getContent(), true);
-        $jwt = \is_array($body) ? ($body['token'] ?? '') : '';
+        // SEC-16 : le jeton a quitté le corps de la réponse — il est dans le cookie.
+        $jwt = $this->jwtFromCookie($client);
 
         // P3-4 : un ARA inconnu ne matérialise plus le club à la vérification — la
         // demande attend l'approbation du club (mail FFBB) ou du superadmin. Les
@@ -58,6 +61,6 @@ trait VerifiesRegistration
             ]);
         }
 
-        return \is_string($jwt) ? $jwt : '';
+        return $jwt;
     }
 }

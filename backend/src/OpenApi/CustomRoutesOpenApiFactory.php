@@ -27,7 +27,11 @@ use Symfony\Component\DependencyInjection\Attribute\AsDecorator;
  * `/api/school-holidays`, `/api/public-holidays` (holiday feeds). The remaining
  * custom routes are tracked as a gap in `specs/evolution/roadmap.md` §9.
  */
-#[AsDecorator('api_platform.openapi.factory')]
+// SEC-16 : priorité NÉGATIVE pour être le décorateur le PLUS EXTERNE — lexik
+// décore aussi cette factory (priorité 0) et écrit `/api/login` en dur avec un
+// `200 {token}` devenu faux. Le plus externe passe en dernier sur les chemins :
+// sans cette priorité, notre correction du contrat était silencieusement écrasée.
+#[AsDecorator('api_platform.openapi.factory', priority: -10)]
 final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterface
 {
     public function __construct(private OpenApiFactoryInterface $decorated) {}
@@ -73,10 +77,9 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             operationId: 'postApiRegisterVerify',
             tags: ['Auth'],
             responses: [
-                '200' => $this->jsonResponse('Verified — materialises the club and returns a JWT (effective login)', [
+                '200' => $this->jsonResponse('Verified — materialises the club and logs in (SEC-16: the JWT is set as the httpOnly BEARER cookie, NOT returned here)', [
                     'type' => 'object',
                     'properties' => [
-                        'token' => ['type' => 'string'],
                         'membershipStatus' => ['type' => 'string', 'enum' => ['none', 'pending', 'active']],
                         'user' => ['type' => 'object', 'properties' => [
                             'id' => ['type' => 'string'],
@@ -195,6 +198,40 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ]),
             ),
         ));
+
+        // SEC-16 (audit) — RÉÉCRITURE du path que le décorateur de lexik écrit en
+        // dur (`OpenApi/OpenApiFactory.php` : 200 + `{token}`). Depuis que le
+        // jeton part en cookie httpOnly, ce contrat MENT : la réponse est un 204
+        // sans corps. Un contrat publié faux se propage au front et aux clients.
+        $paths->addPath('/api/login', new PathItem(post: new Operation(
+            operationId: 'login_check_post',
+            tags: ['Login Check'],
+            responses: [
+                '204' => new Response('Authenticated: the JWT is set as the httpOnly `BEARER` cookie (path /api, SameSite=Strict) — the response has NO body'),
+                '401' => new Response('Bad credentials (identical answer for an unverified account — A3 anti-enumeration)'),
+            ],
+            summary: 'Log in: sets the httpOnly JWT cookie (SEC-16 — the token is never returned in the body)',
+            requestBody: $this->jsonBody([
+                'type' => 'object',
+                'required' => ['email', 'password'],
+                'properties' => [
+                    'email' => ['type' => 'string', 'format' => 'email'],
+                    'password' => ['type' => 'string'],
+                ],
+            ]),
+        )));
+
+        $paths->addPath('/api/logout', new PathItem(post: new Operation(
+            operationId: 'postApiLogout',
+            tags: ['Auth'],
+            responses: [
+                '200' => $this->jsonResponse('Session ended: the auth cookie is cleared server-side', [
+                    'type' => 'object',
+                    'properties' => ['status' => ['type' => 'string', 'enum' => ['logged_out']]],
+                ]),
+            ],
+            summary: 'SEC-16: clear the httpOnly JWT cookie (public and idempotent — the JS cannot clear what it cannot read)',
+        )));
 
         $paths->addPath('/api/mercure/auth', new PathItem(get: new Operation(
             operationId: 'getApiMercureAuth',

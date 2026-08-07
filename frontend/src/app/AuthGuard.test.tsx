@@ -45,7 +45,7 @@ function renderAt(path: string) {
 describe("AuthGuard — onboarding lock", () => {
   beforeEach(() => {
     info.mockClear();
-    useAuthStore.setState({ token: "jwt" });
+    useAuthStore.setState({ isAuthenticated: true });
   });
 
   it("keeps the burger routes reachable while onboarding (profile + club)", () => {

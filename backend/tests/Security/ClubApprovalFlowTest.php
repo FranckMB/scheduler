@@ -12,6 +12,7 @@ use App\Entity\User;
 use App\Repository\ClubCreationRequestRepository;
 use App\Service\EmailVerifier;
 use App\Tests\Double\FfbbHttpClientStub;
+use App\Tests\ReadsJwtCookie;
 use App\Tests\TenantGucTrait;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -30,6 +31,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class ClubApprovalFlowTest extends WebTestCase
 {
+    use ReadsJwtCookie;
     use TenantGucTrait;
 
     private KernelBrowser $client;
@@ -171,7 +173,7 @@ final class ClubApprovalFlowTest extends WebTestCase
         $body = json_decode((string) $this->client->getResponse()->getContent(), true);
         \assert(\is_array($body));
 
-        return [(string) ($body['token'] ?? ''), $body];
+        return [$this->jwtFromCookie($this->client), $body];
     }
 
     private function pendingRequestFor(string $userId): ClubCreationRequest

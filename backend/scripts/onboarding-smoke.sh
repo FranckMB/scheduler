@@ -16,7 +16,8 @@ ARA="ONB$(date +%s)"
 EMAIL="onb-$ARA@smoke.fr"
 # A3: register defers everything to email verification — it returns a neutral 202
 # (no token, no club yet). The club + JWT are materialised only by /register/verify,
-# whose raw token arrives by email → pulled back out of Mailpit here.
+# whose raw token arrives by email → pulled back out of Mailpit here. Since SEC-16
+# the JWT itself comes back as an httpOnly cookie, not in the JSON body.
 # Async generation needs a CONSUMING worker: a queued message nobody consumes
 # leaves the schedule PENDING forever (the smoke then times out on a healthy
 # solver). Same guarantee as smoke-solver.sh — every smoke stands alone.
@@ -40,9 +41,12 @@ done
 [[ -n "$RAW" ]] || die "no verification email/token found in Mailpit"
 
 info "verify email → materialise club + obtain JWT"
-TOKEN=$(curl -s -X POST "$API/register/verify" -H 'Content-Type: application/json' -d "{\"token\":\"$RAW\"}" \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))')
-[[ -n "$TOKEN" ]] || die "verify did not return a token"
+# SEC-16 (audit) : le JWT ne sort plus dans le corps de la réponse — il est posé
+# en cookie httpOnly. Ce script n'est pas un navigateur : il le lit dans l'en-tête
+# Set-Cookie et continue en Bearer (chemin resté ouvert pour les scripts d'ops).
+TOKEN=$(curl -si -X POST "$API/register/verify" -H 'Content-Type: application/json' -d "{\"token\":\"$RAW\"}" \
+  | grep -oiP 'set-cookie: *BEARER=\K[^;]+' | head -1)
+[[ -n "$TOKEN" ]] || die "verify did not set the BEARER cookie"
 H=(-H "Authorization: Bearer $TOKEN")
 JC=(-H "Content-Type: application/json")
 

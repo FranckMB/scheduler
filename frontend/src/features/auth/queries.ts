@@ -7,11 +7,11 @@ import * as authApi from "./api";
 
 /** Current user + club + membership status (server source of truth). */
 export function useMe() {
-  const token = useAuthStore((state) => state.token);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   return useQuery({
     queryKey: ["me"],
     queryFn: authApi.getMe,
-    enabled: null !== token,
+    enabled: isAuthenticated,
     retry: false,
     staleTime: 60_000,
   });
@@ -55,12 +55,14 @@ export function useRenamePlanning() {
 }
 
 export function useLogin() {
-  const setToken = useAuthStore((state) => state.setToken);
+  const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: authApi.login,
-    onSuccess: (data) => {
-      setToken(data.token);
+    // SEC-16 : la réponse ne porte plus de jeton (cookie httpOnly). On ne marque
+    // que « une session est ouverte » — indice d'UI, l'autorisation reste au serveur.
+    onSuccess: () => {
+      setAuthenticated(true);
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     },
   });
@@ -73,23 +75,36 @@ export function useRegister() {
 }
 
 export function useVerifyEmail() {
-  const setToken = useAuthStore((state) => state.setToken);
+  const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: authApi.verifyEmail,
-    onSuccess: (data) => {
-      setToken(data.token);
+    onSuccess: () => {
+      setAuthenticated(true);
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     },
   });
 }
 
+/**
+ * SEC-16 : la déconnexion passe désormais par le SERVEUR — lui seul peut effacer
+ * un cookie httpOnly. L'état local est vidé quoi qu'il arrive (`finally`) : si le
+ * réseau tombe, l'écran doit quand même se fermer, et le cookie expirera de
+ * lui-même. L'inverse — garder l'UI ouverte parce que l'appel a échoué —
+ * laisserait l'utilisateur croire qu'il est encore connecté.
+ */
 export function useLogout() {
   const clear = useAuthStore((state) => state.clear);
   const queryClient = useQueryClient();
-  return () => {
-    clear();
-    queryClient.clear();
+  return async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // silencieux : voir plus haut
+    } finally {
+      clear();
+      queryClient.clear();
+    }
   };
 }
 

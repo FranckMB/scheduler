@@ -11,9 +11,9 @@ async function registerClub(page: import("@playwright/test").Page): Promise<void
 // support (`/api/dev/mark-season-paid`, 404 en prod) ouvre le gate pour le club
 // fraîchement inscrit. Sans lui, chaque « Préparer » rendrait le 409 du gate.
 async function markNextSeasonPaid(page: import("@playwright/test").Page): Promise<void> {
-  const token = await page.evaluate(() => JSON.parse(localStorage.getItem("cs-auth") ?? "{}")?.state?.token as string | undefined);
-  expect(token).toBeTruthy();
-  const response = await page.request.post("/api/dev/mark-season-paid", { headers: { Authorization: `Bearer ${token}` } });
+  // SEC-16 : plus de jeton à lire — `page.request` partage les cookies du contexte,
+  // donc l'appel est authentifié par le cookie httpOnly, sans en-tête.
+  const response = await page.request.post("/api/dev/mark-season-paid");
   expect(response.ok()).toBeTruthy();
 }
 
@@ -97,12 +97,11 @@ test("transition offers to re-date N's events into the draft, once", async ({ pa
   await expect(selectorTrigger).toBeVisible({ timeout: 15_000 });
 
   // Create a club event in N via the API (the cockpit calendar is gated on a
-  // validated baseline — out of this test's scope). Token from the persisted
-  // auth store; season = server-derived current (no header).
-  const token = await page.evaluate(() => JSON.parse(localStorage.getItem("cs-auth") ?? "{}")?.state?.token as string | undefined);
-  expect(token).toBeTruthy();
+  // validated baseline — out of this test's scope). Authentification par le
+  // cookie httpOnly partagé avec le contexte (SEC-16) ; season = server-derived
+  // current (no header).
   const created = await page.request.post("/api/calendar_entries", {
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/ld+json" },
+    headers: { "Content-Type": "application/ld+json" },
     data: { kind: "event", title: "AG e2e", startDate: "2026-10-03", endDate: "2026-10-03", isDisruptive: true, status: "active" },
   });
   expect(created.status()).toBe(201);

@@ -14,6 +14,22 @@ parameters:
     # in which case FfbbApiClient fetches the public token from the FFBB config
     # endpoint at runtime. Never hard-code a token in the repo.
     env(FFBB_MEILISEARCH_TOKEN): ''
+    # SEC-16 (audit) — le cookie httpOnly qui porte le JWT applicatif. Nom et
+    # chemin sont des PARAMÈTRES parce que trois écrivains doivent s'accorder :
+    # le handler lexik (`set_cookies`, ci-dessous), `JwtCookieFactory`
+    # (verifyEmail + déconnexion) et l'extracteur de jeton. Chemin `/api` : le
+    # navigateur ne l'envoie qu'à l'API, jamais aux assets ni aux exports.
+    app.jwt_cookie_name: 'BEARER'
+    app.jwt_cookie_path: '/api'
+    # DÉFAUT `true` — fail-closed délibéré : une variable oubliée en production
+    # donne un cookie `Secure` (correct), alors que l'inverse donnerait un jeton
+    # en clair sur le réseau sans que rien ne le signale. C'est le DEV qui la met
+    # à `false` (backend/.env), et son oubli s'y voit tout de suite : l'e2e
+    # dockerisé tape http://frontend-dev:5173, une origine non sûre où un cookie
+    # Secure n'est pas stocké du tout. Jamais dérivé de $request->isSecure() :
+    # nginx prod écoute en 80 derrière la TLS et y répondrait faux
+    # (docs/security/jwt-cookie.md).
+    env(JWT_COOKIE_SECURE): 'true'
 
 services:
     App\AdminJob\AdminJobExecutorInterface: '@App\AdminJob\ConsoleAdminJobExecutor'

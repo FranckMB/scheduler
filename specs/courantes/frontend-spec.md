@@ -85,7 +85,7 @@ découpage sûr et **aucun n'est optionnel** quand on ajoute une route :
 
 ### Guards et redirects (`src/app/AuthGuard.tsx`)
 
-- Pas de JWT dans `authStore` → redirect `/login` ; 401 API (hors `/api/login`) → clear + redirect `/login` (hook ky `afterResponse`).
+- `isAuthenticated` faux dans `authStore` → redirect `/login` ; 401 API (hors `/api/login`) → clear + redirect `/login` (hook ky `afterResponse`). Le drapeau n'autorise rien : le cookie httpOnly est la seule identité, et le serveur tranche.
 - `membershipStatus === "pending"` → `/waiting`.
 - **Onboarding** : `AuthGuard` verrouille l'app au wizard tant que `me.seasonPlan.hasFinishedVersion === false` (le club n'a jamais généré). Le flag legacy `club.onboardingCompleted` **n'est plus lu pour le routage**.
 - **Gate cockpit** : `CockpitPage` redirige vers `/wizard` tant que `me.seasonPlan.hasFinishedVersion === false`. Le critère est **dérivé** (le plan de saison porte ≥1 version terminée) et **indépendant du pointeur** : rouvrir un planning ne re-verrouille **pas** le cockpit — voir `planning-lifecycle-validated.md` et `specs/courantes/accueil-cockpit-temporel.md` §2ter.
@@ -109,17 +109,18 @@ Deux couches distinctes, responsabilités non chevauchantes.
 | Couche | Outil | Responsabilité | Règle |
 |--------|-------|----------------|-------|
 | Server state | TanStack Query 5 | Données issues de l'API (resources, collections, mutations) | **Toujours** via Query. Jamais de state local pour des données serveur. |
-| Client state | Zustand 5 | État UI pur, token JWT, thème, préférences | **Jamais** de données serveur en Zustand. Sync via Query callbacks. |
+| Client state | Zustand 5 | État UI pur, drapeau de session, thème, préférences | **Jamais** de données serveur en Zustand. Sync via Query callbacks. |
 
 ### Frontière stricte
 
 ```typescript
 // Illustration — frontière Zustand / TanStack Query
 
-// ✅ Zustand : état UI pur, pas de données serveur (authStore réel : token seul)
+// ✅ Zustand : état UI pur, pas de données serveur (authStore réel : un booléen,
+// PLUS AUCUN jeton — le JWT est un cookie httpOnly, SEC-16)
 type AuthStore = {
-  token: string | null;
-  setToken: (token: string | null) => void;
+  isAuthenticated: boolean;
+  setAuthenticated: (value: boolean) => void;
   clear: () => void;
 };
 
@@ -137,12 +138,12 @@ const schedulesQuery = useQuery({
 
 | Situation | Choix | Raison |
 |-----------|-------|--------|
-| JWT token après login | Zustand (`authStore`, persist `cs-auth`) | Persistant côté client, pas une resource API |
+| Identité après login | **Cookie httpOnly posé par le serveur** (SEC-16) ; Zustand ne garde qu'un booléen `isAuthenticated` (persist `cs-auth`) | Un jeton lisible par le JS était exfiltrable ; le drapeau n'est qu'un indice d'UI, l'autorisation reste au serveur → [`jwt-cookie.md`](../../docs/security/jwt-cookie.md) |
 | Contexte tenant (club/saison) | **Aucun état client** | Résolu côté serveur depuis le JWT (`TenantFilterListener`) — le frontend n'envoie aucun header tenant |
 | Thème clair/sombre | Zustand (`themeStore`) | UI pure ; l'accent club vient de `/api/me` via `useApplyClubTheme` |
 | État UI wizard / planning | Zustand (stores de feature `store.ts`) | UI pure, pas de persistence serveur |
 | Liste des équipes | TanStack Query | Donnée serveur, cacheable, invalidable |
-| Statut d'une génération | TanStack Query + polling (`refetchInterval`) | Donnée serveur quasi temps réel |
+| Statut d'une génération | TanStack Query + **flux Mercure** (FRT-04), polling en fallback | Donnée serveur temps réel ; le publieur est best-effort, donc le poll ne meurt pas |
 | Formulaires wizard | État local contrôlé | Formulaires simples, soumis puis invalidés via Query |
 
 ---
@@ -157,11 +158,11 @@ ky 2 comme unique client HTTP. Configuration centralisée, jamais instancié ad-
 // Extrait fidèle au code livré
 export const api = ky.create({
   prefix: "/api", // proxy Vite dev, Nginx prod — jamais de host en dur
+  credentials: "include", // SEC-16 : l'identité est un cookie httpOnly, plus un en-tête
   hooks: {
     beforeRequest: [
       (state) => {
-        const token = useAuthStore.getState().token;
-        if (token) state.request.headers.set("Authorization", `Bearer ${token}`);
+        // Plus d'Authorization : seul X-Season-Id est injecté ici.
       },
     ],
     afterResponse: [
@@ -447,7 +448,7 @@ Le frontend n'utilise **pas** `useInfiniteQuery` (aucune occurrence dans `src/`)
 
 | Store | Fichier | Contenu | Persistence |
 |-------|---------|---------|-------------|
-| `authStore` | `src/shared/stores/authStore.ts` | `token` uniquement (`setToken`, `clear`) | `localStorage` (`persist`, clé `cs-auth`, `migrate` avec null-check) |
+| `authStore` | `src/shared/stores/authStore.ts` | `isAuthenticated` uniquement — **aucun jeton** (SEC-16) | `localStorage` (`persist`, clé `cs-auth`, `version: 2` dont la migration EFFACE un jeton legacy) |
 | `themeStore` | `src/shared/stores/themeStore.ts` | mode clair/sombre + slot `accent` du club | persisté (clé `cs-theme`, relue avant le premier rendu — voir §10) |
 | `seasonStore` | `src/shared/stores/seasonStore.ts` | saison sélectionnée (`selectedSeasonId`) — alimente l'en-tête `X-Season-Id` | persisté |
 | `toastStore` | `src/shared/stores/toastStore.ts` | file des notifications, rendue par `ui/toaster` | Non persisté |
@@ -460,10 +461,10 @@ Le frontend n'utilise **pas** `useInfiniteQuery` (aucune occurrence dans `src/`)
 ### authStore
 
 ```typescript
-// Fidèle au code livré — le token est le SEUL état d'auth client.
+// Fidèle au code livré — SEC-16 : plus aucun jeton côté client, juste un indice d'UI.
 type AuthState = {
-  token: string | null;
-  setToken: (token: string | null) => void;
+  isAuthenticated: boolean;
+  setAuthenticated: (value: boolean) => void;
   clear: () => void;
 };
 
@@ -516,7 +517,7 @@ type AuthState = {
 
 | Header | Source | Injection |
 |--------|--------|-----------|
-| `Authorization: Bearer {jwt}` | `authStore.token` | ky `beforeRequest` hook |
+| *(plus d'`Authorization`)* | **cookie httpOnly `BEARER`** posé par le serveur (SEC-16) | le navigateur l'envoie seul, `credentials: "include"` |
 | `X-Season-Id` | `seasonStore.selectedSeasonId` | ky `beforeRequest` — **conditionnel** : uniquement si une saison est explicitement sélectionnée et que la requête n'en porte pas déjà une |
 
 **Aucun header `X-Club-Id`** : le club est dérivé du JWT côté serveur (`backend-inventory.md`

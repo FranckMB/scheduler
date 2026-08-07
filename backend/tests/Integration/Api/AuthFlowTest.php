@@ -10,6 +10,7 @@ use App\Entity\ClubUser;
 use App\Entity\EmailVerificationToken;
 use App\Entity\User;
 use App\Service\EmailVerifier;
+use App\Tests\StartsFreshBrowserSession;
 use App\Tests\VerifiesRegistration;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -20,6 +21,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class AuthFlowTest extends WebTestCase
 {
+    use StartsFreshBrowserSession;
+
     use VerifiesRegistration;
 
     private static int $ipCounter = 0;
@@ -98,9 +101,10 @@ final class AuthFlowTest extends WebTestCase
         self::assertNotEmpty($token, 'verification issues the JWT');
         self::assertNotNull($this->em->getRepository(Club::class)->findOneBy(['ffbbClubCode' => 'NEWARA1']));
 
-        // Login now succeeds (account verified).
+        // Login now succeeds (account verified). SEC-16 : la réponse est un 204 —
+        // le jeton part en cookie, il ne reste plus rien à mettre dans le corps.
         [$loginStatus] = $this->login('admin@newclub.fr', 'Password123!');
-        self::assertSame(200, $loginStatus);
+        self::assertSame(204, $loginStatus);
     }
 
     public function testVerifyDerivesSchoolZoneFromFfbbCode(): void
@@ -170,7 +174,7 @@ final class AuthFlowTest extends WebTestCase
         $token = $this->verifyRegistration($this->client, 'resend@club.fr');
         self::assertNotEmpty($token);
         [$loginStatus] = $this->login('resend@club.fr', 'Password123!');
-        self::assertSame(200, $loginStatus);
+        self::assertSame(204, $loginStatus); // SEC-16 : succès sans corps (jeton en cookie)
     }
 
     /** A verification token is single-use: replaying it after a successful verify → 400, no duplicate membership. */
@@ -251,6 +255,9 @@ final class AuthFlowTest extends WebTestCase
      */
     private function register(array $payload): array
     {
+        // SEC-16 : le cookie d’auth de l’identité précédente ne doit pas partir
+        // avec cette inscription (sinon 429 du quota par utilisateur).
+        $this->startFreshBrowserSession($this->client);
         $this->request('/api/register', $payload);
 
         return [

@@ -17,14 +17,18 @@ const ONBOARDING_ALLOWED = ["/wizard", "/profile", "/club", "/confidentialite"];
 
 /**
  * Gate for authenticated routes:
- * - no token            -> /login
- * - token + loading     -> spinner
- * - token + active      -> render app
- * - token + pending/none-> /waiting
- * - token + auth error  -> /login (stale/invalid token)
+ * - pas de session      -> /login
+ * - session + loading   -> spinner
+ * - session + active    -> render app
+ * - session + pending/none-> /waiting
+ * - session + auth error-> /login (cookie expiré ou invalide)
+ *
+ * SEC-16 : « session » = le drapeau d'UI du store, PAS une autorisation — le JWT
+ * est un cookie httpOnly que ce code ne voit pas. Un drapeau menteur ne donne
+ * accès à rien : `useMe` répond 401 et renvoie ici sur /login.
  */
 export function AuthGuard() {
-  const token = useAuthStore((state) => state.token);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { data, isLoading, isError } = useMe();
   const location = useLocation();
 
@@ -45,7 +49,7 @@ export function AuthGuard() {
     }
   }, [showCockpitHint]);
 
-  if (null === token) {
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
   if (isLoading) {
