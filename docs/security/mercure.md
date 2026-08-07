@@ -88,3 +88,25 @@ on the next poll).
   native EventSource reconnection, which would replay an expired cookie forever.
 
 `anonymous` stays off; nothing here relaxes the hub configuration above.
+
+### ⚠ The club id in that selector must be a CANONICAL uuid (security review, fixed 2026-08-07)
+
+The `subscribe` selector is parsed by the hub as an **RFC 6570 URI template**:
+anything shaped `{name}` becomes a *variable*, not a literal. A club id in the
+non-canonical form PostgreSQL happily accepts — `{710a290720ce40ffa67fc2674ca0dbe7}`,
+braces, no hyphens — is a valid template varname, so the selector
+`club:{710a29…}:schedule:{id}` carries **two** variables and matches
+**every club's** topics. Measured live on the dev stack before the fix: a member
+of club A received club B's generation events.
+
+The entry point was `X-Club-Id`: the membership check compares in Postgres,
+which normalises, so a member could pass their own club in the degraded form and
+have that raw string land in `_club_id`. Fixed at the source —
+`TenantFilterListener` now validates the club's **shape** exactly like the
+season's (`backend/src/EventListener/TenantFilterListener.php`, `isUuid` guard
+before `_club_id` is set, 403 otherwise: refused, never silently normalised) —
+plus a defence-in-depth re-check in `MercureAuthController` before signing.
+Guarded by `TenantIsolationTest::testANonCanonicalClubHeaderIsRejectedEvenForOwnClub`
+(phase1) and `MercureAuthTest::testANonCanonicalClubIdNeverReachesTheSelector`.
+**Rule for any future selector**: never interpolate a client-influenced string
+into a topic selector without canonical validation.

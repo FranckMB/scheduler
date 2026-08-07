@@ -77,6 +77,21 @@ class TenantFilterListener implements EventSubscriberInterface
             return;
         }
 
+        // FORME du club AVANT tout le reste (revue sécu FRT-04, exploit mesuré) :
+        // PostgreSQL normalise `{710a290720ce...}` en l'UUID canonique, donc un
+        // membre pouvait envoyer SON club sous une forme dégradée, passer le
+        // contrôle d'adhésion — et faire écrire cette chaîne telle quelle dans un
+        // aval qui, lui, ne normalise pas. Sur `/api/mercure/auth` le sélecteur
+        // devenait `club:{710a29...}:schedule:{id}` : DEUX variables URI-template,
+        // qui matchent les topics de N'IMPORTE QUEL club. Le club est ici la
+        // frontière tenant : sa forme se valide comme celle de la saison (l. 166),
+        // et un écart se refuse — jamais une normalisation silencieuse.
+        if (!$this->isUuid($clubId)) {
+            $event->setResponse(new JsonResponse(['error' => 'You do not have access to this club'], 403));
+
+            return;
+        }
+
         $request->attributes->set('_club_id', $clubId);
 
         // Validate that the authenticated user belongs to the requested club

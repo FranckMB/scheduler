@@ -56,6 +56,16 @@ final class MercureAuthController extends AbstractController
             return $this->json(['error' => 'No club in context.'], Response::HTTP_BAD_REQUEST);
         }
 
+        // Défense en profondeur (revue sécu FRT-04) : le sélecteur EST la frontière,
+        // donc ce qu'on y interpole se revalide ici. Une forme non canonique
+        // (`{32hex}` — que Postgres accepte, mais qui est un varname URI-template
+        // valide) ferait matcher les topics de tous les clubs. Le listener la
+        // refuse déjà en 403 ; si un jour un autre chemin pose `_club_id`, cette
+        // route ne signera toujours qu'un UUID canonique.
+        if (1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $clubId)) {
+            return $this->json(['error' => 'No club in context.'], Response::HTTP_BAD_REQUEST);
+        }
+
         if ('' === $this->mercureSecret) {
             // Secret absent = hub inconfiguré : dire 503 plutôt que signer du vide.
             return $this->json(['error' => 'Mercure is not configured.'], Response::HTTP_SERVICE_UNAVAILABLE);

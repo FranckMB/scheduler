@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Api;
 
+use App\Controller\MercureAuthController;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Season;
@@ -17,6 +18,8 @@ use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\HttpFoundation\Cookie;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
  * FRT-04 — le jeton de souscription Mercure (`GET /api/mercure/auth`).
@@ -57,6 +60,34 @@ final class MercureAuthTest extends WebTestCase
         self::assertSame([\sprintf('club:%s:schedule:{id}', $clubA)], $this->subscribeClaim($cookieA->getValue()));
         self::assertSame([\sprintf('club:%s:schedule:{id}', $clubB)], $this->subscribeClaim($cookieB->getValue()));
         self::assertNotSame($clubA, $clubB);
+    }
+
+    /**
+     * Défense en profondeur du sélecteur (revue sécurité FRT-04). Le listener
+     * refuse déjà un club non canonique (`TenantIsolationTest`) ; ici on épingle
+     * que MÊME si `_club_id` arrivait dégradé par un autre chemin, cette route ne
+     * signerait pas un sélecteur à deux variables URI-template — celui qui, en
+     * vivant, délivrait les événements de tous les clubs.
+     */
+    public function testANonCanonicalClubIdNeverReachesTheSelector(): void
+    {
+        // Le contrôleur est invoqué DIRECTEMENT avec un `_club_id` dégradé dans la
+        // pile de requêtes : par le header, le listener l'arrêterait avant (403,
+        // gardé par TenantIsolationTest) — le sujet ici est sa garde propre.
+        $controller = self::getContainer()->get(MercureAuthController::class);
+        $requestStack = self::getContainer()->get(RequestStack::class);
+        $request = Request::create('/api/mercure/auth');
+        $request->attributes->set('_club_id', '{710a290720ce40ffa67fc2674ca0dbe7}');
+        $requestStack->push($request);
+
+        try {
+            $response = $controller();
+        } finally {
+            $requestStack->pop();
+        }
+
+        self::assertSame(400, $response->getStatusCode(), 'une forme non canonique ne doit JAMAIS être signée dans un sélecteur');
+        self::assertStringNotContainsString('mercureAuthorization', (string) $response->headers);
     }
 
     public function testTheTokenIsSignedWithTheHubSecretAndDeliveredHttpOnlyToTheHubPath(): void
