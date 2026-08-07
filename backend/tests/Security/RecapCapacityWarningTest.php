@@ -21,9 +21,6 @@ use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
-use App\Enum\ConstraintFamily;
-use App\Enum\ConstraintRuleType;
-use App\Enum\ConstraintScope;
 use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -143,10 +140,13 @@ final class RecapCapacityWarningTest extends WebTestCase
     }
 
     /**
-     * Les DEUX réductions que le récap réplique — et SEULEMENT elles (revue #341 round 2) :
+     * LA réduction que le récap réplique — et SEULEMENT elle (revue #341 round 2) :
+     * deux créneaux au même `(gymnase, jour, heure)` s'ÉCRASENT (le moteur clé un dict).
      *
-     * 1. deux créneaux au même `(gymnase, jour, heure)` s'ÉCRASENT (le moteur clé un dict) ;
-     * 2. `FACILITY_CAPACITY` **active** rabote à `min(capacity, maxTeams)`.
+     * Il y en avait DEUX : le rabot `FACILITY_CAPACITY` (`min(capacity, maxTeams)`)
+     * en était la seconde. La famille a été RETIRÉE le 2026-08-08 — aucun chemin UI
+     * ne la créait, zéro ligne en base — donc la règle et ses deux cas (rabot actif,
+     * rabot inactif ignoré) disparaissent avec elle.
      *
      * Un verrou HARD n'est délibérément PAS réduit : le moteur y émet un créneau verrouillé
      * PAR ÉQUIPE épinglée, décline la durée, et place même les épinglages hors grille — trois
@@ -156,13 +156,13 @@ final class RecapCapacityWarningTest extends WebTestCase
     public function testOfferAppliesOnlyTheReductionsItCanProveSafe(): void
     {
         [$user, $club, $season] = $this->seedClubSeason('CAPM');
-        $team = $this->team($club, $season, 8);
-        // ⚠ Gymnases SÉPARÉS : `FACILITY_CAPACITY` est clé PAR GYMNASE, donc sur un gymnase
-        // unique son rabot masquerait les autres cas (constaté en falsifiant au round 1).
+        // 4 séances demandées pour 5 places offertes : on reste dans la branche qui
+        // ANNONCE l'offre. (8 séances passeraient en sous-capacité — un autre message,
+        // et le sujet ici est le CALCUL de l'offre, pas l'alerte.)
+        $team = $this->team($club, $season, 4);
+        // Gymnases SÉPARÉS : un cas par gymnase, sinon l'un masque l'autre.
         $dup = $this->venue($club, $season, 'Doublon');
         $locked = $this->venue($club, $season, 'Verrouillé');
-        $capped = $this->venue($club, $season, 'Rabotté');
-        $inactive = $this->venue($club, $season, 'Rabot inactif');
 
         // 1) Doublon exact : le moteur ÉCRASE — 2 places, pas 4.
         $this->slot($club, $season, $dup, '18:00', 2);
@@ -170,19 +170,12 @@ final class RecapCapacityWarningTest extends WebTestCase
         // 2) Verrouillé : capacité PLEINE conservée (3) — majorant assumé.
         $this->slot($club, $season, $locked, '20:00', 3);
         $this->reservation($club, $season, $locked, $team, '20:00');
-        // 3) FACILITY_CAPACITY ACTIVE : min(3, 1) — 1 place.
-        $this->slot($club, $season, $capped, '21:30', 3);
-        $this->facilityCapacity($club, $season, $capped, 1, true);
-        // 4) FACILITY_CAPACITY INACTIVE : le moteur la saute, nous aussi — 3 places, pas 1.
-        //    L'appliquer produisait une FAUSSE ALERTE sur la branche censée ne jamais mentir.
-        $this->slot($club, $season, $inactive, '19:00', 3);
-        $this->facilityCapacity($club, $season, $inactive, 1, false);
 
         $body = $this->validate($user, $club, null);
 
-        // 2 (doublon écrasé) + 3 (verrou non réduit) + 1 (rabot actif) + 3 (rabot inactif ignoré) = 9.
+        // 2 (doublon écrasé) + 3 (verrou laissé à capacité PLEINE) = 5.
         $all = implode(' | ', array_map(strval(...), $body['warnings']));
-        self::assertStringContainsString('jusqu\'à 9 places de créneau', $all, 'doublon écrasé, rabot ACTIF seul appliqué, verrou laissé à capacité pleine');
+        self::assertStringContainsString('jusqu\'à 5 places de créneau', $all, 'doublon écrasé, verrou laissé à capacité pleine');
     }
 
     /**
@@ -377,23 +370,6 @@ final class RecapCapacityWarningTest extends WebTestCase
         $reservation->setStartTime(new DateTimeImmutable($start));
         $reservation->setDurationMinutes(90);
         $this->em->persist($reservation);
-        $this->em->flush();
-    }
-
-    private function facilityCapacity(Club $club, Season $season, Venue $venue, int $maxTeams, bool $isActive = true): void
-    {
-        $constraint = new Constraint;
-        $constraint->setClubId($club->getId());
-        $constraint->setSeasonId($season->getId());
-        $constraint->setScope(ConstraintScope::FACILITY);
-        $constraint->setScopeTargetId($venue->getId());
-        $constraint->setFamily(ConstraintFamily::FACILITY_CAPACITY);
-        $constraint->setRuleType(ConstraintRuleType::HARD);
-        $constraint->setName('Capacité ' . $venue->getName());
-        $constraint->setConfig(['venueId' => $venue->getId(), 'maxTeams' => $maxTeams]);
-        $constraint->setIsActive($isActive);
-        $constraint->setSortOrder(0);
-        $this->em->persist($constraint);
         $this->em->flush();
     }
 

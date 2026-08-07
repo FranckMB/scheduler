@@ -68,7 +68,6 @@ Le **second problème CP-SAT**, distinct du solve hebdomadaire (ADR-0003 ; compo
   1. `input_data.model_dump(by_alias=True)` → dict.
   2. `build_model(data)` — crée `ScheduleCpModel`, variables `x`, extrait HARD locks.
   3. `parse_v2_constraints(data["constraints"])` — règle v2 → collections solver.
-  3 bis. `venue_capacity_caps` appliqués sur `model.slot_capacities` en `min(capacité du créneau, maxTeams)` — resserre uniquement.
   4. Calcul `hard_satisfied_team_ids` (teams dont `sessionsPerWeek` est couvert par locks HARD → exclus du penalty unplaced).
   5. `adjusted_min_by_team` — min sessions mis à 0 pour teams sans assignments disponibles ou en conflit forcedDays/forbiddenDays.
   6. Construction `assignments` avec start/end pour contraintes consécutives.
@@ -172,7 +171,7 @@ Contrat **2.2**, propre à `/place-matches` — les schémas hebdomadaires ne so
 
 ### 4.2 Family & Scope
 
-- **`family`** : catégorie de règle. Valeurs reconnues (`_KNOWN_FAMILIES`, `constraints.py`) : `TIME`, `DAY`, `FACILITY`, `FACILITY_CAPACITY`, `COACH_AVAILABILITY`. Types legacy reconnus (`_KNOWN_TYPES`) : `TEAM_COACH`, `COACH_PLAYER_UNAVAILABILITY`, `PRIORITY_TIER`. Une contrainte dont **ni** la famille **ni** le type n'est reconnu est loggée comme dérive de contrat.
+- **`family`** : catégorie de règle. Valeurs reconnues (`_KNOWN_FAMILIES`, `constraints.py`) : `TIME`, `DAY`, `FACILITY`, `COACH_AVAILABILITY`. Types legacy reconnus (`_KNOWN_TYPES`) : `TEAM_COACH`, `COACH_PLAYER_UNAVAILABILITY`, `PRIORITY_TIER`. Une contrainte dont **ni** la famille **ni** le type n'est reconnu est loggée comme dérive de contrat.
 - **`scope`** : cible de la règle. Valeur vue : `TEAM`. (D'autres scopes peuvent exister mais ne sont pas traités différemment dans le code lu.)
 - **`scopeTargetId`** : ID de la cible (team, coach, venue selon family/scope).
 
@@ -191,7 +190,6 @@ Contrat **2.2**, propre à `/place-matches` — les schémas hebdomadaires ne so
 | `family == "FACILITY"` + `forbiddenVenueId` | `forbidden_assignments` → `[{scope_target_id, venue_id}]` |
 | `family == "FACILITY"` + `forbiddenVenueId` + `PREFERRED` + cible | `avoided_venues` → `[{scope_target_id, venue_id}]` (malus objectif, poids `avoided_venue`). **Même clé** que l'interdiction dure : c'est le `ruleType` qui décide dur/soft (il n'existe **pas** de clé `avoidedVenueId`) |
 | `family == "FACILITY"` + `minAtVenueId` (+ `minAtVenueCount`, défaut 1) + HARD/LOCK + `scope=TEAM` | `venue_minimums` → plancher `somme(vars équipe@gymnase) ≥ N` (ALIGN-05) |
-| `family == "FACILITY_CAPACITY"` + `venueId` + `maxTeams` | `venue_capacity_caps[venueId]` → appliqué en `min(capacité du créneau, maxTeams)` |
 | contrainte reconnue mais inapplicable (sans équipe cible, dispo coach reçue en non-HARD, règle de gymnase écrasée par une autre) | `parse_warnings` → diagnostics `constraint_not_honored` |
 | `type == "PRIORITY_TIER"` (legacy) | `priority_tiers[tierId]` = `defaultMinSessions` |
 | `family in ("TIME","DAY")` | `time_windows` (traité par `add_time_window_constraints`) |

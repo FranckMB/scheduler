@@ -35,13 +35,13 @@ final class CapacityMirrorParityTest extends TestCase
     private PayloadCapacityMirror $mirror;
 
     /**
-     * Règle 1+2 du miroir — dédup par triplet ET rabot FACILITY_CAPACITY.
+     * LA règle du miroir — dédup par triplet. (Le rabot `FACILITY_CAPACITY` en était
+     * une seconde ; la famille a été retirée le 2026-08-08, aucun chemin UI ne la
+     * créait.).
      *
      * Grille : le même triplet (V, lundi, 18:00) déclaré DEUX fois à capacité 3
-     * (le moteur écrase, il n'additionne pas) + un rabot maxTeams=2 sur V + un
-     * second créneau (mercredi, capacité 3, raboté à 2 lui aussi).
-     * Miroir attendu : min(3,2) + min(3,2) = 4 places — PAS 3+3+3=9 (sans dédup)
-     * ni 3+3=6 (sans rabot).
+     * (le moteur écrase, il n'additionne pas) + un second créneau (mercredi,
+     * capacité 3). Miroir attendu : 3 + 3 = 6 places — PAS 3+3+3=9 (sans dédup).
      *
      * Face moteur : 6 équipes à 1 séance → il doit en placer EXACTEMENT `offer`.
      * S'il place plus, le miroir sous-estime (fausses alertes de sous-capacité) ;
@@ -60,15 +60,10 @@ final class CapacityMirrorParityTest extends TestCase
                     ['dayOfWeek' => 3, 'startTime' => '18:00', 'durationMinutes' => 90, 'capacity' => 3],
                 ],
             ]],
-            constraints: [[
-                'id' => 'cap-v1', 'scope' => 'CLUB', 'scopeTargetId' => null,
-                'family' => 'FACILITY_CAPACITY', 'ruleType' => 'HARD', 'name' => 'max 2 à V1',
-                'config' => ['venueId' => 'v1', 'maxTeams' => 2], 'sortOrder' => 0, 'isActive' => true,
-            ]],
         );
 
         $offer = $this->mirror->offer($payload);
-        self::assertSame(4, $offer, 'le miroir PHP doit dédupliquer le triplet ET raboter à maxTeams');
+        self::assertSame(6, $offer, 'le miroir PHP doit dédupliquer le triplet (2 lignes au même créneau = 1 place-set)');
 
         $result = $this->solve($payload);
         self::assertSame('completed', $result['status']);
@@ -76,7 +71,7 @@ final class CapacityMirrorParityTest extends TestCase
             $offer,
             $result['slots'],
             'PARITÉ ROMPUE : le moteur ne place pas le nombre de séances que le miroir annonce — '
-            . 'son algèbre de créneaux a changé (dédup par triplet ou rabot FACILITY_CAPACITY). '
+            . 'son algèbre de créneaux a changé (dédup par triplet). '
             . 'Aligner App\Service\PayloadCapacityMirror, sinon le récap ment.',
         );
     }

@@ -40,8 +40,10 @@ const ctx = {
 const c = (over: Partial<Constraint>): Constraint => ({ id: Math.random().toString(), name: "n", scope: "TEAM", scopeTargetId: null, family: "TIME", ruleType: "HARD", config: {}, isActive: true, ...over }) as Constraint;
 
 describe("groupConstraints", () => {
-  it("FAMILY_ORDER covers every constraint family (FACILITY_CAPACITY included)", () => {
-    expect(FAMILY_ORDER).toEqual(["TIME", "DAY", "FACILITY", "FACILITY_CAPACITY", "COACH_AVAILABILITY"]);
+  it("FAMILY_ORDER couvre toutes les familles de contrainte", () => {
+    // FACILITY_CAPACITY en faisait partie jusqu'au 2026-08-08 : retirée, aucun
+    // chemin UI ne la créait (la capacité se règle par créneau).
+    expect(FAMILY_ORDER).toEqual(["TIME", "DAY", "FACILITY", "COACH_AVAILABILITY"]);
   });
 
   it("TIME/DAY → groups by tag axis (Genre before Âge), then teams by their RANG group", () => {

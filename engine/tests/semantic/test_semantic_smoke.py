@@ -235,25 +235,6 @@ def test_coach_available_days_complement() -> None:
 
 # --- FACILITY ----------------------------------------------------------------
 
-def test_facility_capacity_max_teams_respected() -> None:
-    # Divisible venue: 1 slot, capacity 2, but a FACILITY_CAPACITY maxTeams=1
-    # constraint must cap it to 1 team simultaneously.
-    venue = make_venue("v", [(2, "18:00")], capacity=2)
-    payload = make_payload(
-        teams=[_team("a"), _team("b")],
-        venues=[venue],
-        constraints=[
-            {
-                "id": "cap", "scope": "FACILITY", "scopeTargetId": "v",
-                "family": "FACILITY_CAPACITY", "ruleType": "HARD", "name": "cap",
-                "config": {"venueId": "v", "maxTeams": 1}, "sortOrder": 0, "isActive": True,
-            }
-        ],
-    )
-    result = solve_payload(payload)
-    assert len(_venue_day_starts(result, "v", 2)) <= 1, "maxTeams=1 must not host two teams at once"
-
-
 def test_facility_forbidden_venue_respected() -> None:
     payload = make_payload(
         teams=[_team("t")],

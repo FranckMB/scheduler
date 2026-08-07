@@ -17223,8 +17223,7 @@
                             "TIME",
                             "DAY",
                             "FACILITY",
-                            "COACH_AVAILABILITY",
-                            "FACILITY_CAPACITY"
+                            "COACH_AVAILABILITY"
                         ],
                         "type": [
                             "string",

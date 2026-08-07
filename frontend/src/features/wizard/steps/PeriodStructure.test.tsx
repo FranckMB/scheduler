@@ -880,12 +880,6 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     expect(screen.queryByRole("checkbox", { name: "Pas le dimanche appliquée cette période" })).toBeNull();
   });
 
-  it("family filter: FACILITY_CAPACITY (no tab of its own) files under the Gymnase tab", () => {
-    constraintsState.data = [constraint({ id: "kc", name: "Capacité Barros", family: "FACILITY_CAPACITY", scope: "FACILITY" })];
-    render(<PeriodConstraints calendarEntryId="e1" family="FACILITY" />);
-    expect(screen.getByRole("checkbox", { name: "Capacité Barros appliquée cette période" })).toBeInTheDocument();
-  });
-
   it("family filter: renders NOTHING (not an empty section) when the tab has no inherited constraint", () => {
     constraintsState.data = [constraint({ id: "kt", name: "Pas après 20h", family: "TIME" })];
     const { container } = render(<PeriodConstraints calendarEntryId="e1" family="COACH_AVAILABILITY" />);

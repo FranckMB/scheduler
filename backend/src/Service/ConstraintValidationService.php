@@ -123,12 +123,6 @@ final class ConstraintValidationService
                     $errors[] = 'L\'heure de début doit précéder l\'heure de fin.';
                 }
                 break;
-
-            case ConstraintFamily::FACILITY_CAPACITY:
-                if (!isset($config['maxTeams'])) {
-                    $errors[] = 'Une contrainte de capacité doit préciser un nombre maximum d\'équipes.';
-                }
-                break;
         }
 
         // Validate rule type consistency

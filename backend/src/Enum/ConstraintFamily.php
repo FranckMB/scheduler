@@ -10,5 +10,4 @@ enum ConstraintFamily: string
     case DAY = 'DAY';
     case FACILITY = 'FACILITY';
     case COACH_AVAILABILITY = 'COACH_AVAILABILITY';
-    case FACILITY_CAPACITY = 'FACILITY_CAPACITY';
 }

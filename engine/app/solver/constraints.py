@@ -13,7 +13,7 @@ is a target, not a guarantee (ENG-18).
 
 Derived rules (parsed from v2 constraints[] payload → ParsedConstraints):
   forbidden_assignments, coach_unavailability, forced_venues,
-  preferred_venues, venue_capacity_caps, time_windows (TIME/DAY/LOCK).
+  preferred_venues, time_windows (TIME/DAY/LOCK).
 """
 
 from __future__ import annotations
@@ -49,7 +49,6 @@ class ParsedConstraints(TypedDict):
     preferred_venues: dict[str, set[str]]
     avoided_venues: list[dict[str, str]]
     venue_minimums: list[dict[str, Any]]
-    venue_capacity_caps: dict[str, int]
     time_windows: list[dict[str, Any]]
     priority_tiers: dict[int, int]
     team_coach_map: dict[str, list[str]]
@@ -59,7 +58,7 @@ class ParsedConstraints(TypedDict):
 # Recognised constraint discriminators (a v2 unified `family` or a v1 `type`).
 # Used to warn ONLY on genuine contract drift, not on recognised families whose
 # specific config variant is intentionally a no-op.
-_KNOWN_FAMILIES = frozenset({"TIME", "DAY", "FACILITY", "FACILITY_CAPACITY", "COACH_AVAILABILITY"})
+_KNOWN_FAMILIES = frozenset({"TIME", "DAY", "FACILITY", "COACH_AVAILABILITY"})
 _KNOWN_TYPES = frozenset({"TEAM_COACH", "COACH_PLAYER_UNAVAILABILITY", "PRIORITY_TIER"})
 
 # Intentional aliases (ENG-05 Scope A leaves these as-is, out of scope):
@@ -1714,7 +1713,6 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
         "preferred_venues": {},
         "avoided_venues": [],
         "venue_minimums": [],
-        "venue_capacity_caps": {},
         "time_windows": [],
         "priority_tiers": {},
         "team_coach_map": {},
@@ -1903,16 +1901,6 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
                     c, "WARNING",
                     "Contrainte de gymnase sans équipe cible — non appliquée.",
                 ))
-
-        elif family == "FACILITY_CAPACITY" and config.get("venueId"):
-            # Max teams allowed simultaneously per slot of this venue. Applied in
-            # _solve as min(trainingSlot.capacity, maxTeams) — can only tighten,
-            # never widen a venue the backend already capped to 1 (canSplit=false).
-            # Keyed strictly by config.venueId: scope_target_id under a TEAM scope
-            # is a team id and would never match a venue slot (audit review).
-            max_teams = config.get("maxTeams")
-            if max_teams is not None:
-                result["venue_capacity_caps"][str(config["venueId"])] = int(max_teams)
 
         elif c.get("type") == "PRIORITY_TIER":
             metadata = c.get("metadata") or {}

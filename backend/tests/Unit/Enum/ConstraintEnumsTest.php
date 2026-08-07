@@ -27,7 +27,6 @@ final class ConstraintEnumsTest extends TestCase
         self::assertSame('DAY', ConstraintFamily::DAY->value);
         self::assertSame('FACILITY', ConstraintFamily::FACILITY->value);
         self::assertSame('COACH_AVAILABILITY', ConstraintFamily::COACH_AVAILABILITY->value);
-        self::assertSame('FACILITY_CAPACITY', ConstraintFamily::FACILITY_CAPACITY->value);
     }
 
     public function testConstraintRuleTypeValues(): void

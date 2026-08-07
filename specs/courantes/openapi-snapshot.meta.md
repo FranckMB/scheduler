@@ -1,9 +1,14 @@
-Last verified @ 2026-08-07 (JSON **régénéré** depuis le backend vivant)
+Last verified @ 2026-08-08 (JSON **régénéré** depuis le backend vivant)
 
 Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **SEC-13 PR C (2026-08-08)** : la famille `FACILITY_CAPACITY` disparaît de l'enum exposée
+  (`ConstraintInput.family` : TIME · DAY · FACILITY · COACH_AVAILABILITY). Aucun path touché
+  (107) — c'est une valeur d'énumération qui sort, pas une route. Motif : aucun chemin UI ne
+  la créait, zéro ligne en base ; la capacité se règle par CRÉNEAU. Détail :
+  [`constraints.md`](../../backend/docs/constraints.md).
 - **SEC-16 audit (2026-08-07)** : le JWT applicatif passe en **cookie httpOnly** —
   `POST /api/login` rend désormais **204 sans corps** (le `200 {token}` était écrit en dur par
   le décorateur OpenAPI de lexik ; `CustomRoutesOpenApiFactory` le RÉÉCRIT, d'où sa priorité

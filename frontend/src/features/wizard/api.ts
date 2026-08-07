@@ -304,7 +304,7 @@ export const deleteCoachPlayer = (id: string): Promise<void> => api.delete(`coac
 
 // --- Constraints (W4) ---
 
-export type ConstraintFamily = "TIME" | "DAY" | "FACILITY" | "COACH_AVAILABILITY" | "FACILITY_CAPACITY";
+export type ConstraintFamily = "TIME" | "DAY" | "FACILITY" | "COACH_AVAILABILITY";
 export type ConstraintScope = "CLUB" | "TEAM" | "COACH" | "FACILITY";
 export type ConstraintRuleType = "HARD" | "PREFERRED" | "BONUS" | "LOCK";
 

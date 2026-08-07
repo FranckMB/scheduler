@@ -58,7 +58,6 @@ final class ConstraintKeysAreHonouredByEngineTest extends TestCase
      *   `only`   — UN seul créneau, lundi 18:00          → on observe le PLACEMENT
      *   `days`   — un gymnase, lundi et mercredi 18:00   → on observe le jour
      *   `venues` — deux gymnases, lundi 18:00            → on observe le gymnase
-     *   `shared` — un gymnase capacité 2, DEUX équipes   → on observe le nombre placé
      *
      * ⚠ Pourquoi le STATUT pour les règles dures : mesuré le 2026-08-07, sur une
      * grille à deux issues équivalentes le solveur en choisit une spontanément —
@@ -99,10 +98,10 @@ final class ConstraintKeysAreHonouredByEngineTest extends TestCase
         yield 'minAtVenueId' => ['minAtVenueId', 'venues', 'FACILITY', 'HARD', ['minAtVenueId' => self::V2, 'minAtVenueCount' => 1], self::V2];
         yield 'minAtVenueCount' => ['minAtVenueCount', 'venues', 'FACILITY', 'HARD', ['minAtVenueId' => self::V2, 'minAtVenueCount' => 1], self::V2];
 
-        // ---- FACILITY_CAPACITY : le rabot ferme le créneau à UNE équipe ------
-        // (famille retirée en PR C ; tant qu'elle existe, elle se prouve)
-        yield 'venueId' => ['venueId', 'shared', 'FACILITY_CAPACITY', 'HARD', ['venueId' => self::V1, 'maxTeams' => 1], '1'];
-        yield 'maxTeams' => ['maxTeams', 'shared', 'FACILITY_CAPACITY', 'HARD', ['venueId' => self::V1, 'maxTeams' => 1], '1'];
+        // (FACILITY_CAPACITY portait ici `venueId`/`maxTeams`, prouvées sur une
+        // grille `shared`. La famille a été RETIRÉE le 2026-08-08 : plus de clés,
+        // plus de scénarios — et le garde `testEveryWhitelistedEngineKeyHasAProof`
+        // n'en réclame plus, puisqu'il lit la liste blanche.)
 
         // ---- COACH_AVAILABILITY : le coach requis ne peut pas lundi ----------
         yield 'unavailableDays' => ['unavailableDays', 'only', 'COACH_AVAILABILITY', 'HARD', ['unavailableDays' => [1]], 'non placée'];
@@ -251,8 +250,8 @@ final class ConstraintKeysAreHonouredByEngineTest extends TestCase
         if ([] !== $config) {
             $constraints[] = [
                 'id' => 'rule',
-                'scope' => 'COACH_AVAILABILITY' === $family ? 'COACH' : ('FACILITY_CAPACITY' === $family ? 'CLUB' : 'TEAM'),
-                'scopeTargetId' => 'COACH_AVAILABILITY' === $family ? self::COACH : ('FACILITY_CAPACITY' === $family ? null : self::TEAM),
+                'scope' => 'COACH_AVAILABILITY' === $family ? 'COACH' : 'TEAM',
+                'scopeTargetId' => 'COACH_AVAILABILITY' === $family ? self::COACH : self::TEAM,
                 'family' => $family,
                 'ruleType' => $ruleType,
                 'name' => 'preuve ' . $family,

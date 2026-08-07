@@ -26,7 +26,7 @@ class ConstraintInput
     public ?string $scopeTargetId = null;
 
     #[Assert\NotBlank]
-    #[Assert\Choice(choices: ['TIME', 'DAY', 'FACILITY', 'COACH_AVAILABILITY', 'FACILITY_CAPACITY'])]
+    #[Assert\Choice(choices: ['TIME', 'DAY', 'FACILITY', 'COACH_AVAILABILITY'])]
     #[Groups(['write'])]
     public ?string $family = null;
 

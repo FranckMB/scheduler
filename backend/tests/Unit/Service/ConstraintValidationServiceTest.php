@@ -224,19 +224,6 @@ final class ConstraintValidationServiceTest extends TestCase
         self::assertContains('Une contrainte de disponibilité doit cibler un coach.', $errors);
     }
 
-    public function testFacilityCapacityFamilyRequiresMaxTeams(): void
-    {
-        $constraint = new Constraint;
-        $constraint->setScope(ConstraintScope::CLUB);
-        $constraint->setFamily(ConstraintFamily::FACILITY_CAPACITY);
-        $constraint->setRuleType(ConstraintRuleType::HARD);
-        $constraint->setConfig([]);
-
-        $errors = $this->service->validate($constraint);
-
-        self::assertContains('Une contrainte de capacité doit préciser un nombre maximum d\'équipes.', $errors);
-    }
-
     public function testLockRuleTypeOnlyValidForTimeOrDay(): void
     {
         $constraint = new Constraint;
