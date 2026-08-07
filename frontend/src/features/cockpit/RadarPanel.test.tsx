@@ -34,6 +34,11 @@ let schedulesData: { schedulePlanId: string }[] | undefined = [];
 // vacance qui en porte une ÉCHAPPE à l'horizon 60 j (revue #344 : cette carte est la seule
 // surface qui rende le badge « x à traiter »).
 let campaignsData: unknown[] | undefined = [];
+// P4-68 — indispos gymnase (carte du radar) + leur impact serveur. Vides par défaut :
+// les cas existants ne doivent voir aucune carte de plus.
+const createVenueClosureMutate = vi.fn();
+let unavailabilitiesData: { id: string; venueId: string; startDate: string; endDate: string; label: string | null }[] | undefined = [];
+let impactItemsData: { unavailabilityId: string; trainingSlotCount: number }[] = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, mutateAsync: createHolidayMutateAsync, isPending: false }),
@@ -44,6 +49,14 @@ vi.mock("./queries", () => ({
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
   useSchedulePlans: () => ({ data: plansState.failed ? undefined : plansData, isError: plansState.failed }),
+  useCreateVenueClosure: () => ({ mutate: createVenueClosureMutate, isPending: false }),
+}));
+// P4-68 — les indispos gymnase alimentent une carte du radar. Les trois lectures sont
+// simulées ici : une liste VIDE par défaut, chaque cas qui en veut une la pose lui-même.
+vi.mock("@/features/matches/queries", () => ({
+  useVenueUnavailabilities: () => ({ data: unavailabilitiesData }),
+  useVenues: () => ({ data: [{ id: "gym-1", name: "Armand" }] }),
+  useUnavailabilityImpact: () => ({ data: { clubId: "c", seasonId: "sn1", items: impactItemsData } }),
 }));
 vi.mock("@/features/planning/queries", () => ({ useSchedules: () => ({ data: schedulesData }), useSlots: () => ({ data: seasonSlotsData, isLoading: false }) }));
 vi.mock("@/features/coach-wishes/campaignQueries", () => ({ useCoachWishCampaigns: () => ({ data: campaignsData, isError: false }) }));
@@ -123,6 +136,9 @@ describe("RadarPanel", () => {
     schedulesData = [];
     campaignsData = [];
     plansState.failed = false;
+    createVenueClosureMutate.mockReset();
+    unavailabilitiesData = [];
+    impactItemsData = [];
   });
   afterEach(() => setTodayOverride(null));
 
@@ -717,6 +733,50 @@ describe("RadarPanel", () => {
     expect(screen.getByText("Férié proche")).toBeInTheDocument();
     expect(screen.getByText(/2 séances ce jour-là/)).toBeInTheDocument();
     expect(screen.queryByText("Férié lointain")).not.toBeInTheDocument();
+  });
+
+  // P4-68 (recadrage fondateur 2026-08-06) — « le gestionnaire est responsable et on
+  // fait le nécessaire pour qu'il soit ALERTÉ » : l'indispo gymnase entre au radar au
+  // moment d'agir, avec le geste qui ouvre le chemin (créer la fermeture → adapter).
+  it("alerte sur une indisponibilité gymnase à venir, chiffre l'impact, et « Adapter » crée la fermeture", async () => {
+    const user = userEvent.setup();
+    const today = todayISO();
+    unavailabilitiesData = [{ id: "u1", venueId: "gym-1", startDate: addDays(today, 12), endDate: addDays(today, 20), label: "travaux" }];
+    impactItemsData = [{ unavailabilityId: "u1", trainingSlotCount: 3 }];
+    renderRadar();
+
+    expect(screen.getByText("Armand indisponible (travaux)")).toBeInTheDocument();
+    expect(screen.getByText(/Dans 12 j · 3 créneaux d'entraînement\/sem\. concernés/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Adapter" }));
+
+    // Le geste EXISTANT (période de fermeture + contrainte datée « gymnase fermé »),
+    // aux dates de l'indispo : le radar ne réinvente pas un chemin parallèle.
+    expect(createVenueClosureMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ venueId: "gym-1", startDate: addDays(today, 12), endDate: addDays(today, 20) }),
+      expect.anything(),
+    );
+  });
+
+  it("dit « impact non évalué » plutôt qu'un zéro rassurant quand la lecture n'a rien rendu", () => {
+    const today = todayISO();
+    unavailabilitiesData = [{ id: "u1", venueId: "gym-1", startDate: addDays(today, 5), endDate: addDays(today, 9), label: null }];
+    impactItemsData = []; // impact pas (encore) là
+    renderRadar();
+
+    expect(screen.getByText(/impact non évalué/)).toBeInTheDocument();
+  });
+
+  it("ne double pas la carte d'une période qui couvre déjà l'indisponibilité", () => {
+    const today = todayISO();
+    unavailabilitiesData = [{ id: "u1", venueId: "gym-1", startDate: addDays(today, 12), endDate: addDays(today, 20), label: "travaux" }];
+    renderRadar({
+      entries: [
+        { id: "p1", kind: "period", periodType: "closure", title: "Fermeture Armand", startDate: addDays(today, 10), endDate: addDays(today, 25) } as CalendarEntry,
+      ],
+    });
+
+    expect(screen.queryByText("Armand indisponible (travaux)")).not.toBeInTheDocument();
   });
 
   it("P4-9 — un férié SANS séance ce jour-là disparaît (rien à protéger)", () => {

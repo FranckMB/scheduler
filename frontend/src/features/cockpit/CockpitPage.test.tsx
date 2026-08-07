@@ -38,6 +38,16 @@ vi.mock("./queries", () => ({
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: undefined })),
   // RadarPanel dérive « version active » du plan de la période (lot D-b).
   useSchedulePlans: () => ({ data: [], isSuccess: true }),
+  useCreateVenueClosure: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+// P4-68 — le radar lit les indispos gymnase (et la carte du cockpit les liste) :
+// rien à signaler dans ces cas d'état, la machine à états n'en dépend pas.
+vi.mock("@/features/matches/queries", () => ({
+  useVenueUnavailabilities: () => ({ data: [] }),
+  useVenues: () => ({ data: [] }),
+  useUnavailabilityImpact: () => ({ data: { clubId: "c", seasonId: null, items: [] } }),
+  useCreateVenueUnavailability: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteVenueUnavailability: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 function renderCockpit() {
