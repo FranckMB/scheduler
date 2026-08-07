@@ -51,7 +51,30 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
      */
     protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
     {
-        return $this->rejectingConcurrentPlanDeletion(fn (): object => parent::processPut($input, $uriVariables, $clubId, $seasonId));
+        // P4-44 — le triplet AVANT modification, capturé en valeurs (pas en référence :
+        // l'entité gérée sera mutée par le parent, et un clone tardif rendrait le
+        // nouveau triplet). Les réservations désignent leur créneau par ce triplet :
+        // sans ce relevé, corriger un horaire les laissait sur un horaire mort — que
+        // le moteur place quand même, en silence, sur le socle.
+        $id = $uriVariables['id'] ?? null;
+        $before = \is_string($id) ? $this->entityManager->getRepository(VenueTrainingSlot::class)->find($id) : null;
+        $snapshot = $before instanceof VenueTrainingSlot
+            ? (new VenueTrainingSlot)
+                ->setClubId($before->getClubId())->setSeasonId($before->getSeasonId())
+                ->setVenueId($before->getVenueId())->setDayOfWeek($before->getDayOfWeek())
+                ->setStartTime($before->getStartTime())->setDurationMinutes($before->getDurationMinutes())
+                ->setSchedulePlanId($before->getSchedulePlanId())
+            : null;
+
+        $output = $this->rejectingConcurrentPlanDeletion(fn (): object => parent::processPut($input, $uriVariables, $clubId, $seasonId));
+
+        if ($snapshot instanceof VenueTrainingSlot) {
+            // `$before` est l'entité GÉRÉE : le parent vient de la muter, elle porte donc
+            // déjà le nouveau triplet. C'est bien (avant → après) qu'on passe.
+            $this->cascadeDeleter?->moveChildrenOfSlot($snapshot, $before);
+        }
+
+        return $output;
     }
 
     protected function createEntityFromInput(object $input): VenueTrainingSlot

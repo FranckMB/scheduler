@@ -162,6 +162,43 @@ final class EntityCascadeDeleter
     }
 
     /**
+     * P4-44 — DÉPLACER un créneau déplace ses réservations, il ne les orpheline pas.
+     *
+     * Une `Reservation` désigne son créneau par le TRIPLET (gymnase, jour, heure),
+     * jamais par son id : un `PUT` qui corrige l'horaire laissait donc la réservation
+     * sur l'ancien triplet — un horaire qui n'existe plus. Le moteur ne s'en plaint
+     * PAS sur le socle : il place la séance à l'horaire mort et rend `completed`
+     * (mesuré). Le gestionnaire distribue un planning qui envoie ses équipes devant
+     * une porte fermée.
+     *
+     * Le geste du gestionnaire est « ce créneau est en fait à 18h30 » — pas « annule
+     * mes réservations ». On les SUIT donc (décision fondateur 2026-08-07), avec les
+     * MÊMES bornes de couche que la purge ci-dessous : un créneau de saison ne touche
+     * que les épinglages de base, un créneau de période que les siens.
+     *
+     * @param VenueTrainingSlot $before l'état AVANT modification (triplet d'origine)
+     */
+    public function moveChildrenOfSlot(VenueTrainingSlot $before, VenueTrainingSlot $after): void
+    {
+        if ($before->getVenueId() === $after->getVenueId()
+            && $before->getDayOfWeek() === $after->getDayOfWeek()
+            && $before->getStartTime()->format('H:i:s') === $after->getStartTime()->format('H:i:s')) {
+            return; // le triplet n'a pas bougé : rien à suivre
+        }
+
+        $clubId = $before->getClubId();
+        $seasonId = $before->getSeasonId();
+
+        $this->withoutTenantFilters(function () use ($before, $after, $clubId, $seasonId): void {
+            // Réservations ET verrous HARD qu'elles ont matérialisés — les mêmes deux
+            // familles que `purgeChildrenOfSlot`, sinon le verrou resterait à l'ancien
+            // horaire et `findBaseSlotTemplates` le ré-injecterait à chaque génération.
+            $this->moveBySlotKey(Reservation::class, $before, $after, $clubId, $seasonId, hardOnly: false);
+            $this->moveBySlotKey(ScheduleSlotTemplate::class, $before, $after, $clubId, $seasonId, hardOnly: true);
+        });
+    }
+
+    /**
      * Les épinglages d'un créneau, identifiés par (gymnase, jour, heure) — ni une
      * réservation ni un verrou ne cite l'id du créneau.
      *
@@ -209,6 +246,55 @@ final class EntityCascadeDeleter
             );
             if ([] === $scheduleIds) {
                 return; // aucune version sur cette couche : aucun verrou à emporter
+            }
+            $qb->andWhere('e.scheduleId IN (:scheduleIds)')->setParameter('scheduleIds', $scheduleIds);
+        }
+        if ($hardOnly) {
+            $qb->andWhere('e.lockLevel = :hard')->setParameter('hard', LockLevel::HARD);
+        }
+        $qb->getQuery()->execute();
+    }
+
+    /**
+     * Le jumeau UPDATE de {@see deleteBySlotKey} : MÊME sélection (mêmes bornes de
+     * couche, même famille), mais on réécrit le triplet au lieu de supprimer la ligne.
+     * Écrit en DQL comme son jumeau : ces lignes ne passent pas par l'UnitOfWork, et
+     * un `find`+`set` sur des centaines d'épinglages coûterait sans rien apporter.
+     */
+    private function moveBySlotKey(string $entityClass, VenueTrainingSlot $before, VenueTrainingSlot $after, string $clubId, string $seasonId, bool $hardOnly): void
+    {
+        $qb = $this->entityManager->createQueryBuilder()
+            ->update($entityClass, 'e')
+            ->set('e.venueId', ':newVenueId')
+            ->set('e.dayOfWeek', ':newDayOfWeek')
+            ->set('e.startTime', ':newStartTime')
+            ->where('e.clubId = :clubId')
+            ->andWhere('e.seasonId = :seasonId')
+            ->andWhere('e.venueId = :venueId')
+            ->andWhere('e.dayOfWeek = :dayOfWeek')
+            ->andWhere('e.startTime = :startTime')
+            ->setParameter('newVenueId', $after->getVenueId())
+            ->setParameter('newDayOfWeek', $after->getDayOfWeek())
+            ->setParameter('newStartTime', $after->getStartTime())
+            ->setParameter('clubId', $clubId)
+            ->setParameter('seasonId', $seasonId)
+            ->setParameter('venueId', $before->getVenueId())
+            ->setParameter('dayOfWeek', $before->getDayOfWeek())
+            ->setParameter('startTime', $before->getStartTime());
+
+        $planId = $before->getSchedulePlanId();
+        if (Reservation::class === $entityClass) {
+            $qb->andWhere(null === $planId ? 'e.schedulePlanId IS NULL' : 'e.schedulePlanId = :planId');
+            if (null !== $planId) {
+                $qb->setParameter('planId', $planId);
+            }
+        } elseif (ScheduleSlotTemplate::class === $entityClass) {
+            $scheduleIds = array_map(
+                static fn (Schedule $s): string => $s->getId(),
+                $this->entityManager->getRepository(Schedule::class)->findBy(['schedulePlanId' => $planId ?? $this->seasonPlanIds($seasonId)]),
+            );
+            if ([] === $scheduleIds) {
+                return;
             }
             $qb->andWhere('e.scheduleId IN (:scheduleIds)')->setParameter('scheduleIds', $scheduleIds);
         }
