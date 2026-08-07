@@ -51,6 +51,8 @@ export interface MeResponse {
     schoolZone: string | null;
     /** P2-21 lot A — vérité serveur : les équipes viennent de l'import FFBB. */
     ffbbTeamsImported?: boolean;
+    /** P4-16/P2-4 — « aujourd'hui » simulé d'un club démo (null = horloge réelle). */
+    demoToday?: string | null;
     league: string | null;
     ffbbClubCode: string | null;
     committeeCode: string | null;

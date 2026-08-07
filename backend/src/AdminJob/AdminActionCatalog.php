@@ -42,6 +42,13 @@ final readonly class AdminActionCatalog
                 dangerous: false,
             ),
             new AdminActionDefinition(
+                'demo-clock',
+                'Horloge simulée (club démo)',
+                'Pose l\'« aujourd\'hui » simulé d\'un club de démonstration (serveur ET front vivent à cette date) — ou le relâche. Réservé aux clubs de démo : sur un vrai club, ce serait mentir à un gestionnaire.',
+                'app:demo:clock',
+                dangerous: true,
+            ),
+            new AdminActionDefinition(
                 'reset-current-season',
                 'Réinitialiser la saison courante',
                 'Vide toutes les données de la saison courante du club (structure, calendrier, plannings). La saison et le club survivent — le club repart au wizard.',

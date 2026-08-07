@@ -52,6 +52,15 @@ services:
         tags:
             - { name: kernel.event_subscriber }
 
+    # P4-16 / P2-4 — l'horloge sait mentir pour un club démo (club.demo_today).
+    # Décoration du service `clock` : TOUT consommateur de ClockInterface la
+    # traverse. Hors requête (workers/crons/commandes) ou hors club (routes
+    # publiques, firewall admin), passage direct — horloge réelle.
+    App\Service\DemoAwareClock:
+        decorates: 'clock'
+        arguments:
+            $inner: '@.inner'
+
     App\EventListener\CacheInvalidationListener:
         arguments:
             $scheduleCachePool: '@cache.schedule'

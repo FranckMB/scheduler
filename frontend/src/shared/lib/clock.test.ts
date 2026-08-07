@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { setTodayOverride, toISODate, todayISO } from "./clock";
+import { applyServerToday, setTodayOverride, toISODate, todayISO } from "./clock";
 
-afterEach(() => setTodayOverride(null));
+afterEach(() => {
+  setTodayOverride(null);
+  applyServerToday(null);
+});
 
 describe("clock — le « aujourd'hui » du front", () => {
   it("sans override, rend la date réelle du jour", () => {
@@ -47,6 +50,20 @@ describe("clock — le « aujourd'hui » du front", () => {
     expect(todayISO()).toBe("2028-02-29");
 
     setTodayOverride("2027-02-29");
+    expect(todayISO()).toBe(toISODate(new Date()));
+  });
+
+  // P4-16/P2-4 — la date SERVEUR d'un club démo (/api/me → demoToday).
+  it("applyServerToday pose la date du club démo, et null la relâche", () => {
+    applyServerToday("2026-12-15");
+    expect(todayISO()).toBe("2026-12-15");
+
+    applyServerToday(null); // vrai club : demoToday null → horloge réelle
+    expect(todayISO()).toBe(toISODate(new Date()));
+  });
+
+  it("applyServerToday ignore une date irréelle, comme l'override de dev", () => {
+    applyServerToday("2026-02-31");
     expect(todayISO()).toBe(toISODate(new Date()));
   });
 

@@ -317,6 +317,10 @@ final class AuthController extends AbstractController
                     // du wizard ne s'affiche QUE si l'import FFBB a réellement créé
                     // les équipes (jamais sur une saisie manuelle).
                     'ffbbTeamsImported' => null !== $clubEntity->getFfbbTeamsImportedAt(),
+                    // P4-16/P2-4 — l'« aujourd'hui » simulé d'un club démo : le front
+                    // (clock.ts) s'y cale pour que l'écran et le serveur disent la même
+                    // date. Null pour tout vrai club.
+                    'demoToday' => $clubEntity->getDemoToday()?->format('Y-m-d'),
                 ];
 
                 // FFBB club info: management-only (the /club section is admin-only).
