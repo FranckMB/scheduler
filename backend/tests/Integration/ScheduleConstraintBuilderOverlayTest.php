@@ -445,8 +445,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         // resterait vert en n'exerçant plus un tag semé par le listener, c'est-à-dire le
         // « fixture qui vérifie ses propres fixtures » que ce fichier dénonce plus bas.
         self::assertInstanceOf(TeamTag::class, $tag, 'garde du fixture : le listener doit avoir semé U13');
-        // BCK-11 : tenant + RLS, une ligne sans club_id est refusée en base.
-        $this->em->persist((new TeamTagAssignment)->setClubId($team->getClubId())->setTagId($tag->getId())->setTeamId($team->getId())->setSeasonId($season->getId()));
+        $this->em->persist((new TeamTagAssignment)->setTagId($tag->getId())->setTeamId($team->getId())->setSeasonId($season->getId()));
         $this->em->flush();
 
         $before = $this->assignmentIdsOf($team->getId(), $season->getId());
@@ -494,7 +493,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
             $tag = (new TeamTag)->setClubId($club->getId())->setName($name)->setIsSystem(true);
             $this->em->persist($tag);
             $this->em->flush();
-            $this->em->persist((new TeamTagAssignment)->setClubId($team->getClubId())->setTagId($tag->getId())->setTeamId($team->getId())->setSeasonId($season->getId()));
+            $this->em->persist((new TeamTagAssignment)->setTagId($tag->getId())->setTeamId($team->getId())->setSeasonId($season->getId()));
         }
         $this->em->flush();
 
@@ -657,7 +656,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $this->em->persist($tag);
         $this->em->flush();
         foreach ([$active, $paused] as $t) {
-            $this->em->persist((new TeamTagAssignment)->setClubId($t->getClubId())->setTagId($tag->getId())->setTeamId($t->getId())->setSeasonId($season->getId()));
+            $this->em->persist((new TeamTagAssignment)->setTagId($tag->getId())->setTeamId($t->getId())->setSeasonId($season->getId()));
         }
         $c = new Constraint;
         $c->setClubId($club->getId());
