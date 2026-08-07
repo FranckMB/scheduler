@@ -36,6 +36,18 @@ de console et logout CSRF. Il ne lit ni ne persiste le JWT club.
 3. `GET /api/admin/auth/me` hydrate la session séparée.
 4. `POST /api/admin/auth/logout` exige `X-CSRF-Token`, invalide la session et répond 204.
 
+**Le contrôle CSRF est CENTRAL depuis SEC-18 (2026-08-07).** `AdminCsrfListener`
+(`kernel.request`, priorité 6 — après le firewall et le listener tenant) exige le jeton sur
+**toute méthode non sûre** sous `/api/admin`, que le contrôleur y pense ou non. Deux
+exemptions, et deux seulement : `POST /api/admin/auth/password` et `POST /api/admin/auth/totp`
+— les portes de connexion, qui précèdent toute session porteuse de jeton (leur défense est
+ailleurs : throttle par IP, mot de passe, puis TOTP obligatoire). Les appels
+`AdminSessionCsrf::isValid()` restés dans les contrôleurs deviennent une seconde barrière.
+Ce n'était pas un trou — les quatre écritures existantes l'appelaient toutes — mais un piège :
+le premier endpoint ajouté sans copier la ligne naissait sans protection, en silence.
+`AdminRequestBoundaryTest` ÉNUMÈRE le routeur et exige un 403 sans jeton sur chaque écriture
+admin : une route ajoutée demain est couverte le jour où elle est ajoutée.
+
 Les deux étapes publiques partagent une limite glissante de 5 tentatives par IP sur
 15 minutes. Les erreurs d'identifiant, de mot de passe et de compte désactivé ne révèlent
 pas l'existence du compte. L'état `enabled` est revalidé à chaque restauration de la

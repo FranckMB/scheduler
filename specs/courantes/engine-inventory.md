@@ -237,6 +237,18 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 - **Durée session default** : `DEFAULT_SESSION_MINUTES = 90`.
 - **Timeout solver** : adaptatif (`_adaptive_timeout`, voir §2) — `n_teams × n_venues` ≤50 : 60 s · ≤200 : 180 s · sinon 600 s, plafonné par `solver_timeout_seconds` du payload (default **650 s** dans `ScheduleInputSchema`). Phase 2 (chaînage) plafonnée en plus par `CHAINING_PHASE_MAX_SECONDS = 10`.
 - **Seed** : `solver.parameters.random_seed = input_data.solver_seed` (default 42) — les deux phases.
+- **Déterminisme (ENG-25, 2026-08-07)** : les agrégations par équipe itèrent sur des clés `str`,
+  dont le hash est randomisé PAR PROCESSUS. `add_preferred_day_bonus` **trie** désormais
+  (`objective.py`) — sans quoi l'ordre d'ajout des termes soft, donc le chemin de recherche de
+  CP-SAT, changeait d'un run à l'autre : même payload, même `solverSeed`, planning différent (de
+  valeur d'objectif identique). ⚠ `PYTHONHASHSEED` n'est **délibérément pas figé** : ce serait
+  traiter le symptôme, et le figer désarme la protection contre les collisions de hash. L'ordre se
+  décide là où il compte. Gardé par `tests/test_deterministic_term_order.py`.
+- **Harnais de test (ENG-26, 2026-08-07)** : `tests/support/pipeline.py` annonce la version lue
+  depuis `CONTRACT_VERSION`. Elle était figée à `"1.0"` — un payload que `POST /generate` refuse en
+  422 : `solve_payload` court-circuitant la couche FastAPI, le garde ne tournait jamais, et toute la
+  suite sémantique validait une enveloppe que personne n'accepterait en production. Gardé par
+  `tests/test_harness_speaks_the_real_contract.py`.
 - **Workers** : `num_search_workers` **adaptatif** (`_adaptive_workers`, main.py) — complexité `n_teams×n_venues` ≤200 → **1** (déterministe, dont dépendent les goldens petits) · else → **8** (le worker unique trouve l'optimum en ~2s sur les problèmes denses riches en soft mais ne le prouve pas — 612s de blocage sur BCCL ; le portfolio 8 workers ferme la preuve en ~2s, même valeur d'objectif, assignation non-déterministe mais valeur stable). Appliqué aux deux phases.
   - ⚠️ **Réconciliation spec** : `specs/initiales/…contraintes_v2.md §2` promet « même entrée + même `solver_seed` + même version → planning **exactement** identique ». Depuis les workers adaptatifs, cette garantie n'est plus **exacte** qu'en dessous du seuil (≤200 complexité, 1 worker) ; au-dessus, seule la **valeur d'objectif** (score) est reproductible, pas l'arrangement exact (décision produit 2026-07-07, cf. roadmap §1 — le gestionnaire ajuste de toute façon). Les initiales étant gelées, la réconciliation vit ici.
 - **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V7"`. Maximise somme pondérée. Poids fixes (`LEVEL_2_OBJECTIVE_WEIGHTS`, objective.py — source de vérité, ne pas figer d'autres valeurs ici) :
