@@ -91,6 +91,7 @@ final class DemoAwareClockTest extends KernelTestCase
     {
         $suffix = bin2hex(random_bytes(4));
         $club = (new Club)->setName('Demo ' . $suffix)->setSlug('demo-clock-' . $suffix)->setTimezone('Europe/Paris')->setLocale('fr');
+        $club->setIsDemo($demoToday instanceof DateTimeImmutable);
         $club->setDemoToday($demoToday);
         $this->em->persist($club);
         $this->em->flush();
