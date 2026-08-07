@@ -81,11 +81,16 @@ Il n'existe **pas** de clé `closedDay` ni `onlyDay`. Une fermeture de salle **d
 
 #### `COACH_AVAILABILITY` — Disponibilité d'entraîneur
 
-Déclare les jours où un entraîneur est indisponible (ou, à l'inverse, les seuls jours où il est disponible). La config exige `coachId` (ou `targetTag`) :
+Déclare les jours où un entraîneur est indisponible (ou, à l'inverse, les seuls jours où il est disponible).
+
+⚠ **La cible est le SCOPE, pas le config** (SEC-13, 2026-08-07). `scopeTargetId` porte le
+coach ; `config.coachId` a été supprimé — il valait exactement la même valeur (6 lignes sur 6,
+mesuré) et le solveur n'a jamais lu que le scope (`constraints.py` : `scope_target_id`). Deux
+endroits pour une même vérité finissent par diverger. `targetTag` reste une cible légitime :
+il désigne un GROUPE, ce que le scope ne sait pas exprimer.
 
 | Clé `config` | Type | Description |
 |--------------|------|-------------|
-| `coachId` | UUID | Coach concerné (**requis**, sauf si `targetTag` est fourni) |
 | `unavailableDays` | int[] (1-7) | Jours où le coach est indisponible |
 | `availableDays` | int[] (1-7) | Whitelist : le coach n'est disponible QUE ces jours-là |
 | `fromTime` / `untilTime` | string (HH:MM) | Fenêtre horaire optionnelle de l'indisponibilité (Lot C) ; absente = journée entière |

@@ -88,7 +88,10 @@ final class ConstraintValidationService
                 break;
 
             case ConstraintFamily::COACH_AVAILABILITY:
-                if (!isset($config['coachId']) && !isset($config['targetTag'])) {
+                // SEC-13 : la cible du coach est le SCOPE, plus une clé du config
+                // (doublon exact retiré par Version20260807190000). `targetTag`
+                // reste une cible légitime — il désigne un GROUPE de coachs.
+                if (null === $constraint->getScopeTargetId() && !isset($config['targetTag'])) {
                     $errors[] = 'Une contrainte de disponibilité doit cibler un coach.';
                 }
                 // Lot C: optional time window (fromTime / untilTime, HH:MM). Absent = whole day.
