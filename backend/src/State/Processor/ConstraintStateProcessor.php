@@ -11,6 +11,7 @@ use App\Entity\ConstraintPeriodOverride;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Service\ConstraintConfigValidator;
 use App\Service\ManagementAccessGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
@@ -19,6 +20,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 use Throwable;
 
 /**
@@ -35,6 +37,7 @@ class ConstraintStateProcessor extends AbstractStateProcessor
         SeasonAccessGuard $seasonAccessGuard,
         ManagementAccessGuard $managementAccessGuard,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly ConstraintConfigValidator $configValidator,
         ?LoggerInterface $logger = null,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
@@ -81,6 +84,9 @@ class ConstraintStateProcessor extends AbstractStateProcessor
         $entity->setScopeTargetId($input->scopeTargetId);
         $entity->setFamily($this->parseFamily($input->family));
         $entity->setRuleType($this->parseRuleType($input->ruleType));
+        // SEC-13 : le `config` était le seul champ sans contrôle — une clé mal
+        // orthographiée entrait en base et le solveur l'ignorait en silence.
+        $this->assertConfigIsValid($entity->getFamily(), $input->config ?? []);
         $entity->setConfig($input->config ?? []);
         $entity->setCreatedBy($input->createdBy);
         $entity->setSource($input->source);
@@ -124,6 +130,9 @@ class ConstraintStateProcessor extends AbstractStateProcessor
             $entity->setRuleType($this->parseRuleType($input->ruleType));
         }
         if (null !== $input->config) {
+            // La famille FINALE, pas celle du payload : un PUT peut changer l'une
+            // sans l'autre, et un `config` valide pour TIME ne l'est pas pour DAY.
+            $this->assertConfigIsValid($entity->getFamily(), $input->config);
             $entity->setConfig($input->config);
         }
         if (null !== $input->createdBy) {
@@ -163,6 +172,25 @@ class ConstraintStateProcessor extends AbstractStateProcessor
         // toggles are keyed on constraintId and would orphan on a bare delete.
         foreach ($this->entityManager->getRepository(ConstraintPeriodOverride::class)->findBy(['constraintId' => $entity->getId()]) as $override) {
             $this->entityManager->remove($override);
+        }
+    }
+
+    /**
+     * SEC-13 — refuse un `config` hors liste blanche, en NOMMANT la clé fautive.
+     *
+     * 422 et non 400 : la requête est bien formée, c'est son contenu métier qui
+     * est irrecevable — même sémantique que les autres refus de validation de
+     * l'API. Le message est destiné au gestionnaire ET au développeur : il liste
+     * les réglages acceptés pour la famille, ce qui suffit à corriger une faute
+     * de frappe sans ouvrir le code.
+     *
+     * @param array<string, mixed> $config
+     */
+    private function assertConfigIsValid(ConstraintFamily $family, array $config): void
+    {
+        $errors = $this->configValidator->errors($family, $config);
+        if ([] !== $errors) {
+            throw new UnprocessableEntityHttpException(implode(' ', $errors));
         }
     }
 

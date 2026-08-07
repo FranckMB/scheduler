@@ -95,6 +95,20 @@ async function ensureValidated(page: Page): Promise<void> {
   }
 
   if (await cont.isVisible().catch(() => false)) {
+    // ⚠ `isVisible()` rend VRAI pour un bouton désactivé — cliquer dessus attend
+    // alors le timeout ENTIER du test (240 s), × 3 tentatives = 12,6 min de CI
+    // pour un échec qui ne dit rien (mesuré sur #432). Même défaut que P4-71 avait
+    // corrigé sur le bouton « Lancer » juste en dessous, laissé sur celui-ci.
+    // On échoue en 5 s, en NOMMANT ce qu'un « Continuer » grisé veut dire : le
+    // gate du récap refuse — une contrainte invalide, ou un bloqueur non résolu.
+    if (!(await cont.isEnabled({ timeout: 5_000 }).catch(() => false))) {
+      throw new Error(
+        "ensureValidated: « Continuer vers la génération » est DÉSACTIVÉ. Le gate du récap refuse : "
+        + "une contrainte du club est invalide (config hors liste blanche, SEC-13) ou un bloqueur "
+        + "subsiste (réservation orpheline, sur-capacité). Ouvrir /wizard → Récap pour lire le motif, "
+        + "ou auditer les contraintes du club seedé.",
+      );
+    }
     await cont.click();
   }
   // On ne LANCE une génération que s'il n'y a rien à valider : le club seedé a

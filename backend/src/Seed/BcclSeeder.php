@@ -931,7 +931,10 @@ final class BcclSeeder
         // Variables coach déjà résolues (l.618+) : un coach manquant lève une erreur PHP au lieu de disparaître en silence.
         foreach ([[$coachLionel, 5], [$coachThomas, 5], [$coachEnzo, 5], [$coachJordan, 5], [$coachNicoPatin, 4], [$coachEmerick, 4]] as [$coach, $day]) {
             $label = 5 === $day ? 'le vendredi' : 'le jeudi';
-            $addConstraint(\sprintf('%s - Indisponible %s', $coach->getFirstName(), $label), ConstraintScope::COACH, $coach->getId(), ConstraintFamily::COACH_AVAILABILITY, ConstraintRuleType::HARD, ['coachId' => $coach->getId(), 'unavailableDays' => [$day]]);
+            // SEC-13 : la cible du coach est le SCOPE (3e argument), plus une clé du config —
+            // `coachId` en doublon est refusé depuis la validation stricte, et un club seedé
+            // qui le porte ferme le gate du récap (bouton « Continuer » gris, e2e bloquée).
+            $addConstraint(\sprintf('%s - Indisponible %s', $coach->getFirstName(), $label), ConstraintScope::COACH, $coach->getId(), ConstraintFamily::COACH_AVAILABILITY, ConstraintRuleType::HARD, ['unavailableDays' => [$day]]);
         }
 
         $manager->flush();

@@ -8,6 +8,7 @@ use App\Entity\Constraint;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Service\ConstraintConfigValidator;
 use App\Service\ConstraintValidationService;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -15,6 +16,9 @@ use PHPUnit\Framework\TestCase;
 #[Group('unit')]
 final class ConstraintValidationServiceTest extends TestCase
 {
+    /** SEC-13 : le validateur type les identifiants — un gymnase est un uuid, pas « v ». */
+    private const string VENUE = '11111111-1111-4111-8111-111111111111';
+
     private ConstraintValidationService $service;
 
     public function testTeamScopeRequiresScopeTargetId(): void
@@ -188,7 +192,8 @@ final class ConstraintValidationServiceTest extends TestCase
             $constraint->setScope(ConstraintScope::CLUB);
             $constraint->setFamily(ConstraintFamily::FACILITY);
             $constraint->setRuleType(ConstraintRuleType::HARD);
-            $constraint->setConfig([$key => 42]);
+            // SEC-13 : la valeur compte désormais autant que la clé — 42 n'est pas un gymnase.
+            $constraint->setConfig([$key => self::VENUE]);
 
             self::assertSame([], $this->service->validate($constraint), \sprintf('%s should be a valid FACILITY key', $key));
         }
@@ -279,7 +284,7 @@ final class ConstraintValidationServiceTest extends TestCase
 
     public function testFacilityFamilyAcceptsMinAtVenueId(): void
     {
-        $constraint = (new Constraint)->setScope(ConstraintScope::TEAM)->setScopeTargetId('t')->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)->setConfig(['minAtVenueId' => 'v', 'minAtVenueCount' => 1]);
+        $constraint = (new Constraint)->setScope(ConstraintScope::TEAM)->setScopeTargetId('t')->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)->setConfig(['minAtVenueId' => self::VENUE, 'minAtVenueCount' => 1]);
         self::assertSame([], $this->service->validate($constraint));
     }
 
@@ -292,34 +297,35 @@ final class ConstraintValidationServiceTest extends TestCase
 
     public function testMinAtVenueIdAtPreferredIsRejected(): void
     {
-        $constraint = (new Constraint)->setScope(ConstraintScope::TEAM)->setScopeTargetId('t')->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::PREFERRED)->setConfig(['minAtVenueId' => 'v']);
+        $constraint = (new Constraint)->setScope(ConstraintScope::TEAM)->setScopeTargetId('t')->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::PREFERRED)->setConfig(['minAtVenueId' => self::VENUE]);
         self::assertContains('« Au moins N séances dans ce gymnase » n\'existe qu\'en règle OBLIGATOIRE — passez la contrainte en obligatoire.', $this->service->validate($constraint));
     }
 
     public function testMinAtVenueIdAtClubScopeIsRejected(): void
     {
         // CLUB-scoped minAtVenueId is dropped by parse_v2_constraints (TEAM-only) — reject it (C3).
-        $constraint = (new Constraint)->setScope(ConstraintScope::CLUB)->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)->setConfig(['minAtVenueId' => 'v']);
+        $constraint = (new Constraint)->setScope(ConstraintScope::CLUB)->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)->setConfig(['minAtVenueId' => self::VENUE]);
         self::assertContains('« Au moins N séances dans ce gymnase » se pose sur une équipe ou un groupe — pas sur « toutes les équipes ».', $this->service->validate($constraint));
     }
 
     public function testVenueMinimumErrorWhenCountExceedsSessions(): void
     {
-        $constraint = (new Constraint)->setFamily(ConstraintFamily::FACILITY)->setConfig(['minAtVenueId' => 'v', 'minAtVenueCount' => 3]);
+        $constraint = (new Constraint)->setFamily(ConstraintFamily::FACILITY)->setConfig(['minAtVenueId' => self::VENUE, 'minAtVenueCount' => 3]);
         self::assertNotNull($this->service->venueMinimumError($constraint, 2), 'min 3 > 2 sessions/week must error');
     }
 
     public function testVenueMinimumErrorNullWhenWithinSessions(): void
     {
-        $constraint = (new Constraint)->setFamily(ConstraintFamily::FACILITY)->setConfig(['minAtVenueId' => 'v', 'minAtVenueCount' => 1]);
+        $constraint = (new Constraint)->setFamily(ConstraintFamily::FACILITY)->setConfig(['minAtVenueId' => self::VENUE, 'minAtVenueCount' => 1]);
         self::assertNull($this->service->venueMinimumError($constraint, 2));
         // Non venue-minimum → always null.
-        $other = (new Constraint)->setFamily(ConstraintFamily::FACILITY)->setConfig(['forcedVenueId' => 'v']);
+        $other = (new Constraint)->setFamily(ConstraintFamily::FACILITY)->setConfig(['forcedVenueId' => self::VENUE]);
         self::assertNull($this->service->venueMinimumError($other, 1));
     }
 
     protected function setUp(): void
     {
-        $this->service = new ConstraintValidationService;
+        // SEC-13 : le service délègue la FORME du config au validateur partagé.
+        $this->service = new ConstraintValidationService(new ConstraintConfigValidator);
     }
 }

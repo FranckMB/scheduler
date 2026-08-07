@@ -174,7 +174,8 @@ final class ValidateConstraintsTest extends WebTestCase
         $constraint->setScopeTargetId($coachId);
         $constraint->setFamily(ConstraintFamily::COACH_AVAILABILITY);
         $constraint->setRuleType(ConstraintRuleType::HARD);
-        $constraint->setConfig(['coachId' => $coachId, 'unavailableDays' => [2]]);
+        // SEC-13 PR B : la cible du coach est le scope (l. 174), plus une clé du config.
+        $constraint->setConfig(['unavailableDays' => [2]]);
         $constraint->setIsActive(true);
         $this->em->persist($constraint);
         $this->em->flush();
@@ -386,6 +387,76 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid']);
         self::assertSame([], $data['warnings'], 'sans désactivation, aucune contrainte n’est écartée');
+    }
+
+    /**
+     * SEC-13 — LE 422 À L'ÉCRITURE, sur la vraie route.
+     *
+     * ⚠ Ce test existe parce que la falsification l'a réclamé : retirer l'appel au
+     * validateur dans `ConstraintStateProcessor` laissait TOUTE la suite verte. Le
+     * validateur avait ses 26 cas unitaires, mais son CÂBLAGE — le seul endroit
+     * qui empêche la donnée fautive d'entrer — n'était gardé par personne.
+     *
+     * Le cas mesuré sur l'API réelle le 2026-08-07 : `{"maxStartTme":"19:00"}`
+     * rendait 201, la contrainte s'affichait « HARD · active », et le solveur
+     * plaçait la séance à 20:00.
+     */
+    public function testWritingAnUnknownConfigKeyIsRefusedWithFourTwentyTwo(): void
+    {
+        $this->client->loginUser($this->user);
+
+        $this->client->request('POST', '/api/constraints', [], [], [
+            'CONTENT_TYPE' => 'application/ld+json',
+            'HTTP_X-Club-Id' => $this->club->getId(),
+        ], json_encode([
+            'scope' => 'CLUB', 'family' => 'TIME', 'ruleType' => 'HARD',
+            'name' => 'Rien après 19h (faute de frappe)',
+            'config' => ['maxStartTme' => '19:00'],
+            'isActive' => true, 'sortOrder' => 0,
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(422);
+        self::assertStringContainsString(
+            'maxStartTme',
+            (string) $this->client->getResponse()->getContent(),
+            'le refus doit NOMMER la clé fautive — sinon le gestionnaire ne peut pas corriger',
+        );
+    }
+
+    public function testWritingAnAberrantValueIsRefusedEvenWithAKnownKey(): void
+    {
+        $this->client->loginUser($this->user);
+
+        $this->client->request('POST', '/api/constraints', [], [], [
+            'CONTENT_TYPE' => 'application/ld+json',
+            'HTTP_X-Club-Id' => $this->club->getId(),
+        ], json_encode([
+            'scope' => 'CLUB', 'family' => 'TIME', 'ruleType' => 'HARD',
+            'name' => 'Heure impossible',
+            'config' => ['maxStartTime' => '25:99'],
+            'isActive' => true, 'sortOrder' => 0,
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testAValidConfigStillWritesFine(): void
+    {
+        // TÉMOIN : sans lui, un validateur qui refuserait TOUT passerait les deux
+        // tests ci-dessus au vert en rendant l'application inutilisable.
+        $this->client->loginUser($this->user);
+
+        $this->client->request('POST', '/api/constraints', [], [], [
+            'CONTENT_TYPE' => 'application/ld+json',
+            'HTTP_X-Club-Id' => $this->club->getId(),
+        ], json_encode([
+            'scope' => 'CLUB', 'family' => 'TIME', 'ruleType' => 'PREFERRED',
+            'name' => 'Rien après 19h',
+            'config' => ['maxStartTime' => '19:00'],
+            'isActive' => true, 'sortOrder' => 0,
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(201);
     }
 
     protected function setUp(): void

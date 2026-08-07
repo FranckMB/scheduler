@@ -371,9 +371,19 @@ def add_preferred_day_bonus(
     """
     del model
 
-    def day_set(config: Mapping[str, Any], key: str, snake: str) -> set[int]:
+    def day_set(config: Mapping[str, Any], key: str) -> set[int]:
+        """SEC-13 — UNE seule orthographe : le camelCase du contrat.
+
+        Cette fonction acceptait aussi un alias snake_case (`preferred_days`,
+        `forbidden_days`). Personne ne l'a jamais émis, et depuis SEC-13 l'API
+        REFUSE les clés hors liste blanche : garder l'alias, c'était garder deux
+        façons d'écrire la même règle — donc deux façons de la chercher le jour
+        où elle ne s'applique pas. La liste blanche du backend et ce que lit le
+        moteur sont désormais le MÊME ensemble, et le job CI « Engine semantics »
+        le vérifie clé par clé, par le comportement.
+        """
         days: set[int] = set()
-        for value in config.get(key) or config.get(snake) or ():
+        for value in config.get(key) or ():
             try:
                 days.add(int(_scalar_id(value)))
             except (TypeError, ValueError):
@@ -398,8 +408,8 @@ def add_preferred_day_bonus(
         if team_id is None:
             continue
         config = _get(time_window, "config", default={}) or {}
-        preferred_by_team.setdefault(str(team_id), set()).update(day_set(config, "preferredDays", "preferred_days"))
-        avoided_by_team.setdefault(str(team_id), set()).update(day_set(config, "forbiddenDays", "forbidden_days"))
+        preferred_by_team.setdefault(str(team_id), set()).update(day_set(config, "preferredDays"))
+        avoided_by_team.setdefault(str(team_id), set()).update(day_set(config, "forbiddenDays"))
 
     synthetic_windows: list[dict[str, Any]] = []
     # ENG-25 — `sorted`, et pas seulement pour la forme : ces clés sont des `str`,
@@ -425,8 +435,8 @@ def add_preferred_day_bonus(
         })
 
     def criterion(config: Mapping[str, Any]) -> tuple[set[int], set[int]] | None:
-        preferred = day_set(config, "preferredDays", "preferred_days")
-        avoided = day_set(config, "forbiddenDays", "forbidden_days")
+        preferred = day_set(config, "preferredDays")
+        avoided = day_set(config, "forbiddenDays")
         if not preferred and not avoided:
             return None
         return (preferred, avoided)

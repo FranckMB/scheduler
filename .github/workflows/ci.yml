@@ -346,7 +346,11 @@ jobs:
         run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:database:create --if-not-exists --connection admin --env=test && php bin/console doctrine:migrations:migrate --no-interaction --env=test'
 
       - name: Run unit tests
-        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/'
+        # SEC-13 : le groupe `contract` a QUITTÉ ce job pour « Engine semantics »
+        # (dédié, sans needs). Ce sont les tests qui interrogent le VRAI moteur —
+        # une autre question que « le code unitaire tient-il ? », noyée ici parmi
+        # plus d'un millier de tests, donc invisible quand elle tombait.
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/ --exclude-group contract'
 
   engine-tests:
     name: Engine Tests
@@ -492,6 +496,47 @@ jobs:
   # re-opens then RESTORES the season-plan pointer) — order is a convenience,
   # never a dependency. The solver smoke does leave the COMPLETED season
   # schedule the later ones pin, hence this ordering.
+  engine-semantics:
+    name: Engine semantics
+    runs-on: ubuntu-latest
+    # AUCUN `needs`, comme smoke-tests : la question « ce que le backend croit du
+    # moteur est-il vrai ? » ne dépend d'aucune suite unitaire, et démarrer à t=0
+    # la fait répondre tôt. ⚠ À ajouter aux required status checks de `main` pour
+    # qu'elle BLOQUE (décision fondateur 2026-08-07) — le réglage est côté GitHub.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Prepare .env
+        run: |
+          cp .env.dist .env
+          printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
+      # php-fpm pour exécuter phpunit, engine pour lui répondre. Pas de base :
+      # ces tests POSTent des payloads construits à la main, ils ne lisent rien.
+      - name: Start services
+        run: docker compose up -d --wait php-fpm engine
+
+      - name: Install PHP deps
+        run: docker compose exec -T php-fpm composer install --no-interaction
+
+      # ⚠ La base EST nécessaire, contrairement à ce que le périmètre laissait
+      # croire : trois des quatre tests du groupe POSTent des payloads construits
+      # à la main, mais `MatchPlacementContractSchemaTest` persiste des entités
+      # avant d'appeler /place-matches. Sans ça : « database clubscheduler_test
+      # does not exist », 23 verts sur 24.
+      - name: Init test database
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:database:create --if-not-exists --connection admin --env=test && php bin/console doctrine:migrations:migrate --no-interaction --env=test'
+
+      # Chaque clé de la liste blanche `config` doit CHANGER le résultat du
+      # solveur (SEC-13), le miroir de capacité doit rendre le même verdict que
+      # lui (P3-19), et le payload doit rester recevable (contrat 2.2).
+      - name: Constraint keys, capacity mirror, contract shape — against the REAL engine
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit --group contract'
+
+      - name: Dump engine logs on failure
+        if: failure()
+        run: docker compose logs --tail 120 engine
+
   smoke-tests:
     name: Smoke Tests (semantic e2e)
     runs-on: ubuntu-latest

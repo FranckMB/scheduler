@@ -311,17 +311,24 @@ final class PeriodGatePayloadParityTest extends WebTestCase
             'facilityDefault' => $this->constraint($club, $season, ConstraintScope::FACILITY, $venueOpen->getId(), ConstraintFamily::FACILITY_CAPACITY, ['maxTeams' => 1], null)->getId(),
             // GARDÉE malgré « toutes taguées en pause » : HARD + gymnase dédié émet encore
             // ses lignes « interdit hors tag » (divergence n° 2 alignée).
+            // ⚠ SEC-13 : ces deux-là portaient leurs clés de gymnase sur une famille
+            // TIME. Le sélecteur de période les lit sans regarder la famille
+            // (`PeriodConstraintSelector:238`), mais le MOTEUR exige
+            // `family == "FACILITY"` : le mélange était inerte côté solveur, absent
+            // de la vraie donnée (0 ligne), et la liste blanche le refuse désormais.
+            // Famille corrigée ; ce que le test garde — la ligne dont la clé
+            // secondaire vise un gymnase désactivé — est inchangé.
             // … y compris quand une clé SECONDAIRE vise le gymnase désactivé (revue #340
             // round 1) : les lignes « interdit hors tag » remplacent la config par le seul
             // gymnase DÉDIÉ — un drop entité aveugle les effaçait, le post-filtre par ligne
             // les préservait.
-            'tagHardVenue' => $this->constraint($club, $season, ConstraintScope::CLUB, null, ConstraintFamily::TIME, ['targetTag' => 'PARITE', 'maxStartTime' => '19:00', 'forcedVenueId' => $venueOpen->getId(), 'preferredVenueId' => $venueDisabled->getId()], null)->getId(),
+            'tagHardVenue' => $this->constraint($club, $season, ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ['targetTag' => 'PARITE', 'forcedVenueId' => $venueOpen->getId(), 'preferredVenueId' => $venueDisabled->getId()], null)->getId(),
             // Gardée : datée valide de l'équipe active.
             'datedOk' => $this->constraint($club, $season, ConstraintScope::TEAM, $teamActive->getId(), ConstraintFamily::TIME, ['maxStartTime' => '21:00'], $entry->getId())->getId(),
             // Sortie AVEC warning gymnase (revue #340 round 2) : tag couvrant TOUTES les
             // actives (aucune ligne « interdit hors tag » possible) ET clé secondaire sur le
             // gymnase désactivé (les lignes par équipe meurent) → ZÉRO ligne, drop annoncé.
-            'tagAllActive' => $this->constraint($club, $season, ConstraintScope::CLUB, null, ConstraintFamily::TIME, ['targetTag' => 'TOUTES', 'maxStartTime' => '20:30', 'forcedVenueId' => $venueOpen->getId(), 'minAtVenueId' => $venueDisabled->getId()], null)->getId(),
+            'tagAllActive' => $this->constraint($club, $season, ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ['targetTag' => 'TOUTES', 'forcedVenueId' => $venueOpen->getId(), 'minAtVenueId' => $venueDisabled->getId()], null)->getId(),
             // Sortie AVEC warning (revue #340 round 1) : DATÉE CLUB+tag dont le tag ne vise
             // plus aucune équipe active, sans gymnase dédié (PREFERRED) — un geste explicite
             // du gestionnaire pour la période ne s'évapore jamais en silence (#8).
