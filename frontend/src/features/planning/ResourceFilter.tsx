@@ -85,6 +85,14 @@ export function ResourceFilter({ viewMode, groups, selected, onToggle, onClear }
                 autoFocus
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                // A11Y-10 : un `placeholder` N'EST PAS un nom accessible — il disparaît
+                // à la première frappe et NVDA/VoiceOver annoncent « zone de texte »,
+                // point. Le nom porte AUSSI le périmètre (« Rechercher parmi les
+                // gymnases ») : le champ reçoit le focus à l'ouverture, donc c'est la
+                // première chose entendue — et deux filtres coexistent dans la même
+                // page (modale doléances : coachs ET équipes), où « Rechercher » seul
+                // ne dirait pas lequel des deux parle.
+                aria-label={`Rechercher parmi les ${LABELS[viewMode].toLowerCase()}`}
                 placeholder="Rechercher…"
                 className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring"
               />
