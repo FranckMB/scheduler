@@ -39,18 +39,75 @@ async function ensureValidated(page: Page): Promise<void> {
 
   await page.goto("/wizard");
   await page.waitForLoadState("networkidle");
-  // From Récap (guided landing when all data is present) the generation step is
-  // reached via the footer CTA, not the (still-locked) left-nav entry.
+
+  // P4-71 — DIAGNOSTIQUER VITE, ne pas attendre 3 minutes dans le noir.
+  //
+  // Ce helper SUPPOSAIT l'atterrissage sur Récap (le wizard y mène quand toutes les
+  // données sont là). Sur une base de dev qui a dérivé — une étape redevenue
+  // incomplète au fil des tests du jour — `WizardLayout` ramène de force sur cette
+  // étape (`jumpTo(gap)`), les deux boutons ci-dessous n'existent pas, et l'attente
+  // de « Valider » expirait après 180 s sur un message qui n'apprenait rien.
+  //
+  // ⚠ Naviguer directement vers Génération ne marcherait PAS : le rail n'est ouvert
+  // que pour un club ayant DÉJÀ une version finie (`guided` dans WizardLayout) — or
+  // un club en état 1/2 n'en a par définition aucune. La bonne réponse n'est donc pas
+  // de contourner l'atterrissage, mais de NOMMER la dérive qui l'a provoqué.
+  // Deux mondes, et le helper n'en gérait AUCUN :
+  //  - club SANS version terminée → wizard « guidé » : atterrissage sur le premier
+  //    trou de données, rail VERROUILLÉ (on ne peut que suivre le flux) ;
+  //  - club AVEC une version terminée → `guided` faux : aucun atterrissage, on reste
+  //    sur l'étape par défaut du store (Équipes) mais le rail est OUVERT.
+  // Mesuré le 2026-08-07 : le club seedé tombe dans le SECOND cas dès qu'un
+  // smoke-solver a tourné (2 plannings COMPLETED) — d'où l'échec, qui n'était donc
+  // pas la « dérive de données » annoncée. On emprunte le rail quand il est ouvert.
+  // ⚠ Le nom accessible du bouton d'étape n'est PAS son libellé : la pastille de
+  // progression y entre (« 6 Génération »), et une étape terminée devient
+  // « Génération — étape terminée ». Matcher la chaîne exacte — ou même son début —
+  // ne trouve rien. On cherche donc le libellé N'IMPORTE OÙ dans le nom, scopé au
+  // rail pour ne pas attraper un homonyme du contenu.
+  const railGenerate = page.locator("nav").getByRole("button", { name: /Génération/ });
+  if (await railGenerate.isEnabled({ timeout: 3_000 }).catch(() => false)) {
+    await railGenerate.click();
+  }
+
   const cont = page.getByRole("button", { name: "Continuer vers la génération" });
-  if (await cont.isVisible({ timeout: 5_000 }).catch(() => false)) {
+  const launch = page.getByRole("button", { name: "Lancer la génération" });
+  const onGenerationPath = await Promise.race([
+    cont.waitFor({ state: "visible", timeout: 10_000 }).then(() => true),
+    launch.waitFor({ state: "visible", timeout: 10_000 }).then(() => true),
+  ]).catch(() => false);
+
+  if (!onGenerationPath) {
+    // L'étape atteinte EST le diagnostic : le wizard nous a ramenés sur le premier
+    // trou de données. On le lit dans le rail (l'entrée courante porte aria-current).
+    const landed = await page
+      .locator("[aria-current]")
+      .first()
+      .textContent()
+      .then((t) => t?.trim() ?? "inconnue")
+      .catch(() => "inconnue");
+    throw new Error(
+      `ensureValidated: le wizard a atterri sur « ${landed} » au lieu du chemin de génération. `
+      + "La base de DEV a dérivé (une étape est redevenue incomplète — souvent un gymnase sans créneau, "
+      + "laissé par un autre spec). Rejouez `make -C backend fixtures`, puis relancez. "
+      + "En CI (base fraîche) ce cas ne se produit pas.",
+    );
+  }
+
+  if (await cont.isVisible().catch(() => false)) {
     await cont.click();
   }
-  const launch = page.getByRole("button", { name: "Lancer la génération" });
-  if (await launch.isVisible({ timeout: 5_000 }).catch(() => false)) {
+  // On ne LANCE une génération que s'il n'y a rien à valider : le club seedé a
+  // souvent déjà des versions COMPLETED (un smoke-solver a tourné). Cliquer
+  // « Lancer » dans ce cas attendait un bouton DÉSACTIVÉ jusqu'au timeout — le gate
+  // pré-solve refuse à juste titre tant qu'un diagnostic d'erreur subsiste, alors
+  // qu'une version parfaitement validable était déjà à l'écran.
+  const validate = page.getByRole("button", { name: "Valider" });
+  const alreadyGenerated = await validate.isVisible({ timeout: 3_000 }).catch(() => false);
+  if (!alreadyGenerated && (await launch.isEnabled({ timeout: 5_000 }).catch(() => false))) {
     await launch.click();
   }
-  // COMPLETED → the "Valider" button appears; validate through the confirm dialog.
-  const validate = page.getByRole("button", { name: "Valider" });
+  // COMPLETED → le bouton « Valider » apparaît ; on valide via la confirmation.
   await expect(validate).toBeVisible({ timeout: 180_000 });
   await validate.click();
   const dialog = page.getByRole("dialog", { name: "Valider le planning" });
