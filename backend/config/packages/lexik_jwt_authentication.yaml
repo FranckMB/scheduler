@@ -2,3 +2,24 @@ lexik_jwt_authentication:
     secret_key: '%env(resolve:JWT_SECRET_KEY)%'
     public_key: '%env(resolve:JWT_PUBLIC_KEY)%'
     pass_phrase: '%env(JWT_PASSPHRASE)%'
+
+    # SEC-16 (audit) — le jeton part en COOKIE httpOnly, plus dans le corps de la
+    # réponse : le front n'en détient aucune copie lisible par du JS.
+    # `remove_token_from_body_when_cookies_used` vaut true par défaut, donc
+    # `POST /api/login` ne rend plus `{"token": …}`.
+    set_cookies:
+        BEARER:
+            samesite: strict   # une requête venue d'un autre site ne le porte pas — c'est la défense CSRF
+            path: '%app.jwt_cookie_path%'
+            secure: '%env(bool:JWT_COOKIE_SECURE)%'
+            httpOnly: true
+
+    token_extractors:
+        # Le cookie authentifie le NAVIGATEUR…
+        cookie:
+            enabled: true
+            name: '%app.jwt_cookie_name%'
+        # …et l'en-tête reste actif pour ce qui n'est pas un navigateur : smokes,
+        # scripts d'ops, helpers e2e. Le défaut de lexik, rendu explicite.
+        authorization_header:
+            enabled: true

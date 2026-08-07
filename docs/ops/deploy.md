@@ -60,6 +60,12 @@ cd /srv/clubscheduler
 - `.env.prod.dist` → renommé **`.env.prod`**, puis `chmod 600 .env.prod`.
 
 ⬜ Remplir **chaque CHANGEME** de `.env.prod` (le fichier se commente lui-même).
+⬜ Vérifier que `.env.prod` **ne pose PAS `JWT_COOKIE_SECURE=false`** (SEC-16 — le JWT
+   applicatif voyage en cookie httpOnly). Le laisser ABSENT est sûr : le `backend/.env.prod`
+   committé le met à `true`, et le défaut du conteneur aussi. En revanche une vraie variable
+   d'environnement gagne sur tout — c'est le seul cas qu'aucun test ne peut attraper. Ce flag
+   ne se dérive PAS du protocole vu par PHP : le nginx du front écoute en 80 derrière la TLS.
+   Détail : [`jwt-cookie.md`](../security/jwt-cookie.md).
 Générateurs : `openssl rand -hex 32` (secrets), `openssl rand -hex 24` (mots de
 passe DB). ⚠ Répéter à la main les mots de passe dans `DATABASE_URL` /
 `DATABASE_ADMIN_URL` (pas de `${}` dans ce fichier).

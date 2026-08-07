@@ -6,6 +6,7 @@ namespace App\Tests\Integration\Api;
 
 use App\Entity\ResetPasswordRequest;
 use App\Entity\User;
+use App\Tests\StartsFreshBrowserSession;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -17,6 +18,8 @@ use SymfonyCasts\Bundle\ResetPassword\ResetPasswordHelperInterface;
 #[Group('integration')]
 final class PasswordResetTest extends WebTestCase
 {
+    use StartsFreshBrowserSession;
+
     private static int $ipCounter = 0;
 
     private KernelBrowser $client;
@@ -73,6 +76,9 @@ final class PasswordResetTest extends WebTestCase
 
     private function registerUser(string $email, string $ara): void
     {
+        // SEC-16 : le cookie d’auth de l’identité précédente ne doit pas partir
+        // avec cette inscription (sinon 429 du quota par utilisateur).
+        $this->startFreshBrowserSession($this->client);
         $ip = '10.2.' . intdiv(self::$ipCounter, 254) . '.' . (self::$ipCounter % 254 + 1);
         ++self::$ipCounter;
         $this->client->request('POST', '/api/register', [], [], [

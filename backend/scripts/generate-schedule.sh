@@ -8,7 +8,10 @@ CLUB_ID="77e1e118-e702-4839-8a9c-7c34187541e6"
 # SCHEDULER_PASSWORD pour un login à la volée.
 TOKEN="${SCHEDULER_TOKEN:-}"
 if [[ -z "$TOKEN" && -n "${SCHEDULER_EMAIL:-}" ]]; then
-  TOKEN=$(curl -s -X POST "$API_BASE/login" -H 'Content-Type: application/json'     -d "{\"email\":\"$SCHEDULER_EMAIL\",\"password\":\"$SCHEDULER_PASSWORD\"}"     | python3 -c 'import sys,json;print(json.load(sys.stdin).get("token",""))')
+  # SEC-16 (audit) : /api/login rend 204 et pose le JWT en cookie httpOnly — le
+  # corps ne le porte plus. Un script n'est pas un navigateur : on le lit dans
+  # Set-Cookie et on continue en Bearer (extracteur resté actif pour l'outillage).
+  TOKEN=$(curl -si -X POST "$API_BASE/login" -H 'Content-Type: application/json'     -d "{\"email\":\"$SCHEDULER_EMAIL\",\"password\":\"$SCHEDULER_PASSWORD\"}"     | grep -oiP 'set-cookie: *BEARER=\K[^;]+' | head -1)
 fi
 SCHEDULE_ID=""
 CLUB_ID_ARG=""

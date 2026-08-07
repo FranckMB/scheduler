@@ -831,6 +831,35 @@
                 "summary": "Read the global fleet and solver monitoring overview"
             }
         },
+        "/api/logout": {
+            "post": {
+                "operationId": "postApiLogout",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Session ended: the auth cookie is cleared server-side",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "logged_out"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "SEC-16: clear the httpOnly JWT cookie (public and idempotent \u2014 the JS cannot clear what it cannot read)"
+            }
+        },
         "/api/me": {
             "get": {
                 "operationId": "getApiMe",
@@ -1248,15 +1277,12 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Verified \u2014 materialises the club and returns a JWT (effective login)",
+                        "description": "Verified \u2014 materialises the club and logs in (SEC-16: the JWT is set as the httpOnly BEARER cookie, NOT returned here)",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "type": "object",
                                     "properties": {
-                                        "token": {
-                                            "type": "string"
-                                        },
                                         "membershipStatus": {
                                             "type": "string",
                                             "enum": [
@@ -6058,53 +6084,36 @@
                     "Login Check"
                 ],
                 "responses": {
-                    "200": {
-                        "description": "User token created",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "token": {
-                                            "readOnly": true,
-                                            "type": "string",
-                                            "nullable": false
-                                        }
-                                    },
-                                    "required": [
-                                        "token"
-                                    ]
-                                }
-                            }
-                        }
+                    "204": {
+                        "description": "Authenticated: the JWT is set as the httpOnly `BEARER` cookie (path /api, SameSite=Strict) \u2014 the response has NO body"
+                    },
+                    "401": {
+                        "description": "Bad credentials (identical answer for an unverified account \u2014 A3 anti-enumeration)"
                     }
                 },
-                "summary": "Creates a user token.",
-                "description": "Creates a user token.",
+                "summary": "Log in: sets the httpOnly JWT cookie (SEC-16 \u2014 the token is never returned in the body)",
                 "requestBody": {
-                    "description": "The login data",
                     "content": {
                         "application/json": {
                             "schema": {
                                 "type": "object",
-                                "properties": {
-                                    "email": {
-                                        "type": "string",
-                                        "nullable": false
-                                    },
-                                    "password": {
-                                        "type": "string",
-                                        "nullable": false
-                                    }
-                                },
                                 "required": [
                                     "email",
                                     "password"
-                                ]
+                                ],
+                                "properties": {
+                                    "email": {
+                                        "type": "string",
+                                        "format": "email"
+                                    },
+                                    "password": {
+                                        "type": "string"
+                                    }
+                                }
                             }
                         }
                     },
-                    "required": true
+                    "required": false
                 }
             }
         },
@@ -19599,10 +19608,6 @@
                         "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
                         "default": false,
                         "type": "boolean"
-                    },
-                    "hasVersions": {
-                        "description": "Ce plan porte-t-il au moins une version ? \u26a0 Diff\u00e9rent de `chosenScheduleId` :\nun plan peut porter des versions sans qu'aucune soit point\u00e9e.",
-                        "type": "boolean"
                     }
                 }
             },
@@ -19697,10 +19702,6 @@
                         "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
                         "default": false,
                         "type": "boolean"
-                    },
-                    "hasVersions": {
-                        "description": "Ce plan porte-t-il au moins une version ? \u26a0 Diff\u00e9rent de `chosenScheduleId` :\nun plan peut porter des versions sans qu'aucune soit point\u00e9e.",
-                        "type": "boolean"
                     }
                 }
             },
@@ -19767,10 +19768,6 @@
                             "teamSelectionInitialized": {
                                 "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
                                 "default": false,
-                                "type": "boolean"
-                            },
-                            "hasVersions": {
-                                "description": "Ce plan porte-t-il au moins une version ? \u26a0 Diff\u00e9rent de `chosenScheduleId` :\nun plan peut porter des versions sans qu'aucune soit point\u00e9e.",
                                 "type": "boolean"
                             }
                         }

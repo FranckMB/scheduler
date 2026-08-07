@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\Tests\StartsFreshBrowserSession;
 use App\Tests\VerifiesRegistration;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -19,6 +20,8 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class ApiRateLimitTest extends WebTestCase
 {
+    use StartsFreshBrowserSession;
+
     use VerifiesRegistration;
 
     private const TEST_LIMIT = 30;
@@ -67,6 +70,9 @@ final class ApiRateLimitTest extends WebTestCase
     {
         $ip = \sprintf('10.%d.%d.%d', random_int(1, 254), random_int(0, 254), random_int(1, 254));
         $suffix = strtolower($ara) . substr(md5(uniqid('', true)), 0, 6);
+        // SEC-16 : le cookie d'auth de l'identité précédente ne doit pas partir
+        // avec cette inscription (sinon 429 du quota par utilisateur).
+        $this->startFreshBrowserSession($this->client);
         $this->client->request('POST', '/api/register', [], [], [
             'CONTENT_TYPE' => 'application/json', 'REMOTE_ADDR' => $ip,
         ], json_encode([

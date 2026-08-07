@@ -14,7 +14,7 @@ vi.mock("react-router", async (importOriginal) => ({
   useNavigate: () => h.navigate,
 }));
 vi.mock("@/shared/stores/authStore", () => ({
-  useAuthStore: (sel: (s: { token: string }) => unknown) => sel({ token: "jwt" }),
+  useAuthStore: (sel: (s: { isAuthenticated: boolean }) => unknown) => sel({ isAuthenticated: true }),
 }));
 
 import { WaitingApprovalPage } from "./WaitingApprovalPage";

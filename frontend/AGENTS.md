@@ -143,7 +143,7 @@ data; avoiding it would mean duplicating the auth decision into a per-route `loa
 | Route | Auth | Notes |
 |-------|------|-------|
 | `/login` | public | The only eager page |
-| `/register` · `/verify-email/:token` · `/forgot-password` · `/reset-password/:token` · `/waiting` | public | Register is 202 + email link; the JWT comes from verify |
+| `/register` · `/verify-email/:token` · `/forgot-password` · `/reset-password/:token` · `/waiting` | public | Register is 202 + email link; verify sets the auth **cookie** (SEC-16 — no token in the body) |
 | `/confidentialite` | public | Privacy policy |
 | **`/doleances/:token`** | **public, NO login** | #10 — flat route, deliberately **outside `AuthGuard`**. A coach fills in availability from a personal tokenised link. |
 | `/admin/login` · `/admin` | SA0 session | Superadmin console behind `AdminGuard` → `AdminShell`. Separate identity — a club JWT never crosses this firewall. |
@@ -158,16 +158,19 @@ data; avoiding it would mean duplicating the auth decision into a per-route `loa
 - **Server state → TanStack Query 5. Client state → Zustand 5.** Never store a query result
   in Zustand; never fetch outside Query.
 - **HTTP is `ky`** (`shared/api/client.ts`) — not axios, not raw fetch. `beforeRequest`
-  injects the Bearer and the optional `X-Season-Id`; `afterResponse` clears auth on a 401
-  (except on `/api/login`, where 401 means bad credentials) and self-heals a stale season on
-  a `403` carrying `X-Season-Rejected`.
+  injects the optional `X-Season-Id` — **no `Authorization` header any more**: the JWT is an
+  httpOnly cookie set by the server (SEC-16, `docs/security/jwt-cookie.md`), so the client
+  only carries `credentials`. `afterResponse` clears auth on a 401 (except on `/api/login`,
+  where 401 means bad credentials) and self-heals a stale season on a `403` carrying
+  `X-Season-Rejected`.
   ⚠ **There is no `beforeError` hook and there must not be one**: ky 2.x consumes the error
   body itself and exposes it as `error.data` before any consumer runs. Re-reading
   `error.response` throws *"body stream already read"* — every error reader must use
   `error.data`.
 - **The superadmin console has its own client** (`features/admin/api.ts`): `adminApi`, prefix
-  `/api/admin`, `credentials: "same-origin"`, and it **deliberately never reads the club JWT
-  store**.
+  `/api/admin`, `credentials: "same-origin"`, and it **deliberately never touches the club auth
+  store**. The two identities stay separate cookies on separate paths (`/api/admin` session vs
+  the club `BEARER` cookie scoped to `/api`).
 - **Collections are JSON-LD with the key `member`** (API Platform 4 — *no* `hydra:` prefix).
   `collection()` unwraps it; `collectionAll()` pages via `?page=N` and dedupes by `id`.
   There is **no `useInfiniteQuery`** anywhere.

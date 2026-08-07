@@ -5,18 +5,21 @@ import { useSeasonStore } from "@/shared/stores/seasonStore";
 
 /**
  * Configured HTTP client. Relative `/api` prefix only (Vite proxy in dev, Nginx
- * in prod — never hardcode hosts). Injects the Bearer token; clears auth on 401.
+ * in prod — never hardcode hosts). Clears auth on 401.
  * ky 2.x hooks receive a single `state` object ({ request, response, ... }).
+ *
+ * SEC-16 (audit) : plus d'en-tête `Authorization` — l'identité voyage dans le
+ * cookie httpOnly posé par le serveur, que le JS ne voit pas. `credentials`
+ * reste explicite : le défaut `same-origin` suffirait (l'API est servie sous la
+ * même origine par les proxys vite/nginx), mais l'écrire évite qu'un futur appel
+ * cross-origin parte muet, sans identité et sans erreur parlante.
  */
 export const api = ky.create({
   prefix: "/api",
+  credentials: "include",
   hooks: {
     beforeRequest: [
       (state) => {
-        const token = useAuthStore.getState().token;
-        if (token) {
-          state.request.headers.set("Authorization", `Bearer ${token}`);
-        }
         // Season the manager is working in — absent = server-derived current
         // season (mono-season clubs never send it). A request that already
         // carries the header wins: one-shot cross-season calls (transition

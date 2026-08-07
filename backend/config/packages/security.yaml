@@ -46,6 +46,10 @@ security:
         - { path: ^/api/admin/auth/totp$, roles: PUBLIC_ACCESS }
         - { path: ^/api/admin, roles: ROLE_SUPER_ADMIN }
         - { path: ^/api/login, roles: PUBLIC_ACCESS }
+        # SEC-16 (audit) : effacer le cookie httpOnly du JWT. Public par choix —
+        # le geste est idempotent, ne révèle rien, et l'exiger authentifié
+        # rendrait indéconnectable une session déjà expirée.
+        - { path: ^/api/logout$, roles: PUBLIC_ACCESS }
         - { path: ^/api/register, roles: PUBLIC_ACCESS }
         - { path: ^/api/password, roles: PUBLIC_ACCESS }
         - { path: ^/api/health, roles: PUBLIC_ACCESS }

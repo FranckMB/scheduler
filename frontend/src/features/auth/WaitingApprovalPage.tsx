@@ -22,13 +22,13 @@ import { useLogout } from "./queries";
 export function WaitingApprovalPage() {
   const navigate = useNavigate();
   const logout = useLogout();
-  const token = useAuthStore((state) => state.token);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   // Poll membership status so the screen advances automatically once approved.
   const { data } = useQuery({
     queryKey: ["me"],
     queryFn: getMe,
-    enabled: null !== token,
+    enabled: isAuthenticated,
     refetchInterval: 5000,
     retry: false,
   });
