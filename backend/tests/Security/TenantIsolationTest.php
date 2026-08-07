@@ -63,6 +63,38 @@ final class TenantIsolationTest extends WebTestCase
         self::assertResponseStatusCodeSame(403);
     }
 
+    /**
+     * Le club porté par le header doit être un UUID CANONIQUE — revue sécurité
+     * FRT-04, exploit mesuré sur la stack de dev.
+     *
+     * PostgreSQL accepte `{710a290720ce40ffa67fc2674ca0dbe7}` comme le même uuid
+     * que `710a2907-20ce-...` : un membre pouvait donc envoyer SON PROPRE club
+     * sous cette forme dégradée et passer le contrôle d'adhésion (la comparaison
+     * est faite par la base, qui normalise). La chaîne, elle, continuait son
+     * chemin telle quelle dans `_club_id` — et tout aval qui ne normalise pas
+     * héritait d'une valeur choisie par le client. Sur `/api/mercure/auth` elle
+     * produisait le sélecteur `club:{710a29...}:schedule:{id}`, soit DEUX
+     * variables URI-template : le hub y délivrait les événements de génération
+     * de N'IMPORTE QUEL club (reçus en vivant avant correctif).
+     *
+     * Le club est la frontière tenant : sa FORME se valide au listener, comme
+     * celle de la saison, et un écart se refuse — jamais une normalisation
+     * silencieuse, qui rendrait le club sous deux graphies « le même » ici et
+     * « deux valeurs » ailleurs.
+     */
+    public function testANonCanonicalClubHeaderIsRejectedEvenForOwnClub(): void
+    {
+        [$clubA, , $userA] = $this->createTwoClubs();
+        $mangled = '{' . str_replace('-', '', $clubA->getId()) . '}';
+
+        $this->client->loginUser($userA);
+        $this->client->request('GET', '/api/teams', [], [], [
+            'HTTP_X-Club-Id' => $mangled,
+        ]);
+
+        self::assertResponseStatusCodeSame(403, 'un club sous forme non canonique doit être refusé, même si c’est le sien');
+    }
+
     public function testNoClubHeaderReturnsData(): void
     {
         [, , $userA] = $this->createTwoClubs();

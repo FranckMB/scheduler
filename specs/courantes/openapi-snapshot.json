@@ -1119,6 +1119,46 @@
                 }
             }
         },
+        "/api/mercure/auth": {
+            "get": {
+                "operationId": "getApiMercureAuth",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Mercure subscriber JWT set as an httpOnly cookie (path /.well-known/mercure); the body exposes the topic template to subscribe to",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "expiresIn": {
+                                            "type": "integer",
+                                            "description": "Cookie/JWT TTL in seconds"
+                                        },
+                                        "topicTemplate": {
+                                            "type": "string",
+                                            "description": "URI template club:{clubId}:schedule:{id} \u2014 subscribe to it as-is"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "No club resolved for the authenticated user"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "503": {
+                        "description": "Mercure secret not configured"
+                    }
+                },
+                "summary": "FRT-04: mint the hub subscriber JWT (scoped to the member own club generation topics), delivered as the mercureAuthorization cookie"
+            }
+        },
         "/api/register": {
             "post": {
                 "operationId": "postApiRegister",
@@ -19559,6 +19599,10 @@
                         "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
                         "default": false,
                         "type": "boolean"
+                    },
+                    "hasVersions": {
+                        "description": "Ce plan porte-t-il au moins une version ? \u26a0 Diff\u00e9rent de `chosenScheduleId` :\nun plan peut porter des versions sans qu'aucune soit point\u00e9e.",
+                        "type": "boolean"
                     }
                 }
             },
@@ -19653,6 +19697,10 @@
                         "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
                         "default": false,
                         "type": "boolean"
+                    },
+                    "hasVersions": {
+                        "description": "Ce plan porte-t-il au moins une version ? \u26a0 Diff\u00e9rent de `chosenScheduleId` :\nun plan peut porter des versions sans qu'aucune soit point\u00e9e.",
+                        "type": "boolean"
                     }
                 }
             },
@@ -19719,6 +19767,10 @@
                             "teamSelectionInitialized": {
                                 "description": "La s\u00e9lection d'\u00e9quipes de ce plan a-t-elle d\u00e9j\u00e0 \u00e9t\u00e9 configur\u00e9e au moins une fois ?\nToujours faux sur un plan SEASON, qui n'a pas cette \u00e9tape.",
                                 "default": false,
+                                "type": "boolean"
+                            },
+                            "hasVersions": {
+                                "description": "Ce plan porte-t-il au moins une version ? \u26a0 Diff\u00e9rent de `chosenScheduleId` :\nun plan peut porter des versions sans qu'aucune soit point\u00e9e.",
                                 "type": "boolean"
                             }
                         }

@@ -34,6 +34,9 @@ final class ScheduleProgressPublisher
         }
 
         $this->hub->publish(ClubTopicUpdate::private($topic, json_encode([
+            // FRT-04 : le front s'abonne au TEMPLATE du club (un seul EventSource pour
+            // toutes les générations) — l'événement doit donc nommer son planning.
+            'scheduleId' => $schedule->getId(),
             'status' => $schedule->getStatus(),
             'score' => $schedule->getScore(),
             'unplaced' => $this->countUnplacedTeams($result),
@@ -67,7 +70,7 @@ final class ScheduleProgressPublisher
     {
         $this->hub->publish(ClubTopicUpdate::private(
             \sprintf('club:%s:schedule:%s', $clubId, $scheduleId),
-            json_encode(['status' => 'failed', 'error' => $error], \JSON_THROW_ON_ERROR),
+            json_encode(['scheduleId' => $scheduleId, 'status' => 'failed', 'error' => $error], \JSON_THROW_ON_ERROR),
         ));
     }
 

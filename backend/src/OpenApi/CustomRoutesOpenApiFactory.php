@@ -196,6 +196,24 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             ),
         ));
 
+        $paths->addPath('/api/mercure/auth', new PathItem(get: new Operation(
+            operationId: 'getApiMercureAuth',
+            tags: ['Auth'],
+            responses: [
+                '200' => $this->jsonResponse('Mercure subscriber JWT set as an httpOnly cookie (path /.well-known/mercure); the body exposes the topic template to subscribe to', [
+                    'type' => 'object',
+                    'properties' => [
+                        'expiresIn' => ['type' => 'integer', 'description' => 'Cookie/JWT TTL in seconds'],
+                        'topicTemplate' => ['type' => 'string', 'description' => 'URI template club:{clubId}:schedule:{id} — subscribe to it as-is'],
+                    ],
+                ]),
+                '400' => new Response('No club resolved for the authenticated user'),
+                '401' => new Response('Unauthorized'),
+                '503' => new Response('Mercure secret not configured'),
+            ],
+            summary: 'FRT-04: mint the hub subscriber JWT (scoped to the member own club generation topics), delivered as the mercureAuthorization cookie',
+        )));
+
         $paths->addPath('/api/me/export', new PathItem(get: new Operation(
             operationId: 'getApiMeExport',
             tags: ['Auth'],

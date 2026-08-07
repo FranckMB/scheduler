@@ -59,11 +59,54 @@ The prod stack tightens the same four axes rather than restating them:
 it always matches the port the hub is actually published on. The static value in
 `backend/.env` is only a fallback for non-Docker runs.
 
-## Frontend consumption (future)
+## Frontend consumption (delivered — FRT-04, 2026-08-07)
 
-The frontend currently **polls** the API for generation status and does not
-subscribe to Mercure (see `frontend/src/features/planning/queries.ts`). When a
-real SSE subscription is wired, the client must obtain a **subscriber JWT** —
-signed with `MERCURE_JWT_SECRET`, scoped to that club's topics only
-(`club:{clubId}:schedule:*`) — delivered as the `mercureAuthorization` cookie or
-an `Authorization` header. Do not re-enable `anonymous`.
+The frontend subscribes to the hub for generation progress; polling survives
+only as a **fallback** (the publisher is best-effort — a missed event self-heals
+on the next poll).
+
+- **Subscriber JWT**: minted by `GET /api/mercure/auth`
+  (`backend/src/Controller/MercureAuthController.php`) — HS256, **same
+  `MERCURE_JWT_SECRET` as the publisher**, `subscribe` claim = the single URI
+  template `club:{clubId}:schedule:{id}` where `clubId` is the **authenticated
+  member's resolved tenant** (`_club_id` request attribute — never a client
+  parameter). No wildcard, no other club. TTL 1 h.
+- **Delivery**: `mercureAuthorization` **cookie, httpOnly, SameSite strict,
+  path `/.well-known/mercure`** — the JS never sees the hub token (the
+  app JWT in localStorage is already the weak point; no second exposed token),
+  and the browser only sends it to the hub, same-origin via the vite/nginx
+  proxies. Guarded by `backend/tests/Api/MercureAuthTest.php` (phase1 — the
+  claim's club scope is a tenant boundary).
+- **Client**: `frontend/src/shared/lib/scheduleStream.ts` — ONE ref-counted
+  `EventSource` per session, subscribed to the **template itself as topic**
+  (the response's `topicTemplate`; the hub matches every exact
+  `club:X:schedule:<uuid>` topic against it, so all the club's generations
+  arrive on one connection without knowing their ids). Events **invalidate**
+  the react-query caches (the server stays the source of truth); the poll
+  degrades from 2.5 s to a 15 s fallback while the stream is connected. On
+  stream error the client closes and **re-authenticates on retry** — never the
+  native EventSource reconnection, which would replay an expired cookie forever.
+
+`anonymous` stays off; nothing here relaxes the hub configuration above.
+
+### ⚠ The club id in that selector must be a CANONICAL uuid (security review, fixed 2026-08-07)
+
+The `subscribe` selector is parsed by the hub as an **RFC 6570 URI template**:
+anything shaped `{name}` becomes a *variable*, not a literal. A club id in the
+non-canonical form PostgreSQL happily accepts — `{710a290720ce40ffa67fc2674ca0dbe7}`,
+braces, no hyphens — is a valid template varname, so the selector
+`club:{710a29…}:schedule:{id}` carries **two** variables and matches
+**every club's** topics. Measured live on the dev stack before the fix: a member
+of club A received club B's generation events.
+
+The entry point was `X-Club-Id`: the membership check compares in Postgres,
+which normalises, so a member could pass their own club in the degraded form and
+have that raw string land in `_club_id`. Fixed at the source —
+`TenantFilterListener` now validates the club's **shape** exactly like the
+season's (`backend/src/EventListener/TenantFilterListener.php`, `isUuid` guard
+before `_club_id` is set, 403 otherwise: refused, never silently normalised) —
+plus a defence-in-depth re-check in `MercureAuthController` before signing.
+Guarded by `TenantIsolationTest::testANonCanonicalClubHeaderIsRejectedEvenForOwnClub`
+(phase1) and `MercureAuthTest::testANonCanonicalClubIdNeverReachesTheSelector`.
+**Rule for any future selector**: never interpolate a client-influenced string
+into a topic selector without canonical validation.

@@ -172,14 +172,15 @@ data; avoiding it would mean duplicating the auth decision into a per-route `loa
   `collection()` unwraps it; `collectionAll()` pages via `?page=N` and dedupes by `id`.
   There is **no `useInfiniteQuery`** anywhere.
 
-### Generation status = polling, not SSE
+### Generation status = SSE, polling as fallback (FRT-04)
 
-There is **no `EventSource` in `src/`**. `features/planning/queries.ts` refetches the
-schedules query every 2 500 ms while a planning is in flight (`PENDING`/`GENERATING`), and
-disables the interval otherwise; `WaitingApprovalPage` polls `/api/me` every 5 s. The backend
-*does* publish on Mercure (topic `club:{clubId}:schedule:{scheduleId}`) and both proxies
-exist, so switching to SSE needs no infra change — but nothing consumes it today. The only
-mention of Mercure in `src/` is the admin health probe.
+`shared/lib/scheduleStream.ts` holds the ONE `EventSource` per session (ref-counted
+singleton): auth via `GET /api/mercure/auth` (httpOnly cookie + `topicTemplate` — the front
+never knows its clubId), subscription to the template itself, events invalidate the
+react-query caches. `features/planning/queries.ts` and `features/wizard/queries.ts` keep
+their poll but degrade it (2.5 s stream down → 15 s stream connected) — the publisher is
+best-effort, so polling must never die. Details & security contract:
+`docs/security/mercure.md` (root). `WaitingApprovalPage` still polls `/api/me` every 5 s.
 
 ### Wizard store = UI only
 

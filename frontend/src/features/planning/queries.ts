@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 
 import { download, slugFilename } from "@/shared/lib/download";
 import { errorMessage } from "@/shared/lib/errorMessage";
+import { isScheduleStreamConnected, useScheduleStream } from "@/shared/lib/scheduleStream";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { LockLevel, Schedule, SlotMovePatch } from "./api";
@@ -12,20 +13,28 @@ import * as planningApi from "./api";
 const IN_FLIGHT: Schedule["status"][] = ["PENDING", "GENERATING"];
 
 /**
- * List of the club's schedules. While any schedule is mid-generation, poll so the
- * grid reflects PENDING → GENERATING → COMPLETED without a Mercure subscriber.
+ * List of the club's schedules. While any schedule is mid-generation, the Mercure
+ * stream (FRT-04) pushes progress and the poll degrades to a slow fallback — the
+ * publisher is best-effort, so polling never dies entirely: a missed event
+ * self-heals on the next poll, at 2.5 s only when the stream is NOT connected.
  * `enabled: false` for consumers that only need the list conditionally (e.g. the
  * wizard's period-abandon guard) — avoids fetching/polling from pages that never
  * read the data.
  */
 export function useSchedules(enabled = true) {
-  return useQuery({
+  const query = useQuery({
     queryKey: ["schedules"],
     queryFn: planningApi.listSchedules,
     enabled,
     staleTime: 30_000,
-    refetchInterval: (query) => ((query.state.data ?? []).some((s) => IN_FLIGHT.includes(s.status)) ? 2500 : false),
+    refetchInterval: (query) =>
+      (query.state.data ?? []).some((s) => IN_FLIGHT.includes(s.status))
+        ? (isScheduleStreamConnected() ? 15_000 : 2500)
+        : false,
   });
+  useScheduleStream(enabled && (query.data ?? []).some((s) => IN_FLIGHT.includes(s.status)));
+
+  return query;
 }
 
 export function useSlots(scheduleId: string | null) {
