@@ -35,6 +35,7 @@ def build_result(
     status: Any | None = None,
     fallback_used: bool = False,
     constraint_version: str | None = None,
+    team_coach_map: Mapping[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """Transform a CP-SAT solution into a dict matching ``ScheduleOutputSchema``.
 
@@ -42,6 +43,11 @@ def build_result(
         model_data: The original input data (dict or Pydantic model).
         solver: The OR-Tools ``CpSolver`` instance after solving.
         model: The ``ScheduleCpModel`` containing variables and locked slots.
+        team_coach_map: ENG-17 — la carte équipe → coachs MAIN issue de
+            ``parse_v2_constraints``. SOURCE UNIQUE : c'est déjà elle que le solveur
+            utilise pour l'exclusivité coach et pour attacher le coach aux
+            assignments (``main.py``). La redériver ici recopierait sa règle (filtre
+            de rôle, alias de clés) et les deux divergeraient.
         status: Optional solver status. If omitted, inferred from the solver.
         fallback_used: True when Pass 1 was INFEASIBLE and Pass 2 (without
             coach rest day + salarie distribution constraints) was used instead.
@@ -67,7 +73,13 @@ def build_result(
 
     # Add solver-placed slots when the problem was solved successfully.
     if solver_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        solver_slots = _build_solver_slots(model_data, solver, model)
+        # ENG-17 — la carte vient du MODÈLE par défaut (posée par `_solve`) ; le
+        # paramètre reste pour les appels directs (tests, harnais) qui construisent
+        # un modèle à la main.
+        solver_slots = _build_solver_slots(
+            model_data, solver, model,
+            team_coach_map if team_coach_map is not None else getattr(model, "team_coach_map", None),
+        )
         slots.extend(solver_slots)
 
     # Always run diagnostic checks.
@@ -141,6 +153,7 @@ def _build_solver_slots(
     model_data: Mapping[str, Any] | Any,
     solver: cp_model.CpSolver,
     model: ScheduleCpModel,
+    team_coach_map: Mapping[str, list[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build output slots from CP-SAT boolean variables set to 1.
 
@@ -168,7 +181,7 @@ def _build_solver_slots(
     slots: list[dict[str, Any]] = []
     for (team_id, venue_id, day_of_week), starts in active.items():
         starts_sorted = sorted(starts)
-        coach_id = _find_coach_for_team(model_data, team_id)
+        coach_id = _find_coach_for_team(model_data, team_id, team_coach_map)
 
         # Merge consecutive variables into contiguous blocks.
         # Two variables are contiguous when the next start equals the end of the
@@ -994,8 +1007,29 @@ def _collection(source: Mapping[str, Any] | Any, *names: str) -> list[Any]:
     return []
 
 
-def _find_coach_for_team(model_data: Mapping[str, Any] | Any, team_id: str) -> str | None:
-    """Return the first coach_id found in slot templates for the given team."""
+def _find_coach_for_team(
+    model_data: Mapping[str, Any] | Any,
+    team_id: str,
+    team_coach_map: Mapping[str, list[str]] | None = None,
+) -> str | None:
+    """Qui encadre les séances GÉNÉRÉES de cette équipe ? (ENG-17)
+
+    Le coach MAIN d'abord — c'est ce que le solveur a réellement modélisé
+    (exclusivité coach, bonus de chaînage) et ce que `main.py` attache à chaque
+    assignment. Avant ce correctif, seuls les `slotTemplates` étaient consultés :
+    une équipe dont le coach vient d'une contrainte TEAM_COACH (le chemin
+    DOMINANT — c'est ainsi que le backend sérialise les liens) sortait
+    `coachId=None` sur toutes ses séances placées, et TOUS les diagnostics coach
+    (double-réservation, surcharge, jour de repos) restaient muets pour elle.
+
+    Le repli sur les `slotTemplates` reste : un payload sans contrainte
+    TEAM_COACH (tests, legacy) garde son comportement d'avant.
+    """
+    if team_coach_map is not None:
+        coaches = team_coach_map.get(team_id) or []
+        if coaches:
+            return str(coaches[0])
+
     for template in _slot_templates(model_data):
         template_team_id = _get(template, "team_id", "teamId")
         if template_team_id is not None and str(template_team_id) == team_id:

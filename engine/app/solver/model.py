@@ -24,6 +24,11 @@ class ScheduleCpModel(cp_model.CpModel):
         self.hard_slot_keys: frozenset[SlotKey] = frozenset()
         self.blocked_venue_slots: frozenset[VenueSlotKey] = frozenset()
         self.slot_durations: dict[VenueSlotKey, int] = {}
+        # ENG-17 — équipe → coachs MAIN, posée par `_solve` depuis
+        # `parse_v2_constraints`. Le builder de résultat la lit pour nommer le coach
+        # des séances GÉNÉRÉES (mêmes données que celles modélisées : exclusivité
+        # coach, bonus de chaînage). Même idiome que `locked_slots` ci-dessus.
+        self.team_coach_map: dict[str, list[str]] = {}
         self.slot_capacities: dict[VenueSlotKey, int] = {}
 
     def NumVariables(self) -> int:

@@ -282,6 +282,10 @@ def _solve(
 
     parsed = parse_v2_constraints(data.get("constraints", []))
     team_coach_map: dict[str, list[str]] = parsed.get("team_coach_map", {})
+    # ENG-17 — le builder de résultat en a besoin pour nommer le coach des séances
+    # GÉNÉRÉES : on la POSE sur le modèle (idiome `locked_slots`/`slot_durations`)
+    # plutôt que de re-parser les contraintes une seconde fois.
+    model.team_coach_map = team_coach_map
     team_player_map: dict[str, list[str]] = parsed.get("team_player_map", {})
 
     # FACILITY_CAPACITY: tighten per-slot capacity to maxTeams. min() only — the
