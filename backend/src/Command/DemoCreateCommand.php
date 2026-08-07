@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\User;
 use App\Service\Basketball\FfbbClubPopulator;
+use App\Service\Basketball\FfbbTeamImporter;
 use App\Service\ClubProvisioner;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
@@ -52,6 +53,7 @@ final class DemoCreateCommand extends Command
         private readonly ClubProvisioner $clubProvisioner,
         private readonly TenantConnectionContext $tenantConnectionContext,
         private readonly FfbbClubPopulator $ffbbClubPopulator,
+        private readonly FfbbTeamImporter $ffbbTeamImporter,
         private readonly UserPasswordHasherInterface $passwordHasher,
     ) {
         parent::__construct();
@@ -151,6 +153,21 @@ final class DemoCreateCommand extends Command
                 $this->entityManager->flush();
             } catch (Throwable $ffbbError) {
                 $io->warning(\sprintf('FFBB populate failed (%s) — the demo club keeps the manual name.', $ffbbError->getMessage()));
+            }
+
+            // PR 3 du lot démo (2026-08-07) — les ÉQUIPES engagées, comme au vrai
+            // register (PopulateClubFromFfbbHandler fait les deux étages) : sans
+            // elles, la démo montrait une étape Équipes VIDE là où un vrai club
+            // inscrit l'aurait pleine. Étage best-effort SÉPARÉ, même doctrine que
+            // le handler : hors saison des poules (juin), 0 équipe = no-op naturel,
+            // le prospect saisit comme tout le monde.
+            try {
+                $created = $this->ffbbTeamImporter->importEngagedTeams($club);
+                $io->note(0 === $created
+                    ? 'FFBB engagements: no team returned (pools not out yet?) — the Teams step starts empty.'
+                    : \sprintf('FFBB engagements: %d team(s) created — the Teams step is pre-filled.', $created));
+            } catch (Throwable $teamsError) {
+                $io->warning(\sprintf('FFBB team import failed (%s) — enter teams manually.', $teamsError->getMessage()));
             }
         } finally {
             $this->tenantConnectionContext->clear();
