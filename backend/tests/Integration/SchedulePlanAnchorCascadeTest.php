@@ -43,6 +43,12 @@ final class SchedulePlanAnchorCascadeTest extends KernelTestCase
     {
         yield 'reservation' => ['reservation'];
         yield 'venue_training_slot' => ['venue_training_slot'];
+        // P4-34 — les trois jumeaux. Leur ancre est NOT NULL : le cas « ligne de
+        // base » (ancre nulle, partagée par la saison) n'existe pas pour eux, et
+        // l'insérer échouerait — d'où le drapeau porté par le provider.
+        yield 'venue_period_override' => ['venue_period_override'];
+        yield 'team_period_override' => ['team_period_override'];
+        yield 'constraint_period_override' => ['constraint_period_override'];
     }
 
     /**
@@ -86,17 +92,20 @@ final class SchedulePlanAnchorCascadeTest extends KernelTestCase
 
         $doomedRow = $this->insertAnchoredRow($table, $clubId, $seasonId, $doomedPlanId);
         $survivingRow = $this->insertAnchoredRow($table, $clubId, $seasonId, $survivingPlanId);
-        $baseRow = $this->insertAnchoredRow($table, $clubId, $seasonId, null);
+        // Ancre NOT NULL sur les trois `*PeriodOverride` : pas de ligne de base à tenir.
+        $baseRow = $this->anchorIsNullable($table) ? $this->insertAnchoredRow($table, $clubId, $seasonId, null) : null;
 
         // Le geste réel : `deletePeriodPlan` supprime le plan en SQL brut.
         $this->connection->executeStatement('DELETE FROM schedule_plan WHERE id = ?', [$doomedPlanId]);
 
         self::assertFalse($this->rowExists($table, $doomedRow), 'La ligne du plan supprimé doit être emportée par la cascade.');
         self::assertTrue($this->rowExists($table, $survivingRow), 'La ligne d’un AUTRE plan ne doit pas être touchée.');
-        self::assertTrue(
-            $this->rowExists($table, $baseRow),
-            'La ligne de BASE (ancre NULL) doit survivre : NULL signifie « partagée par la saison », pas « orpheline ».',
-        );
+        if (null !== $baseRow) {
+            self::assertTrue(
+                $this->rowExists($table, $baseRow),
+                'La ligne de BASE (ancre NULL) doit survivre : NULL signifie « partagée par la saison », pas « orpheline ».',
+            );
+        }
     }
 
     protected function setUp(): void
@@ -115,10 +124,49 @@ final class SchedulePlanAnchorCascadeTest extends KernelTestCase
         );
     }
 
+    /** Les deux tables de P4-30 acceptent une ancre NULLE (« ligne de base ») ; les trois de P4-34, non. */
+    private function anchorIsNullable(string $table): bool
+    {
+        return \in_array($table, ['reservation', 'venue_training_slot'], true);
+    }
+
     /** @return string l'identifiant de la ligne insérée */
     private function insertAnchoredRow(string $table, string $clubId, string $seasonId, ?string $planId): string
     {
         $id = $this->uuid();
+
+        if ('venue_period_override' === $table) {
+            $this->connection->executeStatement(
+                'INSERT INTO venue_period_override (id, version, created_at, updated_at, club_id, season_id,
+                    schedule_plan_id, venue_id, mode)
+                 VALUES (?, 1, NOW(), NOW(), ?, ?, ?, ?, ?)',
+                [$id, $clubId, $seasonId, $planId, $this->uuid(), 'DISABLED'],
+            );
+
+            return $id;
+        }
+
+        if ('team_period_override' === $table) {
+            $this->connection->executeStatement(
+                'INSERT INTO team_period_override (id, version, created_at, updated_at, club_id, season_id,
+                    team_id, is_active, schedule_plan_id)
+                 VALUES (?, 1, NOW(), NOW(), ?, ?, ?, true, ?)',
+                [$id, $clubId, $seasonId, $this->uuid(), $planId],
+            );
+
+            return $id;
+        }
+
+        if ('constraint_period_override' === $table) {
+            $this->connection->executeStatement(
+                'INSERT INTO constraint_period_override (id, version, created_at, updated_at, club_id, season_id,
+                    constraint_id, is_active, schedule_plan_id)
+                 VALUES (?, 1, NOW(), NOW(), ?, ?, ?, true, ?)',
+                [$id, $clubId, $seasonId, $this->uuid(), $planId],
+            );
+
+            return $id;
+        }
 
         if ('reservation' === $table) {
             $this->connection->executeStatement(

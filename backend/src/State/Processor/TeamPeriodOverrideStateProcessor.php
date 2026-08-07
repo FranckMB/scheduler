@@ -20,6 +20,8 @@ use Symfony\Component\HttpFoundation\RequestStack;
  */
 class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
 {
+    use AssertsSchedulePlanExistsTrait;
+
     public function __construct(
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
@@ -50,7 +52,10 @@ class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
     protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
     {
         return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
-            $output = parent::processPost($input, $clubId, $seasonId);
+            // P4-34 — filet de la COURSE (voir AssertsSchedulePlanExistsTrait) : le
+            // plan peut disparaître entre le contrôle d'existence et le flush ; la FK
+            // remonterait un 500 opaque là où le 422 est la bonne réponse.
+            $output = $this->rejectingConcurrentPlanDeletion(fn (): object => parent::processPost($input, $clubId, $seasonId));
             if (null !== $input->schedulePlanId) {
                 $this->schedulePlanProvisioner->markPlanTeamSelectionInitialized($input->schedulePlanId);
             }
@@ -72,6 +77,11 @@ class TeamPeriodOverrideStateProcessor extends AbstractStateProcessor
 
         $entity = new TeamPeriodOverride;
         if (null !== $input->schedulePlanId) {
+            // P4-34 — l'ANCRE doit exister : sans ce contrôle, un `schedulePlanId`
+            // inventé écrivait une ligne 201 rattachée à une période inexistante —
+            // invisible à l'écran, jamais lue par une génération, impossible à
+            // supprimer par l'UI. Même garde que `Reservation`/`VenueTrainingSlot` (P4-30).
+            $this->assertSchedulePlanExists($this->entityManager, $input->schedulePlanId);
             $entity->setSchedulePlanId($input->schedulePlanId);
         }
         if (null !== $input->teamId) {
