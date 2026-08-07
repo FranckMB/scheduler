@@ -1,9 +1,13 @@
-Last verified @ 2026-08-03 (JSON **régénéré** depuis le backend vivant)
+Last verified @ 2026-08-07 (JSON **régénéré** depuis le backend vivant)
 
-Snapshot régénéré depuis le backend vivant le 2026-08-03 : `php bin/console api:openapi:export`.
+Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **FRT-04 (2026-08-07)** : +`GET /api/mercure/auth` (route contrôleur
+  `MercureAuthController`, **déclarée dans `CustomRoutesOpenApiFactory`** — 105 → 106 paths) —
+  jeton de souscription Mercure en cookie httpOnly + `topicTemplate` dans le corps. Contrat
+  et périmètre de sécurité : `docs/security/mercure.md` §Frontend consumption.
 - **P1-4 PR F2 (2026-08-03)** : regen vérifiée, **JSON inchangé** (105 paths) — l'analyze/import
   FBI sont des opérations multipart dont l'export ne détaille pas le corps de réponse ; les
   nouveaux champs (`suggestedTeamId`, `pouleError`, `pouleUnknownOpponents`, `completeness`,

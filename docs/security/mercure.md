@@ -59,11 +59,32 @@ The prod stack tightens the same four axes rather than restating them:
 it always matches the port the hub is actually published on. The static value in
 `backend/.env` is only a fallback for non-Docker runs.
 
-## Frontend consumption (future)
+## Frontend consumption (delivered — FRT-04, 2026-08-07)
 
-The frontend currently **polls** the API for generation status and does not
-subscribe to Mercure (see `frontend/src/features/planning/queries.ts`). When a
-real SSE subscription is wired, the client must obtain a **subscriber JWT** —
-signed with `MERCURE_JWT_SECRET`, scoped to that club's topics only
-(`club:{clubId}:schedule:*`) — delivered as the `mercureAuthorization` cookie or
-an `Authorization` header. Do not re-enable `anonymous`.
+The frontend subscribes to the hub for generation progress; polling survives
+only as a **fallback** (the publisher is best-effort — a missed event self-heals
+on the next poll).
+
+- **Subscriber JWT**: minted by `GET /api/mercure/auth`
+  (`backend/src/Controller/MercureAuthController.php`) — HS256, **same
+  `MERCURE_JWT_SECRET` as the publisher**, `subscribe` claim = the single URI
+  template `club:{clubId}:schedule:{id}` where `clubId` is the **authenticated
+  member's resolved tenant** (`_club_id` request attribute — never a client
+  parameter). No wildcard, no other club. TTL 1 h.
+- **Delivery**: `mercureAuthorization` **cookie, httpOnly, SameSite strict,
+  path `/.well-known/mercure`** — the JS never sees the hub token (the
+  app JWT in localStorage is already the weak point; no second exposed token),
+  and the browser only sends it to the hub, same-origin via the vite/nginx
+  proxies. Guarded by `backend/tests/Api/MercureAuthTest.php` (phase1 — the
+  claim's club scope is a tenant boundary).
+- **Client**: `frontend/src/shared/lib/scheduleStream.ts` — ONE ref-counted
+  `EventSource` per session, subscribed to the **template itself as topic**
+  (the response's `topicTemplate`; the hub matches every exact
+  `club:X:schedule:<uuid>` topic against it, so all the club's generations
+  arrive on one connection without knowing their ids). Events **invalidate**
+  the react-query caches (the server stays the source of truth); the poll
+  degrades from 2.5 s to a 15 s fallback while the stream is connected. On
+  stream error the client closes and **re-authenticates on retry** — never the
+  native EventSource reconnection, which would replay an expired cookie forever.
+
+`anonymous` stays off; nothing here relaxes the hub configuration above.
