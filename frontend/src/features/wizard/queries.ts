@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { readState, type ReadState } from "@/shared/lib/readState";
+import { isScheduleStreamConnected, useScheduleStream } from "@/shared/lib/scheduleStream";
 
 import { activeTeams, activeVenues, disabledVenueIds, pausedTeamIds } from "./lib/activeLayer";
 
@@ -569,17 +570,29 @@ export function useConstraintValidation(enabled: boolean, calendarEntryId?: stri
   });
 }
 
-/** Poll a schedule's status while it is queued/generating; stops once terminal. */
+/**
+ * Follow a schedule's status while it is queued/generating; stops once terminal.
+ * FRT-04 : le flux Mercure pousse l'avancement et invalide ce cache ; le poll ne
+ * meurt pas (publieur best-effort), il ralentit tant que le flux est connecté.
+ */
 export function useScheduleStatus(id: string | null) {
-  return useQuery({
+  const query = useQuery({
     queryKey: ["wizard", "schedule_status", id],
     queryFn: () => wizardApi.getSchedule(id ?? ""),
     enabled: null !== id,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return "PENDING" === status || "GENERATING" === status ? 2500 : false;
+      if ("PENDING" !== status && "GENERATING" !== status) {
+        return false;
+      }
+
+      return isScheduleStreamConnected() ? 15_000 : 2500;
     },
   });
+  const status = query.data?.status;
+  useScheduleStream(null !== id && ("PENDING" === status || "GENERATING" === status));
+
+  return query;
 }
 
 /**
