@@ -72,7 +72,9 @@ on the next poll).
   member's resolved tenant** (`_club_id` request attribute — never a client
   parameter). No wildcard, no other club. TTL 1 h.
 - **Delivery**: `mercureAuthorization` **cookie, httpOnly, SameSite strict,
-  path `/.well-known/mercure`** — the JS never sees the hub token (the
+  `Secure` from `JWT_COOKIE_SECURE`** (the same switch as the app JWT cookie —
+  never `$request->isSecure()`, which answers false behind the prod nginx:
+  `docs/security/jwt-cookie.md`), **path `/.well-known/mercure`** — the JS never sees the hub token (the
   app JWT in localStorage is already the weak point; no second exposed token),
   and the browser only sends it to the hub, same-origin via the vite/nginx
   proxies. Guarded by `backend/tests/Api/MercureAuthTest.php` (phase1 — the
