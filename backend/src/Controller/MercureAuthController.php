@@ -41,6 +41,8 @@ final class MercureAuthController extends AbstractController
     public function __construct(
         #[Autowire(env: 'MERCURE_JWT_SECRET')]
         private readonly string $mercureSecret,
+        #[Autowire(env: 'bool:JWT_COOKIE_SECURE')]
+        private readonly bool $cookieSecure,
         private readonly RequestStack $requestStack,
         private readonly ClockInterface $clock,
     ) {}
@@ -93,7 +95,15 @@ final class MercureAuthController extends AbstractController
             // Le hub est servi SOUS L'ORIGINE du front par les proxys (vite dev,
             // nginx dev/prod) : le cookie ne part que vers lui, jamais vers l'API.
             path: '/.well-known/mercure',
-            secure: $request->isSecure(),
+            // SEC-16 : MÊME source que le cookie du JWT applicatif — une variable
+            // d'env, jamais `$request->isSecure()`. Le nginx de prod écoute en 80
+            // derrière la terminaison TLS et réécrit `X-Forwarded-Proto` avec
+            // `$scheme` (docker/frontend/nginx.prod.conf:57) : `isSecure()` y répond
+            // FAUX, et ce cookie serait parti sans `Secure`. Le nom de la variable
+            // parle du cookie « JWT » — c'en est un ici aussi (jeton de souscription
+            // signé), et le réglage est le même : une seule question, une seule
+            // réponse (docs/security/jwt-cookie.md).
+            secure: $this->cookieSecure,
             httpOnly: true,
             sameSite: Cookie::SAMESITE_STRICT,
         ));

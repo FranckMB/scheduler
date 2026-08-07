@@ -117,6 +117,43 @@ final class MercureAuthTest extends WebTestCase
         self::assertSame(\sprintf('club:%s:schedule:{id}', $clubId), $body['topicTemplate'] ?? null);
     }
 
+    /**
+     * SEC-16 — le flag `Secure` de CE cookie suit la configuration, pas le
+     * protocole vu par PHP.
+     *
+     * Le nginx de production écoute en 80 derrière la terminaison TLS et réécrit
+     * `X-Forwarded-Proto` avec `$scheme` : `$request->isSecure()` y répond FAUX,
+     * et le cookie serait parti **sans `Secure`** — le jeton de souscription
+     * lisible en clair par un attaquant réseau. Le test force l'inverse (requête
+     * VUE comme https) et exige que le cookie ne suive PAS la requête : en
+     * environnement de test `JWT_COOKIE_SECURE` vaut `false`, donc un contrôleur
+     * qui interrogerait la requête rendrait ici un cookie `Secure` — et rougirait.
+     */
+    public function testTheCookieSecureFlagFollowsTheConfigurationNotTheRequestProtocol(): void
+    {
+        [$token] = $this->memberOfAFreshClub('proto');
+
+        $this->client->request('GET', '/api/mercure/auth', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+            'HTTPS' => 'on',
+            'HTTP_X_FORWARDED_PROTO' => 'https',
+        ]);
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+
+        $cookie = null;
+        foreach ($this->client->getResponse()->headers->getCookies() as $candidate) {
+            if ('mercureAuthorization' === $candidate->getName()) {
+                $cookie = $candidate;
+            }
+        }
+        self::assertInstanceOf(Cookie::class, $cookie);
+        self::assertFalse(
+            $cookie->isSecure(),
+            'le flag doit venir de JWT_COOKIE_SECURE (false en test), jamais de $request->isSecure() — '
+            . 'sinon la prod, où nginx écoute en 80, poserait le cookie sans Secure',
+        );
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();

@@ -93,6 +93,16 @@ rester dans des fichiers exclus de l'image. Ce qu'aucun test ne peut couvrir :
 une **vraie variable d'environnement** posée à `false` sur la VM — elle gagne sur
 tout fichier, d'où la vérification au runbook (`docs/ops/deploy.md`).
 
+## Le cookie Mercure suit la même règle
+
+`MercureAuthController` pose un second cookie (le jeton de souscription du hub,
+`mercureAuthorization`, path `/.well-known/mercure` — voir
+[`mercure.md`](mercure.md)). Il lit **le même `JWT_COOKIE_SECURE`** : c'est un
+jeton signé lui aussi, exposé au même mensonge de `isSecure()` derrière le nginx
+de prod. Une seule question, une seule réponse — deux sources auraient dérivé.
+Gardé par `MercureAuthTest::testTheCookieSecureFlagFollowsTheConfigurationNotTheRequestProtocol`
+(requête vue comme https, cookie qui doit rester non-`Secure` en test).
+
 ## Côté front
 
 `authStore` ne porte plus qu'un booléen `isAuthenticated` — un **indice d'UI**
