@@ -115,11 +115,11 @@ final class StructureSnapshotter
      */
     private function loadFamily(string $entityClass, string $clubId, string $seasonId): array
     {
-        // SportCategory is club-scoped but season-less; TeamTagAssignment is
-        // season-scoped but club-less (same special cases as SeasonDataPurger).
+        // SportCategory is club-scoped but season-less — le seul cas particulier
+        // qui reste. TeamTagAssignment en était un second (season-scoped, club-less)
+        // jusqu'à BCK-11 : il porte son `club_id` et suit le cas général.
         $criteria = match ($entityClass) {
             SportCategory::class => ['clubId' => $clubId],
-            TeamTagAssignment::class => ['seasonId' => $seasonId],
             default => ['clubId' => $clubId, 'seasonId' => $seasonId],
         };
         // Only the PERMANENT structure — les lignes de période n'y entrent pas. L'ancre

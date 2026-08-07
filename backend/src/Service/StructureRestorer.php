@@ -14,6 +14,7 @@ use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\TeamTagAssignment;
+use App\Entity\TenantOwnedInterface;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintScope;
@@ -98,7 +99,17 @@ final class StructureRestorer
 
         foreach (self::FAMILY_CLASS as $family => $entityClass) {
             foreach ($data[$family] ?? [] as $rowData) {
-                $this->entityManager->persist($this->hydrate($entityClass, $rowData));
+                $entity = $this->hydrate($entityClass, $rowData);
+                // Une photo PRISE AVANT qu'une famille devienne tenant ne porte pas
+                // `clubId` : hydratée telle quelle, elle échouerait au NOT NULL (et,
+                // pire, resterait invisible sous RLS si la colonne l'acceptait). Le
+                // club de la restauration est le seul possible — c'est celui dont on
+                // vient d'effacer la structure. Règle générale, pas un rustine pour
+                // une famille : toute famille qui gagnera un tenant en hérite (BCK-11).
+                if ($entity instanceof TenantOwnedInterface && !\array_key_exists('clubId', $rowData)) {
+                    $entity->setClubId($clubId);
+                }
+                $this->entityManager->persist($entity);
             }
         }
         $this->entityManager->flush();
@@ -281,10 +292,11 @@ final class StructureRestorer
     /** Delete the current permanent structure (NOT schedules, NOT the calendar). */
     private function wipeStructure(string $clubId, string $seasonId): void
     {
-        // TeamTagAssignment has a season_id but NO club_id (scoped by season).
         $this->deleteFamily(TeamCoach::class, $clubId, $seasonId);
         $this->deleteFamily(CoachPlayerMembership::class, $clubId, $seasonId);
-        $this->deleteFamily(TeamTagAssignment::class, null, $seasonId);
+        // BCK-11 : borné au club depuis que la table porte son `club_id` (il
+        // valait `null` ici tant qu'elle n'en avait pas).
+        $this->deleteFamily(TeamTagAssignment::class, $clubId, $seasonId);
         $this->deleteFamily(Reservation::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Constraint::class, $clubId, $seasonId, permanentOnly: true);
         $this->deleteFamily(Team::class, $clubId, $seasonId);
