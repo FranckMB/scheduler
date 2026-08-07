@@ -10,7 +10,8 @@ means the production solver actually honours the input.
 ``make_payload`` builds a payload in the exact shape the backend emits
 (``ScheduleConstraintBuilder::serializeUnifiedConstraints`` — nested ``config``,
 plus the v1 ``type``/``metadata`` coach constraints), so semantic tests exercise
-the true contract.
+the true contract — ``version`` inclus, lu depuis ``CONTRACT_VERSION`` (ENG-26 :
+il était figé à ``"1.0"``, que le garde de ``POST /generate`` refuse en 422).
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from app.main import build_schedule
+from app.main import build_schedule, read_contract_version
 from app.schemas.input_schema import ScheduleInputSchema
 
 
@@ -135,7 +136,13 @@ def make_payload(
     return {
         "clubId": "test-club",
         "seasonId": "test-season",
-        "version": "1.0",
+        # ENG-26 — la version RÉELLE du contrat, pas un "1.0" figé. `solve_payload`
+        # court-circuite la couche FastAPI, donc le garde de version ne tourne pas
+        # en test : le harnais envoyait tranquillement un payload que la PROD
+        # rejette en 422 (MAJOR différent), tout en promettant, docstring à
+        # l'appui, « la forme exacte que le backend émet ». Des tests sémantiques
+        # verts sur une enveloppe que personne n'accepterait.
+        "version": read_contract_version(),
         "solverSeed": seed,
         "solverTimeoutSeconds": timeout,
         "venues": venues,

@@ -56,6 +56,20 @@ class TenantFilterListener implements EventSubscriberInterface
         $this->tenantConnectionContext->clear();
 
         $request = $event->getRequest();
+
+        // SEC-17 — la console super-admin n'a PAS de tenant, par construction.
+        // Son identité est un `SuperAdmin` (jamais un `User`), elle travaille sur
+        // la connexion Doctrine `admin` qui contourne RLS, et le contrat SA0 dit
+        // « la session admin ne pose jamais app.club_id ». Or ce listener y posait
+        // quand même le GUC dès qu'un `X-Club-Id` traînait dans la requête :
+        // l'anti-spoof ne s'arme que `if ($user instanceof User)` (plus bas), donc
+        // hors identité club le club VOULU par l'appelant passait sans contrôle
+        // d'appartenance. Impact mesuré nul — les endpoints admin ne lisent pas
+        // par cette connexion — mais un mécanisme qui contredit son propre
+        // contrat est une bombe à retardement pour le prochain qui l'étend.
+        if (str_starts_with($request->getPathInfo(), '/api/admin')) {
+            return;
+        }
         $user = $this->authenticatedUser();
 
         // Single active club per user: when no explicit tenant is supplied, derive

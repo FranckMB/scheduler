@@ -32,6 +32,7 @@ The shared membership lookups (`findActiveMembership`, `findActiveClubIds`, `isM
 **File:** `backend/src/EventListener/TenantFilterListener.php`
 
 - Subscribes to `kernel.request` at **priority 7 — AFTER the security firewall** (priority 8), so the JWT user is authenticated by the time the tenant is resolved.
+- **Returns immediately for `/api/admin/**` (SEC-17, 2026-08-07).** The super-admin console has no tenant by construction: separate identity (`SuperAdmin`, never a `User`), Doctrine `admin` connection which bypasses RLS, and the SA0 contract states the admin session never sets `app.club_id`. Without the skip the listener honoured an `X-Club-Id` header on those requests — and its anti-spoof membership check only arms `if ($user instanceof User)`, so under an admin identity the *claimed* club passed with no ownership check at all. Nothing read by that connection today; the point is that a mechanism contradicting its own contract breaks silently for whoever extends it next. Guarded by `AdminRequestBoundaryTest::testAnAdminRequestNeverSetsTheTenantGuc`.
 - On each **main HTTP request**:
   1. Resolves the current `club_id`: `_club_id` route attribute → `X-Club-Id` header → **the authenticated JWT user's single active `ClubUser` membership** (the frontend sends no header — the club is derived from the token).
   2. If a club came from a header/attribute and a user is present, validates the membership (403 if the user is not an active member — blocks a spoofed `X-Club-Id`).

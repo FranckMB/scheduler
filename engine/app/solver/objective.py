@@ -402,7 +402,17 @@ def add_preferred_day_bonus(
         avoided_by_team.setdefault(str(team_id), set()).update(day_set(config, "forbiddenDays", "forbidden_days"))
 
     synthetic_windows: list[dict[str, Any]] = []
-    for team_id in preferred_by_team.keys() | avoided_by_team.keys():
+    # ENG-25 — `sorted`, et pas seulement pour la forme : ces clés sont des `str`,
+    # dont le hash est randomisé par processus (PYTHONHASHSEED). Sans tri, l'ordre
+    # des fenêtres synthétiques changeait d'un PROCESSUS à l'autre, donc l'ordre
+    # d'ajout des termes à l'objectif, donc le chemin de recherche de CP-SAT : deux
+    # runs du MÊME payload avec le MÊME `solverSeed` pouvaient rendre deux
+    # affectations différentes (de valeur d'objectif identique — mais un
+    # gestionnaire qui régénère à l'identique voyait son planning bouger).
+    # ⚠ On NE fige PAS `PYTHONHASHSEED` : ce serait traiter le symptôme, et le
+    # figer désarme la protection contre les collisions de hash. L'ordre se
+    # décide là où il compte.
+    for team_id in sorted(preferred_by_team.keys() | avoided_by_team.keys()):
         preferred = preferred_by_team.get(team_id) or set()
         avoided = avoided_by_team.get(team_id) or set()
         if not preferred and not avoided:
