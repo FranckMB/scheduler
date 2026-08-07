@@ -519,6 +519,14 @@ jobs:
       - name: Install PHP deps
         run: docker compose exec -T php-fpm composer install --no-interaction
 
+      # ⚠ La base EST nécessaire, contrairement à ce que le périmètre laissait
+      # croire : trois des quatre tests du groupe POSTent des payloads construits
+      # à la main, mais `MatchPlacementContractSchemaTest` persiste des entités
+      # avant d'appeler /place-matches. Sans ça : « database clubscheduler_test
+      # does not exist », 23 verts sur 24.
+      - name: Init test database
+        run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console doctrine:database:create --if-not-exists --connection admin --env=test && php bin/console doctrine:migrations:migrate --no-interaction --env=test'
+
       # Chaque clé de la liste blanche `config` doit CHANGER le résultat du
       # solveur (SEC-13), le miroir de capacité doit rendre le même verdict que
       # lui (P3-19), et le payload doit rester recevable (contrat 2.2).
