@@ -27,10 +27,11 @@ use App\Enum\ConstraintFamily;
  * moteur, la preuve qu'elles changent le résultat du solveur.
  *
  * Ce que la liste NE contient PAS, et pourquoi :
- * - `dateStart`/`dateEnd` : recopiées par `ConstraintSerializer` vers un payload
- *   que le moteur ignore (`extra="ignore"`), lues par personne, zéro ligne en
- *   base. Autoriser une date sans effet, ce serait fabriquer le mensonge qu'on
- *   corrige (décision fondateur 2026-08-07) ;
+ * - `dateStart`/`dateEnd` : elles n'étaient lues que par `ConstraintSerializer`,
+ *   une classe MORTE (aucun appelant, supprimée le 2026-08-08) — et de surcroît
+ *   MAL NOMMÉES : le geste réel écrit `startDate`/`endDate` (fermeture de gymnase
+ *   datée, cf. FACILITY). Deux mots inversés dans du code que personne n'appelait :
+ *   rien ne pouvait le révéler. Zéro ligne en base ;
  * - `coachId` : doublon exact du scope, supprimé par `Version20260807190000` ;
  * - les alias snake_case (`forbidden_days`, `preferred_days`) : le moteur les
  *   lisait, ils sont retirés côté moteur dans la même PR — une seule orthographe
