@@ -170,8 +170,7 @@ final class AdminMessengerFailedControllerTest extends WebTestCase
 
     private function sendFailedMessage(GenerateScheduleMessage $message, DateTimeImmutable $failedAt, string $errorMessage): string
     {
-        $dsn = $_ENV['MESSENGER_FAILURE_TRANSPORT_DSN'] ?? 'redis://redis:6379/messages/failed';
-        $connection = RedisConnection::fromDsn($dsn, ['auto_setup' => false]);
+        $connection = RedisConnection::fromDsn($this->failureDsn(), ['auto_setup' => false]);
         $transport = new RedisTransport($connection);
 
         $envelope = new Envelope($message, [
@@ -188,7 +187,7 @@ final class AdminMessengerFailedControllerTest extends WebTestCase
 
     private function cleanupAllFailedMessages(): void
     {
-        $dsn = 'redis://redis:6379/messages/failed';
+        $dsn = $this->failureDsn();
         $connection = RedisConnection::fromDsn($dsn, ['auto_setup' => false]);
         $redis = $this->getRedisFromConnection($connection);
         $stream = $this->resolveStreamName($dsn);
@@ -212,7 +211,7 @@ final class AdminMessengerFailedControllerTest extends WebTestCase
 
     private function cleanupRedisMessages(): void
     {
-        $dsn = 'redis://redis:6379/messages/failed';
+        $dsn = $this->failureDsn();
         $connection = RedisConnection::fromDsn($dsn, ['auto_setup' => false]);
         $redis = $this->getRedisFromConnection($connection);
         $stream = $this->resolveStreamName($dsn);
@@ -224,6 +223,20 @@ final class AdminMessengerFailedControllerTest extends WebTestCase
                 // Best-effort cleanup; ignore failures
             }
         }
+    }
+
+    /**
+     * SEC-16 — UNE source pour le DSN d'échec. Le seed lisait $_ENV mais les deux
+     * nettoyages codaient l'ancien DSN en dur : au changement de stream, les
+     * fixtures s'accumulaient sans jamais être balayées et « aucun message » en
+     * trouvait trois (résidu attrapé en local le jour du changement).
+     */
+    private function failureDsn(): string
+    {
+        $dsn = $_ENV['MESSENGER_FAILURE_TRANSPORT_DSN'] ?? 'redis://redis:6379/failed_messages/failed';
+        \assert(\is_string($dsn));
+
+        return $dsn;
     }
 
     private function getRedisFromConnection(RedisConnection $connection): Redis

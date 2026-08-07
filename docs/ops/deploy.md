@@ -214,3 +214,21 @@ supprimer).
 ### Restaurer un backup
 
 → [`backup-restore.md`](backup-restore.md) §3 (restore-check puis restauration réelle).
+
+## SEC-16 — migration du stream d'échec Messenger (déployé le 2026-08-07)
+
+Le DSN d'échec par défaut est passé de `redis://redis:6379/messages/failed` (groupe posé
+sur le MÊME stream que les messages vifs — tout dispatch rendait 500 dès que ce groupe
+était matérialisé) à `redis://redis:6379/failed_messages/failed` (stream dédié).
+
+Au premier déploiement qui embarque ce changement :
+
+1. vérifier qu'aucun `.env.prod` ne surcharge `MESSENGER_FAILURE_TRANSPORT_DSN` avec
+   l'ancien DSN — sinon la mine reste armée ;
+2. vérifier qu'aucun message n'attend dans l'ancien groupe :
+   `docker compose exec php-fpm php bin/console messenger:failed:show` (avant bascule) ;
+3. détruire le groupe hérité s'il existe — sans lui l'incident reste possible :
+   `docker compose exec redis redis-cli XGROUP DESTROY messages failed`.
+
+NR : `MessengerTransportSeparationTest` (phase1) refuse tout retour à un stream partagé.
+
