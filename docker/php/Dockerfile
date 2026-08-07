@@ -59,9 +59,11 @@ COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
 EXPOSE 9000
 
-# SEC-15 (roadmap) : durcissement USER non-root à tester stack complète — php-fpm
-# abandonne déjà root pour ses workers (www-data), engine/pdf-worker sont des
-# conteneurs internes jamais exposés.
+# SEC-15 (2026-08-07) — cet étage `base` sert le DEV et la CI uniquement : le
+# master php-fpm y reste root (il se setuide, les workers tournent www-data —
+# pool www) parce que le bind-mount dev appartient à l'uid hôte et que les
+# cibles Makefile passent déjà `-u` là où il faut. L'image de PROD, elle, est
+# non-root : l'étage `prod` ci-dessous termine par `USER www-data`.
 # nosemgrep: dockerfile.security.missing-user.missing-user
 CMD ["php-fpm"]
 

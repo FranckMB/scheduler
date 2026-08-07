@@ -22,8 +22,11 @@ COPY frontend/worker.js ./worker.js
 # Heartbeat admin (builtins uniquement — AUCUNE dépendance npm, voir worker-heartbeat.js).
 COPY frontend/worker-heartbeat.js ./worker-heartbeat.js
 
-# SEC-15 (roadmap) : durcissement USER non-root à tester stack complète — php-fpm
-# abandonne déjà root pour ses workers (www-data), engine/pdf-worker sont des
-# conteneurs internes jamais exposés.
-# nosemgrep: dockerfile.security.missing-user.missing-user
+# SEC-15 — défaut NON-ROOT : pptruser est l'utilisateur prévu par l'image
+# puppeteer (sandbox Chromium comprise). Les deux composes l'écrasent
+# explicitement (dev : uid hôte pour créer public/exports sur le bind-mount ;
+# prod : 1000:1000, le même uid que le www-data de l'image php, pour partager
+# le volume exports) — ce USER est le filet si l'image est lancée nue.
+USER pptruser
+
 CMD ["node", "worker.js"]
