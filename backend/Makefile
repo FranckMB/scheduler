@@ -46,7 +46,12 @@ tests-complete: APP_ENV = test
 tests-complete: db-init-test
 	$(MAKE) APP_ENV=$(APP_ENV) phpstan
 	$(MAKE) APP_ENV=$(APP_ENV) cs
-	$(EXEC) php vendor/bin/phpunit tests/
+	$(EXEC) php vendor/bin/phpunit tests/ --exclude-group contract
+
+.PHONY: tests-engine-semantics ## Les tests qui interrogent le VRAI moteur (job CI « Engine semantics »)
+tests-engine-semantics: APP_ENV = test
+tests-engine-semantics:
+	$(EXEC) php vendor/bin/phpunit --group contract
 
 .PHONY: phpunit ## Run blocking PHPUnit group
 phpunit: APP_ENV = test

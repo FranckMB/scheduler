@@ -79,6 +79,10 @@ Oriente ou bloque l'utilisation d'une salle spécifique. La validation exige **a
 
 Il n'existe **pas** de clé `closedDay` ni `onlyDay`. Une fermeture de salle **datée** ne passe pas par une contrainte saisie à la main : elle se déclare dans le **cockpit** (entrée calendrier `venue_closed`) et **ne devient jamais une contrainte** — depuis P2-5 5b le backend retire purement et simplement les créneaux du gymnase du payload sur ses jours fermés (voir §3.3).
 
+> ⚠ **La forme du `config` est validée à l'écriture depuis SEC-13** (422 sur clé
+> inconnue ou valeur aberrante). La table des clés acceptées, leur type et leur
+> lecteur : [`constraint-config-keys.md`](constraint-config-keys.md).
+
 #### `COACH_AVAILABILITY` — Disponibilité d'entraîneur
 
 Déclare les jours où un entraîneur est indisponible (ou, à l'inverse, les seuls jours où il est disponible).

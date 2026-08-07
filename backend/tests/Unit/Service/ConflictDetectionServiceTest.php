@@ -8,6 +8,7 @@ use App\Entity\Constraint;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Service\ConstraintConfigValidator;
 use App\Service\ConstraintValidationService;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -227,6 +228,6 @@ final class ConflictDetectionServiceTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->service = new ConstraintValidationService;
+        $this->service = new ConstraintValidationService(new ConstraintConfigValidator);
     }
 }

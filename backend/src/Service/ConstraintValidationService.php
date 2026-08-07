@@ -17,12 +17,22 @@ use App\Enum\ConstraintScope;
  */
 final class ConstraintValidationService
 {
+    public function __construct(private readonly ConstraintConfigValidator $configValidator) {}
+
     /**
      * @return list<string>
      */
     public function validate(Constraint $constraint): array
     {
-        $errors = [];
+        // SEC-13 — LA FORME du config est jugée par le MÊME validateur qu'à
+        // l'écriture. Ce service n'énonce plus ses propres règles de forme : deux
+        // endroits qui disent presque la même chose finissent par diverger (sept
+        // écarts mesurés sur le miroir de capacité, revue #341). Il reste ici ce
+        // que l'écriture ne peut PAS voir : la cohérence entre champs d'une même
+        // contrainte, les contradictions ENTRE contraintes, et l'état du club.
+        // Utile malgré le 422 à l'écriture : les fixtures, imports et écritures
+        // SQL directes n'y passent pas.
+        $errors = $this->configValidator->errors($constraint->getFamily(), $constraint->getConfig());
 
         // Validate scope + scope_target_id consistency
         $scope = $constraint->getScope();
