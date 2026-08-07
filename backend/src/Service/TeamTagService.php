@@ -79,6 +79,9 @@ final class TeamTagService
             }
 
             $assignment = new TeamTagAssignment;
+            // BCK-11 : l'assignation porte son tenant. L'équipe EST la source —
+            // une assignation ne peut pas appartenir à un autre club qu'elle.
+            $assignment->setClubId($clubId);
             $assignment->setTeamId($teamId);
             $assignment->setTagId($systemTags[$tagName]->getId());
             $assignment->setSeasonId($seasonId);
