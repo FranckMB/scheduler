@@ -45,10 +45,11 @@ export function computeReservationWarnings(reservations: Reservation[], teams: T
     byTeam.set(r.teamId, [...(byTeam.get(r.teamId) ?? []), r]);
   }
   byTeam.forEach((group, teamId) => {
-    const team = teams.find((t) => t.id === teamId);
-    if (undefined !== team && group.length > team.sessionsPerWeek) {
-      warnings.push(`${teamName.get(teamId) ?? "?"} : ${group.length} réservations pour ${team.sessionsPerWeek} séance(s)/semaine.`);
-    }
+    // P3-20 (décision fondateur 2026-08-06) — « plus de réservations que de séances » a
+    // quitté cet écran : c'est une INCOHÉRENCE, plus un avertissement, et le verdict est
+    // rendu par le SERVEUR (`ValidateConstraintsController::overBookedTeamBlockers`, où
+    // vivent déjà les bloqueurs). Le laisser ici en warning ferait deux vérités : l'écran
+    // dirait « à surveiller » pendant que la porte refuse de s'ouvrir (§7.2 pt 2).
     const perDay = new Map<number, number>();
     for (const r of group) {
       perDay.set(r.dayOfWeek, (perDay.get(r.dayOfWeek) ?? 0) + 1);

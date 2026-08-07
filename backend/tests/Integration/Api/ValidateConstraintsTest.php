@@ -188,6 +188,51 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertStringContainsString('Matéo', $warnings);
     }
 
+    /**
+     * NR — P3-20 (décision fondateur 2026-08-06) : « si j'ai déclaré 3 réservations alors
+     * que l'équipe ne veut que 2 créneaux, on BLOQUE — c'est une incohérence gestionnaire ».
+     * Ce n'est pas une préférence bafouée : un verrou étant pré-placé hors modèle
+     * (ALIGN-07), les trois s'imposeraient et l'équipe jouerait plus que déclaré, en
+     * silence. Le cas naît du geste de désactivation (les réservations d'un gymnase
+     * désactivé sont conservées ; déplacer la séance ailleurs en fabrique une de trop).
+     */
+    public function testMoreReservationsThanSessionsPerWeekBlocksTheGeneration(): void
+    {
+        $venueId = $this->venue('Matéo');
+        $teamId = $this->team(sessionsPerWeek: 2);
+        $this->reservation($teamId, $venueId, dayOfWeek: 1, start: '18:00');
+        $this->reservation($teamId, $venueId, dayOfWeek: 2, start: '18:00');
+        $this->reservation($teamId, $venueId, dayOfWeek: 3, start: '18:00');
+
+        $this->client->loginUser($this->user);
+        $this->client->request('POST', '/api/constraints/validate', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+
+        self::assertResponseStatusCodeSame(422);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertFalse($data['valid']);
+        $blockers = implode(' | ', $data['blockers']);
+        self::assertStringContainsString('3 réservations', $blockers);
+        self::assertStringContainsString('2 séances', $blockers);
+        // Le message doit dire QUOI FAIRE : un bloqueur sans recours enferme le gestionnaire.
+        self::assertStringContainsString('retirez 1 réservation', $blockers);
+    }
+
+    /** Témoin : autant de réservations que de séances déclarées — rien à signaler. */
+    public function testExactlyAsManyReservationsAsSessionsIsFine(): void
+    {
+        $venueId = $this->venue('Matéo');
+        $teamId = $this->team(sessionsPerWeek: 2);
+        $this->reservation($teamId, $venueId, dayOfWeek: 1, start: '18:00');
+        $this->reservation($teamId, $venueId, dayOfWeek: 2, start: '18:00');
+
+        $this->client->loginUser($this->user);
+        $this->client->request('POST', '/api/constraints/validate', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+
+        self::assertResponseStatusCodeSame(200);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame([], $data['blockers']);
+    }
+
     public function testOverlayValidationIncludesInheritedPermanentConstraints(): void
     {
         $this->constraint(['maxStartTime' => '10:00']);

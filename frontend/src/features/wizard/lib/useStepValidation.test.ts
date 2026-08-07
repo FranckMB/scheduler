@@ -109,7 +109,11 @@ describe("computeReservationWarnings (W6)", () => {
     expect(computeReservationWarnings(reservations, teams, venues, slots)).toEqual([]);
   });
 
-  it("warns when a team reserves more slots than its sessions/week", () => {
+  // P3-20 (décision fondateur 2026-08-06) — « plus de réservations que de séances » est
+  // désormais une INCOHÉRENCE qui BLOQUE, rendue par le serveur
+  // (`ValidateConstraintsController::overBookedTeamBlockers`). Cet écran ne doit plus en
+  // faire un avertissement : deux vérités, dont une plus tendre que la porte (§7.2 pt 2).
+  it("ne dit plus « trop de réservations » ici — c'est un bloqueur SERVEUR, pas un avertissement d'écran", () => {
     const teams = [team("t1", "U13", 2)];
     const venues = [venue("v1", "Gymnase A", false)];
     const slots = [slot("v1", 1, "18:00", 1), slot("v1", 3, "18:00", 1), slot("v1", 5, "18:00", 1)];
@@ -119,7 +123,7 @@ describe("computeReservationWarnings (W6)", () => {
       reservation("r3", "t1", "v1", 5, "18:00"),
     ];
     const warnings = computeReservationWarnings(reservations, teams, venues, slots);
-    expect(warnings).toContainEqual("U13 : 3 réservations pour 2 séance(s)/semaine.");
+    expect(warnings.filter((w) => w.includes("réservations pour"))).toEqual([]);
   });
 
   it("warns when a team has two sessions on the same day", () => {

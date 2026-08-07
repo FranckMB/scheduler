@@ -116,13 +116,24 @@ final class OrphanPinGuardTest extends WebTestCase
         self::assertNull($this->guard->firstOrphanMessage($this->overlay));
     }
 
-    public function testAPinOnADisabledVenueIsOrphanTooInsteadOfBeingDroppedInSilence(): void
+    /**
+     * NR — P3-20 (décision fondateur 2026-08-06) : UN ÉPINGLAGE SUR UN GYMNASE DÉSACTIVÉ
+     * NE BLOQUE PLUS.
+     *
+     * Ce cas gardait l'inverse (revue #8 round 4) : le verrou étant retiré du payload avec
+     * son gymnase, on refusait la génération plutôt que de déplacer la séance en silence.
+     * Le terrain a montré l'effet de bord : désactiver un gymnase qui portait une
+     * réservation rendait TOUTE génération impossible, avec un message nommant un gymnase
+     * que l'écran ne montre plus — le geste de désactivation fabriquait l'impasse (P3-20).
+     *
+     * Ce qui a changé dans le raisonnement : « déplacée en silence » ne s'applique pas
+     * ici. Un gymnase désactivé ne sert AUCUNE séance — il n'y a pas d'ailleurs où la
+     * séance glisserait sans le dire. L'épinglage est simplement INERTE, et il revient
+     * intact à la réactivation. Les autres causes d'orphelin (grille vidée, jour de
+     * fermeture) bloquent toujours : là, la séance partirait vraiment ailleurs.
+     */
+    public function testAPinOnADisabledVenueNoLongerBlocksTheGeneration(): void
     {
-        // Revue #8 round 4 — DÉSACTIVÉ conserve la grille : le créneau existe toujours, et
-        // le garde y voyait donc une correspondance valable. Mais buildForOverlay retire ce
-        // gymnase du payload AVEC les épinglages qui s'y trouvent : le verrou passait le
-        // garde-fou pour être supprimé juste après, et la séance partait ailleurs sans un
-        // mot. Fonctionnellement, l'épinglage est orphelin — il doit bloquer et se nommer.
         $this->em->persist($this->slotTemplate(2, '18:00', LockLevel::HARD)); // le créneau que la période possède
         $override = new VenuePeriodOverride;
         $override->setClubId($this->club->getId());
@@ -133,9 +144,25 @@ final class OrphanPinGuardTest extends WebTestCase
         $this->em->persist($override);
         $this->em->flush();
 
+        self::assertNull(
+            $this->guard->firstOrphanMessage($this->overlay),
+            'un épinglage sur un gymnase désactivé est inerte, pas orphelin : il ne doit plus refuser la génération',
+        );
+    }
+
+    /**
+     * TÉMOIN du cas ci-dessus — sans lui, « ça ne bloque plus » passerait aussi si le
+     * garde s'était tu pour une raison étrangère (données absentes, plan mal résolu).
+     * MÊME contexte, seule différence : le gymnase n'est pas désactivé, le créneau
+     * n'existe pas. Le garde doit toujours refuser, et se nommer.
+     */
+    public function testAnOrphanOnAnEnabledVenueStillBlocks(): void
+    {
+        $this->em->persist($this->slotTemplate(3, '20:00', LockLevel::HARD)); // aucun créneau ce jour-là
+        $this->em->flush();
+
         $message = $this->guard->firstOrphanMessage($this->overlay);
-        self::assertIsString($message, 'un épinglage sur un gymnase désactivé bloque la génération');
-        self::assertStringContainsString('mardi', $message);
+        self::assertIsString($message, 'un épinglage sans créneau reste orphelin');
         self::assertStringContainsString($this->venue->getName(), $message);
     }
 

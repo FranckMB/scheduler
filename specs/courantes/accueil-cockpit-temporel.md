@@ -736,7 +736,7 @@ l'autre — la période est PROPRIÉTAIRE.**
 - `cutoff` et `mutualisation` ne portent pas de plan de période.
 
 Corollaire opérationnel : un épinglage HARD qui ne retombe sur aucun créneau de la grille de la
-période **bloque la génération** (422 nommant le gymnase et le jour, `OrphanPinGuard`) — dans un
+période **bloque la génération** (422 nommant le gymnase et le jour, `OrphanPinGuard` — sauf sur un gymnase DÉSACTIVÉ, exclu depuis P3-20) — dans un
 modèle additif il aurait silencieusement retrouvé un créneau de saison.
 
 ## 10. En une phrase
