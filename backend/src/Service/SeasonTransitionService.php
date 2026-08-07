@@ -86,7 +86,11 @@ final class SeasonTransitionService
             SeasonResolver::seasonYear($today) + 1,
         );
         $club = $this->entityManager->getRepository(Club::class)->find($clubId);
-        if (!$club instanceof Club || ($club->getPaidSeasonYear() ?? \PHP_INT_MIN) < $targetYear) {
+        // P2-4 (fondateur 2026-08-07) — un club de DÉMONSTRATION a un abonnement
+        // illimité : la bascule de saison se montre en rendez-vous (souvent sous
+        // horloge simulée), jamais bloquée par un paiement qui n'existe pas.
+        $isDemo = $club instanceof Club && $club->isDemo();
+        if (!$club instanceof Club || (!$isDemo && ($club->getPaidSeasonYear() ?? \PHP_INT_MIN) < $targetYear)) {
             throw new ConflictHttpException(\sprintf('La saison %d-%d n\'est pas réglée — la bascule est réservée aux saisons payées.', $targetYear, $targetYear + 1));
         }
 

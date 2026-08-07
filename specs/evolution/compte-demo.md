@@ -1,6 +1,12 @@
 # Compte / mode démo (montrer la puissance de l'app) — besoin à spécifier
 
-> **Statut** : **besoin à spécifier** (discovery **ouverte** — options posées, décisions à trancher). **Pas un plan.**
+> **Statut** : **volet VENDEUR LIVRÉ** (2026-08-07 — décisions fondateur des 2026-08-06/07, détail en
+> [état des lieux](../courantes/etat-des-lieux.md)) : option **A** retenue et livrée en 4 PR (horloge simulée
+> par club = P4-16 soldé · flag `is_demo` hors KPI + abonnement illimité · `app:demo:create` — club du
+> prospect par code FFBB, équipes engagées comprises, un seul login animateur déplacé · `app:demo:seed-bccl`
+> — BCCL anonymisé strict, reset d'un geste). Le bouton « ré-importer les équipes » d'un club peuplé est
+> **écarté** (décision fermée, voir état des lieux). **Le volet C (prospect self-service) part au PARKING roadmap**
+> (décision fondateur 2026-08-07 — jamais demandé par le terrain) : ce fichier est une ARCHIVE de cadrage.
 > **Nature** : levier de **vente**. Montrer en quelques secondes le « wow » du solveur (un vrai planning de club résolu) sans que le prospect saisisse quoi que ce soit.
 > **Rattachement roadmap** : **P2-4** (fort levier de vente). ⚠ Dépend en pratique de **P4-16** — sans horloge simulée pilotant le « aujourd'hui » de l'UI, la démo montre la mauvaise date.
 > **Réutilise l'existant** : fixtures **`BasketballInit`** (déjà un club réaliste, BCCL, 40+ équipes, contraintes, réservations, couleurs) · plan **Découverte** · `ResetSeasonController` / `app:seasons:purge` · seed superadmin (reset).
