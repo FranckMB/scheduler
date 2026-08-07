@@ -19,8 +19,51 @@ import { useActiveTeams, useActiveVenues, useGridSlots, usePriorityTiers, useRes
 import { useWizardStore } from "../store";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
+import { orphanReservationIds } from "../lib/orphanReservations";
+import { useDeleteReservation } from "../queries";
+import { Button } from "@/shared/components/ui/button";
+import { Trash2 } from "lucide-react";
 
 // Manager-facing labels for the FFBB play levels (mirrors the teams step).
+/**
+ * P4-44 — une ligne de réservation. ORPHELINE (créneau déplacé ou supprimé), elle se
+ * signale ET s'enlève : c'est le seul écran capable de la montrer, donc le seul où le
+ * geste correctif peut vivre. Le serveur, lui, bloque la génération dessus — un blocage
+ * sans recours atteignable enfermerait le gestionnaire (leçon P3-20).
+ */
+function ReservationRow({
+  reservation,
+  teamName,
+  venueName,
+  isOrphan,
+  onRemove,
+  busy,
+}: {
+  reservation: { id: string; teamId: string; venueId: string; dayOfWeek: number; startTime: string };
+  teamName: Map<string, string>;
+  venueName: Map<string, string>;
+  isOrphan: boolean;
+  onRemove: () => void;
+  busy: boolean;
+}) {
+  const label = teamName.get(reservation.teamId) ?? "?";
+  const where = `${venueName.get(reservation.venueId) ?? "?"} · ${dayLabel(reservation.dayOfWeek)} ${hhmm(reservation.startTime)}`;
+
+  return (
+    <SummaryRow
+      label={isOrphan ? <span className="text-destructive">{label} — créneau supprimé ou déplacé</span> : label}
+      meta={<span className={isOrphan ? "text-destructive" : undefined}>{where}</span>}
+      action={
+        isOrphan ? (
+          <Button variant="ghost" size="icon" className="size-7" aria-label={`Retirer la réservation de ${label}`} disabled={busy} onClick={onRemove}>
+            <Trash2 className="size-4" />
+          </Button>
+        ) : undefined
+      }
+    />
+  );
+}
+
 function Counter({ label, value, sub }: { label: string; value: number; sub?: string }) {
   return (
     <Card>
@@ -113,6 +156,13 @@ export function RecapStep() {
   // Reservations ordered by team rank (fanion S → A → B → C → D), then day + time.
   const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
   const rankOf = (id: string): number => teamRank.get(id) ?? Number.MAX_SAFE_INTEGER;
+  // P4-44 — les réservations devenues orphelines (créneau déplacé ou supprimé) : le
+  // serveur les BLOQUE au récap, et c'est ici — seul écran qui les liste — qu'on peut
+  // les retirer. L'écran « Réserver » en est incapable : sa grille boucle sur les
+  // créneaux, une réservation hors grille n'y a aucune case.
+  const orphanIds = orphanReservationIds(reservations, slots);
+  const deleteReservation = useDeleteReservation();
+
   const sortedReservations = [...reservations].sort((a, b) => rankOf(a.teamId) - rankOf(b.teamId) || a.dayOfWeek - b.dayOfWeek || hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
   // Coaches split into staffing groups (Salariés / Coachs-joueurs / Bénévoles),
   // each shown under its own header (user request — same as the constraint tab).
@@ -276,7 +326,7 @@ export function RecapStep() {
                       <div key={g.tier?.id ?? "orphan"} className="mb-2 last:mb-0">
                         <p className="px-1 pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">{tierGroupLabel(g.tier)}</p>
                         {rows.map((r) => (
-                          <SummaryRow key={r.id} label={teamName.get(r.teamId) ?? "?"} meta={`${venueName.get(r.venueId) ?? "?"} · ${dayLabel(r.dayOfWeek)} ${hhmm(r.startTime)}`} />
+                          <ReservationRow key={r.id} reservation={r} teamName={teamName} venueName={venueName} isOrphan={orphanIds.has(r.id)} onRemove={() => deleteReservation.mutate(r.id)} busy={deleteReservation.isPending} />
                         ))}
                       </div>
                     ))}
@@ -284,7 +334,7 @@ export function RecapStep() {
                       <div className="mb-2 last:mb-0">
                         <p className="px-1 pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Autres</p>
                         {orphanRows.map((r) => (
-                          <SummaryRow key={r.id} label={teamName.get(r.teamId) ?? "?"} meta={`${venueName.get(r.venueId) ?? "?"} · ${dayLabel(r.dayOfWeek)} ${hhmm(r.startTime)}`} />
+                          <ReservationRow key={r.id} reservation={r} teamName={teamName} venueName={venueName} isOrphan={orphanIds.has(r.id)} onRemove={() => deleteReservation.mutate(r.id)} busy={deleteReservation.isPending} />
                         ))}
                       </div>
                     ) : null}

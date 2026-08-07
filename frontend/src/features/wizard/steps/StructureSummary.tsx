@@ -12,11 +12,17 @@ import { coachTeamNames } from "../lib/summary";
 import { usePriorityTiers, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams } from "../queries";
 
 /** One item per row — shared by the recap and the period read-only views. */
-export function SummaryRow({ label, meta, className }: { label: ReactNode; meta?: ReactNode; className?: string }) {
+export function SummaryRow({ label, meta, action, className }: { label: ReactNode; meta?: ReactNode; action?: ReactNode; className?: string }) {
   return (
     <div className={cn("flex items-center justify-between gap-4 border-b border-border/60 py-1.5 text-sm last:border-0", className)}>
       <span className="text-foreground">{label}</span>
-      {meta ? <span className="shrink-0 text-xs text-muted-foreground">{meta}</span> : null}
+      <span className="flex shrink-0 items-center gap-2">
+        {meta ? <span className="text-xs text-muted-foreground">{meta}</span> : null}
+        {/* P4-44 — le récap devient ACTIONNABLE pour le seul cas où l'écran « Réserver »
+            ne peut rien : une réservation hors grille n'a aucune case où s'afficher
+            là-bas (la grille boucle sur les créneaux), donc c'est ICI ou nulle part. */}
+        {action}
+      </span>
     </div>
   );
 }

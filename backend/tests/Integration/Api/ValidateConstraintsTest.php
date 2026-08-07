@@ -161,6 +161,9 @@ final class ValidateConstraintsTest extends WebTestCase
         $venueId = $this->venue('Matéo');
         $teamId = $this->team(sessionsPerWeek: 1);
         $coachId = $this->mainCoach($teamId, 'Emerick');
+        // P4-44 : une réservation repose sur un créneau RÉEL — sans lui elle serait
+        // orpheline et bloquerait, ce qui n'est pas ce que ce cas mesure.
+        $this->trainingSlot($venueId, dayOfWeek: 2, start: '17:00');
         $this->reservation($teamId, $venueId, dayOfWeek: 2, start: '17:00');
 
         $constraint = new Constraint;
@@ -222,6 +225,8 @@ final class ValidateConstraintsTest extends WebTestCase
     {
         $venueId = $this->venue('Matéo');
         $teamId = $this->team(sessionsPerWeek: 2);
+        $this->trainingSlot($venueId, dayOfWeek: 1, start: '18:00');
+        $this->trainingSlot($venueId, dayOfWeek: 2, start: '18:00');
         $this->reservation($teamId, $venueId, dayOfWeek: 1, start: '18:00');
         $this->reservation($teamId, $venueId, dayOfWeek: 2, start: '18:00');
 
@@ -231,6 +236,49 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertSame([], $data['blockers']);
+    }
+
+    /**
+     * NR — P4-44 (décision fondateur 2026-08-07 : « je veux bloquer »). Une réservation
+     * qui ne retombe sur AUCUN créneau bloque la génération, et le message la NOMME
+     * avec son heure — sans quoi le gestionnaire ne saurait pas laquelle retirer
+     * (l'écran « Réserver » ne peut pas l'afficher : sa grille boucle sur les créneaux).
+     *
+     * Ce que ça évite : sur le SOCLE, le moteur PLACE l'épinglage hors grille et rend
+     * `completed` (mesuré) — le planning distribué envoyait les équipes devant une
+     * porte fermée, sans une alerte.
+     */
+    public function testAReservationWithoutAMatchingSlotBlocksAndNamesIt(): void
+    {
+        $venueId = $this->venue('Matéo');
+        $this->trainingSlot($venueId, dayOfWeek: 2, start: '18:30'); // la grille a BOUGÉ
+        $teamId = $this->team(sessionsPerWeek: 1);
+        $this->reservation($teamId, $venueId, dayOfWeek: 2, start: '18:00'); // l'ancien horaire
+
+        $this->client->loginUser($this->user);
+        $this->client->request('POST', '/api/constraints/validate', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+
+        self::assertResponseStatusCodeSame(422);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertFalse($data['valid']);
+        $blockers = implode(' | ', $data['blockers']);
+        self::assertStringContainsString('Matéo', $blockers);
+        self::assertStringContainsString('mardi', $blockers, 'le jour, pour retrouver la ligne');
+        self::assertStringContainsString('18h00', $blockers, 'et l\'HEURE — le message d\'OrphanPinGuard ne la donnait pas');
+    }
+
+    /** Témoin : la réservation retombe sur son créneau — rien à signaler. */
+    public function testAReservationOnAnExistingSlotDoesNotBlock(): void
+    {
+        $venueId = $this->venue('Matéo');
+        $this->trainingSlot($venueId, dayOfWeek: 2, start: '18:00');
+        $this->reservation($this->team(sessionsPerWeek: 1), $venueId, dayOfWeek: 2, start: '18:00');
+
+        $this->client->loginUser($this->user);
+        $this->client->request('POST', '/api/constraints/validate', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+
+        self::assertResponseStatusCodeSame(200);
+        self::assertSame([], json_decode((string) $this->client->getResponse()->getContent(), true)['blockers']);
     }
 
     public function testOverlayValidationIncludesInheritedPermanentConstraints(): void

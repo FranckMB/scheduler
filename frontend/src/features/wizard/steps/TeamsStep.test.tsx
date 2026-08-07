@@ -40,6 +40,8 @@ vi.mock("../queries", () => ({
   useUpdateTeam: () => ({ mutate: updateMut }),
   useDeleteTeam: () => ({ mutate: deleteMut }),
   useReorderTeams: () => ({ mutate: reorderMut, isPending: reorderPending.value }),
+  // P4-44 — le récap peut retirer une réservation orpheline (seul écran capable de la montrer).
+  useDeleteReservation: () => ({ mutate: vi.fn(), isPending: false }),
   useReservations: () => ({ data: [{ id: "r1", teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 90, calendarEntryId: null }] }),
   useWizardTeamCoaches: () => ({ data: [] }),
   useWizardCoachPlayers: () => ({ data: [] }),
