@@ -131,14 +131,22 @@ class TeamStateProcessor extends AbstractStateProcessor
         //
         // (Un jour l'import FFBB pourra vouloir changer un niveau — ce cas sera traité
         // à ce moment-là, avec la photo. Pas avant, et pas en douce.)
-        $newLevel = null !== $input->level ? TeamLevel::tryFrom($input->level) : null;
-        if ($newLevel !== $entity->getLevel()) {
-            $this->teamEngagementGuard->assertNotEngaged(
-                $entity->getId(),
-                'Cette équipe joue en compétition : elle est inscrite sous son niveau actuel auprès de la fédération, il ne peut plus changer.',
-            );
+        // DOC-3 (arbitré fondateur 2026-07-31 : « absent = on garde ») — un PUT qui
+        // OMET `level` est indiscernable d'un PUT qui l'efface, et l'écrire mettait le
+        // niveau à NULL : le tag NIVEAU disparaissait du payload solveur en silence.
+        // Aligné sur les 4 champs du bloc « PUT PARTIEL » ci-dessous. Effacer un niveau
+        // par l'API devient impossible — assumé : le wizard ré-échoit toujours `level`,
+        // et un niveau ne se retire pas « en douce » sur une équipe qui joue.
+        if (null !== $input->level) {
+            $newLevel = TeamLevel::tryFrom($input->level);
+            if ($newLevel !== $entity->getLevel()) {
+                $this->teamEngagementGuard->assertNotEngaged(
+                    $entity->getId(),
+                    'Cette équipe joue en compétition : elle est inscrite sous son niveau actuel auprès de la fédération, il ne peut plus changer.',
+                );
+            }
+            $entity->setLevel($newLevel);
         }
-        $entity->setLevel($newLevel);
 
         if (null !== $input->sessionsPerWeek) {
             $entity->setSessionsPerWeek($input->sessionsPerWeek);

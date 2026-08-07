@@ -258,7 +258,15 @@ final class EngagedTeamGuardTest extends WebTestCase
         self::assertResponseStatusCodeSame(409);
     }
 
-    public function testAnEngagedTeamCannotHaveItsLevelCleared(): void
+    /**
+     * DOC-3 — CE TEST A CHANGÉ DE SENS. Avant : un PUT sans `level` sur une équipe
+     * engagée = tentative d'EFFACEMENT → 409. Depuis « absent = on garde », omettre
+     * `level` n'est plus un changement : le PUT passe et le niveau reste — un client
+     * minimal peut renommer une équipe engagée sans se faire refuser pour un
+     * effacement qu'il ne demandait pas. Le 409 vit toujours : sur un changement
+     * EXPLICITE (témoin ci-dessous), gardé par testAnEngagedTeamCannotChangeLevel.
+     */
+    public function testAnEngagedTeamKeepsItsLevelWhenAbsentFromThePut(): void
     {
         $client = $this->client;
         $team = $this->createTeam('U15 inscrite');
@@ -271,12 +279,16 @@ final class EngagedTeamGuardTest extends WebTestCase
             'HTTP_X-Club-Id' => $this->club->getId(),
             'CONTENT_TYPE' => 'application/ld+json',
         ], json_encode([
-            'name' => 'U15 inscrite',
+            'name' => 'U15 inscrite renommée',
             'sportCategoryId' => $this->sportCategory->getId(),
             'priorityTierId' => $this->priorityTier->getId(),
         ], \JSON_THROW_ON_ERROR));
 
-        self::assertResponseStatusCodeSame(409);
+        self::assertResponseIsSuccessful();
+        $this->em->clear();
+        $fresh = $this->em->getRepository(Team::class)->find($team->getId());
+        self::assertSame(TeamLevel::REGIONAL, $fresh?->getLevel(), 'absent = on garde — le niveau de l\'équipe engagée n\'a pas bougé');
+        self::assertSame('U15 inscrite renommée', $fresh?->getName(), 'et le renommage, lui, est passé');
     }
 
     public function testWritesAnswerIsEngagedLikeReadsDo(): void

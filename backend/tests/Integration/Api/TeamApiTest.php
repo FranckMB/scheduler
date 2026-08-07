@@ -261,7 +261,16 @@ final class TeamApiTest extends WebTestCase
         self::assertSame('REGIONAL', json_decode((string) $client->getResponse()->getContent(), true)['level']);
     }
 
-    public function testLevelIsClearedWhenNullOnUpdate(): void
+    /**
+     * DOC-3 (arbitré fondateur 2026-07-31) — CE TEST A CHANGÉ DE SENS. Il gardait
+     * « level: null efface » ; or un PUT qui OMET `level` est indiscernable d'un PUT
+     * qui l'efface (`?string` des deux côtés) : renommer une équipe par un client
+     * minimal effaçait son niveau — donc son tag NIVEAU du payload solveur — en
+     * silence. Nouveau contrat, aligné sur forcedVenueId/matchDay/minSessionsOverride/
+     * parentTeamId : ABSENT (ou null) = ON GARDE. Effacer un niveau par l'API devient
+     * impossible — assumé.
+     */
+    public function testAbsentLevelKeepsTheCurrentValueOnUpdate(): void
     {
         $client = $this->client;
         $team = $this->createTeam('Leveled');
@@ -269,22 +278,24 @@ final class TeamApiTest extends WebTestCase
         $this->em->flush();
         $client->loginUser($this->user);
 
+        // Rename WITHOUT the level key — the minimal client the old contract broke.
         $client->request('PUT', \sprintf('/api/teams/%s', $team->getId()), [], [], [
             'HTTP_X-Club-Id' => $this->club->getId(),
             'CONTENT_TYPE' => 'application/ld+json',
         ], json_encode([
-            'name' => 'Leveled',
+            'name' => 'Leveled Renamed',
             'sportCategoryId' => $this->sportCategory->getId(),
             'priorityTierId' => $this->priorityTier->getId(),
-            'level' => null,
         ], \JSON_THROW_ON_ERROR));
 
         self::assertResponseIsSuccessful();
-        // API Platform omits null-valued fields from the JSON-LD output, so the
-        // key is absent (not present-and-null) once level is cleared.
-        self::assertNull(json_decode((string) $client->getResponse()->getContent(), true)['level'] ?? null);
         $this->em->clear();
-        self::assertNull($this->em->getRepository(Team::class)->find($team->getId())?->getLevel());
+        $fresh = $this->em->getRepository(Team::class)->find($team->getId());
+        self::assertSame('Leveled Renamed', $fresh?->getName());
+        self::assertSame(TeamLevel::REGIONAL, $fresh?->getLevel(), 'un PUT sans `level` garde le niveau — le renommage ne l\'efface plus');
+        // Le témoin « une valeur EXPLICITE agit toujours » n'est pas dupliqué ici :
+        // `EngagedTeamGuardTest::testAnEngagedTeamCannotChangeLevel` prouve qu'un
+        // `level` explicite atteint la garde (409) — le champ n'est pas devenu inerte.
     }
 
     public function testInvalidLevelIsRejected(): void
