@@ -146,7 +146,7 @@ Sous-schemas clés :
 |--------------------|---------------------|
 | `ruleType == "LOCK"` + `family in ("TIME","DAY")` | `time_windows` (traité comme `HARD` par `add_time_window_constraints`) |
 | `ruleType == "LOCK"` + `family == "FACILITY"` | même traitement que `HARD` (`forced_venues` / `venue_minimums`) |
-| `type == "TEAM_COACH"` (legacy) | `team_coach_map[teamId]` → coachIds |
+| `type == "TEAM_COACH"` (legacy) | `team_coach_map[teamId]` → coachIds (MAIN seuls — un ASSISTANT n'est pas une ressource exclusive). **Posée sur le modèle** (`model.team_coach_map`, `main.py`) : depuis ENG-17 (2026-08-07) c'est elle qui nomme le `coachId` des créneaux GÉNÉRÉS — avant, seuls les `slotTemplates` étaient consultés et les diagnostics coach restaient muets sur le chemin dominant |
 | `type == "COACH_PLAYER_UNAVAILABILITY"` (legacy) | `team_player_map[teamId]` → coachIds |
 | `family == "COACH_AVAILABILITY"` | `coach_unavailability[scopeTargetId]` → `unavailableDays` |
 | `family == "FACILITY"` + `preferredVenueId` + `HARD` + `scope=TEAM` | `forced_venues[scopeTargetId]` = `preferredVenueId` |
