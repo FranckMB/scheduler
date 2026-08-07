@@ -9,6 +9,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Fixture;
 use App\Entity\Schedule;
+use App\Entity\SchedulePlan;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamPeriodOverride;
@@ -19,6 +20,7 @@ use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
+use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
 use App\Enum\TeamLevel;
 use App\Service\SchedulePlanProvisioner;
@@ -125,7 +127,7 @@ final class RegenerateFromVersionTest extends WebTestCase
         $sm2 = $this->persistTeam('SM2');
         $override = (new TeamPeriodOverride)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
-            ->setSchedulePlanId('33333333-3333-4333-8333-333333333333')
+            ->setSchedulePlanId($this->periodPlanId())
             ->setTeamId($sm2->getId())->setIsActive(false);
         $this->em->persist($override);
         $this->em->flush();
@@ -443,5 +445,21 @@ final class RegenerateFromVersionTest extends WebTestCase
         $this->linkSeededSchedule($schedule, $calendarEntryId);
 
         return $schedule;
+    }
+
+    /**
+     * P4-34 — l'ancre d'un `*PeriodOverride` doit EXISTER (FK + garde 422 depuis
+     * cette PR) : un uuid décoratif ne passe plus. On provisionne un vrai plan de
+     * période, comme en production.
+     */
+    private function periodPlanId(): string
+    {
+        $plan = (new SchedulePlan)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setType(SchedulePlanType::HOLIDAY)->setName('Période de test')
+            ->setStartDate(new DateTimeImmutable('2026-02-15'))->setEndDate(new DateTimeImmutable('2026-02-28'));
+        $this->em->persist($plan);
+        $this->em->flush();
+
+        return $plan->getId();
     }
 }

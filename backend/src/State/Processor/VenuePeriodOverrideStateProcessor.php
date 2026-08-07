@@ -37,6 +37,8 @@ use Symfony\Component\HttpFoundation\RequestStack;
  */
 class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
 {
+    use AssertsSchedulePlanExistsTrait;
+
     public function __construct(
         EntityManagerInterface $entityManager,
         RequestStack $requestStack,
@@ -61,7 +63,12 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
     {
         return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
             /** @var VenuePeriodOverrideResource $output */
-            $output = parent::processPost($input, $clubId, $seasonId);
+            // P4-34 — filet de la COURSE : le contrôle d'existence est un
+            // check-then-insert ; entre lui et le flush, le plan peut disparaître
+            // (suppression de période, reprise du socle). La FK remonterait alors
+            // une violation que personne n'attrape → 500 opaque. Même 422 qu'un
+            // plan déjà absent au contrôle.
+            $output = $this->rejectingConcurrentPlanDeletion(fn (): object => parent::processPost($input, $clubId, $seasonId));
             $this->applyMode($output);
 
             return $output;
@@ -79,7 +86,7 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
 
         return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId, $before): object {
             /** @var VenuePeriodOverrideResource $output */
-            $output = parent::processPut($input, $uriVariables, $clubId, $seasonId);
+            $output = $this->rejectingConcurrentPlanDeletion(fn (): object => parent::processPut($input, $uriVariables, $clubId, $seasonId));
             // Seul un CHANGEMENT de mode agit sur la grille. Re-enregistrer le mode déjà
             // en place doit être sans effet : rejouer la purge détruirait les créneaux que
             // le gestionnaire vient de saisir à la main (revue #8 — une action d'apparence
@@ -151,6 +158,11 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
 
         $entity = new VenuePeriodOverride;
         if (null !== $input->schedulePlanId) {
+            // P4-34 — l'ANCRE doit exister : sans ce contrôle, un `schedulePlanId`
+            // inventé écrivait une ligne 201 rattachée à une période inexistante —
+            // invisible à l'écran, jamais lue par une génération, impossible à
+            // supprimer par l'UI. Même garde que `Reservation`/`VenueTrainingSlot` (P4-30).
+            $this->assertSchedulePlanExists($this->entityManager, $input->schedulePlanId);
             $entity->setSchedulePlanId($input->schedulePlanId);
         }
         if (null !== $input->venueId) {

@@ -14,9 +14,23 @@ use App\Entity\ConstraintPeriodOverride;
  */
 class ConstraintPeriodOverrideStateProcessor extends AbstractStateProcessor
 {
+    use AssertsSchedulePlanExistsTrait;
+
     protected function getEntityClass(): string
     {
         return ConstraintPeriodOverride::class;
+    }
+
+    /**
+     * P4-34 — filet de la COURSE (voir {@see AssertsSchedulePlanExistsTrait}) : le
+     * contrôle d'existence de l'ancre est un check-then-insert ; entre lui et le
+     * flush le plan peut disparaître (suppression de période, reprise du socle), et
+     * la FK remonterait alors une violation que personne n'attrape → 500 opaque.
+     * On rend le MÊME 422 que si le plan avait déjà disparu au contrôle.
+     */
+    protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
+    {
+        return $this->rejectingConcurrentPlanDeletion(fn (): object => parent::processPost($input, $clubId, $seasonId));
     }
 
     /**
@@ -32,6 +46,11 @@ class ConstraintPeriodOverrideStateProcessor extends AbstractStateProcessor
 
         $entity = new ConstraintPeriodOverride;
         if (null !== $input->schedulePlanId) {
+            // P4-34 — l'ANCRE doit exister : sans ce contrôle, un `schedulePlanId`
+            // inventé écrivait une ligne 201 rattachée à une période inexistante —
+            // invisible à l'écran, jamais lue par une génération, impossible à
+            // supprimer par l'UI. Même garde que `Reservation`/`VenueTrainingSlot` (P4-30).
+            $this->assertSchedulePlanExists($this->entityManager, $input->schedulePlanId);
             $entity->setSchedulePlanId($input->schedulePlanId);
         }
         if (null !== $input->constraintId) {

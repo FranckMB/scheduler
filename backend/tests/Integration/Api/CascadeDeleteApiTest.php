@@ -15,6 +15,7 @@ use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
+use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\Team;
@@ -29,6 +30,7 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleDiagnosticSeverity;
+use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
 use App\Enum\TeamCoachRole;
 use App\Tests\ChoosesPlanVersionTrait;
@@ -87,7 +89,7 @@ final class CascadeDeleteApiTest extends WebTestCase
         // with the constraint when the team's cascade bulk-deletes it (else it orphans).
         $overrideId = $this->persist((new ConstraintPeriodOverride)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
-            ->setSchedulePlanId('33333333-3333-4333-8333-333333333333')->setConstraintId($constraintId)->setIsActive(false));
+            ->setSchedulePlanId($this->periodPlanId())->setConstraintId($constraintId)->setIsActive(false));
         // PAS de Fixture ici : depuis la garde du périmètre engagé, un SEUL match — même
         // UNPLACED — rend l'équipe indélébile (409). Ce test porte sur la cascade d'une
         // équipe ordinaire ; le cas « elle joue » est couvert par EngagedTeamGuardTest.
@@ -330,5 +332,21 @@ final class CascadeDeleteApiTest extends WebTestCase
         $this->em->flush();
 
         return method_exists($entity, 'getId') ? (string) $entity->getId() : '';
+    }
+
+    /**
+     * P4-34 — l'ancre d'un `*PeriodOverride` doit EXISTER (FK + garde 422 depuis
+     * cette PR) : un uuid décoratif ne passe plus. On provisionne un vrai plan de
+     * période, comme en production.
+     */
+    private function periodPlanId(): string
+    {
+        $plan = (new SchedulePlan)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setType(SchedulePlanType::HOLIDAY)->setName('Période de test')
+            ->setStartDate(new DateTimeImmutable('2026-02-15'))->setEndDate(new DateTimeImmutable('2026-02-28'));
+        $this->em->persist($plan);
+        $this->em->flush();
+
+        return $plan->getId();
     }
 }
