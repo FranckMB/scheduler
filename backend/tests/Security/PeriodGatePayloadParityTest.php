@@ -244,6 +244,9 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         $this->em->persist($tag);
         $this->em->flush();
         $assignment = new TeamTagAssignment;
+        // BCK-11 : la table est tenant + RLS — une ligne sans club_id est refusée
+        // par PostgreSQL, plus seulement invisible.
+        $assignment->setClubId($club->getId());
         $assignment->setTeamId($teamPaused->getId());
         $assignment->setTagId($tag->getId());
         $assignment->setSeasonId($season->getId());
@@ -258,6 +261,7 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         $this->em->persist($allTag);
         $this->em->flush();
         $allAssignment = new TeamTagAssignment;
+        $allAssignment->setClubId($club->getId());
         $allAssignment->setTeamId($teamActive->getId());
         $allAssignment->setTagId($allTag->getId());
         $allAssignment->setSeasonId($season->getId());
