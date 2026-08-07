@@ -70,7 +70,6 @@
 | P2-2 | **Boucle d'ajustement — « corriger sur place »** | 🟠 | M | « Naviguer » est livré (#180) : les diagnostics surlignent les créneaux vides du gymnase concerné et la vue bascule dessus. **Reste** : glisser une équipe dans un créneau vide pour réparer. **⭐ Même primitive que la grille de réservation pré-génération** (grille + créneaux vides + clic = affecter) : une seule brique, deux moments (avant génération = LOCK HARD, après = réparer). À spécifier ensemble le jour venu. Jumeau : rendre les **diagnostics actionnables** (actions + liens entités dans le jsonb) plutôt que du texte |
 | P2-8 | **Le front re-dérive des règles de refus du serveur** | 🟠 | M | `PlanningToolbar` recalcule côté client `isLastFinishedSeasonVersion`, `hasInFlightSibling` et le décompte des sœurs supprimées à la validation. **Chaque miroir est un risque de dérive** — c'est ce motif exact qui a produit 40 défauts en 4 rounds sur la bascule ADR-0002. Les supprimer suppose que le serveur expose ce qui est **permis** (capacités par ressource, patron de `Schedule.isChosen` / `Team.isEngaged`) : chantier de conception, pas correctif |
 | P2-3 | **Versions — « Travailler sur cette version » + savepoint auto (D4)** | 🟡 | M | Moitié manquante de la décision 5 ; D1→D3quater livrés (état des lieux) |
-| P2-4 | **Compte / mode démo** | 🟡 | S/M | Spécifié, zéro code → [`compte-demo.md`](compte-demo.md). **Fort levier de vente** : club fictif pré-rempli, génération en 30 s avant toute saisie. Options vendeur vs prospect self-service, anonymisation RGPD, flag `isDemo`. ⚠ Dépend en pratique de P4-16 (l'horloge simulée ne déplace pas le « aujourd'hui » de l'UI — sans quoi on démontre un cockpit à la mauvaise date) |
 
 ---
 
@@ -156,6 +155,7 @@
 
 ## Parking — idées gardées, non cadrées
 
+- **Mode démo self-service** (ex-volet C de P2-4, jamais demandé par le terrain) : bouton public « Essayer avec des données d'exemple », sandbox jetable par visiteur (TTL/purge), à cadrer avec le bridage P1-3. Le volet VENDEUR est livré et couvre l'usage réel (état des lieux 2026-08-07). Rouvrir si la landing/le volume de prospects le justifie.
 - **Réservation de salle de convivialité** (self-service coach : réserver une soirée dans une salle non sportive → notif gestionnaire). La résa est **triviale** (salle = `Venue`, pas de solveur, juste un check de conflit). ⚠ **Le vrai coût n'est pas la résa** : « le coach réserve lui-même » exige des **comptes coach + un modèle de rôles** (P1-1). **Question stratégique** : veut-on que l'appli devienne le *hub du club* (self-service coach) ou reste l'*outil de planning* (piloté gestionnaire) ? Déclencheur de réouverture : P1-1 livré, ou demande d'un club pilote — la feature devient alors quasi gratuite.
 - **Reset du club : la route s'appelle encore `DELETE /api/reset-season`** alors que le geste rendu est « reset club ». Reliquat cosmétique, sans conséquence fonctionnelle.
 

@@ -27,8 +27,11 @@ use Symfony\Component\Console\Tester\CommandTester;
  *  3. un ARA déjà pris est REFUSÉ : une démo ne squatte jamais le code d'un
  *     vrai club (le sien !) — c'est la contrainte du register.
  *
- * ⚠ Le populate FFBB n'est PAS asserté : best-effort réseau, il échoue en test
- * (aucun accès sortant) et la commande doit survivre — c'est le cas nominal ici.
+ * ⚠ Ni le populate FFBB ni l'import d'équipes ne sont assertés sur leur CONTENU :
+ * best-effort réseau, ils échouent ou rendent zéro en test (aucun accès sortant)
+ * et la commande doit SURVIVRE — c'est le cas nominal exercé ici. L'étage équipes
+ * (PR 3) est le même que le vrai register (PopulateClubFromFfbbHandler), déjà
+ * couvert par ses propres tests.
  */
 #[Group('integration')]
 final class DemoCreateCommandTest extends KernelTestCase
