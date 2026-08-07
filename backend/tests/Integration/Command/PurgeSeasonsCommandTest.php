@@ -156,8 +156,6 @@ final class PurgeSeasonsCommandTest extends KernelTestCase
         $this->em->flush();
 
         $assignment = new TeamTagAssignment;
-        // BCK-11 : tenant + RLS, une ligne sans club_id est refusée en base.
-        $assignment->setClubId($team->getClubId());
         $assignment->setSeasonId($old->getId());
         $assignment->setTeamId($team->getId());
         $assignment->setTagId($tag->getId());

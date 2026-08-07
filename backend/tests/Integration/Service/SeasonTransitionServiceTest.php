@@ -418,8 +418,6 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $this->em->flush();
 
         $assignment = new TeamTagAssignment;
-        // BCK-11 : tenant + RLS, une ligne sans club_id est refusée en base.
-        $assignment->setClubId($teamA->getClubId());
         $assignment->setSeasonId($season->getId());
         $assignment->setTeamId($teamA->getId());
         $assignment->setTagId($tag->getId());
