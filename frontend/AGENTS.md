@@ -175,6 +175,19 @@ data; avoiding it would mean duplicating the auth decision into a per-route `loa
   `collection()` unwraps it; `collectionAll()` pages via `?page=N` and dedupes by `id`.
   There is **no `useInfiniteQuery`** anywhere.
 
+### ⚠ axe ne voit PAS un champ nommé par son seul `placeholder`
+
+Mesuré le 2026-08-07 sur `<input placeholder="…" />` nu : axe-core rend `violations: []`
+et classe `label` **et** `label-title-only` dans `passes` — HTML-AAM autorise `placeholder`
+comme source de nom de dernier recours, donc axe a techniquement raison. Conséquence
+pratique : `expect(await axe(container)).toHaveNoViolations()` **ne garantit pas** qu'un
+champ a un nom utilisable (le placeholder disparaît à la première frappe, et l'AT n'annonce
+plus que « zone de texte »). C'est ainsi qu'A11Y-10 a survécu à un test qui prétendait
+couvrir l'écran.
+
+Donc : pour un champ, assertion EXPLICITE du nom —
+`screen.getByRole("textbox", { name: "…" })` — en plus de la passe axe, jamais à sa place.
+
 ### Generation status = SSE, polling as fallback (FRT-04)
 
 `shared/lib/scheduleStream.ts` holds the ONE `EventSource` per session (ref-counted

@@ -54,6 +54,19 @@ describe("ResourceFilter — un filtre posé doit se voir", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  it("le champ de recherche porte un NOM ACCESSIBLE qui nomme son périmètre (A11Y-10)", async () => {
+    // Un `placeholder` n'est pas un nom : il disparaît à la première frappe, et le
+    // lecteur d'écran annonce alors « zone de texte », rien d'autre. Le champ reçoit
+    // le focus à l'ouverture — c'est la PREMIÈRE chose entendue. Et comme deux filtres
+    // coexistent dans la même page (modale doléances : coachs ET équipes), le nom doit
+    // dire lequel des deux parle.
+    const user = userEvent.setup();
+    render(<ResourceFilter viewMode="gymnase" groups={groups} selected={[]} onToggle={noop} onClear={noop} />);
+    await user.click(screen.getByRole("button", { expanded: false }));
+
+    expect(screen.getByRole("textbox", { name: "Rechercher parmi les gymnases" })).toBeInTheDocument();
+  });
+
   it("bascule la ressource cliquée", async () => {
     const onToggle = vi.fn();
     const user = userEvent.setup();

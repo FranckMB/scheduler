@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 2026-07-29 (CONTRACT_VERSION 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156 · P2-9 volet 1 : diagnostics de verrou, #317)
+Last verified @ 2026-08-07 (CONTRACT_VERSION **2.2** = second problème `/place-matches`, P1-4 PR D · 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156 · P2-9 volet 1 : diagnostics de verrou, #317)
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
@@ -14,7 +14,7 @@ Last verified @ 2026-07-29 (CONTRACT_VERSION 2.1 = fenêtres horaires coach #195
 - **Solver** : Google OR-Tools CP-SAT (`from ortools.sat.python import cp_model`).
 - **Validation** : Pydantic v2 (`BaseModel`, `ConfigDict`, `Field`, `populate_by_name=True`).
 - **Settings** : `pydantic-settings` (`engine/app/core/config.py`), prefix env `ENGINE_`, `.env` lu. Defaults : `app_name="engine"`, `app_version="1.0"`, `contract_version="2.0"`, `environment="dev"`, `log_level="info"`.
-- **Contract version** : lu depuis `engine/CONTRACT_VERSION` (**fichier = `2.1`** — source de vérité), fallback `settings.contract_version` (default `2.0`). Le **`2.0→2.1`** a été posé par les **fenêtres horaires d'indisponibilité coach** (lot C, #195) — nouveaux champs, donc bump.
+- **Contract version** : lu depuis `engine/CONTRACT_VERSION` (**fichier = `2.2`** — source de vérité, `main.py:104-108`), fallback `settings.contract_version` (default `2.0`) si le fichier manque. Deux bumps depuis 2.0 : **2.1** = fenêtres horaires d'indisponibilité coach (lot C, #195) ; **2.2** = second problème `/place-matches` (P1-4 PR D, ADR-0003) — **UN SEUL contrat pour les DEUX endpoints**, les deux vérifient le même MAJOR.
 - **Structure interne** :
   - `app/main.py` — endpoints FastAPI + pipeline solver.
   - `app/core/config.py` — settings.
@@ -24,6 +24,8 @@ Last verified @ 2026-07-29 (CONTRACT_VERSION 2.1 = fenêtres horaires coach #195
   - `app/solver/constraints.py` — contraintes Level-1 (hard) + `parse_v2_constraints`.
   - `app/solver/objective.py` — objectif Level-2 (poids fixes T24).
   - `app/solver/result_builder.py` — solution → `ScheduleOutputSchema` + diagnostics.
+  - `app/solver/match_placement.py` — le SECOND problème (placement de matchs datés, ADR-0003).
+  - `app/schemas/match_input_schema.py` / `match_output_schema.py` — ses schémas dédiés.
 - **Port** : 8000 (conteneur Docker `engine`).
 - **Commandes** : tout via `engine/Makefile` dans le conteneur (`make test`, `make lint`, `make exec`).
 
@@ -31,14 +33,31 @@ Last verified @ 2026-07-29 (CONTRACT_VERSION 2.1 = fenêtres horaires coach #195
 
 ## 2. Endpoints Engine
 
-Quatre endpoints exposés par `app/main.py` :
+**Cinq** endpoints exposés par `app/main.py` :
 
 | Endpoint | Méthode | Rôle | Response model |
 |----------|---------|------|----------------|
 | `/` | GET | Health + `contract_version` | `{"status":"ok","contract_version":...}` |
 | `/health` | GET | Health simple | `{"status":"ok"}` |
-| `/generate` | POST | **Principal** — résout un planning | `ScheduleOutputSchema` |
+| `/generate` | POST | **Principal** — résout un planning hebdomadaire | `ScheduleOutputSchema` |
+| `/place-matches` | POST | **Second problème** — place des matchs DATÉS (P1-4 PR D, ADR-0003) | `MatchPlacementOutputSchema` |
 | `/implicit-constraints` | POST | Sync règles implicites backend↔engine | `JSONResponse` (200 synchronized / 409 desynchronized) |
+
+### POST /place-matches
+
+Le **second problème CP-SAT**, distinct du solve hebdomadaire (ADR-0003 ; comportement produit :
+[`module-matchs.md`](module-matchs.md) §Solveur de placement). Ce qui est propre à l'engine :
+
+- **Handler** : `place_matches(input_data: MatchPlacementInputSchema)` (`main.py:526-545`). Même
+  garde de contrat que `/generate` — MAJOR seul, 422 sinon : **un seul `CONTRACT_VERSION` pour les
+  deux endpoints**.
+- **Verrou par club PRÉFIXÉ** (`f"matches:{club_id}"`) : un solve hebdomadaire long ne bloque pas
+  un placement de 3 s, alors qu'un même verrou l'aurait fait. Le sémaphore global
+  (`_solve_semaphore`) borne quand même le CPU.
+- **Solve** : `solve_match_placement(input_data)` dans un thread worker
+  (`app/solver/match_placement.py`). Best-effort à poids dominant : aucune HARD violée, le
+  non-plaçable ressort **nommé**.
+- **Schémas dédiés** : `app/schemas/match_input_schema.py` / `match_output_schema.py` (§3 bis).
 
 ### POST /generate
 
@@ -73,13 +92,13 @@ Quatre endpoints exposés par `app/main.py` :
 
 ### ScheduleInputSchema (`engine/app/schemas/input_schema.py`)
 
-Version contrat active : **`"2.1"`** (fichier `CONTRACT_VERSION` ; `2.0` = default Pydantic de repli). `ConfigDict(extra="forbid", populate_by_name=True)`.
+Version contrat active : **`"2.2"`** (fichier `CONTRACT_VERSION`, source de vérité). ⚠ Le default Pydantic du champ `version` vaut **`"2.0"`** (`input_schema.py:149`) et n'a jamais suivi les bumps : c'est un repli pour un payload qui n'annonce rien, pas la version parlée. `ConfigDict(extra="forbid", populate_by_name=True)`.
 
-**Bornes A10** (#156, anti-bombe de génération) : la plupart des listes portent un `max_length` (rejet **422** avant CP-SAT) — `teams` ≤200 · `venues` ≤50 · `coaches` ≤200 · `slot_templates` ≤2000 · `priority_tiers` ≤20 · `trainingSlots` ≤1000/gymnase ; plus un `model_validator` bornant le **total** des créneaux à ≤3000 (empêche 50×1000). **`constraints` n'a PAS de cap engine** (ENG-23 corrigé) : le backend éclate 1 règle CLUB en N rangées/équipe, donc la taille étendue = brut(≤500)×équipes(≤200) — aucun nombre fixe ne peut à la fois borner une bombe et ne jamais faux-bloquer un club légitime ; les vraies bornes sont le cap **brut** backend (≤500) + la limite de body nginx (20 m) + le timeout solveur. Le backend (`GenerationComplexityGuard`) pré-vérifie teams/venues/coaches/contraintes permanentes/total créneaux (=3000) **plus** `teams×venues` ≤2000, **avant dispatch**. ⚠ Ce durcissement de validation (#156) n'a **pas** bumpé `CONTRACT_VERSION` : politique — un `max_length` resserre l'enveloppe acceptée sans changer forme/type ni MAJOR ; un bump n'est requis que pour un changement de forme/sémantique (champ/type/alias). Le seul bump depuis 2.0 est **2.1** (#195, fenêtres horaires coach — nouveaux champs).
+**Bornes A10** (#156, anti-bombe de génération) : la plupart des listes portent un `max_length` (rejet **422** avant CP-SAT) — `teams` ≤200 · `venues` ≤50 · `coaches` ≤200 · `slot_templates` ≤2000 · `priority_tiers` ≤20 · `trainingSlots` ≤1000/gymnase ; plus un `model_validator` bornant le **total** des créneaux à ≤3000 (empêche 50×1000). **`constraints` n'a PAS de cap engine** (ENG-23 corrigé) : le backend éclate 1 règle CLUB en N rangées/équipe, donc la taille étendue = brut(≤500)×équipes(≤200) — aucun nombre fixe ne peut à la fois borner une bombe et ne jamais faux-bloquer un club légitime ; les vraies bornes sont le cap **brut** backend (≤500) + la limite de body nginx (20 m) + le timeout solveur. Le backend (`GenerationComplexityGuard`) pré-vérifie teams/venues/coaches/contraintes permanentes/total créneaux (=3000) **plus** `teams×venues` ≤2000, **avant dispatch**. ⚠ Ce durcissement de validation (#156) n'a **pas** bumpé `CONTRACT_VERSION` : politique — un `max_length` resserre l'enveloppe acceptée sans changer forme/type ni MAJOR ; un bump n'est requis que pour un changement de forme/sémantique (champ/type/alias). Les bumps depuis 2.0 : **2.1** (#195, fenêtres horaires coach — nouveaux champs) et **2.2** (P1-4 PR D, second endpoint `/place-matches` — nouveaux schémas).
 
 | Champ | Alias JSON | Type | Default |
 |-------|-------------|------|---------|
-| `version` | — | `str` | `"2.1"` |
+| `version` | — | `str` | `"2.0"` (repli — cf. ci-dessus) |
 | `club_id` | `clubId` | `str` | requis |
 | `season_id` | `seasonId` | `str` | requis |
 | `schedule_name` | `scheduleName` | `str \| None` | `None` |
@@ -100,6 +119,23 @@ Sous-schemas clés :
 - **ConstraintV2Schema** : unifié v2/legacy. `ConfigDict(extra="ignore")`. Champs v2 : `scope`, `scopeTargetId`, `family`, `ruleType`, `name`, `config`, `sortOrder`, `isActive`. Champs legacy v1 : `teamId`, `type`, `severity`, `value`, `metadata`.
 - **ScheduleSlotTemplateSchema** : `id`, `teamId`, `venueId`, `coachId`, `dayOfWeek`, `startTime` (time), `durationMinutes`, `lockLevel` (default `"NONE"`), `temporaryLock`, `temporaryLockFor`, `temporaryMinSessionsOverride`, `pendingConstraintSuggestion`.
 - **PriorityTierSchema** : `id`, `label`, `orToolsWeight`, `defaultMinSessions`.
+
+### Schémas du placement de matchs (`match_input_schema.py` / `match_output_schema.py`)
+
+Contrat **2.2**, propre à `/place-matches` — les schémas hebdomadaires ne sont pas réutilisés
+(le problème n'a ni créneau récurrent ni séance) :
+
+- **`MatchPlacementInputSchema`** : `version`, `clubId`, `seasonId`, `matches`, `venues`, `teams`,
+  `coaches`… Sous-schémas : **`MatchVenueSchema`** (`matchWindows: list[MatchAccessWindowSchema]`
+  = jour + plage `start`/`end` d'accès à la salle, `unavailabilities` datées),
+  **`MatchTeamSchema`** (`leagueWindows: list[LeagueKickoffWindowSchema]` = jour +
+  `kickoffMin`/`kickoffMax` imposés par la ligue, `habits: list[TeamHabitSchema]` ≤7 = jour +
+  heure-point + gymnase optionnel, `coaches: list[TeamCoachRefSchema]` ≤20 avec `role`
+  MAIN/ASSISTANT).
+- **`MatchPlacementOutputSchema`** : `status`, `placements: list[MatchPlacementSchema]`
+  (`matchId`, `venueId`, `kickoff`), **`unplaced: list[UnplacedMatchSchema]`** (`matchId`,
+  `reason`, `message` — le non-plaçable sort NOMMÉ, c'est le produit), `diagnostics`
+  (mêmes `DiagnosticSchema` que le solve hebdo), `metrics`.
 
 ### ScheduleOutputSchema (`engine/app/schemas/output_schema.py`)
 
