@@ -37,6 +37,9 @@ use Throwable;
  */
 final class ValidateConstraintsController extends AbstractController
 {
+    /** ISO-8601 : 1 = lundi (même table que {@see CoachDoubleBookingDetector}). */
+    private const array DAY_NAMES = [1 => 'lundi', 2 => 'mardi', 3 => 'mercredi', 4 => 'jeudi', 5 => 'vendredi', 6 => 'samedi', 7 => 'dimanche'];
+
     public function __construct(
         private readonly ConstraintRepository $constraintRepository,
         private readonly CalendarEntryRepository $calendarEntryRepository,
@@ -187,6 +190,15 @@ final class ValidateConstraintsController extends AbstractController
         // n'a jamais choisi que son coach se dédouble. Décision fondateur : ça BLOQUE.
         $blockers = [
             ...$saturationBlockers,
+            // 3. P4-44 — une réservation qui ne retombe sur AUCUN créneau de la grille.
+            //    Sur une PÉRIODE, `OrphanPinGuard` refusait déjà la génération, mais
+            //    l'écran « Réserver » ne peut pas montrer la ligne fautive (il boucle
+            //    sur les créneaux) : le gestionnaire était mis en échec sans recours.
+            //    Sur le SOCLE, pire : le moteur PLACE la séance à l'horaire mort et rend
+            //    `completed` (mesuré) — le planning distribué envoie les équipes devant
+            //    une porte fermée. On le NOMME ici, avec l'heure, et le récap offre de la
+            //    retirer : c'est ce qui rend le blocage légitime.
+            ...$this->orphanReservationBlockers($reservations, $capacityPayload),
             ...$this->overBookedTeamBlockers($reservations, $clubId, $seasonId),
             ...array_map(
                 fn (array $conflict): string => $this->coachDoubleBookingDetector->describeForRecap($conflict),
@@ -504,6 +516,65 @@ final class ValidateConstraintsController extends AbstractController
                 $this->plural($reserved, 'réservation', 'réservations'),
                 $this->plural($sessions, 'séance', 'séances'),
                 $this->plural($reserved - $sessions, 'réservation', 'réservations'),
+            );
+        }
+
+        return $blockers;
+    }
+
+    /**
+     * P4-44 — les réservations HORS GRILLE, nommées avec leur heure.
+     *
+     * La grille lue est celle du PAYLOAD (`venues[].trainingSlots`) : exactement ce que
+     * le solveur recevra, gymnases désactivés déjà retirés. Sans payload (période sans
+     * plan), on ne sait rien — on n'invente pas un bloqueur.
+     *
+     * @param list<Reservation>         $reservations
+     * @param array<string, mixed>|null $payload
+     *
+     * @return list<string>
+     */
+    private function orphanReservationBlockers(array $reservations, ?array $payload): array
+    {
+        if ([] === $reservations || null === $payload) {
+            return [];
+        }
+
+        $grid = [];
+        $venueNames = [];
+        foreach (\is_array($payload['venues'] ?? null) ? $payload['venues'] : [] as $venue) {
+            if (!\is_array($venue)) {
+                continue;
+            }
+            $venueId = (string) ($venue['id'] ?? '');
+            $venueNames[$venueId] = (string) ($venue['name'] ?? $venueId);
+            foreach (\is_array($venue['trainingSlots'] ?? null) ? $venue['trainingSlots'] : [] as $slot) {
+                if (\is_array($slot)) {
+                    $grid[\sprintf('%s|%s|%s', $venueId, $slot['dayOfWeek'] ?? '', substr((string) ($slot['startTime'] ?? ''), 0, 5))] = true;
+                }
+            }
+        }
+
+        // Les noms d'équipe ne sont chargés QUE s'il y a un orphelin à nommer : le cas
+        // normal (aucun) ne paie pas la requête.
+        $teamNames = [];
+        $blockers = [];
+        foreach ($reservations as $reservation) {
+            $key = \sprintf('%s|%d|%s', $reservation->getVenueId(), $reservation->getDayOfWeek(), $reservation->getStartTime()->format('H:i'));
+            if (isset($grid[$key])) {
+                continue;
+            }
+            if ([] === $teamNames) {
+                foreach ($this->teamRepository->findBy(['clubId' => $reservation->getClubId(), 'seasonId' => $reservation->getSeasonId()]) as $team) {
+                    $teamNames[$team->getId()] = $team->getName();
+                }
+            }
+            $blockers[] = \sprintf(
+                'La réservation de %s à %s le %s à %s ne correspond à aucun créneau : ce créneau a été déplacé ou supprimé. Retirez-la depuis le récapitulatif, ou recréez le créneau.',
+                $teamNames[$reservation->getTeamId()] ?? 'cette équipe',
+                $venueNames[$reservation->getVenueId()] ?? 'ce gymnase',
+                self::DAY_NAMES[$reservation->getDayOfWeek()] ?? 'ce jour',
+                $reservation->getStartTime()->format('H\hi'),
             );
         }
 

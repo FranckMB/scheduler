@@ -47,6 +47,8 @@ vi.mock("../queries", () => ({
   useWizardTeamCoaches: () => ({ data: [] }),
   useWizardConstraints: () => ({ data: [] }),
   useWizardTeamTags: () => ({ data: [] }),
+  // P4-44 — le récap peut retirer une réservation orpheline (seul écran capable de la montrer).
+  useDeleteReservation: () => ({ mutate: vi.fn(), isPending: false }),
   useReservations: () => ({ data: h.reservations }),
   usePriorityTiers: () => ({
     data: [
@@ -140,6 +142,12 @@ describe("RecapStep — read-only summary", () => {
       { id: "rB", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120 },
       { id: "rS", calendarEntryId: null, teamId: "t2", venueId: "v1", dayOfWeek: 3, startTime: "18:00", durationMinutes: 90 },
     ];
+    // P4-44 : leurs créneaux EXISTENT — sinon elles seraient orphelines et ce cas
+    // mesurerait l'exception au lieu de la règle (lecture seule sur les saines).
+    recapLayer.slots = [
+      { id: "sB", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 },
+      { id: "sS", venueId: "v1", dayOfWeek: 3, startTime: "18:00", durationMinutes: 90, capacity: 1 },
+    ];
     const user = userEvent.setup();
     renderWithProviders(<RecapStep />);
 
@@ -149,8 +157,29 @@ describe("RecapStep — read-only summary", () => {
     const rows = screen.getAllByText(/^(Fanion|SM1)$/).map((el) => el.textContent);
     expect(rows.indexOf("Fanion")).toBeLessThan(rows.indexOf("SM1"));
 
-    // Read-only strict: the recap exposes no destructive action.
+    // Le récap reste en LECTURE SEULE sur les réservations SAINES : leur geste vit à
+    // l'étape « Réserver », pas ici.
     expect(screen.queryByRole("button", { name: /Retirer la réservation/ })).not.toBeInTheDocument();
+  });
+
+  /**
+   * P4-44 (décision fondateur 2026-08-07) — L'UNIQUE exception à la lecture seule.
+   * Une réservation ORPHELINE (créneau déplacé ou supprimé) n'a AUCUNE case où
+   * s'afficher à l'étape « Réserver » : sa grille boucle sur les créneaux. Le récap
+   * est donc le seul écran capable de la montrer, et le serveur BLOQUE la génération
+   * dessus — un blocage sans recours atteignable enfermerait le gestionnaire (P3-20).
+   */
+  it("signale une réservation orpheline et permet de la retirer — seul écran qui le peut", async () => {
+    // La grille n'ouvre le gymnase qu'à 18h30 ; la réservation pointe 18h00.
+    recapLayer.slots = [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "18:30", durationMinutes: 90, capacity: 1 }];
+    h.reservations = [{ id: "rOrpheline", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "18:00", durationMinutes: 90 }];
+    const user = userEvent.setup();
+    renderWithProviders(<RecapStep />);
+
+    await user.click(screen.getByRole("button", { name: /Réservations/ }));
+
+    expect(screen.getByText(/créneau supprimé ou déplacé/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retirer la réservation/ })).toBeInTheDocument();
   });
 
   it("shows the team tiers open by default (ranks visible at first glance)", async () => {
