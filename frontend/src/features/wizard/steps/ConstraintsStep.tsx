@@ -268,7 +268,10 @@ export function ConstraintsStep() {
       family,
       // Always hard: the engine enforces coach availability unconditionally.
       ruleType: "HARD",
-      config: { coachId, [coachDaysKey]: [...days], ...window },
+      // SEC-13 : plus de `coachId` dans le config — il valait EXACTEMENT
+      // `scopeTargetId` juste au-dessus, et c'est ce scope que le solveur lit.
+      // Un doublon finit toujours par diverger ; la cible du coach a UN endroit.
+      config: { [coachDaysKey]: [...days], ...window },
     };
   }
 
@@ -329,7 +332,7 @@ export function ConstraintsStep() {
     setRuleType(isForced ? "PREFERRED" : c.ruleType);
     const tag = "string" === typeof cfg.targetTag ? cfg.targetTag : "";
     if ("COACH_AVAILABILITY" === c.family) {
-      setCoachId("string" === typeof cfg.coachId ? cfg.coachId : (c.scopeTargetId ?? ""));
+      setCoachId(c.scopeTargetId ?? ""); // SEC-13 : le scope EST la cible (le config ne la porte plus)
       const available = Array.isArray(cfg.availableDays);
       setCoachMode(available ? "available" : "unavailable");
       setDays(new Set(asNums(available ? cfg.availableDays : cfg.unavailableDays)));

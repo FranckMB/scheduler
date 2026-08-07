@@ -38,11 +38,34 @@ final class ConstraintValidationServiceTest extends TestCase
         $constraint->setScopeTargetId(null);
         $constraint->setFamily(ConstraintFamily::COACH_AVAILABILITY);
         $constraint->setRuleType(ConstraintRuleType::HARD);
-        $constraint->setConfig(['coachId' => 'coach-1']);
+        $constraint->setConfig([]); // SEC-13 : la cible est le SCOPE, plus une clé du config
 
         $errors = $this->service->validate($constraint);
 
         self::assertContains('Cette contrainte doit cibler une équipe, un coach ou un gymnase précis.', $errors);
+    }
+
+    /**
+     * SEC-13 — la cible d'une contrainte de disponibilité est le SCOPE, et lui seul.
+     *
+     * Le validateur exigeait `config.coachId`, qui valait exactement
+     * `scope_target_id` (6 lignes sur 6, mesuré avant migration). Deux endroits
+     * pour la même vérité : le jour où ils divergent, personne ne sait lequel fait
+     * foi — et le solveur, lui, n'a jamais lu que le scope. Ce test épingle que
+     * la clé n'est plus réclamée : la remettre en condition fait rougir.
+     */
+    public function testCoachAvailabilityTargetsThroughTheScopeAloneWithoutAConfigKey(): void
+    {
+        $constraint = new Constraint;
+        $constraint->setScope(ConstraintScope::COACH);
+        $constraint->setScopeTargetId('coach-1');
+        $constraint->setFamily(ConstraintFamily::COACH_AVAILABILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setConfig(['unavailableDays' => [5]]);
+
+        $errors = $this->service->validate($constraint);
+
+        self::assertSame([], $errors, 'une disponibilité ciblée par le scope se suffit — aucun coachId dans le config');
     }
 
     public function testCoachAvailabilityAcceptsAValidTimeWindow(): void
@@ -52,7 +75,7 @@ final class ConstraintValidationServiceTest extends TestCase
         $constraint->setScopeTargetId('coach-1');
         $constraint->setFamily(ConstraintFamily::COACH_AVAILABILITY);
         $constraint->setRuleType(ConstraintRuleType::HARD);
-        $constraint->setConfig(['coachId' => 'coach-1', 'unavailableDays' => [2], 'fromTime' => '20:00']);
+        $constraint->setConfig(['unavailableDays' => [2], 'fromTime' => '20:00']);
 
         self::assertSame([], $this->service->validate($constraint));
     }
@@ -64,7 +87,7 @@ final class ConstraintValidationServiceTest extends TestCase
         $constraint->setScopeTargetId('coach-1');
         $constraint->setFamily(ConstraintFamily::COACH_AVAILABILITY);
         $constraint->setRuleType(ConstraintRuleType::HARD);
-        $constraint->setConfig(['coachId' => 'coach-1', 'unavailableDays' => [2], 'fromTime' => '25:99', 'untilTime' => '20:00']);
+        $constraint->setConfig(['unavailableDays' => [2], 'fromTime' => '25:99', 'untilTime' => '20:00']);
 
         $errors = $this->service->validate($constraint);
         self::assertContains('L\'heure « à partir de » doit être au format HH:MM.', $errors);
@@ -72,7 +95,7 @@ final class ConstraintValidationServiceTest extends TestCase
         // would emit a second, misleading error for one bad field (Lot C review).
         self::assertNotContains('L\'heure de début doit précéder l\'heure de fin.', $errors);
 
-        $constraint->setConfig(['coachId' => 'coach-1', 'fromTime' => '20:00', 'untilTime' => '18:00']);
+        $constraint->setConfig(['fromTime' => '20:00', 'untilTime' => '18:00']);
         self::assertContains('L\'heure de début doit précéder l\'heure de fin.', $this->service->validate($constraint));
     }
 

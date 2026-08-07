@@ -213,7 +213,7 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
   it("groups coach constraints by staffing group (Salariés / Coachs-joueurs / Bénévoles)", async () => {
     const user = userEvent.setup();
     h.list = [
-      { id: "cc", name: "Jean Dupont · indispo vendredi", scope: "COACH", scopeTargetId: "co1", family: "COACH_AVAILABILITY", ruleType: "HARD", config: { coachId: "co1" }, isActive: true },
+      { id: "cc", name: "Jean Dupont · indispo vendredi", scope: "COACH", scopeTargetId: "co1", family: "COACH_AVAILABILITY", ruleType: "HARD", config: {}, isActive: true },
     ] as Constraint[];
 
     renderWithProviders(<ConstraintsStep />);
@@ -226,7 +226,7 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     const user = userEvent.setup();
     h.list = [
       // co-gone is NOT in useWizardCoaches (removed/deactivated) — must still show.
-      { id: "cx", name: "Coach retiré · indispo vendredi", scope: "COACH", scopeTargetId: "co-gone", family: "COACH_AVAILABILITY", ruleType: "HARD", config: { coachId: "co-gone" }, isActive: true },
+      { id: "cx", name: "Coach retiré · indispo vendredi", scope: "COACH", scopeTargetId: "co-gone", family: "COACH_AVAILABILITY", ruleType: "HARD", config: {}, isActive: true },
     ] as Constraint[];
 
     renderWithProviders(<ConstraintsStep />);
@@ -256,7 +256,12 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
 
     expect(h.createMut).toHaveBeenCalledOnce();
-    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", ruleType: "HARD", config: { coachId: "co1", unavailableDays: [1] } });
+    // SEC-13 : la cible du coach vit dans le SCOPE, et NULLE PART ailleurs. Le
+    // `config.coachId` d'avant valait exactement `scopeTargetId` — un doublon que
+    // le solveur n'a jamais lu. Les deux assertions comptent : la première dit où
+    // est la cible, la seconde interdit qu'elle revienne en double.
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", ruleType: "HARD", scopeTargetId: "co1", config: { unavailableDays: [1] } });
+    expect(h.createMut.mock.calls[0][0].config).not.toHaveProperty("coachId");
   });
 
   it("groups the coach picker (a non-employee non-player coach lands under « Bénévoles »)", async () => {
@@ -278,7 +283,8 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     await user.click(screen.getByRole("button", { name: "Mar" }));
     await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
 
-    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", ruleType: "HARD", config: { coachId: "co1", availableDays: [2] } });
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", ruleType: "HARD", scopeTargetId: "co1", config: { availableDays: [2] } });
+    expect(h.createMut.mock.calls[0][0].config).not.toHaveProperty("coachId"); // SEC-13
   });
 
   it("coach availability emits an optional time window (Lot C: fromTime/untilTime)", async () => {
@@ -291,7 +297,8 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     await user.type(screen.getByLabelText("Heure de début"), "20:00");
     await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
 
-    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", config: { coachId: "co1", unavailableDays: [2], fromTime: "20:00" } });
+    expect(h.createMut.mock.calls[0][0]).toMatchObject({ family: "COACH_AVAILABILITY", scopeTargetId: "co1", config: { unavailableDays: [2], fromTime: "20:00" } });
+    expect(h.createMut.mock.calls[0][0].config).not.toHaveProperty("coachId"); // SEC-13
   });
 
   it("DAY emits forbiddenDays (the matrix key) whatever the ruleType", async () => {

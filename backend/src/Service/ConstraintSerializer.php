@@ -82,9 +82,6 @@ final class ConstraintSerializer
                 break;
 
             case 'COACH_AVAILABILITY':
-                if (isset($config['coachId'])) {
-                    $result['coachId'] = $config['coachId'];
-                }
                 if (isset($config['availableDays'])) {
                     $result['availableDays'] = $config['availableDays'];
                 }
