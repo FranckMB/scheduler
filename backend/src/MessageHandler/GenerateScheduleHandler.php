@@ -40,6 +40,24 @@ use Throwable;
 #[AsMessageHandler]
 final class GenerateScheduleHandler
 {
+    /**
+     * Marge du TTL du verrou de génération AU-DESSUS du budget demandé au moteur.
+     *
+     * ⚠ **L'invariant est : le verrou survit toujours au solve.** S'il expire pendant que le
+     * worker attend `EngineClient::solve()`, un second message acquiert le verrou et **deux
+     * solves tournent sur le même club** : deux imports, le dernier écrase l'autre. Et le
+     * `release()` par token fait correctement son no-op — donc **aucune exception, aucun log,
+     * aucun test rouge**. C'est la corruption la plus silencieuse du registre (audit D-05).
+     *
+     * La marge couvre ce que le budget moteur NE compte PAS : l'aller-retour HTTP, la
+     * sérialisation du payload, l'import du résultat. Le budget réel du moteur est
+     * `min(tier, solver_timeout_seconds) + CHAINING_PHASE_MAX_SECONDS` — soit 610 s au
+     * plafond, contre 710 s de TTL ici. `GenerationLockOutlivesTheSolveTest` compare les deux
+     * en lisant le moteur : baisser cette marge sous le budget fait rougir la CI, au lieu de
+     * se découvrir en production sur un planning écrasé.
+     */
+    private const int LOCK_TTL_MARGIN_SECONDS = 60;
+
     public function __construct(
         private EntityManagerInterface $entityManager,
         private ScheduleConstraintBuilder $constraintBuilder,
@@ -93,7 +111,7 @@ final class GenerateScheduleHandler
             return;
         }
 
-        $lockToken = $this->clubGenerationLock->acquire($message->getClubId(), $message->getTimeoutSeconds() + 60);
+        $lockToken = $this->clubGenerationLock->acquire($message->getClubId(), $message->getTimeoutSeconds() + self::LOCK_TTL_MARGIN_SECONDS);
         if (null === $lockToken) {
             $schedule->setStatus(ScheduleStatus::PENDING);
             $this->entityManager->flush();
