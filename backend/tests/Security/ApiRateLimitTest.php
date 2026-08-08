@@ -9,6 +9,7 @@ use App\Tests\VerifiesRegistration;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * SEC-11 non-regression: the authenticated API is rate-limited per user. The
@@ -27,6 +28,28 @@ final class ApiRateLimitTest extends WebTestCase
     private const TEST_LIMIT = 30;
 
     private KernelBrowser $client;
+
+    /**
+     * D-12 — la borne de PRODUCTION n'était assertée nulle part.
+     *
+     * Ce test exerce le comportement sous l'override de test (30/min) ; la valeur qui
+     * protège réellement l'API en prod (300/min, `rate_limiter.yaml`) ne l'était par
+     * personne : la passer à 30000 laissait la suite entièrement verte et faisait
+     * silencieusement disparaître la garde SEC-11. On lit donc le YAML de prod — pas
+     * l'override — pour épingler ce qui sera effectivement servi.
+     */
+    public function testTheProductionBudgetIsTheOneSecurityAssumes(): void
+    {
+        $config = Yaml::parseFile(__DIR__ . '/../../config/packages/rate_limiter.yaml');
+        self::assertIsArray($config);
+
+        $api = $config['framework']['rate_limiter']['api'] ?? null;
+        self::assertIsArray($api, 'Le limiteur `api` a disparu de rate_limiter.yaml — SEC-11 repose dessus.');
+
+        self::assertSame(300, $api['limit'] ?? null, 'La borne de production de SEC-11 a changé sans que personne ne le décide ici.');
+        self::assertSame('1 minute', $api['interval'] ?? null);
+        self::assertSame('sliding_window', $api['policy'] ?? null);
+    }
 
     public function testAuthenticatedApiIsThrottledPastTheBudget(): void
     {

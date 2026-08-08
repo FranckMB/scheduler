@@ -11,10 +11,12 @@ use App\Entity\Venue;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Service\EngineClient;
 use App\Service\ScheduleConstraintBuilder;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
+use ReflectionClass;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
@@ -22,11 +24,23 @@ use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 
 final class ContractSchemaTest extends TestCase
 {
-    private const ENGINE_URL = 'http://engine:8000/generate';
-
     private const CLUB_ID = '11111111-1111-1111-1111-111111111111';
 
     private const SEASON_ID = '22222222-2222-2222-2222-222222222222';
+
+    /**
+     * D-17 — cette constante était une COPIE de celle d'`EngineClient`, et le test
+     * s'en servait pour poster PUIS pour vérifier l'URL reçue : une tautologie. Passer
+     * `EngineClient::ENGINE_URL` à un autre port laissait ces assertions vertes.
+     * Elle est désormais LUE sur le client réel — la seule façon d'en faire un garde.
+     */
+    private static function engineUrl(): string
+    {
+        $url = new ReflectionClass(EngineClient::class)->getConstant('ENGINE_URL');
+        self::assertIsString($url);
+
+        return $url;
+    }
 
     #[Group('phase1')]
     public function testPhase1PayloadShapeIsValidWithoutEngine(): void
@@ -36,7 +50,7 @@ final class ContractSchemaTest extends TestCase
         $capturedPayload = null;
         $client = new MockHttpClient(static function (string $method, string $url, array $options) use (&$capturedPayload): MockResponse {
             self::assertSame('POST', $method);
-            self::assertSame(self::ENGINE_URL, $url);
+            self::assertSame(self::engineUrl(), $url);
             self::assertArrayHasKey('body', $options);
             self::assertIsString($options['body']);
             $capturedPayload = json_decode($options['body'], true, 512, \JSON_THROW_ON_ERROR);
@@ -46,7 +60,7 @@ final class ContractSchemaTest extends TestCase
             ]);
         });
 
-        $response = $client->request('POST', self::ENGINE_URL, ['json' => $payload]);
+        $response = $client->request('POST', self::engineUrl(), ['json' => $payload]);
 
         self::assertSame(200, $response->getStatusCode());
         self::assertIsArray($capturedPayload);
@@ -64,7 +78,7 @@ final class ContractSchemaTest extends TestCase
         $client = HttpClient::create(['timeout' => 3]);
 
         try {
-            $response = $client->request('POST', self::ENGINE_URL, ['json' => $payload]);
+            $response = $client->request('POST', self::engineUrl(), ['json' => $payload]);
             self::assertSame(200, $response->getStatusCode());
             $data = $response->toArray(false);
         } catch (TransportExceptionInterface $exception) {

@@ -24,6 +24,24 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 CONTRACT_VERSION_FILE = REPO_ROOT / "engine" / "CONTRACT_VERSION"
 INVENTORY_DOC = REPO_ROOT / "specs" / "courantes" / "engine-inventory.md"
 
+# D-37 (2026-08-08) — le garde ne surveillait QUE l'inventaire, et sept autres documents ont
+# derive sous son nez : ils annoncaient encore le contrat 2.1 alors que le fichier disait 2.2,
+# dont `project-map.md`, qui avait recu un tampon « verifie » le matin meme. Un garde trop
+# etroit est un garde qui rassure a tort : on le croit couvrant, il ne tient qu'un fichier.
+#
+# Tout document qui se prononce sur la version EN VIGUEUR entre ici. Les mentions
+# HISTORIQUES restent libres (« bump 2.1 -> 2.2 », « 2.1 = fenetres coach ») : la regle est
+# seulement que la version courante soit citee, jamais qu'une ancienne disparaisse.
+DOCS_QUOTING_THE_ACTIVE_VERSION = (
+    INVENTORY_DOC,
+    REPO_ROOT / "docs" / "project-map.md",
+    REPO_ROOT / "docs" / "glossary.md",
+    REPO_ROOT / "engine" / "README.md",
+    REPO_ROOT / "engine" / "docs" / "nominal-flow.md",
+    REPO_ROOT / "engine" / "docs" / "solver-errors.md",
+    REPO_ROOT / "backend" / "docs" / "schedule-generation-guide.md",
+)
+
 
 def _current_version() -> str:
     return CONTRACT_VERSION_FILE.read_text(encoding="utf-8").strip()
@@ -62,4 +80,30 @@ def test_the_doc_does_not_still_present_an_older_version_as_active() -> None:
         f"le doc annonce encore {stale} comme version en vigueur alors que "
         f"CONTRACT_VERSION={version}. Une version historique se cite au passé "
         "(« 2.1 = fenêtres coach »), jamais comme la version active."
+    )
+
+
+def test_every_doc_quoting_the_contract_cites_the_current_version() -> None:
+    """D-37 — la meme regle, etendue a tous les documents qui annoncent la version.
+
+    Volontairement bete, comme le test ci-dessus : on exige seulement que la version en
+    vigueur soit CITEE quelque part. Un doc qui ne parle que d'une version passee est donc
+    en faute, un doc qui cite la courante ET son historique est correct.
+    """
+    version = _current_version()
+
+    stale = []
+    for doc in DOCS_QUOTING_THE_ACTIVE_VERSION:
+        text = doc.read_text(encoding="utf-8")
+        # Le doc parle-t-il du contrat ? (sinon il n'a rien a citer)
+        if not re.search(r"CONTRACT_VERSION|contrat\s+`?\"?2\.", text):
+            continue
+        if version not in text:
+            stale.append(str(doc.relative_to(REPO_ROOT)))
+
+    assert not stale, (
+        f"ces documents parlent du contrat sans citer la version en vigueur ({version}) : "
+        f"{stale}. Un agent qui les lit part sur une version perimee — c'est exactement ce "
+        "qui s'est produit entre le bump 2.2 et l'audit du 2026-08-08, sur SEPT fichiers. "
+        "Mettre a jour le doc dans le MEME commit que le bump."
     )
