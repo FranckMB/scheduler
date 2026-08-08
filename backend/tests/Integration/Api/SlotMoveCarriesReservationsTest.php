@@ -11,6 +11,7 @@ use App\Entity\Season;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
+use App\Enum\SeasonStatus;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -109,7 +110,7 @@ final class SlotMoveCarriesReservationsTest extends WebTestCase
         $this->scopeGucToClub($this->club->getId());
         $this->em->persist((new ClubUser)->setClubId($this->club->getId())->setUserId($this->user->getId())->setRole('admin')->setIsActive(true));
         $this->season = (new Season)->setClubId($this->club->getId())->setName('2025-2026')
-            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus('active');
+            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($this->season);
         $this->em->flush();
     }

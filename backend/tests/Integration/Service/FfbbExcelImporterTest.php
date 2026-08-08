@@ -9,6 +9,7 @@ use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
+use App\Enum\SeasonStatus;
 use App\Exception\ImportRejectedException;
 use App\Service\Basketball\FfbbExcelImporter;
 use App\Service\SeasonResolver;
@@ -130,7 +131,7 @@ final class FfbbExcelImporterTest extends KernelTestCase
         $year = SeasonResolver::seasonYear(new DateTimeImmutable);
         $season = (new Season)->setClubId($this->club->getId())->setName($year . '-' . ($year + 1))
             ->setStartDate(new DateTimeImmutable($year . '-07-15'))->setEndDate(new DateTimeImmutable(($year + 1) . '-07-14'))
-            ->setStatus('active')->setTransitionData([]);
+            ->setStatus(SeasonStatus::ACTIVE)->setTransitionData([]);
         $this->em->persist($season);
         $this->em->flush();
         $this->seasonId = $season->getId();

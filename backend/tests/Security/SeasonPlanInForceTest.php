@@ -15,6 +15,7 @@ use App\Entity\ScheduleStructureSnapshot;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use App\Service\SocleGuard;
@@ -206,7 +207,7 @@ final class SeasonPlanInForceTest extends WebTestCase
             ->setName((string) $year)
             ->setStartDate(new DateTimeImmutable($year . '-08-01'))
             ->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'))
-            ->setStatus('active');
+            ->setStatus(SeasonStatus::ACTIVE);
         $this->season->setTransitionData([]);
         $this->em->persist($this->season);
         $this->em->flush();

@@ -9,6 +9,7 @@ use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Entity\Venue;
+use App\Enum\SeasonStatus;
 use App\EventListener\TenantFilterListener;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
@@ -229,7 +230,7 @@ final class SeasonIsolationTest extends WebTestCase
         $season->setName($startYear . '-' . ($startYear + 1));
         $season->setStartDate(new DateTimeImmutable($startYear . '-08-01'));
         $season->setEndDate(new DateTimeImmutable(($startYear + 1) . '-07-15'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
 

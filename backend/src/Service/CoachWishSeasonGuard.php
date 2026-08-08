@@ -33,7 +33,7 @@ final class CoachWishSeasonGuard
         if (null === $season) {
             return true; // fail-closed
         }
-        if (\in_array($season->getStatus(), ['archived', 'closed'], true)) {
+        if ($season->getStatus()->isFrozen()) {
             return true; // archivage/clôture manuels
         }
         $clubId = $campaign->getClubId();

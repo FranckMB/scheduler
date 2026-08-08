@@ -21,6 +21,7 @@ use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
+use App\Enum\SeasonStatus;
 use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -273,7 +274,7 @@ final class RecapCapacityWarningTest extends WebTestCase
         $season->setName('2025-2026');
         $season->setStartDate(new DateTimeImmutable('2025-09-01'));
         $season->setEndDate(new DateTimeImmutable('2026-06-30'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
 

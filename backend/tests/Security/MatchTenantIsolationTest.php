@@ -21,6 +21,7 @@ use App\Entity\VenueUnavailability;
 use App\Enum\CompetitionType;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
+use App\Enum\SeasonStatus;
 use App\Service\SeasonResolver;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
@@ -388,7 +389,7 @@ final class MatchTenantIsolationTest extends WebTestCase
         $season->setName((string) $startYear);
         $season->setStartDate(new DateTimeImmutable($startYear . '-08-01'));
         $season->setEndDate(new DateTimeImmutable(($startYear + 1) . '-07-15'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
         $this->em->flush();

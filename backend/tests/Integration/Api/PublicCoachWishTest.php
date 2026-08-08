@@ -17,6 +17,7 @@ use App\Entity\TeamCoach;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
+use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -155,7 +156,7 @@ final class PublicCoachWishTest extends WebTestCase
         // intercepter — une saison archivée (lecture seule) doit fermer le lien (410),
         // jamais laisser écrire dans une saison gelée.
         $this->scopeGucToClub($this->club->getId());
-        $this->season->setStatus('archived');
+        $this->season->setStatus(SeasonStatus::ARCHIVED);
         $this->em->flush();
 
         $this->client->request('GET', '/api/coach-wishes/public/' . $this->token);
@@ -179,10 +180,10 @@ final class PublicCoachWishTest extends WebTestCase
         // → le lien public doit fermer (410), comme le chemin authentifié via _season_readonly.
         $this->scopeGucToClub($this->club->getId());
         $next = (new Season)->setClubId($this->club->getId())->setName('2026-2027')
-            ->setStartDate(new DateTimeImmutable('2026-09-01'))->setEndDate(new DateTimeImmutable('2027-06-30'))->setStatus('active');
+            ->setStartDate(new DateTimeImmutable('2026-09-01'))->setEndDate(new DateTimeImmutable('2027-06-30'))->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($next);
         $this->em->flush();
-        self::assertSame('active', $this->season->getStatus(), 'la saison de la campagne reste active (statut jamais roulé)');
+        self::assertSame(SeasonStatus::ACTIVE, $this->season->getStatus(), 'la saison de la campagne reste active (statut jamais roulé)');
 
         $this->client->request('GET', '/api/coach-wishes/public/' . $this->token);
         self::assertResponseStatusCodeSame(410);
@@ -277,7 +278,7 @@ final class PublicCoachWishTest extends WebTestCase
         $this->scopeGucToClub($this->club->getId());
         $this->em->persist((new ClubUser)->setClubId($this->club->getId())->setUserId($user->getId())->setRole('admin')->setIsActive(true));
         $this->season = (new Season)->setClubId($this->club->getId())->setName('2025-2026')
-            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus('active');
+            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($this->season);
 
         $this->team = $this->newTeam('SM1');
@@ -346,7 +347,7 @@ final class PublicCoachWishTest extends WebTestCase
         $this->em->flush();
         $this->scopeGucToClub($club->getId());
         $season = (new Season)->setClubId($club->getId())->setName('2025-2026')
-            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus('active');
+            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($season);
         $team = (new Team)->setClubId($club->getId())->setSeasonId($season->getId())
             ->setSportCategoryId('22222222-2222-4222-8222-222222222222')->setPriorityTierId(1)->setName('Intrus');

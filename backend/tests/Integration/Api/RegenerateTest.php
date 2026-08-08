@@ -12,6 +12,7 @@ use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Service\SeasonResolver;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
@@ -143,7 +144,7 @@ final class RegenerateTest extends WebTestCase
             ->setName((string) $year)
             ->setStartDate(new DateTimeImmutable($year . '-08-01'))
             ->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'))
-            ->setStatus('active');
+            ->setStatus(SeasonStatus::ACTIVE);
         $this->season->setTransitionData([]);
         $this->em->persist($this->season);
         $this->em->flush();

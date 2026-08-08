@@ -10,6 +10,7 @@ use App\Entity\Season;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
+use App\Enum\SeasonStatus;
 use App\Service\TenantConnectionContext;
 use App\Tests\CreatesPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
@@ -390,7 +391,7 @@ final class VenueTrainingSlotApiTest extends WebTestCase
         $season->setName('2025-2026');
         $season->setStartDate(new DateTimeImmutable('2025-09-01'));
         $season->setEndDate(new DateTimeImmutable('2026-06-30'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
 
         $this->em->persist($season);

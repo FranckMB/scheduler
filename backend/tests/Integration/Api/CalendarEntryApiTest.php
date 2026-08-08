@@ -16,6 +16,7 @@ use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Service\SchedulePlanProvisioner;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
@@ -295,7 +296,7 @@ final class CalendarEntryApiTest extends WebTestCase
         $old->setName('2024-2025');
         $old->setStartDate(new DateTimeImmutable('2024-09-01'));
         $old->setEndDate(new DateTimeImmutable('2025-06-30'));
-        $old->setStatus('archived');
+        $old->setStatus(SeasonStatus::ARCHIVED);
         $this->em->persist($old);
         $oldEntry = new CalendarEntry;
         $oldEntry->setClubId($club->getId());
@@ -590,7 +591,7 @@ final class CalendarEntryApiTest extends WebTestCase
         $season->setName('2025-2026');
         $season->setStartDate(new DateTimeImmutable('2025-09-01'));
         $season->setEndDate(new DateTimeImmutable('2026-06-30'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($season);
 
         $this->em->flush();

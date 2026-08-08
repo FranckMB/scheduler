@@ -9,6 +9,7 @@ use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Entity\Venue;
+use App\Enum\SeasonStatus;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -187,7 +188,7 @@ final class SeasonReadonlyTest extends WebTestCase
         $season->setName((string) $startYear);
         $season->setStartDate(new DateTimeImmutable($startYear . '-08-01'));
         $season->setEndDate(new DateTimeImmutable(($startYear + 1) . '-07-15'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
 

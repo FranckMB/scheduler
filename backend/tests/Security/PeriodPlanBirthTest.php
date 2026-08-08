@@ -18,6 +18,7 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
@@ -694,7 +695,7 @@ final class PeriodPlanBirthTest extends WebTestCase
         $season->setName((string) $year);
         $season->setStartDate(new DateTimeImmutable($year . '-08-01'));
         $season->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
         $this->em->flush();

@@ -27,6 +27,7 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\Gender;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Enum\VenuePeriodMode;
 use App\Service\ScheduleConstraintBuilder;
 use App\Tests\ProvisionsPeriodPlanTrait;
@@ -610,7 +611,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $seasonB->setName('2026-2027');
         $seasonB->setStartDate(new DateTimeImmutable('2026-09-01'));
         $seasonB->setEndDate(new DateTimeImmutable('2027-06-30'));
-        $seasonB->setStatus('active');
+        $seasonB->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($seasonB);
         $this->em->flush();
         $this->team($club, $seasonB, 'U11');
@@ -1042,7 +1043,7 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $season->setName('2025-2026');
         $season->setStartDate(new DateTimeImmutable('2025-09-01'));
         $season->setEndDate(new DateTimeImmutable('2026-06-30'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($season);
 
         $this->em->flush();
