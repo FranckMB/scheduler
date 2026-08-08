@@ -7,6 +7,17 @@ import { registerAndVerify, uniqueAra } from "./support";
  * doesn't break the app (no `Refused to …` violations while walking the real
  * flows). The headers live in the frontend nginx build, NOT the Vite dev
  * server, so both tests skip when E2E_BASE_URL points at a dev server (:517x).
+ *
+ * ⚠ D-04 (audit 2026-08-08) — ce skip a rendu le contrôle A17 INEXISTANT pendant des mois :
+ * la CI lançait toute la suite avec `E2E_BASE_URL=http://localhost:5173`, donc les deux tests
+ * skippaient à CHAQUE run. Retirer un en-tête de sécurité de la conf prod passait tous les
+ * checks, et la posture cyber de l'audit annonçait « A17 protégé » sur la seule existence des
+ * fichiers de conf — que rien ne vérifiait servis.
+ *
+ * Le skip reste légitime (les en-têtes n'existent pas sur le dev server), mais il ne peut plus
+ * se produire SILENCIEUSEMENT là où le contrôle est attendu : `E2E_A17_REQUIRED=1` le
+ * transforme en échec. C'est le job CI dédié qui pose la variable — un garde qui peut se
+ * saborder sans bruit n'est pas un garde.
  */
 const REQUIRED_HEADERS: Record<string, RegExp> = {
   "content-security-policy": /default-src 'self'/,
@@ -18,11 +29,24 @@ const REQUIRED_HEADERS: Record<string, RegExp> = {
 
 const isDevServer = (baseURL: string | undefined): boolean => /:517\d(\/|$)/.test(baseURL ?? "");
 
+/**
+ * Sauter le contrôle est acceptable ; le sauter LÀ OÙ ON CROIT LE FAIRE ne l'est pas.
+ * Quand `E2E_A17_REQUIRED=1`, viser un dev server est une erreur de câblage, pas un cas à
+ * ignorer : on échoue en le disant plutôt que de rendre un vert qui ne prouve rien.
+ */
+const skipUnlessNginxBuild = (baseURL: string | undefined, why: string): void => {
+  if (!isDevServer(baseURL)) return;
+  if ("1" === process.env.E2E_A17_REQUIRED) {
+    throw new Error(`A17 exigé mais E2E_BASE_URL vise le dev server (${baseURL ?? "?"}) — ces en-têtes ne vivent que sur l'image nginx (:8081).`);
+  }
+  test.skip(true, why);
+};
+
 const cspViolations = (messages: ConsoleMessage[]): string[] =>
   messages.filter((m) => /content security policy|refused to (load|connect|apply|execute|frame)/i.test(m.text())).map((m) => m.text());
 
 test("SPA ships the A17 security headers", async ({ page, baseURL }) => {
-  test.skip(isDevServer(baseURL), "security headers only exist on the nginx build");
+  skipUnlessNginxBuild(baseURL, "security headers only exist on the nginx build");
   const response = await page.goto("/login");
   const headers = response?.headers() ?? {};
   for (const [name, pattern] of Object.entries(REQUIRED_HEADERS)) {
@@ -31,7 +55,7 @@ test("SPA ships the A17 security headers", async ({ page, baseURL }) => {
 });
 
 test("CSP does not break the app across login → register → wizard → club", async ({ page, baseURL }) => {
-  test.skip(isDevServer(baseURL), "CSP is served by the nginx build, not the dev server");
+  skipUnlessNginxBuild(baseURL, "CSP is served by the nginx build, not the dev server");
   test.setTimeout(120_000);
   const console_: ConsoleMessage[] = [];
   page.on("console", (m) => console_.push(m));

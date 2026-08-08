@@ -479,6 +479,19 @@ jobs:
         working-directory: frontend
         run: E2E_BASE_URL=http://localhost:5173 npx playwright test
 
+      # D-04 — les en-têtes A17 (CSP, HSTS, X-Frame-Options, nosniff) ne vivent QUE sur
+      # l'image nginx. La suite ci-dessus tourne contre le dev server, où le spec dédié se
+      # skippait donc à CHAQUE run : le contrôle A17 n'a jamais tourné en CI, et retirer un
+      # en-tête de la conf prod passait tous les checks. On construit l'image et on rejoue
+      # le seul spec concerné contre elle. `E2E_A17_REQUIRED=1` interdit au skip de revenir
+      # en silence : viser un dev server ici devient un échec, pas un test ignoré.
+      - name: Build the nginx frontend image
+        run: docker compose up -d --wait --build frontend
+
+      - name: A17 security headers (against the nginx build, not the dev server)
+        working-directory: frontend
+        run: E2E_BASE_URL=http://localhost:8081 E2E_A17_REQUIRED=1 npx playwright test tests/e2e/security-headers.spec.ts
+
       - name: Upload traces on failure
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
