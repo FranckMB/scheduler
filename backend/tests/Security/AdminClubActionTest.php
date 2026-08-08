@@ -14,6 +14,7 @@ use App\Entity\SuperAdmin;
 use App\Entity\Team;
 use App\Enum\AdminJobSource;
 use App\Enum\AdminJobStatus;
+use App\Enum\SeasonStatus;
 use App\Security\TotpService;
 use App\Tests\Double\RecordingAdminJobExecutor;
 use App\Tests\TenantGucTrait;
@@ -270,7 +271,7 @@ final class AdminClubActionTest extends WebTestCase
         $season = (new Season)->setClubId($club->getId())->setName('SA4')
             ->setStartDate(new DateTimeImmutable(date('Y') . '-07-16'))
             ->setEndDate(new DateTimeImmutable((date('Y') + 1) . '-07-14'))
-            ->setStatus('active');
+            ->setStatus(SeasonStatus::ACTIVE);
         $em->persist($season);
         $em->flush();
 

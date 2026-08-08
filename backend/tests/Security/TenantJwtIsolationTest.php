@@ -10,6 +10,7 @@ use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
+use App\Enum\SeasonStatus;
 use App\Tests\StartsFreshBrowserSession;
 use App\Tests\TenantGucTrait;
 use App\Tests\VerifiesRegistration;
@@ -109,7 +110,7 @@ final class TenantJwtIsolationTest extends WebTestCase
         $season->setName('2025-2026');
         $season->setStartDate(new DateTimeImmutable('2025-09-01'));
         $season->setEndDate(new DateTimeImmutable('2026-06-30'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($season);
 
         $category = new SportCategory;

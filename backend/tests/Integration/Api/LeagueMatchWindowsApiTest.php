@@ -12,6 +12,7 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\User;
+use App\Enum\SeasonStatus;
 use App\Enum\TeamLevel;
 use App\Service\LeagueResolver;
 use App\Service\SeasonResolver;
@@ -94,7 +95,7 @@ final class LeagueMatchWindowsApiTest extends WebTestCase
         $season->setName((string) $year);
         $season->setStartDate(new DateTimeImmutable($year . '-08-01'));
         $season->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
 

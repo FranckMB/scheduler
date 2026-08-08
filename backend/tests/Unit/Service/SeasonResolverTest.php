@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Service;
 
 use App\Entity\Season;
+use App\Enum\SeasonStatus;
 use App\Service\SeasonResolver;
 use DateTimeImmutable;
 use PHPUnit\Framework\Attributes\Group;
@@ -123,7 +124,7 @@ final class SeasonResolverTest extends TestCase
         $season->setName('saison');
         $season->setStartDate(new DateTimeImmutable($start));
         $season->setEndDate(new DateTimeImmutable($end));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
 
         return $season;

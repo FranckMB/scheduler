@@ -22,6 +22,7 @@ use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Enum\VenuePeriodMode;
 use App\Tests\ProvisionsPeriodPlanTrait;
@@ -500,7 +501,7 @@ final class ValidateConstraintsTest extends WebTestCase
         $this->season->setName('2025-2026');
         $this->season->setStartDate(new DateTimeImmutable('2025-09-01'));
         $this->season->setEndDate(new DateTimeImmutable('2026-06-30'));
-        $this->season->setStatus('active');
+        $this->season->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($this->season);
 
         $this->em->flush();

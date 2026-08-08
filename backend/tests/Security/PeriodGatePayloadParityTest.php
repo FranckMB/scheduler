@@ -25,6 +25,7 @@ use App\Enum\CalendarEntryStatus;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Enum\SeasonStatus;
 use App\Enum\VenuePeriodMode;
 use App\Service\PeriodConstraintSelector;
 use App\Service\ScheduleConstraintBuilder;
@@ -199,7 +200,7 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         $season->setName('2025-2026');
         $season->setStartDate(new DateTimeImmutable('2025-09-01'));
         $season->setEndDate(new DateTimeImmutable('2026-06-30'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
 

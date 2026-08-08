@@ -14,6 +14,7 @@ use App\Entity\Team;
 use App\Enum\CompetitionType;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
+use App\Enum\SeasonStatus;
 use App\Exception\ImportRejectedException;
 use App\Service\FbiFixtureImporter;
 use App\Service\SeasonResolver;
@@ -721,7 +722,7 @@ final class FbiFixtureImporterTest extends KernelTestCase
             $season->setName((string) $year);
             $season->setStartDate(new DateTimeImmutable($year . '-08-01'));
             $season->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'));
-            $season->setStatus('active');
+            $season->setStatus(SeasonStatus::ACTIVE);
             $season->setTransitionData([]);
             $this->em->persist($season);
         }

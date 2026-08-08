@@ -27,6 +27,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLinkType;
 use App\Service\ScheduleConstraintBuilder;
@@ -66,7 +67,7 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         // Season shell: dates +1 year, draft, gates null, lineage in transitionData.
         self::assertSame($club->getId(), $target->getClubId());
         self::assertSame($season->getStartDate()->modify('+1 year')->format('Y-m-d'), $target->getStartDate()->format('Y-m-d'));
-        self::assertSame('draft', $target->getStatus());
+        self::assertSame(SeasonStatus::DRAFT, $target->getStatus());
         self::assertNull($this->chosenPlanVersion($target), 'N+1 starts as an empty espace de travail');
         self::assertSame($season->getId(), $target->getTransitionData()['sourceSeasonId']);
         self::assertSame($target->getId(), $season->getTransitionData()['transitionedTo']);
@@ -216,7 +217,7 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $june1 = new DateTimeImmutable('2026-06-01');
         $target = $this->service->transition($current, $june1);
 
-        self::assertSame('draft', $target->getStatus());
+        self::assertSame(SeasonStatus::DRAFT, $target->getStatus());
         self::assertNull($this->chosenPlanVersion($target), 'N+1 must not inherit the pointer');
         // N+1 = the 2026-27 season-year.
         self::assertSame('2026-08-01', $target->getStartDate()->format('Y-m-d'));
@@ -524,7 +525,7 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $season->setName((string) $startYear);
         $season->setStartDate(new DateTimeImmutable($startYear . '-08-01'));
         $season->setEndDate(new DateTimeImmutable(($startYear + 1) . '-07-15'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
 

@@ -11,6 +11,7 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamTag;
+use App\Enum\SeasonStatus;
 use App\Enum\TeamTagAxis;
 use App\Service\TeamTagResolver;
 use App\Service\TeamTagService;
@@ -290,7 +291,7 @@ final class TeamTagScopeTest extends KernelTestCase
         $this->season->setName('2025-2026');
         $this->season->setStartDate(new DateTimeImmutable('2025-09-01'));
         $this->season->setEndDate(new DateTimeImmutable('2026-06-30'));
-        $this->season->setStatus('active');
+        $this->season->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($this->season);
 
         $existing = $this->em->getRepository(PriorityTier::class)->find(1);

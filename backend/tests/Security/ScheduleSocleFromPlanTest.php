@@ -10,6 +10,7 @@ use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use App\Tests\ChoosesPlanVersionTrait;
@@ -193,7 +194,7 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
         $otherSeason->setName((string) $otherYear);
         $otherSeason->setStartDate(new DateTimeImmutable($otherYear . '-08-01'));
         $otherSeason->setEndDate(new DateTimeImmutable(($otherYear + 1) . '-07-15'));
-        $otherSeason->setStatus('archived');
+        $otherSeason->setStatus(SeasonStatus::ARCHIVED);
         $otherSeason->setTransitionData([]);
         $this->em->persist($otherSeason);
         $this->em->flush();
@@ -378,7 +379,7 @@ final class ScheduleSocleFromPlanTest extends WebTestCase
         $season->setName((string) $year);
         $season->setStartDate(new DateTimeImmutable($year . '-08-01'));
         $season->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
         $this->em->flush();

@@ -8,6 +8,7 @@ use ApiPlatform\Validator\Exception\ValidationException;
 use App\ApiResource\SeasonResource;
 use App\Dto\SeasonInput;
 use App\Entity\Season;
+use App\Enum\SeasonStatus;
 use App\Service\ManagementAccessGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
@@ -96,7 +97,7 @@ class SeasonStateProcessor extends AbstractStateProcessor
         $entity->setStartDate($input->startDate);
         $entity->setEndDate($input->endDate);
         if (null !== $input->status) {
-            $entity->setStatus($input->status);
+            $entity->setStatus(SeasonStatus::from($input->status));
         }
 
         return $entity;
@@ -120,7 +121,7 @@ class SeasonStateProcessor extends AbstractStateProcessor
             $entity->setEndDate($input->endDate);
         }
         if (null !== $input->status) {
-            $entity->setStatus($input->status);
+            $entity->setStatus(SeasonStatus::from($input->status));
         }
     }
 

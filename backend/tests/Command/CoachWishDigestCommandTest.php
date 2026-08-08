@@ -17,6 +17,7 @@ use App\Entity\TeamCoach;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
+use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Repository\ClubUserRepository;
 use App\Repository\CoachWishTokenRepository;
@@ -212,7 +213,7 @@ final class CoachWishDigestCommandTest extends KernelTestCase
         $this->scopeGucToClub($club->getId());
         $this->em->persist((new ClubUser)->setClubId($club->getId())->setUserId($user->getId())->setRole('admin')->setIsActive(true));
         $season = (new Season)->setClubId($club->getId())->setName('2025-2026')
-            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus('active');
+            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($season);
         $this->em->flush();
 

@@ -25,6 +25,7 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\Gender;
 use App\Enum\LockLevel;
+use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
 use App\Service\Basketball\CategoryCatalog;
@@ -222,7 +223,7 @@ final class BcclSeeder
             $season->setName('2026-2027');
             $season->setStartDate(new DateTimeImmutable('2026-07-15'));
             $season->setEndDate(new DateTimeImmutable('2027-07-14'));
-            $season->setStatus('active');
+            $season->setStatus(SeasonStatus::ACTIVE);
             $manager->persist($season);
         }
         // ADR-0002 Lot A: seed the season's empty SEASON plan (idempotent).
@@ -1088,7 +1089,7 @@ final class BcclSeeder
 
         $existingSeason = $manager->getRepository(Season::class)->findOneBy([
             'clubId' => $club->getId(),
-            'status' => 'active',
+            'status' => SeasonStatus::ACTIVE->value,
         ]);
         if (null === $existingSeason) {
             $currentYear = (int) (new DateTimeImmutable)->format('Y');
@@ -1097,7 +1098,7 @@ final class BcclSeeder
             $season->setName((string) $currentYear);
             $season->setStartDate(new DateTimeImmutable($currentYear . '-08-01'));
             $season->setEndDate(new DateTimeImmutable($currentYear . '-07-15'));
-            $season->setStatus('active');
+            $season->setStatus(SeasonStatus::ACTIVE);
             $season->setTransitionData([]);
             $manager->persist($season);
             // ADR-0002 Lot A: seed the season's empty SEASON plan.

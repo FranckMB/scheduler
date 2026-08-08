@@ -19,6 +19,7 @@ use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Enum\VenuePeriodMode;
 use App\Service\OrphanPinGuard;
 use App\Service\SchedulePlanProvisioner;
@@ -238,7 +239,7 @@ final class OrphanPinGuardTest extends WebTestCase
         $this->scopeGucToClub($this->club->getId());
         $this->em->persist((new ClubUser)->setClubId($this->club->getId())->setUserId($this->user->getId())->setRole('admin')->setIsActive(true));
         $this->season = (new Season)->setClubId($this->club->getId())->setName('2025-2026')
-            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus('active');
+            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($this->season);
         $this->em->flush();
 

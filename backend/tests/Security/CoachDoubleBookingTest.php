@@ -18,6 +18,7 @@ use App\Entity\Venue;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Service\CoachDoubleBookingDetector;
 use App\Tests\TenantGucTrait;
@@ -213,7 +214,7 @@ final class CoachDoubleBookingTest extends KernelTestCase
 
         $this->scopeGucToClub($clubId);
 
-        $season = (new Season)->setClubId($clubId)->setName('2026-2027')->setStartDate(new DateTimeImmutable('2026-09-01'))->setEndDate(new DateTimeImmutable('2027-06-30'))->setStatus('active');
+        $season = (new Season)->setClubId($clubId)->setName('2026-2027')->setStartDate(new DateTimeImmutable('2026-09-01'))->setEndDate(new DateTimeImmutable('2027-06-30'))->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
         $this->em->flush();

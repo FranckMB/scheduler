@@ -12,6 +12,7 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\User;
+use App\Enum\SeasonStatus;
 use App\Service\SeasonResolver;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\Double\FfbbHttpClientStub;
@@ -169,7 +170,7 @@ final class FfbbPairingAuthorizationTest extends WebTestCase
         $season->setName((string) $startYear);
         $season->setStartDate(new DateTimeImmutable($startYear . '-08-01'));
         $season->setEndDate(new DateTimeImmutable(($startYear + 1) . '-07-15'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
         $this->em->flush();

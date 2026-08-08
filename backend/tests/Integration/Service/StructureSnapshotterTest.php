@@ -19,6 +19,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Service\StructureSnapshotter;
 use App\Tests\ChoosesPlanVersionTrait;
@@ -154,7 +155,7 @@ final class StructureSnapshotterTest extends KernelTestCase
         $this->em->flush();
         $this->scopeGucToClub($club->getId());
         $season = (new Season)->setClubId($club->getId())->setName('2025-2026')
-            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus('active');
+            ->setStartDate(new DateTimeImmutable('2025-09-01'))->setEndDate(new DateTimeImmutable('2026-06-30'))->setStatus(SeasonStatus::ACTIVE);
         $this->em->persist($season);
         $this->em->flush();
 

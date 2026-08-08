@@ -20,6 +20,7 @@ use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Service\SchedulePlanProvisioner;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -560,7 +561,7 @@ final class SchedulePlanProvisionerTest extends KernelTestCase
         $season->setName($name);
         $season->setStartDate(new DateTimeImmutable($start));
         $season->setEndDate(new DateTimeImmutable($end));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
         $this->em->flush();

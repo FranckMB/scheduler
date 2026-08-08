@@ -17,6 +17,7 @@ use App\Entity\Venue;
 use App\Entity\VenueMatchWindow;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintScope;
+use App\Enum\SeasonStatus;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Clock\ClockInterface;
@@ -161,7 +162,7 @@ final class SeasonTransitionService
         $target->setName($this->nextName($source->getName(), $yearsToAdd));
         $target->setStartDate($source->getStartDate()->modify($shift));
         $target->setEndDate($source->getEndDate()->modify($shift));
-        $target->setStatus('draft');
+        $target->setStatus(SeasonStatus::DRAFT);
         $target->setTransitionData([]);
         $this->entityManager->persist($target);
 

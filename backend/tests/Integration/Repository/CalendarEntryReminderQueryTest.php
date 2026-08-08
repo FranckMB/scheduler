@@ -14,6 +14,7 @@ use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Repository\CalendarEntryRepository;
 use App\Service\SchedulePlanProvisioner;
 use App\Tests\TenantGucTrait;
@@ -67,7 +68,7 @@ final class CalendarEntryReminderQueryTest extends KernelTestCase
         $this->entry($club, $season, '2026-04-29'); // already started (before today)
         $this->entry($club, $season, '2026-05-20'); // beyond the 14-day horizon
         // Another season, same club, in window → excluded.
-        $other = $this->season($club, 'archived');
+        $other = $this->season($club, SeasonStatus::ARCHIVED);
         $this->entry($club, $other, self::IN_WINDOW);
         $this->em->flush();
 
@@ -151,12 +152,12 @@ final class CalendarEntryReminderQueryTest extends KernelTestCase
         }
     }
 
-    private function season(Club $club, string $status): Season
+    private function season(Club $club, SeasonStatus $status): Season
     {
         $this->scopeGucToClub($club->getId());
         $season = new Season;
         $season->setClubId($club->getId());
-        $season->setName('S-' . $status);
+        $season->setName('S-' . $status->value);
         $season->setStartDate(new DateTimeImmutable('2025-09-01'));
         $season->setEndDate(new DateTimeImmutable('2026-06-30'));
         $season->setStatus($status);
@@ -199,6 +200,6 @@ final class CalendarEntryReminderQueryTest extends KernelTestCase
         $cu->setIsActive(true);
         $this->em->persist($cu);
 
-        return [$club, $this->season($club, 'active')];
+        return [$club, $this->season($club, SeasonStatus::ACTIVE)];
     }
 }

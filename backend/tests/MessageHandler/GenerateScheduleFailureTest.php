@@ -10,6 +10,7 @@ use App\Entity\ScheduleDiagnostic;
 use App\Entity\Season;
 use App\Entity\SolverMetric;
 use App\Enum\ScheduleStatus;
+use App\Enum\SeasonStatus;
 use App\Message\GenerateScheduleMessage;
 use App\MessageHandler\GenerateScheduleHandler;
 use App\Service\ClubGenerationLock;
@@ -161,7 +162,7 @@ final class GenerateScheduleFailureTest extends KernelTestCase
         $season->setName('2025-2026');
         $season->setStartDate(new DateTimeImmutable('2025-09-01'));
         $season->setEndDate(new DateTimeImmutable('2026-06-30'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $em->persist($season);
         $em->flush();
 

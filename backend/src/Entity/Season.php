@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\SeasonStatus;
 use App\Repository\SeasonRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
@@ -40,8 +41,8 @@ class Season implements TenantOwnedInterface
     #[ORM\Column(type: 'date_immutable')]
     private DateTimeImmutable $endDate;
 
-    #[ORM\Column(type: 'string', length: 20)]
-    private string $status;
+    #[ORM\Column(type: 'string', length: 20, enumType: SeasonStatus::class)]
+    private SeasonStatus $status;
 
     #[ORM\Column(type: 'string', length: 2048, nullable: true)]
     private ?string $exportPdfUrl = null;
@@ -163,12 +164,12 @@ class Season implements TenantOwnedInterface
         return $this;
     }
 
-    public function getStatus(): string
+    public function getStatus(): SeasonStatus
     {
         return $this->status;
     }
 
-    public function setStatus(string $status): self
+    public function setStatus(SeasonStatus $status): self
     {
         $this->status = $status;
 

@@ -9,6 +9,7 @@ use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
+use App\Enum\SeasonStatus;
 use App\Repository\SportRepository;
 use App\Service\Basketball\CategoryCatalog;
 use DateTimeImmutable;
@@ -87,7 +88,7 @@ final class ClubProvisioner
         $season->setName(SeasonResolver::defaultSeasonName(new DateTimeImmutable($seasonYear . '-07-15')));
         $season->setStartDate(new DateTimeImmutable($seasonYear . '-07-15'));
         $season->setEndDate(new DateTimeImmutable(($seasonYear + 1) . '-07-14'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->entityManager->persist($season);
 

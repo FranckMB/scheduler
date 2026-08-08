@@ -9,6 +9,7 @@ use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Enum\SeasonStatus;
 use App\Repository\ClubUserRepository;
 use App\Repository\TransitionReminderLogRepository;
 use App\Service\SeasonResolver;
@@ -262,7 +263,7 @@ final class TransitionReminderCommandTest extends KernelTestCase
         $season->setName($start->format('Y'));
         $season->setStartDate($start);
         $season->setEndDate($start->modify('+10 months'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $this->em->persist($season);
         $this->em->flush();

@@ -16,6 +16,7 @@ use App\Entity\VenueMatchWindow;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixturePlacementSource;
 use App\Enum\FixtureStatus;
+use App\Enum\SeasonStatus;
 use App\Service\MatchPlacementPayloadBuilder;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
@@ -162,7 +163,7 @@ final class MatchPlacementContractSchemaTest extends KernelTestCase
         $season->setName((string) $year);
         $season->setStartDate(new DateTimeImmutable($year . '-08-01'));
         $season->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'));
-        $season->setStatus('active');
+        $season->setStatus(SeasonStatus::ACTIVE);
         $season->setTransitionData([]);
         $em->persist($season);
 

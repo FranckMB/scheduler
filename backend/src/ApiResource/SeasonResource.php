@@ -67,7 +67,7 @@ class SeasonResource
         $dto->name = $entity->getName();
         $dto->startDate = $entity->getStartDate();
         $dto->endDate = $entity->getEndDate();
-        $dto->status = $entity->getStatus();
+        $dto->status = $entity->getStatus()->value;
         $dto->exportPdfUrl = $entity->getExportPdfUrl();
         $dto->transitionData = $entity->getTransitionData();
 

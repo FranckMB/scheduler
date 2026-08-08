@@ -39,12 +39,12 @@
 > [`reprise-perimetre-engage.md`](reprise-perimetre-engage.md) (mémoire produit du planning de saison) ·
 > [`duplications-de-verite.md`](duplications-de-verite.md) (**inventaire du motif « une vérité, deux endroits »** —
 > 44 cas datés du 2026-08-08, triés par « la divergence est-elle silencieuse ? », avec la doctrine de correction.
-> **État : 37 livrés · 4 réfutés · 3 ouverts** — compte vérifiable par
-> `grep -c '^| \*\*D-[0-9]*\*\* ⬜'` (le `grep -c '⬜'` annoncé jusqu'ici comptait aussi la légende et
-> deux lignes de prose, soit 6 pour 3 ouverts). Les trois restants sont sans impact
-> données/sécurité et n'ont jamais produit d'effet observé ; **deux attendent un arbitrage**
-> (D-07 : typer `Season.status` ou non · D-14 : quelle règle coach fait foi), le troisième est
-> dormant (D-11)).
+> **État : 38 livrés · 4 réfutés · 2 ouverts** — compte vérifiable par
+> `grep -c '^| \*\*D-[0-9]*\*\* ⬜'` (un `grep -c '⬜'` nu compte aussi la légende et deux lignes
+> de prose). Les deux restants sont sans impact données/sécurité et n'ont jamais produit
+> d'effet observé : **D-14 attend un arbitrage** (quelle règle coach fait foi — trois
+> divergences mesurées, cf. l'entrée), **D-11 est dormant** (`match_day` NULL sur les 69
+> équipes, aucun écran ne l'expose)).
 >
 > **Réf historiques** : `FF#n` / `BG G#n` = identifiants des anciens `features-futures.md` / `backend-gaps.md`,
 > absorbés le 2026-07-05. `v3 §x` / `contraintes-v2` = specs figées de `specs/initiales/`.
