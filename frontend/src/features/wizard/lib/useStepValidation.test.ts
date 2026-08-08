@@ -101,6 +101,30 @@ describe("computeReservationWarnings (W6)", () => {
     expect(warnings[0]).toContain("Créneau partagé par 2 équipes (max 1)");
   });
 
+  // D-03 — la porte avait sa PROPRE copie de `slotKey` et du calcul de capacité, et les deux
+  // avaient divergé de `reservationSlots` (la source, dont le Récap se sert). Ces deux cas
+  // épinglent les deux écarts : l'un faisait crier « max 1 » sur un créneau à 2 places.
+  it("apparie la réservation au créneau même quand l'API rend les secondes (D-03)", () => {
+    const teams = [team("t1", "U13", 1), team("t2", "U15", 1)];
+    const venues = [venue("v1", "Gymnase A", true)];
+    // Le créneau porte « 18:00:00 » (forme servie par l'API), la réservation « 18:00 ».
+    const slots = [slot("v1", 2, "18:00:00", 2)];
+    const reservations = [reservation("r1", "t1", "v1", 2, "18:00"), reservation("r2", "t2", "v1", 2, "18:00")];
+    // Sans normalisation, la capacité du créneau n'était pas retrouvée : `?? 1` s'appliquait
+    // et l'étape annonçait « max 1 » pendant que le Récap affichait « 2 places ».
+    expect(computeReservationWarnings(reservations, teams, venues, slots)).toEqual([]);
+  });
+
+  it("ne rétrograde pas la capacité quand le gymnase n'est pas encore chargé (D-03)", () => {
+    const teams = [team("t1", "U13", 1), team("t2", "U15", 1)];
+    const slots = [slot("v1", 2, "18:00", 2)];
+    const reservations = [reservation("r1", "t1", "v1", 2, "18:00"), reservation("r2", "t2", "v1", 2, "18:00")];
+    // Liste des gymnases en vol : `effectiveSlotCapacity` fait confiance à `slot.capacity`
+    // (le backend force 1 sur un gymnase non divisible), donc une requête en retard ne peut
+    // pas faire disparaître une place — la copie locale, elle, retombait sur 1.
+    expect(computeReservationWarnings(reservations, teams, [], slots)).toEqual([]);
+  });
+
   it("does not warn when a splittable slot with capacity 2 holds two teams", () => {
     const teams = [team("t1", "U13", 1), team("t2", "U15", 1)];
     const venues = [venue("v1", "Gymnase A", true)];

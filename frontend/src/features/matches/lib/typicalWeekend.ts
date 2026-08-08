@@ -4,12 +4,15 @@ import type { TeamMatchHabit } from "../api";
  * P1-4 PR E2 — the « week-end type » view (founder reframing of « semaine
  * type », 2026-08-03): the manager's IDEAL weekend template — every team's
  * habitual window laid out Sat/Sun × venues, date-less. Read-only (habits are
- * edited in HabitsLinksDialog). Pure layout, same 2h15 footprint geometry as
- * the dated grid.
+ * edited in HabitsLinksDialog). Pure layout, MÊME empreinte que la grille datée
+ * (constantes importées de `weekendGrid`, elles-mêmes alignées sur `MatchFootprint.php`).
  */
 
-const WARMUP_MINUTES = 30;
-const MATCH_MINUTES = 135;
+// D-02 : ces deux constantes valaient 30/135 ici et 30/105 dans `weekendGrid` — or le
+// serveur fait foi (`MatchFootprint.php` : 30 + 105). Le « week-end type » dessinait donc des
+// blocs de 2h15 pour des matchs que le solveur traite comme 1h45, et l'en-tête ci-dessus
+// affirmait pourtant « same footprint geometry as the dated grid ».
+import { MATCH_MINUTES, WARMUP_MINUTES } from "./weekendGrid";
 
 export interface TypicalColumn {
   key: string;

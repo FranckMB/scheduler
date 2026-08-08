@@ -43,11 +43,10 @@ export function parseTimeToMinutes(time: string): number {
 }
 
 /** minutes → "HH:MM" (zero-padded). */
-export function formatMinutes(total: number): string {
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
+// D-20 : le formateur vit en `shared/lib/time` — cette copie ne clampait pas et rendait « 25:15 ».
+import { formatMinutes } from "@/shared/lib/time";
+
+export { formatMinutes };
 
 /** Time-ish string → "HH:MM" (zero-padded). */
 export function toHourMinute(time: string): string {
