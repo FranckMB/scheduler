@@ -67,7 +67,13 @@ final class ImplicitConstraintConfigTest extends TestCase
 
         self::assertSame('MIN_SESSIONS', $result['minSessions']['type']);
         self::assertTrue($result['minSessions']['enabled']);
-        self::assertSame('Each team gets at least its effective minimum sessions', $result['minSessions']['description']);
+        // D-43 — cette assertion épinglait « gets at least », donc un PLANCHER DUR, alors que
+        // le solveur n'en fait qu'une CIBLE (bonus soft) depuis ENG-18 : elle verrouillait la
+        // description mensongère et aurait fait rougir quiconque la corrigeait. La formulation
+        // vient désormais du moteur (`engine/implicit_rules.json`), et `ImplicitRulesMatchEngineTest`
+        // exige que les deux côtés la partagent — ici on garde seulement qu'elle dit « cible ».
+        self::assertStringContainsString('TARGETS', $result['minSessions']['description']);
+        self::assertStringContainsString('not a hard floor', $result['minSessions']['description']);
     }
 
     public function testGetConstraintsArrayReturnsFiveIndexedEntries(): void
