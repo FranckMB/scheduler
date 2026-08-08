@@ -29,8 +29,18 @@ class VenueTrainingSlotInput
     #[Groups(['write'])]
     public ?int $durationMinutes = 90;
 
+    /**
+     * Nombre d'équipes simultanées sur le créneau — 3 depuis le 2026-08-05 (certains terrains
+     * se divisent en trois en travers : cas ADN au BCCL).
+     *
+     * ⚠ Cette borne est la PORTE D'ENTRÉE, et elle est restée à 2 quand l'écran est passé à 3 :
+     * `slotFields.tsx` offrait « 3 équipes » et l'API répondait 422. La chaîne AVAL était bien
+     * générique (`ScheduleConstraintBuilder:610` lit `getCapacity()`, l'engine borne à `ge=1`
+     * sans plafond, le picker de réservation suit `capacity`) — c'est précisément ce qui a
+     * masqué le trou : tout le monde a vérifié l'aval, personne la porte.
+     */
     #[Assert\NotBlank]
-    #[Assert\Range(min: 1, max: 2)]
+    #[Assert\Range(min: 1, max: 3)]
     #[Groups(['write'])]
     public ?int $capacity = 1;
 
