@@ -21,11 +21,28 @@
 | Compte jamais vérifié | User non vérifié + token | contrat (précontractuel) | 7 jours | `app:users:purge-unverified` (cron) | — |
 | Données du club | Coach (email/tél), équipes, plannings, contraintes | contrat (via le club) | saison courante + N-1 | `app:seasons:purge` (cron, grâce 30 j post-bascule) ; suppression manuelle par le club (cascade, auditée) | `AccountErasureTest` (d) |
 | Effacement de compte | anonymisation immédiate + purge club orphelin | obligation légale (art. 17) | grâce 30 j (annulable, revalidée) | `DELETE /api/me` → `app:clubs:purge-erased` — **l'identité publique FFBB du club survit** | `AccountErasureTest` |
-| Portabilité | export JSON compte / workspace club | obligation légale (art. 20) | à la demande (10/h par user) | `GET /api/me/export`, `GET /api/club/export` (management) | `RgpdExportTest` |
+| Portabilité | export JSON compte / workspace club — **périmètre DÉRIVÉ** des entités `TenantOwnedInterface`, plus recopié (D-01, 2026-08-08) | obligation légale (art. 20) | à la demande (10/h par user) | `GET /api/me/export`, `GET /api/club/export` (management) | `RgpdExportTest` + **`RgpdExportCompletenessTest`** |
 | Contacts officiels FFBB | président/correspondant (nom/tél/email publiés par la FFBB) | **intérêt légitime** (organisation des rencontres, annuaire adverse) | tant que publiés (refresh FFBB) ; **survivent** à la purge du club | opposition : exclusion du refresh (à outiller avec l'annuaire) | revue DP1 |
 | Journal d'audit | actions sensibles — **ids uniquement, jamais de PII** | intérêt légitime (accountability art. 5.2) | 12 mois | `app:audit:purge` (connexion admin — append-only DB pour le runtime) | `AuditTrailTest` |
 | Doléances coachs (#10) | `CoachWish` (souhaits par équipe × semaine, **commentaire libre**), `CoachWishToken` (lien personnel + horodatage d'envoi `sentAt`) | contrat (via le club) | saison courante + N-1 | `app:seasons:purge` (`SeasonDataPurger` supprime `CoachWish` et `CoachWishCampaign` ; les tokens partent par cascade FK de la campagne) | `PurgeSeasonsCommandTest` |
 | Consentement | `termsAcceptedAt` + `termsVersion` au register | obligation légale (preuve) | vie du compte (anonymisé avec lui). Couvre 100 % des comptes réels : exigé au register avant le premier utilisateur de production (pas de backfill nécessaire — les comptes dev/test antérieurs n'en ont pas) | — | `ConsentTest` |
+
+### Ce que l'export de portabilité NE contient PAS, et pourquoi
+
+Deux tables club-scoped sont **volontairement** hors de `GET /api/club/export`. Ce sont des
+décisions, tenues par `RgpdExportCompletenessTest` (qui refuse une exclusion sans raison écrite) :
+
+| Table | Raison |
+|---|---|
+| `coach_wish_token` | Le token est un **secret stocké en clair** — il EST l'identité de la page publique du coach. Le verser dans un fichier téléchargeable transformerait la portabilité en **fuite de credentials** : le porteur du JSON pourrait écrire des souhaits au nom de n'importe quel coach. Les **souhaits eux-mêmes** (`coach_wish`) sont exportés : c'est là qu'est la donnée de l'art. 20. |
+| `audit_log` | Base légale **distincte** : accountability (art. 5.2, intérêt légitime), pas le contrat. L'art. 20 ne couvre que les données **fournies par la personne** sur base contrat ou consentement. La table est de surcroît append-only et sans PII (ids uniquement). |
+
+> ⚑ **Le périmètre ne se recopie plus.** Il est dérivé des métadonnées Doctrine filtrées sur
+> `TenantOwnedInterface` (`RgpdExportService::clubScopedTables()`), marqueur déjà prouvé
+> équivalent à la colonne `club_id`. La liste manuscrite qui existait avant avait dérivé de
+> **9 tables** — dont `coach_wish` — et l'omission était **invisible** : la réponse restait 200
+> et le JSON valide, la clé simplement absente. Une entité tenant nouvelle fait désormais
+> **échouer** le test tant qu'elle n'est pas explicitement exportée ou exclue.
 
 ## 3. Mécanismes clés (pointeurs code)
 
