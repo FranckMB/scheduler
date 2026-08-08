@@ -298,7 +298,7 @@ export function RecapStep() {
                   <p className="mb-1 rounded-md border-l-4 border-accent bg-accent/10 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-foreground">{FAMILY_LABEL[group.family] ?? "Autres"}</p>
                   {group.sections.map((section) => (
                     <div key={section.key} className="mb-1 last:mb-0">
-                      <p className="px-2 text-[11px] font-medium text-muted-foreground">{section.label}</p>
+                      <p className="px-2 text-xs font-medium text-muted-foreground">{section.label}</p>
                       {section.items.map((c) => (
                         <SummaryRow key={c.id} label={c.name} meta={c.ruleType} />
                       ))}

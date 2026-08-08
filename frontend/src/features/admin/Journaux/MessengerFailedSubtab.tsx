@@ -107,7 +107,7 @@ function FailedTable({
             {items.map((item) => (
               <tr key={item.id} className="align-top text-slate-300 hover:bg-white/[0.025]">
                 <td className="px-5 py-4">
-                  <p className="font-mono text-[11px] text-slate-400">{item.class}</p>
+                  <p className="font-mono text-xs text-slate-400">{item.class}</p>
                 </td>
                 <td className="px-4 py-4 tabular-nums">{formatDateTime(item.failedAt)}</td>
                 <td className="px-4 py-4">

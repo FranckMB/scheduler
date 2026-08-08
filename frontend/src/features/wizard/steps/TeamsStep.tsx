@@ -111,7 +111,7 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete, rankLabel
         {/* P4-36 (b) — le rang n'existait que comme TITRE de section : invisible dès qu'on
             trie autrement, et illisible quand on cherche une équipe précise. Décision
             fondateur : un badge par ligne, et les flèches sorties du mode « Trier ». */}
-        <span className="w-6 shrink-0 rounded border border-border text-center text-[10px] font-semibold text-muted-foreground" title={rankLabel.full}>
+        <span className="w-6 shrink-0 rounded border border-border text-center text-xs font-semibold text-muted-foreground" title={rankLabel.full}>
           {rankLabel.short}
         </span>
         {/* Les flèches ne servent QUE dans l'ordre par rang : elles déplacent au sein d'un

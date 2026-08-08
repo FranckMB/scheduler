@@ -142,7 +142,7 @@ function SystemErrorRow({ item }: { item: AdminSystemErrorItem }) {
         <p className="text-slate-200">{item.message}</p>
       </td>
       <td className="px-4 py-5">
-        <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold", SEVERITY_STYLES[sev])}>
+        <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold", SEVERITY_STYLES[sev])}>
           {SEVERITY_LABELS[sev]}
         </span>
       </td>

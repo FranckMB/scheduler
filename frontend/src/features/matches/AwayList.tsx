@@ -55,7 +55,7 @@ export function AwayList({ fixtures, teams, habits, onEdit, onDelete }: AwayList
                   {null !== fixture.fbiVenueLabel ? ` (${fixture.fbiVenueLabel})` : ""}
                   {null !== hour ? ` · ${hour}` : " · heure inconnue"}
                 </span>
-                {estimated ? <span className="ml-1 rounded bg-muted px-1 text-[10px] uppercase tracking-wide">heure estimée</span> : null}
+                {estimated ? <span className="ml-1 rounded bg-muted px-1 text-xs uppercase tracking-wide">heure estimée</span> : null}
               </span>
               <span className="flex shrink-0 gap-1">
                 <Button variant="ghost" size="sm" aria-label={`Modifier le match contre ${fixture.opponentLabel}`} onClick={() => onEdit(fixture)}>
