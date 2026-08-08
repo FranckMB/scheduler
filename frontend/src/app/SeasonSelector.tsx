@@ -12,6 +12,8 @@ import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 import { toast } from "@/shared/stores/toastStore";
 import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
+import { todayDate } from "@/shared/lib/clock";
+
 import { localIso, seasonPrepWindow } from "./seasonTransition";
 
 /**
@@ -21,7 +23,7 @@ import { localIso, seasonPrepWindow } from "./seasonTransition";
  * "Préparer la saison suivante" copies the current season's entries into a
  * fresh N+1 draft (confirmed first — structural club action).
  */
-export function SeasonSelector({ today = new Date() }: { today?: Date } = {}) {
+export function SeasonSelector({ today = todayDate() }: { today?: Date } = {}) {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
   const selectedSeasonId = useSeasonStore((s) => s.selectedSeasonId);

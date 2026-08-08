@@ -1,10 +1,10 @@
+import { IN_FLIGHT_STATUSES } from "@/features/planning/lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Rocket } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useMe } from "@/features/auth/queries";
 import { anchorIsWritable, useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
-import type { ScheduleStatus } from "@/features/planning/api";
 import { isSeasonPlanType } from "@/features/planning/lib/versions";
 import { GenerationWaiting } from "@/features/planning/GenerationWaiting";
 import { PlanningPage } from "@/features/planning/PlanningPage";
@@ -19,7 +19,8 @@ import { useLaunchGeneration, useScheduleStatus } from "../queries";
 import { useWizardStore } from "../store";
 import { BlockerList } from "./BlockerList";
 
-const IN_FLIGHT: ScheduleStatus[] = ["PENDING", "GENERATING"];
+// D-31 : foyer unique — importé du module qui porte le type.
+const IN_FLIGHT = IN_FLIGHT_STATUSES;
 
 // Hard client-side guard: if the backend/engine never answers, stop polling forever and
 // surface a retry. Must exceed the WORST-CASE wall-clock, not just one solve: the message

@@ -89,3 +89,16 @@ if (import.meta.env.DEV && "undefined" !== typeof window) {
   setTodayOverride(new URLSearchParams(window.location.search).get("today"));
   devParamActive = null !== override;
 }
+
+/**
+ * L'« aujourd'hui » de l'application, en `Date` — même source que {@link todayISO}, donc
+ * l'horloge simulée d'un club démo comprise (D-29).
+ *
+ * ⚠ À préférer à `new Date()` dans tout composant qui DÉCIDE quelque chose sur la date :
+ * la bannière de bascule de saison et le sélecteur lisaient l'horloge réelle pendant que le
+ * cockpit vivait à la date simulée — le nudge « préparer la saison suivante » apparaissait
+ * ou disparaissait au mauvais moment, sans rien pour l'expliquer.
+ */
+export function todayDate(): Date {
+  return new Date(`${todayISO()}T00:00:00`);
+}

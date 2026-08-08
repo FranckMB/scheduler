@@ -1,3 +1,4 @@
+import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
@@ -6,11 +7,12 @@ import { errorMessage } from "@/shared/lib/errorMessage";
 import { isScheduleStreamConnected, useScheduleStream } from "@/shared/lib/scheduleStream";
 import { toast } from "@/shared/stores/toastStore";
 
-import type { LockLevel, Schedule, SlotMovePatch } from "./api";
+import type { LockLevel, SlotMovePatch } from "./api";
 import { OverlaysExistError } from "./api";
 import * as planningApi from "./api";
 
-const IN_FLIGHT: Schedule["status"][] = ["PENDING", "GENERATING"];
+// D-31 : la liste vit avec le type (`api.ts`) — elle était déclarée cinq fois.
+const IN_FLIGHT = IN_FLIGHT_STATUSES;
 
 /**
  * List of the club's schedules. While any schedule is mid-generation, the Mercure
