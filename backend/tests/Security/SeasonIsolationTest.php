@@ -9,6 +9,7 @@ use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Entity\Venue;
+use App\EventListener\TenantFilterListener;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -96,6 +97,7 @@ final class SeasonIsolationTest extends WebTestCase
             'HTTP_X-Season-Id' => $foreignSeason->getId(),
         ]);
         self::assertResponseStatusCodeSame(403);
+        $this->assertSelfHealMarkerIsPresent();
     }
 
     public function testUnknownSeasonHeaderIsRejected(): void
@@ -106,6 +108,7 @@ final class SeasonIsolationTest extends WebTestCase
             'HTTP_X-Season-Id' => '00000000-0000-4000-8000-000000000000',
         ]);
         self::assertResponseStatusCodeSame(403);
+        $this->assertSelfHealMarkerIsPresent();
     }
 
     public function testMalformedSeasonHeaderIsRejected(): void
@@ -116,6 +119,7 @@ final class SeasonIsolationTest extends WebTestCase
             'HTTP_X-Season-Id' => 'not-a-uuid',
         ]);
         self::assertResponseStatusCodeSame(403);
+        $this->assertSelfHealMarkerIsPresent();
     }
 
     public function testResetSeasonOnAPastSeasonIsRefused(): void
@@ -255,5 +259,25 @@ final class SeasonIsolationTest extends WebTestCase
         sort($names);
 
         return $names;
+    }
+
+    /**
+     * D-39 — le marqueur d'auto-réparation doit accompagner CHAQUE rejet de saison.
+     *
+     * Ce n'est pas un détail d'en-tête : le backend 403 TOUTE requête portant une saison
+     * morte, `/api/me` comprise. Sans ce marqueur, le front ne peut pas distinguer « lâche
+     * ta saison » d'un refus d'autorisation légitime — il garderait la saison morte et
+     * resterait en boucle 403 SANS chemin de retour. Un producteur, un consommateur, et
+     * jusqu'ici aucun test des deux côtés.
+     */
+    private function assertSelfHealMarkerIsPresent(): void
+    {
+        self::assertTrue(
+            $this->client->getResponse()->headers->has(TenantFilterListener::STALE_SEASON_HEADER),
+            \sprintf(
+                'Le rejet de saison doit porter %s — sans lui le frontend ne peut pas se réparer et boucle en 403.',
+                TenantFilterListener::STALE_SEASON_HEADER,
+            ),
+        );
     }
 }
