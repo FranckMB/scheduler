@@ -1,6 +1,6 @@
 # Identité visuelle par club (logo + couleur d'accent)
 
-Last verified @ 2026-07-29 (aucune modification depuis — le sujet est clos et le fichier n'a pas bougé)
+Last verified @ 2026-08-08 (statut posé ce jour ; sujet CLOS le 2026-07-02, le fichier n'a pas bougé sur le fond depuis le 2026-07-29)
 
 > **LIVRÉ (2026-07-02)** — accent par club + logo + extraction 3 couleurs + écran « Gestion du club ». Détail livré ci-dessous ; ce qui reste ⬜ est du confort (voir « Questions ouvertes »).
 >

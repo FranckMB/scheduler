@@ -1,6 +1,6 @@
 # Génération d'un planning — conduite normalisée (bout en bout)
 
-Last verified @ 2026-08-01 (contenu recalé par P4-38/39 : bandeau de période, score retiré de l'écran, diagnostics contextuels)
+Last verified @ 2026-08-08 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-01 par P4-38/39 : bandeau de période, score retiré de l'écran, diagnostics contextuels)
 
 > Vérité courante. Décrit ce qui **doit** se passer, zone par zone, quand un
 > gestionnaire lance une génération : ce que fait le frontend, ce que fait le

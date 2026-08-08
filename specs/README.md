@@ -45,6 +45,10 @@ Le 2026-08-08, cette commande a sorti **9 fichiers sur 16** — dont un modifié
 
 **Bumper sans avoir rien vérifié est pire que ne pas bumper** : ça transforme une promesse vague en fausse garantie. Si la commande ci-dessus signale un fichier, l'ordre est : regarder ce que les commits ont changé (`git log --since=<stamp> -- <fichier>`), vérifier ce point, **puis** dater — en disant laquelle des deux formes s'applique.
 
+**La date est celle du STATUT, pas celle de la dernière édition de fond.** On date le jour où l'on statue sur le fichier ; ce qui a été recalé, et quand, se dit dans la parenthèse (« statut posé ce jour ; contenu recalé jusqu'au JJ par … »). Dater de la dernière édition de fond paraît plus fidèle mais se mord la queue : le commit qui pose le stamp est lui-même une édition, donc le stamp naîtrait déjà en retard sur son propre fichier.
+
+> **Ce n'est plus une promesse : c'est un test.** `backend/tests/Unit/Documentation/DocStampFreshnessTest.php` exécute la règle ci-dessus (groupe `phase1`, donc joué par `unit-tests` — un contexte requis de `main`). Son voisin `BlockingTestsListMatchesCiTest.php` fait le même travail pour la liste des blocking-tests de `CLAUDE.md` §4 contre les steps réels de `ci.yml`, dans les deux sens. Les deux sont nés du même constat : dans ce dépôt, **le seul document qui cesse de mentir est celui qu'un test surveille** — le premier de la série étant `engine/tests/test_contract_version_doc_sync.py`.
+
 ## Files Overview
 
 - `specs/initiales/` — `ClubScheduler_v3.md` (spec produit consolidée, figée) · `ClubScheduler_Specification_des_contraintes_v2.md` (modèle de contraintes d'origine) · prompt orchestrateur v3.

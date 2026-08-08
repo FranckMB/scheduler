@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-08-04 (fenêtres d'accès match visibles sur la grille des gymnases, 2026-08-04 ; P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle · PR E2 diagnostic gradué · PR F1 appariement FFBB · PR F2 garde-fou poule + complétude — **lot P1-4 SOLDÉ**)
+Last verified @ 2026-08-08 (statut posé ce jour ; fenêtres d'accès match visibles sur la grille des gymnases, 2026-08-04 ; P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle · PR E2 diagnostic gradué · PR F1 appariement FFBB · PR F2 garde-fou poule + complétude — **lot P1-4 SOLDÉ**)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés

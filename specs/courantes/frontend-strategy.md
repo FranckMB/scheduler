@@ -1,6 +1,6 @@
 # Frontend Strategy — TDD, Stack Fixée & Anti-patterns
 
-Last verified @ 2026-08-02 (versions re-lues dans `frontend/package.json` le 2026-07-29 ; contenu recalé depuis par P4-65 — activer Sentry ne peut plus échouer en silence, garde de build `sentryCspGuard`)
+Last verified @ 2026-08-08 (statut posé ce jour ; versions re-lues dans `frontend/package.json` le 2026-07-29 ; contenu recalé depuis par P4-65 — activer Sentry ne peut plus échouer en silence, garde de build `sentryCspGuard`)
 
 > **Statut : le rebuild est LIVRÉ.** Les formulations « pour le rebuild » ci-dessous sont
 > historiques ; le document reste la référence vivante des **versions de la stack**, des
