@@ -32,29 +32,20 @@ describe("les jours de la semaine (foyer unique, D-22)", () => {
 });
 
 /**
- * D-30 — trois stratégies de fuseau coexistaient pour la même question, dont deux dans la
- * même feature : minuit local, midi UTC, minuit UTC. Alignées pour un navigateur français,
- * elles divergent ailleurs — « pas d'accès match le vendredi » sur un match que l'autre
- * valide comme samedi.
+ * D-30 — l'inventaire annonçait trois stratégies de fuseau « qui divergent hors France ».
+ * MESURÉ SOUS UTC+14 (Pacific/Kiritimati) : les trois concordent, et c'est logique — chacune
+ * est cohérente avec elle-même (`T00:00:00` local lu par `getDay()`, `T…Z` lu par
+ * `getUTCDay()`). Le risque annoncé n'existait pas ; **le finding est réfuté**.
+ *
+ * Ce qui restait vrai : trois implémentations de la même question, dont deux dans la même
+ * feature. La consolidation vaut pour la lisibilité, pas pour un bug. Ce test épingle donc
+ * ce qui compte réellement — dimanche vaut 7 et jamais 0, la source d'erreur classique.
  */
 describe("jour ISO d'une date civile (foyer unique, D-30)", () => {
-  it("rend 1..7 avec dimanche = 7", () => {
+  it("rend 1..7 avec dimanche = 7, jamais 0", () => {
     expect(isoDayOf("2026-08-03")).toBe(1); // lundi
     expect(isoDayOf("2026-08-08")).toBe(6); // samedi
-    expect(isoDayOf("2026-08-09")).toBe(7); // dimanche, jamais 0
-  });
-
-  /**
-   * Le cas qui distinguait les trois implémentations : minuit — local OU UTC — bascule d'un
-   * jour au premier décalage venu. Midi UTC est hors de portée, dans les deux sens.
-   */
-  it("ne bascule pas d'un jour quel que soit le fuseau", () => {
-    // ±14 h couvre l'amplitude réelle des fuseaux (Kiribati à Baker Island).
-    for (const offsetHours of [-14, -5, 0, 5, 14]) {
-      const shifted = new Date(Date.parse("2026-08-09T12:00:00Z") + offsetHours * 3_600_000);
-      expect(shifted.getTime(), "la date civile reste un jour, pas un instant").toBeGreaterThan(0);
-    }
-    expect(isoDayOf("2026-08-09")).toBe(7);
+    expect(isoDayOf("2026-08-09")).toBe(7); // dimanche — 0 en JS, 7 en ISO
     expect(isoDayOf("2026-01-01")).toBe(4); // jeudi
   });
 });

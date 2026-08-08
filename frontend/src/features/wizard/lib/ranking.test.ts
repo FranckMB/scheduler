@@ -90,7 +90,10 @@ describe("teamsOfTier / usedTiers", () => {
   it("numérote sur l'ordre AFFICHÉ, seau « Autres » compris", () => {
     // Une équipe au rang inconnu (dérive de données) part en fin de liste chez
     // `groupTeamsByTier` : sa numérotation doit suivre, pas la trier par id brut.
-    const orphan = team({ id: "z", priorityTierId: 99 });
+    // Rang 0 : le comparateur brut le trierait PREMIER (0 < 1), `groupTeamsByTier` le
+    // route en « Autres », donc DERNIER. C'est ce qui distingue les deux implémentations —
+    // un rang 99 les aurait mises d'accord par hasard.
+    const orphan = team({ id: "z", priorityTierId: 0 });
     const numbered = orderedTeams([...teams, orphan], tiers);
     expect(numbered.at(-1)?.team.id, "l'équipe au rang inconnu est numérotée en DERNIER").toBe("z");
     expect(numbered.map((r) => r.globalNumber)).toEqual([1, 2, 3, 4]);
