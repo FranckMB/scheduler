@@ -1,10 +1,10 @@
 # Living Specs System
 
-Last verified @ 2026-07-31 (refonte : roadmap = l'ouvert seulement, `courantes/etat-des-lieux.md` = le livré)
+Last verified @ 2026-08-08 (règle « initiales figées » précisée — modifier ≠ archiver une pièce source, audit DOC-30 ; règle des deux fichiers re-vérifiée contre roadmap/état-des-lieux)
 
 ## 3-Tier Structure
 
-- `specs/initiales/` : besoin d'origine (v2/v3), **figé — jamais modifié**. L'évolution se lit dans le delta `initiales` → `courantes` (+ git). Pas de dossier `archive/`.
+- `specs/initiales/` : besoin d'origine (v2/v3), **figé — jamais modifié**. L'évolution se lit dans le delta `initiales` → `courantes` (+ git). Pas de dossier `archive/`. ⚠ **« Figé » interdit de MODIFIER, pas d'ARCHIVER** : une pièce source reçue du terrain peut être déposée ici (ex. `rechercherRencontre.xlsx`, export FBI joint au cadrage P1-4 le 2026-08-02) — elle entre telle quelle et ne bouge plus. Un dépôt n'est légitime que s'il s'agit d'une **pièce d'origine** ; toute production de l'équipe va dans `courantes/` ou `evolution/`.
 - `specs/courantes/` : **ce que l'appli fait aujourd'hui**. Doit refléter le code : si une spec ne colle plus → on la **met à jour** ; si la feature a disparu → on la **supprime**. Point d'entrée : [`etat-des-lieux.md`](courantes/etat-des-lieux.md) — carte des capacités livrées, **décisions fermées**, traces datées.
 - `specs/evolution/` : **ce que l'appli fera plus tard** (backlog + gaps ouverts). Quand un item est **livré**, il **quitte** evolution (il gradue dans `courantes`). Les notes de process/décisions **résolues** n'y restent pas.
 

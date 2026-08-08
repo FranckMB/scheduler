@@ -83,7 +83,6 @@
 
 | Clé | Sens | Mécanisme |
 |---|---|---|
-| `coachId` (uuid) | le coach visé | — |
 | `unavailableDays` (`[int]`) | **indisponible** ces jours | jours interdits pour toute équipe du coach. **UNION** si plusieurs contraintes sur le même coach |
 | `availableDays` (`[int]`) | **disponible uniquement** ces jours | whitelist. **INTERSECTION** si plusieurs contraintes |
 | `fromTime` / `untilTime` (`"HH:MM"`, optionnels) | **fenêtre horaire** sur ces jours (Lot C) | absent = journée entière (comportement legacy). Bloque un créneau dont le **début** ∈ `[from, until)` sur le jour visé. En interne : la disponibilité est un ensemble d'**intervalles bloqués `(jour, from, to)`** avec sémantique UNION (par De Morgan, couvre à la fois l'UNION des indispos et l'INTERSECTION des whitelists) |
@@ -100,19 +99,27 @@
 > overnight `20:00-08:00` que le modèle plat ne wrappe pas) ou une heure malformée retombe sur **journée
 > entière bloquée** (l'indispo est honorée, jamais silencieusement perdue ni crash du solve).
 
+> **La cible est le `scope`, jamais le `config` (SEC-13 PR B, 2026-08-08).** La clé `coachId` a été
+> **supprimée** : elle valait exactement `scopeTargetId`, et un doublon de cible est une occasion de
+> divergence (deux sources pour la même vérité). Elle est absente de la liste blanche — un `config`
+> qui la porte est refusé en **422** à l'écriture.
+
 **Exemple BCCL**
-- `Lionel - Indisponible le vendredi` → `{ COACH_AVAILABILITY, HARD, scope:"COACH", scopeTargetId:<Lionel>, config:{ coachId:<Lionel>, unavailableDays:[5] } }`
+- `Lionel - Indisponible le vendredi` → `{ COACH_AVAILABILITY, HARD, scope:"COACH", scopeTargetId:<Lionel>, config:{ unavailableDays:[5] } }`
 
 ---
 
-## Famille FACILITY_CAPACITY — capacité d'un gymnase
+## ~~Famille FACILITY_CAPACITY~~ — RETIRÉE le 2026-08-08 (SEC-13 PR C)
 
-| Clé | Sens | Mécanisme |
-|---|---|---|
-| `venueId` (uuid) | le gymnase | **clé stricte** (`scopeTargetId` ne convient pas ici) |
-| `maxTeams` (int) | nb max d'équipes **simultanées** par créneau | appliqué en `min(capacité du créneau, maxTeams)` — **ne peut que resserrer**, jamais élargir |
+La famille est **supprimée des trois couches**. Le moteur rabotait la capacité d'un gymnase à `maxTeams`
+(`min(capacité du créneau, maxTeams)`) — un mécanisme réel, mais **aucun chemin UI ne pouvait créer la
+contrainte** et **zéro ligne n'existait en base** : du code honoré que personne ne pouvait atteindre.
+Elle est absente de la liste blanche `config` (une écriture est refusée en 422) et il ne reste dans le
+moteur qu'un commentaire au passé (`app/main.py:291-294`).
 
-**Exemple BCCL** — un gymnase divisible (ex. ADN, 3 terrains) est saisi côté **écran Gymnases** (`canSplit`), pas dans l'onglet contraintes ; la divisibilité voyage alors dans `trainingSlots[].capacity` (`canSplit ? capacity : 1`), **pas** en contrainte. Le backend n'émet **aucun** `FACILITY_CAPACITY` depuis `canSplit` : cette famille n'atteint l'engine que si une contrainte explicite est stockée en base (pass-through).
+**La divisibilité d'un gymnase n'a jamais transité par cette famille** : elle est saisie à l'**écran
+Gymnases** (`canSplit`) et voyage dans `trainingSlots[].capacity` (`canSplit ? capacity : 1`) — c'est
+toujours le cas, et c'est le seul chemin.
 
 ---
 

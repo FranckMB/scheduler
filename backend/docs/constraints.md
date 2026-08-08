@@ -99,7 +99,7 @@ il désigne un GROUPE, ce que le scope ne sait pas exprimer.
 | `availableDays` | int[] (1-7) | Whitelist : le coach n'est disponible QUE ces jours-là |
 | `fromTime` / `untilTime` | string (HH:MM) | Fenêtre horaire optionnelle de l'indisponibilité (Lot C) ; absente = journée entière |
 
-> Exemple : `{coachId: "uuid-enzo", unavailableDays: [5]}` signifie que l'entraîneur n'est jamais disponible le vendredi. Avec `fromTime: "18:00"` et `untilTime: "20:00"`, l'indisponibilité ne couvre que ce créneau.
+> Exemple : `scopeTargetId: "uuid-enzo"` avec `config: {unavailableDays: [5]}` signifie que l'entraîneur n'est jamais disponible le vendredi. Avec `fromTime: "18:00"` et `untilTime: "20:00"`, l'indisponibilité ne couvre que ce créneau.
 
 > ⚠ **`FACILITY_CAPACITY` a été RETIRÉE le 2026-08-08.** Elle limitait le nombre d'équipes simultanées dans une salle entière (`min(capacité du créneau, maxTeams)`). Aucun chemin UI ne la créait — zéro ligne en base, zéro créateur côté serveur — et la capacité se règle déjà **par créneau** (`VenueTrainingSlot.capacity`, borné à 1 quand le gymnase n'est pas divisible), qui est le geste réel du gestionnaire. Ce qu'on perd : le raccourci « caper tout un gymnase en une règle ». Ce qui reste : éditer la capacité des créneaux concernés.
 
