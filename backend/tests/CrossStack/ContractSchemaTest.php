@@ -168,7 +168,15 @@ final class ContractSchemaTest extends TestCase
         self::assertIsBool($payload['venues'][0]['isActive']);
         self::assertArrayHasKey('trainingSlots', $payload['venues'][0]);
         self::assertIsArray($payload['venues'][0]['trainingSlots']);
-        if (isset($payload['venues'][0]['trainingSlots']) && [] !== $payload['venues'][0]['trainingSlots']) {
+        // D-44 — cette branche NE S'EXÉCUTE JAMAIS ici : le fixture construit le builder sans
+        // `VenueTrainingSlotRepository` (mode léger, sans DB), donc `trainingSlots` est
+        // toujours vide. Elle donnait l'illusion d'une couverture que ce test n'apporte pas.
+        // Le contenu des créneaux est réellement gardé là où une DB existe :
+        // `ScheduleConstraintBuilderOverlayTest` (blocking, compte les créneaux et leurs jours),
+        // `OverlayGenerationTest` (un gymnase fermé sort du payload) et `PeriodPlanBirthTest`.
+        // Elle est conservée — et non supprimée — parce qu'elle documente la FORME attendue
+        // d'un créneau ; le `if` reste donc, mais son inutilité ici est écrite.
+        if ([] !== $payload['venues'][0]['trainingSlots']) {
             $slot = $payload['venues'][0]['trainingSlots'][0];
             self::assertArrayHasKey('dayOfWeek', $slot);
             self::assertArrayHasKey('startTime', $slot);

@@ -1,5 +1,5 @@
 {
-  "version": "2.0",
+  "version": "2.1",
   "rules": [
     {"name": "VENUE_AT_MOST_ONE", "enabled": true, "description": "One venue hosts max one team per time slot"},
     {"name": "COACH_NO_OVERLAP", "enabled": true, "description": "One coach coaches max one team per time slot"},
