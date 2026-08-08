@@ -1,3 +1,5 @@
+import { compareTeamsByRank, groupTeamsByTier } from "@/shared/lib/teamTiers";
+
 import type { Coach, PriorityTier, Team } from "../api";
 
 export interface RankedTeam {
@@ -10,25 +12,26 @@ export interface RankedTeam {
  * Global order = tiers by importance (id asc: 1=S…5=D), then tierOrder within the
  * tier, then name. The global number lets selectors surface important teams first.
  */
-export function orderedTeams(teams: Team[]): RankedTeam[] {
-  const sorted = [...teams].sort(
-    (a, b) => a.priorityTierId - b.priorityTierId || a.tierOrder - b.tierOrder || a.name.localeCompare(b.name, "fr"),
-  );
+export function orderedTeams(teams: Team[], tiers: PriorityTier[] = []): RankedTeam[] {
+  // D-26 — la formule de tri était RECOPIÉE de `compareTeamsByRank`, et surtout la
+  // numérotation ne suivait pas l'AFFICHAGE : l'écran range les équipes avec
+  // `groupTeamsByTier`, qui route une équipe au rang inconnu (dérive de données) vers le
+  // seau « Autres » en fin de liste — pendant que cette numérotation la triait par son id
+  // brut. La colonne « # » se lisait alors 1, 2, 4, 5… 3. On numérote donc sur l'ordre
+  // effectivement rendu, comme `RecapStep` le fait déjà.
+  const sorted = tiers.length > 0
+    ? groupTeamsByTier(teams, tiers).flatMap((group) => group.teams)
+    : [...teams].sort(compareTeamsByRank);
+
   return sorted.map((team, index) => ({ team, globalNumber: index + 1 }));
 }
 
 /** Teams of a tier, ordered by tierOrder then name. */
 export function teamsOfTier(teams: Team[], tierId: number): Team[] {
-  return teams
-    .filter((t) => t.priorityTierId === tierId)
-    .sort((a, b) => a.tierOrder - b.tierOrder || a.name.localeCompare(b.name, "fr"));
+  // D-26 : l'ordre intra-rang vient du comparateur partagé (le rang est déjà filtré).
+  return teams.filter((t) => t.priorityTierId === tierId).sort(compareTeamsByRank);
 }
 
-/** Tiers present, ordered by importance (id asc). */
-export function usedTiers(teams: Team[], tiers: PriorityTier[]): PriorityTier[] {
-  const present = new Set(teams.map((t) => t.priorityTierId));
-  return tiers.filter((t) => present.has(t.id)).sort((a, b) => a.id - b.id);
-}
 
 /** Which staffing bucket a coach falls into (drives the display order). */
 export type CoachGroup = "salaried" | "player" | "other";

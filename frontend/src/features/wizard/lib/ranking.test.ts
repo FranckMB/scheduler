@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Coach, PriorityTier, Team } from "../api";
-import { coachMeta, groupedCoaches, orderedCoaches, orderedTeams, teamsOfTier, usedTiers } from "./ranking";
+import { coachMeta, groupedCoaches, orderedCoaches, orderedTeams, teamsOfTier } from "./ranking";
 
 function team(over: Partial<Team>): Team {
   return { id: "id", name: "T", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true, ...over };
@@ -85,7 +85,14 @@ describe("teamsOfTier / usedTiers", () => {
   it("orders teams within a tier by tierOrder", () => {
     expect(teamsOfTier(teams, 1).map((t) => t.id)).toEqual(["b", "a"]);
   });
-  it("lists only present tiers, by importance", () => {
-    expect(usedTiers(teams, tiers).map((t) => t.id)).toEqual([1, 2]);
+  // D-26 — `usedTiers` n'avait plus AUCUN appelant (l'écran est passé à `groupTeamsByTier`
+  // en revue #347) : une source morte que seul son test gardait en vie. Supprimée.
+  it("numérote sur l'ordre AFFICHÉ, seau « Autres » compris", () => {
+    // Une équipe au rang inconnu (dérive de données) part en fin de liste chez
+    // `groupTeamsByTier` : sa numérotation doit suivre, pas la trier par id brut.
+    const orphan = team({ id: "z", priorityTierId: 99 });
+    const numbered = orderedTeams([...teams, orphan], tiers);
+    expect(numbered.at(-1)?.team.id, "l'équipe au rang inconnu est numérotée en DERNIER").toBe("z");
+    expect(numbered.map((r) => r.globalNumber)).toEqual([1, 2, 3, 4]);
   });
 });

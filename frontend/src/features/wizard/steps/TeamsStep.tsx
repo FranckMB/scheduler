@@ -402,7 +402,9 @@ function TeamsEditor() {
   // choix explicite, refusé à la soumission comme l'est déjà un nom vide.
   const effectiveCat = catId;
 
-  const numberOf = new Map(orderedTeams(teams).map((r) => [r.team.id, r.globalNumber]));
+  // D-26 : la numérotation suit l'AFFICHAGE (groupTeamsByTier, seau « Autres » compris) —
+  // sans les rangs elle triait par id brut et la colonne « # » se lisait 1, 2, 4, 5… 3.
+  const numberOf = new Map(orderedTeams(teams, tiers).map((r) => [r.team.id, r.globalNumber]));
 
   // P4-36 (c) — trier par une AUTRE colonne que le rang est incompatible avec un affichage
   // en sections : « trié par catégorie » donnerait cinq listes triées séparément, ce qui ne

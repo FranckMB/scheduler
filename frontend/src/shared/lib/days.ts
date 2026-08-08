@@ -26,3 +26,21 @@ export const DAY_LABEL_LONG: readonly string[] = ["", "lundi", "mardi", "mercred
 
 /** Le libellé long d'un jour ISO, ou une chaîne vide si le jour est hors bornes. */
 export const dayLabelLong = (isoDay: number): string => DAY_LABEL_LONG[isoDay] ?? "";
+
+/**
+ * Jour ISO (1 = lundi … 7 = dimanche) d'une date civile « Y-m-d ». Foyer unique (D-30).
+ *
+ * ⚑ Il en existait TROIS stratégies, dont deux dans la même feature : `T00:00:00` local +
+ * `getDay()`, `T12:00:00Z` + `getUTCDay()`, et `T00:00:00Z` + `getUTCDay()`. Alignées pour
+ * un navigateur français, elles divergent hors fuseau — « pas d'accès match le vendredi »
+ * sur un match que l'autre valide comme samedi.
+ *
+ * **Midi UTC est retenu délibérément** : une date civile n'est pas un instant, et se placer
+ * au milieu de la journée met le calcul hors de portée de tout décalage horaire, dans les
+ * deux sens. Minuit — local OU UTC — bascule d'un jour au premier fuseau venu.
+ */
+export function isoDayOf(dateStr: string): number {
+  const day = new Date(`${dateStr}T12:00:00Z`).getUTCDay();
+
+  return 0 === day ? 7 : day;
+}
