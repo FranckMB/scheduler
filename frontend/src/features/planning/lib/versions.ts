@@ -1,3 +1,4 @@
+import { IN_FLIGHT_STATUSES } from "./scheduleStatus";
 import type { Schedule } from "../api";
 
 /**
@@ -24,7 +25,8 @@ interface VersionLike {
 const isSeasonVersion = (v: VersionLike): boolean => isSeasonPlanType(v.planType);
 
 /** Une version en cours de solve bloque la validation (409) au lieu d'être supprimée. */
-const IN_FLIGHT_STATUS = ["PENDING", "GENERATING"];
+// D-31 : foyer unique dans `api.ts`.
+const IN_FLIGHT_STATUS: readonly string[] = IN_FLIGHT_STATUSES;
 
 /**
  * Les versions que valider `selected` va SUPPRIMER — miroir exact de la règle du

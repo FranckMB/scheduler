@@ -1,3 +1,4 @@
+import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CalendarX2, CheckCircle2, Pencil, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -33,7 +34,8 @@ import { isSeasonPlanType, versionsDeletedByValidating } from "./lib/versions";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
 
-const IN_FLIGHT = ["PENDING", "GENERATING"];
+// D-31 : foyer unique dans `api.ts`.
+const IN_FLIGHT: readonly string[] = IN_FLIGHT_STATUSES;
 
 function ValidateDialog({ hasAlerts, siblingCount, busy, onConfirm, onCancel }: { hasAlerts: boolean; siblingCount: number; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (

@@ -43,7 +43,6 @@ async function collectionAll<T extends { id: string }>(path: string, searchParam
 }
 
 export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
-
 /** Canonical FR labels for a schedule status (toolbar + cockpit banner). */
 export const STATUS_LABELS: Record<ScheduleStatus, string> = {
   DRAFT: "Brouillon",

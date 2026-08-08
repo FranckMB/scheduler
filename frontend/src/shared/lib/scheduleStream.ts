@@ -1,3 +1,5 @@
+import type { ScheduleStatus } from "@/features/planning/api";
+import { isTerminalStatus } from "@/features/planning/lib/scheduleStatus";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
@@ -49,7 +51,8 @@ export function parseScheduleEvent(raw: string): ScheduleStreamEvent | null {
   const scheduleId = "string" === typeof record.scheduleId ? record.scheduleId : null;
   const status = "string" === typeof record.status ? record.status : null;
 
-  return { scheduleId, status, terminal: null !== status && "PENDING" !== status && "GENERATING" !== status };
+  // D-31 : la négation inline des statuts en vol était une 5e copie de la liste.
+  return { scheduleId, status, terminal: isTerminalStatus(status as ScheduleStatus | null) };
 }
 
 /**

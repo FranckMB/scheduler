@@ -2,6 +2,8 @@ import { CalendarPlus } from "lucide-react";
 
 import { useMe } from "@/features/auth/queries";
 import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
+import { todayDate } from "@/shared/lib/clock";
+
 import { frDayMonth, localIso, seasonPrepWindow } from "./seasonTransition";
 
 /**
@@ -14,7 +16,7 @@ import { frDayMonth, localIso, seasonPrepWindow } from "./seasonTransition";
  * e-mail cron (app:seasons:remind-transition) is the out-of-app twin.
  * Not dismissible by design — the user asked for a permanent on-screen nudge.
  */
-export function SeasonTransitionBanner({ today = new Date() }: { today?: Date }) {
+export function SeasonTransitionBanner({ today = todayDate() }: { today?: Date }) {
   const { data: me } = useMe();
   const openConfirm = useTransitionUiStore((s) => s.openConfirm);
 

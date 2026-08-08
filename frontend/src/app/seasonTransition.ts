@@ -5,11 +5,14 @@ export function seasonYearOf(iso: string): number {
   return iso.slice(5, 10) >= "07-15" ? year : year - 1;
 }
 
-/** Local Y-m-d (never toISOString — the UTC shift can flip the day). Partagé par la
- *  bannière de transition et le sélecteur de saison (gating date). */
-export function localIso(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
+/**
+ * D-29 — `localIso` était une COPIE de `toISODate` (même corps, même commentaire sur le
+ * piège de `toISOString`). Le foyer est `shared/lib/clock`, qui porte en plus l'« aujourd'hui »
+ * SERVEUR d'un club démo : sans lui, le cockpit vivait à la date simulée pendant que la
+ * bannière de bascule et le sélecteur lisaient l'horloge réelle — le nudge apparaissait au
+ * mauvais moment, sans rien pour l'expliquer.
+ */
+export { toISODate as localIso } from "@/shared/lib/clock";
 
 interface SeasonBounds {
   startDate: string;
