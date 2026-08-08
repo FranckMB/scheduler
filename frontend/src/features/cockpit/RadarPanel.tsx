@@ -553,8 +553,13 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
         // Entrée matérialisée mais plans encore en vol : validée ou non, on ne sait PAS —
         // on n'offre donc ni « Voir » ni « Adapter » (adapter à tort régénère un plan validé).
         const stateUnknown = undefined !== entry && plansUnresolved;
+        // Une vacance DÉJÀ commencée reste affichée — c'est voulu (cf. le commentaire de
+        // SCHOOL_HOLIDAY_HORIZON_DAYS : elle demande toujours un geste). Mais « Dans N j »
+        // devient alors « Dans -35 j », qui ne veut rien dire pour un gestionnaire. Même
+        // formulation que la carte des indisponibilités plus bas : on dit qu'elle court.
+        const when = h.startDate <= today ? `En cours jusqu'au ${frDateShort(h.endDate)}` : `Dans ${daysUntil(today, h.startDate)} j`;
         return (
-          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`Dans ${daysUntil(today, h.startDate)} j · ${null !== activeId ? "planning validé" : stateUnknown ? "chargement…" : "pas de planning"}`}>
+          <RadarCard key={h.id} icon={<CalendarClock className="size-4 text-accent" />} title={h.label} detail={`${when} · ${null !== activeId ? "planning validé" : stateUnknown ? "chargement…" : "pas de planning"}`}>
             {undefined !== entry ? (
               <Button variant="ghost" size="sm" onClick={() => setWishesEntry(entry)}>
                 <MessageSquare className="size-4" />

@@ -136,7 +136,7 @@
 
 ---
 
-## Findings d'audit ouverts (registre `/audit`) — 17
+## Findings d'audit ouverts (registre `/audit`) — 15
 
 > **À quoi sert cette section.** Le skill `/audit` tient un **registre à IDs stables** : un finding garde son
 > identifiant d'une édition à l'autre, ce qui rend la comparaison inter-éditions possible (« ce défaut est-il
@@ -156,8 +156,6 @@
 | ID | Sujet | Gravité | Zone | Depuis | Note |
 |---|-------|:---:|:---:|:---:|---|
 | AUD-BCK-12 | **Fallback silencieux des enums de contrainte** | Moyenne | backend | 2026-08-08 | `ConstraintStateProcessor.php:197-210` : `tryFrom($value ?? '') ?? CLUB/TIME/HARD`. Un `family` fautif (« DAYS ») devient TIME **en silence**, un `scope` fautif devient CLUB — le motif « déclaré ≠ effectif » que SEC-13 vient de tuer sur `config`, survivant sur les trois champs voisins. Atténué : le `config` est validé contre la famille retombée, donc beaucoup de typos finissent en 422 par ricochet. Correctif d'une ligne (422 si `tryFrom` rend null alors que le champ est fourni) + un test qui rougit. Axe *constraint semantics* → NR |
-| AUD-UXS-04 | **« Dans -35 j » sur le cockpit** | Moyenne | ux | 2026-08-08 | `RadarPanel.tsx:557` et `:674` interpolent `daysUntil()` sans garde de négatif : une période déjà commencée s'affiche « Vacances d'Été · Dans **-35 j** ». La carte voisine (`:628`) a la garde (`started`), pas ses deux sœurs. ⚑ **Vu en NAVIGATEUR sur données réelles**, invisible à quatre éditions de grep — c'est l'argument pour garder le parcours navigateur dans le protocole d'audit |
-| AUD-A11Y-12 | **Cibles cliquables ~16 px** (< 24 px, WCAG 2.5.8) | Moyenne | ux | 2026-08-08 | Boutons nus à icône `size-4` sans padding : `SlotDetail.tsx:47`, `PlacementPanel.tsx:126`, `ConstraintsStep.tsx:682,685`, `SlotReservationModal.tsx:187`. Les `aria-label` sont présents (lecteurs d'écran servis) — c'est la **motricité** qui trinque. Correctif mécanique (`p-1` porte à 24 px, patron déjà appliqué dans `DayDialog`) |
 | AUD-FRT-19 | **Types API 100 % manuels, aucun codegen OpenAPI** | Moyenne | frontend | 2026-08-08 | Chaque feature écrit ses interfaces à la main (`wizard/api.ts` 446 l., `matches/api.ts` 550 l.) alors qu'API Platform expose un schéma et qu'un snapshot est déjà versionné. Une dérive de contrat back↔front est **invisible au typecheck** — rattrapée seulement par la normalisation défensive (`planning/api.ts:278-287`) et les e2e. Deux voies : codegen, ou un test de dérive contrat↔snapshot (moins ambitieux, beaucoup moins cher) |
 | AUD-BCK-13 | UUID de gymnase du `config` validé en forme seulement | Faible | backend | 2026-08-08 | `ConstraintConfigValidator.php:77-80,201-204` : `forcedVenueId`/`forbiddenVenueId`/`preferredVenueId`/`minAtVenueId` passent le format mais aucun contrôle d'appartenance. Un UUID étranger ou inexistant s'enregistre — **aucune fuite** (RLS borne la lecture), mais la contrainte peut être structurellement inopérante. Le gate pré-solve en rattrape une partie : vérifier avant de coder |
 | AUD-BCK-10 | Choix du club courant non déterministe en multi-club | Faible | backend | 2026-07-19 | `TenantFilterListener.php:232-240` : `findOneBy(userId, isActive)` **sans ordre**. Sans objet tant qu'un gestionnaire n'a qu'un club ; devient réel avec P1-1/P4-8 |

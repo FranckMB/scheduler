@@ -123,7 +123,7 @@ export function PlacementPanel({
           {locked ? <Lock aria-label="Ancre manuelle" className="size-3.5 text-muted-foreground" /> : null}
           {teamLabel}
         </CardTitle>
-        <button type="button" onClick={onClose} aria-label="Fermer" className="text-muted-foreground hover:text-foreground">
+        <button type="button" onClick={onClose} aria-label="Fermer" className="rounded p-1 text-muted-foreground hover:text-foreground">
           <X className="size-4" />
         </button>
       </CardHeader>
