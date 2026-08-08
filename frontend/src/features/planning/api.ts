@@ -53,6 +53,14 @@ export const STATUS_LABELS: Record<ScheduleStatus, string> = {
   FAILED: "Échec",
 };
 // ENG-21: SOFT is not a supported lock (it had no solver effect); only NONE/HARD.
+/**
+ * ⚠ Volontairement PLUS ÉTROIT que l'enum PHP, qui porte aussi `SOFT` : le verrou souple est
+ * un placebo (le solveur ne lit jamais sa pénalité) et l'API le REFUSE en le nommant
+ * (ENG-21). Le cas existe côté serveur pour pouvoir rendre « use NONE or HARD » plutôt qu'un
+ * « Invalid lockLevel » générique ; l'UI, elle, ne doit pas offrir un verrou sans effet.
+ * L'écart est déclaré dans `TsUnionsMatchPhpEnumsTest::DELIBERATE_GAPS` — ne pas « aligner »
+ * cette union sans lire cette raison : on casserait soit le message d'erreur, soit l'écran.
+ */
 export type LockLevel = "NONE" | "HARD";
 export type DiagnosticSeverity = "ERROR" | "WARNING" | "INFO" | "SUCCESS";
 /** ADR-0002: a plan's type — SEASON is the socle, CLOSURE/HOLIDAY are period overlays. */
