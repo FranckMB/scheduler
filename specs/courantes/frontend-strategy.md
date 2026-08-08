@@ -1,6 +1,6 @@
 # Frontend Strategy — TDD, Stack Fixée & Anti-patterns
 
-Last verified @ 2026-08-08 (statut posé ce jour ; versions re-lues dans `frontend/package.json` le 2026-07-29 ; contenu recalé depuis par P4-65 — activer Sentry ne peut plus échouer en silence, garde de build `sentryCspGuard`)
+Last verified @ 2026-08-08 (statut posé ce jour ; convention de TAILLE DE CIBLE ajoutée — WCAG 2.5.8, que le linter ne mesure pas, AUD-A11Y-12 ; versions re-lues dans `frontend/package.json` le 2026-07-29 ; contenu recalé depuis par P4-65 — activer Sentry ne peut plus échouer en silence, garde de build `sentryCspGuard`)
 
 > **Statut : le rebuild est LIVRÉ.** Les formulations « pour le rebuild » ci-dessous sont
 > historiques ; le document reste la référence vivante des **versions de la stack**, des
@@ -70,6 +70,14 @@ associés). `label-has-associated-control` connaît les composants maison
 (`Input`, `Select`, `TeamSelect`) pour ne pas crier au faux positif sur un
 `<label>…<Input/></label>`. Repasser à `warn` ne se fait que pour débloquer temporairement un
 gros refactor.
+
+**Ce que le linter NE voit PAS : la taille des cibles.** WCAG 2.5.8 (AA) demande **24 × 24 px**
+minimum, et aucune règle `jsx-a11y` ne mesure un rendu. Convention du dépôt, à appliquer à la
+main sur tout bouton à **icône nue** : `rounded p-1` autour d'une icône `size-4` → 24 px.
+Quand le padding casserait une densité voulue (pastille, poignée de tri), le compenser par une
+**marge négative de même valeur** (`p-1 -m-1`, `p-1.5 -m-1.5` pour une icône `size-3`) : la
+surface cliquable grandit, la mise en page ne bouge pas. Un `aria-label` ne dispense de rien —
+il sert les lecteurs d'écran, pas la motricité (audit AUD-A11Y-12, 2026-08-08).
 
 ---
 
