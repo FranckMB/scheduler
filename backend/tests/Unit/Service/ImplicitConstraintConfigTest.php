@@ -40,7 +40,16 @@ final class ImplicitConstraintConfigTest extends TestCase
 
         self::assertSame('COACH_NO_OVERLAP', $result['coachNoOverlap']['type']);
         self::assertTrue($result['coachNoOverlap']['enabled']);
-        self::assertSame('One coach coaches max one team per time slot', $result['coachNoOverlap']['description']);
+
+        // D-14 — cette assertion épinglait « max one team per time slot », soit la règle que
+        // le MOTEUR appliquait et non celle que le produit veut : un coach PEUT tenir deux
+        // équipes dans le même gymnase (il y surveille deux groupes), et c'est le moteur qui
+        // a été aligné. La phrase décrit désormais l'exemption ET sa borne, parce que c'est
+        // elle que `POST /implicit-constraints` compare au moteur — une formulation qui
+        // n'énoncerait que « max one team » ferait croire à un dédoublement interdit.
+        $description = $result['coachNoOverlap']['description'];
+        self::assertStringContainsString('EXCEPT in the same venue', $description);
+        self::assertStringContainsString('different venues remain impossible', $description);
     }
 
     public function testCoachPlayerNoOverlapConfig(): void
