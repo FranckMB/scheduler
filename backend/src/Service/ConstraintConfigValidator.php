@@ -153,6 +153,41 @@ final class ConstraintConfigValidator
      *
      * @return array<string, list<string>>
      */
+    /**
+     * Les clés de `config` qui portent un UUID d'entité, toutes familles confondues.
+     *
+     * ⚑ Deux listes manuscrites les recopiaient, et les deux avaient dérivé (audit D-08) :
+     *  - `SeasonTransitionService::CONFIG_ID_KEYS` **oubliait `forcedVenueId` et
+     *    `minAtVenueId`** — une contrainte « impose ce gymnase » recopiée en saison N+1
+     *    gardait l'uuid du gymnase de l'ANCIENNE saison, `$configDangling` restant `false` :
+     *    aucun skip, aucun log, un pointeur mort en base ;
+     *  - `ScheduleConstraintBuilder::VENUE_CONFIG_KEYS` portait `setVenueId`, une clé
+     *    FANTÔME (aucun writer, aucun reader, refusée à l'écriture depuis SEC-13).
+     *
+     * La liste se dérive donc du `SPEC`, seule source qui décide ce qu'un `config` accepte.
+     *
+     * @return list<string>
+     */
+    public function uuidKeys(): array
+    {
+        $keys = [];
+        foreach (self::SPEC as $spec) {
+            foreach ($spec as $key => $type) {
+                if ('uuid' === $type) {
+                    $keys[$key] = true;
+                }
+            }
+        }
+
+        $keys = array_keys($keys);
+        sort($keys);
+
+        return $keys;
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
     public function engineKeysByFamily(): array
     {
         $backendOnly = ['type', 'startDate', 'endDate'];

@@ -73,7 +73,7 @@ final class SeasonTransitionServiceTest extends KernelTestCase
 
         $counts = $target->getTransitionData()['counts'];
         self::assertSame(
-            ['venues' => 2, 'venueTrainingSlots' => 1, 'coaches' => 2, 'teams' => 2, 'teamCoaches' => 1, 'coachPlayerMemberships' => 1, 'constraints' => 2],
+            ['venues' => 2, 'venueTrainingSlots' => 1, 'coaches' => 2, 'teams' => 2, 'teamCoaches' => 1, 'coachPlayerMemberships' => 1, 'constraints' => 3],
             $counts,
         );
 
@@ -137,16 +137,19 @@ final class SeasonTransitionServiceTest extends KernelTestCase
 
         $copied = $this->em->getRepository(Constraint::class)->findBy(['seasonId' => $target->getId()], ['name' => 'ASC']);
         // The dated constraint (calendarEntryId set) is NOT copied.
-        self::assertCount(2, $copied);
-        self::assertSame(['Coach indispo', 'Salle interdite'], [$copied[0]->getName(), $copied[1]->getName()]);
+        self::assertCount(3, $copied);
+        self::assertSame(['Coach indispo', 'Salle imposée', 'Salle interdite'], [$copied[0]->getName(), $copied[1]->getName(), $copied[2]->getName()]);
 
         $newCoach = $this->em->getRepository(Coach::class)->findOneBy(['seasonId' => $target->getId(), 'firstName' => 'Anna']);
         $newVenueB = $this->em->getRepository(Venue::class)->findOneBy(['seasonId' => $target->getId(), 'name' => 'Gym B']);
 
         // scopeTargetId remapped per scope; config id keys remapped too.
         self::assertSame($newCoach?->getId(), $copied[0]->getScopeTargetId());
-        self::assertSame($newCoach?->getId(), $copied[0]->getConfig()['coachId']);
-        self::assertSame($newVenueB?->getId(), $copied[1]->getConfig()['forbiddenVenueId']);
+        self::assertArrayNotHasKey('coachId', $copied[0]->getConfig(), 'La cible du coach est le scope (SEC-13), jamais le config.');
+        self::assertSame($newVenueB?->getId(), $copied[2]->getConfig()['forbiddenVenueId']);
+        // D-08 : `forcedVenueId` n'était PAS dans la liste de remap — la contrainte partait
+        // en saison N+1 avec l'uuid du gymnase de l'ancienne saison, sans skip ni log.
+        self::assertSame($newVenueB?->getId(), $copied[1]->getConfig()['forcedVenueId'], 'forcedVenueId doit être remappé comme les autres clés uuid.');
         // Lineage.
         self::assertSame($refs['coachConstraint']->getId(), $copied[0]->getParentConstraintId());
     }
@@ -245,7 +248,7 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         ));
         self::assertNotEmpty($coachConstraints);
         self::assertSame($newCoach?->getId(), $coachConstraints[0]['scopeTargetId']);
-        self::assertSame($newCoach?->getId(), $coachConstraints[0]['config']['coachId']);
+        self::assertArrayNotHasKey('coachId', $coachConstraints[0]['config'] ?? [], 'SEC-13 : la cible du coach est le scope.');
     }
 
     public function testRerunReturnsConflictWithTheExistingSuccessor(): void
@@ -433,7 +436,10 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $coachConstraint->setScopeTargetId($anna->getId());
         $coachConstraint->setFamily(ConstraintFamily::COACH_AVAILABILITY);
         $coachConstraint->setRuleType(ConstraintRuleType::HARD);
-        $coachConstraint->setConfig(['coachId' => $anna->getId(), 'unavailableDays' => [1]]);
+        // D-08 — le fixture portait `config.coachId`, clé SUPPRIMÉE par SEC-13 (doublon
+        // exact du scope, refusée à l'écriture) : le test vérifiait le remap d'une clé qui
+        // ne peut plus exister. La cible du coach, c'est le scope.
+        $coachConstraint->setConfig(['unavailableDays' => [1]]);
         $this->em->persist($coachConstraint);
 
         $venueConstraint = new Constraint;
@@ -446,6 +452,18 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $venueConstraint->setRuleType(ConstraintRuleType::PREFERRED);
         $venueConstraint->setConfig(['forbiddenVenueId' => $venueB->getId()]);
         $this->em->persist($venueConstraint);
+
+        // D-08 — la clé que la liste de remap manuscrite OUBLIAIT.
+        $forcedConstraint = new Constraint;
+        $forcedConstraint->setClubId($club->getId());
+        $forcedConstraint->setSeasonId($season->getId());
+        $forcedConstraint->setName('Salle imposée');
+        $forcedConstraint->setScope(ConstraintScope::TEAM);
+        $forcedConstraint->setScopeTargetId($teamA->getId());
+        $forcedConstraint->setFamily(ConstraintFamily::FACILITY);
+        $forcedConstraint->setRuleType(ConstraintRuleType::HARD);
+        $forcedConstraint->setConfig(['forcedVenueId' => $venueB->getId()]);
+        $this->em->persist($forcedConstraint);
 
         $dated = new Constraint;
         $dated->setClubId($club->getId());

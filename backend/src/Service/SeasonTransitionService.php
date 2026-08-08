@@ -38,20 +38,12 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
  */
 final class SeasonTransitionService
 {
-    /** Constraint `config` keys that embed entity ids and must be remapped. */
-    private const CONFIG_ID_KEYS = [
-        'venueId' => 'venues',
-        'forbiddenVenueId' => 'venues',
-        'preferredVenueId' => 'venues',
-        'coachId' => 'coaches',
-        'teamId' => 'teams',
-    ];
-
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly SeasonResolver $seasonResolver,
         private readonly ClockInterface $clock,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly ConstraintConfigValidator $constraintConfigValidator,
     ) {}
 
     /**
@@ -123,6 +115,28 @@ final class SeasonTransitionService
 
             return $this->copy($source, $today);
         });
+    }
+
+    /**
+     * Les clés de `config` qui portent un id d'entité, DÉRIVÉES de la liste blanche.
+     *
+     * ⚑ Cette liste était écrite à la main et avait dérivé dans les deux sens (audit D-08,
+     * 2026-08-08) : elle **oubliait `forcedVenueId` et `minAtVenueId`** — une contrainte
+     * « impose ce gymnase » ou « au moins N séances ici » recopiée en saison N+1 gardait
+     * l'uuid du gymnase de l'ANCIENNE saison, et comme la clé n'était pas parcourue,
+     * `$configDangling` restait `false` : aucun skip, aucun log, un pointeur mort en base.
+     * Elle traînait par ailleurs trois clés qui n'existent plus (`venueId`, `teamId`) ou
+     * qui ont été supprimées (`coachId`, doublon du scope retiré par SEC-13).
+     *
+     * Toutes les clés uuid connues visent aujourd'hui un gymnase ; le jour où une clé uuid
+     * d'une autre famille apparaît, `uuidKeys()` la remonte et ce mapping doit la nommer —
+     * c'est ce que `SeasonTransitionConfigKeysTest` exige.
+     *
+     * @return array<string, string> clé de config => nom de la carte d'ids
+     */
+    private function configIdKeys(): array
+    {
+        return array_fill_keys($this->constraintConfigValidator->uuidKeys(), 'venues');
     }
 
     private function copy(Season $source, ?DateTimeImmutable $today = null): Season
@@ -453,7 +467,7 @@ final class SeasonTransitionService
      */
     private function remapConfig(array $config, array $maps): array
     {
-        foreach (self::CONFIG_ID_KEYS as $key => $mapName) {
+        foreach ($this->configIdKeys() as $key => $mapName) {
             if (isset($config[$key]) && \is_string($config[$key])) {
                 $mapped = $maps[$mapName][$config[$key]] ?? null;
                 if (null === $mapped) {
