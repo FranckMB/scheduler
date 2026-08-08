@@ -24,6 +24,17 @@ use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 
 class TenantFilterListener implements EventSubscriberInterface
 {
+    /**
+     * Marqueur qui distingue « ta saison sélectionnée est morte » d'un 403 d'AUTORISATION.
+     *
+     * ⚠ Contrat protocolaire avec le frontend (`shared/api/client.ts`), et il n'est pas
+     * cosmétique : sans lui, le front ne peut pas savoir qu'il doit lâcher sa saison
+     * périmée. Or le backend 403 TOUTE requête portant cette saison, `/api/me` comprise —
+     * l'app resterait donc en **boucle 403 définitive**, sans chemin de retour. Un
+     * producteur, un consommateur, et jusqu'au 2026-08-08 zéro test des deux côtés (D-39).
+     */
+    public const string STALE_SEASON_HEADER = 'X-Season-Rejected';
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly ClubUserRepository $clubUserRepository,
@@ -154,7 +165,7 @@ class TenantFilterListener implements EventSubscriberInterface
                 $event->setResponse(new JsonResponse(
                     ['error' => 'You do not have access to this season'],
                     403,
-                    ['X-Season-Rejected' => '1'],
+                    [self::STALE_SEASON_HEADER => '1'],
                 ));
 
                 return;
