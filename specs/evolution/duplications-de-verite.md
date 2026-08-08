@@ -161,6 +161,35 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 > **Ordre conseillé** : 0 (bug live, une ligne) → 1 (légal) → 2 (visible du gestionnaire) → 3 (on
 > se croit protégé et on ne l'est pas) → 4 → 5 → 6 → 7 → 8.
 
+> ⚠ **Ce découpage ne couvrait pas les 44 findings, et je l'ai cru clos à tort le 2026-08-08.**
+> Les huit lots sont soldés — mais **dix findings n'appartenaient à aucun lot** et restent
+> ouverts (voir ⬜ ci-dessus). L'erreur est instructive et vaut d'être gardée : un plan de
+> découpage se vérifie **contre l'inventaire**, pas contre lui-même. Le compte fait foi :
+> `grep -c '⬜' specs/evolution/duplications-de-verite.md`.
+>
+> **État au 2026-08-08 : 44 findings — 30 livrés · 4 réfutés · 10 ouverts.**
+>
+> **Les dix restants, et pourquoi ils ont attendu.** Aucun ne peut corrompre une donnée,
+> franchir une frontière ni tromper un gestionnaire sur un flux critique — c'est ce qui les a
+> mis en fin de file, et cela reste vrai :
+>
+> | # | Sujet | Pourquoi il attend |
+> |---|---|---|
+> | D-07 | `Season.status`, seule string libre | demande un **arbitrage** : typer la colonne (`enumType`) ou garder l'enum à la seule validation |
+> | D-10 | topic Mercure, 6 publishers | la SSE est best-effort, le polling prend le relais — dégradation invisible, pas panne |
+> | D-11 | convention `matchDay` | **dormant** : `match_day` est NULL sur les 69 équipes, aucun écran ne l'expose |
+> | D-13 | sémantique des contraintes implicites | le gros est traité en D-43 ; résidu de formulation |
+> | D-14 | miroirs coach backend↔engine | demande une **décision produit** : quelle règle fait foi |
+> | D-15 | `MERCURE_PORT` `.env` vs `.env.dist` | dev only, et la CI lit `.env.dist` |
+> | D-18 | colonnes d'export XLSX | même patron que D-16, mécanique |
+> | D-19 | statuts `admin_job_run` | le `CHECK` SQL rattrape le code ; seule la copie OpenAPI dérive |
+> | D-35 | tranche d'âge : règle ⇄ libellés ⇄ noms semés | a **déjà mordu deux fois** (P4-42, P4-63) — le plus sérieux des dix |
+> | D-42 | paliers solveur cités par 7 documents | même garde que D-37, à élargir |
+>
+> **Le plus rentable des dix est D-35** : c'est le seul qui a déjà trompé un gestionnaire (un
+> libellé « Jeune (U13-U21) » qui mentait sur la portée réelle d'une règle HARD), et le patron
+> de garde existe déjà.
+
 > **La leçon de méthode, pour la prochaine fois.** Sur les trois rapports d'agents, **quatre
 > constats « graves » se sont révélés faux ou surévalués** à la contre-vérification :
 > `matchDay` est dormant (0 donnée, aucun écran), `CoachWishSeasonGuard` combine bien ses deux
