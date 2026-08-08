@@ -1,5 +1,5 @@
 import type { Reservation, TeamCoach } from "../api";
-import { hhmm } from "./days";
+import { parseTime } from "@/shared/lib/time";
 
 /**
  * P2-9 PR C — « affecter cette équipe ici mettrait-il son coach à deux endroits ? »
@@ -28,12 +28,9 @@ import { hhmm } from "./days";
  * s'éteindrait en silence. L'appelant traite explicitement ce cas.
  */
 function minutes(time: string): number | null {
-  const [h, m] = hhmm(time).split(":").map(Number);
-  if (undefined === h || undefined === m || Number.isNaN(h) || Number.isNaN(m)) {
-    return null;
-  }
-
-  return h * 60 + m;
+  // D-21 : lecture partagée — ce site rendait DÉJÀ null, la réaction la plus stricte des
+  // cinq. Elle est conservée telle quelle (l'appelant traite explicitement ce cas).
+  return parseTime(time);
 }
 
 /** teamId → coachId du coach MAIN (les ASSISTANT sont ignorés, règle 3). */

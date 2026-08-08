@@ -2,16 +2,14 @@ import type { Fixture, LeagueWindow } from "../api";
 
 /** Time-ish string ("18:00", "18:00:00", ISO) → minutes since midnight. */
 export function timeToMinutes(time: string | null | undefined): number {
-  const match = time?.match(/(\d{1,2}):(\d{2})/);
-  if (null == match) {
-    return 0;
-  }
-  return Number(match[1]) * 60 + Number(match[2]);
+  // D-21 : lecture partagée, repli 0 explicite (une enveloppe se calcule, elle ne valide pas).
+  return parseTime(time) ?? 0;
 }
 
 // D-30 : cette version calculait le jour à MINUIT LOCAL — elle basculait d'un jour hors
 // fuseau français, là où `matchAccess` (midi UTC) restait juste. Foyer unique partagé.
 import { isoDayOf as isoWeekday } from "@/shared/lib/days";
+import { parseTime } from "@/shared/lib/time";
 
 export { isoWeekday };
 

@@ -13,6 +13,7 @@ import type { TeamMatchHabit } from "../api";
 // blocs de 2h15 pour des matchs que le solveur traite comme 1h45, et l'en-tête ci-dessus
 // affirmait pourtant « same footprint geometry as the dated grid ».
 import { MATCH_MINUTES, WARMUP_MINUTES } from "./weekendGrid";
+import { parseTime } from "@/shared/lib/time";
 
 export interface TypicalColumn {
   key: string;
@@ -43,8 +44,8 @@ export interface TypicalWeekendModel {
 }
 
 function toMinutes(time: string): number {
-  const [h = 0, m = 0] = time.split(":").map(Number);
-  return h * 60 + m;
+  // D-21 : lecture partagée, repli 0 explicite (mise en page seule).
+  return parseTime(time) ?? 0;
 }
 
 export function buildTypicalWeekend(habits: TeamMatchHabit[]): TypicalWeekendModel {
