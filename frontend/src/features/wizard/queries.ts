@@ -22,7 +22,7 @@ import * as wizardApi from "./api";
  * le jour où l'une ajoute un filtre, l'écran monté en second recevra silencieusement les
  * données de l'autre.
  */
-const invalidateEverywhere = (queryClient: QueryClient, family: "teams" | "venues" | "coaches"): Promise<void> =>
+export const invalidateEverywhere = (queryClient: QueryClient, family: "teams" | "venues" | "coaches"): Promise<void> =>
   Promise.all([
     queryClient.invalidateQueries({ queryKey: ["wizard", family] }),
     queryClient.invalidateQueries({ queryKey: [family] }),
