@@ -33,8 +33,25 @@ class ScheduleSlotSchema(SerializableModel):
 
 class DiagnosticSchema(SerializableModel):
     id: str
-    # Valid diagnostic types: unplaced, soft_lock_moved, coach_overload, session_below_effective_min, conflict, unused_slot, coach_no_rest_day
-    type: str
+    # D-41 — c'etait un COMMENTAIRE, donc rien : il annoncait 7 types alors que le solveur en
+    # emettait deja 8 (`constraint_not_honored`, P2-9). Un commentaire ne valide pas, et un
+    # code renomme ici tombe cote backend dans le `default` de `DiagnosticMessageBuilder`
+    # (« Diagnostic inconnu. » affiche au gestionnaire) tout en eteignant le surlignage du
+    # front — sans erreur nulle part. La liste est donc une CONTRAINTE : Pydantic refuse
+    # desormais un type hors enumeration, a la construction, cote emetteur.
+    type: Literal[
+        "coach_no_rest_day",
+        "coach_overload",
+        "conflict",
+        "constraint_not_honored",
+        "day_constraint_conflict",
+        "session_below_effective_min",
+        "soft_lock_moved",
+        "unplaced",
+        "unplaced_match",
+        "unused_slot",
+        "venue_minimum_unreachable",
+    ]
     severity: str
     team_id: str | None = Field(default=None, alias="teamId")
     coach_id: str | None = Field(default=None, alias="coachId")
