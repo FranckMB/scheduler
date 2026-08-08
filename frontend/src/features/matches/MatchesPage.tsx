@@ -1,7 +1,6 @@
 import { CalendarRange, ChevronLeft, ChevronRight, DoorOpen, Link2, Lock, Plus, Repeat, Upload, Wand2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Modal } from "@/shared/components/ui/modal";
@@ -26,13 +25,14 @@ import { toast } from "@/shared/stores/toastStore";
 import { useMatchesStore } from "./store";
 import { UnplacedList } from "./UnplacedList";
 import { WeekendGrid } from "./WeekendGrid";
+import { useSocleValidated } from "@/shared/lib/socle";
 
 function byId<T extends { id: string }>(rows: T[] | undefined): Map<string, T> {
   return new Map((rows ?? []).map((row) => [row.id, row]));
 }
 
 export function MatchesPage() {
-  const { data: me } = useMe();
+  const socleValidated = useSocleValidated();
   const fixtures = useFixtures();
   const competitions = useCompetitions();
   const leagueWindows = useLeagueWindows();
@@ -164,7 +164,7 @@ export function MatchesPage() {
 
   // Matches are locked until the season's plan points at a version (cockpit
   // state 2) — the same condition the server's SocleGuard enforces on writes.
-  if (null == me?.seasonPlan?.chosenScheduleId) {
+  if (!socleValidated) {
     return (
       <div className="mx-auto max-w-md py-16 text-center">
         <Lock className="mx-auto mb-3 size-8 text-accent" />

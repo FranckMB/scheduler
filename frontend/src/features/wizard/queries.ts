@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { readState, type ReadState } from "@/shared/lib/readState";
 import { isScheduleStreamConnected, useScheduleStream } from "@/shared/lib/scheduleStream";
@@ -7,6 +7,26 @@ import { activeTeams, activeVenues, disabledVenueIds, pausedTeamIds } from "./li
 
 import type { CoachPayload, ConstraintPayload, SlotPayload, Team, TeamCoachRole, TeamPayload, Venue, VenuePayload } from "./api";
 import * as wizardApi from "./api";
+
+/**
+ * Invalide une famille de référence pour TOUS les écrans, pas seulement le wizard (D-25).
+ *
+ * ⚑ Le wizard écrit sous `["wizard", …]` et n'invalidait que cette clé — mais Planning et
+ * Matchs lisent les MÊMES ressources sous `["teams"]`/`["venues"]`/`["coaches"]`, avec un
+ * `staleTime` de cinq minutes. Conséquence mesurée : après avoir ajouté un gymnase dans
+ * l'assistant, l'écran Matchs ne le proposait pas pendant cinq minutes, et une équipe
+ * renommée y gardait son ancien nom. Rien ne le signalait — le cache faisait son travail.
+ *
+ * ⚠ Reste ouvert (D-25 volet a) : `planning` et `matches` déclarent la même clé avec des
+ * `queryFn` DIFFÉRENTES. Ça marche aujourd'hui parce que les deux appellent le même endpoint ;
+ * le jour où l'une ajoute un filtre, l'écran monté en second recevra silencieusement les
+ * données de l'autre.
+ */
+const invalidateEverywhere = (queryClient: QueryClient, family: "teams" | "venues" | "coaches"): Promise<void> =>
+  Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["wizard", family] }),
+    queryClient.invalidateQueries({ queryKey: [family] }),
+  ]).then(() => undefined);
 
 export function useWizardTeams() {
   return useQuery({ queryKey: ["wizard", "teams"], queryFn: wizardApi.listTeams, staleTime: 30_000 });
@@ -26,7 +46,7 @@ export function useCreateTeam() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: TeamPayload) => wizardApi.createTeam(body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "teams"] }),
+    onSuccess: () => invalidateEverywhere(queryClient, "teams"),
   });
 }
 
@@ -34,7 +54,7 @@ export function useUpdateTeam() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: TeamPayload }) => wizardApi.updateTeam(id, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "teams"] }),
+    onSuccess: () => invalidateEverywhere(queryClient, "teams"),
   });
 }
 
@@ -42,7 +62,7 @@ export function useDeleteTeam() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteTeam(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "teams"] }),
+    onSuccess: () => invalidateEverywhere(queryClient, "teams"),
   });
 }
 
@@ -51,7 +71,7 @@ export function useReorderTeams() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (items: { id: string; priorityTierId: number; tierOrder: number }[]) => wizardApi.reorderTeams(items),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "teams"] }),
+    onSuccess: () => invalidateEverywhere(queryClient, "teams"),
   });
 }
 
@@ -97,7 +117,7 @@ export function useCreateVenue() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: VenuePayload) => wizardApi.createVenue(body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "venues"] }),
+    onSuccess: () => invalidateEverywhere(queryClient, "venues"),
   });
 }
 
@@ -105,7 +125,7 @@ export function useUpdateVenue() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: VenuePayload }) => wizardApi.updateVenue(id, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "venues"] }),
+    onSuccess: () => invalidateEverywhere(queryClient, "venues"),
   });
 }
 
@@ -114,7 +134,7 @@ export function useDeleteVenue() {
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteVenue(id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["wizard", "venues"] });
+      void invalidateEverywhere(queryClient, "venues");
       void queryClient.invalidateQueries({ queryKey: ["wizard", "venue_slots"] });
     },
   });
@@ -426,7 +446,7 @@ export function useCreateCoach() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: CoachPayload) => wizardApi.createCoach(body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "coaches"] }),
+    onSuccess: () => invalidateEverywhere(queryClient, "coaches"),
   });
 }
 
@@ -434,7 +454,7 @@ export function useUpdateCoach() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: CoachPayload }) => wizardApi.updateCoach(id, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "coaches"] }),
+    onSuccess: () => invalidateEverywhere(queryClient, "coaches"),
   });
 }
 
@@ -443,7 +463,7 @@ export function useDeleteCoach() {
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteCoach(id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["wizard", "coaches"] });
+      void invalidateEverywhere(queryClient, "coaches");
       void queryClient.invalidateQueries({ queryKey: ["wizard", "team_coaches"] });
       void queryClient.invalidateQueries({ queryKey: ["wizard", "coach_players"] });
     },

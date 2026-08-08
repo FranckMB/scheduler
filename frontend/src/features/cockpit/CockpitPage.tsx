@@ -12,6 +12,7 @@ import { PUBLIC_HOLIDAY_HORIZON_DAYS, RadarPanel } from "./RadarPanel";
 import { VenueUnavailabilityCard } from "./VenueUnavailabilityCard";
 import { useCalendarEntries, usePublicHolidays, useSchoolHolidays } from "./queries";
 import { addDays, monthWindow, todayISO } from "./lib/date";
+import { useSocleValidated } from "@/shared/lib/socle";
 
 /** Home cockpit — unlocked once the season's plan carries a first COMPLETED version
  *  (inv. 8/16 : avoir généré une fois suffit, donc rouvrir ne re-verrouille pas).
@@ -43,6 +44,10 @@ export function CockpitPage() {
   const { data: publicHolidays } = usePublicHolidays(from, to);
   const { data: radarPublicHolidays, isLoading: publicHolidaysLoading } = usePublicHolidays(radarToday, addDays(radarToday, PUBLIC_HOLIDAY_HORIZON_DAYS));
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
+  // D-28 : le prédicat partagé est un HOOK — il s'appelle donc ici, avec les autres, et
+  // jamais après un early return (la version inline qu'il remplace n'était pas un hook,
+  // et vivait plus bas : les règles des hooks l'auraient refusée là).
+  const socleValidated = useSocleValidated();
 
   if (isLoading) {
     return <FullPageSpinner />;
@@ -56,7 +61,6 @@ export function CockpitPage() {
   }
   // State 2 (versions exist but the plan points at none): the cockpit is
   // reachable, but matches + secondary plans stay locked until it does.
-  const socleValidated = null != me?.seasonPlan?.chosenScheduleId;
 
   const prev = () => setCursor((c) => (c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 }));
   const next = () => setCursor((c) => (c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 }));
