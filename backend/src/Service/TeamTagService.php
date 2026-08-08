@@ -91,6 +91,40 @@ final class TeamTagService
     }
 
     /**
+     * @return list<string>
+     */
+    /**
+     * La tranche d'âge d'une catégorie — LA règle, isolée de toute lecture en base.
+     *
+     * ⚑ Extraite pour être vérifiable (D-35). Elle vivait au milieu d'une méthode qui charge
+     * la `SportCategory` : impossible de la faire tourner sur le catalogue sans monter une
+     * base, donc impossible de comparer ce qu'elle APPLIQUE à ce que les libellés ANNONCENT.
+     * Or l'écart entre les deux a trompé des gestionnaires deux fois (P4-42, P4-63) sur des
+     * contraintes qui peuvent être HARD. `TagLabelsMatchTheRuleTest` la compare désormais aux
+     * étiquettes ; `TeamTagScopeTest` (phase1) garde ses frontières.
+     *
+     * ⚠ BABY passe AVANT EMB (P4-42) : U5/U7 satisfont les deux bornes, c'est l'ORDRE qui
+     * tranche — le réordonner élargirait EMB en silence.
+     */
+    public function ageBracketFor(string $name, ?int $ageMin, ?int $ageMax): ?string
+    {
+        if ($this->isBabyCategory($name, $ageMax)) {
+            return 'BABY';
+        }
+        if (null !== $ageMax && $ageMax <= 12) {
+            return 'EMB';
+        }
+        if (null !== $ageMax && null !== $ageMin && $ageMin <= 18) {
+            return 'JEUNE';
+        }
+        if (null !== $ageMin && $ageMin >= 19) {
+            return 'SENIOR';
+        }
+
+        return null;
+    }
+
+    /**
      * U5-U7, la tranche que le fondateur veut distinguer d'EMB (P4-42).
      *
      * Deux chemins, et l'ÂGE prime quand il est connu : `ageMax <= 7` couvre U5 (3-5) et
@@ -318,16 +352,9 @@ final class TeamTagService
             $ageMax = $sportCategory->getAgeMax();
             $name = $sportCategory->getName();
 
-            // Tags de tranche d'âge. BABY passe AVANT EMB (P4-42) : U5/U7 satisfont les
-            // deux bornes, c'est l'ordre qui tranche.
-            if ($this->isBabyCategory($name, $ageMax)) {
-                $tags[] = 'BABY';
-            } elseif (null !== $ageMax && $ageMax <= 12) {
-                $tags[] = 'EMB';
-            } elseif (null !== $ageMax && null !== $ageMin && $ageMin <= 18) {
-                $tags[] = 'JEUNE';
-            } elseif (null !== $ageMin && $ageMin >= 19) {
-                $tags[] = 'SENIOR';
+            $bracket = $this->ageBracketFor($name, $ageMin, $ageMax);
+            if (null !== $bracket) {
+                $tags[] = $bracket;
             }
 
             // U-category tags from name

@@ -95,7 +95,7 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 | **D-32** ✅ | Rôles de management exposés au front | `ClubUserRepository.php:22` `MANAGEMENT_ROLES` (mono-source côté backend ✓) vs `SeasonTransitionBanner.tsx:25` et `ClubPage.tsx:481` (réécrits inline) | Un rôle ajouté côté backend → les deux écrans continuent de **masquer** une capacité que le serveur autorise : la fonctionnalité existe et reste invisible, sans erreur | Exposer les rôles via l'API |
 | **D-33** ✅ | Nom affiché d'un coach | `ranking.ts:50` (avec `.trim()`) vs `grid.ts:122` et `ConflictRadar.tsx:18` (**sans**), 3 replis différents (`"Coach ?"` / `"Coach"` / `null`) | Un coach sans nom de famille s'affiche `Emerick` dans le wizard et `Emerick ` (espace final, visible en badge) sur le planning | `shared/lib/coachName.ts` |
 | **D-34** ✅ (garde posé) | Unions de valeurs recopiées entre features | `TeamLevel` : union stricte dans `wizard/api.ts:20`, **`level: string`** dans `matches/api.ts:191` · `ScheduleStatus` et `SchedulePlanType` déclarés deux fois · `matches.Team` **n'a pas `isActive`** | Un niveau ajouté côté serveur passe **muet** côté matchs ; l'écran Matchs ne peut pas filtrer les équipes inactives et rien ne le lui rappelle | Mettre les **unions** dans `shared/api/types.ts`. ⚠ Les projections **structurelles** par feature restent légitimes (voir §3) |
-| **D-35** ⬜ | Tranche d'âge → tag : règle vs libellés vs noms semés | Règle : `TeamTagService.php:321-332` + `CategoryCatalog.php:37-48` · Libellés : `tagLabels.ts:24,29,34` · Noms semés : `DefaultConstraintSeeder.php:51-54` | **S'est déjà produit deux fois**, documenté dans le code : `tagLabels.ts:19-23` « « Jeune (U13-U21) » MENTAIT jusqu'à P4-63 », `:26-29` « « EMB (U9-U11) » MENTAIT jusqu'à P4-42 ». Un dirigeant pose une règle HARD « Jeune » en croyant couvrir U21 : elle ne couvre pas. `TeamTagScopeTest` épingle la **règle**, rien ne la lie aux libellés | Dériver les libellés de la règle, ou les diffé par test |
+| **D-35** ✅ | Tranche d'âge → tag : règle vs libellés vs noms semés | Règle : `TeamTagService.php:321-332` + `CategoryCatalog.php:37-48` · Libellés : `tagLabels.ts:24,29,34` · Noms semés : `DefaultConstraintSeeder.php:51-54` | **S'est déjà produit deux fois**, documenté dans le code : `tagLabels.ts:19-23` « « Jeune (U13-U21) » MENTAIT jusqu'à P4-63 », `:26-29` « « EMB (U9-U11) » MENTAIT jusqu'à P4-42 ». Un dirigeant pose une règle HARD « Jeune » en croyant couvrir U21 : elle ne couvre pas. `TeamTagScopeTest` épingle la **règle**, rien ne la lie aux libellés | Dériver les libellés de la règle, ou les diffé par test |
 
 ### 2.4 Cross-stack — la frontière la moins gardée
 
@@ -160,6 +160,33 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 
 > **Ordre conseillé** : 0 (bug live, une ligne) → 1 (légal) → 2 (visible du gestionnaire) → 3 (on
 > se croit protégé et on ne l'est pas) → 4 → 5 → 6 → 7 → 8.
+
+> ⚠ **Ce découpage ne couvrait pas les 44 findings, et je l'ai cru clos à tort le 2026-08-08.**
+> Les huit lots sont soldés — mais **dix findings n'appartenaient à aucun lot** et restent
+> ouverts (voir ⬜ ci-dessus). L'erreur est instructive et vaut d'être gardée : un plan de
+> découpage se vérifie **contre l'inventaire**, pas contre lui-même. Le compte fait foi :
+> `grep -c '⬜' specs/evolution/duplications-de-verite.md`.
+>
+> **État au 2026-08-08 : 44 findings — 31 livrés · 4 réfutés · 9 ouverts.**
+>
+> **Les dix restants, et pourquoi ils ont attendu.** Aucun ne peut corrompre une donnée,
+> franchir une frontière ni tromper un gestionnaire sur un flux critique — c'est ce qui les a
+> mis en fin de file, et cela reste vrai :
+>
+> | # | Sujet | Pourquoi il attend |
+> |---|---|---|
+> | D-07 | `Season.status`, seule string libre | demande un **arbitrage** : typer la colonne (`enumType`) ou garder l'enum à la seule validation |
+> | D-10 | topic Mercure, 6 publishers | la SSE est best-effort, le polling prend le relais — dégradation invisible, pas panne |
+> | D-11 | convention `matchDay` | **dormant** : `match_day` est NULL sur les 69 équipes, aucun écran ne l'expose |
+> | D-13 | sémantique des contraintes implicites | le gros est traité en D-43 ; résidu de formulation |
+> | D-14 | miroirs coach backend↔engine | demande une **décision produit** : quelle règle fait foi |
+> | D-15 | `MERCURE_PORT` `.env` vs `.env.dist` | dev only, et la CI lit `.env.dist` |
+> | D-18 | colonnes d'export XLSX | même patron que D-16, mécanique |
+> | D-19 | statuts `admin_job_run` | le `CHECK` SQL rattrape le code ; seule la copie OpenAPI dérive |
+> > | D-42 | paliers solveur cités par 7 documents | même garde que D-37, à élargir |
+>
+> **D-35 a été traité le 2026-08-08** (c'était le plus rentable des dix : le seul qui avait déjà
+> trompé un gestionnaire). Les neuf restants n'ont, eux, jamais produit d'effet observé.
 
 > **La leçon de méthode, pour la prochaine fois.** Sur les trois rapports d'agents, **quatre
 > constats « graves » se sont révélés faux ou surévalués** à la contre-vérification :
