@@ -83,11 +83,6 @@ final class ConstraintConfigValidator
             'startDate' => 'date',
             'endDate' => 'date',
         ],
-        // Lues par le moteur : `main.py` (rabot de capacité par gymnase).
-        'FACILITY_CAPACITY' => [
-            'venueId' => 'uuid',
-            'maxTeams' => 'count',
-        ],
         // Lues par le moteur : `constraints.py` (jours + fenêtre horaire, lot C).
         // La CIBLE est le scope, jamais une clé d'ici (SEC-13 PR B).
         'COACH_AVAILABILITY' => [

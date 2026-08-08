@@ -824,9 +824,10 @@ const RULE_LABEL: Record<ConstraintRuleType, string> = {
   LOCK: "Verrouillé",
 };
 
-/** L'onglet-famille où une contrainte héritée se range. FACILITY_CAPACITY n'a pas
- *  d'onglet propre (aucun formulaire ne la crée) → rangée avec « Gymnase ». */
-const familyTabOf = (family: Constraint["family"]): Constraint["family"] => ("FACILITY_CAPACITY" === family ? "FACILITY" : family);
+/** L'onglet-famille où une contrainte héritée se range. (FACILITY_CAPACITY, qui
+ * n'avait pas d'onglet propre et se rangeait sous Gymnase, a été RETIRÉE le
+ * 2026-08-08 : aucun chemin UI ne la créait — la capacité se règle par créneau.) */
+const familyTabOf = (family: Constraint["family"]): Constraint["family"] => family;
 
 /**
  * Period-editable constraints: the club's PERMANENT constraints are inherited into the

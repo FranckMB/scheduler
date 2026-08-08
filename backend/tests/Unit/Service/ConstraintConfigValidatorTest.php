@@ -58,7 +58,7 @@ final class ConstraintConfigValidatorTest extends TestCase
         yield 'jours non-liste' => [ConstraintFamily::DAY, ['forbiddenDays' => 3], 'jours'];
         yield 'gymnase qui n\'est pas un uuid' => [ConstraintFamily::FACILITY, ['forcedVenueId' => 'Barros'], 'gymnase'];
         yield 'compteur à zéro' => [ConstraintFamily::FACILITY, ['minAtVenueId' => self::VENUE, 'minAtVenueCount' => 0], 'au moins 1'];
-        yield 'compteur en tableau' => [ConstraintFamily::FACILITY_CAPACITY, ['maxTeams' => ['trois']], 'au moins 1'];
+        yield 'compteur en tableau' => [ConstraintFamily::FACILITY, ['minAtVenueId' => self::VENUE, 'minAtVenueCount' => ['trois']], 'au moins 1'];
         yield 'date inexistante' => [ConstraintFamily::FACILITY, ['type' => 'venue_closed', 'startDate' => '2026-02-31'], 'AAAA-MM-JJ'];
         yield 'type de fermeture inventé' => [ConstraintFamily::FACILITY, ['type' => 'gymnase_ferme'], 'venue_closed'];
         yield 'groupe vide' => [ConstraintFamily::TIME, ['targetTag' => '   '], 'groupe'];

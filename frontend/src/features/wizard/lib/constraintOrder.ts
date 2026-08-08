@@ -11,13 +11,12 @@ export interface ConstraintSection {
 }
 
 /** Constraint families in the order of the wizard's constraint tabs. */
-export const FAMILY_ORDER = ["TIME", "DAY", "FACILITY", "FACILITY_CAPACITY", "COACH_AVAILABILITY"] as const;
+export const FAMILY_ORDER = ["TIME", "DAY", "FACILITY", "COACH_AVAILABILITY"] as const;
 
 export const FAMILY_LABEL: Record<string, string> = {
   TIME: "Horaire",
   DAY: "Jours",
   FACILITY: "Gymnase",
-  FACILITY_CAPACITY: "Capacité gymnase",
   COACH_AVAILABILITY: "Dispo coach",
 };
 
@@ -30,7 +29,7 @@ export function orderedTagNames(tags: TeamTag[]): string[] {
   return groupTagsByAxis(tags).flatMap((g) => g.tags).map((t) => t.name);
 }
 
-/** The venue a FACILITY / FACILITY_CAPACITY constraint refers to (any of its keys). */
+/** The venue a FACILITY constraint refers to (any of its keys). */
 function constraintVenueId(c: Constraint): string | null {
   const cfg = c.config ?? {};
   for (const k of ["forcedVenueId", "preferredVenueId", "forbiddenVenueId", "minAtVenueId", "venueId"]) {
@@ -56,7 +55,7 @@ interface GroupContext {
  * Group a family's constraints into labelled sections. The grouping DIMENSION
  * depends on the family (user request):
  * - COACH_AVAILABILITY → staffing group (Salariés / Coachs-joueurs / Bénévoles) ;
- * - FACILITY / FACILITY_CAPACITY → the venue the rule targets ;
+ * - FACILITY → the venue the rule targets ;
  * - TIME / DAY → the target's AXIS (Genre / Niveau / Âge) for group rules, then
  *   per-team (rank order), then club-wide.
  * Shared by the constraint tab AND the recap so both group identically.
@@ -82,7 +81,7 @@ export function groupConstraints(constraints: Constraint[], family: string, ctx:
     return labels.filter(([k]) => buckets[k].length > 0).map(([k, label]) => ({ key: `staff:${k}`, label, items: buckets[k] }));
   }
 
-  if ("FACILITY" === family || "FACILITY_CAPACITY" === family) {
+  if ("FACILITY" === family) {
     const byVenue = new Map<string, Constraint[]>();
     const noVenue: Constraint[] = [];
     for (const c of constraints) {

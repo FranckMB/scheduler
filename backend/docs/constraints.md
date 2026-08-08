@@ -101,9 +101,7 @@ il désigne un GROUPE, ce que le scope ne sait pas exprimer.
 
 > Exemple : `{coachId: "uuid-enzo", unavailableDays: [5]}` signifie que l'entraîneur n'est jamais disponible le vendredi. Avec `fromTime: "18:00"` et `untilTime: "20:00"`, l'indisponibilité ne couvre que ce créneau.
 
-#### `FACILITY_CAPACITY` — Capacité de salle
-
-Limite le nombre d'équipes simultanées dans une salle. La clé `maxTeams` est **requise** ; l'engine borne alors la capacité de chaque créneau de la salle à `min(capacité du créneau, maxTeams)` (la clé ne peut que resserrer la capacité, jamais l'élargir).
+> ⚠ **`FACILITY_CAPACITY` a été RETIRÉE le 2026-08-08.** Elle limitait le nombre d'équipes simultanées dans une salle entière (`min(capacité du créneau, maxTeams)`). Aucun chemin UI ne la créait — zéro ligne en base, zéro créateur côté serveur — et la capacité se règle déjà **par créneau** (`VenueTrainingSlot.capacity`, borné à 1 quand le gymnase n'est pas divisible), qui est le geste réel du gestionnaire. Ce qu'on perd : le raccourci « caper tout un gymnase en une règle ». Ce qui reste : éditer la capacité des créneaux concernés.
 
 ### 2.3 Rule Type — Quelle sévérité ?
 
@@ -269,7 +267,6 @@ Toutes les combinaisons scope + family ne sont pas logiques. Voici les combinais
 | `CLUB` | `DAY` | Oui | Toutes les équipes seniors préfèrent le mardi |
 | `CLUB` | `FACILITY` | Oui | Aucune équipe féminine à Jean Vilar |
 | `CLUB` | `COACH_AVAILABILITY` | Non | Pas de sens (pas de coach cible) |
-| `CLUB` | `FACILITY_CAPACITY` | Non | Pas de sens (pas de salle cible) |
 | `TEAM` | `TIME` | Oui | SM3 après 20h |
 | `TEAM` | `DAY` | Oui | SF3 uniquement le mardi |
 | `TEAM` | `FACILITY` | Oui | SM1 préfère Matéo |
@@ -281,7 +278,6 @@ Toutes les combinaisons scope + family ne sont pas logiques. Voici les combinais
 | `FACILITY` | `TIME` | Non | Pas de sens |
 | `FACILITY` | `DAY` | Non | Pas de sens |
 | `FACILITY` | `FACILITY` | Oui | ADN fermé le lundi |
-| `FACILITY` | `FACILITY_CAPACITY` | Oui | Limite de terrains au gymnase Matéo |
 
 Attention, ce tableau est un **guide métier**, pas une règle appliquée par le code : `ConstraintValidationService` n'implémente **aucune matrice scope × family**. Ce qu'il vérifie réellement :
 

@@ -151,6 +151,4 @@ MATRIX: tuple[MatrixCell, ...] = (
                note="engine-only: 'at least one session on these days' (≠ 'only'); the wizard emits allowedDays"),
     MatrixCell("DAY", "PREFERRED", "preferredDays", "TEAM", Expectation.NOT_OFFERED, False,
                note="objective reads it, wizard never emits it (ENG-10 root)"),
-    MatrixCell("FACILITY_CAPACITY", "HARD", "maxTeams", "TEAM", Expectation.NOT_OFFERED, False,
-               note="emitted by the backend (canSplit), not the wizard"),
 )

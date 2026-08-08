@@ -120,7 +120,8 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         // Blindage du filtre UUID (revue #340 round 1) : quel que soit le FORMAT d'id d'une
         // future voie d'expansion, aucune ligne du payload ne doit CONTENIR l'id d'une
         // entité sortie de la sélection — sinon le filtre par racine masquerait la fuite.
-        $excludedIds = [$ids['teamDeactivated'], $ids['prefDisabledVenue'], $ids['facilityDefault'], $ids['tagAllActive'], $ids['datedInertTag'], $ids['datedDeactivated']];
+        // (`facilityDefault` était une contrainte FACILITY_CAPACITY — famille retirée le 2026-08-08.)
+        $excludedIds = [$ids['teamDeactivated'], $ids['prefDisabledVenue'], $ids['tagAllActive'], $ids['datedInertTag'], $ids['datedDeactivated']];
         foreach ($payload['constraints'] as $row) {
             self::assertIsArray($row);
             foreach ($excludedIds as $excludedId) {
@@ -308,7 +309,6 @@ final class PeriodGatePayloadParityTest extends WebTestCase
             // Sortie AVEC warning : elle nomme le gymnase désactivé (clé de config).
             'prefDisabledVenue' => $this->constraint($club, $season, ConstraintScope::TEAM, $teamActive->getId(), ConstraintFamily::FACILITY, ['preferredVenueId' => $venueDisabled->getId()], null)->getId(),
             // Sortie par le DÉFAUT reprise (FACILITY droppée sans override).
-            'facilityDefault' => $this->constraint($club, $season, ConstraintScope::FACILITY, $venueOpen->getId(), ConstraintFamily::FACILITY_CAPACITY, ['maxTeams' => 1], null)->getId(),
             // GARDÉE malgré « toutes taguées en pause » : HARD + gymnase dédié émet encore
             // ses lignes « interdit hors tag » (divergence n° 2 alignée).
             // ⚠ SEC-13 : ces deux-là portaient leurs clés de gymnase sur une famille

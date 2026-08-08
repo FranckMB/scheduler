@@ -288,16 +288,10 @@ def _solve(
     model.team_coach_map = team_coach_map
     team_player_map: dict[str, list[str]] = parsed.get("team_player_map", {})
 
-    # FACILITY_CAPACITY: tighten per-slot capacity to maxTeams. min() only — the
-    # backend already sets capacity to 1 for non-divisible venues, so a maxTeams
-    # above the slot capacity must not re-open it. add_room_at_most_one and the
-    # over-capacity diagnostic both read model.slot_capacities → stays coherent.
-    venue_capacity_caps: dict[str, int] = parsed.get("venue_capacity_caps", {})
-    if venue_capacity_caps:
-        for vsk in model.slot_capacities:
-            cap = venue_capacity_caps.get(str(vsk[0]))
-            if cap is not None:
-                model.slot_capacities[vsk] = min(model.slot_capacities[vsk], cap)
+    # (La famille FACILITY_CAPACITY rabotait ici la capacité d'un gymnase entier
+    # à `maxTeams`. RETIRÉE le 2026-08-08 : aucun chemin UI ne la créait, zéro
+    # ligne en base. La capacité se règle par CRÉNEAU — `trainingSlots.capacity`,
+    # que le backend borne déjà à 1 pour un gymnase non divisible.)
 
     locked_slots_by_team: dict[str, int] = {}
     for locked_slot in model.locked_slots:

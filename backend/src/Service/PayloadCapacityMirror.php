@@ -27,9 +27,10 @@ namespace App\Service;
  * 1. **déduplication** par `(gymnase, jour, heure)` — `model.slot_capacities` est
  *    un dict sur ce triplet (`model.py:54-56`) : deux lignes au même triplet
  *    s'écrasent, elles ne s'additionnent pas ;
- * 2. **`FACILITY_CAPACITY` ACTIVE** → `min(capacité, maxTeams)` (`main.py:288-293`),
- *    clé sur `config.venueId`. Le filtre `isActive` n'est pas optionnel : le
- *    moteur saute toute contrainte inactive (`constraints.py`).
+ * (Une seconde règle existait — le rabot `FACILITY_CAPACITY`, `min(capacité,
+ * maxTeams)` par gymnase. La famille a été RETIRÉE le 2026-08-08 : aucun chemin
+ * UI ne la créait, zéro ligne en base. La capacité se règle par CRÉNEAU
+ * (`VenueTrainingSlot.capacity`), qui est le geste réel du gestionnaire.)
  *
  * Ce qui n'est délibérément PAS répliqué : les verrous HARD (le moteur y émet un
  * créneau par équipe épinglée, décline la durée en pas de 15 min, place même hors
@@ -46,16 +47,11 @@ final class PayloadCapacityMirror
      */
     public function offer(array $payload): int
     {
-        $caps = $this->activeCapacityCaps($payload);
-
         $byKey = [];
         foreach (\is_array($payload['venues'] ?? null) ? $payload['venues'] : [] as $venue) {
             $venueId = (string) ($venue['id'] ?? '');
             foreach (\is_array($venue['trainingSlots'] ?? null) ? $venue['trainingSlots'] : [] as $slot) {
                 $capacity = (int) ($slot['capacity'] ?? 0);
-                if (isset($caps[$venueId])) {
-                    $capacity = min($capacity, $caps[$venueId]);
-                }
                 // Écrasement, pas addition : le moteur clé un DICT sur ce triplet.
                 $byKey[$this->key($venueId, $slot['dayOfWeek'] ?? '', (string) ($slot['startTime'] ?? ''))] = $capacity;
             }
@@ -71,7 +67,7 @@ final class PayloadCapacityMirror
      *   règles se cumulent — le moteur pose un `>=` par règle, le max domine). Un pin
      *   n'en soustrait RIEN : le moteur exige ces séances sur les variables du modèle,
      *   et un créneau verrouillé n'a pas de variable (`model.py:62-63`) ;
-     * - l'OFFRE LIBRE : capacités dédupliquées + rabot FACILITY_CAPACITY, MOINS les
+     * - l'OFFRE LIBRE : capacités dédupliquées, MOINS les
      *   triplets verrouillés par un pin HARD — un triplet bloqué ne porte aucune
      *   variable, pour personne.
      *
@@ -118,8 +114,6 @@ final class PayloadCapacityMirror
             $pinnedKeys[$this->key((string) ($pin['venueId'] ?? ''), $pin['dayOfWeek'] ?? '', (string) ($pin['startTime'] ?? ''))] = true;
         }
 
-        $caps = $this->activeCapacityCaps($payload);
-
         /** @var array<string, array<string, int>> $freeByVenue venueId => triplet => capacité libre */
         $freeByVenue = [];
         $venueNames = [];
@@ -141,9 +135,6 @@ final class PayloadCapacityMirror
                     continue;
                 }
                 $capacity = (int) ($slot['capacity'] ?? 0);
-                if (isset($caps[$venueId])) {
-                    $capacity = min($capacity, $caps[$venueId]);
-                }
                 $freeByVenue[$venueId][$key] = $capacity;
             }
         }
@@ -190,31 +181,5 @@ final class PayloadCapacityMirror
     public function key(string $venueId, mixed $dayOfWeek, string $startTime): string
     {
         return \sprintf('%s|%s|%s', $venueId, $dayOfWeek, substr($startTime, 0, 5));
-    }
-
-    /**
-     * Le rabot FACILITY_CAPACITY par gymnase — contraintes ACTIVES seulement, clé
-     * STRICTEMENT sur `config.venueId` comme l'engine (un `scopeTargetId` sous scope
-     * TEAM est un id d'équipe et ne désignerait aucun gymnase).
-     *
-     * @param array<string, mixed> $payload
-     *
-     * @return array<string, int>
-     */
-    private function activeCapacityCaps(array $payload): array
-    {
-        $caps = [];
-        foreach (\is_array($payload['constraints'] ?? null) ? $payload['constraints'] : [] as $row) {
-            if (!\is_array($row) || 'FACILITY_CAPACITY' !== ($row['family'] ?? null) || false === ($row['isActive'] ?? true)) {
-                continue;
-            }
-            $config = \is_array($row['config'] ?? null) ? $row['config'] : [];
-            if (isset($config['venueId'], $config['maxTeams'])) {
-                $venueId = (string) $config['venueId'];
-                $caps[$venueId] = min($caps[$venueId] ?? \PHP_INT_MAX, (int) $config['maxTeams']);
-            }
-        }
-
-        return $caps;
     }
 }

@@ -334,19 +334,6 @@ class ParseV2ConstraintsTest(unittest.TestCase):
         result = parse_v2_constraints(constraints)
         assert "venue_closures" not in result
 
-    def test_facility_capacity_produces_cap(self):
-        constraints = [
-            {
-                "id": "c1",
-                "isActive": True,
-                "family": "FACILITY_CAPACITY",
-                "scopeTargetId": "venue-1",
-                "config": {"venueId": "venue-1", "maxTeams": 2},
-            }
-        ]
-        result = parse_v2_constraints(constraints)
-        assert result["venue_capacity_caps"] == {"venue-1": 2}
-
     def test_facility_with_preferred_venue_produces_forced_venue(self):
         constraints = [
             {
