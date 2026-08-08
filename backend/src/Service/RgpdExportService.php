@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\TenantOwnedInterface;
 use App\Entity\User;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
@@ -26,31 +27,37 @@ use Doctrine\ORM\EntityManagerInterface;
 final class RgpdExportService
 {
     /**
-     * Tables club-scoped exportées telles quelles (SELECT * WHERE club_id).
-     * schedule est traité à part (colonnes lourdes exclues).
+     * Tables club-scoped traitées AILLEURS dans exportClub() — elles sortent de la
+     * boucle générique, pas de l'export.
+     *
+     * @var array<string, string> table => où elle est traitée
      */
-    private const CLUB_TABLES = [
-        'season',
-        'team',
-        'coach',
-        'venue',
-        'venue_training_slot',
-        'venue_match_window',
-        'venue_unavailability',
-        'constraint',
-        'reservation',
-        'schedule_slot_template',
-        'schedule_diagnostic',
-        'schedule_structure_snapshot',
-        'calendar_entry',
-        'competition',
-        'fixture',
-        'team_coach',
-        'team_match_habit',
-        'team_link',
-        'coach_player_membership',
-        'team_tag',
-        'sport_category',
+    private const HANDLED_APART = [
+        'schedule' => 'exporté sans son blob interne (snapshot_data)',
+        'club_user' => 'exporté sous la clé `members`, jointe à app_user pour l\'email',
+    ];
+
+    /**
+     * Tables club-scoped VOLONTAIREMENT hors de l'export, chacune avec sa raison.
+     *
+     * ⚠ Une exclusion se justifie, elle ne se constate pas : le test
+     * `RgpdExportCompletenessTest` exige que toute entité
+     * tenant soit exportée OU listée ici. Ajouter une entité sans y penser fait rougir.
+     *
+     * @var array<string, string> table => pourquoi
+     */
+    private const EXCLUDED_FROM_EXPORT = [
+        // SECRET EN CLAIR (décision fondateur 2026-07-26, cf. Entity\CoachWishToken) : le
+        // token EST l'identité de la page publique du coach. Le verser dans un fichier
+        // téléchargeable transformerait l'export de portabilité en fuite de credentials —
+        // quiconque obtient le JSON peut écrire des souhaits au nom de n'importe quel coach.
+        // Les souhaits eux-mêmes (coach_wish) sont exportés : c'est LA donnée de l'art. 20.
+        'coach_wish_token' => 'secret en clair — l\'exporter serait une fuite de credentials',
+        // Base légale DIFFÉRENTE : le journal relève de l'accountability (art. 5.2, intérêt
+        // légitime), pas du contrat ; la portabilité de l'art. 20 ne couvre que les données
+        // fournies par la personne sur base contrat/consentement. Il est de surcroît
+        // append-only par construction et sans PII (« ids uniquement » — docs/security/rgpd.md).
+        'audit_log' => 'accountability art. 5.2, hors périmètre art. 20 ; append-only, sans PII',
     ];
 
     public function __construct(
@@ -105,9 +112,9 @@ final class RgpdExportService
             'club' => $connection->fetchAssociative('SELECT * FROM club WHERE id = :cid', ['cid' => $clubId]) ?: null,
         ];
 
-        foreach (self::CLUB_TABLES as $table) {
-            // Noms de table issus de la constante (jamais d'input) — le quote
-            // gère le mot réservé `constraint`.
+        foreach (self::clubScopedTables() as $table) {
+            // Noms de table issus des métadonnées Doctrine (jamais d'input) — le
+            // quote gère le mot réservé `constraint`.
             $quoted = '"' . $table . '"';
             $data[$table] = $connection->fetchAllAssociative(
                 \sprintf('SELECT * FROM %s WHERE club_id = :cid', $quoted),
@@ -134,12 +141,9 @@ final class RgpdExportService
             ['cid' => $clubId],
         );
 
-        // team_tag_assignment n'a pas de club_id : jointure par saison.
-        $data['team_tag_assignment'] = $connection->fetchAllAssociative(
-            'SELECT tta.* FROM team_tag_assignment tta
-             JOIN season s ON s.id = tta.season_id WHERE s.club_id = :cid',
-            ['cid' => $clubId],
-        );
+        // (team_tag_assignment passait ici par une jointure saison « faute de club_id » —
+        // elle en a un depuis BCK-11, 2026-08-07 : la boucle générique la sert désormais,
+        // et le contournement est retiré avec son commentaire devenu faux.)
 
         // Memberships du club (qui a accès) — sans données de compte au-delà
         // de l'email (les comptes appartiennent à leurs titulaires).
@@ -151,6 +155,41 @@ final class RgpdExportService
         );
 
         return $data;
+    }
+
+    /**
+     * Les tables à exporter en bloc : TOUTES les entités tenant, moins celles traitées
+     * à part et celles exclues nommément.
+     *
+     * ⚑ DÉRIVÉE, jamais recopiée (audit D-01, 2026-08-08). La liste vivait en dur et
+     * avait dérivé : 9 tables tenant manquaient, dont `coach_wish` qui porte le
+     * commentaire libre du coach et ses indisponibilités. L'omission était INVISIBLE —
+     * `GET /api/club/export` rendait 200, un JSON valide, la clé simplement absente.
+     * Le marqueur `TenantOwnedInterface` est déjà prouvé équivalent à la colonne
+     * `club_id` par `TenantOwnedInterfaceCompletenessTest` :
+     * on s'appuie sur une source déjà gardée plutôt que d'en maintenir une seconde.
+     *
+     * @return list<string>
+     */
+    public function clubScopedTables(): array
+    {
+        $tables = [];
+        foreach ($this->entityManager->getMetadataFactory()->getAllMetadata() as $metadata) {
+            if (!is_a($metadata->getName(), TenantOwnedInterface::class, true)) {
+                continue;
+            }
+
+            $table = $metadata->getTableName();
+            if (isset(self::HANDLED_APART[$table]) || isset(self::EXCLUDED_FROM_EXPORT[$table])) {
+                continue;
+            }
+
+            $tables[] = $table;
+        }
+
+        sort($tables); // ordre stable d'un export à l'autre (diffable)
+
+        return $tables;
     }
 
     private function connection(): Connection
