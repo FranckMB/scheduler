@@ -21,6 +21,7 @@ import { CoachWishesModal } from "@/features/coach-wishes/CoachWishesModal";
 import { RadarCoachWishAction } from "@/features/coach-wishes/RadarCoachWishAction";
 import { useCoachWishCampaigns } from "@/features/coach-wishes/campaignQueries";
 import { useState } from "react";
+import { isoDayOf } from "@/shared/lib/days";
 
 /** Public holidays further out than this are noise, not a to-do. */
 export const PUBLIC_HOLIDAY_HORIZON_DAYS = 30;
@@ -343,11 +344,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   for (const slot of seasonSlotsQuery.data ?? []) {
     slotsPerIsoDay.set(slot.dayOfWeek, (slotsPerIsoDay.get(slot.dayOfWeek) ?? 0) + 1);
   }
-  // Date ISO « yyyy-mm-dd » → jour ISO 1-7 (UTC : la date est un jour civil, pas un instant).
-  const isoDayOf = (date: string): number => {
-    const day = new Date(`${date}T00:00:00Z`).getUTCDay();
-    return 0 === day ? 7 : day;
-  };
+  // D-30 : le jour ISO vient de `shared/lib/days` (midi UTC — hors de portée des fuseaux).
   // P4-68 (recadrage fondateur 2026-08-06) — l'indispo de gymnase entre au RADAR.
   // Elle vivait dans une carte statique plus bas : le gestionnaire n'était donc pas
   // alerté au moment d'agir, alors que tout le modèle repose sur lui (« il crée

@@ -2,11 +2,11 @@ import type { VenueMatchWindow, VenueUnavailability } from "../api";
 
 const DAY_LABELS = ["", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 
-/** ISO weekday (1..7) of a Y-m-d date — UTC noon so no TZ edge flips the day. */
-export function isoDayOf(matchDate: string): number {
-  const day = new Date(`${matchDate}T12:00:00Z`).getUTCDay();
-  return 0 === day ? 7 : day;
-}
+// D-30 : cette implémentation (midi UTC) était la plus défensive des trois — elle est
+// devenue le foyer partagé.
+import { isoDayOf } from "@/shared/lib/days";
+
+export { isoDayOf };
 
 /** Venues that hold ≥ 1 match access window — the derived « match venue » flag. */
 export function matchVenueIds(windows: VenueMatchWindow[]): Set<string> {

@@ -9,11 +9,11 @@ export function timeToMinutes(time: string | null | undefined): number {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-/** Y-m-d → ISO weekday 1..7 (Mon..Sun). */
-export function isoWeekday(dateStr: string): number {
-  const day = new Date(`${dateStr}T00:00:00`).getDay(); // 0=Sun..6=Sat
-  return 0 === day ? 7 : day;
-}
+// D-30 : cette version calculait le jour à MINUIT LOCAL — elle basculait d'un jour hors
+// fuseau français, là où `matchAccess` (midi UTC) restait juste. Foyer unique partagé.
+import { isoDayOf as isoWeekday } from "@/shared/lib/days";
+
+export { isoWeekday };
 
 export interface EnvelopeResult {
   /** True only when the team maps to at least one league window (HARD guard active). */
