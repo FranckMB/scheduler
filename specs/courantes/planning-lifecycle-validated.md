@@ -1,5 +1,7 @@
 # Cycle de vie des plannings — le pointeur du plan (N3)
 
+Last verified @ 2026-07-31 (aucune modification depuis ; ADR-0002 et ses amendements restent la source)
+
 > **Bascule 2026-07-16 (ADR-0002, `docs/architecture/adr-0002-pattern-plan.md`)** : le **plan de
 > type SEASON** (`schedule_plan`) et **la version qu'il pointe** (`chosen_schedule_id`) SONT le
 > calendrier de la saison. **« Validé » n'est plus un statut** : ça se dérive du pointeur, et de

@@ -1,6 +1,6 @@
 # FORWARD Components Spec — Pages & Shared Components (hors wizard)
 
-Last verified @ 2026-07-29
+Last verified @ 2026-08-01 (contenu recalé par les livraisons : grille Gymnases qui montre tout ce qui existe P4-37 · modale « Solliciter les coachs » P3-15 a/b)
 
 > 🛑 **Ce document est SUPERSEDED. Il ne décrit pas le frontend livré.**
 >

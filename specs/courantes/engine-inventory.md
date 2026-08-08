@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 2026-08-07 (CONTRACT_VERSION **2.2** = second problème `/place-matches`, P1-4 PR D · 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156 · P2-9 volet 1 : diagnostics de verrou, #317)
+Last verified @ 2026-08-08 (retrait de `FACILITY_CAPACITY` et de `config.coachId` répercuté le 2026-08-08 ; CONTRACT_VERSION **2.2** = second problème `/place-matches`, P1-4 PR D · 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156 · P2-9 volet 1 : diagnostics de verrou, #317)
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.

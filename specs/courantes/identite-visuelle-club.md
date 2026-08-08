@@ -1,5 +1,7 @@
 # Identité visuelle par club (logo + couleur d'accent)
 
+Last verified @ 2026-07-29 (aucune modification depuis — le sujet est clos et le fichier n'a pas bougé)
+
 > **LIVRÉ (2026-07-02)** — accent par club + logo + extraction 3 couleurs + écran « Gestion du club ». Détail livré ci-dessous ; ce qui reste ⬜ est du confort (voir « Questions ouvertes »).
 >
 > **Livré** : `Club.accentColor` (**accent clair**) + `Club.accentColorDark` (**accent sombre distinct**, nullable → dérivé de l'accent clair si absent — ancien comportement) + `accentPalette` + `logoUrl` (backend) · endpoint `PATCH /api/club/appearance` (accentColor · accentColorDark · palette) · upload/serve logo via abstraction `LogoStorage` (locale en dev, swappable prod) `POST/DELETE /api/club/logo` + `GET /api/clubs/{id}/logo` (public) · application front `--accent`/`--accent-foreground` (AA auto) via `useApplyClubTheme` — **une couleur par mode** : l'accent sombre explicite est appliqué tel quel en dark, sinon dérivation legible de l'accent clair · écran `/club` (hub) section Identité (**deux sélecteurs accent : thème clair + thème sombre** ; upload logo + **cropper cercle : zoom + cadrage, export PNG cadré**, y compris recadrage du logo existant + extraction 3 couleurs → suggestion accent + palette) · affichage logo header + écran d'attente génération · **onglet de nav actif = pill accent** (AA-safe) · **barre d'accent (`border-l`) sur les titres de page** (Planning · Profil · Gestion du club · Matchs) pour une présence accent générale.

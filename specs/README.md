@@ -23,6 +23,28 @@ Last verified @ 2026-08-08 (règle « initiales figées » précisée — modifi
 - `evolution` : on **retire** un item quand il est livré (graduation vers courantes) ; on **ajoute** un item quand un gap/bug/feature futur est identifié — avec sa preuve `fichier:ligne` vérifiée dans le code.
 - `initiales` : jamais modifié.
 
+### La règle du stamp — « Last verified » doit être VÉRIFIABLE, pas déclaratif
+
+**Un fichier édité après la date de son stamp a un stamp qui ment.** C'est mécanique, ça se contrôle en une commande, et ça n'a rien à voir avec la qualité du contenu :
+
+```bash
+# Liste les stamps antérieurs au dernier commit qui a touché le fichier.
+for f in specs/courantes/*.md docs/project-map.md docs/testing/testing-strategy.md specs/README.md; do
+  s=$(grep -m1 -o 'Last verified @ [0-9-]*' "$f" | grep -o '[0-9-]*$'); [ -z "$s" ] && continue
+  last=$(git log -1 --format=%ad --date=short -- "$f")
+  [[ "$last" > "$s" ]] && echo "STAMP MENTEUR: $f (stamp=$s commit=$last)"
+done
+```
+
+Le 2026-08-08, cette commande a sorti **9 fichiers sur 16** — dont un modifié le jour même sans bump. Aucun n'avait un contenu périmé : chacun avait été correctement recalé **par la PR qui livrait la feature**. Seul le stamp était resté figé. C'est exactement pour ça que le motif a survécu à six éditions d'audit (`AUD-DOC-04`) : personne ne voyait le mensonge, parce qu'il ne portait pas sur le fond.
+
+**Deux formulations, deux sens — ne pas les confondre :**
+
+- *« Last verified @ D (X re-vérifié contre `<fichier de code>` »* — quelqu'un a **relu le code**. C'est la forme forte, la seule qui autorise à faire confiance au fichier sans re-vérifier.
+- *« Last verified @ D (contenu recalé par les livraisons : … »* — le fichier a été **maintenu au fil des PR**, sans relecture d'ensemble. Honnête et utile, mais plus faible : un oubli de PR n'y serait pas vu.
+
+**Bumper sans avoir rien vérifié est pire que ne pas bumper** : ça transforme une promesse vague en fausse garantie. Si la commande ci-dessus signale un fichier, l'ordre est : regarder ce que les commits ont changé (`git log --since=<stamp> -- <fichier>`), vérifier ce point, **puis** dater — en disant laquelle des deux formes s'applique.
+
 ## Files Overview
 
 - `specs/initiales/` — `ClubScheduler_v3.md` (spec produit consolidée, figée) · `ClubScheduler_Specification_des_contraintes_v2.md` (modèle de contraintes d'origine) · prompt orchestrateur v3.
