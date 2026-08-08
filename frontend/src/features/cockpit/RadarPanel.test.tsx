@@ -318,6 +318,19 @@ describe("RadarPanel", () => {
     expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
   });
 
+  // (b) AUD-UXS-04 — le REVERS de l'horizon ci-dessus. Une vacance déjà commencée reste
+  // affichée volontairement (elle demande toujours un geste), mais « Dans N j » devient
+  // alors NÉGATIF : le cockpit annonçait « Vacances d'Été · Dans -35 j » sur des données
+  // réelles. Défaut trouvé en NAVIGATEUR, invisible à quatre éditions d'audit au grep.
+  // La formulation reprise est celle que la carte des indisponibilités utilise déjà.
+  it("dit « En cours jusqu'au … » sur une vacance commencée, jamais un nombre de jours négatif", () => {
+    setTodayOverride("2999-01-10"); // dans la fenêtre : 5 j après le début, 8 j avant la fin
+    renderRadar({ holidays: [holiday] });
+
+    expect(screen.getByText(/En cours jusqu'au 18 janv\. 2999/)).toBeInTheDocument();
+    expect(screen.queryByText(/Dans -\d+ j/)).not.toBeInTheDocument();
+  });
+
   // La non-régression qui compte : l'horizon ne masque que les vacances INTACTES. Dès
   // qu'un plan existe, la période est un travail commencé — la cacher ferait perdre au
   // gestionnaire ce qu'il a déjà entamé, ce qui serait bien pire que le bruit corrigé.

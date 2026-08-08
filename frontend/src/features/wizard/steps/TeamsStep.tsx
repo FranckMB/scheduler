@@ -287,7 +287,7 @@ function SortableTeamRow({ team, canUp, canDown, onArrow }: SortRowProps) {
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
   return (
     <div ref={setNodeRef} style={style} className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-2">
-      <button type="button" className="cursor-grab touch-none text-muted-foreground hover:text-foreground" aria-label="Déplacer l'équipe" {...attributes} {...listeners}>
+      <button type="button" className="-m-1 cursor-grab touch-none rounded p-1 text-muted-foreground hover:text-foreground" aria-label="Déplacer l'équipe" {...attributes} {...listeners}>
         <GripVertical className="size-4" />
       </button>
       <span className="flex-1 text-sm">{team.name}</span>

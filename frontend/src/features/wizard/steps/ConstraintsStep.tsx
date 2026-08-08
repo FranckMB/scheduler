@@ -679,10 +679,10 @@ export function ConstraintsStep() {
                   <li key={c.id} className={cn("flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm", editingId === c.id ? "border-accent ring-1 ring-accent" : "border-border")}>
                     <span className="flex-1">{c.name}</span>
                     <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
-                    <button type="button" aria-label="Modifier" className="text-muted-foreground hover:text-foreground" onClick={() => editConstraint(c)}>
+                    <button type="button" aria-label="Modifier" className="rounded p-1 text-muted-foreground hover:text-foreground" onClick={() => editConstraint(c)}>
                       <Pencil className="size-4" />
                     </button>
-                    <button type="button" aria-label="Supprimer" className="text-muted-foreground hover:text-destructive" onClick={() => setPendingDelete(c)}>
+                    <button type="button" aria-label="Supprimer" className="rounded p-1 text-muted-foreground hover:text-destructive" onClick={() => setPendingDelete(c)}>
                       <Trash2 className="size-4" />
                     </button>
                   </li>

@@ -44,7 +44,7 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, busy, readOnly =
           {cell.teamLabel}
           {cell.locked ? <Lock className="size-4 text-muted-foreground" /> : null}
         </CardTitle>
-        <button type="button" onClick={onClose} aria-label="Fermer" className="text-muted-foreground hover:text-foreground">
+        <button type="button" onClick={onClose} aria-label="Fermer" className="rounded p-1 text-muted-foreground hover:text-foreground">
           <X className="size-4" />
         </button>
       </CardHeader>

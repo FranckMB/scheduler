@@ -187,7 +187,7 @@ export function SlotReservationModal({
               <button
                 type="button"
                 aria-label={`Retirer ${teamName.get(r.teamId) ?? "l'équipe"}`}
-                className="text-muted-foreground hover:text-destructive"
+                className="rounded p-1 text-muted-foreground hover:text-destructive"
                 onClick={() => {
                   setError(null); // le refus affiché peut devenir caduc en libérant la place
                   setRemoved((prev) => [...prev, r.id]);
@@ -225,7 +225,7 @@ export function SlotReservationModal({
               <button
                 type="button"
                 aria-label={`Annuler l'ajout de ${teamName.get(teamId) ?? "l'équipe"}`}
-                className="text-muted-foreground hover:text-destructive"
+                className="rounded p-1 text-muted-foreground hover:text-destructive"
                 onClick={() => {
                   setError(null);
                   setAdded((prev) => prev.filter((id) => id !== teamId));
