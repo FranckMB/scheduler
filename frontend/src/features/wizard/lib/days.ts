@@ -20,8 +20,8 @@ export const toMinutes = (time: string): number => {
   return h * 60 + m;
 };
 
-/** Minutes since midnight back to "HH:MM". */
-export const fmtMinutes = (m: number): string => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+/** Minutes depuis minuit → "HH:MM" — foyer unique `shared/lib/time` (D-20 : cette copie rendait « 25:15 »). */
+export { formatMinutes as fmtMinutes } from "@/shared/lib/time";
 
 /** Durées proposées pour un créneau (min) — éditeurs de saison et de période. */
 // 45 min → 2h30 par pas de 15 (retour terrain 2026-07-31 : la liste s'arrêtait à 1h→2h,

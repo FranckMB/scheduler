@@ -4,6 +4,7 @@ import { readFailed, readLoading } from "@/shared/lib/readState";
 import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
 import { useConstraintValidation, usePeriodSlots, useReservations, useTeamPeriodOverrides, useVenuePeriodOverrides, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
+import { effectiveSlotCapacity, slotKey } from "./reservationSlots";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
 
 const DAY_LABELS = ["", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
@@ -22,8 +23,13 @@ export function computeReservationWarnings(reservations: Reservation[], teams: T
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const venueName = new Map(venues.map((v) => [v.id, v.name]));
   const venueSplit = new Map(venues.map((v) => [v.id, v.canSplit]));
-  const slotKey = (venueId: string, day: number, start: string): string => `${venueId}|${day}|${start}`;
-  const slotCapacity = new Map(slots.map((s) => [slotKey(s.venueId, s.dayOfWeek, s.startTime), s.capacity]));
+  // D-02/D-03 : `slotKey` et la capacité effective viennent de `reservationSlots` — la porte
+  // en avait sa PROPRE copie, et les deux avaient divergé sur les deux points qui comptent :
+  // la clé n'y normalisait pas l'heure (les réservations stockent « 18:00 », les créneaux
+  // peuvent porter « 18:00:00 » : la Map ne retrouvait alors pas le créneau, `?? 1`
+  // s'appliquait) et un gymnase pas encore chargé y valait 1 au lieu de sa capacité. L'étape
+  // criait « max 1 » pendant que le Récap, branché sur la source, annonçait « 2 places ».
+  const slotCapacity = new Map(slots.map((s) => [slotKey(s.venueId, s.dayOfWeek, s.startTime), effectiveSlotCapacity(s, venueSplit)]));
 
   // Rule 1 — same slot shared by more distinct teams than allowed.
   const bySlot = new Map<string, Set<string>>();
@@ -33,7 +39,7 @@ export function computeReservationWarnings(reservations: Reservation[], teams: T
   }
   bySlot.forEach((teamIds, key) => {
     const [venueId, day, start] = key.split("|");
-    const allowed = (venueSplit.get(venueId) ?? false) ? (slotCapacity.get(key) ?? 1) : 1;
+    const allowed = slotCapacity.get(key) ?? 1;
     if (teamIds.size > allowed) {
       warnings.push(`Créneau partagé par ${teamIds.size} équipes (max ${allowed}) : ${venueName.get(venueId) ?? "?"} ${DAY_LABELS[Number(day)] ?? ""} ${start}.`);
     }

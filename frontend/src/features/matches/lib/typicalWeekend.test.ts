@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TeamMatchHabit } from "../api";
+import { MATCH_MINUTES, WARMUP_MINUTES } from "./weekendGrid";
 import { buildTypicalWeekend } from "./typicalWeekend";
 
 const habit = (over: Partial<TeamMatchHabit> = {}): TeamMatchHabit => ({
@@ -13,11 +14,19 @@ const habit = (over: Partial<TeamMatchHabit> = {}): TeamMatchHabit => ({
 });
 
 describe("buildTypicalWeekend (P1-4 PR E2)", () => {
+  // D-02 — ce cas épinglait 15:00→17:45, soit 2h45, sous un nom qui annonce « 2h15 » : il
+  // verrouillait la divergence au lieu de la révéler. Le serveur fait foi (`MatchFootprint.php`,
+  // 30 min avant le coup d'envoi + 105 après = 2h15) et la grille DATÉE le respectait déjà ;
+  // seul le « week-end type » dessinait 2h45. Les bornes ci-dessous sont désormais dérivées des
+  // mêmes constantes que le code, pour que la valeur ne puisse plus être recopiée de travers.
   it("lays a venue-anchored habit as a 2h15 footprint in its day×venue column", () => {
     const model = buildTypicalWeekend([habit()]);
+    const kickoffMin = 15 * 60 + 30;
     expect(model.empty).toBe(false);
     expect(model.columns).toEqual([{ key: "6:venue-1", dayOfWeek: 6, venueId: "venue-1" }]);
-    expect(model.blocks[0]).toMatchObject({ startMin: 15 * 60, endMin: 17 * 60 + 45, kickoff: "15:30" });
+    expect(model.blocks[0]).toMatchObject({ startMin: kickoffMin - WARMUP_MINUTES, endMin: kickoffMin + MATCH_MINUTES, kickoff: "15:30" });
+    // L'empreinte totale annoncée par le nom du test : 2h15.
+    expect(WARMUP_MINUTES + MATCH_MINUTES).toBe(135);
   });
 
   it("keeps only weekend habits and lists venue-less ones apart", () => {

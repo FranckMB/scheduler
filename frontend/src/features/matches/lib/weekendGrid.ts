@@ -6,12 +6,10 @@ export const WARMUP_MINUTES = 30;
 export const MATCH_MINUTES = 105;
 
 /** minutes since midnight → "HH:MM". */
-export function formatMinutes(total: number): string {
-  const clamped = ((total % 1440) + 1440) % 1440;
-  const h = Math.floor(clamped / 60);
-  const m = clamped % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
+// D-20 : c'était la seule des trois copies à clamper — elle est devenue le foyer partagé.
+import { formatMinutes } from "@/shared/lib/time";
+
+export { formatMinutes };
 
 /** Local Y-m-d (never toISOString, which shifts to UTC and can flip the day). */
 function toYmd(date: Date): string {
