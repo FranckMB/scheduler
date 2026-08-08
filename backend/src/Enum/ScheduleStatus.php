@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum ScheduleStatus: string
 {
+    use HasValues;
+
     case DRAFT = 'DRAFT';
     case PENDING = 'PENDING';
     case GENERATING = 'GENERATING';

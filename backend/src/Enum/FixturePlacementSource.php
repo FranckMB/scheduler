@@ -13,6 +13,8 @@ namespace App\Enum;
  */
 enum FixturePlacementSource: string
 {
+    use HasValues;
+
     case MANUAL = 'MANUAL';
     case SOLVER = 'SOLVER';
 }

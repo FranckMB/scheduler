@@ -11,11 +11,8 @@ namespace App\Enum;
  */
 enum TeamLinkType: string
 {
-    /** @return list<string> */
-    public static function values(): array
-    {
-        return array_map(static fn (self $case): string => $case->value, self::cases());
-    }
+    use HasValues;
+
     /**
      * The two teams share players (« double projets » — no player entity
      * exists, the manager DECLARES the bridge): their matches should never

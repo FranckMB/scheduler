@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Dto;
 
+use App\Enum\ScheduleStatus;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -24,7 +25,7 @@ class ScheduleInput
     public ?string $name = null;
 
     #[Assert\NotBlank]
-    #[Assert\Choice(choices: ['DRAFT', 'PENDING', 'GENERATING', 'COMPLETED', 'FAILED'])]
+    #[Assert\Choice(callback: [ScheduleStatus::class, 'values'])]
     #[Groups(['write'])]
     public ?string $status = null;
 

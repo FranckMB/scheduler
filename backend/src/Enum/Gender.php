@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum Gender: string
 {
+    use HasValues;
+
     case M = 'M';
     case F = 'F';
     case MIXTE = 'MIXTE';

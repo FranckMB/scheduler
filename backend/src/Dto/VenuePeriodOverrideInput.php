@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Dto;
 
+use App\Enum\VenuePeriodMode;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -24,7 +25,7 @@ class VenuePeriodOverrideInput
      * de ligne. Pour revenir aux créneaux de saison on supprime l'override (DELETE).
      */
     #[Assert\NotBlank]
-    #[Assert\Choice(choices: ['DISABLED', 'BLANK'], message: 'Mode invalide : seuls DISABLED et BLANK se stockent. INHERIT est le défaut — supprimez l\'override pour y revenir.')]
+    #[Assert\Choice(callback: [VenuePeriodMode::class, 'values'], message: 'Mode invalide : seuls DISABLED et BLANK se stockent. INHERIT est le défaut — supprimez l\'override pour y revenir.')]
     #[Groups(['write'])]
     public ?string $mode = null;
 }

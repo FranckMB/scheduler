@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Dto;
 
 use App\Enum\FixtureHomeAway;
+use App\Enum\FixturePlacementSource;
 use App\Enum\FixtureStatus;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
@@ -53,7 +54,7 @@ class FixtureInput
      * any other manual write keeps stamping MANUAL. MANUAL is accepted as a
      * no-op echo (the stamp rule produces it anyway).
      */
-    #[Assert\Choice(choices: ['MANUAL', 'SOLVER'])]
+    #[Assert\Choice(callback: [FixturePlacementSource::class, 'values'])]
     #[Groups(['write'])]
     public ?string $placementSource = null;
 }

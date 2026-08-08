@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Dto;
 
+use App\Enum\ScheduleDiagnosticSeverity;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -17,7 +18,7 @@ class ScheduleDiagnosticInput
     #[Groups(['write'])]
     public ?string $type = null;
 
-    #[Assert\Choice(choices: ['ERROR', 'WARNING', 'INFO', 'SUCCESS'])]
+    #[Assert\Choice(callback: [ScheduleDiagnosticSeverity::class, 'values'])]
     #[Groups(['write'])]
     public ?string $severity = null;
 

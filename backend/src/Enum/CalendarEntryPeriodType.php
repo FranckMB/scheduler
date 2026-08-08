@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum CalendarEntryPeriodType: string
 {
+    use HasValues;
+
     case CLOSURE = 'closure';
     case HOLIDAY = 'holiday';
     case CUTOFF = 'cutoff';

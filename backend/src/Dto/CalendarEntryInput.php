@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Dto;
 
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\CalendarEntryStatus;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Context\ExecutionContextInterface;
@@ -11,7 +14,7 @@ use Symfony\Component\Validator\Context\ExecutionContextInterface;
 class CalendarEntryInput
 {
     #[Assert\NotBlank]
-    #[Assert\Choice(choices: ['event', 'period'])]
+    #[Assert\Choice(callback: [CalendarEntryKind::class, 'values'])]
     #[Groups(['write'])]
     public ?string $kind = null;
 
@@ -33,7 +36,7 @@ class CalendarEntryInput
     #[Groups(['write'])]
     public ?bool $isDisruptive = null;
 
-    #[Assert\Choice(choices: ['closure', 'holiday', 'cutoff', 'mutualisation', 'custom'])]
+    #[Assert\Choice(callback: [CalendarEntryPeriodType::class, 'values'])]
     #[Groups(['write'])]
     public ?string $periodType = null;
 
@@ -46,7 +49,7 @@ class CalendarEntryInput
     #[Groups(['write'])]
     public ?string $parentEntryId = null;
 
-    #[Assert\Choice(choices: ['proposed', 'active', 'ignored'])]
+    #[Assert\Choice(callback: [CalendarEntryStatus::class, 'values'])]
     #[Groups(['write'])]
     public ?string $status = null;
 

@@ -17,6 +17,8 @@ namespace App\Enum;
  */
 enum VenuePeriodMode: string
 {
+    use HasValues;
+
     case DISABLED = 'DISABLED';
     case BLANK = 'BLANK';
 }

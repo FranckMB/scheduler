@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum TeamCoachRole: string
 {
+    use HasValues;
+
     case MAIN = 'MAIN';
     case ASSISTANT = 'ASSISTANT';
 }
