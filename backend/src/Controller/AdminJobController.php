@@ -9,6 +9,7 @@ use App\AdminJob\AdminJobCatalog;
 use App\AdminJob\AdminJobDefinition;
 use App\AdminJob\AdminJobExecutorInterface;
 use App\Entity\SuperAdmin;
+use App\Enum\AdminJobStatus;
 use App\Security\AdminSessionCsrf;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -58,6 +59,6 @@ final readonly class AdminJobController
             return new JsonResponse(['error' => 'Operational job failed.', 'key' => $key, 'exitCode' => $exitCode], 502);
         }
 
-        return new JsonResponse(['key' => $key, 'status' => 'succeeded', 'exitCode' => $exitCode]);
+        return new JsonResponse(['key' => $key, 'status' => AdminJobStatus::SUCCEEDED->value, 'exitCode' => $exitCode]);
     }
 }

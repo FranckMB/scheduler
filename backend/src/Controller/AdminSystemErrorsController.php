@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Enum\AdminJobStatus;
 use DateTimeImmutable;
+use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Doctrine\Persistence\ManagerRegistry;
@@ -53,7 +55,8 @@ final readonly class AdminSystemErrorsController
         $connection = $this->registry->getConnection('admin');
         \assert($connection instanceof Connection);
 
-        $params = [];
+        $params = ['faulty' => AdminJobStatus::faultyValues()];
+        $paramTypes = ['faulty' => ArrayParameterType::STRING];
         $sinceSql = '';
         if (null !== $since) {
             $sinceSql = 'AND created_at >= :since';
@@ -69,7 +72,7 @@ final readonly class AdminSystemErrorsController
                 md5(command_name) AS message_hash,
                 date_trunc('hour', started_at) AS hour_bucket
             FROM admin_job_run
-            WHERE status IN ('failed', 'interrupted')
+            WHERE status IN (:faulty)
                 {$sinceSql}
             UNION ALL
             SELECT
@@ -96,6 +99,7 @@ final readonly class AdminSystemErrorsController
         $count = (int) $connection->fetchOne(
             $cte . ' SELECT COUNT(*) FROM deduped WHERE rn = 1',
             $params,
+            $paramTypes,
         );
 
         $offset = ($page - 1) * $limit;
@@ -108,7 +112,7 @@ final readonly class AdminSystemErrorsController
             . ' ORDER BY created_at DESC'
             . ' LIMIT :limit OFFSET :offset',
             [...$params, 'limit' => $limit, 'offset' => $offset],
-            ['limit' => ParameterType::INTEGER, 'offset' => ParameterType::INTEGER],
+            [...$paramTypes, 'limit' => ParameterType::INTEGER, 'offset' => ParameterType::INTEGER],
         );
 
         $items = array_map(static fn (array $row): array => [

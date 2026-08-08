@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\AdminJob;
 
+use App\Enum\AdminJobSource;
+use App\Enum\AdminJobStatus;
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
@@ -29,12 +31,12 @@ final readonly class AdminJobRunStore
         );
     }
 
-    public function start(AdminJobDefinition $definition, string $source, ?string $superAdminId, ?DateTimeImmutable $scheduledFor = null): string
+    public function start(AdminJobDefinition $definition, AdminJobSource $source, ?string $superAdminId, ?DateTimeImmutable $scheduledFor = null): string
     {
         $connection = $this->connection();
         $connection->executeStatement(
-            'UPDATE admin_job_run SET status = \'interrupted\', finished_at = NOW(), duration_ms = GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000))::INT WHERE job_key = :job_key AND status = \'running\'',
-            ['job_key' => $definition->key],
+            'UPDATE admin_job_run SET status = :interrupted, finished_at = NOW(), duration_ms = GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000))::INT WHERE job_key = :job_key AND status = :running',
+            ['job_key' => $definition->key, 'interrupted' => AdminJobStatus::INTERRUPTED->value, 'running' => AdminJobStatus::RUNNING->value],
         );
 
         $id = $this->newUuid();
@@ -42,8 +44,8 @@ final readonly class AdminJobRunStore
             'id' => $id,
             'job_key' => $definition->key,
             'command_name' => $definition->command,
-            'source' => $source,
-            'status' => 'running',
+            'source' => $source->value,
+            'status' => AdminJobStatus::RUNNING->value,
             'started_at' => (new DateTimeImmutable)->format('Y-m-d H:i:sP'),
             'super_admin_id' => $superAdminId,
             'scheduled_for' => $scheduledFor?->format('Y-m-d H:i:sP'),
@@ -57,16 +59,19 @@ final readonly class AdminJobRunStore
 
     public function latestScheduledFor(string $jobKey): ?DateTimeImmutable
     {
-        $value = $this->connection()->fetchOne('SELECT MAX(scheduled_for) FROM admin_job_run WHERE job_key = :job_key AND scheduled_for IS NOT NULL AND status <> \'interrupted\'', ['job_key' => $jobKey]);
+        $value = $this->connection()->fetchOne(
+            'SELECT MAX(scheduled_for) FROM admin_job_run WHERE job_key = :job_key AND scheduled_for IS NOT NULL AND status <> :interrupted',
+            ['job_key' => $jobKey, 'interrupted' => AdminJobStatus::INTERRUPTED->value],
+        );
 
         return false === $value || null === $value ? null : new DateTimeImmutable((string) $value);
     }
 
-    public function finish(string $runId, string $status, int $exitCode): void
+    public function finish(string $runId, AdminJobStatus $status, int $exitCode): void
     {
         $this->connection()->executeStatement(
             'UPDATE admin_job_run SET status = :status, finished_at = NOW(), duration_ms = GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000))::INT, exit_code = :exit_code WHERE id = :id',
-            ['id' => $runId, 'status' => $status, 'exit_code' => $exitCode],
+            ['id' => $runId, 'status' => $status->value, 'exit_code' => $exitCode],
         );
     }
 

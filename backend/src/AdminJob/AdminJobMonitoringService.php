@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\AdminJob;
 
+use App\Enum\AdminJobStatus;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Doctrine\DBAL\Connection;
@@ -86,7 +87,10 @@ final readonly class AdminJobMonitoringService
 
     private function latestScheduledFor(string $jobKey): ?DateTimeImmutable
     {
-        $value = $this->connection()->fetchOne('SELECT MAX(scheduled_for) FROM admin_job_run WHERE job_key = :job_key AND scheduled_for IS NOT NULL AND status <> \'interrupted\'', ['job_key' => $jobKey]);
+        $value = $this->connection()->fetchOne(
+            'SELECT MAX(scheduled_for) FROM admin_job_run WHERE job_key = :job_key AND scheduled_for IS NOT NULL AND status <> :interrupted',
+            ['job_key' => $jobKey, 'interrupted' => AdminJobStatus::INTERRUPTED->value],
+        );
 
         return false === $value || null === $value ? null : new DateTimeImmutable((string) $value);
     }

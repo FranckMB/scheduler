@@ -11,6 +11,7 @@ use App\AdminJob\AdminJobDefinition;
 use App\AdminJob\AdminJobExecutorInterface;
 use App\AdminJob\AdminJobSchedule;
 use App\Entity\SuperAdmin;
+use App\Enum\AdminJobStatus;
 use App\Security\AdminSessionCsrf;
 use App\Service\TenantConnectionContext;
 use Doctrine\DBAL\Connection;
@@ -134,7 +135,7 @@ final readonly class AdminClubActionController
             return new JsonResponse(['error' => 'Support action failed.', 'key' => $key, 'exitCode' => $exitCode], 502);
         }
 
-        return new JsonResponse(['key' => $key, 'clubId' => $clubId, 'status' => 'succeeded', 'exitCode' => $exitCode]);
+        return new JsonResponse(['key' => $key, 'clubId' => $clubId, 'status' => AdminJobStatus::SUCCEEDED->value, 'exitCode' => $exitCode]);
     }
 
     private function connection(): Connection
