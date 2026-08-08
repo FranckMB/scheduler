@@ -9,6 +9,7 @@ use App\Entity\ScheduleDiagnostic;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
 use App\Mercure\ClubTopicUpdate;
+use App\Mercure\MercureTopic;
 use App\Message\GenerateScheduleMessage;
 use App\Service\SolverMetricsRecorder;
 use App\Service\TenantConnectionContext;
@@ -78,7 +79,7 @@ final readonly class ScheduleGenerationFailureListener
             $this->entityManager->flush();
 
             $this->hub->publish(ClubTopicUpdate::private(
-                \sprintf('club:%s:schedule:%s', $message->getClubId(), $message->getScheduleId()),
+                MercureTopic::for($message->getClubId(), $message->getScheduleId()),
                 json_encode(['status' => 'failed', 'error' => 'generation_failed'], \JSON_THROW_ON_ERROR),
             ));
         } catch (Throwable $exception) {

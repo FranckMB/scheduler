@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\AdminJob;
 
+use App\Enum\AdminJobSource;
+use App\Enum\AdminJobStatus;
 use DateTimeImmutable;
 use Symfony\Component\Console\Command\Command;
 use Throwable;
@@ -14,7 +16,7 @@ final readonly class AdminJobRunner
     public function __construct(private AdminJobRunStore $store) {}
 
     /** @param callable(): int $execute */
-    public function run(AdminJobDefinition $definition, string $source, ?string $superAdminId, callable $execute, ?DateTimeImmutable $scheduledFor = null): int
+    public function run(AdminJobDefinition $definition, AdminJobSource $source, ?string $superAdminId, callable $execute, ?DateTimeImmutable $scheduledFor = null): int
     {
         // Verrou sur la clé EFFECTIVE (peut être partagée avec un job planifié — SA4),
         // historique sous `key` (toujours propre à la définition, jamais mélangé).
@@ -27,12 +29,12 @@ final readonly class AdminJobRunner
             try {
                 $exitCode = $execute();
             } catch (Throwable $error) {
-                $this->store->finish($runId, 'failed', Command::FAILURE);
+                $this->store->finish($runId, AdminJobStatus::FAILED, Command::FAILURE);
 
                 throw $error;
             }
 
-            $this->store->finish($runId, Command::SUCCESS === $exitCode ? 'succeeded' : 'failed', $exitCode);
+            $this->store->finish($runId, Command::SUCCESS === $exitCode ? AdminJobStatus::SUCCEEDED : AdminJobStatus::FAILED, $exitCode);
 
             return $exitCode;
         } finally {

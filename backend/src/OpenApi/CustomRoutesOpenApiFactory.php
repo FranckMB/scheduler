@@ -10,6 +10,8 @@ use ApiPlatform\OpenApi\Model\PathItem;
 use ApiPlatform\OpenApi\Model\RequestBody;
 use ApiPlatform\OpenApi\Model\Response;
 use ApiPlatform\OpenApi\OpenApi;
+use App\Enum\AdminJobSource;
+use App\Enum\AdminJobStatus;
 use ArrayObject;
 use Symfony\Component\DependencyInjection\Attribute\AsDecorator;
 
@@ -735,8 +737,8 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             'nullable' => true,
             'properties' => [
                 'id' => ['type' => 'string', 'format' => 'uuid'],
-                'status' => ['type' => 'string', 'enum' => ['running', 'succeeded', 'failed', 'interrupted']],
-                'source' => ['type' => 'string', 'enum' => ['scheduled', 'cli', 'superadmin']],
+                'status' => ['type' => 'string', 'enum' => AdminJobStatus::values()],
+                'source' => ['type' => 'string', 'enum' => AdminJobSource::values()],
                 'startedAt' => ['type' => 'string', 'format' => 'date-time'],
                 'finishedAt' => ['type' => 'string', 'format' => 'date-time', 'nullable' => true],
                 'durationMs' => ['type' => 'integer', 'nullable' => true],
@@ -775,7 +777,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'type' => 'object',
                         'properties' => [
                             'key' => ['type' => 'string'],
-                            'status' => ['type' => 'string', 'enum' => ['succeeded']],
+                            'status' => ['type' => 'string', 'enum' => [AdminJobStatus::SUCCEEDED->value]],
                             'exitCode' => ['type' => 'integer', 'enum' => [0]],
                         ],
                     ]),

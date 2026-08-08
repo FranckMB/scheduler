@@ -6,6 +6,7 @@ namespace App\Command;
 
 use App\AdminJob\AdminJobCatalog;
 use App\AdminJob\AdminJobRunStore;
+use App\Enum\AdminJobSource;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Symfony\Component\Clock\ClockInterface;
@@ -40,7 +41,7 @@ final class RunDueAdminJobsCommand extends Command
             }
             $exitCode = $application->find('app:jobs:run')->run(new ArrayInput([
                 'job' => $definition->key,
-                '--source' => 'scheduled',
+                '--source' => AdminJobSource::SCHEDULED->value,
                 '--scheduled-for' => $dueAt->format(DateTimeInterface::ATOM),
                 '--no-interaction' => true,
             ]), $output);

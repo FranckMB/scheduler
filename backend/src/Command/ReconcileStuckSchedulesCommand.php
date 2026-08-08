@@ -10,6 +10,7 @@ use App\Entity\ScheduleDiagnostic;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
 use App\Mercure\ClubTopicUpdate;
+use App\Mercure\MercureTopic;
 use App\Service\SolverMetricsRecorder;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
@@ -165,7 +166,7 @@ final class ReconcileStuckSchedulesCommand extends Command
     private function publishFailure(string $clubId, string $scheduleId): void
     {
         $this->hub->publish(ClubTopicUpdate::private(
-            \sprintf('club:%s:schedule:%s', $clubId, $scheduleId),
+            MercureTopic::for($clubId, $scheduleId),
             json_encode(['status' => 'failed', 'error' => 'stuck_timeout'], \JSON_THROW_ON_ERROR),
         ));
     }

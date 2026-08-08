@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\AdminJob;
 
+use App\Enum\AdminJobSource;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Output\NullOutput;
@@ -22,7 +23,7 @@ final readonly class ConsoleAdminJobExecutor implements AdminJobExecutorInterfac
         $application = new Application($this->kernel);
         $application->setAutoExit(false);
 
-        return $this->runner->run($definition, 'superadmin', $superAdminId, static function () use ($application, $definition): int {
+        return $this->runner->run($definition, AdminJobSource::SUPERADMIN, $superAdminId, static function () use ($application, $definition): int {
             $command = $application->find($definition->command);
             $input = new ArrayInput($definition->arguments);
             $input->setInteractive(false);

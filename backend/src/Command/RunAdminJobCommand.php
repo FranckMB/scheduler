@@ -8,6 +8,7 @@ use App\AdminJob\AdminJobAlreadyRunning;
 use App\AdminJob\AdminJobCatalog;
 use App\AdminJob\AdminJobDefinition;
 use App\AdminJob\AdminJobRunner;
+use App\Enum\AdminJobSource;
 use DateTimeImmutable;
 use DateTimeInterface;
 use Symfony\Component\Console\Application;
@@ -43,14 +44,14 @@ final class RunAdminJobCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
         $jobKey = (string) $input->getArgument('job');
-        $source = (string) $input->getOption('source');
+        $source = AdminJobSource::fromCommandLine((string) $input->getOption('source'));
         $scheduledForRaw = $input->getOption('scheduled-for');
-        if (!\in_array($source, ['cli', 'scheduled'], true)) {
+        if (!$source instanceof AdminJobSource) {
             $io->error('Invalid --source: expected cli or scheduled.');
 
             return Command::INVALID;
         }
-        if (('scheduled' === $source) !== \is_string($scheduledForRaw)) {
+        if ((AdminJobSource::SCHEDULED === $source) !== \is_string($scheduledForRaw)) {
             $io->error('--scheduled-for is required only when --source=scheduled.');
 
             return Command::INVALID;

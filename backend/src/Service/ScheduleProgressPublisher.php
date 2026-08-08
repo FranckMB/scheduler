@@ -6,6 +6,7 @@ namespace App\Service;
 
 use App\Entity\Schedule;
 use App\Mercure\ClubTopicUpdate;
+use App\Mercure\MercureTopic;
 use LogicException;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Mercure\HubInterface;
@@ -28,8 +29,8 @@ final class ScheduleProgressPublisher
     /** @param array<string, mixed> $result */
     public function publish(Schedule $schedule, array $result): void
     {
-        $topic = \sprintf('club:%s:schedule:%s', $schedule->getClubId(), $schedule->getId());
-        if ('club::schedule:' === $topic) {
+        $topic = MercureTopic::for($schedule->getClubId(), $schedule->getId());
+        if (MercureTopic::isEmpty($topic)) {
             throw new LogicException('Schedule Mercure topic cannot be empty.');
         }
 
@@ -69,7 +70,7 @@ final class ScheduleProgressPublisher
     public function publishTerminalFailure(string $clubId, string $scheduleId, string $error): void
     {
         $this->hub->publish(ClubTopicUpdate::private(
-            \sprintf('club:%s:schedule:%s', $clubId, $scheduleId),
+            MercureTopic::for($clubId, $scheduleId),
             json_encode(['scheduleId' => $scheduleId, 'status' => 'failed', 'error' => $error], \JSON_THROW_ON_ERROR),
         ));
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Mercure\MercureTopic;
 use DateTimeImmutable;
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
@@ -76,7 +77,7 @@ final class MercureAuthController extends AbstractController
         $now = DateTimeImmutable::createFromInterface($this->clock->now());
         // `{id}` est une expression URI-template : le hub matche
         // `club:X:schedule:abc` contre ce sélecteur — et RIEN d'un autre club.
-        $topicTemplate = \sprintf('club:%s:schedule:{id}', $clubId);
+        $topicTemplate = MercureTopic::selectorForClub($clubId);
         $token = $config->builder()
             ->issuedAt($now)
             ->expiresAt($now->modify(\sprintf('+%d seconds', self::TTL_SECONDS)))

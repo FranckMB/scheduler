@@ -12,6 +12,8 @@ use App\Entity\Club;
 use App\Entity\Season;
 use App\Entity\SuperAdmin;
 use App\Entity\Team;
+use App\Enum\AdminJobSource;
+use App\Enum\AdminJobStatus;
 use App\Security\TotpService;
 use App\Tests\Double\RecordingAdminJobExecutor;
 use App\Tests\TenantGucTrait;
@@ -126,9 +128,9 @@ final class AdminClubActionTest extends WebTestCase
 
         self::assertTrue($store->tryAcquire($definition->key));
         try {
-            $runId = $store->start($definition, 'superadmin', null);
+            $runId = $store->start($definition, AdminJobSource::SUPERADMIN, null);
             $this->jobRunIds[] = $runId;
-            $store->finish($runId, 'succeeded', 0);
+            $store->finish($runId, AdminJobStatus::SUCCEEDED, 0);
         } finally {
             $store->release($definition->key);
         }
