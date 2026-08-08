@@ -62,7 +62,7 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 | # | Sujet | Preuve | En silence | Geste |
 |---|---|---|---|---|
 | **D-06** ✅ | `Assert\Choice` en dur vs enums | 12 DTO écrivent la liste à la main ; **5 utilisent déjà** `callback: [Enum::class, 'values']` (`FixtureInput:29,37`, `TeamInput:60`, `CompetitionInput:23`) | Enum élargi sans le DTO → une valeur légitime **rejetée en 422** : la capacité existe et est inatteignable, aucun test ne la couvre | Généraliser le `callback` (patron du dépôt) + **trait** `values()` — la méthode est aujourd'hui **recopiée 5 fois à l'identique**. Plus un test qui refuse un `Choice` en dur quand un enum porte exactement ces valeurs |
-| **D-07** ⬜ | `Season.status` : la seule string libre | `Entity/Season.php:44` `private string $status` ; valeurs en dur dans `SeasonInput.php:25` et `CoachWishSeasonGuard.php:36` | Tous les autres statuts du projet sont des enums (`ScheduleStatus`, `FixtureStatus`, `CalendarEntryStatus`). Un statut ajouté n'est verrouillé nulle part | Créer `SeasonStatus` et brancher les deux sites |
+| **D-07** ✅ | `Season.status` : la seule string libre | `Entity/Season.php:44` `private string $status` ; valeurs en dur dans `SeasonInput.php:25` et `CoachWishSeasonGuard.php:36` | Tous les autres statuts du projet sont des enums (`ScheduleStatus`, `FixtureStatus`, `CalendarEntryStatus`). Un statut ajouté n'est verrouillé nulle part | Créer `SeasonStatus` et brancher les deux sites |
 | **D-08** ✅ | Clés `config` portant un id d'entité, **3 listes manuscrites** | `SeasonTransitionService.php:42-48` `CONFIG_ID_KEYS` · `ScheduleConstraintBuilder.php:46` `VENUE_CONFIG_KEYS` (dont `setVenueId`, **clé fantôme** sans writer ni reader) · `ConstraintValidationService.php:79` | **DÉJÀ DIVERGENT.** `CONFIG_ID_KEYS` **oublie `forcedVenueId` et `minAtVenueId`** → une contrainte FACILITY permanente est recopiée en saison N+1 avec l'**uuid d'un gymnase mort**, `$configDangling` reste `false`, aucun skip. Elle liste encore `coachId`, supprimé depuis | Dériver du `SPEC` de `ConstraintConfigValidator` (clés de type `uuid`) — même correctif pour les trois |
 | **D-09** ✅ | Familles structurelles (snapshot/restore) | `StructureSnapshotter.php:52-63` `FAMILIES` vs `StructureRestorer.php:46-57` + `:293-309` `wipeStructure()` — 3 énumérations, `:45` avoue « mirror of » | Famille présente au wipe mais absente du snapshot → `$data[$family] ?? []` rend `[]` **après** que `wipeStructure` a supprimé les lignes → **perte de données silencieuse** sur « Charger cette version » | Une classe `StructureFamilies` sur le modèle de `StructureAnchor.php:40` (match exhaustif qui throw) |
 | **D-10** ✅ | Topic Mercure : 6 publishers, 1 sélecteur | `ScheduleProgressPublisher.php:31,72`, `ExportPdfHandler.php:57,92`, `ScheduleGenerationFailureListener.php:81`, `ReconcileStuckSchedulesCommand.php:168` vs `MercureAuthController.php:79` | Un publisher qui dérive → le hub ne matche plus → **la SSE meurt** → le front dégrade en polling **par conception** : l'UI marche, personne ne voit rien. `MercurePrivateUpdateTest.php:44` n'assert que le préfixe | Un `MercureTopic::for($clubId, $scheduleId)`. ⚑ Le **front est exemplaire** : il lit `topicTemplate` au runtime (`scheduleStream.ts:130`), zéro copie |
@@ -168,16 +168,21 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 > `grep -c '^| \*\*D-[0-9]*\*\* ⬜' specs/evolution/duplications-de-verite.md` — **ancré sur la ligne
 > de tableau** : un `grep -c '⬜'` nu compte aussi la légende et cette prose (6 au lieu de 3).
 >
-> **État au 2026-08-09 : 44 findings — 37 livrés · 4 réfutés · 3 ouverts.**
+> **État au 2026-08-09 : 44 findings — 38 livrés · 4 réfutés · 2 ouverts.**
 >
 > **Les trois restants, et pourquoi ils attendent.** Aucun ne peut corrompre une donnée,
 > franchir une frontière ni tromper un gestionnaire sur un flux critique — c'est ce qui les a
-> mis en fin de file, et cela reste vrai. **Les deux premiers attendent un ARBITRAGE, pas du
-> temps de développement** : les traiter sans trancher reviendrait à choisir en silence.
+> mis en fin de file, et cela reste vrai. **D-14 attend un ARBITRAGE, pas du temps de
+> développement** : le traiter sans trancher reviendrait à choisir en silence.
+>
+> **D-07 a été tranché le 2026-08-09** (fondateur : « dans un enum ») — colonne typée
+> `enumType`, comme `CalendarEntry`. À noter : **aucun test nouveau n'a été écrit**. Le garde
+> de **D-06** (`EnumChoicesAreDerivedTest`) couvrait déjà le cas et l'a attrapé dès que l'enum
+> a existé — falsifié : « SeasonInput::$status recopie SeasonStatus ». Un garde qui rend son
+> service sur un finding écrit deux jours plus tard.
 >
 > | # | Sujet | Pourquoi il attend |
 > |---|---|---|
-> | D-07 | `Season.status`, seule string libre | demande un **arbitrage** : typer la colonne (`enumType`) ou garder l'enum à la seule validation |
 > | D-11 | convention `matchDay` | **dormant** : `match_day` est NULL sur les 69 équipes, aucun écran ne l'expose |
 > | D-14 | miroirs coach backend↔engine | demande une **décision produit** : quelle règle fait foi |
 >
