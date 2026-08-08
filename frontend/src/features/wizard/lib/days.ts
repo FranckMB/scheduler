@@ -1,13 +1,9 @@
 /** dayOfWeek 1-7 (ISO: 1=Monday). Availability + constraints use this convention. */
-export const DAYS: { n: number; label: string }[] = [
-  { n: 1, label: "Lun" },
-  { n: 2, label: "Mar" },
-  { n: 3, label: "Mer" },
-  { n: 4, label: "Jeu" },
-  { n: 5, label: "Ven" },
-  { n: 6, label: "Sam" },
-  { n: 7, label: "Dim" },
-];
+// D-22 : les sept jours vivent en `shared/lib/days` — une copie de ce tableau
+// s'arrêtait au samedi et rendait un planning à six colonnes « complet ».
+import { DAYS } from "@/shared/lib/days";
+
+export { DAYS };
 
 export const dayLabel = (n: number): string => DAYS.find((d) => d.n === n)?.label ?? "?";
 

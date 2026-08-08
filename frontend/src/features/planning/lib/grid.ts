@@ -15,15 +15,11 @@ import type { ViewMode } from "../store";
  * « ? » dans les diagnostics, et le select « Jour » de `SlotDetail` (qui lit ce même
  * tableau) la rendait non déplaçable. Un planning à six colonnes se donnait pour complet.
  */
-export const DAYS: { n: number; label: string }[] = [
-  { n: 1, label: "Lun" },
-  { n: 2, label: "Mar" },
-  { n: 3, label: "Mer" },
-  { n: 4, label: "Jeu" },
-  { n: 5, label: "Ven" },
-  { n: 6, label: "Sam" },
-  { n: 7, label: "Dim" },
-];
+// D-22 : les sept jours vivent en `shared/lib/days` — une copie de ce tableau
+// s'arrêtait au samedi et rendait un planning à six colonnes « complet ».
+import { DAYS } from "@/shared/lib/days";
+
+export { DAYS };
 
 export const NO_COACH = "__none__";
 

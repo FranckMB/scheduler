@@ -4,10 +4,14 @@ import { readFailed, readLoading } from "@/shared/lib/readState";
 import type { Reservation, Team, Venue, VenueTrainingSlot } from "../api";
 import { useConstraintValidation, usePeriodSlots, useReservations, useTeamPeriodOverrides, useVenuePeriodOverrides, useVenueSlots, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
+import { DAY_LABEL_LONG } from "@/shared/lib/days";
+
+import { activeTeams, activeVenues, pausedTeamIds } from "./activeLayer";
 import { effectiveSlotCapacity, slotKey } from "./reservationSlots";
 import { okValidation, type StepValidation, type WizardStepId } from "./steps";
 
-const DAY_LABELS = ["", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+// D-22 : libellés longs partagés (index 0 vide EXPRÈS — le jour ISO commence à 1).
+const DAY_LABELS = DAY_LABEL_LONG;
 
 /**
  * Non-blocking warnings on pre-generation reservations (W6). These never gate
@@ -185,10 +189,14 @@ export function useStepValidation(stepId: WizardStepId): StepValidation {
   // génération partait et rendait un planning vide. Un écran qui compte autrement que sa
   // porte, ce sont deux vérités : le défaut que ce lot corrige partout ailleurs.
   // Passé les retours ci-dessus, les deux lectures d'overrides sont RÉSOLUES en période.
-  const disabledVenueIds = new Set(periodOverrides.filter((o) => "DISABLED" === o.mode).map((o) => o.venueId));
-  const pausedIds = new Set((periodTeamOverridesQuery.data ?? []).filter((o) => !o.isActive).map((o) => o.teamId));
-  const layerTeams = periodMode ? teams.filter((t) => !pausedIds.has(t.id)) : teams;
-  const layerVenues = periodMode ? venues.filter((v) => !disabledVenueIds.has(v.id)) : venues;
+  // D-23 — ces quatre règles étaient RÉÉCRITES ici alors qu'`activeLayer` les porte, et que
+  // P2-15 l'avait extrait précisément pour qu'il n'y ait qu'un foyer. Le récap lit la source,
+  // la porte lisait sa copie : la prochaine règle ajoutée au foyer (un `BLANK` qui retirerait
+  // aussi le gymnase, un `isActive` serveur) aurait fait diverger le verdict de l'affichage —
+  // le défaut que le commentaire ci-dessus dénonce, commis quatre lignes plus bas.
+  const pausedIds = pausedTeamIds(periodTeamOverridesQuery.data ?? []);
+  const layerTeams = periodMode ? activeTeams(teams, pausedIds) : teams;
+  const layerVenues = periodMode ? activeVenues(venues, periodOverrides) : venues;
   // Le message doit dire QUOI FAIRE : « ajoutez une équipe » sur une période dont les
   // équipes existent mais sont toutes en pause enverrait le gestionnaire au mauvais écran.
   const noTeamError = periodMode && teams.length > 0 ? "Aucune équipe n'est active pour cette période — cochez-en au moins une." : "Ajoutez au moins une équipe.";
