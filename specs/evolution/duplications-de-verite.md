@@ -95,7 +95,7 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 | **D-32** ✅ | Rôles de management exposés au front | `ClubUserRepository.php:22` `MANAGEMENT_ROLES` (mono-source côté backend ✓) vs `SeasonTransitionBanner.tsx:25` et `ClubPage.tsx:481` (réécrits inline) | Un rôle ajouté côté backend → les deux écrans continuent de **masquer** une capacité que le serveur autorise : la fonctionnalité existe et reste invisible, sans erreur | Exposer les rôles via l'API |
 | **D-33** ✅ | Nom affiché d'un coach | `ranking.ts:50` (avec `.trim()`) vs `grid.ts:122` et `ConflictRadar.tsx:18` (**sans**), 3 replis différents (`"Coach ?"` / `"Coach"` / `null`) | Un coach sans nom de famille s'affiche `Emerick` dans le wizard et `Emerick ` (espace final, visible en badge) sur le planning | `shared/lib/coachName.ts` |
 | **D-34** ✅ (garde posé) | Unions de valeurs recopiées entre features | `TeamLevel` : union stricte dans `wizard/api.ts:20`, **`level: string`** dans `matches/api.ts:191` · `ScheduleStatus` et `SchedulePlanType` déclarés deux fois · `matches.Team` **n'a pas `isActive`** | Un niveau ajouté côté serveur passe **muet** côté matchs ; l'écran Matchs ne peut pas filtrer les équipes inactives et rien ne le lui rappelle | Mettre les **unions** dans `shared/api/types.ts`. ⚠ Les projections **structurelles** par feature restent légitimes (voir §3) |
-| **D-35** ⬜ | Tranche d'âge → tag : règle vs libellés vs noms semés | Règle : `TeamTagService.php:321-332` + `CategoryCatalog.php:37-48` · Libellés : `tagLabels.ts:24,29,34` · Noms semés : `DefaultConstraintSeeder.php:51-54` | **S'est déjà produit deux fois**, documenté dans le code : `tagLabels.ts:19-23` « « Jeune (U13-U21) » MENTAIT jusqu'à P4-63 », `:26-29` « « EMB (U9-U11) » MENTAIT jusqu'à P4-42 ». Un dirigeant pose une règle HARD « Jeune » en croyant couvrir U21 : elle ne couvre pas. `TeamTagScopeTest` épingle la **règle**, rien ne la lie aux libellés | Dériver les libellés de la règle, ou les diffé par test |
+| **D-35** ✅ | Tranche d'âge → tag : règle vs libellés vs noms semés | Règle : `TeamTagService.php:321-332` + `CategoryCatalog.php:37-48` · Libellés : `tagLabels.ts:24,29,34` · Noms semés : `DefaultConstraintSeeder.php:51-54` | **S'est déjà produit deux fois**, documenté dans le code : `tagLabels.ts:19-23` « « Jeune (U13-U21) » MENTAIT jusqu'à P4-63 », `:26-29` « « EMB (U9-U11) » MENTAIT jusqu'à P4-42 ». Un dirigeant pose une règle HARD « Jeune » en croyant couvrir U21 : elle ne couvre pas. `TeamTagScopeTest` épingle la **règle**, rien ne la lie aux libellés | Dériver les libellés de la règle, ou les diffé par test |
 
 ### 2.4 Cross-stack — la frontière la moins gardée
 
@@ -167,7 +167,7 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 > découpage se vérifie **contre l'inventaire**, pas contre lui-même. Le compte fait foi :
 > `grep -c '⬜' specs/evolution/duplications-de-verite.md`.
 >
-> **État au 2026-08-08 : 44 findings — 30 livrés · 4 réfutés · 10 ouverts.**
+> **État au 2026-08-08 : 44 findings — 31 livrés · 4 réfutés · 9 ouverts.**
 >
 > **Les dix restants, et pourquoi ils ont attendu.** Aucun ne peut corrompre une donnée,
 > franchir une frontière ni tromper un gestionnaire sur un flux critique — c'est ce qui les a
@@ -183,12 +183,10 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 > | D-15 | `MERCURE_PORT` `.env` vs `.env.dist` | dev only, et la CI lit `.env.dist` |
 > | D-18 | colonnes d'export XLSX | même patron que D-16, mécanique |
 > | D-19 | statuts `admin_job_run` | le `CHECK` SQL rattrape le code ; seule la copie OpenAPI dérive |
-> | D-35 | tranche d'âge : règle ⇄ libellés ⇄ noms semés | a **déjà mordu deux fois** (P4-42, P4-63) — le plus sérieux des dix |
-> | D-42 | paliers solveur cités par 7 documents | même garde que D-37, à élargir |
+> > | D-42 | paliers solveur cités par 7 documents | même garde que D-37, à élargir |
 >
-> **Le plus rentable des dix est D-35** : c'est le seul qui a déjà trompé un gestionnaire (un
-> libellé « Jeune (U13-U21) » qui mentait sur la portée réelle d'une règle HARD), et le patron
-> de garde existe déjà.
+> **D-35 a été traité le 2026-08-08** (c'était le plus rentable des dix : le seul qui avait déjà
+> trompé un gestionnaire). Les neuf restants n'ont, eux, jamais produit d'effet observé.
 
 > **La leçon de méthode, pour la prochaine fois.** Sur les trois rapports d'agents, **quatre
 > constats « graves » se sont révélés faux ou surévalués** à la contre-vérification :

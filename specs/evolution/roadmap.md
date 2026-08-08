@@ -39,8 +39,8 @@
 > [`reprise-perimetre-engage.md`](reprise-perimetre-engage.md) (mémoire produit du planning de saison) ·
 > [`duplications-de-verite.md`](duplications-de-verite.md) (**inventaire du motif « une vérité, deux endroits »** —
 > 44 cas datés du 2026-08-08, triés par « la divergence est-elle silencieuse ? », avec la doctrine de correction.
-> **État : 30 livrés · 4 réfutés · 10 ouverts** — compte vérifiable par `grep -c '⬜'`. Les dix restants sont
-> sans impact données/sécurité ; le plus rentable est **D-35**, le seul qui ait déjà trompé un gestionnaire).
+> **État : 31 livrés · 4 réfutés · 9 ouverts** — compte vérifiable par `grep -c '⬜'`. Les neuf restants sont
+> sans impact données/sécurité et n'ont jamais produit d'effet observé ; deux demandent un arbitrage (D-07, D-14)).
 >
 > **Réf historiques** : `FF#n` / `BG G#n` = identifiants des anciens `features-futures.md` / `backend-gaps.md`,
 > absorbés le 2026-07-05. `v3 §x` / `contraintes-v2` = specs figées de `specs/initiales/`.

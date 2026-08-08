@@ -338,6 +338,9 @@ final class TeamTagService
         );
     }
 
+    /**
+     * @return list<string>
+     */
     private function determineTagNames(Team $team): array
     {
         $tags = [];
