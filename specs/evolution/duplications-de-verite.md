@@ -68,13 +68,13 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 | **D-10** ✅ | Topic Mercure : 6 publishers, 1 sélecteur | `ScheduleProgressPublisher.php:31,72`, `ExportPdfHandler.php:57,92`, `ScheduleGenerationFailureListener.php:81`, `ReconcileStuckSchedulesCommand.php:168` vs `MercureAuthController.php:79` | Un publisher qui dérive → le hub ne matche plus → **la SSE meurt** → le front dégrade en polling **par conception** : l'UI marche, personne ne voit rien. `MercurePrivateUpdateTest.php:44` n'assert que le préfixe | Un `MercureTopic::for($clubId, $scheduleId)`. ⚑ Le **front est exemplaire** : il lit `topicTemplate` au runtime (`scheduleStream.ts:130`), zéro copie |
 | **D-11** ⬜ | `matchDay` : convention de jour | `TeamInput.php:44` `Range(0,6)` « 0 = Monday » vs ISO 1..7 partout ailleurs (`VenueTrainingSlotInput.php:18`) et `objective.py:550` `match_day % 7 + 1` | ⚠ **DORMANT, pas live** (vérifié : `match_day` est NULL sur les 69 équipes, aucun écran ne l'expose). Le jour où le champ est exposé : le bonus de repos tombe sur le mauvais jour et le dimanche ISO est rejeté en 422. `tests/Validator/TeamInputValidationTest.php:26` épingle aujourd'hui `matchDay=6` comme valide — l'anti-garde | Aligner sur ISO `Range(1,7)` **avant** d'exposer le champ |
 | **D-12** ✅ | Rate limit prod jamais asserté | `rate_limiter.yaml:41` `limit: 300` ; `ApiRateLimitTest.php:27` ne garde que l'override de test (`:81`, 30) | Passer la valeur prod à 30000 → **tous les tests verts**, la borne SEC-11 s'évapore | Asserter la valeur prod, pas seulement l'override |
-| **D-13** ⬜ | Sémantique des contraintes implicites | `ImplicitConstraintConfig.php:40` « gets **at least** its minimum » vs `engine/implicit_rules.json:8` « **TARGETS** … soft bonus, **not a hard floor** » | **Inversé sémantiquement.** `POST /implicit-constraints` (`main.py:545-547`) ne compare que les **noms** — jamais les descriptions ni la version (`'2.1'` backend vs `"2.0"` json) : la commande de sync rend **`synchronized` sur une contradiction** | Comparer description + version. ⚠ anti-garde : `ImplicitConstraintConfigTest.php:69` épingle la mauvaise chaîne |
+| **D-13** ✅ | Sémantique des contraintes implicites | `ImplicitConstraintConfig.php:40` « gets **at least** its minimum » vs `engine/implicit_rules.json:8` « **TARGETS** … soft bonus, **not a hard floor** » | **Inversé sémantiquement.** `POST /implicit-constraints` (`main.py:545-547`) ne compare que les **noms** — jamais les descriptions ni la version (`'2.1'` backend vs `"2.0"` json) : la commande de sync rend **`synchronized` sur une contradiction** | Comparer description + version. ⚠ anti-garde : `ImplicitConstraintConfigTest.php:69` épingle la mauvaise chaîne |
 | **D-14** ⬜ | Miroirs backend↔engine des règles coach | `CoachDoubleBookingDetector.php:282-309` (MAIN, gymnases **différents**, chevauchement d'intervalles) vs `result_builder.py:629-663` (clé `(coach, day, startTime)`, **début exact**) · fenêtres d'indispo : `:219-251` vs `constraints.py:1637-1662` | **DIVERGENT dans les deux sens.** 17:00-18:30 vs 17:30-19:00 → le backend bloque en 422, le moteur ne voit rien. Même gymnase, 2 équipes, 1 coach → le backend autorise (mutualisation), le moteur émet une **ERROR**. Fenêtre inversée (20:00→08:00) → le moteur bloque **toute la journée**, le récap se tait | Le détecteur se déclare « miroir » (`:145-149`) sans garde : un test croisé backend⇄moteur |
 | **D-15** ✅ (reformulé) | `MERCURE_PORT` | `.env:10` = **13009** vs `.env.dist:10` = **3000** et `vite.config.ts:51` défaut `127.0.0.1:3000` | **DÉJÀ DIVERGENT.** Un `npm run dev` hôte proxie vers un port mort → SSE morte → repli polling qui masque tout. La CI lit `.env.dist`, donc ne verra jamais la dérive | — |
 | **D-16** ✅ | Colonnes d'INSERT manuscrites | `SchedulePlanProvisioner.php:783-785` (12 colonnes), `FfbbLeagueRepository.php:38`, `FfbbCommitteeRepository.php:35` | Nouvelle colonne **nullable** → les créneaux de période copiés la perdent en silence : la grille de période diverge de la grille saison qu'elle prétend copier | **Le patron existe** : `TeamTagService.php:40` + son diff bidirectionnel dans `TeamTagScopeTest.php:202-221` |
 | **D-17** ✅ | `ContractSchemaTest` tautologique sur l'URL moteur | `EngineClient.php:17-18` vs `AdminHealthService.php:24`, `ExportImplicitConstraintsCommand.php:22` ; `ContractSchemaTest.php:39` compare l'URL **à sa propre constante** passée au `MockHttpClient` (`:49`) | Passer `EngineClient.php:17` en 8001 → **4 tests CrossStack verts**. Seul le smoke tombe. `ENGINE_URL` existe dans `.env.dist:16` et **n'est lu nulle part** | Un paramètre Symfony unique |
-| **D-18** ⬜ | Colonnes d'export XLSX | `SpreadsheetGenerator.php:25` `HEADERS` (7) vs tuples `:46-52`, `:59-63`, plage `'A1:G1'` `:75` | Insérer une colonne dans une seule branche → les lignes « fenêtre vide » s'affichent **sous les mauvais en-têtes**. Aucun test n'assert l'ordre | — |
-| **D-19** ⬜ | Statuts/sources `admin_job_run` | CHECK SQL `Version20260716120000.php:19` vs 4 services **+ `CustomRoutesOpenApiFactory.php:738-739`** | Le CHECK rattrape le code (bruyant), mais la copie **OpenAPI** dérive seule : la doc publique ment sur les valeurs | Créer `AdminJobStatus`/`AdminJobSource` |
+| **D-18** ✅ | Colonnes d'export XLSX | `SpreadsheetGenerator.php:25` `HEADERS` (7) vs tuples `:46-52`, `:59-63`, plage `'A1:G1'` `:75` | Insérer une colonne dans une seule branche → les lignes « fenêtre vide » s'affichent **sous les mauvais en-têtes**. Aucun test n'assert l'ordre | — |
+| **D-19** ✅ | Statuts/sources `admin_job_run` | CHECK SQL `Version20260716120000.php:19` vs 4 services **+ `CustomRoutesOpenApiFactory.php:738-739`** | Le CHECK rattrape le code (bruyant), mais la copie **OpenAPI** dérive seule : la doc publique ment sur les valeurs | Créer `AdminJobStatus`/`AdminJobSource` |
 
 ### 2.3 Frontend — à traiter en lot
 
@@ -165,25 +165,30 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 > Les huit lots sont soldés — mais **dix findings n'appartenaient à aucun lot** et restent
 > ouverts (voir ⬜ ci-dessus). L'erreur est instructive et vaut d'être gardée : un plan de
 > découpage se vérifie **contre l'inventaire**, pas contre lui-même. Le compte fait foi :
-> `grep -c '⬜' specs/evolution/duplications-de-verite.md`.
+> `grep -c '^| \*\*D-[0-9]*\*\* ⬜' specs/evolution/duplications-de-verite.md` — **ancré sur la ligne
+> de tableau** : un `grep -c '⬜'` nu compte aussi la légende et cette prose (6 au lieu de 3).
 >
-> **État au 2026-08-09 : 44 findings — 34 livrés · 4 réfutés · 6 ouverts.**
+> **État au 2026-08-09 : 44 findings — 37 livrés · 4 réfutés · 3 ouverts.**
 >
-> **Les dix restants, et pourquoi ils ont attendu.** Aucun ne peut corrompre une donnée,
+> **Les trois restants, et pourquoi ils attendent.** Aucun ne peut corrompre une donnée,
 > franchir une frontière ni tromper un gestionnaire sur un flux critique — c'est ce qui les a
-> mis en fin de file, et cela reste vrai :
+> mis en fin de file, et cela reste vrai. **Les deux premiers attendent un ARBITRAGE, pas du
+> temps de développement** : les traiter sans trancher reviendrait à choisir en silence.
 >
 > | # | Sujet | Pourquoi il attend |
 > |---|---|---|
 > | D-07 | `Season.status`, seule string libre | demande un **arbitrage** : typer la colonne (`enumType`) ou garder l'enum à la seule validation |
 > | D-11 | convention `matchDay` | **dormant** : `match_day` est NULL sur les 69 équipes, aucun écran ne l'expose |
-> | D-13 | sémantique des contraintes implicites | le gros est traité en D-43 ; résidu de formulation |
 > | D-14 | miroirs coach backend↔engine | demande une **décision produit** : quelle règle fait foi |
-> | D-18 | colonnes d'export XLSX | même patron que D-16, mécanique |
-> | D-19 | statuts `admin_job_run` | le `CHECK` SQL rattrape le code ; seule la copie OpenAPI dérive |
-> >
-> **D-35 a été traité le 2026-08-08** (c'était le plus rentable des dix : le seul qui avait déjà
-> trompé un gestionnaire). Les neuf restants n'ont, eux, jamais produit d'effet observé.
+>
+> **D-13 est clos sans code** : le correctif de D-43 l'avait absorbé. `ImplicitRulesMatchEngineTest`
+> compare désormais les descriptions ET les versions annoncées de part et d'autre
+> (`ImplicitRulesMatchEngineTest.php:37,54`), les deux côtés disent « TARGETS … not a hard floor »
+> et annoncent `2.1`, et l'anti-garde qui épinglait « gets at least » a été retourné
+> (`ImplicitConstraintConfigTest.php:75-76`). Il ne restait qu'une ligne d'inventaire.
+>
+> **D-35 a été traité le 2026-08-08** (c'était le plus rentable : le seul qui avait déjà trompé
+> un gestionnaire). Les autres n'ont, eux, jamais produit d'effet observé.
 
 > **La leçon de méthode, pour la prochaine fois.** Sur les trois rapports d'agents, **quatre
 > constats « graves » se sont révélés faux ou surévalués** à la contre-vérification :
