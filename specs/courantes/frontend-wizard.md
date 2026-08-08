@@ -1,6 +1,6 @@
 # Wizard — saisie des données (tranche 3, LIVRÉ)
 
-Last verified @ 2026-08-01 (étape Gymnases re-vérifiée contre `frontend/src/features/wizard/` — grille 8h→23h sur sept jours, durées 45 min→2h30, P4-37 ; bandeau de mode période et diagnostics de l'étape Génération re-vérifiés contre `WizardLayout.tsx` et `PlanningPage.tsx`, P4-38/P4-40)
+Last verified @ 2026-08-08 (contenu recalé en continu par les livraisons qui le concernent — retrait de `FACILITY_CAPACITY` 2026-08-08 · un solve FAILED qui s'explique à l'écran · terrain divisible jusqu'à 3 équipes · « Associer à… » les salles FFBB · contraintes de base à la création P2-16 · fenêtres d'accès match sur la grille · durée à la pose en période P4-43 ; vérification directe du 2026-08-01 : étape Gymnases re-vérifiée contre `frontend/src/features/wizard/` — grille 8h→23h sur sept jours, durées 45 min→2h30, P4-37 ; bandeau de mode période et diagnostics de l'étape Génération re-vérifiés contre `WizardLayout.tsx` et `PlanningPage.tsx`, P4-38/P4-40)
 
 > ⚠️ **Réalité livrée — canonique.** Le draft "4 étapes" plus bas est **historique/superseded** : le wizard a été reconstruit dans `frontend/src/features/wizard` avec un flux plus granulaire, décidé avec le PO. Les sections 1+ ci-dessous ne décrivent plus l'implémentation.
 

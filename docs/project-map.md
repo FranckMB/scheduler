@@ -1,6 +1,8 @@
 # Project Map — ClubScheduler (engine + backend)
 
-Detailed companion to the short index in [`/CLAUDE.md`](../CLAUDE.md). Frontend has been **rebuilt (React 19) and is active** — features `auth`, `planning` (work-loop) and `wizard` (data entry); see `specs/courantes/frontend-wizard.md`. Generated/verified during onboarding against the real code and the `code-review-graph` knowledge graph.
+Last verified @ 2026-08-08 (périmètre frontend recompté contre `frontend/src/features/` ; renvois sécurité/ops re-vérifiés — audit DOC-29)
+
+Detailed companion to the short index in [`/CLAUDE.md`](../CLAUDE.md). Frontend has been **rebuilt (React 19) and is active** — **11 features** livrées : `auth`, `wizard` (data entry), `planning` (work-loop), `cockpit`, `matches`, `coach-wishes` (doléances), `club`, `profile`, `season-transition`, `legal` et `admin` (console superadmin, garde et session distinctes) ; voir `specs/courantes/frontend-wizard.md` et `frontend-spec.md`. Generated/verified during onboarding against the real code and the `code-review-graph` knowledge graph.
 
 ---
 
@@ -168,7 +170,7 @@ Two further MCP servers are configured in `.mcp.json` and enabled: **Serena** (`
 - Commandes backend (make · console `app:*` · pièges RLS): [`../backend/docs/commands.md`](../backend/docs/commands.md) · routes FFBB: [`../backend/docs/ffbb-api.md`](../backend/docs/ffbb-api.md)
 - Journal des upgrades (le pourquoi, pour le fondateur): [`upgrades.md`](upgrades.md) — tenu par le skill `/dependabot`
 - Tests & guardrails: [`testing/testing-strategy.md`](testing/testing-strategy.md)
-- Sécurité: [`security/rls.md`](security/rls.md) (RLS, GUC, exceptions) · [`security/mercure.md`](security/mercure.md) (durcissement SEC-05/06) · [`security/rgpd.md`](security/rgpd.md) (registre art. 30)
+- Sécurité: [`security/rls.md`](security/rls.md) (RLS, GUC, exceptions) · [`security/mercure.md`](security/mercure.md) (durcissement SEC-05/06) · [`security/jwt-cookie.md`](security/jwt-cookie.md) (JWT en cookie httpOnly, `JWT_COOKIE_SECURE`, pièges de test) · [`security/rgpd.md`](security/rgpd.md) (registre art. 30)
 - Exploitation: [`ops/prod-stack.md`](ops/prod-stack.md) · [`ops/deploy.md`](ops/deploy.md) · [`ops/backup-restore.md`](ops/backup-restore.md)
 - Ce qui reste à faire — bugs, évolutions, dette, suppressions sûres : [`../specs/evolution/roadmap.md`](../specs/evolution/roadmap.md) (**l'ouvert seulement**)
 - Ce qui est livré + les décisions fermées : [`../specs/courantes/etat-des-lieux.md`](../specs/courantes/etat-des-lieux.md)

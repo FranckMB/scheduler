@@ -4,7 +4,7 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-07-29 (routes, stack, stores, pagination et export re-vérifiés contre `frontend/src/`)
+Last verified @ 2026-08-08 (stores re-vérifiés contre `frontend/src/shared/stores/` — la règle « `persist` pour le token » contredisait le tableau des stores depuis SEC-16, audit DOC-28 ; routes/stack/pagination/export re-vérifiés le 2026-07-29)
 
 ---
 
@@ -477,8 +477,8 @@ type AuthState = {
 - **Un store par domaine.** Pas de store global "app" qui mélange tout.
 - **Pas de données serveur en Zustand.** Si ça vient de l'API, c'est en TanStack Query.
 - **Actions dans le store, pas dans les composants.** `login()`, `logout()`, `setContext()` vivent dans le store.
-- **Pas de middleware complexe.** `persist` pour le token, c'est tout. Pas de `devtools` en prod.
-- **Sélecteurs fins.** `useAuthStore((s) => s.token)` pour éviter les re-renders inutiles.
+- **Pas de middleware complexe.** `persist` pour les préférences (thème, saison, drapeau de session), c'est tout. Pas de `devtools` en prod. ⚠ **Jamais de jeton dans un store** : depuis SEC-16 le JWT est un **cookie httpOnly** que le JS ne voit pas (§ tableau ci-dessus) — `authStore` ne porte qu'un booléen.
+- **Sélecteurs fins.** `useAuthStore((s) => s.isAuthenticated)` pour éviter les re-renders inutiles.
 
 ---
 
@@ -528,9 +528,9 @@ choisi une saison (voir §4) — et validé côté serveur dans tous les cas.
 
 | Endpoint | Méthode | Body | Réponse | Action frontend |
 |----------|---------|------|---------|-----------------|
-| `/api/login` | POST | `{ email, password }` | `{ token }` (JWT) | Stocker token en Zustand, redirect `/` |
+| `/api/login` | POST | `{ email, password }` | **204 sans corps** — le JWT part en **cookie httpOnly** (SEC-16) | Poser `isAuthenticated`, redirect `/` — **il n'y a aucun jeton à stocker** |
 | `/api/register` | POST | `{ email, password, firstName, lastName, ara, club_name?, consent }` (consent obligatoire — RGPD) | **202** `{ status:"verification_pending" }` (aucun token — A3) | Afficher l'écran « vérifie tes emails » ; **pas de redirect** (le JWT vient de la vérification) |
-| `/api/register/verify` | POST | `{ token }` (du lien email) | `{ token, membershipStatus, user }` | Stocker token ; `pending` → `/waiting`, sinon `/` |
+| `/api/register/verify` | POST | `{ token }` (du lien email) | `{ membershipStatus, user }` + **cookie httpOnly** posé par `JwtCookieFactory` (aucun jeton dans le corps) | Poser `isAuthenticated` ; `pending` → `/waiting`, sinon `/` |
 | `/api/me` | GET | — | `{ id, email, firstName, lastName, membershipStatus, role, club: {…} \| null, seasonPlan: { id, name, chosenScheduleId, hasFinishedVersion, currentStructureHash } \| null, seasons, … }` — **forme complète : `src/features/auth/api.ts` (`MeResponse`)**, source de vérité (le bloc `club` porte aussi l'accent sombre, la fiche FFBB, la ligue et le comité) | Query `["me"]` — source des guards, du thème (accent) et de l'état du plan de saison (ADR-0002) |
 
 Les trois champs **structurants** de cette réponse : `club.accentColor` / `club.accentColorDark`

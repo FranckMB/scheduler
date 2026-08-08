@@ -1,6 +1,6 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-07-29
+Last verified @ 2026-08-08 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-06 par les livraisons elles-mêmes : radar borné à l'avenir actionnable P3-13/15c/11 · bandeau de période et diagnostics contextuels P4-38/39 · gymnase désactivé qui ne bloque plus la génération, 2026-08-06)
 
 > **Statut** : **approche arrêtée** (décisions tranchées §9) — **livrée** ; cf. [`etat-des-lieux.md`](etat-des-lieux.md) §1.2.
 > **Pas un plan** — pas de tâches, pas d'effort chiffré ; l'exécution se planifiera palier par palier (§8).

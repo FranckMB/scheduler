@@ -1,9 +1,9 @@
 # Backend Inventory
 
-> Backward inventory of the existing backend (Symfony 7 + API Platform). This document
+> Backward inventory of the existing backend (Symfony 7.4 + API Platform). This document
 > describes what exists in the codebase at the time of verification — it is not a roadmap.
 
-Last verified @ 2026-07-25 (Reservation ajoutée · CoachWish/Campaign/Token #10 · register A3 · cap génération A10 · gate CI audit deps A18)
+Last verified @ 2026-08-08 (audit DOC-04, 5e réouverture — re-vérifié au code sur `backend/src/{Entity,ApiResource,Controller,Service,EventListener,Enum}` et `backend/config/`: JWT en cookie httpOnly SEC-16, module démo, approbation de club par token public P3-4, liste blanche `config` des contraintes SEC-13, console superadmin/SEC-17/SEC-18, RLS de `team_tag_assignment` BCK-11, `regenerate`/`regenerate-from`/`export-xlsx`, JWT de souscription Mercure, `TeamLink`/`TeamMatchHabit`)
 
 ---
 
@@ -14,8 +14,8 @@ Last verified @ 2026-07-25 (Reservation ajoutée · CoachWish/Campaign/Token #10
 | Composant | Version / Détail |
 |-----------|------------------|
 | Langage | PHP 8.4 (`declare(strict_types=1)` dans tous les fichiers) |
-| Framework | Symfony 7 |
-| API | API Platform (auto-génération CRUD + OpenAPI sous `/api/*`) |
+| Framework | Symfony 7.4 (LTS ; `symfony/framework-bundle` verrouillé via `extra.symfony.require`, cf. `CLAUDE.md` §5) |
+| API | API Platform ^4.3 (auto-génération CRUD + OpenAPI sous `/api/*`) |
 | ORM | Doctrine (migrations dans `backend/migrations/`) |
 | Auth | LexikJWTAuthenticationBundle (JWT stateless) |
 | Real-time | Mercure (SSE) |
@@ -40,8 +40,16 @@ backend/
 │   ├── Enum/                 # ScheduleStatus, LockLevel, ...
 │   ├── Dto/                  # Input DTOs (ClubInput, ScheduleInput, ...)
 │   ├── Repository/           # Repositories Doctrine
-│   ├── Command/              # Commandes CLI (imports holidays, seed league windows, purge/rappels saison) — liste : ls backend/src/Command/
+│   ├── Command/              # Commandes CLI (imports holidays, seed league windows, purge/rappels saison, module démo) — liste : ls backend/src/Command/
 │   ├── Storage/              # LogoStorage (interface) + LocalLogoStorage
+│   ├── Security/             # JwtCookieFactory (SEC-16), AdminSessionCsrf/SuperAdminProvider/TotpService (SA0), UserChecker
+│   ├── Message/ · MessageHandler/  # GenerateSchedule(Message|Handler), ExportPdf(Message|Handler)
+│   ├── Mercure/              # ClubTopicUpdate (payload publié sur le topic club:{clubId}:schedule:{id})
+│   ├── AdminJob/             # Catalogue + exécution des jobs planifiés de la console superadmin (SA3)
+│   ├── Clock/                # DevClockStore (Redis) + SimulatedClock — horloge dev globale, distincte de Club::$demoToday (§3 Module démo)
+│   ├── Seed/                 # BcclSeeder + BcclSeedProfile (club de démo permanent)
+│   ├── Export/                # ScheduleExportData(Provider) — table plate consommée par l'export Excel/PDF
+│   ├── OpenApi/               # CustomRoutesOpenApiFactory (documente les routes Symfony hors API Platform)
 │   └── DataFixtures/         # Jeux de données de test
 ├── config/
 │   ├── packages/security.yaml
@@ -61,6 +69,11 @@ backend/
 - Docs formats : OpenAPI (`application/vnd.openapi+json`), JSON-LD, HTML.
 - `defaults.stateless: true` — toutes les opérations sont stateless.
 - `cache_headers.vary` inclut `Content-Type`, `Authorization`, `Origin`.
+- `normalization_context.skip_null_values: false` — une clé à `null` reste **présente** en
+  `application/json` (le défaut d'API Platform l'omet ; `jsonld` l'incluait déjà). Le frontend
+  compare en strict (`null === x`) : une clé absente arrive `undefined` et casse la lecture
+  (`chosenScheduleId` null lu comme « validé », `parentEntryId` null → mère prise pour racine).
+  Gardé par `JsonNullKeysTest` (phase1).
 
 ---
 
@@ -69,8 +82,8 @@ backend/
 Les ressources sont définies dans `backend/src/ApiResource/` (liste exhaustive : `ls backend/src/ApiResource/`). Chaque ressource est un DTO
 avec attributs `#[ApiResource]` déclarant les opérations CRUD standard
 (`GetCollection`, `Get`, `Post`, `Put`, `Delete`), un `provider` et un `processor` personnalisés,
-et la pagination à 30 items/page. Les entités Doctrine correspondantes vivent dans
-`backend/src/Entity/` et utilisent des UUID string.
+et une pagination explicite (détail et exceptions au défaut 30/page : §6). Les entités
+Doctrine correspondantes vivent dans `backend/src/Entity/` et utilisent des UUID string.
 
 | # | Resource (shortName) | Endpoint | Description | Notes |
 |---|----------------------|---------|-------------|-------|
@@ -86,14 +99,14 @@ et la pagination à 30 items/page. Les entités Doctrine correspondantes vivent 
 | 10 | PriorityTier | `/api/priority-tiers` | Niveaux de priorité (S/A/B/C/D) | |
 | 11 | SubscriptionPlan | `/api/subscription_plans` | Plans d'abonnement (facturation ; renommé depuis `Plan`/`/api/plans` — ADR-0002 lot A, le nom « plan » revient au domaine planning) | |
 | 11bis | SchedulePlan | `/api/schedule_plans` | Conteneur nommé des versions d'une saison/période (lecture seule ; ADR-0002) — filtres `calendarEntryId`, `type`. Le renommage arrive avec la bascule (le nom vit alors sur le plan, inv. 12) | |
-| 12 | Schedule | `/api/schedules` | Générations de planning | `mercure: true` ; opérations custom `generate` et `export-pdf` ; filtres `isActive` (booléen) et `seasonId` (exact). Les routes de cycle de vie (`validate`/`reopen`) sont des routes Symfony hors API Platform (§3). |
+| 12 | Schedule | `/api/schedules` | Générations de planning | `mercure: true` ; opérations custom `generate`, `export-pdf`, `export-xlsx` ; filtres `isActive` (booléen) et `seasonId` (exact). Les routes de cycle de vie (`validate`/`reopen`/`regenerate`/`regenerate-from`) sont des routes Symfony hors API Platform (§3). |
 | 13 | ScheduleSlotTemplate | `/api/schedule-slot-templates` | Créneaux générés | |
 | 14 | ScheduleDiagnostic | `/api/schedule-diagnostics` | Erreurs / avertissements | |
 | 15 | Constraint | `/api/constraints` | Contraintes permanentes | |
 | 16 | TeamCoach | `/api/team-coaches` | Assignations entraîneur-équipe | |
 | 17 | CoachPlayerMembership | `/api/coach-player-memberships` | Entraîneurs aussi joueurs | |
 | 18 | TeamTag | `/api/team-tags` | Étiquettes d'équipe | |
-| 19 | TeamTagAssignment | `/api/team-tag-assignments` | Assignations d'étiquettes | |
+| 19 | TeamTagAssignment | `/api/team-tag-assignments` | Assignations d'étiquettes | Sous RLS FORCE depuis `backend/migrations/Version20260807170000.php` (BCK-11) : colonne `club_id` (backfillée depuis `team.club_id`) + policy `tenant_isolation` — c'était la seule table liée à un tenant sans backstop base de données, l'isolation reposait sur le seul filtre Doctrine |
 | 20 | VenueTrainingSlot | `/api/venue_training_slots` | Créneaux d'entraînement de salle — saisonniers (`schedulePlanId` null) ou d'un plan de période (copie du modèle de saison faite à la naissance du plan, #8 : jamais d'union entre les deux couches, l'anti-chevauchement est borné à une même couche) | |
 | — | Reservation | `/api/reservations` | Réservation d'un créneau de salle pour une équipe (mutualisation : 2 équipes sur un créneau à capacité 2 ; matérialise le verrou pour l'overlay). GetCollection/Get/Post/Delete (pas de PUT — on supprime/recrée) ; ancrable à un plan de période (`schedulePlanId`). | |
 | — | VenuePeriodOverride | `/api/venue_period_overrides` (+ actions atomiques `POST /reset-grid` « reprendre la grille du planning principal » et `POST /clear-grid` « vider la grille » pour un gymnase — SEC-07, 422 si visées sur le plan de saison, 404 hors club) | Mode d'un gymnase pour une période (#8) : sparse par (`schedulePlanId`, `venueId`), `DISABLED`\|`BLANK` — pas de ligne = hériter la grille de saison. DÉSACTIVÉ conserve la grille mais sort le gymnase du payload engine ; VIERGE la vide ; DELETE (retour à hériter) la revide puis la recopie | |
@@ -106,12 +119,14 @@ et la pagination à 30 items/page. Les entités Doctrine correspondantes vivent 
 | — | CalendarEntry | `/api/calendar-entries` | Cockpit temporel : périodes/événements (kind PERIOD/EVENT ; `parentEntryId` = semaine ENFANT d'une mère découpée). L'entrée porte le **FAIT** ; la RÉPONSE vit sur le plan — `overlayScheduleId` a été **supprimé** (ADR-0002 lot D-b), « période → version active » se dérive de `SchedulePlanProvisioner::chosenOfPeriodPlan` | Opération custom conflits (§3) |
 | — | Competition | `/api/competitions` | Compétitions FFBB (championnat/coupe/brassage) — module matchs palier A | season-scoped |
 | — | Fixture | `/api/fixtures` | Rencontres (HOME/AWAY, placement domicile, `externalRef` = n° FBI) | Ops custom conflits + import FBI (§3) |
+| — | TeamLink | `/api/team_links` | Pont déclaré entre deux équipes — pas d'entité joueur, le gestionnaire déclare le lien (`teamAId < teamBId` normalisé par le processor) : `NOT_SIMULTANEOUS` (double projet, jamais en même temps) ou `BACK_TO_BACK` (enchaînées, implique `NOT_SIMULTANEOUS`). Consommé par le module matchs (`MatchPlacementPayloadBuilder`, `MatchConflictDetector`) — le solveur d'entraînement ne le lit pas | |
+| — | TeamMatchHabit | `/api/team_match_habits` | Créneau de match habituel d'une équipe (un par jour de semaine, gymnase optionnel) — consommé par le module matchs (`MatchPlacementPayloadBuilder`, `AwayKickoffEstimator`) pour estimer les coups d'envoi à l'extérieur | |
 
 > La numérotation n'est **pas** un décompte — liste exhaustive et à jour : `ls backend/src/ApiResource/`. Les tables globales de référence (`PublicHoliday`, `SchoolHolidayPeriod`, `LeagueMatchWindow`) sont exposées en **lecture seule via contrôleurs invokables** (§3), pas comme ressources CRUD.
 
-Chaque ressource déclare `paginationEnabled: true` et `paginationItemsPerPage: 30` au niveau
-de l'attribut `#[ApiResource]`. Les réponses collections suivent le format JSON-LD
-(`hydra:member`, `hydra:totalItems`, `hydra:view`).
+Chaque ressource déclare sa pagination au niveau de l'attribut `#[ApiResource]` — le détail et
+les exceptions au défaut `paginationEnabled: true, paginationItemsPerPage: 30` sont en §6. Les
+réponses collections suivent le format JSON-LD (`hydra:member`, `hydra:totalItems`, `hydra:view`).
 
 ---
 
@@ -132,15 +147,17 @@ classiques avec `#[Route]`.
 | `/api/me` | GET | Profil courant — retourne `id`, `email`, `firstName`, `lastName`, `membershipStatus` (`none`/`pending`/`active`), `role`, `club` (id, name, `onboardingCompleted`, `logoUrl`, `accentColor`, `accentPalette`), **`seasonPlan`** (`{id, name, chosenScheduleId, hasFinishedVersion, currentStructureHash}` — LE plan de la saison sélectionnée, ADR-0002 : `chosenScheduleId` = la version choisie, `null` = espace de travail ; `hasFinishedVersion` = le plan porte ≥1 version terminée, ce qui débloque le cockpit ; `currentStructureHash` = hash du payload solver actuel pour comparer la version affichée et griser « Régénérer » quand elle est déjà identique), `hasGenerated` (booléen : `generationCountSeason > 0`), `seasons`. |
 | `/api/me` | DELETE | **RGPD droit à l'effacement** (self-only, `DeleteAccountController`). Ré-authentification : body `{ password }` (mot de passe courant, 400 sinon — un JWT volé ne suffit pas). Anonymisation IMMÉDIATE (email → `deleted-{id}@anonymized.invalid`, hash aléatoire, memberships désactivés, transactionnel) ; plus aucun membre actif → `Club.erasureScheduledAt = +30 j` (purge du workspace par `app:clubs:purge-erased`, auto-annulée si un membre revient ; l'identité publique FFBB survit). Réponse `{ message, clubPurgeScheduled, gracePeriodDays }`. NR : `AccountErasureTest`. |
 | `/api/me/export` | GET | **RGPD portabilité** (self-only, `RgpdExportController`) : compte + adhésions + preuve de consentement + lastLoginAt, JAMAIS le hash. JSON en téléchargement (`Content-Disposition`). Rate-limité `rgpd_export` (10/h par user). NR : `RgpdExportTest`. |
-| `/api/club/export` | GET | **RGPD portabilité club** (management SEC-07, tenant du JWT — pas d'id de chemin ; 404 sans membership actif, 403 non-management) : workspace complet en lignes brutes par table (19 tables, `schedule` sans `snapshot_data`), tenant-scoped garanti par RLS. Rate-limité `rgpd_export`. NR : `RgpdExportTest`. |
+| `/api/club/export` | GET | **RGPD portabilité club** (management SEC-07, tenant du JWT — pas d'id de chemin ; 404 sans membership actif, 403 non-management) : workspace complet en lignes brutes, une clé par table (liste dans `RgpdExportService::CLUB_TABLES`, `schedule` traité à part hors colonnes lourdes), tenant-scoped garanti par RLS. Rate-limité `rgpd_export`. NR : `RgpdExportTest`. |
 
 ### Télémétrie de génération (`SolverMetric.php`)
 
 `solver_metrics` conserve une ligne par tentative de génération (`schedule_id`, `club_id`,
-statut, durée, taille du problème, conflits, score, version du solveur, horodatage). La
-table est sous RLS `FORCE` et le rôle runtime ne voit que le club courant. `Club.lastActivityAt`
-est mis à jour au login authentifié et à la mise en file d'une génération. La rétention et
-le partitionnement sont différés aux jobs SA3.
+`status`, `wallTimeMs`, `nbVariables`/`nbConstraints`/`nbConflicts`, `score`, `solverVersion`,
+`planType`, `nbTeams`/`nbVenues`, `createdAt` — `src/Entity/SolverMetric.php`). La table est
+sous RLS `FORCE` et le rôle runtime ne voit que le club courant. `Club.lastActivityAt` est mis
+à jour **à la mise en file d'une génération** seulement (`GenerateScheduleController::__invoke`,
+`src/Controller/GenerateScheduleController.php:125`) — pas au login. La rétention et le
+partitionnement sont différés aux jobs SA3.
 
 ### Authentification superadmin (`AdminAuthController.php`)
 
@@ -148,6 +165,20 @@ Identité, provider et firewall stateful séparés de `User`/`ClubUser` et du JW
 parcours mot de passe + TOTP, la session, le CSRF et l'audit fail-closed sont spécifiés dans
 [`superadmin-auth.md`](superadmin-auth.md). Routes : `POST /api/admin/auth/password`,
 `POST /api/admin/auth/totp`, `GET /api/admin/auth/me`, `POST /api/admin/auth/logout`.
+
+Le reste de la console (supervision parc/solveur, jobs planifiés, journaux read-only, actions
+de support, demandes de création de club) vit derrière le même firewall `/api/admin` dans
+`AdminMonitoringController`, `AdminJobController`, `AdminAuditLogController`,
+`AdminMessengerFailedController`, `AdminSystemErrorsController`, `AdminClubActionController`
+et `AdminClubRequestController` (`backend/src/Controller/Admin*.php`) — catalogue de routes
+exhaustif et à jour dans [`superadmin-auth.md`](superadmin-auth.md), pas dupliqué ici.
+Deux mécanismes transverses à toute la console : le `TenantFilterListener` **retourne
+immédiatement** sur `/api/admin/**` (SEC-17, `src/EventListener/TenantFilterListener.php:70` —
+la console n'a pas de tenant, et poser `app.club_id` pour une identité admin violerait le
+contrat SA0) ; et `AdminCsrfListener` (SEC-18, `src/EventListener/AdminCsrfListener.php`,
+priorité 6) exige le jeton CSRF sur **toute méthode non sûre** sous `/api/admin` — opt-out
+par exemption explicite (`auth/password`, `auth/totp`, les deux portes de connexion), plus
+opt-in par contrôleur.
 
 > **RGPD — mécanismes transverses** (rétention comptes inactifs 24 mois, purges cron, journal
 > d'audit append-only, consentement) : registre des traitements et pointeurs code dans
@@ -174,6 +205,8 @@ parcours mot de passe + TOTP, la session, le CSRF et l'audit fail-closed sont sp
 |-------|---------|------------|-------------|
 | `/api/schedules/{id}/validate` | POST | `ValidateScheduleController` | **Pointe** la version sur son plan **et supprime les versions sœurs** du même périmètre (inv. 1 — plus d'archivage). Gate management (SEC-07) + contrôle club courant (403 sinon). 409 si le statut n'est pas `COMPLETED`, si une sœur est `PENDING`/`GENERATING`, ou (`overlays_exist`) si choisir une **autre** version de saison détruirait des plans secondaires — confirmer par `{"confirmDeleteOverlays": true}` ; portée et destruction : voir `/reopen`. |
 | `/api/schedules/{id}/reopen` | POST | `ReopenScheduleController` | Inverse : le plan **dépointe** la version, qui survit et redevient éditable (inv. 2). Gate management (SEC-07). 409 si la version n'est pas celle que pointe son plan ; 409 `overlays_exist` si le socle porte des plans de période **pas encore commencées** (validés ou non, décision fondateur 2026-07-24, ADR-0002 inv. 14) — confirmés, ils sont détruits **de bout en bout** (versions + plan + grille copiée + réglages) ; l'entrée de calendrier survit, « à traiter » de nouveau. |
+| `/api/schedules/{id}/regenerate` | POST | `RegenerateController` | « Régénérer » : crée une **nouvelle version linéaire** (V2, V3…) du **même plan** avec la structure club COURANTE — jamais une régénération en place. Gate management (SEC-07) + club courant + borne A10 (`GenerationComplexityGuard`) avant dispatch. Plans SAISON uniquement (409 sinon — un overlay se régénère depuis le cockpit) ; source doit être `COMPLETED`/`FAILED` et non la version **choisie** (409 « rouvrez-le avant ») ; 409 si une génération est déjà en cours pour la saison. Défense en profondeur du socle en vigueur SOUS verrou de plan-scope (`SocleGuard::assertSeasonPlanNotChosen`, miroir de `processPost`). Aucune copie de créneaux : le payload de génération répingle déjà les verrous HARD des versions de base. |
+| `/api/schedules/{id}/regenerate-from` | POST | `RegenerateFromVersionController` | « Charger cette version » : **restaure** la photo de structure (`ScheduleStructureSnapshot`, `StructureRestorer`) d'une version `COMPLETED` dans la structure vivante du club et la marque comme contexte chargé de la saison (`Season.liveContextScheduleId`) — **sans lancer de solve**. Plans SAISON uniquement, source `COMPLETED`, ni choisie ni en cours de génération ; restauration destructive faite sous le même verrou de plan-scope + `assertSeasonPlanNotChosen` **avant** l'écrasement. 409 si aucune photo n'existe (version antérieure à la fonctionnalité). |
 | `/api/schedule_plans/{id}` | PUT | `SchedulePlanStateProcessor` | Renomme le plan — le **nom appartient au plan** (inv. 12). Gate management (SEC-07). |
 
 ### Réordonnancement des équipes
@@ -192,11 +225,38 @@ Réservé à un admin **actif** du club (403 sinon) ; cible toujours restreinte 
 | `/api/memberships/{id}/approve` | POST | Active la membership (`isActive=true`). |
 | `/api/memberships/{id}/reject` | POST | Supprime la membership. Retourne 204. |
 
+### Approbation de club par token public (P3-4, `ClubApprovalController`)
+
+Page publique SANS login, ouverte depuis le mail institutionnel FFBB — même patron que
+`PublicCoachWishController` : le token EST l'identité, 404 byte-identique, rate-limit par IP
+AVANT toute résolution (`club_approval_public`, 20/15 min, `config/packages/rate_limiter.yaml`).
+Support entité `ClubCreationRequest` (**hors RLS, pas de `club_id`** — `src/Entity/ClubCreationRequest.php:19`,
+le club n'existe pas encore au moment de la demande) via `ClubCreationRequestRepository::findPendingByToken`.
+
+| Route | Méthode | Description |
+|-------|---------|-------------|
+| `/api/club-approvals/{token}` | GET | Résout le token (forme `^[0-9a-f]{64}$`, sinon 404), 410 si expiré. Rend `clubName`, `ara`, `requesterName`, `expiresAt`. |
+| `/api/club-approvals/{token}` | POST | Body `{decision: "approve"\|"refuse"}` (422 sinon). Décision **unique** : la demande passe hors statut PENDING, un second appel revoit 404. `approve` délègue à `ClubApprovalService::approve` — verrou consultatif Postgres `pg_advisory_xact_lock(hashtext('club-approval:'.ara))` (anti-double-club sur deux demandes concurrentes pour le même ARA), club déjà né entre-temps → la demande devient une adhésion `pending` (jamais un second club), sinon `ClubProvisioner::createClub`. |
+
 ### Validation des contraintes
 
 | Route | Méthode | Contrôleur | Description |
 |-------|---------|------------|-------------|
 | `/api/constraints/validate` | POST | `ValidateConstraintsController` | Gate pré-solve. En mode période, le jeu validé vient de **`PeriodConstraintSelector`** (P2-14) — LA source unique partagée avec `buildForPeriodPlan`, qui aligne le récap sur ce que le solveur recevra (parité gardée par `PeriodGatePayloadParityTest`, phase1). Retourne `errors` par contrainte + `conflits` + `warnings` (drops pour gymnase désactivé, tag inerte, **capacité dans les deux sens** — P2-9 PR A : demande = Σ `sessionsPerWeek` du payload, offre = Σ capacités des créneaux, sous-capacité en « au moins X », surplus dès 1 créneau en trop ; nombres lus du payload `buildForClubSeason`/`buildForPeriodPlan`, jamais recalculés ; **coach indisponible × réservation en dur** — PR A 2026-08-06, miroir du parse moteur dans `CoachDoubleBookingDetector::detectUnavailabilityClashes`, avertit AVANT au lieu de l'INFO post-solve) + `blockers` (coach dédoublé, P2-9 PR B ; **saturation des « au moins » par gymnase** — PR A 2026-08-06 : demande = Σ des minimums (un pin n'y compte pas, sa variable n'existe pas), offre = places des triplets NON verrouillés — demande > offre = INFEASIBLE certain ; **surplus de réservations d'une équipe** — P3-20 2026-08-06 : plus de réservations que de `sessionsPerWeek` est une INCOHÉRENCE gestionnaire, pas une préférence (un verrou est pré-placé hors modèle, les trois s'imposeraient) ; la règle vivait côté client en simple avertissement, elle est revenue au serveur). **L'algèbre des lectures de payload vit dans `PayloadCapacityMirror`** (P3-19, 2026-08-07 — source unique offre/saturation/grille, parité épinglée contre le VRAI moteur par `CapacityMirrorParityTest`, groupe `contract`). |
+
+### Écriture des contraintes — liste blanche `config` (SEC-13)
+
+`ConstraintConfigValidator` (`src/Service/ConstraintConfigValidator.php`) est LA liste blanche
+noms+types du champ `config` d'une contrainte — branchée dans `ConstraintStateProcessor`
+(création ET PUT), seul champ du formulaire qui n'avait auparavant aucune validation. Une clé
+mal orthographiée (`maxStartTme`) rendait 201, s'affichait comme une règle active, et le
+solveur l'ignorait silencieusement (déclaré ≠ effectif). Violation → **422** nommant la clé.
+Quatre familles (`enum ConstraintFamily` : `TIME`, `DAY`, `FACILITY`, `COACH_AVAILABILITY` —
+`FACILITY_CAPACITY` a été retirée, plus personne ne pouvait la créer) + `targetTag`, lisible
+par toutes. `config.coachId` a été supprimé (doublon exact du `scope`, la cible est déjà le
+scope). Chaque clé de la liste cite qui la lit ; pour les clés lues par le moteur, la preuve
+qu'elles changent le résultat du solveur est portée par le job CI dédié `engine-semantics`
+(groupe `contract`).
 
 ### Calendriers — vacances scolaires & jours fériés
 
@@ -207,11 +267,12 @@ Référentiels globaux display-only (jamais consommés par le solveur). Détail 
 | `/api/school-holidays` | GET | `SchoolHolidaysController` | Vacances scolaires de la zone du club (`Club.schoolZone`) dans la fenêtre `from`/`to` (défaut : saison active). Zone null → `items: []`. |
 | `/api/public-holidays` | GET | `PublicHolidaysController` | Jours fériés `NATIONAL` ∪ extras du territoire du club, même fenêtre. Zone null → NATIONAL quand même. |
 
-### Export PDF
+### Export PDF / Excel
 
 | Route | Méthode | Contrôleur | Description |
 |-------|---------|------------|-------------|
 | `/api/schedules/{id}/export-pdf` | POST | `ExportPdfController` | Lance l'export PDF asynchrone. Passe `pdfExportStatus` à `pending`, dispatche `ExportPdfMessage`. Retourne 202. |
+| `/api/schedules/{id}/export-xlsx` | POST | `ExportXlsxController` | Export Excel **synchrone** (`PhpSpreadsheet`, pas de tête sans écran à attendre) : flux `.xlsx` en téléchargement direct, filtrable par gymnase. Contrôle club courant (403). Nom de fichier = le nom **vivant** du plan (`SchedulePlanProvisioner::displayNameOf`, pas la photo `Schedule.name`) ; `/`/`\` remplacés avant `makeDisposition` (sinon 500 générique — Symfony lève sur un séparateur de chemin dans un nom de fichier). |
 
 ### Édition manuelle (`ManualEditController.php`)
 
@@ -243,6 +304,34 @@ Champs `Club` : `accentColor` (hex), `accentPalette` (json ≤3 hex), `logoUrl` 
 | `/api/club/logo` | POST · DELETE | `ClubLogoController` | Upload (multipart `file`, raster PNG/JPEG/WebP ≤ 500 Ko) / suppression du logo du club courant. Octets stockés via l'abstraction `App\Storage\LogoStorage` (`LocalLogoStorage` en dev ; alias `services.yaml` swappable pour du stockage objet en prod). |
 | `/api/clubs/{clubId}/logo` | GET | `ClubLogoController` | Sert le logo (public, stream + mime via finfo). |
 
+### Module démo
+
+Deux mécanismes distincts, à ne pas confondre :
+
+1. **Horloge simulée PAR CLUB** (`Club::$isDemo`/`$demoToday`, `src/Entity/Club.php:102,110`) —
+   `DemoAwareClock` (`src/Service/DemoAwareClock.php`) décore l'horloge réelle : si le club
+   résolu par le tenant (`_club_id`, posé par `TenantFilterListener` APRÈS le firewall) est
+   `isDemo` et porte un `demoToday`, `now()` rend la **date simulée** à l'**heure réelle** dans
+   le fuseau réel ; sinon l'horloge est vraie. **Aucune route HTTP n'écrit `demoToday`** — seule
+   la commande CLI `app:demo:clock` (`src/Command/DemoClockCommand.php`, options `--club`,
+   `--date`, `--clear`) le fait, une action de support (SA4).
+2. **`DevClockController`** (`/api/dev/clock`, GET/POST) est un mécanisme **global**, sans
+   rapport avec `demoToday` : il pin/relâche l'horloge de TOUTE l'app dans Redis
+   (`DevClockStore`), lue par `SimulatedClock` (alias de `ClockInterface` en dev). Gardé par
+   `%kernel.debug%` — 404 en environnement non-debug (donc en prod).
+
+Le club de démonstration permanent (BCCL) est créé/réinitialisé par `app:demo:seed-bccl`
+(`src/Command/DemoSeedBcclCommand.php`, connexion `admin`, options `--password`/`--email`) via
+`BcclSeeder` + `BcclSeedProfile` (`src/Seed/`, 26 identités fictives substituées de façon
+positionnelle et déterministe). Un club de démonstration **prospect** (à partir d'un code
+FFBB réel) se crée par `app:demo:create` (`src/Command/DemoCreateCommand.php`, options
+`--ffbb`, `--name`, `--animator-email`, `--animator-password`) qui pointe le compte animateur
+dessus. Deux contrôleurs dev-only relaient ces gestes en environnement e2e/test (mêmes garde
+`%kernel.debug%`, 404 en prod) : `POST /api/dev/approve-club-request` (`DevClubApprovalController`,
+approuve la demande PENDING de l'appelant) et `POST /api/dev/mark-season-paid`
+(`DevSeasonPaymentController`, marque payée la saison SUIVANTE du club courant — respecte
+l'horloge simulée).
+
 ### Cockpit temporel (overlays période/événement)
 
 Détail : [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md). `CalendarEntry` (kind PERIOD/EVENT) est le **déclencheur daté** ; le planning de période est un `SchedulePlan` ancré à l'entrée, et c'est **le plan** qui pointe sa version (`chosenScheduleId`). Le pointeur inverse `overlayScheduleId` a été supprimé par ADR-0002 lot D-b.
@@ -263,6 +352,7 @@ Détail : [`module-matchs.md`](module-matchs.md). Placement des rencontres domic
 | `/api/venue-unavailability-impact` | GET | `VenueUnavailabilityImpactController` | Flux d'alerte cockpit : par indispo, matchs placés touchés + séances d'entraînement des plannings **effectifs** (ADR-0002, `EffectiveScheduleResolver`). Lecture seule, rien persisté. |
 | `/api/fixtures/import/analyze` | POST | `ImportFixturesAnalyzeController` | **Dry-run** de l'export FBI global club : table des divisions résolue contre la correspondance persistée (`Competition`), zéro écriture. |
 | `/api/fixtures/import` | POST | `ImportFixturesController` | Import FBI **une passe** (fichier global + `mappings` JSON) : persiste les correspondances puis crée/**met à jour** par diff `(team, n° FBI)`. Rapport `created`/`updated`/`unchanged`/`exempted`/`warnings`/`unmappedDivisions`/`errors`. Remplace `/api/teams/{id}/fixtures/import` (P1-4 PR A, 2026-08-02). |
+| `/api/fixtures/place` | POST | `PlaceMatchesController` | « Placer automatiquement » (P1-4 PR D, ADR-0003). Rail **SYNCHRONE** — pas de Messenger/Mercure, verrou Redis dédié `MatchPlacementLock` (TTL 90 s, anti-double-clic). Ordre des gardes : SEC-07 (management) → saison inscriptible → `SocleGuard::assertSeasonPlanChosen` (409 si pas de socle en vigueur). Construit le payload (`MatchPlacementPayloadBuilder`, y compris `TeamLink`/`TeamMatchHabit`), appelle `POST /place-matches` sur l'engine (timeout 60 s, `BAD_GATEWAY` si l'appel échoue — rien n'est écrit avant l'application du résultat), applique les placements (`MatchPlacementResultApplier`). Un match non plaçable n'est **jamais une erreur** : il revient nommé dans `unplaced` avec sa raison. |
 
 ### Transition de saison (P1/P2)
 
@@ -297,18 +387,25 @@ Détail : [`vacances-scolaires-jours-feries.md`] et roadmap. Bascule de saison a
 
 ### Access control
 
-| Path | Rôle |
-|------|------|
-| `^/api/login` | `PUBLIC_ACCESS` |
-| `^/api/logout$` | `PUBLIC_ACCESS` |
-| `^/api/register` | `PUBLIC_ACCESS` |
-| `^/api/password` | `PUBLIC_ACCESS` |
-| `^/api/health` | `PUBLIC_ACCESS` |
-| `^/api/docs` | `PUBLIC_ACCESS` |
-| `^/api/clubs/[^/]+/logo$` (GET) | `PUBLIC_ACCESS` |
-| `^/api` | `IS_AUTHENTICATED_FULLY` |
+| Path | Méthode | Rôle |
+|------|---------|------|
+| `^/api/admin/auth/password$` | — | `PUBLIC_ACCESS` (porte de connexion admin) |
+| `^/api/admin/auth/totp$` | — | `PUBLIC_ACCESS` (porte de connexion admin) |
+| `^/api/admin` | — | `ROLE_SUPER_ADMIN` (firewall stateful `admin` séparé — §3 Authentification superadmin) |
+| `^/api/login` | — | `PUBLIC_ACCESS` |
+| `^/api/logout$` | — | `PUBLIC_ACCESS` |
+| `^/api/register` | — | `PUBLIC_ACCESS` |
+| `^/api/password` | — | `PUBLIC_ACCESS` |
+| `^/api/health` | — | `PUBLIC_ACCESS` |
+| `^/api/docs` | — | `PUBLIC_ACCESS` |
+| `^/api/clubs/[^/]+/logo$` | GET | `PUBLIC_ACCESS` (image de marque publique, SEC-10) |
+| `^/api/ffbb-logos/` | GET | `PUBLIC_ACCESS` (logos ligue/comité rehébergés, même motif SEC-10) |
+| `^/api/coach-wishes/public/` | GET, POST | `PUBLIC_ACCESS` (le token porte l'identité — #10 C2) |
+| `^/api/club-approvals/` | GET, POST | `PUBLIC_ACCESS` (le token porte l'identité — P3-4) |
+| `^/api` | — | `IS_AUTHENTICATED_FULLY` |
 
-Seule la première règle correspondante s'applique. Tout le reste de `/api/*` requiert un JWT valide.
+Seule la première règle correspondante s'applique. Tout le reste de `/api/*` requiert un JWT
+valide (ou, sous `/api/admin`, une session superadmin séparée — jamais un JWT club, §3).
 Le firewall `login` applique en plus `login_throttling` (`max_attempts: 5`) ; `/api/register` et
 `/api/password/forgot` sont rate-limités par IP (`config/packages/rate_limiter.yaml`, sliding window 5/15 min).
 **SEC-11** : tout `^/api` **authentifié** est en plus limité **par utilisateur** (limiteur `api`,
@@ -319,7 +416,9 @@ au-delà ; les endpoints publics (sans `User`) gardent leur limiteur par IP.
 
 Le `TenantFilterListener` (event `KernelEvents::REQUEST`, **priorité 7 — APRÈS le firewall
 de sécurité (priorité 8)**, pour que l'utilisateur JWT soit déjà authentifié) implémente
-l'isolation multi-tenant au niveau de chaque requête :
+l'isolation multi-tenant au niveau de chaque requête. Il **retourne immédiatement** sur
+`^/api/admin` (SEC-17, `src/EventListener/TenantFilterListener.php:70`) — la console
+superadmin n'a pas de tenant, §3 :
 
 1. **Résolution du clubId** : attribut de requête `_club_id`, sinon header `X-Club-Id`,
    sinon **la membership `ClubUser` active de l'utilisateur JWT** (le frontend n'envoie
@@ -359,7 +458,21 @@ l'isolation multi-tenant au niveau de chaque requête :
 - JWT secret depuis `MERCURE_JWT_SECRET` (**dédié, distinct de `JWT_PASSPHRASE`** — SEC-06),
   permission publisher `publish: '*'`. Hub durci (SEC-05) : pas d'abonné `anonymous`,
   `cors_origins` restreint aux frontends dev, pas de `publish_origins *`. Gardé par
-  `MercureHardeningTest`. Conso frontend future = JWT subscriber (voir `docs/security/mercure.md`).
+  `MercureHardeningTest`.
+
+### Souscription frontend (`MercureAuthController`, FRT-04)
+
+`GET /api/mercure/auth` signe un JWT hub subscriber (même secret `MERCURE_JWT_SECRET` que le
+publieur) dont l'autorisation `subscribe` est un **URI template borné au club résolu par le
+tenant** — `club:{clubId}:schedule:{id}`, où seul `{id}` varie ; `clubId` revalidé en forme
+UUID canonique (défense en profondeur : le sélecteur EST la frontière de sécurité). Le jeton
+part en **cookie httpOnly** `mercureAuthorization` (`path: /.well-known/mercure`, `SameSite=Strict`,
+`secure` piloté par la MÊME variable `JWT_COOKIE_SECURE` que le cookie JWT applicatif — jamais
+`$request->isSecure()`, TTL 3600 s), jamais rendu au JS (même raisonnement que SEC-16 : pas de
+second jeton lisible en plus du JWT applicatif). Le frontend consomme
+(`frontend/src/shared/lib/scheduleStream.ts`) : un seul `EventSource` par session sur
+`/.well-known/mercure?topic={topicTemplate}`, reçoit ainsi les mises à jour de TOUTES ses
+générations.
 
 ### Topic et publication
 
@@ -369,35 +482,43 @@ Le topic Mercure suit le format :
 club:{clubId}:schedule:{scheduleId}
 ```
 
-La publication est effectuée par les handlers asynchrones :
+La publication est effectuée par les handlers asynchrones, toujours via l'enveloppe
+`App\Mercure\ClubTopicUpdate::private()` (topic privé, publisher `publish: '*'` mais
+consommateur borné par le sélecteur JWT ci-dessus) :
 
-- **`GenerateScheduleHandler`** : publie sur le topic après import du résultat du solver
-  (`sprintf('club:%s:schedule:%s', $schedule->getClubId(), $schedule->getId())`).
-- **`ExportPdfHandler`** : publie sur le même topic après génération du PDF.
+- **`GenerateScheduleHandler`** délègue à `ScheduleProgressPublisher` (BCK-04, extraction du
+  handler — `src/Service/ScheduleProgressPublisher.php`) : `publish()`/`publishSafely()` (le
+  second avale une panne Mercure — best-effort, le front rattrape par polling) publient
+  `{scheduleId, status, score, unplaced, warnings}` — à l'entrée en `GENERATING` et à chaque
+  état terminal (succès, échec, timeout), pas seulement après import.
+- **`ExportPdfHandler`** publie directement sur le hub (`{pdfExportStatus, pdfExportUrl,
+  pngExportUrl}`) après génération du PDF, et une fois sur échec (planning devenu invisible
+  sous RLS — pour ne pas laisser le front tourner en boucle sur `pdfExportStatus`).
 
 La ressource `ScheduleResource` déclare `mercure: true` au niveau de l'attribut `#[ApiResource]`,
-ce qui active la diffusion Mercure pour les opérations CRUD standard sur les schedules.
-
-Le frontend consomme ces événements via `EventSource` sur
-`/.well-known/mercure?topic=club:{clubId}:schedule:{scheduleId}`.
+ce qui active la diffusion Mercure pour les opérations CRUD standard sur les schedules. La
+souscription frontend (cookie, template, `EventSource`) est décrite ci-dessus.
 
 ---
 
 ## 6. Pagination
 
-Toutes les ressources API Platform déclarent explicitement :
+Chaque ressource API Platform déclare explicitement `paginationEnabled` (et
+`paginationItemsPerPage` quand activée) au niveau de l'attribut `#[ApiResource]`. La majorité
+suit le défaut `paginationEnabled: true, paginationItemsPerPage: 30`, mais ce n'est **plus
+universel** — vérifier au besoin `grep paginationItemsPerPage backend/src/ApiResource/*.php` :
 
-```php
-paginationEnabled: true,
-paginationItemsPerPage: 30,
-```
+- **Désactivée** (`paginationEnabled: false` — listes petites, sparse, ou consommées entières
+  par un écran) : `SchedulePlan`, `TeamPeriodOverride`, `ConstraintPeriodOverride`,
+  `VenuePeriodOverride`, `CoachWish`, `CoachWishCampaign`.
+- **Surchargée à 50 ou 100** (listes qui grossissent plus vite que le défaut 30 ne le tolère) :
+  `TeamLink`, `TeamMatchHabit`, `VenueUnavailability`, `Competition` (50) ; `Reservation`,
+  `Fixture` (100).
 
-au niveau de l'attribut `#[ApiResource]`. Les collections sont servies au format JSON-LD :
+Les collections sont servies au format JSON-LD :
 
 - `hydra:member` : tableau des items de la page courante.
 - `hydra:totalItems` : nombre total d'items.
 - `hydra:view` : liens de navigation (`hydra:first`, `hydra:next`, `hydra:last`, `hydra:previous`).
 - Paramètres de requête : `page` (numéro de page), `itemsPerPage` (surchargeable via
   `pagination_client_items_per_page` si activé).
-
-Aucune ressource ne désactive la pagination ni ne surcharge le nombre d'items par page.
