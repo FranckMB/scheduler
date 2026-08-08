@@ -18,6 +18,7 @@ import { useSlots, useVenues } from "@/features/planning/queries";
 import { LogoCropper } from "./LogoCropper";
 import { computeVenueStats, formatHours, seasonWeeks } from "./lib/venueStats";
 import { useDeleteLogo, useDownloadClubExport, useFfbbImport, useResetClub, useUpdateAppearance, useUploadLogo } from "./queries";
+import { isManagementRole } from "@/shared/lib/roles";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const DEFAULT_ACCENT = "#3b82f6";
@@ -478,7 +479,7 @@ function ClubHub({ me }: { me: MeResponse }) {
   const isAdmin = me.role === "admin";
   // Le gate backend management = owner|admin (SEC-07) — l'UI doit matcher,
   // sinon un owner ne voit jamais l'export RGPD (revue PR-2).
-  const isManagement = me.role === "admin" || me.role === "owner";
+  const isManagement = isManagementRole(me.role);
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-1 border-l-[3px] border-accent pl-3 text-xl font-semibold">Gestion du club</h1>

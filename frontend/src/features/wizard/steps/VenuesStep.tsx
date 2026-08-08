@@ -30,6 +30,7 @@ import { PeriodVenues } from "./PeriodStructure";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 import { CapacitySelect, SharedSlotHint } from "./slotFields";
 import { WEEK } from "../lib/weekGrid";
+import { venuesWithoutSlot } from "../lib/useStepValidation";
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -327,7 +328,8 @@ function VenuesEditor() {
   // d'entraînement (loué pour les matchs seulement) : la règle l'épargne, ici
   // comme au gate (useStepValidation — les deux sites bougent ensemble, §7.2).
   const matchVenueIds = new Set((matchWindowsQuery.data ?? []).map((w) => w.venueId));
-  const emptyVenues = venues.filter((v) => !slots.some((s) => s.venueId === v.id) && !matchVenueIds.has(v.id));
+  // D-24 : le prédicat vient de la porte — les trois sites partagent la RÈGLE, pas le libellé.
+  const emptyVenues = venuesWithoutSlot(venues, slots, matchVenueIds);
 
   return (
     <div>

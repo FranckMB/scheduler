@@ -5,6 +5,7 @@ import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
 import { todayDate } from "@/shared/lib/clock";
 
 import { frDayMonth, localIso, seasonPrepWindow } from "./seasonTransition";
+import { isManagementRole } from "@/shared/lib/roles";
 
 /**
  * Permanent anticipation banner (transition P2-PR2): from May 15 until the
@@ -24,7 +25,7 @@ export function SeasonTransitionBanner({ today = todayDate() }: { today?: Date }
   const current = seasons.find((s) => s.isCurrent);
   // Preparing a season is a management action (the endpoint 403s otherwise) —
   // never nag members who cannot act on the nudge.
-  const isManagement = "owner" === me?.role || "admin" === me?.role;
+  const isManagement = isManagementRole(me?.role);
   if (undefined === current || !isManagement) {
     return null;
   }

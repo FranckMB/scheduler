@@ -77,8 +77,15 @@ export function computeReservationWarnings(reservations: Reservation[], teams: T
 /** Venues that carry no availability slot — the "gym without slot" rule, shared
  * by the venues and recap gates. P1-4 PR B : un gymnase à fenêtre MATCH est
  * épargné (loué pour les matchs seulement, il n'a légitimement aucun créneau
- * d'entraînement — ni de saison, ni de période). */
-function venuesWithoutSlot(venues: Venue[], slots: VenueTrainingSlot[], matchVenueIds: ReadonlySet<string>): Venue[] {
+ * d'entraînement — ni de saison, ni de période).
+ *
+ * ⚑ D-24 — `WizardLayout` écrivait « la règle vit à TROIS sites, ils bougent ensemble » :
+ * la porte (ici), le bandeau (`VenuesStep`) et l'atterrissage guidé (`WizardLayout`). Une
+ * exemption ajoutée à un seul donne soit un bandeau rouge sans blocage — le gestionnaire ne
+ * comprend pas ce qu'on lui reproche — soit un « Suivant » bloqué SANS message, l'écran ne
+ * montrant rien à corriger. Les trois appellent désormais ce prédicat ; les libellés, eux,
+ * restent propres à chaque site. */
+export function venuesWithoutSlot(venues: Venue[], slots: VenueTrainingSlot[], matchVenueIds: ReadonlySet<string>): Venue[] {
   const withSlot = new Set(slots.map((s) => s.venueId));
   return venues.filter((v) => !withSlot.has(v.id) && !matchVenueIds.has(v.id));
 }
