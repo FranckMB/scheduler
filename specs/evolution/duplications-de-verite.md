@@ -69,7 +69,7 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 | **D-11** ⬜ | `matchDay` : convention de jour | `TeamInput.php:44` `Range(0,6)` « 0 = Monday » vs ISO 1..7 partout ailleurs (`VenueTrainingSlotInput.php:18`) et `objective.py:550` `match_day % 7 + 1` | ⚠ **DORMANT, pas live** (vérifié : `match_day` est NULL sur les 69 équipes, aucun écran ne l'expose). Le jour où le champ est exposé : le bonus de repos tombe sur le mauvais jour et le dimanche ISO est rejeté en 422. `tests/Validator/TeamInputValidationTest.php:26` épingle aujourd'hui `matchDay=6` comme valide — l'anti-garde | Aligner sur ISO `Range(1,7)` **avant** d'exposer le champ |
 | **D-12** ✅ | Rate limit prod jamais asserté | `rate_limiter.yaml:41` `limit: 300` ; `ApiRateLimitTest.php:27` ne garde que l'override de test (`:81`, 30) | Passer la valeur prod à 30000 → **tous les tests verts**, la borne SEC-11 s'évapore | Asserter la valeur prod, pas seulement l'override |
 | **D-13** ✅ | Sémantique des contraintes implicites | `ImplicitConstraintConfig.php:40` « gets **at least** its minimum » vs `engine/implicit_rules.json:8` « **TARGETS** … soft bonus, **not a hard floor** » | **Inversé sémantiquement.** `POST /implicit-constraints` (`main.py:545-547`) ne compare que les **noms** — jamais les descriptions ni la version (`'2.1'` backend vs `"2.0"` json) : la commande de sync rend **`synchronized` sur une contradiction** | Comparer description + version. ⚠ anti-garde : `ImplicitConstraintConfigTest.php:69` épingle la mauvaise chaîne |
-| **D-14** ⬜ | Miroirs backend↔engine des règles coach | `CoachDoubleBookingDetector.php:282-309` (MAIN, gymnases **différents**, chevauchement d'intervalles) vs `result_builder.py:629-663` (clé `(coach, day, startTime)`, **début exact**) · fenêtres d'indispo : `:219-251` vs `constraints.py:1637-1662` | **DIVERGENT dans les deux sens.** 17:00-18:30 vs 17:30-19:00 → le backend bloque en 422, le moteur ne voit rien. Même gymnase, 2 équipes, 1 coach → le backend autorise (mutualisation), le moteur émet une **ERROR**. Fenêtre inversée (20:00→08:00) → le moteur bloque **toute la journée**, le récap se tait | Le détecteur se déclare « miroir » (`:145-149`) sans garde : un test croisé backend⇄moteur |
+| **D-14** ✅ | Miroirs backend↔engine des règles coach | `CoachDoubleBookingDetector.php:282-309` (MAIN, gymnases **différents**, chevauchement d'intervalles) vs `result_builder.py:629-663` (clé `(coach, day, startTime)`, **début exact**) · fenêtres d'indispo : `:219-251` vs `constraints.py:1637-1662` | **DIVERGENT dans les deux sens.** 17:00-18:30 vs 17:30-19:00 → le backend bloque en 422, le moteur ne voit rien. Même gymnase, 2 équipes, 1 coach → le backend autorise (mutualisation), le moteur émet une **ERROR**. Fenêtre inversée (20:00→08:00) → le moteur bloque **toute la journée**, le récap se tait | Le détecteur se déclare « miroir » (`:145-149`) sans garde : un test croisé backend⇄moteur |
 | **D-15** ✅ (reformulé) | `MERCURE_PORT` | `.env:10` = **13009** vs `.env.dist:10` = **3000** et `vite.config.ts:51` défaut `127.0.0.1:3000` | **DÉJÀ DIVERGENT.** Un `npm run dev` hôte proxie vers un port mort → SSE morte → repli polling qui masque tout. La CI lit `.env.dist`, donc ne verra jamais la dérive | — |
 | **D-16** ✅ | Colonnes d'INSERT manuscrites | `SchedulePlanProvisioner.php:783-785` (12 colonnes), `FfbbLeagueRepository.php:38`, `FfbbCommitteeRepository.php:35` | Nouvelle colonne **nullable** → les créneaux de période copiés la perdent en silence : la grille de période diverge de la grille saison qu'elle prétend copier | **Le patron existe** : `TeamTagService.php:40` + son diff bidirectionnel dans `TeamTagScopeTest.php:202-221` |
 | **D-17** ✅ | `ContractSchemaTest` tautologique sur l'URL moteur | `EngineClient.php:17-18` vs `AdminHealthService.php:24`, `ExportImplicitConstraintsCommand.php:22` ; `ContractSchemaTest.php:39` compare l'URL **à sa propre constante** passée au `MockHttpClient` (`:49`) | Passer `EngineClient.php:17` en 8001 → **4 tests CrossStack verts**. Seul le smoke tombe. `ENGINE_URL` existe dans `.env.dist:16` et **n'est lu nulle part** | Un paramètre Symfony unique |
@@ -168,12 +168,18 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 > `grep -c '^| \*\*D-[0-9]*\*\* ⬜' specs/evolution/duplications-de-verite.md` — **ancré sur la ligne
 > de tableau** : un `grep -c '⬜'` nu compte aussi la légende et cette prose (6 au lieu de 3).
 >
-> **État au 2026-08-09 : 44 findings — 38 livrés · 4 réfutés · 2 ouverts.**
+> **État au 2026-08-09 : 44 findings — 39 livrés · 4 réfutés · 1 ouvert.**
 >
 > **Les trois restants, et pourquoi ils attendent.** Aucun ne peut corrompre une donnée,
 > franchir une frontière ni tromper un gestionnaire sur un flux critique — c'est ce qui les a
-> mis en fin de file, et cela reste vrai. **D-14 attend un ARBITRAGE, pas du temps de
-> développement** : le traiter sans trancher reviendrait à choisir en silence.
+> mis en fin de file, et cela reste vrai.
+>
+> **D-14 a été tranché le 2026-08-09**, et l'arbitrage a désigné le coupable inverse de
+> celui qu'on croyait. Le premier compte rendu concluait « un coach ne couvre jamais deux
+> équipes, il faut durcir le backend » ; le fondateur a corrigé : « Matthieu coache les SM1
+> et les SM2, on peut vouloir que les deux entraînements se passent en même temps. C'est de
+> la responsabilité du gestionnaire, ce n'est pas une erreur. » Le backend et la modale
+> avaient donc raison ; c'est le MOTEUR qui refusait ce que l'UI offrait.
 >
 > **D-07 a été tranché le 2026-08-09** (fondateur : « dans un enum ») — colonne typée
 > `enumType`, comme `CalendarEntry`. À noter : **aucun test nouveau n'a été écrit**. Le garde
@@ -184,7 +190,6 @@ Statut : ⬜ ouvert · ✅ traité (avec sa trace dans `../courantes/etat-des-li
 > | # | Sujet | Pourquoi il attend |
 > |---|---|---|
 > | D-11 | convention `matchDay` | **dormant** : `match_day` est NULL sur les 69 équipes, aucun écran ne l'expose |
-> | D-14 | miroirs coach backend↔engine | demande une **décision produit** : quelle règle fait foi |
 >
 > **D-13 est clos sans code** : le correctif de D-43 l'avait absorbé. `ImplicitRulesMatchEngineTest`
 > compare désormais les descriptions ET les versions annoncées de part et d'autre

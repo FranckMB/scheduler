@@ -14,7 +14,7 @@ final class ImplicitConstraintConfig
      * pendant que `engine/implicit_rules.json` en annonçait une autre — deux déclarations que
      * rien ne comparait (D-43). Gardée par `ImplicitRulesMatchEngineTest`.
      */
-    public const string RULESET_VERSION = '2.1';
+    public const string RULESET_VERSION = '2.2';
 
     /**
      * @return array<string, mixed>
@@ -30,7 +30,11 @@ final class ImplicitConstraintConfig
             'coachNoOverlap' => [
                 'type' => ImplicitConstraint::COACH_NO_OVERLAP->value,
                 'enabled' => true,
-                'description' => 'One coach coaches max one team per time slot',
+                // D-14 (2026-08-09) — la formulation « max one team per time slot » décrivait
+                // la règle que le MOTEUR appliquait, pas celle que le produit veut : le même
+                // gymnase est autorisé (un coach y surveille deux groupes). Le backend et la
+                // modale l'exemptaient déjà ; le moteur a été aligné, et cette phrase avec.
+                'description' => 'One coach coaches at most one team per time slot, EXCEPT in the same venue (D-14: a coach can watch two groups side by side; different venues remain impossible)',
             ],
             'coachPlayerNoOverlap' => [
                 'type' => ImplicitConstraint::COACH_PLAYER_NO_OVERLAP->value,

@@ -313,10 +313,20 @@ def add_coach_at_most_one(model: Any, assignments: Sequence[AssignmentVariable],
     Overlap detection uses both ``_assignment_time_key`` grouping (same slot start) and
     ``_intervals_overlap`` (interval intersection) so that coaching assignments
     with different start times but overlapping intervals are also prevented.
+
+    ⚑ D-14 (arbitrage fondateur, 2026-08-09) — la règle est **venue-aware** : le même
+    gymnase est AUTORISÉ. Un coach qui tient les SM1 et les SM2 sur le même créneau, au
+    même endroit, est présent une fois et surveille deux groupes ; c'est un choix de
+    gestion légitime, courant dans les petites structures. Ce sont les gymnases
+    DIFFÉRENTS qui restent interdits — là, c'est physiquement impossible.
+
+    Le backend (`CoachDoubleBookingDetector`) et la modale du wizard
+    (`coachDoubleBooking.ts`) appliquaient déjà cette exemption ; le moteur était le seul
+    des trois à l'ignorer, et refusait donc de placer ce que les deux autres offraient.
     """
 
-    groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
-    person_entries: dict[str, list[tuple[int, int, BoolVarLike, str]]] = defaultdict(list)
+    groups: dict[tuple[Any, Any], list[tuple[BoolVarLike, str | None]]] = defaultdict(list)
+    person_entries: dict[str, list[tuple[int, int, BoolVarLike, str, str | None, str]]] = defaultdict(list)
 
     for assignment in assignments:
         time_key = _assignment_time_key(assignment)
@@ -337,16 +347,20 @@ def add_coach_at_most_one(model: Any, assignments: Sequence[AssignmentVariable],
                 coach_ids = [coach_id]
 
         var = assignment.var
+        venue_id = str(assignment.venue_id) if assignment.venue_id is not None else None
+        # Le gymnase reste HORS de la clé (cf. `_add_cross_venue_at_most_one`) : il est
+        # porté par l'entrée, et c'est la comparaison de paire qui exempte le même gymnase
+        # sans désarmer les gymnases différents.
         for coach_id in coach_ids:
-            groups[(coach_id, time_key)].append(var)
+            groups[(coach_id, time_key)].append((var, venue_id))
 
         start, end, day = _extract_interval(assignment)
         if start is not None and end is not None and day is not None:
             for coach_id in coach_ids:
-                person_entries[str(coach_id)].append((start, end, var, day))
+                person_entries[str(coach_id)].append((start, end, var, day, venue_id, "coach"))
 
-    time_key_added = _add_at_most_one_groups(model, groups.values())
-    interval_added = _add_interval_at_most_one(model, person_entries)
+    time_key_added = _add_cross_venue_at_most_one(model, groups)
+    interval_added = _add_interval_at_most_one(model, person_entries, same_venue_allowed=True)
     return time_key_added + interval_added
 
 
@@ -366,7 +380,7 @@ def add_coach_player_non_overlap(model: Any, assignments: Sequence[AssignmentVar
 
     coach_groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
     player_groups: dict[tuple[Any, Any], list[BoolVarLike]] = defaultdict(list)
-    person_entries: dict[str, list[tuple[int, int, BoolVarLike, str]]] = defaultdict(list)
+    person_entries: dict[str, list[tuple[int, int, BoolVarLike, str, str | None, str]]] = defaultdict(list)
 
     for assignment in assignments:
         time_key = _assignment_time_key(assignment)
@@ -376,39 +390,50 @@ def add_coach_player_non_overlap(model: Any, assignments: Sequence[AssignmentVar
         team_id = assignment.team_id
         team_id_str = str(team_id) if team_id is not None else None
 
+        # D-14 : le RÔLE est retenu, pas seulement la personne. Une même personne peut être
+        # coach ici et joueuse là ; seule la paire coach-coach tolère le même gymnase, et
+        # `player` l'emporte quand les deux s'appliquent (on ne joue pas en coachant).
+        person_roles: dict[str, str] = {}
         all_person_ids: set[str] = set()
 
         if team_coach_map is not None and team_id_str is not None and team_id_str in team_coach_map:
             for coach_id in team_coach_map[team_id_str]:
                 coach_groups[(coach_id, time_key)].append(assignment.var)
                 all_person_ids.add(str(coach_id))
+                person_roles.setdefault(str(coach_id), "coach")
         else:
             single_coach = assignment.coach_id
             if single_coach is not None:
                 coach_groups[(single_coach, time_key)].append(assignment.var)
                 all_person_ids.add(str(single_coach))
+                person_roles.setdefault(str(single_coach), "coach")
 
         if team_player_map is not None and team_id_str is not None and team_id_str in team_player_map:
             for player_id in team_player_map[team_id_str]:
                 player_groups[(player_id, time_key)].append(assignment.var)
                 all_person_ids.add(str(player_id))
+                person_roles[str(player_id)] = "player"
         else:
             for player_id in assignment.player_ids:
                 player_groups[(player_id, time_key)].append(assignment.var)
                 all_person_ids.add(str(player_id))
+                person_roles[str(player_id)] = "player"
 
         var = assignment.var
         start, end, day = _extract_interval(assignment)
         if start is not None and end is not None and day is not None:
+            venue_id = str(assignment.venue_id) if assignment.venue_id is not None else None
             for person_id in all_person_ids:
-                person_entries[person_id].append((start, end, var, day))
+                person_entries[person_id].append((start, end, var, day, venue_id, person_roles.get(person_id, "player")))
 
     overlap_groups = (
         coach_groups[key] + player_groups[key]
         for key in coach_groups.keys() & player_groups.keys()
     )
     time_key_added = _add_at_most_one_groups(model, overlap_groups)
-    interval_added = _add_interval_at_most_one(model, person_entries)
+    # D-14 : le drapeau est levé ici AUSSI, mais il ne relâche que les paires coach-coach —
+    # que la contrainte 2 possède déjà. Coach-joueur et joueur-joueur restent opposés.
+    interval_added = _add_interval_at_most_one(model, person_entries, same_venue_allowed=True)
     return time_key_added + interval_added
 
 
@@ -1310,30 +1335,89 @@ def _extract_interval(assignment: AssignmentVariable) -> tuple[int | None, int |
     return start_minutes, end_minutes, day
 
 
+def _add_cross_venue_at_most_one(
+    model: Any,
+    keyed_entries: dict[tuple[Any, Any], list[tuple[BoolVarLike, str | None]]],
+) -> int:
+    """``varA + varB <= 1`` pour toute paire de MÊME clé posée dans des gymnases DIFFÉRENTS.
+
+    D-14 — remplace un `_add_at_most_one_groups` sur la clé `(coach, temps)`. Ajouter
+    simplement le gymnase à cette clé serait le réflexe évident, et il est FAUX : deux
+    gymnases différents tomberaient alors dans deux groupes séparés, chacun réduit à une
+    variable, et plus rien ne les opposerait — on aurait autorisé le même gymnase en
+    autorisant AUSSI ce qu'on voulait interdire. C'est
+    `test_coach_on_two_venues_at_same_time_is_impossible` qui l'a rattrapé.
+
+    D'où le passage en paires explicites : le gymnase reste hors de la clé, et c'est la
+    COMPARAISON entre les deux membres qui décide. Un gymnase inconnu (None) ne vaut pas
+    « même gymnase » — sans preuve de co-localisation, on garde la règle stricte.
+    """
+    added = 0
+    for entries in keyed_entries.values():
+        for i in range(len(entries)):
+            var_a, venue_a = entries[i]
+            for j in range(i + 1, len(entries)):
+                var_b, venue_b = entries[j]
+                if var_a is var_b:
+                    continue
+                if venue_a is not None and venue_a == venue_b:
+                    continue
+                model.Add(var_a + var_b <= 1)
+                added += 1
+    return added
+
+
 def _add_interval_at_most_one(
     model: Any,
-    person_entries: dict[str, list[tuple[int, int, BoolVarLike, str]]],
+    person_entries: dict[str, list[tuple[int, int, BoolVarLike, str, str | None, str]]],
+    *,
+    same_venue_allowed: bool = False,
 ) -> int:
     """Add pairwise ``varA + varB <= 1`` for overlapping intervals per person per day.
 
     Args:
         model: CP-SAT model.
-        person_entries: ``dict[person_id, list[(start, end, var, day)]]``.
+        person_entries: ``dict[person_id, list[(start, end, var, day, venue, role)]]`` où
+            ``role`` vaut ``"coach"`` ou ``"player"``.
+        same_venue_allowed: quand True, deux intervalles qui se chevauchent **dans le même
+            gymnase** ne sont PAS opposés — mais UNIQUEMENT si les deux entrées sont des
+            rôles ``"coach"``. Voir D-14 ci-dessous.
 
     Returns: number of pairwise constraints added.
+
+    D-14 (arbitrage fondateur, 2026-08-09) — un coach PEUT tenir deux équipes en même temps
+    dans le MÊME gymnase. « Matthieu coache les SM1 et les SM2, et le gestionnaire peut
+    vouloir que les deux séances aient lieu simultanément. C'est rare mais c'est possible
+    dans les petites structures. » Il est présent une fois et surveille deux groupes.
+
+    ⚠ **L'exemption est réservée aux paires coach-coach**, et c'est pour cela que le rôle
+    voyage avec l'entrée. Coacher et JOUER sont deux rôles, pas deux groupes surveillés :
+    une même personne ne peut pas les tenir simultanément, même à trois mètres d'écart.
+
+    ⚑ C'est le piège qui a failli passer. ``add_coach_player_non_overlap`` teste lui aussi
+    TOUTES les combinaisons de rôles pour une même personne, **coach-coach comprise** : sa
+    copie venue-blind continuait de rendre INFEASIBLE le cas Matthieu alors que la
+    contrainte 2 l'avait dûment relâché. Relâcher un seul des deux sites ne relâche rien —
+    seule la falsification l'a montré, la suite restait verte.
+
+    Deux gymnases différents restent interdits dans tous les cas : impossibilité physique,
+    pas choix de gestion.
     """
     added = 0
     for entries in person_entries.values():
-        by_day: dict[str, list[tuple[int, int, BoolVarLike]]] = defaultdict(list)
-        for start, end, var, day in entries:
-            by_day[day].append((start, end, var))
+        by_day: dict[str, list[tuple[int, int, BoolVarLike, str | None, str]]] = defaultdict(list)
+        for start, end, var, day, venue, role in entries:
+            by_day[day].append((start, end, var, venue, role))
 
         for day_entries in by_day.values():
             for i in range(len(day_entries)):
-                a_start, a_end, var_a = day_entries[i]
+                a_start, a_end, var_a, a_venue, a_role = day_entries[i]
                 for j in range(i + 1, len(day_entries)):
-                    b_start, b_end, var_b = day_entries[j]
+                    b_start, b_end, var_b, b_venue, b_role = day_entries[j]
                     if var_a is var_b:
+                        continue
+                    both_coaching = a_role == "coach" and b_role == "coach"
+                    if same_venue_allowed and both_coaching and a_venue is not None and a_venue == b_venue:
                         continue
                     if _intervals_overlap(a_start, a_end, b_start, b_end):
                         model.Add(var_a + var_b <= 1)
