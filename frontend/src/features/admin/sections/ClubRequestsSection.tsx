@@ -54,8 +54,8 @@ export function ClubRequestsSection() {
                 <div className="text-sm text-slate-200">
                   <span className="font-medium text-white">{item.clubName}</span>{" "}
                   <span className="text-slate-400">({item.ara})</span>
-                  {"expired" === item.status ? <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase text-amber-300">Expirée</span> : null}
-                  {null === item.clubEmail ? <span className="ml-2 rounded bg-slate-500/20 px-1.5 py-0.5 text-[11px] font-semibold uppercase text-slate-300">Sans mail FFBB</span> : null}
+                  {"expired" === item.status ? <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-semibold uppercase text-amber-300">Expirée</span> : null}
+                  {null === item.clubEmail ? <span className="ml-2 rounded bg-slate-500/20 px-1.5 py-0.5 text-xs font-semibold uppercase text-slate-300">Sans mail FFBB</span> : null}
                   <div className="text-xs text-slate-400">
                     Demandé par {item.requesterName} ({item.requesterEmail}) le {item.createdAt} — expire le {item.expiresAt}
                   </div>

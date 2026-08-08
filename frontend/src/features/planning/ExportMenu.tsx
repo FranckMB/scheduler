@@ -83,7 +83,7 @@ export function ExportMenu({ scheduleId, venues, exportName = null }: { schedule
               </button>
             ))}
           </div>
-          <p className="mt-2 text-[11px] leading-tight text-muted-foreground">Une page paysage, ajustée pour rester lisible.</p>
+          <p className="mt-2 text-xs leading-tight text-muted-foreground">Une page paysage, ajustée pour rester lisible.</p>
         </div>
       ) : null}
     </div>

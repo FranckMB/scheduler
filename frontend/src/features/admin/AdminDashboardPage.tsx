@@ -383,7 +383,7 @@ function SolverChart({ solver }: { solver: AdminOverviewResponse["solver"] }) {
               </div>
             ))}
           </div>
-          <div className="mt-2 flex justify-between text-[11px] text-slate-600">
+          <div className="mt-2 flex justify-between text-xs text-slate-600">
             <span>{formatShortDate(solver.daily[0]?.date)}</span>
             <span>{formatShortDate(solver.daily.at(-1)?.date)}</span>
           </div>
@@ -426,7 +426,7 @@ function HealthSection({ data, loading, error, retry }: DataSectionProps<AdminHe
             {services.map(({ key, label, icon: Icon, status, latencyMs }) => (
               <li key={key} className="flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4 last:border-b-0 sm:odd:border-r sm:[&:nth-last-child(-n+2)]:border-b-0">
                 <div className="flex items-center gap-3"><Icon className="size-4 text-slate-500" aria-hidden="true" /><span className="text-sm text-slate-300">{label}</span></div>
-                <div className="text-right"><StatusChip status={status} /><p className="mt-1 text-[11px] text-slate-600">{latencyMs === null ? "—" : `${latencyMs} ms`}</p></div>
+                <div className="text-right"><StatusChip status={status} /><p className="mt-1 text-xs text-slate-600">{latencyMs === null ? "—" : `${latencyMs} ms`}</p></div>
               </li>
             ))}
           </ul>
@@ -512,12 +512,12 @@ function JobsSection({ data, loading, error, retry }: DataSectionProps<AdminJobs
 function JobRow({ job, running, onRun }: { job: AdminJob; running: boolean; onRun: () => void }) {
   return (
     <tr className="align-top text-slate-300 hover:bg-white/[0.025]">
-      <td className="px-5 py-5"><div className="flex items-start gap-3"><div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-slate-500"><History className="size-4" aria-hidden="true" /></div><div><p className="font-medium text-white">{job.label}</p><p className="mt-1 font-mono text-[11px] text-slate-600">{job.command}</p></div></div></td>
+      <td className="px-5 py-5"><div className="flex items-start gap-3"><div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-slate-500"><History className="size-4" aria-hidden="true" /></div><div><p className="font-medium text-white">{job.label}</p><p className="mt-1 font-mono text-xs text-slate-600">{job.command}</p></div></div></td>
       <td className="px-4 py-5">{formatCadence(job.cadence)}</td>
       <td className="px-4 py-5"><NextRun value={job.nextRunAt} /></td>
       <td className="px-4 py-5">{job.latestRun ? <><p>{formatDateTime(job.latestRun.startedAt)}</p><p className="mt-1 text-xs text-slate-600">{formatJobSource(job.latestRun.source)}</p></> : <span className="text-slate-500">Jamais exécuté</span>}</td>
       <td className="px-4 py-5 tabular-nums">{job.latestRun ? formatDuration(job.latestRun.durationMs) : "—"}</td>
-      <td className="px-4 py-5"><JobStatus status={job.latestRun?.status ?? null} />{job.latestRun?.exitCode !== null && job.latestRun?.exitCode !== undefined ? <p className="mt-1 text-[11px] text-slate-600">Code {job.latestRun.exitCode}</p> : null}</td>
+      <td className="px-4 py-5"><JobStatus status={job.latestRun?.status ?? null} />{job.latestRun?.exitCode !== null && job.latestRun?.exitCode !== undefined ? <p className="mt-1 text-xs text-slate-600">Code {job.latestRun.exitCode}</p> : null}</td>
       <td className="px-4 py-5">{job.manualTriggerAllowed ? <Button type="button" size="sm" variant="outline" className="border-white/15 text-slate-200 hover:bg-white/10" disabled={running} onClick={onRun}>{running ? <Spinner className="size-3.5" /> : <RotateCw className="size-3.5" aria-hidden="true" />} {running ? "Exécution…" : "Relancer"}</Button> : <span className="text-xs text-slate-600">Supervision seule</span>}</td>
     </tr>
   );
@@ -557,14 +557,14 @@ function FreshnessSection({ data, loading, error, retry }: DataSectionProps<Admi
           <article key={item.key} className="rounded-xl border border-white/10 bg-white/[0.04] p-5">
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-medium text-white">{item.label}</p>
-              <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold", item.stale ? "bg-amber-400/15 text-amber-300" : "bg-emerald-400/15 text-emerald-300")}>
+              <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold", item.stale ? "bg-amber-400/15 text-amber-300" : "bg-emerald-400/15 text-emerald-300")}>
                 {item.stale ? "Périmé" : "À jour"}
               </span>
             </div>
             <p className="mt-3 text-xs text-slate-500">
               {item.lastUpdatedAt ? `Dernière mise à jour : ${formatDate(item.lastUpdatedAt)}` : "Jamais importé"}
             </p>
-            <p className="mt-1 text-[11px] text-slate-600">Seuil : {integerFormatter.format(item.staleAfterDays)} jours</p>
+            <p className="mt-1 text-xs text-slate-600">Seuil : {integerFormatter.format(item.staleAfterDays)} jours</p>
           </article>
         ))}
       </div>
@@ -616,11 +616,11 @@ function ClubsTable({ clubs, page, pages, total, query, loading, onPageChange }:
 function ClubRow({ club, onActions }: { club: AdminClub; onActions: () => void }) {
   return (
     <tr className="align-top text-slate-300 hover:bg-white/[0.025]">
-      <td className="px-5 py-5"><div className="flex items-start gap-3"><div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-slate-500"><Building2 className="size-4" aria-hidden="true" /></div><div><p className="font-medium text-white">{club.name}</p><p className="mt-1 text-xs text-slate-600">{club.ffbbClubCode ?? club.slug}</p>{club.isDemo ? <span className="mt-2 mr-2 inline-block rounded bg-violet-500/20 px-1.5 py-0.5 text-[11px] font-medium text-violet-300">Démo</span> : null}{club.unsubscribed ? <span className="mt-2 inline-block text-[11px] font-medium text-amber-300">Désabonné</span> : null}</div></div></td>
+      <td className="px-5 py-5"><div className="flex items-start gap-3"><div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-white/[0.06] text-slate-500"><Building2 className="size-4" aria-hidden="true" /></div><div><p className="font-medium text-white">{club.name}</p><p className="mt-1 text-xs text-slate-600">{club.ffbbClubCode ?? club.slug}</p>{club.isDemo ? <span className="mt-2 mr-2 inline-block rounded bg-violet-500/20 px-1.5 py-0.5 text-xs font-medium text-violet-300">Démo</span> : null}{club.unsubscribed ? <span className="mt-2 inline-block text-xs font-medium text-amber-300">Désabonné</span> : null}</div></div></td>
       <td className="px-4 py-5"><p>{club.lastActivityAt ? formatDate(club.lastActivityAt) : "Jamais"}</p><p className="mt-1 text-xs text-slate-600">Créé le {formatDate(club.createdAt)}</p></td>
       <td className="px-4 py-5"><p className="text-white">{club.planId === null ? "Découverte" : "Payant"}</p><p className="mt-1 text-xs text-slate-600">{club.generationCountSeason} génération{club.generationCountSeason > 1 ? "s" : ""}{club.billingCycle ? ` · ${club.billingCycle}` : ""}</p></td>
       <td className="px-4 py-5"><p>{club.currentSeason?.name ?? "Aucune saison"}</p><p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600"><span className="flex items-center gap-1"><Users className="size-3" aria-hidden="true" />{club.volumes.teams} équipes · {club.volumes.coaches} coachs</span><span className="flex items-center gap-1"><MapPin className="size-3" aria-hidden="true" />{club.volumes.venues} salles</span><span>{club.volumes.constraints} contraintes</span></p></td>
-      <td className="px-4 py-5"><p><span className="font-medium text-white">{club.solver.generations}</span> générations · {formatRate(club.solver.infeasibleRate)} inf.</p><p className="mt-1 text-xs text-slate-600">P50 {formatDuration(club.solver.p50WallTimeMs)} · P95 {formatDuration(club.solver.p95WallTimeMs)}</p>{club.solver.latestStatus ? <p className="mt-2 text-[11px] text-slate-500">Dernière : {club.solver.latestStatus}</p> : null}</td>
+      <td className="px-4 py-5"><p><span className="font-medium text-white">{club.solver.generations}</span> générations · {formatRate(club.solver.infeasibleRate)} inf.</p><p className="mt-1 text-xs text-slate-600">P50 {formatDuration(club.solver.p50WallTimeMs)} · P95 {formatDuration(club.solver.p95WallTimeMs)}</p>{club.solver.latestStatus ? <p className="mt-2 text-xs text-slate-500">Dernière : {club.solver.latestStatus}</p> : null}</td>
       <td className="px-4 py-5">
         <Button type="button" size="sm" variant="outline" className="border-white/15 text-slate-200 hover:bg-white/10" onClick={onActions}>
           Actions
@@ -683,7 +683,7 @@ function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => 
                 >
                   <span className="flex items-center justify-between gap-3">
                     <span className="text-sm font-medium">{action.label}</span>
-                    {action.dangerous ? <span className="shrink-0 text-[11px] font-semibold uppercase text-destructive">Destructif</span> : null}
+                    {action.dangerous ? <span className="shrink-0 text-xs font-semibold uppercase text-destructive">Destructif</span> : null}
                   </span>
                   <span className="mt-1 block text-xs text-muted-foreground">{action.description}</span>
                 </button>

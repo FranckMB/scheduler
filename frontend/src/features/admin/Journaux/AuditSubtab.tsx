@@ -148,7 +148,7 @@ function AuditRow({ item }: { item: AdminAuditLogItem }) {
         <p className="font-mono text-xs text-slate-400">{item.route ?? "—"}</p>
       </td>
       <td className="px-4 py-5">
-        <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold", STATUS_STYLES[status])}>
+        <span className={cn("inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold", STATUS_STYLES[status])}>
           {STATUS_LABELS[status]}
           {null !== item.status ? <span className="tabular-nums opacity-70">{item.status}</span> : null}
         </span>

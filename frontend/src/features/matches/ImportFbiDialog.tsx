@@ -128,7 +128,7 @@ export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps)
                         onChange={(e) => setChoices((prev) => ({ ...prev, [divisionKey(division)]: e.target.value }))}
                       />
                       {null !== usableSuggestion(division) && undefined === choices[divisionKey(division)] ? (
-                        <span className="rounded bg-muted px-1 text-[10px] uppercase tracking-wide text-muted-foreground">proposé par la FFBB</span>
+                        <span className="rounded bg-muted px-1 text-xs uppercase tracking-wide text-muted-foreground">proposé par la FFBB</span>
                       ) : null}
                     </span>
                   )}

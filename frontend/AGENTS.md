@@ -175,6 +175,21 @@ data; avoiding it would mean duplicating the auth decision into a per-route `loa
   `collection()` unwraps it; `collectionAll()` pages via `?page=N` and dedupes by `id`.
   There is **no `useInfiniteQuery`** anywhere.
 
+### Taille de texte : plancher 12 px, sauf dans les grilles
+
+Le corps de texte descend à `text-xs` (0,75 rem = **12 px**) et pas en dessous — pas
+d'échelle arbitraire en `text-[10px]`. **Exception assumée : les GRILLES**
+(`WeekGrid`, `WeekendGrid`, `TypicalWeekendGrid`, `ReservationGrid`, `MonthCalendar`,
+`VenueAvailabilityGrid`), où la densité est la fonction : y agrandir le texte impose
+des lignes plus hautes, donc du défilement dans un écran fait pour tenir en un coup
+d'œil. Décision fondateur du 2026-08-08, avec son pourquoi dans
+`specs/courantes/etat-des-lieux.md` §2.
+
+⚠ Ne pas confondre avec une exigence WCAG : **aucun plancher de taille n'existe** en
+2.2 (1.4.4 demande le zoom 200 % sans perte, pas une taille mini). C'est une barre de
+qualité — donc un ajout en `text-[9px]` hors grille se discute, il ne se refuse pas
+au nom d'une norme.
+
 ### ⚠ axe ne voit PAS un champ nommé par son seul `placeholder`
 
 Mesuré le 2026-08-07 sur `<input placeholder="…" />` nu : axe-core rend `violations: []`

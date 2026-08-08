@@ -110,7 +110,7 @@ export function RegisterPage() {
                 {s.enabled ? <Check aria-hidden className="absolute right-1.5 top-1.5 size-3.5 text-accent" /> : null}
                 <span aria-hidden className="text-2xl leading-none">{s.icon}</span>
                 <span>{s.label}</span>
-                {s.enabled ? null : <span className="text-[10px] text-muted-foreground">bientôt</span>}
+                {s.enabled ? null : <span className="text-xs text-muted-foreground">bientôt</span>}
               </button>
             ))}
           </div>

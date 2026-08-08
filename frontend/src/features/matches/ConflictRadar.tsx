@@ -162,7 +162,7 @@ export function ConflictRadar({ conflicts, teams, coaches }: ConflictRadarProps)
                           <p className="font-medium">{conflictTitle(conflict, coaches)}</p>
                           <p className="text-muted-foreground">
                             {conflictSummary(conflict, teams)}
-                            {estimatedTag(conflict) ? <span className="ml-1 rounded bg-muted px-1 text-[10px] uppercase tracking-wide">heure estimée</span> : null}
+                            {estimatedTag(conflict) ? <span className="ml-1 rounded bg-muted px-1 text-xs uppercase tracking-wide">heure estimée</span> : null}
                           </p>
                           {undefined !== conflict.start && undefined !== conflict.end ? (
                             <p className="text-xs text-muted-foreground">
