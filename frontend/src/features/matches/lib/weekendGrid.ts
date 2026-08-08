@@ -8,6 +8,7 @@ export const MATCH_MINUTES = 105;
 /** minutes since midnight → "HH:MM". */
 // D-20 : c'était la seule des trois copies à clamper — elle est devenue le foyer partagé.
 import { formatMinutes } from "@/shared/lib/time";
+import { assignLanes } from "@/shared/lib/gridLayout";
 
 export { formatMinutes };
 
@@ -99,46 +100,8 @@ interface Interval {
   cell: WeekendCell;
 }
 
-/** Lay time-overlapping cells in the same column into side-by-side lanes. */
-function assignLanes(intervals: Interval[]): void {
-  const byColumn = new Map<number, Interval[]>();
-  for (const interval of intervals) {
-    const list = byColumn.get(interval.cell.gridColumn) ?? [];
-    list.push(interval);
-    byColumn.set(interval.cell.gridColumn, list);
-  }
-  for (const list of byColumn.values()) {
-    list.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
-    let cluster: Interval[] = [];
-    let clusterEnd = -1;
-    const flush = (): void => {
-      const laneEnds: number[] = [];
-      for (const item of cluster) {
-        let lane = laneEnds.findIndex((end) => end <= item.startMin);
-        if (-1 === lane) {
-          lane = laneEnds.length;
-        }
-        laneEnds[lane] = item.endMin;
-        item.cell.lane = lane;
-      }
-      for (const item of cluster) {
-        item.cell.laneCount = laneEnds.length;
-      }
-    };
-    for (const interval of list) {
-      if (cluster.length > 0 && interval.startMin >= clusterEnd) {
-        flush();
-        cluster = [];
-        clusterEnd = -1;
-      }
-      cluster.push(interval);
-      clusterEnd = Math.max(clusterEnd, interval.endMin);
-    }
-    if (cluster.length > 0) {
-      flush();
-    }
-  }
-}
+// D-27 : le placement en couloirs vit en `shared/lib/gridLayout` — il était recopié
+// caractere pour caractere entre les deux grilles.
 
 function dateLabel(dateKey: string): string {
   return new Date(`${dateKey}T00:00:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });

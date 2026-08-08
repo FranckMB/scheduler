@@ -6,6 +6,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { Coach, Conflict, Team } from "./api";
 import { groupBySeverity } from "./lib/diagnostic";
+import { coachFullName } from "@/shared/lib/coachName";
 
 interface ConflictRadarProps {
   conflicts: Conflict[];
@@ -15,7 +16,9 @@ interface ConflictRadarProps {
 
 function coachName(coaches: Map<string, Coach>, id: string): string {
   const coach = coaches.get(id);
-  return coach ? `${coach.firstName} ${coach.lastName}` : "Coach ?";
+  // D-33 : formatage partagé — cette version omettait le `.trim()`, laissant un espace
+  // final visible quand le coach n'a pas de nom de famille.
+  return coachFullName(coach);
 }
 
 function teamName(teams: Map<string, Team>, id: string): string {

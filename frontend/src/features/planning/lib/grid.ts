@@ -42,6 +42,8 @@ export function parseTimeToMinutes(time: string): number {
 /** minutes → "HH:MM" (zero-padded). */
 // D-20 : le formateur vit en `shared/lib/time` — cette copie ne clampait pas et rendait « 25:15 ».
 import { formatMinutes, parseTime } from "@/shared/lib/time";
+import { coachFullName } from "@/shared/lib/coachName";
+import { assignLanes } from "@/shared/lib/gridLayout";
 
 export { formatMinutes };
 
@@ -115,7 +117,9 @@ function coachName(coaches: Map<string, Coach>, coachId: string | null): string 
     return "Sans coach";
   }
   const coach = coaches.get(coachId);
-  return coach ? `${coach.firstName} ${coach.lastName}` : "Coach ?";
+  // D-33 : formatage partagé — cette version omettait le `.trim()`, laissant un espace
+  // final visible quand le coach n'a pas de nom de famille.
+  return coachFullName(coach);
 }
 
 function resourceLabel(id: string, viewMode: ViewMode, lookups: Lookups): string {
@@ -237,49 +241,8 @@ interface Interval {
   cell: GridCell;
 }
 
-/** Lay time-overlapping cells in the same column into side-by-side lanes. */
-function assignLanes(intervals: Interval[]): void {
-  const byColumn = new Map<number, Interval[]>();
-  for (const interval of intervals) {
-    const list = byColumn.get(interval.cell.gridColumn) ?? [];
-    list.push(interval);
-    byColumn.set(interval.cell.gridColumn, list);
-  }
-
-  for (const list of byColumn.values()) {
-    list.sort((a, b) => a.startMin - b.startMin || a.endMin - b.endMin);
-
-    let cluster: Interval[] = [];
-    let clusterEnd = -1;
-    const flush = (): void => {
-      const laneEnds: number[] = [];
-      for (const item of cluster) {
-        let lane = laneEnds.findIndex((end) => end <= item.startMin);
-        if (-1 === lane) {
-          lane = laneEnds.length;
-        }
-        laneEnds[lane] = item.endMin;
-        item.cell.lane = lane;
-      }
-      for (const item of cluster) {
-        item.cell.laneCount = laneEnds.length;
-      }
-    };
-
-    for (const interval of list) {
-      if (cluster.length > 0 && interval.startMin >= clusterEnd) {
-        flush();
-        cluster = [];
-        clusterEnd = -1;
-      }
-      cluster.push(interval);
-      clusterEnd = Math.max(clusterEnd, interval.endMin);
-    }
-    if (cluster.length > 0) {
-      flush();
-    }
-  }
-}
+// D-27 : le placement en couloirs vit en `shared/lib/gridLayout` — il était recopié
+// caractere pour caractere entre les deux grilles.
 
 export interface GridRow {
   /** Displayed only on hour / half-hour rows; null elsewhere (keeps the grid line). */

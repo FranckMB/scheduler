@@ -32,6 +32,7 @@ import { RecapStep } from "./steps/RecapStep";
 import { TeamsStep } from "./steps/TeamsStep";
 import { VenuesStep } from "./steps/VenuesStep";
 import { useWizardStore } from "./store";
+import { venuesWithoutSlot } from "./lib/useStepValidation";
 
 function StepContent({ stepId }: { stepId: WizardStepId }) {
   switch (stepId) {
@@ -179,7 +180,6 @@ export function WizardPage() {
     positioned.current = true;
     const venueList = venues.data ?? [];
     const slotList = slots.data ?? [];
-    const withSlot = new Set(slotList.map((s) => s.venueId));
     const matchVenues = new Set((matchWindows.data ?? []).map((w) => w.venueId));
     let gap: WizardStepId | null = null;
     // P2-21 lot A — des équipes importées AUTOMATIQUEMENT que le gestionnaire
@@ -197,7 +197,8 @@ export function WizardPage() {
       null === window.localStorage.getItem(`ffbb-teams-import-notice-${clubId}`);
     if (0 === (teams.data ?? []).length || importUnseen) {
       gap = "teams";
-    } else if (0 === venueList.length || venueList.some((v) => !withSlot.has(v.id) && !matchVenues.has(v.id))) {
+      // D-24 : même prédicat que la porte et le bandeau — la règle ne vit plus à trois sites.
+    } else if (0 === venueList.length || venuesWithoutSlot(venueList, slotList, matchVenues).length > 0) {
       gap = "venues";
     } else if (0 === (coaches.data ?? []).length) {
       gap = "coaches";

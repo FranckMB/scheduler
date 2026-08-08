@@ -1,3 +1,4 @@
+import { coachFullName } from "@/shared/lib/coachName";
 import { compareTeamsByRank, groupTeamsByTier } from "@/shared/lib/teamTiers";
 
 import type { Coach, PriorityTier, Team } from "../api";
@@ -50,7 +51,8 @@ const COACH_GROUP_RANK: Record<CoachGroup, number> = { salaried: 0, player: 1, o
  */
 export function orderedCoaches(coaches: Coach[], coachPlayerIds: Set<string>): RankedCoach[] {
   const groupOf = (c: Coach): CoachGroup => (c.isEmployee ? "salaried" : coachPlayerIds.has(c.id) ? "player" : "other");
-  const fullName = (c: Coach): string => `${c.firstName} ${c.lastName}`.trim();
+  // D-33 : formatage partagé (cette version était la seule à trimmer).
+  const fullName = (c: Coach): string => coachFullName(c);
   return coaches
     .map((coach) => ({ coach, group: groupOf(coach) }))
     .sort((a, b) => COACH_GROUP_RANK[a.group] - COACH_GROUP_RANK[b.group] || fullName(a.coach).localeCompare(fullName(b.coach), "fr"));
