@@ -34,13 +34,14 @@ function firstHourMinute(time: string): [number, number] {
 
 /** Time-ish string → minutes since midnight (tolerates ISO datetimes from the API). */
 export function parseTimeToMinutes(time: string): number {
-  const [h, m] = firstHourMinute(time);
-  return h * 60 + m;
+  // D-21 : lecture partagée ; le repli 0 est conservé (une grille place un bloc, elle ne
+  // valide pas une saisie) mais il est désormais EXPLICITE.
+  return parseTime(time) ?? 0;
 }
 
 /** minutes → "HH:MM" (zero-padded). */
 // D-20 : le formateur vit en `shared/lib/time` — cette copie ne clampait pas et rendait « 25:15 ».
-import { formatMinutes } from "@/shared/lib/time";
+import { formatMinutes, parseTime } from "@/shared/lib/time";
 
 export { formatMinutes };
 

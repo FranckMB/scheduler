@@ -1,6 +1,7 @@
 /** dayOfWeek 1-7 (ISO: 1=Monday). Availability + constraints use this convention. */
 // D-22 : les sept jours vivent en `shared/lib/days` — une copie de ce tableau
 // s'arrêtait au samedi et rendait un planning à six colonnes « complet ».
+import { parseTime } from "@/shared/lib/time";
 import { DAYS } from "@/shared/lib/days";
 
 export { DAYS };
@@ -12,8 +13,11 @@ export const hhmm = (time: string): string => time.match(/(\d{2}):(\d{2})/)?.[0]
 
 /** Minutes since midnight for a time-ish string (single source for the grid + overlap). */
 export const toMinutes = (time: string): number => {
-  const [h, m] = hhmm(time).split(":").map(Number);
-  return h * 60 + m;
+  // D-21 — la LECTURE est partagée, le repli reste local et VOULU : `NaN` est load-bearing.
+  // `slotOverlap` teste `!Number.isFinite(toMinutes(...))` pour refuser une heure vide en
+  // nommant le champ ; rendre 0 ici rendrait cette garde muette et laisserait partir une
+  // écriture que l'API rejette par un 422 générique.
+  return parseTime(time) ?? Number.NaN;
 };
 
 /** Minutes depuis minuit → "HH:MM" — foyer unique `shared/lib/time` (D-20 : cette copie rendait « 25:15 »). */

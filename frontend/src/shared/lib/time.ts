@@ -22,3 +22,31 @@ export function formatMinutes(total: number): string {
 
   return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
 }
+
+/**
+ * « Heure-ish » (`"18:00"`, `"18:00:00"`, un ISO datetime) → minutes depuis minuit.
+ * **`null` quand la valeur est illisible** — l'échec est explicite, jamais déguisé.
+ *
+ * ⚑ Il en existait CINQ implémentations, avec **quatre** comportements d'échec différents
+ * (`NaN`, `0`, `0`, `null`, `0`) et deux regex divergentes (`\d{2}` contre `\d{1,2}`, donc
+ * « 9:00 » lu par les unes et pas par les autres). Sur une heure illisible, le wizard
+ * **bloquait la pose** pendant que le planning et les matchs la traitaient comme **minuit**
+ * et posaient le bloc en haut de grille, sans un mot (audit D-21).
+ *
+ * ⚠ **Le repli reste le choix de l'appelant, et c'est délibéré.** Le `NaN` de
+ * `wizard/lib/days.toMinutes` est LOAD-BEARING : `slotOverlap` s'en sert
+ * (`!Number.isFinite(...)`) pour refuser une heure vide avec un message qui nomme le champ —
+ * l'écraser en `0` rendrait la garde muette et laisserait partir une écriture que l'API
+ * rejette par un 422 générique. Unifier la LECTURE ne veut pas dire unifier la RÉACTION.
+ */
+export function parseTime(value: string | null | undefined): number | null {
+  const match = value?.match(/(\d{1,2}):(\d{2})/);
+  if (null == match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+}
