@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum ConstraintRuleType: string
 {
+    use HasValues;
+
     case HARD = 'HARD';
     case PREFERRED = 'PREFERRED';
     case BONUS = 'BONUS';

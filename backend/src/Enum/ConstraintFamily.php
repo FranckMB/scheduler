@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum ConstraintFamily: string
 {
+    use HasValues;
+
     case TIME = 'TIME';
     case DAY = 'DAY';
     case FACILITY = 'FACILITY';

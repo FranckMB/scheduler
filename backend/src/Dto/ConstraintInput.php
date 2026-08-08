@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Dto;
 
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
@@ -17,7 +20,7 @@ class ConstraintInput
     public ?string $description = null;
 
     #[Assert\NotBlank]
-    #[Assert\Choice(choices: ['CLUB', 'TEAM', 'COACH', 'FACILITY'])]
+    #[Assert\Choice(callback: [ConstraintScope::class, 'values'])]
     #[Groups(['write'])]
     public ?string $scope = null;
 
@@ -26,12 +29,12 @@ class ConstraintInput
     public ?string $scopeTargetId = null;
 
     #[Assert\NotBlank]
-    #[Assert\Choice(choices: ['TIME', 'DAY', 'FACILITY', 'COACH_AVAILABILITY'])]
+    #[Assert\Choice(callback: [ConstraintFamily::class, 'values'])]
     #[Groups(['write'])]
     public ?string $family = null;
 
     #[Assert\NotBlank]
-    #[Assert\Choice(choices: ['HARD', 'PREFERRED', 'BONUS', 'LOCK'])]
+    #[Assert\Choice(callback: [ConstraintRuleType::class, 'values'])]
     #[Groups(['write'])]
     public ?string $ruleType = null;
 

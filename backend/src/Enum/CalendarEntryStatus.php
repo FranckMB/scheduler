@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum CalendarEntryStatus: string
 {
+    use HasValues;
+
     case PROPOSED = 'proposed';
     case ACTIVE = 'active';
     case IGNORED = 'ignored';

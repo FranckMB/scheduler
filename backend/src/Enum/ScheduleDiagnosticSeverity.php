@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum ScheduleDiagnosticSeverity: string
 {
+    use HasValues;
+
     case ERROR = 'ERROR';
     case WARNING = 'WARNING';
     case INFO = 'INFO';

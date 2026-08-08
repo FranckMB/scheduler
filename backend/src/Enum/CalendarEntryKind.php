@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum CalendarEntryKind: string
 {
+    use HasValues;
+
     case EVENT = 'event';
     case PERIOD = 'period';
 }

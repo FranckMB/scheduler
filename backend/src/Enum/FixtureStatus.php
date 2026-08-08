@@ -21,13 +21,8 @@ namespace App\Enum;
  */
 enum FixtureStatus: string
 {
-    /**
-     * @return list<string>
-     */
-    public static function values(): array
-    {
-        return array_map(static fn (self $case): string => $case->value, self::cases());
-    }
+    use HasValues;
+
     case UNPLACED = 'UNPLACED';
     case PLACED = 'PLACED';
     case SUBMITTED = 'SUBMITTED';

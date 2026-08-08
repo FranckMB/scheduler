@@ -6,6 +6,8 @@ namespace App\Enum;
 
 enum ConstraintScope: string
 {
+    use HasValues;
+
     case CLUB = 'CLUB';
     case TEAM = 'TEAM';
     case COACH = 'COACH';
