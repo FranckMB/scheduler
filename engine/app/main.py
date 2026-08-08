@@ -547,7 +547,19 @@ async def sync_implicit_constraints(input_data: ImplicitConstraintSyncRequest) -
     missing_in_engine = sorted(set(backend_rules) - set(engine_enabled_rules))
     missing_in_backend = sorted(set(engine_enabled_rules) - set(backend_rules))
 
-    if not missing_in_engine and not missing_in_backend:
+    # D-43 — ne comparer que les NOMS laissait passer une contradiction de fond : `MIN_SESSIONS`
+    # etait decrite comme un plancher dur cote backend alors que le solveur n'en fait qu'une
+    # cible (ENG-18). Deux cotes d'accord sur la liste, en desaccord sur ce qu'elle veut dire :
+    # l'endpoint repondait « synchronized » sur un mensonge.
+    engine_descriptions = {rule.name: rule.description for rule in engine_rules.rules if rule.enabled}
+    backend_descriptions = {rule.name: rule.description for rule in input_data.rules if rule.enabled}
+    contradicting = sorted(
+        name
+        for name, description in backend_descriptions.items()
+        if name in engine_descriptions and engine_descriptions[name] != description
+    )
+
+    if not missing_in_engine and not missing_in_backend and not contradicting:
         return JSONResponse(
             status_code=status.HTTP_200_OK,
             content={"status": "synchronized", "rules_count": len(engine_enabled_rules)},
@@ -561,6 +573,7 @@ async def sync_implicit_constraints(input_data: ImplicitConstraintSyncRequest) -
             "engine_rules": engine_enabled_rules,
             "missing_in_engine": missing_in_engine,
             "missing_in_backend": missing_in_backend,
+            "contradicting_descriptions": contradicting,
         },
     )
 

@@ -97,7 +97,7 @@ final class ExportImplicitConstraintsCommand extends Command
         }
 
         return [
-            'version' => '2.1',
+            'version' => ImplicitConstraintConfig::RULESET_VERSION,
             'rules' => $rules,
         ];
     }
