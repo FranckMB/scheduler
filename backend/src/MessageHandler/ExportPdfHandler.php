@@ -6,6 +6,7 @@ namespace App\MessageHandler;
 
 use App\Entity\Schedule;
 use App\Mercure\ClubTopicUpdate;
+use App\Mercure\MercureTopic;
 use App\Message\ExportPdfMessage;
 use App\Service\PdfGenerator;
 use App\Service\TenantConnectionContext;
@@ -54,7 +55,7 @@ final readonly class ExportPdfHandler
             // club) must not leave the frontend spinning on pdfExportStatus —
             // publish a failure on the requesting club's topic.
             $this->hub->publish(ClubTopicUpdate::private(
-                \sprintf('club:%s:schedule:%s', $clubId, $message->getScheduleId()),
+                MercureTopic::for($clubId, $message->getScheduleId()),
                 json_encode(['pdfExportStatus' => 'failed', 'pdfExportUrl' => null, 'pngExportUrl' => null], \JSON_THROW_ON_ERROR),
             ));
 
@@ -89,8 +90,8 @@ final readonly class ExportPdfHandler
 
     private function publishProgress(Schedule $schedule): void
     {
-        $topic = \sprintf('club:%s:schedule:%s', $schedule->getClubId(), $schedule->getId());
-        if ('club::schedule:' === $topic) {
+        $topic = MercureTopic::for($schedule->getClubId(), $schedule->getId());
+        if (MercureTopic::isEmpty($topic)) {
             throw new LogicException('Schedule Mercure topic cannot be empty.');
         }
 

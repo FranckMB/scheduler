@@ -107,3 +107,47 @@ def test_every_doc_quoting_the_contract_cites_the_current_version() -> None:
         "qui s'est produit entre le bump 2.2 et l'audit du 2026-08-08, sur SEPT fichiers. "
         "Mettre a jour le doc dans le MEME commit que le bump."
     )
+
+
+# D-42 — les paliers du budget solveur sont cités par SEPT documents.
+SOLVER_TIERS_DOCS = (
+    REPO_ROOT / "CLAUDE.md",
+    REPO_ROOT / "docs" / "architecture" / "adr-0001-single-pass-solve.md",
+    REPO_ROOT / "docs" / "glossary.md",
+    REPO_ROOT / "docs" / "project-map.md",
+)
+
+
+def _adaptive_tiers() -> list[str]:
+    """Les paliers reellement codes dans `_adaptive_timeout`, en ordre croissant."""
+    main = (REPO_ROOT / "engine" / "app" / "main.py").read_text(encoding="utf-8")
+    tiers = sorted(int(v) for v in re.findall(r"^\s+adaptive = (\d+)$", main, re.M))
+
+    assert tiers, "les paliers ont disparu de `_adaptive_timeout` — ce test doit suivre, pas se taire"
+
+    return [str(t) for t in tiers]
+
+
+def test_docs_quoting_the_solver_tiers_cite_the_real_values() -> None:
+    """D-42 — un doc qui annonce un budget solveur perime fait planifier a contresens.
+
+    Ces chiffres decident ce qu'un agent croit possible (« le solveur a 600 s »). Ils sont
+    ecrits dans sept documents et nulle part derives. Le test ne juge pas la prose : il
+    exige seulement qu'un doc qui CITE la suite de paliers cite la VRAIE.
+    """
+    expected = "/".join(_adaptive_tiers())
+
+    stale = []
+    for doc in SOLVER_TIERS_DOCS:
+        text = doc.read_text(encoding="utf-8")
+        # Ancre sur l'unite : sans elle, une DATE (« 01/02/04 ») passe pour des paliers.
+        quoted = re.findall(r"\b(\d{2,3}/\d{2,3}/\d{2,3})\s*s\b", text)
+        for suite in quoted:
+            if suite != expected:
+                stale.append(f"{doc.relative_to(REPO_ROOT)} annonce {suite}")
+
+    assert not stale, (
+        f"ces documents annoncent des paliers de budget solveur qui ne sont plus ceux du "
+        f"moteur ({expected}) : {stale}. Un agent qui les lit planifie sur un budget qui "
+        "n'existe pas — meme motif que la version de contrat (D-37)."
+    )

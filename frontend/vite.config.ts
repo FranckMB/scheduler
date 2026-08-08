@@ -48,7 +48,11 @@ const config = defineConfig({
         changeOrigin: true,
       },
       '/.well-known/mercure': {
-        target: process.env.MERCURE_PROXY_TARGET ?? 'http://127.0.0.1:3000',
+        // D-15 — le défaut ignorait `MERCURE_PORT`, alors que le hub est publié sur CE port
+        // (`docker-compose.yml`). Dans Docker le compose passe `MERCURE_PROXY_TARGET`, donc
+        // rien ne se voyait ; sur l'hôte, un `npm run dev` proxifiait vers un port mort — la
+        // SSE tombait et le polling prenait le relais, masquant la panne.
+        target: process.env.MERCURE_PROXY_TARGET ?? `http://127.0.0.1:${process.env.MERCURE_PORT ?? '3000'}`,
         changeOrigin: true,
       },
       // FRT-17: no `/engine` proxy — the frontend NEVER calls the engine directly
