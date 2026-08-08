@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionEnum;
 use ReflectionEnumBackedCase;
+use UnitEnum;
 
 /**
  * D-34/D-38 — le PREMIER test qui traverse la frontière backend ↔ frontend.
@@ -110,7 +111,7 @@ final class TsUnionsMatchPhpEnumsTest extends TestCase
     /** @return list<string> */
     private function phpValues(string $enumName): array
     {
-        /** @var class-string<\UnitEnum> $class */
+        /** @var class-string<UnitEnum> $class */
         $class = 'App\\Enum\\' . $enumName;
         self::assertTrue(enum_exists($class), \sprintf('L\'enum %s a disparu — ce test le référence.', $class));
 
