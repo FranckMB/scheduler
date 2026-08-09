@@ -44,6 +44,23 @@ class PdfGenerator
     ) {}
 
     /**
+     * P4-52 — où les rendus atterrissent, et sous quelle URL ils sont servis.
+     *
+     * Exposés en accesseurs plutôt que recopiés dans `PurgeExportsCommand` : la purge doit
+     * balayer EXACTEMENT le répertoire que ce générateur écrit. Deux constantes qui
+     * dériveraient donneraient une purge qui ne trouve rien — et qui le dit en vert.
+     */
+    public static function outputDir(): string
+    {
+        return self::OUTPUT_DIR;
+    }
+
+    public static function publicPath(): string
+    {
+        return self::PUBLIC_PATH;
+    }
+
+    /**
      * @return array{pdf: string, png: ?string}
      */
     public function generate(Schedule $schedule, ?string $venueId = null): array

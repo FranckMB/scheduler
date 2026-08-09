@@ -1,0 +1,177 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Command;
+
+use App\Service\PdfGenerator;
+use DateTimeImmutable;
+use Doctrine\DBAL\Connection;
+use Doctrine\Persistence\ManagerRegistry;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Style\SymfonyStyle;
+
+/**
+ * P4-52 — la rétention des rendus d'export.
+ *
+ * Les PDF/PNG s'écrivent dans `public/exports` (`PdfGenerator`) et **ne repartaient jamais** :
+ * une saison de régénérations laisse autant de fichiers, indéfiniment.
+ *
+ * ⚑ Le rendu est servi **publiquement par design** (`nginx.prod.conf` : « SEC-14 : proxy
+ * PUBLIC par design ») — l'URL porte l'UUID du planning, elle n'est pas devinable, mais elle
+ * ne se périme pas non plus. La rétention borne donc deux choses d'un coup : le disque, et la
+ * durée pendant laquelle un vieux rendu reste atteignable.
+ *
+ * **Deux motifs de suppression, et un seul filet.**
+ *  1. **Orphelin** — le planning n'existe plus. Pure hygiène, aucune décision produit.
+ *  2. **Périmé** — plus vieux que la rétention (90 jours), SAUF s'il est pointé par
+ *     `Season.exportPdfUrl`.
+ *
+ * ⚠ Ce second point EST le `is_pinned` du croquis v3, réalisé avec ce qui existe déjà : une
+ * saison qui pointe son export l'épingle de fait. Une colonne `is_pinned` dédiée aurait
+ * supposé un GESTE d'épinglage — et aucun écran ne l'offre. On n'ajoute pas une capacité que
+ * personne ne peut atteindre ; le jour où un gestionnaire demande à figer un rendu précis, la
+ * colonne se pose avec son écran.
+ *
+ * Manuelle comme ses sept sœurs `app:purge-*`, inscrite au catalogue des jobs d'exploitation.
+ * Un rendu supprimé se régénère depuis l'écran : la perte est nulle, seul le délai revient.
+ */
+#[AsCommand(
+    name: 'app:exports:purge',
+    description: 'Delete orphaned export renders and those older than the retention window (pinned season exports are kept).',
+)]
+final class PurgeExportsCommand extends Command
+{
+    /** Jours au-delà desquels un rendu non épinglé part. Un planning se consulte dans les jours qui suivent ; une saison dure dix mois. */
+    private const int RETENTION_DAYS = 90;
+
+    /** `schedule-{uuid}-{scope}.{ext}` — le nom EST la seule jointure entre le fichier et sa ligne. */
+    private const string PUBLIC_PREFIX = '/exports';
+
+    private const string RENDER_PATTERN = '/^schedule-([0-9a-f-]{36})-.+\.(pdf|png)$/i';
+
+    public function __construct(
+        private readonly ManagerRegistry $managerRegistry,
+    ) {
+        parent::__construct();
+    }
+
+    /**
+     * La décision, en une fonction PURE — extraite du parcours de répertoire à dessein.
+     *
+     * ⚑ Montée dans la commande, elle n'était éprouvable qu'à travers une base : or la
+     * commande lit par la connexion `admin`, que la transaction d'un test ne traverse pas.
+     * Le test devenait un combat contre le harnais au lieu d'une preuve de la règle. Sortie
+     * d'ici, elle se falsifie cas par cas (cf. `retryTarget.ts`, même journée, même leçon).
+     *
+     * `null` = ce fichier n'est pas un rendu, on passe.
+     *
+     * @param array<string, true> $knownScheduleIds
+     * @param array<string, true> $pinnedUrls
+     *
+     * @return 'keep'|'orphan'|'expired'|null
+     */
+    public static function verdictFor(string $name, array $knownScheduleIds, array $pinnedUrls, int $modifiedAt, int $cutoff): ?string
+    {
+        if (1 !== preg_match(self::RENDER_PATTERN, $name, $matches)) {
+            return null;
+        }
+
+        // Épinglé : la saison le pointe. Il ne part JAMAIS, quel que soit son âge — c'est le
+        // seul rendu qu'un gestionnaire ait une raison de rouvrir des mois plus tard.
+        if (isset($pinnedUrls[self::PUBLIC_PREFIX . '/' . $name])) {
+            return 'keep';
+        }
+
+        if (!isset($knownScheduleIds[strtolower($matches[1])])) {
+            return 'orphan';
+        }
+
+        return $modifiedAt < $cutoff ? 'expired' : 'keep';
+    }
+
+    protected function configure(): void
+    {
+        $this->addOption('dry-run', null, InputOption::VALUE_NONE, 'List what would be purged without deleting anything.');
+        $this->addOption('days', null, InputOption::VALUE_REQUIRED, 'Override the retention window (days).');
+    }
+
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $io = new SymfonyStyle($input, $output);
+        $dryRun = true === $input->getOption('dry-run');
+        $days = $this->retentionDays($input);
+
+        $directory = PdfGenerator::outputDir();
+        if (!is_dir($directory)) {
+            $io->success('Aucun répertoire de rendus : rien à purger.');
+
+            return Command::SUCCESS;
+        }
+
+        // ⚑ La purge est TRANSVERSE : elle balaie les rendus de TOUS les clubs. Elle lit donc
+        // par la connexion `admin`, la seule qui contourne RLS — comme les migrations et les
+        // autres purges d'exploitation (`PurgeAuditLogCommand`).
+        //
+        // ⚠ Mesuré, pas supposé : j'avais d'abord tenté `runWithoutTenant()`. C'est l'inverse
+        // de ce qu'il fallait — les policies sont en FORCE, donc SANS contexte de club une
+        // requête ne rend AUCUNE ligne. `knownScheduleIds()` revenait vide et la purge classait
+        // TOUS les rendus en orphelins : elle aurait effacé les exports vivants de tous les
+        // clubs en annonçant un succès. C'est le test qui l'a montré, pas la relecture.
+        $connection = $this->managerRegistry->getConnection('admin');
+        \assert($connection instanceof Connection);
+
+        /** @var list<string> $scheduleRows */
+        $scheduleRows = $connection->fetchFirstColumn('SELECT id FROM schedule');
+        $knownScheduleIds = array_fill_keys(array_map(strtolower(...), $scheduleRows), true);
+
+        /** @var list<string> $pinnedRows */
+        $pinnedRows = $connection->fetchFirstColumn('SELECT export_pdf_url FROM season WHERE export_pdf_url IS NOT NULL');
+        $pinnedUrls = array_fill_keys($pinnedRows, true);
+
+        $cutoff = new DateTimeImmutable(\sprintf('-%d days', $days))->getTimestamp();
+        $orphans = 0;
+        $expired = 0;
+        $kept = 0;
+
+        foreach ((array) scandir($directory) as $entry) {
+            $name = (string) $entry;
+            $verdict = self::verdictFor($name, $knownScheduleIds, $pinnedUrls, (int) @filemtime($directory . '/' . $name), $cutoff);
+            if (null === $verdict) {
+                continue;
+            }
+            if ('keep' === $verdict) {
+                ++$kept;
+                continue;
+            }
+
+            'orphan' === $verdict ? ++$orphans : ++$expired;
+            $io->writeln(\sprintf('  %s %s', $dryRun ? '[dry-run]' : 'supprimé', $name));
+            if (!$dryRun) {
+                @unlink($directory . '/' . $name);
+            }
+        }
+
+        $io->success(\sprintf(
+            '%s : %d orphelin(s), %d périmé(s) au-delà de %d jours, %d conservé(s).',
+            $dryRun ? 'Simulation' : 'Purge',
+            $orphans,
+            $expired,
+            $days,
+            $kept,
+        ));
+
+        return Command::SUCCESS;
+    }
+
+    private function retentionDays(InputInterface $input): int
+    {
+        $raw = $input->getOption('days');
+
+        return \is_string($raw) && ctype_digit($raw) && (int) $raw > 0 ? (int) $raw : self::RETENTION_DAYS;
+    }
+}

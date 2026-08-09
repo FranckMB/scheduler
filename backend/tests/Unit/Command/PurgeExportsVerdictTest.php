@@ -1,0 +1,91 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Unit\Command;
+
+use App\Command\PurgeExportsCommand;
+use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\TestCase;
+
+/**
+ * P4-52 — les quatre verdicts de la purge des rendus.
+ *
+ * Les PDF/PNG s'écrivaient dans `public/exports` et **ne repartaient jamais**. Le rendu étant
+ * servi publiquement par design (SEC-14 : « proxy PUBLIC par design »), la rétention borne
+ * deux choses d'un coup : le disque, et la durée pendant laquelle un vieux rendu reste
+ * atteignable par son URL.
+ *
+ * ⚑ **Pourquoi la règle est testée ici et non à travers la commande** : la purge est
+ * transverse, donc elle lit par la connexion `admin` — la seule qui contourne RLS. Or la
+ * transaction d'un test d'intégration ne traverse pas cette connexion : le test devenait un
+ * combat contre le harnais au lieu d'une preuve de la règle. Extraite, elle se falsifie cas
+ * par cas. Même leçon que `retryTarget.ts`, le même jour.
+ *
+ * ⚠ Le cas qui compte est l'ÉPINGLÉ : sans lui, la purge effacerait le PDF de la saison en
+ * vigueur — le seul qu'un gestionnaire ait une raison de rouvrir des mois plus tard.
+ */
+#[Group('phase1')]
+final class PurgeExportsVerdictTest extends TestCase
+{
+    private const string LIVE = '11111111-1111-4111-8111-111111111111';
+
+    private const string GONE = '22222222-2222-4222-8222-222222222222';
+
+    private const int CUTOFF = 1_000_000;
+
+    public function testAnOrphanRenderIsRemovedEvenWhenRecent(): void
+    {
+        self::assertSame('orphan', $this->verdict(self::GONE, modifiedAt: self::CUTOFF + 5_000));
+    }
+
+    public function testALivingRecentRenderIsKept(): void
+    {
+        self::assertSame('keep', $this->verdict(self::LIVE, modifiedAt: self::CUTOFF + 5_000));
+    }
+
+    public function testALivingButExpiredRenderIsRemoved(): void
+    {
+        self::assertSame('expired', $this->verdict(self::LIVE, modifiedAt: self::CUTOFF - 5_000));
+    }
+
+    /**
+     * L'épinglage n'est PAS une colonne `is_pinned` : c'est `Season.exportPdfUrl`, qui existe
+     * déjà. Une colonne dédiée aurait supposé un geste d'épinglage qu'aucun écran n'offre —
+     * on n'ajoute pas une capacité que personne ne peut atteindre.
+     */
+    public function testAPinnedRenderSurvivesBothAgeAndOrphanhood(): void
+    {
+        $name = $this->renderName(self::GONE);
+
+        self::assertSame('keep', PurgeExportsCommand::verdictFor(
+            $name,
+            [self::LIVE => true],
+            ['/exports/' . $name => true],
+            self::CUTOFF - 999_999,
+            self::CUTOFF,
+        ), 'un export épinglé ne part jamais : ni vieux, ni orphelin');
+    }
+
+    public function testANonRenderFileIsLeftAlone(): void
+    {
+        self::assertNull(PurgeExportsCommand::verdictFor('.gitignore', [], [], 0, self::CUTOFF));
+        self::assertNull(PurgeExportsCommand::verdictFor('rapport-2026.pdf', [], [], 0, self::CUTOFF));
+    }
+
+    private function verdict(string $scheduleId, int $modifiedAt): ?string
+    {
+        return PurgeExportsCommand::verdictFor(
+            $this->renderName($scheduleId),
+            [self::LIVE => true],
+            [],
+            $modifiedAt,
+            self::CUTOFF,
+        );
+    }
+
+    private function renderName(string $scheduleId): string
+    {
+        return \sprintf('schedule-%s-all.pdf', $scheduleId);
+    }
+}
