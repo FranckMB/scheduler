@@ -318,18 +318,46 @@ class TestInvariants:
         if result["status"] != "completed":
             pytest.skip("Solver did not find a feasible solution")
 
-        coach_bookings: dict[tuple[str, int, str], set[str]] = {}
+        # ⚑ D-14 (2026-08-09) — la clé porte le GYMNASE, et ce n'est pas un détail.
+        #
+        # Cet invariant épinglait « un coach, une équipe à la fois », gymnase ignoré. C'est
+        # la règle que D-14 a RETIRÉE : un coach peut tenir les SM1 et les SM2 au même
+        # moment dans le MÊME gymnase — il y est présent une fois, il surveille deux
+        # groupes. Seuls deux gymnases DIFFÉRENTS restent une impossibilité physique.
+        #
+        # ⚠ Il a survécu à D-14 parce qu'il était VIDE : jusqu'à AUD-ENG-28, seules les
+        # équipes portant un template avaient un coach, et le cas ne se produisait jamais.
+        # Rendre l'invariant vivant a réveillé une règle périmée — il échouait 2 fois sur 8,
+        # avec deux équipes du même gymnase pour « preuve ».
+        #
+        # La leçon vaut d'être gardée : un test qu'on croit inutile parce qu'il ne casse
+        # jamais peut simplement ne rien vérifier, et sa règle continue de vieillir.
+        # ⚑ Les créneaux VERROUILLÉS sont hors sujet ici, et c'est structurel : un verrou
+        # HARD est pré-placé HORS du solveur (P2-9 PR B), sa variable n'existe pas, donc
+        # aucune contrainte du moteur ne peut le voir — encore moins refuser qu'il dédouble
+        # un coach. C'est le BACKEND qui l'interdit, en amont, au récap
+        # (`CoachDoubleBookingDetector` bloque la génération).
+        #
+        # Mesuré, pas supposé : les cas qui faisaient rougir cet invariant opposaient
+        # systématiquement un créneau `lockLevel: HARD` à un créneau placé par le solveur.
+        # L'invariant porte donc sur ce que le MOTEUR décide — le seul périmètre dont il
+        # répond. Y inclure les verrous ferait échouer le moteur pour une garantie qu'il
+        # n'a jamais eue, et qui est tenue ailleurs.
+        coach_bookings: dict[tuple[str, int, str, str], set[str]] = {}
         for slot in result["slots"]:
             coach_id = slot.get("coachId")
-            if not coach_id:
+            if not coach_id or slot.get("lockLevel") == "HARD":
                 continue
-            key = (coach_id, slot["dayOfWeek"], slot["startTime"])
+            key = (coach_id, slot["dayOfWeek"], slot["startTime"], slot["venueId"])
             coach_bookings.setdefault(key, set()).add(slot["teamId"])
 
-        for key, team_ids in coach_bookings.items():
-            # The result builder assigns the same coach to all slots of a team,
-            # so we only assert that no two *different* teams share a coach.
-            assert len(team_ids) <= 1, f"Coach double-booking at {key}: {team_ids}"
+        # Deux gymnases DIFFÉRENTS au même instant : impossibilité physique.
+        by_moment: dict[tuple[str, int, str], set[str]] = {}
+        for (coach_id, day, start, venue), _team_ids in coach_bookings.items():
+            by_moment.setdefault((coach_id, day, start), set()).add(venue)
+
+        for moment, venues in by_moment.items():
+            assert len(venues) <= 1, f"Coach dans {len(venues)} gymnases à la fois — {moment} : {sorted(venues)}"
 
     @settings(max_examples=20, deadline=None)
     @given(data=random_fixture())
