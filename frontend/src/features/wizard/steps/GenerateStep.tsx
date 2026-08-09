@@ -11,6 +11,7 @@ import { PlanningPage } from "@/features/planning/PlanningPage";
 import { useDiagnostics, useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
+import { scheduleIdToReuse } from "../lib/retryTarget";
 import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
 import { errorMessage } from "@/shared/lib/errorMessage";
 
@@ -137,6 +138,10 @@ export function GenerateStep() {
     if (periodMode && (null === periodPlanId || !periodAnchorReady)) {
       return;
     }
+    // AUD-FRT-09 — la règle vit dans `retryTarget.ts` : montée ici, elle n'était pas
+    // falsifiable (voir son en-tête).
+    const reuseId = scheduleIdToReuse({ periodMode, status, scheduleId });
+
     setTimedOut(false);
     setLaunchReason(null);
     launch.reset();
@@ -150,7 +155,7 @@ export function GenerateStep() {
               // version neuve sous le plan (lot D-b — plus de pointeur overlay sur l'entrée).
               existingScheduleId: overlaySchedule?.id ?? undefined,
             }
-          : {},
+          : { existingScheduleId: reuseId },
       );
       setScheduleId(id);
     } catch (error) {

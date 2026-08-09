@@ -37,6 +37,23 @@ describe("errorMessage", () => {
     expect(await errorMessage(httpError(500))).toBe("Erreur serveur. Réessayez plus tard.");
   });
 
+  /**
+   * AUD-FRT-18 — 401 et 429 tombaient dans le repli « Une erreur est survenue (429) ».
+   *
+   * Le backend émet les deux pour de bon (`AuthController:322,453` ; SEC-11, gardé par
+   * `ApiRateLimitTest`). Un nombre ne dit ni ce qui s'est passé, ni quoi faire — et sur
+   * 429 il pousse même à RE-CLIQUER, ce qui prolonge la fenêtre de blocage.
+   *
+   * Le test épingle le SENS (se reconnecter / patienter), pas la phrase exacte : la
+   * formulation peut évoluer, la conduite à tenir non.
+   */
+  it("dit quoi faire sur une session expirée et sur un throttle", async () => {
+    expect(await errorMessage(httpError(401))).toMatch(/reconnect/i);
+    expect(await errorMessage(httpError(401))).not.toMatch(/401/);
+    expect(await errorMessage(httpError(429))).toMatch(/patientez/i);
+    expect(await errorMessage(httpError(429))).not.toMatch(/429/);
+  });
+
   // NR P4-5 / SEC-08 — un 5xx ne doit JAMAIS reprendre la chaîne du serveur :
   // elle n'est pas actionnable et peut porter des détails internes.
   it("n'expose jamais le message serveur d'une erreur 5xx", async () => {
