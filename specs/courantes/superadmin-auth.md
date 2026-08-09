@@ -255,6 +255,13 @@ ouvre le gate de bascule ; idempotente, le marqueur ne recule jamais), `reset-cu
 courante — le club repart au wizard, la saison et le club survivent) et
 `purge-old-seasons` (supprime les saisons au-delà de la rétention).
 
+**Attribution d'offres (P1-3 PR A, 2026-08-10)** : une entrée du catalogue **par offre**
+(`set-plan-decouverte` … `set-plan-beta` — `--plan` figé dans l'entrée, seul `--club` est
+runtime : la console reste incapable d'exécuter un argument libre) + `reset-credits`
+(ré-ouvre le pool de crédits de sortie du plan Découverte). C'est la **seule porte
+d'attribution** d'une offre — l'offre Bêta n'a aucun autre chemin par construction, et le
+paiement v1 (virement) se matérialise par `set-plan` + `mark-season-paid`.
+
 **Arbitrages P3-4 (PR B, 2026-08-05)** : `GET /api/admin/club-requests` liste les demandes
 de création de club **pending ET expirées** (« le superadmin peut valider si besoin » — le
 lien public meurt à J+7, pas la console) ; `POST /api/admin/club-requests/{id}/decision`
