@@ -1,124 +1,132 @@
-# Bridage plan Découverte (freemium) — besoin spécifié
+# Bridage plan Découverte (freemium) + offres par statut — besoin spécifié
 
 > **Statut** : **besoin spécifié** (discovery close, décisions tranchées §5) — **pas un plan**.
-> **Nature** : fixe le modèle de bridage du plan gratuit (Découverte / freemium), business-critique — pas de SaaS sans verrou de conversion.
+> **Nature** : fixe le modèle du plan gratuit ET le socle d'offres par statut, business-critique.
 > **Rattachement roadmap** : **P1-3**.
-> ⚑ **Modèle RETRANCHÉ le 2026-08-09** (point de cadrage fondateur, nourri par
-> [`etude-tailles-clubs-ffbb.md`](etude-tailles-clubs-ffbb.md) et passé au `business-challenger`) :
-> le gate « ~4 générations totales » du 2026-08-04 est **remplacé par un cap d'équipes**.
-> L'historique et les raisons du renversement : §3.
-> **Réutilise l'existant** : `Club.planId` · `billing_cycle`/`plan_expires_at` · le **verrou read-only serveur** des 4 chemins d'édition (patron de la version choisie, ADR-0002) · le gate de bascule `Club.paidSeasonYear` (P1-5, livré) · les quotas de solve anti-abus par club (P4-45, indépendants du business). **Zéro changement engine.**
+> ⚑ **Modèle HYBRIDE acté le 2026-08-09 (soir)** — troisième et dernière itération d'une même journée
+> de cadrage, chaque renversement tracé en §3 : générations seules (2026-08-04) → cap 12 équipes
+> (2026-08-09 matin, après l'étude [`etude-tailles-clubs-ffbb.md`](etude-tailles-clubs-ffbb.md) et une
+> passe `business-challenger`) → **hybride** (2026-08-09 soir : périmètre complet gratuit + générations
+> limitées + features off, cap d'équipes réservé aux paliers PAYANTS).
+> **Réutilise l'existant** : `SubscriptionPlan` (modèle livré, aucune offre seedée) · `Club.planId`
+> (⚠ `?int` face à un id guid — lien à réparer) · `Club.paidSeasonYear` + gate de bascule saison
+> (P1-5, livré — la « transition off en gratuit » est DÉJÀ effective) · quotas de solve anti-abus
+> par club (P4-45, indépendants du business) · patron de garde `ClubQuotaSubscriber` pour le compteur.
+> **Zéro changement engine.**
 
 ---
 
 ## 1. Le but
 
-Laisser un gestionnaire **voir le gain du solveur sur SES gymnases, SES coachs, SES contraintes** — assez
-pour porter l'argument à son bureau — puis le convertir **au moment où le club achète** (l'avant-saison).
-Le freemium montre la magie sur un périmètre réel réduit ; le **compte démo vendeur** (livré) montre le
-wow gros-club ; la formule payante fait le club entier.
+Laisser un gestionnaire **saisir TOUT son club** (import FFBB compris) et **voir le solveur résoudre son
+vrai problème** — le coût de bascule (saisir les contraintes orales) est payé AVANT tout mur, et le
+planning obtenu est l'argument que le bénévole porte à son bureau. La conversion vient de ce que la
+**saison vivante est payante** : plans de vacances, matchs, exports, saison suivante.
 
-## 2. Le modèle : gratuit jusqu'à 12 équipes, générations illimitées
+## 2. Le modèle : Découverte complète mais bornée, payants par taille
 
-- **Cap = 12 équipes dans l'app** (fondateur, 2026-08-09). Au-delà → création d'équipe refusée avec un
-  message qui donne le prix de la formule adaptée à la taille du club. Étude à l'appui : ~76 % des clubs
-  français (82 % dans le Rhône) ont plus que ça en réel → **le mur touche la quasi-totalité du marché
-  cible**, et il touche **pendant la saisie, donc dans la fenêtre d'achat** (l'avant-saison — le bureau
-  achète avant la saison, jamais au milieu). 12 équipes sur 2-3 gymnases = de vrais conflits : le solveur
-  ne paraît pas nul.
-- **Générations ILLIMITÉES.** L'itération générer→ajuster→régénérer est la philosophie de la work-loop ;
-  le freemium ne la punit plus. Le coût de calcul est borné par les **quotas anti-abus P4-45** (par club,
-  3 routes), qui restent en place et ne sont PAS un mécanisme business.
-- **Un seul axe partout** : l'équipe est le value metric (la douleur scale avec les équipes —
-  `business/pricing.md`), la grille payante est par taille, le freemium est le palier 0 de la même grille.
-  « Gratuit jusqu'à 12 équipes » s'explique en une phrase.
-- **PDF export off** en freemium (feature de conversion, inchangé).
-- **Transition de saison off** en freemium (inchangé — un essai est mono-saison).
-- **Pas de limite de temps, pas de compteur, pas de read-only d'épuisement** pour le freemium ≤ 12 :
-  un petit club (≈ 22 % du marché, douleur faible < 10 équipes, WTP ≈ 0 — contexte business §2) utilise
-  gratuitement à vie. **Assumé** : il n'aurait pas payé, et il parle aux autres clubs — le canal
-  d'acquisition EST le bouche-à-oreille.
-- **Expiration du payant** : un club payé saison N qui ne renouvelle pas et dépasse 12 équipes passe en
-  **read-only total** (données préservées et visibles, aucune action) — le verrou serveur ADR-0002 des
-  4 chemins d'édition est réutilisé avec ce déclencheur. Verrou de conversion, pas lockout.
-- **Default freemium** : tout le monde démarre en Découverte ; le choix d'offre se fait à la conversion
-  (inchangé).
+### Découverte (gratuit — l'entrée par défaut de tout compte)
 
-## 3. Pourquoi ce modèle (et pourquoi le précédent est tombé)
+- **Périmètre ILLIMITÉ en saisie** : toutes ses équipes (l'import FFBB d'onboarding importe tout),
+  gymnases, coachs, contraintes. Le solveur résout le club ENTIER — le wow est maximal, et il n'existe
+  **aucun cap d'équipes en gratuit**.
+- **10 générations AU TOTAL** (valeur de config), **non rechargeables** — pas « par saison », pas de
+  limite horaire (la soirée générer-ajuster-regénérer est la boucle normale ; l'anti-abus de débit
+  reste P4-45). Compte les 3 routes de solve. Reset **superadmin seulement** (cas particuliers).
+  À l'épuisement : plus de génération — **tout le reste fonctionne** (consultation, ajustement manuel).
+  Pas de read-only, pas de lockout : le planning reste vivant à la main, l'envie de régénérer convertit.
+- **Features OFF** (les murs de conversion) : **module matchs** OFF · **plans de période/vacances
+  (overlays)** OFF · **export PDF** OFF · **transition de saison** OFF (déjà effectif via
+  `paidSeasonYear`, livré). Tout le reste est ouvert.
 
-| Piste | Statut |
+### Offres payantes — « quand tu payes, c'est juste le cap par équipe »
+
+- **100 % des fonctionnalités**, générations **illimitées** (P4-45 seul frein). La SEULE différence
+  entre paliers = le **cap d'équipes** :
+
+| Offre | Cap équipes (app) | Note |
+|---|---|---|
+| Essentiel | ≤ 20 | |
+| Club | 21-30 | |
+| Grand club | 31-50 | |
+| Sans limite | illimité | les > 50 (≈ BCCL et au-delà) |
+
+  Frontières = **valeurs en base** (`maxTeams`), ajustables sans redéploiement ; calées sur l'étude
+  (§4bis) et le read fondateur. Aucun montant nulle part — « sur demande ».
+- **Enforcement du cap payant** : refus de créer une équipe AU-DELÀ du cap de SON offre (création
+  unitaire, imports), message nommant le palier supérieur. Un club prend l'offre qui correspond à la
+  taille qu'il a déjà saisie (« j'ai 15 équipes → Essentiel »).
+- **Attribution superadmin seul** (virement → offre + `paidSeasonYear` posés en console). Valable
+  **une saison** ; à l'expiration, l'offre effective retombe sur **Découverte** (features se ferment,
+  compteur de générations tel quel) — le renouvellement rouvre tout. Pas de mécanisme de read-only.
+
+### Bêta
+
+- **Une offre** comme les autres : tout illimité, attribuable **UNIQUEMENT par le superadmin**,
+  valable **une saison** ; à l'expiration → Découverte, le club choisit.
+
+## 3. Historique des renversements (pourquoi CE modèle)
+
+| Modèle | Sort |
 |---|---|
-| **Cap ~4 générations totales, club complet** (modèle du 2026-08-04) | **RENVERSÉ le 2026-08-09.** Trois défauts mesurés depuis : (a) un club discipliné boucle son planning de saison en 2-3 générations + ajustements gratuits → **la valeur annuelle part gratis**, conversion repoussée d'un an ; (b) le mur tombe **en cours de saison** (socle + 3-4 plans de vacances > 4 solves), hors fenêtre d'achat du bureau ; (c) il punit l'itération, cœur de la work-loop. Sa crainte fondatrice (« un cap d'entité rend le solveur nul ») est **désamorcée par l'étude** : le cap est calibré à 12 (vrais conflits), et le wow gros-club vit dans le compte démo vendeur (livré) |
-| **Bombe temps** (1 mois puis blocage) | Écartée (inchangé) — se bat contre le rythme saisonnier lent du club amateur |
-| **Cap par saison rechargeable** | Sans objet dans le nouveau modèle (plus de compteur) |
-| **Hybride équipes + générations** | Écarté 2026-08-09 — double mur = double friction, double enforcement, message illisible |
-| **Lockout total** | Écarté (inchangé) — read-only préserve le désir de revenir (ne subsiste que pour le payant expiré, §2) |
+| **~4 générations, club complet** (2026-08-04) | Renversé le 2026-08-09 matin : un club discipliné capte la valeur annuelle en 4 générations + ajustements gratuits ; mur en cours de saison (hors fenêtre d'achat) ; punit l'itération |
+| **Cap 12 équipes, générations illimitées** (2026-08-09 matin) | Renversé le 2026-08-09 soir : son risque n°1 (nommé par le `business-challenger`, jamais couvert) — un club de 25 équipes **n'investit pas la saisie** face à un mur à 12, et l'essai sur sous-ensemble n'est pas le vrai club. Le test wow-12 (concluant) reste valable : il prouvait qu'un problème à 12 équipes n'est pas trivial — a fortiori le club entier |
+| **Hybride** (2026-08-09 soir, ACTÉ) | Cumule les forces : saisie complète gratuite (coût de bascule payé avant le mur, sunk cost pro-conversion), wow sur le vrai club, murs = saison vivante (10 générations totales + matchs/vacances/PDF/transition OFF), et le trou de 2026-08-04 est bouché — le socle gratuit ne donne ni les vacances, ni les matchs, ni l'export, ni la saison suivante. Les 10 générations brûlent pendant la construction du socle (août-sept) → mur dans la fenêtre d'achat |
+| Limite horaire (« 1-2/h ») | Écartée : punit la soirée de travail active ; P4-45 borne déjà le débit |
+| Bombe temps · cap par saison · lockout/read-only | Écartés (inchangé 2026-08-04) — le read-only devient de surcroît INUTILE : l'expiration retombe sur Découverte et la transition payante verrouille la suite |
 
-## 4. Enforcement — petit, pas transversal
+## 4. Enforcement — petit, sur des patrons existants
 
-1. **Cap équipes** : garde aux points d'entrée qui créent des équipes — création unitaire, **import Excel**
-   (P3-7 : refus au-delà du cap avec le décompte), duplication/transition (déjà off en freemium). Refus =
-   message de conversion nommant la formule adaptée. Pas d'état « déjà au-dessus » en freemium pur
-   (default freemium ⇒ on ne peut jamais y être) ; le seul chemin au-dessus du cap est le payant expiré → read-only (§2).
-2. **Export off** : garde sur l'export PDF si plan Découverte (inchangé).
-3. **Read-only payant-expiré** : réutilise le verrou serveur ADR-0002 des 4 chemins d'édition,
-   déclencheur = `paidSeasonYear` périmé ET > 12 équipes.
+1. **Compteur 10 générations** : garde sur les 3 routes de solve (patron `ClubQuotaSubscriber` P4-45),
+   active si l'offre EFFECTIVE est Découverte. Nouveau champ compteur **total** (l'existant
+   `generation_count_season` se remet à zéro par saison — inutilisable). Reset superadmin.
+2. **Features off Découverte** : gate matchs (rail fixtures/placement) · gate création de plan de
+   période (overlays) · gate export PDF. La transition de saison est déjà gatée (`paidSeasonYear`).
+3. **Cap payant aux portes de création d'équipes** (création unitaire, import Excel, import FFBB,
+   confirm engagements) : ne s'applique QU'AUX offres payantes (Découverte et Bêta sans cap).
+4. **Offre effective calculée à la lecture** (service de droits) : `planId` null → Découverte ;
+   offre payante/bêta avec `paidSeasonYear` périmé → Découverte. Pas de cron, pas d'état stocké.
+   Club démo (`isDemo`) : droits pleins, toujours.
 
-Pas de compteur à persister, pas de reset superadmin, pas de garde sur `/generate` (les quotas P4-45 y
-restent pour l'anti-abus, indépendamment du plan).
+## 5. Décisions tranchées (2026-08-09 soir — remplacent toutes les précédentes)
 
-## 5. Décisions tranchées (2026-08-09, remplacent celles du 2026-08-04)
-
-1. **Gate = cap de 12 équipes app** ; générations illimitées ; pas de limite de temps.
-2. **PDF export off** en freemium.
-3. **Transition de saison off** en freemium.
-4. **Petits clubs (≤ 12) gratuits à vie — assumé** (WTP ≈ 0, carburant du bouche-à-oreille).
-5. **Read-only** réservé au cas « payant expiré au-dessus du cap » (données préservées).
-6. **Default freemium** ; choix d'offre à la conversion.
-7. **PSP = Stripe** (cible 100 % France, franchise de TVA au départ → le merchant-of-record type Polar
-   paierait double commission pour un service sans objet ; facture au SIRET du fondateur = confiance
-   trésorier). **Intégration DIFFÉRÉE** : P1-3 se livre avec **virement + marquage superadmin**
-   (`paidSeasonYear`) ; Stripe (checkout carte + SEPA + webhook) le jour où un club veut payer par carte.
-   ⚠ Prérequis légal : la micro-entreprise (SIRET) doit exister avant le premier encaissement.
+1. **Découverte** = défaut de tout compte : périmètre illimité, **10 générations totales** non
+   rechargeables (config), matchs/overlays/PDF/transition OFF, pas de lockout à l'épuisement.
+2. **Payants** = 100 % des features, générations illimitées, **seul le cap d'équipes varie** :
+   Essentiel ≤ 20 · Club ≤ 30 · Grand club ≤ 50 · Sans limite. Aucun montant dans l'app.
+3. **Bêta = une offre** superadmin-only, une saison, illimitée.
+4. **Attribution d'offre = superadmin seul** (virement) ; expiration → Découverte effective.
+5. **PSP = Stripe, différé** (décision du matin, inchangée) ; prérequis SIRET avant premier encaissement.
+6. Le nom du gratuit reste **« Découverte »** (conforme à toute la doc).
+7. Affiliation → parking roadmap.
+8. `monthlyPrice`/`annualPrice` : à retirer du modèle (aucun montant nulle part) ; `maxGenerations`/
+   `maxVenues` : convention **0 = illimité**.
 
 ## 6. Dépendances & hors scope
 
-- **Anti-abus « plusieurs clubs de 12 »** : découper son club en 2 comptes casse le planning (gymnases
-  partagés entre comptes = conflits invisibles au solveur) — contournement auto-punitif, surveillé, pas bloqué.
-- **Guidage des contraintes** : besoin cœur produit, chantier séparé (inchangé).
-- **Compte démo vendeur** : livré — c'est lui qui porte le wow gros-club, le freemium n'a plus à le faire.
-- Les offres payantes (`SubscriptionPlan` : seed des 4 offres, `billing_cycle`/`plan_expires_at`) et les
-  **prix** : hors scope de ce doc — grille et montants dans `business/pricing.md`, à valider par le
-  **Van Westendorp** sur les clubs bêta avant toute annonce.
+- **Contournement « 10 générations puis on vit à la main »** : assumé — sans vacances, sans matchs,
+  sans PDF et sans saison suivante, le planning gratuit est un souvenir, pas un outil de saison.
+- **Multi-comptes** : sans objet (le périmètre gratuit est déjà complet).
+- **Guidage des contraintes** : chantier séparé (l'enjeu d'une génération gâchée monte avec un compteur).
+- **Compte démo vendeur** : complémentaire, exempt de tout gate (`isDemo`).
+- Montants, Van Westendorp, Stripe/checkout, notification d'expiration : hors scope de ce doc.
 
-## 7. Garde-fous avant implémentation (issus du `business-challenger`, 2026-08-09)
+## 7. Garde-fous (mis à jour)
 
-L'hypothèse la plus risquée du modèle : **« un club de 20-30 équipes investit la saisie face à un mur à
-12 équipes, et le sous-ensemble suffit au wow »**. Deux tests, AVANT ou PENDANT la construction :
-
-1. ✅ **Test wow-12 — FAIT le 2026-08-09, CONCLUANT (cap 12 confirmé).** Protocole : payload réel BCCL
-   tronqué à 12 équipes (U9→U21 + seniors + 2 groupes école mutualisés + 3x3), 3 gymnases (21 places
-   hebdo), 6 coachs dont 5 multi-équipes, 11 règles horaires dures + indispos coach — envoyé directement
-   au moteur (contrat 2.2, chemin debug dev). Résultat en deux temps, tous deux démonstratifs :
-   (a) le jeu initial (3 coachs indispo le vendredi) est **détecté IMPOSSIBLE en 3 ms** avec suggestions —
-   un humain l'aurait découvert après des heures ; (b) une indispo relâchée → **17/17 séances placées en
-   41 ms, zéro violation sur 16 contrôles** (fenêtres EMB ≤ 17h30, mercredis interdits, adultes ≥ 18h50,
-   U15 ≤ 19h00, chevauchements coach), avec **enchaînements coach optimisés** (Jordan 17h30→19h00,
-   Thomas 19h00→20h30 deux soirs, âge croissant dans chaque soirée) et les 4 créneaux restés libres
-   **nommés**. Un problème à 12 équipes n'est PAS trivial. ⚠ Nuance honnête : le wow dépend des
-   **contraintes saisies** — un club qui ne saisit rien verra un rendu plus plat (c'est l'insight
-   produit connu : la valeur est dans la capture des contraintes).
-2. **Question aux clubs bêta (15 min)** : « si l'app était gratuite jusqu'à 12 équipes et payante au-delà,
-   tu aurais fait quoi le premier jour ? » — teste le risque « n'investit pas la saisie ». **Reste à faire**
-   (panel : Rillieux en premier — ~25-35 équipes app, le profil exact du mur).
-
-Le chiffre 12 est une **valeur de config ajustable**, pas une promesse produit.
+1. ✅ **Test wow-12 (2026-08-09)** — gardé pour mémoire : un problème à 12 équipes n'est pas trivial
+   (17/17 séances, 0 violation, infaisabilité réelle détectée en 3 ms). Le modèle hybride résout mieux
+   encore (club entier).
+2. **Question aux clubs bêta** (reformulée pour l'hybride) : « 10 générations gratuites pour construire
+   ton socle, puis vacances/matchs/PDF payants — tu aurais payé à quel moment ? » — Rillieux en premier.
+3. Le chiffre **10** est une valeur de config ajustable, pas une promesse produit.
 
 ## 8. Axes structurants (§7.1) & vérification
 
-- **auth & memberships / périmètre** : le cap équipes gate la création/import → NR (13ᵉ équipe refusée en
-  Découverte avec le message de conversion ; import Excel > cap refusé ; club payé non bridé ; payant
-  expiré > cap → 4 chemins d'édition refusés, lecture OK).
-- **generation pipeline** : PAS de garde business sur `/generate` — NR inversé : un freemium ≤ 12 équipes
-  génère sans limite business (les quotas P4-45 restent, `ClubQuotaTest` les garde déjà).
-- **Vérification** : smoke-solveur inchangé (le freemium génère un vrai plan).
+- **generation pipeline** : le compteur gate les 3 routes de solve → NR (Découverte à 10/10 → refus
+  avec message ; payant/bêta → jamais de refus business ; reset superadmin rouvre ; `ClubQuotaTest`
+  P4-45 ne doit pas rougir).
+- **auth & memberships / périmètre** : caps payants aux portes de création + features off → NR
+  (Découverte crée sa 25ᵉ équipe SANS refus ; Essentiel refuse la 21ᵉ avec message ; matchs/overlay/PDF
+  refusés en Découverte, ouverts en payant et bêta ; expiration → Découverte effective).
+- **Vérification** : smoke-solveur inchangé (`backend/scripts/smoke-solver.sh`, COMPLETED) — le club
+  de smoke doit garder du quota ou une offre non bridée.
