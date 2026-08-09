@@ -210,7 +210,6 @@ class LevelOneHardConstraintsTest(unittest.TestCase):
 class ParseV2ConstraintsTest(unittest.TestCase):
     def test_empty_constraints_returns_defaults(self):
         result = parse_v2_constraints([])
-        assert result["fixed_slots"] == []
         assert result["forbidden_assignments"] == []
         assert result["coach_unavailability"] == {}
         assert result["forced_venues"] == {}
@@ -221,11 +220,13 @@ class ParseV2ConstraintsTest(unittest.TestCase):
             {"id": "c1", "isActive": False, "ruleType": "LOCK"},
         ]
         result = parse_v2_constraints(constraints)
-        assert result["fixed_slots"] == []
+        assert result["forbidden_assignments"] == []
 
     def test_lock_time_day_routes_to_time_windows(self):
         # LOCK on a TIME/DAY rule is enforced as HARD (routed to time_windows).
-        # The old fixed_slots UUID path was dead (never matched) and is removed.
+        # AUD-ENG-31 : la clé `fixed_slots` a disparu du parseur — le chemin UUID qui
+        # l'alimentait avait été supprimé (il ne matchait jamais), et la clé restait
+        # câblée au solveur en annonçant un mécanisme que le payload n'a pas.
         constraints = [
             {
                 "id": "c1",
@@ -237,7 +238,6 @@ class ParseV2ConstraintsTest(unittest.TestCase):
             },
         ]
         result = parse_v2_constraints(constraints)
-        assert result["fixed_slots"] == []
         assert len(result["time_windows"]) == 1
 
     def test_coach_availability_family(self):
