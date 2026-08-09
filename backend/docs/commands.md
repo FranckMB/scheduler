@@ -39,6 +39,7 @@ Toutes manuelles sauf mention. Détail : `ls backend/src/Command/`.
 | `app:seasons:purge` | Supprime les saisons < N-1 (rétention : courante + précédente + futures) — **auto, quotidien à 03:00 (Europe/Paris)** |
 | `app:users:purge-inactive` | RGPD rétention : préavis email à 23 mois d'inactivité, anonymisation à 24 mois (préavis ≥ 1 mois exigé) — **auto, quotidien à 02:30** |
 | `app:audit:purge` | RGPD : purge le journal d'audit > 12 mois — **connexion admin** (append-only : le rôle runtime n'a pas de policy DELETE) — **auto, quotidien à 03:30** |
+| `app:exports:purge` | Supprime les rendus PDF/PNG **orphelins** (planning disparu) et ceux de **plus de 90 jours**, **sauf** l'export que pointe `Season.exportPdfUrl` — cet épinglage-là remplace la colonne `is_pinned` du croquis v3, qui aurait supposé un geste qu'aucun écran n'offre. **Connexion admin** (purge transverse : les policies RLS étant en `FORCE`, sans contexte de club une requête ne rend AUCUNE ligne) — **auto, quotidien à 03:45** ; `--dry-run` / `--days` |
 | `app:purge-orphans` | Nettoie les orphelins logiques pré-cascade (réservations orphelines, liens pendants) — manuel |
 | `app:users:purge-unverified` | Supprime les comptes non vérifiés > 7 j — **auto, quotidien à 02:00** |
 | `app:clubs:purge-erased` | RGPD : purge le workspace des clubs dont le délai de grâce d'effacement (30 j) est échu — l'identité publique FFBB survit — **auto, quotidien à 02:15** |
