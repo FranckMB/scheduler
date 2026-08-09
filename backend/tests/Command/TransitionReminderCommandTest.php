@@ -12,6 +12,7 @@ use App\Entity\User;
 use App\Enum\SeasonStatus;
 use App\Repository\ClubUserRepository;
 use App\Repository\TransitionReminderLogRepository;
+use App\Service\ClubDay;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use App\Service\TransitionReminderMailBuilder;
@@ -244,6 +245,7 @@ final class TransitionReminderCommandTest extends KernelTestCase
             $container->get(TransitionReminderLogRepository::class),
             new TransitionReminderMailBuilder('http://localhost:5173'),
             $container->get(ClockInterface::class),
+            $container->get(ClubDay::class),
         );
 
         $tester = new CommandTester($command);

@@ -11,11 +11,11 @@ use App\Entity\CoachWish;
 use App\Entity\CoachWishCampaign;
 use App\Repository\ClubUserRepository;
 use App\Repository\CoachWishTokenRepository;
+use App\Service\ClubDay;
 use App\Service\CoachWishMailBuilder;
 use App\Service\CoachWishPerimeter;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
-use DateTimeZone;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -58,6 +58,7 @@ final class CoachWishDigestCommand extends Command
         private readonly CoachWishMailBuilder $mailBuilder,
         private readonly CoachWishPerimeter $perimeter,
         private readonly ClockInterface $clock,
+        private readonly ClubDay $clubDay,
     ) {
         parent::__construct();
     }
@@ -117,9 +118,8 @@ final class CoachWishDigestCommand extends Command
         }
 
         // « Aujourd'hui » = le jour CALENDAIRE du club (comme PeriodReminderCommand).
-        $today = $forcedToday ?? $this->clock->now()
-            ->setTimezone(new DateTimeZone('' !== $club->getTimezone() ? $club->getTimezone() : 'Europe/Paris'));
-        $todayYmd = $today->format('Y-m-d');
+        // P4-46 — « quel jour est-on pour ce club ? » vit dans ClubDay, plus jamais inline.
+        $todayYmd = ($forcedToday ?? $this->clubDay->todayFor($club))->format('Y-m-d');
 
         $emails = null; // gestionnaires — résolus au premier besoin seulement
         $sent = 0;

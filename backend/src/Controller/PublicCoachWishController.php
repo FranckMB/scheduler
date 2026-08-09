@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\CalendarEntry;
+use App\Entity\Club;
 use App\Entity\Coach;
 use App\Entity\CoachWish;
 use App\Entity\CoachWishCampaign;
@@ -12,6 +13,7 @@ use App\Entity\CoachWishToken;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Repository\CoachWishTokenRepository;
+use App\Service\ClubDay;
 use App\Service\CoachWishSeasonGuard;
 use App\Service\CoachWishUpserter;
 use App\Service\TenantConnectionContext;
@@ -57,6 +59,7 @@ final class PublicCoachWishController extends AbstractController
         private readonly ClockInterface $clock,
         private readonly RateLimiterFactory $coachWishPublicLimiter,
         private readonly CoachWishSeasonGuard $seasonGuard,
+        private readonly ClubDay $clubDay,
     ) {}
 
     #[Route('/api/coach-wishes/public/{token}', name: 'public_coach_wish_get', methods: ['GET'])]
@@ -241,8 +244,14 @@ final class PublicCoachWishController extends AbstractController
 
     private function isExpired(CoachWishCampaign $campaign): bool
     {
-        // Deadline INCLUSIVE : le jour même est encore ouvert. Comparaison date à date.
-        return $this->clock->now()->format('Y-m-d') > $campaign->getDeadline()->format('Y-m-d');
+        // Deadline INCLUSIVE : le jour même est encore ouvert — dans le fuseau DU CLUB
+        // (P4-46). Sur le jour du serveur, un coach en Guadeloupe (UTC−4) prenait 410 le
+        // soir du dernier jour : 21h chez lui, déjà le lendemain à Paris. La promesse
+        // « le jour même est ouvert » vaut pour le jour que LE CLUB vit.
+        $club = $this->entityManager->find(Club::class, $campaign->getClubId());
+
+        return ($club instanceof Club ? $this->clubDay->todayYmdFor($club) : $this->clock->now()->format('Y-m-d'))
+            > $campaign->getDeadline()->format('Y-m-d');
     }
 
     /** La semaine (lundi→dimanche) recoupe-t-elle encore la période mère, date à date ? */

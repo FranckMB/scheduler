@@ -10,13 +10,12 @@ use App\Entity\PeriodReminderLog;
 use App\Repository\CalendarEntryRepository;
 use App\Repository\ClubUserRepository;
 use App\Repository\PeriodReminderLogRepository;
+use App\Service\ClubDay;
 use App\Service\PeriodReminderMailBuilder;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
 use DateTimeImmutable;
-use DateTimeZone;
 use Doctrine\ORM\EntityManagerInterface;
-use Symfony\Component\Clock\ClockInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -56,7 +55,7 @@ final class PeriodReminderCommand extends Command
         private readonly SeasonResolver $seasonResolver,
         private readonly PeriodReminderLogRepository $reminderLogRepository,
         private readonly PeriodReminderMailBuilder $mailBuilder,
-        private readonly ClockInterface $clock,
+        private readonly ClubDay $clubDay,
     ) {
         parent::__construct();
     }
@@ -113,7 +112,7 @@ final class PeriodReminderCommand extends Command
         // "Today" is the CLUB's calendar day, not the server's (a UTC cron near
         // midnight would otherwise shift every bucket by one day for a Paris club).
         // An explicit --date (rehearsal/tests) overrides for all clubs.
-        $today = $forcedToday ?? $this->clubToday($club);
+        $today = $forcedToday ?? $this->clubDay->todayFor($club);
 
         // Remind across ALL the club's seasons: the date horizon does the real
         // bounding. Keying on the current season only would go silent for a
@@ -193,26 +192,6 @@ final class PeriodReminderCommand extends Command
         }
 
         return $days <= 7 ? 7 : 14;
-    }
-
-    /**
-     * The club's current calendar day, materialized as a plain (server-TZ) date so
-     * diffs against date-only startDate columns stay whole days.
-     */
-    private function clubToday(Club $club): DateTimeImmutable
-    {
-        $timezone = 'Europe/Paris';
-        if ('' !== $club->getTimezone()) {
-            try {
-                new DateTimeZone($club->getTimezone());
-                $timezone = $club->getTimezone();
-            } catch (Throwable) {
-                // Invalid stored TZ → keep the FFBB default.
-            }
-        }
-
-        // "now" from the clock (dev simulator can pin it), read in the club TZ.
-        return new DateTimeImmutable($this->clock->now()->setTimezone(new DateTimeZone($timezone))->format('Y-m-d'));
     }
 
     /** Strict: a real calendar date, else null (rejects rollovers like 2026-02-30). No --date → null (per-club today). */
