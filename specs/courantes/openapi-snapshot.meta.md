@@ -1,9 +1,20 @@
-Last verified @ 2026-08-08 (JSON **régénéré** depuis le backend vivant)
+Last verified @ 2026-08-09 (JSON **régénéré** depuis le backend vivant)
 
 Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P4-47 (2026-08-09)** : **107 → 125 paths**. Dix-huit routes `#[Route]` custom étaient
+  **invisibles** du contrat — elles portaient pourtant des gestes centraux : valider un
+  planning, régénérer, réordonner les équipes, approuver une adhésion, réinitialiser la
+  saison, le logo du club, les deux pages de mot de passe. ⚑ Le test de dérive de FRT-19 ne
+  pouvait PAS les voir : une route absente de la factory manque des **deux** côtés, contrat
+  et snapshot d'accord entre eux et faux tous les deux. Il fallait confronter le contrat au
+  **routeur** — c'est `EveryCustomRouteIsDocumentedTest`, un **cliquet** : la dette restante
+  (15 routes, dont 10 sur la console superadmin) est déclarée et ne peut que décroître, et
+  une route documentée doit sortir de la liste sous peine de faire rougir le second sens.
+  Les codes de réponse sont relevés DANS les contrôleurs, jamais devinés : une entrée qui
+  annonce un 200 là où le serveur rend 409 est pire que pas d'entrée — elle est crue.
 - **SEC-13 PR C (2026-08-08)** : la famille `FACILITY_CAPACITY` disparaît de l'enum exposée
   (`ConstraintInput.family` : TIME · DAY · FACILITY · COACH_AVAILABILITY). Aucun path touché
   (107) — c'est une valeur d'énumération qui sort, pas une route. Motif : aucun chemin UI ne

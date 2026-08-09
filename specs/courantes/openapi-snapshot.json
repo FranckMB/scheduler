@@ -1188,6 +1188,40 @@
                 "summary": "FRT-04: mint the hub subscriber JWT (scoped to the member own club generation topics), delivered as the mercureAuthorization cookie"
             }
         },
+        "/api/password/forgot": {
+            "post": {
+                "operationId": "postApiPasswordForgot",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Always 200 \u2014 the response never reveals whether the email exists (anti-enumeration)"
+                    },
+                    "429": {
+                        "description": "Per-IP rate limit"
+                    }
+                },
+                "summary": "Request a password reset link (PUBLIC_ACCESS)"
+            }
+        },
+        "/api/password/reset": {
+            "post": {
+                "operationId": "postApiPasswordReset",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Password changed"
+                    },
+                    "400": {
+                        "description": "Token unknown, expired or already used, or password too short"
+                    }
+                },
+                "summary": "Consume a password reset token (PUBLIC_ACCESS)"
+            }
+        },
         "/api/register": {
             "post": {
                 "operationId": "postApiRegister",
@@ -1907,6 +1941,26 @@
                 ]
             }
         },
+        "/api/club/appearance": {
+            "patch": {
+                "operationId": "patchApiClubAppearance",
+                "tags": [
+                    "Club"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Appearance updated"
+                    },
+                    "400": {
+                        "description": "No club in context, or invalid JSON"
+                    },
+                    "404": {
+                        "description": "Club not found"
+                    }
+                },
+                "summary": "Club colours and display preferences"
+            }
+        },
         "/api/club/export": {
             "get": {
                 "operationId": "getApiClubExport",
@@ -1928,6 +1982,67 @@
                     }
                 },
                 "summary": "RGPD portability: export the current club full workspace (management only, tenant from JWT)"
+            }
+        },
+        "/api/club/ffbb-import": {
+            "post": {
+                "operationId": "postApiClubFfbbImport",
+                "tags": [
+                    "Club"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Club refreshed from the FFBB public API (best-effort)"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Member but not a management role"
+                    }
+                },
+                "summary": "Re-import the club identity from FFBB (hosts hard-coded, SSRF-safe)"
+            }
+        },
+        "/api/club/logo": {
+            "post": {
+                "operationId": "postApiClubLogo",
+                "tags": [
+                    "Club"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Logo stored; returns its URL"
+                    },
+                    "400": {
+                        "description": "No club in context, or no file in the \"file\" field"
+                    },
+                    "404": {
+                        "description": "Club not found"
+                    },
+                    "422": {
+                        "description": "Larger than 500 KB, or not PNG/JPEG/WebP"
+                    }
+                },
+                "summary": "Upload the club logo (multipart, MIME and size validated server-side)"
+            },
+            "delete": {
+                "operationId": "deleteApiClubLogo",
+                "tags": [
+                    "Club"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Logo removed"
+                    },
+                    "400": {
+                        "description": "No club in context"
+                    },
+                    "404": {
+                        "description": "Club not found"
+                    }
+                },
+                "summary": "Remove the club logo"
             }
         },
         "/api/clubs": {
@@ -2001,6 +2116,23 @@
                         "explode": true
                     }
                 ]
+            }
+        },
+        "/api/clubs/{clubId}/logo": {
+            "get": {
+                "operationId": "getApiClubLogo",
+                "tags": [
+                    "Club"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Logo bytes (PUBLIC_ACCESS \u2014 read-only, no tenant)"
+                    },
+                    "404": {
+                        "description": "No logo for this club"
+                    }
+                },
+                "summary": "Serve a club logo"
             }
         },
         "/api/clubs/{id}": {
@@ -4247,6 +4379,26 @@
                 ]
             }
         },
+        "/api/calendar-entries/{id}/conflicts": {
+            "get": {
+                "operationId": "getApiCalendarEntryConflicts",
+                "tags": [
+                    "Cockpit"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Periods overlapping this entry window"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "404": {
+                        "description": "Resource not found"
+                    }
+                },
+                "summary": "Overlaps of a calendar period"
+            }
+        },
         "/api/competitions": {
             "get": {
                 "operationId": "api_competitions_get_collection",
@@ -5467,6 +5619,23 @@
                         "explode": false
                     }
                 ]
+            }
+        },
+        "/api/constraints/validate": {
+            "post": {
+                "operationId": "postApiConstraintsValidate",
+                "tags": [
+                    "Constraints"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Advisory pre-solve report: blocking errors and warnings"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "summary": "Advisory gate \u2014 never writes, and does NOT run on generate/regenerate"
             }
         },
         "/api/fixtures": {
@@ -6738,6 +6907,83 @@
                     }
                 },
                 "summary": "Venue unavailability impact (alert-only, computed on the fly \u2014 blocks nothing)"
+            }
+        },
+        "/api/memberships/pending": {
+            "get": {
+                "operationId": "getApiMembershipsPending",
+                "tags": [
+                    "Memberships"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pending membership requests for the current club"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "summary": "Membership requests awaiting a decision"
+            }
+        },
+        "/api/memberships/{id}/approve": {
+            "post": {
+                "operationId": "postApiMembershipApprove",
+                "tags": [
+                    "Memberships"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Membership activated"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Member but not a management role"
+                    },
+                    "404": {
+                        "description": "Resource not found"
+                    }
+                },
+                "summary": "Approve a membership request"
+            }
+        },
+        "/api/memberships/{id}/reject": {
+            "post": {
+                "operationId": "postApiMembershipReject",
+                "tags": [
+                    "Memberships"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Membership request rejected"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Member but not a management role"
+                    },
+                    "404": {
+                        "description": "Resource not found"
+                    }
+                },
+                "summary": "Reject a membership request"
+            }
+        },
+        "/api/health": {
+            "get": {
+                "operationId": "getApiHealth",
+                "tags": [
+                    "Ops"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Service is up (public, no authentication)"
+                    }
+                },
+                "summary": "Liveness probe"
             }
         },
         "/api/priority_tiers": {
@@ -9056,6 +9302,115 @@
                         "explode": false
                     }
                 ]
+            }
+        },
+        "/api/schedules/{id}/regenerate": {
+            "post": {
+                "operationId": "postApiScheduleRegenerate",
+                "tags": [
+                    "Schedules"
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Regeneration queued (async, progress on the Mercure topic)"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "409": {
+                        "description": "Version in force, or a generation is already running for this club"
+                    },
+                    "429": {
+                        "description": "Club generation quota reached (P4-45)"
+                    }
+                },
+                "summary": "Regenerate this version in place"
+            }
+        },
+        "/api/schedules/{id}/regenerate-from": {
+            "post": {
+                "operationId": "postApiScheduleRegenerateFrom",
+                "tags": [
+                    "Schedules"
+                ],
+                "responses": {
+                    "202": {
+                        "description": "New version queued from the source version structure"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "409": {
+                        "description": "Version in force, or a generation is already running"
+                    },
+                    "429": {
+                        "description": "Club generation quota reached (P4-45)"
+                    }
+                },
+                "summary": "Create a new version from an existing one and regenerate it"
+            }
+        },
+        "/api/schedules/{id}/reopen": {
+            "post": {
+                "operationId": "postApiScheduleReopen",
+                "tags": [
+                    "Schedules"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Plan un-pointed: the season has no version in force again"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "409": {
+                        "description": "This version is not the one in force"
+                    }
+                },
+                "summary": "ADR-0002 \u2014 un-point the plan so it can be regenerated"
+            }
+        },
+        "/api/schedules/{id}/validate": {
+            "post": {
+                "operationId": "postApiScheduleValidate",
+                "tags": [
+                    "Schedules"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Version pointed as the plan in force; COMPLETED siblings are archived"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "409": {
+                        "description": "A version is already in force for this plan, or the schedule is not COMPLETED"
+                    }
+                },
+                "summary": "ADR-0002 \u2014 point this version as the plan in force"
+            }
+        },
+        "/api/reset-season": {
+            "post": {
+                "operationId": "postApiResetSeason",
+                "tags": [
+                    "Season"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Season workspace emptied"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Member but not a management role"
+                    },
+                    "409": {
+                        "description": "A generation is running, or the season is archived"
+                    }
+                },
+                "summary": "Destructive \u2014 empties the season workspace (management only)"
             }
         },
         "/api/seasons": {
@@ -12552,6 +12907,26 @@
                         "explode": false
                     }
                 ]
+            }
+        },
+        "/api/teams/reorder": {
+            "post": {
+                "operationId": "postApiTeamsReorder",
+                "tags": [
+                    "Teams"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "New tier order persisted for every team, in ONE transaction"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "422": {
+                        "description": "Unknown team, or a team outside the current club"
+                    }
+                },
+                "summary": "Bulk reorder \u2014 atomic, so concurrent PUTs never race on the optimistic-lock version"
             }
         },
         "/api/users/{id}": {
@@ -23051,7 +23426,7 @@
                     },
                     "capacity": {
                         "minimum": 1,
-                        "maximum": 2,
+                        "maximum": 3,
                         "default": 1,
                         "type": [
                             "integer",

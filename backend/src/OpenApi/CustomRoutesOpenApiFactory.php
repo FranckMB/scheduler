@@ -293,6 +293,10 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             ]),
         )));
 
+        foreach ($this->uncoveredCustomPaths() as $path => $pathItem) {
+            $paths->addPath($path, $pathItem);
+        }
+
         foreach ($this->manualEditPaths() as $path => $pathItem) {
             $paths->addPath($path, $pathItem);
         }
@@ -865,6 +869,215 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ],
                 summary: 'Public holidays (jours fériés) applying to the club (display-only, never feeds the solver)',
                 parameters: $windowParameters,
+            )),
+        ];
+    }
+
+    /**
+     * P4-47 — les routes `#[Route]` custom qui n'apparaissaient nulle part dans le contrat.
+     *
+     * ⚑ Une route absente d'OpenAPI n'existe pour personne : le frontend écrit ses types à
+     * partir de ce contrat, et un agent qui planifie le lit comme la vérité. Ces 18-là
+     * étaient invisibles alors qu'elles portent des gestes centraux — valider un planning,
+     * régénérer, réordonner les équipes, approuver une adhésion.
+     *
+     * ⚠ Les codes de réponse sont relevés DANS les contrôleurs, pas devinés : c'est la
+     * moitié utile de la documentation d'une route. Une entrée qui annonce un 200 là où le
+     * serveur rend 409 est pire que pas d'entrée — elle est crue.
+     *
+     * @return array<string, PathItem>
+     */
+    private function uncoveredCustomPaths(): array
+    {
+        $unauthorized = new Response('Unauthorized');
+        $notFound = new Response('Resource not found');
+
+        return [
+            '/api/health' => new PathItem(get: new Operation(
+                operationId: 'getApiHealth',
+                tags: ['Ops'],
+                responses: ['200' => new Response('Service is up (public, no authentication)')],
+                summary: 'Liveness probe',
+            )),
+            '/api/schedules/{id}/validate' => new PathItem(post: new Operation(
+                operationId: 'postApiScheduleValidate',
+                tags: ['Schedules'],
+                responses: [
+                    '200' => new Response('Version pointed as the plan in force; COMPLETED siblings are archived'),
+                    '401' => $unauthorized,
+                    '409' => new Response('A version is already in force for this plan, or the schedule is not COMPLETED'),
+                ],
+                summary: 'ADR-0002 — point this version as the plan in force',
+            )),
+            '/api/schedules/{id}/reopen' => new PathItem(post: new Operation(
+                operationId: 'postApiScheduleReopen',
+                tags: ['Schedules'],
+                responses: [
+                    '200' => new Response('Plan un-pointed: the season has no version in force again'),
+                    '401' => $unauthorized,
+                    '409' => new Response('This version is not the one in force'),
+                ],
+                summary: 'ADR-0002 — un-point the plan so it can be regenerated',
+            )),
+            '/api/schedules/{id}/regenerate' => new PathItem(post: new Operation(
+                operationId: 'postApiScheduleRegenerate',
+                tags: ['Schedules'],
+                responses: [
+                    '202' => new Response('Regeneration queued (async, progress on the Mercure topic)'),
+                    '401' => $unauthorized,
+                    '409' => new Response('Version in force, or a generation is already running for this club'),
+                    '429' => new Response('Club generation quota reached (P4-45)'),
+                ],
+                summary: 'Regenerate this version in place',
+            )),
+            '/api/schedules/{id}/regenerate-from' => new PathItem(post: new Operation(
+                operationId: 'postApiScheduleRegenerateFrom',
+                tags: ['Schedules'],
+                responses: [
+                    '202' => new Response('New version queued from the source version structure'),
+                    '401' => $unauthorized,
+                    '409' => new Response('Version in force, or a generation is already running'),
+                    '429' => new Response('Club generation quota reached (P4-45)'),
+                ],
+                summary: 'Create a new version from an existing one and regenerate it',
+            )),
+            '/api/teams/reorder' => new PathItem(post: new Operation(
+                operationId: 'postApiTeamsReorder',
+                tags: ['Teams'],
+                responses: [
+                    '200' => new Response('New tier order persisted for every team, in ONE transaction'),
+                    '401' => $unauthorized,
+                    '422' => new Response('Unknown team, or a team outside the current club'),
+                ],
+                summary: 'Bulk reorder — atomic, so concurrent PUTs never race on the optimistic-lock version',
+            )),
+            '/api/constraints/validate' => new PathItem(post: new Operation(
+                operationId: 'postApiConstraintsValidate',
+                tags: ['Constraints'],
+                responses: [
+                    '200' => new Response('Advisory pre-solve report: blocking errors and warnings'),
+                    '401' => $unauthorized,
+                ],
+                summary: 'Advisory gate — never writes, and does NOT run on generate/regenerate',
+            )),
+            '/api/calendar-entries/{id}/conflicts' => new PathItem(get: new Operation(
+                operationId: 'getApiCalendarEntryConflicts',
+                tags: ['Cockpit'],
+                responses: [
+                    '200' => new Response('Periods overlapping this entry window'),
+                    '401' => $unauthorized,
+                    '404' => $notFound,
+                ],
+                summary: 'Overlaps of a calendar period',
+            )),
+            '/api/reset-season' => new PathItem(post: new Operation(
+                operationId: 'postApiResetSeason',
+                tags: ['Season'],
+                responses: [
+                    '200' => new Response('Season workspace emptied'),
+                    '401' => $unauthorized,
+                    '403' => new Response('Member but not a management role'),
+                    '409' => new Response('A generation is running, or the season is archived'),
+                ],
+                summary: 'Destructive — empties the season workspace (management only)',
+            )),
+            '/api/club/appearance' => new PathItem(patch: new Operation(
+                operationId: 'patchApiClubAppearance',
+                tags: ['Club'],
+                responses: [
+                    '200' => new Response('Appearance updated'),
+                    '400' => new Response('No club in context, or invalid JSON'),
+                    '404' => new Response('Club not found'),
+                ],
+                summary: 'Club colours and display preferences',
+            )),
+            '/api/club/logo' => new PathItem(
+                post: new Operation(
+                    operationId: 'postApiClubLogo',
+                    tags: ['Club'],
+                    responses: [
+                        '200' => new Response('Logo stored; returns its URL'),
+                        '400' => new Response('No club in context, or no file in the "file" field'),
+                        '404' => new Response('Club not found'),
+                        '422' => new Response('Larger than 500 KB, or not PNG/JPEG/WebP'),
+                    ],
+                    summary: 'Upload the club logo (multipart, MIME and size validated server-side)',
+                ),
+                delete: new Operation(
+                    operationId: 'deleteApiClubLogo',
+                    tags: ['Club'],
+                    responses: [
+                        '200' => new Response('Logo removed'),
+                        '400' => new Response('No club in context'),
+                        '404' => new Response('Club not found'),
+                    ],
+                    summary: 'Remove the club logo',
+                ),
+            ),
+            '/api/clubs/{clubId}/logo' => new PathItem(get: new Operation(
+                operationId: 'getApiClubLogo',
+                tags: ['Club'],
+                responses: [
+                    '200' => new Response('Logo bytes (PUBLIC_ACCESS — read-only, no tenant)'),
+                    '404' => new Response('No logo for this club'),
+                ],
+                summary: 'Serve a club logo',
+            )),
+            '/api/club/ffbb-import' => new PathItem(post: new Operation(
+                operationId: 'postApiClubFfbbImport',
+                tags: ['Club'],
+                responses: [
+                    '200' => new Response('Club refreshed from the FFBB public API (best-effort)'),
+                    '401' => $unauthorized,
+                    '403' => new Response('Member but not a management role'),
+                ],
+                summary: 'Re-import the club identity from FFBB (hosts hard-coded, SSRF-safe)',
+            )),
+            '/api/memberships/pending' => new PathItem(get: new Operation(
+                operationId: 'getApiMembershipsPending',
+                tags: ['Memberships'],
+                responses: ['200' => new Response('Pending membership requests for the current club'), '401' => $unauthorized],
+                summary: 'Membership requests awaiting a decision',
+            )),
+            '/api/memberships/{id}/approve' => new PathItem(post: new Operation(
+                operationId: 'postApiMembershipApprove',
+                tags: ['Memberships'],
+                responses: [
+                    '204' => new Response('Membership activated'),
+                    '401' => $unauthorized,
+                    '403' => new Response('Member but not a management role'),
+                    '404' => $notFound,
+                ],
+                summary: 'Approve a membership request',
+            )),
+            '/api/memberships/{id}/reject' => new PathItem(post: new Operation(
+                operationId: 'postApiMembershipReject',
+                tags: ['Memberships'],
+                responses: [
+                    '204' => new Response('Membership request rejected'),
+                    '401' => $unauthorized,
+                    '403' => new Response('Member but not a management role'),
+                    '404' => $notFound,
+                ],
+                summary: 'Reject a membership request',
+            )),
+            '/api/password/forgot' => new PathItem(post: new Operation(
+                operationId: 'postApiPasswordForgot',
+                tags: ['Auth'],
+                responses: [
+                    '200' => new Response('Always 200 — the response never reveals whether the email exists (anti-enumeration)'),
+                    '429' => new Response('Per-IP rate limit'),
+                ],
+                summary: 'Request a password reset link (PUBLIC_ACCESS)',
+            )),
+            '/api/password/reset' => new PathItem(post: new Operation(
+                operationId: 'postApiPasswordReset',
+                tags: ['Auth'],
+                responses: [
+                    '200' => new Response('Password changed'),
+                    '400' => new Response('Token unknown, expired or already used, or password too short'),
+                ],
+                summary: 'Consume a password reset token (PUBLIC_ACCESS)',
             )),
         ];
     }
