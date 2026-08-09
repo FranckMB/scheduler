@@ -85,6 +85,11 @@ _club_locks: dict[str, asyncio.Lock] = {}
 _club_locks_guard = asyncio.Lock()
 _MAX_CLUB_LOCKS = 256
 _solve_semaphore = asyncio.Semaphore(settings.max_concurrent_solves)
+# AUD-ENG-30 — le rail matchs a son PROPRE budget : un placement synchrone de 3 s ne doit
+# pas attendre derrière un solve hebdomadaire de 600 s. Deux sémaphores distincts, pas un
+# sémaphore plus large : élargir le partagé aurait aussi autorisé deux GÉNÉRATIONS
+# simultanées, ce que `max_concurrent_solves` borne délibérément.
+_placement_semaphore = asyncio.Semaphore(settings.max_concurrent_placements)
 
 
 class SerializableModel(BaseModel):
@@ -526,8 +531,8 @@ async def generate_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSc
 async def place_matches(input_data: MatchPlacementInputSchema) -> MatchPlacementOutputSchema:
     """P1-4 PR D (ADR-0003) — the dated match-placement solve, SEPARATE from the
     weekly /generate problem. Same MAJOR-only contract check; the club lock is
-    prefixed so a long weekly solve never blocks a 3-second placement (the
-    global semaphore still bounds CPU)."""
+    prefixed so a long weekly solve never blocks a 3-second placement — et depuis
+    AUD-ENG-30 le SÉMAPHORE l'est aussi, sans quoi le verrou préfixé ne servait à rien."""
     contract_version = read_contract_version()
     if input_data.version.split(".")[0] != contract_version.split(".")[0]:
         raise HTTPException(
@@ -536,7 +541,7 @@ async def place_matches(input_data: MatchPlacementInputSchema) -> MatchPlacement
         )
 
     lock = await get_club_lock(f"matches:{input_data.club_id}")
-    async with lock, _solve_semaphore:
+    async with lock, _placement_semaphore:
         logger.info("match placement start club=%s matches=%d", input_data.club_id, len(input_data.matches))
         result = await asyncio.to_thread(solve_match_placement, input_data)
     return MatchPlacementOutputSchema.model_validate(result)

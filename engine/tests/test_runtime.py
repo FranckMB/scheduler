@@ -180,3 +180,48 @@ def test_unhandled_exception_returns_clean_500(caplog: Any) -> None:
     assert body == {"status": "error", "detail": "Internal solver error."}
     assert "boom: secret internal detail" not in response.body.decode()
     assert "boom: secret internal detail" in caplog.text  # logged server-side
+
+
+def test_a_placement_never_waits_behind_a_running_generate() -> None:
+    """AUD-ENG-30 — les deux rails ont des budgets CPU SÉPARÉS.
+
+    `/place-matches` est SYNCHRONE (ADR-0003 : ni Messenger ni Mercure — le gestionnaire
+    attend la réponse HTTP) et dure ~3 s, quand `/generate` peut tenir 600 s. Tant que les
+    deux partageaient `_solve_semaphore`, un placement lancé pendant une génération
+    attendait le solve entier : timeout côté gestionnaire, sur une opération de trois
+    secondes.
+
+    ⚑ Le verrou de club de `/place-matches` était DÉJÀ préfixé (`matches:{club_id}`)
+    précisément pour éviter cela — le sémaphore partagé défaisait cette intention, en
+    silence. Deux protections qui se contredisent, et c'est la plus discrète qui gagnait.
+
+    Ce test échoue (TimeoutError) si les deux sémaphores redeviennent le même objet.
+    """
+
+    async def scenario() -> str:
+        async with main._solve_semaphore:  # une génération est en vol
+            # Le placement doit acquérir SON budget immédiatement, sans attendre le solve.
+            await asyncio.wait_for(main._placement_semaphore.acquire(), timeout=0.5)
+            main._placement_semaphore.release()
+        return "ok"
+
+    assert asyncio.run(scenario()) == "ok"
+
+
+def test_two_generations_are_still_serialised() -> None:
+    """Le pendant : séparer les rails ne relâche PAS la borne des générations.
+
+    Élargir `max_concurrent_solves` aurait été la correction paresseuse — elle aurait
+    aussi autorisé deux solves de 600 s en parallèle, ce que le réglage borne exprès.
+    """
+
+    async def scenario() -> bool:
+        async with main._solve_semaphore:
+            try:
+                await asyncio.wait_for(main._solve_semaphore.acquire(), timeout=0.2)
+            except TimeoutError:
+                return True
+            main._solve_semaphore.release()
+            return False
+
+    assert asyncio.run(scenario()), "une seconde génération ne doit pas démarrer pendant la première"
