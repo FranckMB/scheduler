@@ -241,10 +241,22 @@ class TenantFilterListener implements EventSubscriberInterface
 
         // Fallback: the authenticated user's single active membership.
         if ($user instanceof User) {
-            $membership = $this->clubUserRepository->findOneBy([
-                'userId' => $user->getId(),
-                'isActive' => true,
-            ]);
+            // AUD-BCK-10 — ORDRE EXPLICITE. Sans lui, `findOneBy` laissait PostgreSQL
+            // choisir : deux appels identiques pouvaient rendre deux clubs différents
+            // (l'ordre d'un SELECT sans ORDER BY n'est garanti par rien, et change au gré
+            // des mises à jour de pages). Sans objet tant qu'un gestionnaire n'a qu'un
+            // club — mais ce repli est la frontière TENANT : le jour du multi-club, il
+            // déciderait au hasard quelles données le gestionnaire voit, sans erreur ni
+            // trace. On fige donc l'adhésion la PLUS ANCIENNE : stable, et c'est le club
+            // d'origine du compte.
+            //
+            // ⚠ Ce n'est pas le choix DÉFINITIF du multi-club (P4-8) : c'est un
+            // déterminisme, pas une règle produit. Le jour où le gestionnaire choisit son
+            // club, ce repli disparaît au profit de son choix.
+            $membership = $this->clubUserRepository->findOneBy(
+                ['userId' => $user->getId(), 'isActive' => true],
+                ['createdAt' => 'ASC', 'id' => 'ASC'],
+            );
             if (null !== $membership) {
                 return $membership->getClubId();
             }
