@@ -1,7 +1,7 @@
 {
-  "version": "2.2",
+  "version": "2.3",
   "rules": [
-    {"name": "VENUE_AT_MOST_ONE", "enabled": true, "description": "One venue hosts max one team per time slot"},
+    {"name": "VENUE_AT_MOST_ONE", "enabled": true, "description": "One venue hosts at most its slot capacity of teams per time slot (capacity comes from the payload, default 1)"},
     {"name": "COACH_NO_OVERLAP", "enabled": true, "description": "One coach coaches at most one team per time slot, EXCEPT in the same venue (D-14: a coach can watch two groups side by side; different venues remain impossible)"},
     {"name": "COACH_PLAYER_NO_OVERLAP", "enabled": true, "description": "A coach-player cannot be in two roles simultaneously"},
     {"name": "TEAM_NO_OVERLAP", "enabled": true, "description": "A team cannot have two sessions at the same time"},

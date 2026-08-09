@@ -31,7 +31,14 @@ final class ImplicitConstraintConfigTest extends TestCase
 
         self::assertSame('VENUE_AT_MOST_ONE', $result['venueAtMostOne']['type']);
         self::assertTrue($result['venueAtMostOne']['enabled']);
-        self::assertSame('One venue hosts max one team per time slot', $result['venueAtMostOne']['description']);
+        // P4-65 — cette assertion figeait « max one team per time slot », soit une règle que le
+        // moteur n'applique pas : il borne à la CAPACITÉ du créneau. L'assertion épingle
+        // désormais ce qui porte le sens, pas la phrase entière — c'est cette description que
+        // `POST /implicit-constraints` compare au moteur, et « max one team » y ferait croire
+        // qu'un créneau ne peut jamais accueillir deux équipes.
+        $description = $result['venueAtMostOne']['description'];
+        self::assertStringContainsString('at most its slot capacity', $description);
+        self::assertStringContainsString('default 1', $description);
     }
 
     public function testCoachNoOverlapConfig(): void
