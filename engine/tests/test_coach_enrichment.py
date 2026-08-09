@@ -138,7 +138,10 @@ class TestCoachAtMostOneWithMap:
                 slot_id="1:18:00",
             ),
             AssignmentVariable(
-                var=var_b, team_id="team-b", venue_id="venue-1",
+                # D-14 : gymnase DIFFÉRENT — c'est ce qui rend le cas interdit. Le même
+                # gymnase est désormais AUTORISÉ (cf. les deux tests SAME_venue plus bas),
+                # donc ce test ne prouverait plus rien avec deux fois "venue-1".
+                var=var_b, team_id="team-b", venue_id="venue-2",
                 slot_id="1:18:00",
             ),
         ]
@@ -160,6 +163,125 @@ class TestCoachAtMostOneWithMap:
         assert status == cp_model.INFEASIBLE, (
             f"Same coach in same slot should be INFEASIBLE, got {status}"
         )
+
+    def test_same_coach_two_teams_SAME_venue_is_allowed(self) -> None:
+        """D-14 — Matthieu coache les SM1 et les SM2 au même moment, au même endroit.
+
+        Arbitrage fondateur (2026-08-09) : « fonctionnellement il pourrait avoir le droit de
+        faire ça, ce n'est pas une erreur. C'est rare mais c'est possible dans les petites
+        structures. » Le coach est présent UNE fois et surveille deux groupes.
+
+        Le backend (`CoachDoubleBookingDetector`) et la modale du wizard
+        (`coachDoubleBooking.ts`) offraient déjà ce geste ; le moteur était le seul des trois
+        à le refuser, et rendait donc INFEASIBLE ce que l'UI proposait.
+        """
+        model = cp_model.CpModel()
+        # Le créneau doit accepter DEUX équipes — c'est la contrainte 1 (capacité du
+        # gymnase), pas la règle coach, qui borne le nombre d'équipes au même endroit. Sans
+        # cela le modèle reste INFEASIBLE pour une raison étrangère à Matthieu, et le test
+        # croirait éprouver la règle coach en éprouvant la capacité.
+        model.slot_capacities = {("gymnase-unique", 1, "18:00"): 2}
+        var_a = model.NewBoolVar("a")
+        var_b = model.NewBoolVar("b")
+        assignments = [
+            AssignmentVariable(var=var_a, team_id="sm1", venue_id="gymnase-unique", slot_id="1:18:00"),
+            AssignmentVariable(var=var_b, team_id="sm2", venue_id="gymnase-unique", slot_id="1:18:00"),
+        ]
+
+        stats = add_level_1_hard_constraints(
+            model, assignments,
+            coaches=[{"id": "matthieu"}],
+            team_coach_map={"sm1": ["matthieu"], "sm2": ["matthieu"]},
+        )
+        model.Add(var_a == 1)
+        model.Add(var_b == 1)
+
+        assert stats.coach_at_most_one == 0
+        assert _solve(model) != cp_model.INFEASIBLE
+
+    def test_overlapping_intervals_SAME_venue_is_allowed(self) -> None:
+        """La même règle par le chemin des INTERVALLES, pas celui de la clé de temps.
+
+        Des débuts différents (17h00-18h30 / 17h30-19h00) tombent dans deux clés de temps
+        distinctes : seul `_add_interval_at_most_one` peut les opposer. Ce test isole donc
+        l'exemption — sans lui, la retirer ne changeait RIEN à la suite, et la falsification
+        restait verte.
+        """
+        model = cp_model.CpModel()
+        model.slot_capacities = {("gymnase-unique", 2, "17:00"): 2, ("gymnase-unique", 2, "17:30"): 2}
+        var_a = model.NewBoolVar("a")
+        var_b = model.NewBoolVar("b")
+        assignments = [
+            AssignmentVariable(var=var_a, team_id="sm1", venue_id="gymnase-unique", slot_id="2:17:00", start=1020, end=1110),
+            AssignmentVariable(var=var_b, team_id="sm2", venue_id="gymnase-unique", slot_id="2:17:30", start=1050, end=1140),
+        ]
+
+        stats = add_level_1_hard_constraints(
+            model, assignments,
+            coaches=[{"id": "matthieu"}],
+            team_coach_map={"sm1": ["matthieu"], "sm2": ["matthieu"]},
+        )
+        model.Add(var_a == 1)
+        model.Add(var_b == 1)
+
+        assert stats.coach_at_most_one == 0
+        assert _solve(model) != cp_model.INFEASIBLE
+
+    def test_overlapping_intervals_DIFFERENT_venues_stays_impossible(self) -> None:
+        """Le pendant obligatoire : deux gymnases restent une impossibilité physique.
+
+        Les deux vont par paire. Relâcher le même gymnase sans garder celui-ci ouvrirait la
+        porte à un coach téléporté — et c'est exactement l'erreur qu'a commise la première
+        version du correctif (le gymnase mis dans la CLÉ de groupe séparait les variables
+        au lieu de les opposer).
+        """
+        model = cp_model.CpModel()
+        var_a = model.NewBoolVar("a")
+        var_b = model.NewBoolVar("b")
+        assignments = [
+            AssignmentVariable(var=var_a, team_id="sm1", venue_id="gymnase-nord", slot_id="2:17:00", start=1020, end=1110),
+            AssignmentVariable(var=var_b, team_id="sm2", venue_id="gymnase-sud", slot_id="2:17:30", start=1050, end=1140),
+        ]
+
+        stats = add_level_1_hard_constraints(
+            model, assignments,
+            coaches=[{"id": "matthieu"}],
+            team_coach_map={"sm1": ["matthieu"], "sm2": ["matthieu"]},
+        )
+        model.Add(var_a == 1)
+        model.Add(var_b == 1)
+
+        assert stats.coach_at_most_one > 0
+        assert _solve(model) == cp_model.INFEASIBLE
+
+    def test_coaching_and_playing_in_the_SAME_venue_stays_impossible(self) -> None:
+        """La BORNE de l'exemption : elle vaut coach-coach, jamais coach-JOUEUR.
+
+        Matthieu peut surveiller deux groupes côte à côte ; il ne peut pas coacher les SM1
+        et jouer en SM2 en même temps, fussent-elles dans le même gymnase — ce sont deux
+        RÔLES, pas deux groupes. Sans ce test, remplacer la condition de rôle par un `True`
+        constant laissait TOUTE la suite verte (falsification F3).
+        """
+        model = cp_model.CpModel()
+        model.slot_capacities = {("gymnase-unique", 2, "17:00"): 2, ("gymnase-unique", 2, "17:30"): 2}
+        var_a = model.NewBoolVar("a")
+        var_b = model.NewBoolVar("b")
+        assignments = [
+            AssignmentVariable(var=var_a, team_id="sm1", venue_id="gymnase-unique", slot_id="2:17:00", start=1020, end=1110),
+            AssignmentVariable(var=var_b, team_id="sm2", venue_id="gymnase-unique", slot_id="2:17:30", start=1050, end=1140),
+        ]
+
+        stats = add_level_1_hard_constraints(
+            model, assignments,
+            coaches=[{"id": "matthieu"}],
+            team_coach_map={"sm1": ["matthieu"], "sm2": ["julie"]},
+            team_player_map={"sm2": ["matthieu"]},
+        )
+        model.Add(var_a == 1)
+        model.Add(var_b == 1)
+
+        assert stats.coach_player_non_overlap > 0
+        assert _solve(model) == cp_model.INFEASIBLE
 
     def test_coach_at_most_one_allows_different_slots(self) -> None:
         """When a coach coaches two teams in different time slots, it must be feasible."""
@@ -205,7 +327,7 @@ class TestCoachAtMostOneWithMap:
                 slot_id="1:18:00", coach_id="coach-1",
             ),
             AssignmentVariable(
-                var=var_b, team_id="team-b", venue_id="venue-1",
+                var=var_b, team_id="team-b", venue_id="venue-2",
                 slot_id="1:18:00", coach_id="coach-1",
             ),
         ]
@@ -406,7 +528,7 @@ class TestMultiCoachTeamWithMap:
                 slot_id="1:18:00",
             ),
             AssignmentVariable(
-                var=var_other, team_id="other-team", venue_id="venue-1",
+                var=var_other, team_id="other-team", venue_id="venue-2",
                 slot_id="1:18:00",
             ),
         ]

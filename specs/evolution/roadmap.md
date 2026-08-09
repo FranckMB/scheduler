@@ -39,12 +39,10 @@
 > [`reprise-perimetre-engage.md`](reprise-perimetre-engage.md) (mémoire produit du planning de saison) ·
 > [`duplications-de-verite.md`](duplications-de-verite.md) (**inventaire du motif « une vérité, deux endroits »** —
 > 44 cas datés du 2026-08-08, triés par « la divergence est-elle silencieuse ? », avec la doctrine de correction.
-> **État : 38 livrés · 4 réfutés · 2 ouverts** — compte vérifiable par
+> **État : 39 livrés · 4 réfutés · 1 ouvert** — compte vérifiable par
 > `grep -c '^| \*\*D-[0-9]*\*\* ⬜'` (un `grep -c '⬜'` nu compte aussi la légende et deux lignes
-> de prose). Les deux restants sont sans impact données/sécurité et n'ont jamais produit
-> d'effet observé : **D-14 attend un arbitrage** (quelle règle coach fait foi — trois
-> divergences mesurées, cf. l'entrée), **D-11 est dormant** (`match_day` NULL sur les 69
-> équipes, aucun écran ne l'expose)).
+> de prose). Le dernier, **D-11, est dormant** : `match_day` est NULL sur les 69 équipes et
+> aucun écran ne l'expose — à traiter le jour où le champ sera exposé, pas avant).
 >
 > **Réf historiques** : `FF#n` / `BG G#n` = identifiants des anciens `features-futures.md` / `backend-gaps.md`,
 > absorbés le 2026-07-05. `v3 §x` / `contraintes-v2` = specs figées de `specs/initiales/`.
@@ -114,6 +112,8 @@
 
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
+| P4-64 | **`make format` reformate tout l'arbre alors que la CI ne le vérifie pas** | ⚪ | S | Le dépôt n'est PAS dans l'état que produit `ruff format` : lancer `make format` (cible documentée) a churné **38 fichiers** sans rapport avec le travail en cours, noyant un diff de 150 lignes sous 800. La CI, elle, ne lance que `ruff check` (lint), jamais `ruff format --check` — donc rien ne signale la dérive et rien ne l'empêche de grossir. Deux sorties : formater l'arbre une bonne fois et ajouter `--check` au gate, ou retirer la cible. **En attendant : ne pas lancer `make format`** sur un travail ciblé (D-14, 2026-08-09) |
+| P4-65 | **Description de `VENUE_AT_MOST_ONE` fausse dans les deux inventaires** | ⚪ | S | `implicit_rules.json` et `ImplicitConstraintConfig` annoncent « One venue hosts max one team per time slot » alors que `add_room_at_most_one` honore la **capacité** du créneau (`slot_capacities`, 5 créneaux à `capacity > 1` en base). Même motif que la description coach corrigée en D-14, sur la ligne juste au-dessus — repéré en la corrigeant, laissé hors périmètre |
 | P4-35 | **Import Excel d'équipes — la correspondance EXPLICITE persistée** | ⚪ | M | ⚑ **Volet technique LIVRÉ le 2026-08-04** (identité par nom, import tout-ou-rien, sortOrder des catégories créées — voir état des lieux) ; **reste le design décidé** : le gestionnaire APPARIE (jamais une clé naturelle devinée), la correspondance est **persistée** pour le ré-import — c'est l'écran P3-7 qui la porte, à livrer avec lui |
 | P4-25 | **Écritures API Platform sans verrou optimiste (transverse)** | ⚪ | M | `AbstractStateProcessor::processPut` remplace tous les champs éditables sans vérifier la colonne `version` : deux éditeurs de la même ligne (deux onglets, cache react-query périmé 30 s) → lost update silencieux. Constaté sur `CoachWish`, mais **universel**. Fix : If-Match/ETag ou garde de `version` (409 sur conflit), câblé une fois pour toutes. Fenêtre étroite → ⚪ |
 | P4-26 | **Deux coachs d'une même équipe partagent la doléance de la semaine** | ⚪ | M | `CoachWish` est clé sur `(calendarEntryId, teamId, weekStart)` **sans dimension coach** : une équipe à MAIN + ASSISTANT n'a qu'**une** doléance par semaine, et le second à saisir écrase le premier. **Atténué** (le pré-remplissage montre la valeur courante, et « un souhait, jamais une contrainte »). Décision fondateur explicite (« un souhait par équipe × semaine ») → laissé tel quel en V0. Même famille que P4-25. **Relue le 2026-08-01 au moment de P3-14 : inchangée** — borner le coach aux MAIN de l'équipe ne change pas la clé de la doléance, et le fondateur maintient « un souhait par équipe × semaine » |

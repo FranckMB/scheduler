@@ -627,41 +627,64 @@ def _diagnose_conflicts(
             })
 
     # Post-solve safety check: coach double-booking.
-    # Dedupe by (team, venue) — NOT team alone: the coach key excludes venue, so
-    # the SAME team in two different gyms at once with one coach is a REAL
-    # conflict (the coach can't be in two places). Only a same-team+same-venue
-    # repeat (the duplicate-template artifact) must collapse.
-    coach_bookings: dict[tuple[str, int, str], list[tuple[str, str]]] = defaultdict(list)
-    coach_durations: dict[tuple[str, int, str], int] = {}
+    #
+    # D-14 (2026-08-09) — deux corrections, faites ensemble parce qu'elles portaient sur la
+    # MÊME question et se contredisaient :
+    #
+    #  1. La clé était `(coach, jour, heure de début EXACTE)`. Deux séances 17h00-18h30 et
+    #     17h30-19h00 dédoublent pourtant bien le coach : elles tombaient dans deux clés
+    #     distinctes et passaient inaperçues. La contrainte HARD du solveur, elle, teste
+    #     l'intersection d'intervalles depuis toujours — ce filet était donc plus laxiste
+    #     que le modèle qu'il est censé surveiller. On aligne sur les intervalles.
+    #
+    #  2. Le MÊME gymnase n'est PAS un conflit (arbitrage fondateur) : un coach peut tenir
+    #     les SM1 et les SM2 côte à côte, il est présent une fois. Le diagnostic remontait
+    #     une ERROR rouge sur un geste que le backend et l'UI offrent explicitement.
+    #
+    # Ce qui reste un conflit : gymnases DIFFÉRENTS et intervalles qui se chevauchent — y
+    # compris pour la MÊME équipe (elle ne peut pas être à deux endroits non plus). Le
+    # doublon même-équipe/même-gymnase (artefact de template dupliqué) reste, lui, muet.
+    coach_slots: dict[tuple[str, int], list[tuple[int, int, str, str, str]]] = defaultdict(list)
     for slot in slots:
         coach_id = slot.get("coachId")
         if not coach_id:
             continue
-        key = (coach_id, slot["dayOfWeek"], slot["startTime"])
-        coach_bookings[key].append((str(slot["teamId"]), str(slot["venueId"])))
-        coach_durations[key] = max(coach_durations.get(key, 0), int(slot.get("durationMinutes") or 0))
+        start_minutes = _time_to_minutes(slot["startTime"])
+        duration = int(slot.get("durationMinutes") or 0)
+        coach_slots[(str(coach_id), slot["dayOfWeek"])].append(
+            (start_minutes, start_minutes + duration, str(slot["teamId"]), str(slot["venueId"]), str(slot["startTime"])),
+        )
 
-    for (coach_id, day_of_week, start_time), coach_booked in coach_bookings.items():
-        distinct: list[tuple[str, str]] = list(dict.fromkeys(coach_booked))
-        team_ids = [team for team, _venue in distinct]
-        if len(distinct) > 1:
-            when = f"{_day_label(day_of_week)} {_time_range(start_time, coach_durations.get((coach_id, day_of_week, start_time)))}"
-            diagnostics.append({
-                "id": f"diag-conflict-coach-{coach_id}-{day_of_week}-{start_time}",
-                "type": "conflict",
-                "severity": "ERROR",
-                "coachId": coach_id,
-                "dayOfWeek": day_of_week,
-                "startTime": str(start_time)[:5],
-                "message": (
-                    f"Le coach {_label(coach_id, coach_names)} est affecté à plusieurs équipes "
-                    f"en même temps le {when} : {_named_list(team_ids, team_names)}."
-                ),
-                "suggestions": [
-                    "Séparez les séances ou affectez un autre coach à l'une des équipes.",
-                ],
-                "createdAt": datetime.now(UTC).isoformat(),
-            })
+    for (clash_coach, clash_day), clash_booked in sorted(coach_slots.items()):
+        ordered = sorted(clash_booked)
+        seen_pairs: set[tuple[str, str]] = set()
+        for i, (a_start, a_end, a_team, a_venue, a_raw) in enumerate(ordered):
+            for b_start, b_end, b_team, b_venue, _b_raw in ordered[i + 1 :]:
+                if a_venue == b_venue:
+                    continue  # même gymnase : le coach n'y est qu'une fois (D-14)
+                if not (a_start < b_end and b_start < a_end):
+                    continue  # intervalles demi-ouverts : se toucher n'est pas se chevaucher
+                pair = (a_team, b_team) if a_team <= b_team else (b_team, a_team)
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                when = f"{_day_label(clash_day)} {_time_range(a_raw, a_end - a_start)}"
+                diagnostics.append({
+                    "id": f"diag-conflict-coach-{clash_coach}-{clash_day}-{a_raw}",
+                    "type": "conflict",
+                    "severity": "ERROR",
+                    "coachId": clash_coach,
+                    "dayOfWeek": clash_day,
+                    "startTime": str(a_raw)[:5],
+                    "message": (
+                        f"Le coach {_label(clash_coach, coach_names)} est affecté à plusieurs équipes "
+                        f"en même temps le {when}, dans des gymnases différents : {_named_list(list(pair), team_names)}."
+                    ),
+                    "suggestions": [
+                        "Séparez les séances ou affectez un autre coach à l'une des équipes.",
+                    ],
+                    "createdAt": datetime.now(UTC).isoformat(),
+                })
 
     return diagnostics
 
