@@ -17,6 +17,7 @@ use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionProperty;
+use Symfony\Component\HttpFoundation\RequestStack;
 
 #[Group('unit')]
 final class ConstraintStateProcessorTest extends TestCase
@@ -83,6 +84,10 @@ final class ConstraintStateProcessorTest extends TestCase
 
         $processor = new ReflectionClass(ConstraintStateProcessor::class)->newInstanceWithoutConstructor();
         new ReflectionProperty(AbstractStateProcessor::class, 'entityManager')->setValue($processor, $em);
+        // P4-25 : `processPut` lit désormais l'en-tête If-Match pour le verrou optimiste.
+        // Une pile VIDE reproduit le cas « aucun client ne l'envoie » — celui de tous les
+        // écrans aujourd'hui, et celui que ce test veut éprouver (la saison ne migre pas).
+        new ReflectionProperty(AbstractStateProcessor::class, 'requestStack')->setValue($processor, new RequestStack);
 
         $input = new ConstraintInput;
         $input->name = 'renamed';
