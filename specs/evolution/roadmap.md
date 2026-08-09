@@ -1,4 +1,4 @@
-# Roadmap (35) — ce qui reste à faire
+# Roadmap (41) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
@@ -49,18 +49,20 @@
 
 ---
 
-## Ordre d'attaque conseillé
+## Top 3 — plus forte plus-value (jugement IA, re-vérifié à chaque mise à jour)
 
-> ⚠ **Règle d'ordre (fondateur, 2026-07-31)** : le **retour terrain** passe AVANT les chantiers
-> que l'outil s'est donnés à lui-même. P1-1 et P1-3 sont des lignes anciennes, légitimes, mais
-> elles ne viennent d'aucune demande d'usage — elles attendent que le terrain soit servi.
+> **Remplace l'« ordre d'attaque conseillé »** (décision fondateur 2026-08-09 : UNE seule liste de priorité,
+> pas deux vérités). Règle d'entretien : **chaque PR qui touche ce fichier re-vérifie le top 3** — daté,
+> chaque item justifié en une ligne. La demande terrain pèse lourd dans le jugement (règle fondateur
+> 2026-07-31 : le terrain passe avant les chantiers auto-assignés), mais la liste est un jugement de
+> plus-value, pas une file FIFO.
 
-> **Le retour terrain du 2026-07-31 est SOLDÉ** (dernier lot : P4-42, le 2026-08-02). Ce qui en est sorti se lit dans
-> [`etat-des-lieux.md`](../courantes/etat-des-lieux.md) §3.
+**Au 2026-08-09 :**
+1. **P1-3 — bridage freemium** : aucune monétisation possible sans lui, spec prête. ⚠ Préalable en cours : **étude Rhône** (stats équipes/club via données FFBB) puis point de cadrage dédié — voir la ligne P1-3.
+2. **P1-1 — rôles + gestion des membres** : débloque le self-service coach, P4-8, la salle de convivialité — structurant pour toute la surface multi-utilisateur.
+3. **P2-8 — supprimer les miroirs front des règles serveur** : le motif a produit 40 défauts en 4 rounds sur la bascule ADR-0002, et chaque feature nouvelle en rajoute tant qu'il vit.
 
-1. **P2-17** — mutualisation lisible (issu du terrain). *(P2-18, resynchro FFBB : SOLDÉ le 2026-08-04 — volet superadmin livré, volets équipe/delta fermés par les mesures ; voir état des lieux.)* *(P2-16, contraintes de base à la création : LIVRÉ le 2026-08-04 — voir état des lieux.)* *(L'ancienne priorité 1 — le module matchs — a quitté ce fichier : voir état des lieux §1.5/§3 ; la tête de liste est à re-désigner par le fondateur.)*
-2. Ensuite seulement **P1-1 (rôles)** puis **P1-3 (bridage freemium)** — structurants pour la suite du produit, mais aucun club ne les a demandés.
-3. **P3/P4** restants par lots opportunistes.
+*(P2-17 — mutualisation lisible, issu du terrain — reste la première demande d'usage ouverte : il talonne ce top 3 et son volet « affichage fusionné » est le seul gratuit des trois.)*
 
 ---
 
@@ -69,7 +71,7 @@
 | # | Sujet | Impact | Effort | Débloque | Note |
 |---|-------|:---:|:---:|---|---|
 | P1-1 | **Rôles non-admin + modèle de permissions** | 🟠 | L | self-service coach · comptes coach · salle convivialité · P4-8 | `ClubUser.role` est hardcodé `admin` au register ; aucune différenciation de droits. `isManagementRole` = amorce, voters à câbler partout. Inclut l'écran **gestion des membres** (inviter / changer rôle / désactiver — le membership existe, pas l'UI) |
-| P1-3 | **Bridage freemium Découverte** | 🟠 | M | monétisation | Spécifié, zéro code → [`bridage-freemium-decouverte.md`](bridage-freemium-decouverte.md). Club complet, **aucun cap d'entité** (sinon le solveur paraît nul) ; gate = `POST /generate` plafonné (~4) ; générer décompte, ajuster gratuit ; compteur **total non rechargeable** (⚠ `generation_count_season` se remet à zéro par saison — il faut un compteur qui ne recharge jamais) ; PDF off ; read-only à l'épuisement. Enforcement = **3 gardes, pas transversal**. Reste aussi : le **seed des 4 offres** `SubscriptionPlan` (le modèle est livré, les offres n'existent pas) et la logique `billing_cycle`/`plan_expires_at` ⚑ **Grille tarifaire tranchée (fondateur 2026-08-04, à implémenter avec le paiement en ligne)** : l'abonnement se paie **PAR SAISON** (jamais par période) — prix **fixe de mai à septembre** (phase de préparation), **dégressif ensuite** (octobre un peu moins cher, février nettement moins : on ne fait pas payer plein pot une saison entamée). Le gate de bascule (P1-5, livré) lit `Club.paidSeasonYear` ; le paiement en ligne devra l'écrire |
+| P1-3 | **Bridage freemium Découverte** | 🟠 | M | monétisation | Spécifié, zéro code → [`bridage-freemium-decouverte.md`](bridage-freemium-decouverte.md). Club complet, **aucun cap d'entité** (sinon le solveur paraît nul) ; gate = `POST /generate` plafonné (~4) ; générer décompte, ajuster gratuit ; compteur **total non rechargeable** (⚠ `generation_count_season` se remet à zéro par saison — il faut un compteur qui ne recharge jamais) ; PDF off ; read-only à l'épuisement. Enforcement = **3 gardes, pas transversal**. Reste aussi : le **seed des 4 offres** `SubscriptionPlan` (le modèle est livré, les offres n'existent pas) et la logique `billing_cycle`/`plan_expires_at` ⚑ **Grille tarifaire tranchée (fondateur 2026-08-04, à implémenter avec le paiement en ligne)** : l'abonnement se paie **PAR SAISON** (jamais par période) — prix **fixe de mai à septembre** (phase de préparation), **dégressif ensuite** (octobre un peu moins cher, février nettement moins : on ne fait pas payer plein pot une saison entamée). Le gate de bascule (P1-5, livré) lit `Club.paidSeasonYear` ; le paiement en ligne devra l'écrire. ⚑ **Le CAP est re-mis en question (fondateur, 2026-08-09)** : la décision « aucun cap d'entité, gate = ~4 générations » n'est plus acquise — le cap génération se contourne en soignant sa saisie (4 essais suffisent à un club appliqué → planning complet gratuit), là où un cap d'équipes est un vrai frein commercial ; mais un cap trop bas fait paraître le solveur trivial (la raison de la décision d'origine tient toujours). **Point de cadrage DÉDIÉ, APRÈS l'étude Rhône** (distribution équipes/club/catégorie — elle doit dire où mettre un éventuel seuil). À trancher au même point : le **PSP** (Polar.sh = merchant of record, TVA portée par lui, adapté solo dev ; Stripe = standard, moins cher en %, TVA à charge) — le paiement écrit `Club.paidSeasonYear` |
 
 ---
 
@@ -134,6 +136,25 @@
 
 ---
 
+## P5 — Avant PROD : la checklist de mise en production
+
+> **Pourquoi cette section (fondateur, 2026-08-09)** : les gestes « à faire le jour où on ouvre » s'accumulaient
+> en notes éparses — cette liste les tient au même endroit pour y voir clair le jour venu. Elle mélange des
+> **gestes d'exploitation** (pas de code) et des **lignes de code** à livrer avant l'ouverture publique.
+> S'y ajoutent deux rituels déjà tracés ailleurs : **SEC-13** (ZAP baseline + Nuclei, ligne P4 ci-dessus)
+> et le **dump pré-migration** ([`deploy.md`](../../docs/ops/deploy.md)).
+
+| # | Sujet | Impact | Effort | Note |
+|---|-------|:---:|:---:|---|
+| P5-1 | **Activer Sentry — le compte n'existe pas** | 🟠 | XS | Geste ops, zéro code : créer l'org Sentry, poser les 3 DSN (backend/engine/frontend — câblage livré P0-4, DSN-vide-inactif) **et l'hôte d'ingestion dans `docker/frontend/csp.conf`** — le garde P4-65 (`sentryCspGuard.ts`) fait échouer le build tant que l'hôte manque, précisément pour que ce geste ne s'oublie pas à moitié |
+| P5-2 | **Hook off-site des backups (résidu INF-02)** | 🟠 | XS | Action d'exploitation, pas de code : brancher la copie hors-site des dumps `pg_dump` le jour du déploiement → [`backup-restore.md`](../../docs/ops/backup-restore.md) |
+| P5-3 | **Anti-abus à l'ouverture publique : Turnstile + anti-énumération** | 🟡 | S/M | Le socle existe (rate limiting multi-axes SEC-11, quotas de solve par club P4-45, email verification) — restent les deux trous qui n'ont de sens qu'exposé au public : **Cloudflare Turnstile sur register** (adaptatif de préférence), et **audit anti-énumération** sur register/reset-password (réponses et délais identiques compte existant/inexistant — jamais vérifié). Axe auth §7.1 → NR |
+| P5-4 | **Mesure de charge multi-club — jamais faite** | 🟡 | M | La stack tient un club (BCCL, 49 équipes) ; personne n'a mesuré N clubs simultanés (générations concurrentes × workers, RAM OR-Tools, Redis, Postgres). Pas de refonte préventive : **une mesure**, qui dit si l'archi actuelle tient l'objectif 5 clubs bêta et où elle casse. Recoupe [`infrastructure-hebergement.md`](infrastructure-hebergement.md) |
+| P5-5 | **Page de vente publique (+ FAQ statique)** | 🟠 | M | Rien n'existe. Landing produit hors app : ce que fait l'outil, pour qui, captures, appel à contact — prérequis de toute prospection (un mail sans page où atterrir ne convertit pas). La FAQ statique y vit. À cadrer : hébergement (statique séparé vs route publique du front) et contenu. Le compte démo vendeur (livré) et le mode démo self-service (parking) s'y raccrocheront |
+| P5-6 | **Canal signalement + support/repro — à spécifier** | 🟡 | M | Besoin fondateur 2026-08-09 : un endroit où un gestionnaire signale un bug, une contrainte manquante, une idée — et de quoi **reproduire** ce qu'un utilisateur a rencontré. Base saine voulue d'emblée (pas un `mailto:` jetable), sans sur-ingénierie tickets. **Cadrage dédié à faire** : rien n'est tranché (in-app vs externe, lien avec Sentry, quelles données de contexte joindre) |
+
+---
+
 ## Findings d'audit ouverts (registre `/audit`) — 1
 
 > **À quoi sert cette section.** Le skill `/audit` tient un **registre à IDs stables** : un finding garde son
@@ -156,8 +177,8 @@
 | AUD-FRT-20 | Tests d'écrans qui mockent les hooks porteurs | Faible | frontend | 2026-08-08 | 17× `auth/queries`, 15× `./queries`, 9× cockpit — contre 15× `./api`. Le patron prescrit par §7.2 pt 5 (mocker le module API **voisin**, monter le vrai hook sur un `QueryClient`) coexiste avec du hook-mocking qui ne garde que le câblage. Pas rouge (967 verts) : le filet est simplement inégal selon les features |
 
 > **Non repris ici, volontairement** : `UXC-12` (console superadmin hors design system — persona fondateur, pas
-> gestionnaire), `UXC-10` résidu (empty states inline — ~14 sites, cosmétique) et le résidu `INF-02` (hook
-> off-site des backups) qui est une **action d'exploitation**, pas de code : il se fera le jour du déploiement.
+> gestionnaire) et `UXC-10` résidu (empty states inline — ~14 sites, cosmétique). Le résidu `INF-02` (hook
+> off-site des backups) a rejoint la checklist Avant PROD (**P5-2**) le 2026-08-09.
 > Ils restent lisibles dans l'édition d'audit, qui est la mémoire longue.
 
 ---
