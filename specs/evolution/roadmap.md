@@ -142,7 +142,7 @@
 
 ---
 
-## Findings d'audit ouverts (registre `/audit`) — 11
+## Findings d'audit ouverts (registre `/audit`) — 8
 
 > **À quoi sert cette section.** Le skill `/audit` tient un **registre à IDs stables** : un finding garde son
 > identifiant d'une édition à l'autre, ce qui rend la comparaison inter-éditions possible (« ce défaut est-il
@@ -161,10 +161,7 @@
 
 | ID | Sujet | Gravité | Zone | Depuis | Note |
 |---|-------|:---:|:---:|:---:|---|
-| AUD-BCK-12 | **Fallback silencieux des enums de contrainte** | Moyenne | backend | 2026-08-08 | `ConstraintStateProcessor.php:197-210` : `tryFrom($value ?? '') ?? CLUB/TIME/HARD`. Un `family` fautif (« DAYS ») devient TIME **en silence**, un `scope` fautif devient CLUB — le motif « déclaré ≠ effectif » que SEC-13 vient de tuer sur `config`, survivant sur les trois champs voisins. Atténué : le `config` est validé contre la famille retombée, donc beaucoup de typos finissent en 422 par ricochet. Correctif d'une ligne (422 si `tryFrom` rend null alors que le champ est fourni) + un test qui rougit. Axe *constraint semantics* → NR |
 | AUD-FRT-19 | **Types API 100 % manuels, aucun codegen OpenAPI** | Moyenne | frontend | 2026-08-08 | Chaque feature écrit ses interfaces à la main (`wizard/api.ts` 446 l., `matches/api.ts` 550 l.) alors qu'API Platform expose un schéma et qu'un snapshot est déjà versionné. Une dérive de contrat back↔front est **invisible au typecheck** — rattrapée seulement par la normalisation défensive (`planning/api.ts:278-287`) et les e2e. Deux voies : codegen, ou un test de dérive contrat↔snapshot (moins ambitieux, beaucoup moins cher) |
-| AUD-BCK-13 | UUID de gymnase du `config` validé en forme seulement | Faible | backend | 2026-08-08 | `ConstraintConfigValidator.php:77-80,201-204` : `forcedVenueId`/`forbiddenVenueId`/`preferredVenueId`/`minAtVenueId` passent le format mais aucun contrôle d'appartenance. Un UUID étranger ou inexistant s'enregistre — **aucune fuite** (RLS borne la lecture), mais la contrainte peut être structurellement inopérante. Le gate pré-solve en rattrape une partie : vérifier avant de coder |
-| AUD-BCK-10 | Choix du club courant non déterministe en multi-club | Faible | backend | 2026-07-19 | `TenantFilterListener.php:232-240` : `findOneBy(userId, isActive)` **sans ordre**. Sans objet tant qu'un gestionnaire n'a qu'un club ; devient réel avec P1-1/P4-8 |
 | AUD-FRT-09 | Le retry d'une génération saison crée une version de plus | Faible | frontend | 2026-07-10 | `GenerateStep.tsx:204` → `queries.ts:614-617` : `existingScheduleId ?? createSchedule(...)`. Le mode période réutilise l'overlay en vol, pas le mode saison. Conséquence : des versions FAILED s'accumulent sous le plan. Pas de corruption (l'unicité du socle est tenue par un 409 serveur) |
 | AUD-FRT-18 | Le fallback d'erreur expose le code HTTP au lieu du sens | Faible | frontend | 2026-07-10 | `errorMessage.ts:55` : « Une erreur est survenue (429) » là où le gestionnaire devrait lire « trop de requêtes, patientez ». Le gros du finding est corrigé (les corps serveur ne sont plus repris qu'en 4xx) ; reste la table de correspondance des codes courants |
 | AUD-FRT-20 | Tests d'écrans qui mockent les hooks porteurs | Faible | frontend | 2026-08-08 | 17× `auth/queries`, 15× `./queries`, 9× cockpit — contre 15× `./api`. Le patron prescrit par §7.2 pt 5 (mocker le module API **voisin**, monter le vrai hook sur un `QueryClient`) coexiste avec du hook-mocking qui ne garde que le câblage. Pas rouge (967 verts) : le filet est simplement inégal selon les features |

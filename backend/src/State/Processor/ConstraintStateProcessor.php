@@ -8,6 +8,7 @@ use App\ApiResource\ConstraintResource;
 use App\Dto\ConstraintInput;
 use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
+use App\Entity\Venue;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -192,20 +193,95 @@ class ConstraintStateProcessor extends AbstractStateProcessor
         if ([] !== $errors) {
             throw new UnprocessableEntityHttpException(implode(' ', $errors));
         }
+
+        $this->assertVenuesExist($config);
     }
 
+    /**
+     * AUD-BCK-13 — un UUID de gymnase du `config` était validé EN FORME seulement.
+     *
+     * ⚑ Mesuré sur le moteur avant d'écrire une ligne : un `forcedVenueId` qui ne
+     * correspond à aucun gymnase du payload fait forcer à 0 **toutes** les affectations de
+     * l'équipe (`add_forced_venue_constraints` : « quand un gymnase est imposé, tous les
+     * autres sont fixés à 0 » — et aucun n'est celui-là). Résultat observé : `completed`,
+     * **zéro créneau**, l'équipe absente du planning.
+     *
+     * ⚠ Et le diagnostic ment sur la cause. Il tombe bien en ERROR, mais annonce « tous les
+     * créneaux compatibles étaient déjà occupés par des équipes plus prioritaires, ou en
+     * conflit avec ses contraintes (coach indisponible, gymnase fermé, jour interdit) » —
+     * quatre pistes, toutes fausses. Le gestionnaire chercherait une indisponibilité qui
+     * n'existe pas.
+     *
+     * Aucune fuite : RLS borne la lecture, un UUID étranger ne rend rien. Le défaut est
+     * qu'on ENREGISTRE une contrainte inapplicable au lieu de la refuser tout de suite.
+     *
+     * @param array<string, mixed> $config
+     */
+    private function assertVenuesExist(array $config): void
+    {
+        // La liste des clés porteuses d'un uuid de gymnase se DÉRIVE du SPEC du
+        // validateur (`uuidKeys()`), jamais d'une copie : c'est déjà le foyer que D-??
+        // avait établi après avoir trouvé deux listes divergentes ailleurs.
+        foreach ($this->configValidator->uuidKeys() as $key) {
+            $venueId = $config[$key] ?? null;
+            if (!\is_string($venueId) || '' === $venueId) {
+                continue;
+            }
+
+            // ⚑ Aucun `clubId` passé ici, et c'est VOULU : le `TenantFilter` Doctrine est
+            // déjà actif (listener priorité 7, après le firewall) et borne la requête au
+            // club courant. Un gymnase d'un autre club ne se trouve donc pas, et se
+            // signale comme INCONNU — jamais comme « interdit », ce qui révélerait son
+            // existence. Re-filtrer à la main dupliquerait la frontière tenant et ferait
+            // croire qu'elle se tient ici.
+            $venue = $this->entityManager->getRepository(Venue::class)->findOneBy(['id' => $venueId]);
+            if (!$venue instanceof Venue) {
+                throw new UnprocessableEntityHttpException(\sprintf('« %s » désigne un gymnase inconnu (%s). Une contrainte qui impose un gymnase inexistant rend l\'équipe impossible à placer, sans que le planning le dise.', $key, $venueId));
+            }
+        }
+    }
+
+    /**
+     * AUD-BCK-12 — ces trois champs retombaient EN SILENCE sur CLUB / TIME / HARD.
+     *
+     * ⚑ **Le finding est réfuté sur le chemin réel** : `ConstraintInput` porte
+     * `Assert\NotBlank` + `Assert\Choice` sur les trois, donc un `family` fautif est
+     * rejeté en 422 par le validateur AVANT d'atteindre ce processeur — mesuré, pas
+     * déduit (`ConstraintApiTest::testAnInvalidEnumValueIsRefusedNeverSilentlyCoerced`).
+     * Le repli était donc inatteignable, pas dangereux.
+     *
+     * ⚠ Il restait néanmoins **muet sur sa propre inutilité** : rien ne reliait le repli à
+     * la validation qui le rend mort. Le jour où un `Assert\Choice` saute — un DTO
+     * réécrit, une famille ajoutée sans son entrée — une contrainte « DAYS » deviendrait
+     * une contrainte TIME, enregistrée, envoyée au solveur, et honorée comme telle. Le
+     * gestionnaire aurait posé une règle de jour et obtenu une règle d'heure, sans un mot.
+     *
+     * Défense en profondeur : on échoue bruyamment. Cette exception ne peut pas se
+     * déclencher aujourd'hui ; c'est exactement ce qu'on veut d'un filet.
+     */
     private function parseScope(?string $value): ConstraintScope
     {
-        return ConstraintScope::tryFrom($value ?? '') ?? ConstraintScope::CLUB;
+        return ConstraintScope::tryFrom($value ?? '') ?? throw $this->unknownEnumValue('scope', $value, ConstraintScope::values());
     }
 
     private function parseFamily(?string $value): ConstraintFamily
     {
-        return ConstraintFamily::tryFrom($value ?? '') ?? ConstraintFamily::TIME;
+        return ConstraintFamily::tryFrom($value ?? '') ?? throw $this->unknownEnumValue('family', $value, ConstraintFamily::values());
     }
 
     private function parseRuleType(?string $value): ConstraintRuleType
     {
-        return ConstraintRuleType::tryFrom($value ?? '') ?? ConstraintRuleType::HARD;
+        return ConstraintRuleType::tryFrom($value ?? '') ?? throw $this->unknownEnumValue('ruleType', $value, ConstraintRuleType::values());
+    }
+
+    /** @param list<string> $accepted */
+    private function unknownEnumValue(string $field, ?string $value, array $accepted): UnprocessableEntityHttpException
+    {
+        return new UnprocessableEntityHttpException(\sprintf(
+            '« %s » n\'est pas une valeur connue pour %s. Valeurs acceptées : %s.',
+            $value ?? '(absent)',
+            $field,
+            implode(', ', $accepted),
+        ));
     }
 }

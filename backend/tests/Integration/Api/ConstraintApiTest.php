@@ -16,6 +16,7 @@ use App\Enum\SeasonStatus;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -37,6 +38,14 @@ final class ConstraintApiTest extends WebTestCase
     private User $user;
 
     private Season $season;
+
+    /** @return iterable<string, array{string, string}> */
+    public static function invalidEnumValues(): iterable
+    {
+        yield 'family' => ['family', 'DAYS'];
+        yield 'scope' => ['scope', 'CLUBS'];
+        yield 'ruleType' => ['ruleType', 'HARDER'];
+    }
 
     public function testCreateConstraint(): void
     {
@@ -67,6 +76,95 @@ final class ConstraintApiTest extends WebTestCase
         self::assertSame(['forbiddenDays' => [6]], $data['config']);
         self::assertTrue($data['isActive']);
         self::assertSame(1, $data['sortOrder']);
+    }
+
+    /**
+     * AUD-BCK-12 — axe *constraint semantics* : une valeur d'enum fautive est REFUSÉE,
+     * jamais silencieusement corrigée.
+     *
+     * Le finding annonçait un repli silencieux (`family` fautif → TIME) atteignable par
+     * l'API. Mesure faite, il ne l'est pas : `ConstraintInput` porte `Assert\Choice` sur
+     * les trois champs et le validateur rend 422 avant le processeur. Ce test épingle la
+     * garantie qui compte — celle du bord — plutôt que le détail d'implémentation qui la
+     * rend vraie.
+     *
+     * ⚑ Ce qui serait perdu sans elle : « DAYS » deviendrait une contrainte TIME,
+     * enregistrée et envoyée au solveur. Le gestionnaire poserait une règle de JOUR et
+     * obtiendrait une règle d'HEURE — honorée, cohérente, et fausse. C'est le motif
+     * « déclaré ≠ effectif » que SEC-13 a tué sur `config`.
+     *
+     * ⚠ Ce test tourne dans `unit-tests`, PAS dans le job `blocking-tests` (§4) : il
+     * bloque le merge via le contexte requis « Unit Tests », mais ne gate pas
+     * `build-docker` et son verdict tombe après celui du gate.
+     */
+    #[DataProvider('invalidEnumValues')]
+    public function testAnInvalidEnumValueIsRefusedNeverSilentlyCoerced(string $field, string $value): void
+    {
+        $client = $this->client;
+        $client->loginUser($this->user);
+
+        $payload = [
+            'name' => 'Typo',
+            'scope' => 'CLUB',
+            'family' => 'DAY',
+            'ruleType' => 'HARD',
+            'config' => ['forbiddenDays' => [6]],
+            'isActive' => true,
+            'sortOrder' => 1,
+        ];
+        $payload[$field] = $value;
+
+        $client->request('POST', '/api/constraints', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode($payload, \JSON_THROW_ON_ERROR));
+
+        self::assertSame(422, $client->getResponse()->getStatusCode(), \sprintf(
+            'Une valeur « %s » sur %s doit être REFUSÉE. Si elle passe, elle a été corrigée en silence : '
+            . 'la contrainte enregistrée ne sera pas celle que le gestionnaire a demandée.',
+            $value,
+            $field,
+        ));
+        self::assertStringContainsString($field, (string) $client->getResponse()->getContent(), 'La réponse doit NOMMER le champ fautif — sans quoi la typo se corrige à l\'aveugle.');
+    }
+
+    /**
+     * AUD-BCK-13 — un gymnase inconnu dans le `config` est REFUSÉ à l'écriture.
+     *
+     * ⚑ Mesuré côté moteur avant d'écrire le correctif : un `forcedVenueId` qui ne
+     * correspond à aucun gymnase fait forcer à 0 TOUTES les affectations de l'équipe
+     * (« quand un gymnase est imposé, tous les autres sont fixés à 0 » — et aucun n'est
+     * celui-là). Le solve rend `completed` avec **zéro créneau**, l'équipe absente.
+     *
+     * ⚠ Et le diagnostic désigne les mauvaises causes : « déjà occupés par des équipes plus
+     * prioritaires, ou en conflit avec ses contraintes (coach indisponible, gymnase fermé,
+     * jour interdit) ». Quatre pistes, toutes fausses. Le gestionnaire chercherait une
+     * indisponibilité qui n'existe pas.
+     *
+     * Le refus à l'écriture supprime l'état plutôt que d'espérer qu'un diagnostic le
+     * rattrape — d'autant que celui-ci, ici, ment.
+     */
+    public function testAConstraintCannotImposeAVenueThatDoesNotExist(): void
+    {
+        $client = $this->client;
+        $client->loginUser($this->user);
+
+        $client->request('POST', '/api/constraints', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode([
+            'name' => 'Impose un gymnase fantôme',
+            'scope' => 'TEAM',
+            'scopeTargetId' => '11111111-1111-4111-8111-111111111111',
+            'family' => 'FACILITY',
+            'ruleType' => 'HARD',
+            'config' => ['forcedVenueId' => '00000000-0000-4000-8000-000000000000'],
+            'isActive' => true,
+            'sortOrder' => 1,
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertSame(422, $client->getResponse()->getStatusCode(), 'Un gymnase inexistant doit être refusé : la contrainte rendrait l\'équipe impossible à placer, et le diagnostic du moteur accuserait autre chose.');
+        self::assertStringContainsString('forcedVenueId', (string) $client->getResponse()->getContent(), 'La réponse doit NOMMER la clé fautive.');
     }
 
     public function testListConstraints(): void
