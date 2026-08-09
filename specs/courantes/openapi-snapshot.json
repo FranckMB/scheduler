@@ -15671,7 +15671,7 @@
                     },
                     "planId": {
                         "type": [
-                            "integer",
+                            "string",
                             "null"
                         ]
                     },
@@ -15859,7 +15859,7 @@
                     },
                     "planId": {
                         "type": [
-                            "integer",
+                            "string",
                             "null"
                         ]
                     },
@@ -15968,7 +15968,7 @@
                             },
                             "planId": {
                                 "type": [
-                                    "integer",
+                                    "string",
                                     "null"
                                 ]
                             },
@@ -21047,6 +21047,10 @@
                         "type": "string",
                         "format": "date-time"
                     },
+                    "code": {
+                        "default": "",
+                        "type": "string"
+                    },
                     "name": {
                         "default": "",
                         "type": "string"
@@ -21062,14 +21066,6 @@
                     "maxGenerations": {
                         "default": 0,
                         "type": "integer"
-                    },
-                    "monthlyPrice": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "annualPrice": {
-                        "default": "",
-                        "type": "string"
                     },
                     "features": {
                         "type": "object",
@@ -21101,6 +21097,10 @@
                         "type": "string",
                         "format": "date-time"
                     },
+                    "code": {
+                        "default": "",
+                        "type": "string"
+                    },
                     "name": {
                         "default": "",
                         "type": "string"
@@ -21116,14 +21116,6 @@
                     "maxGenerations": {
                         "default": 0,
                         "type": "integer"
-                    },
-                    "monthlyPrice": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "annualPrice": {
-                        "default": "",
-                        "type": "string"
                     },
                     "features": {
                         "type": "object",
@@ -21160,6 +21152,10 @@
                                 "type": "string",
                                 "format": "date-time"
                             },
+                            "code": {
+                                "default": "",
+                                "type": "string"
+                            },
                             "name": {
                                 "default": "",
                                 "type": "string"
@@ -21175,14 +21171,6 @@
                             "maxGenerations": {
                                 "default": 0,
                                 "type": "integer"
-                            },
-                            "monthlyPrice": {
-                                "default": "",
-                                "type": "string"
-                            },
-                            "annualPrice": {
-                                "default": "",
-                                "type": "string"
                             },
                             "features": {
                                 "type": "object",

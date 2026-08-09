@@ -317,7 +317,7 @@ final readonly class AdminMonitoringService
             'slug' => (string) $row['slug'],
             'ffbbClubCode' => $this->nullableString($row, 'ffbb_club_code'),
             'isDemo' => (bool) ($row['is_demo'] ?? false),
-            'planId' => $this->nullableInteger($row, 'plan_id'),
+            'planId' => $this->nullableString($row, 'plan_id'),
             'billingCycle' => $this->nullableString($row, 'billing_cycle'),
             'generationCountSeason' => $this->integer($row, 'generation_count_season'),
             'createdAt' => (string) $row['created_at'],

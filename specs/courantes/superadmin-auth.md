@@ -1,6 +1,6 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-Last verified @ 2026-08-08 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-07 par les livraisons : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
+Last verified @ 2026-08-10 (recalé ce jour par P1-3 PR A : **attribution d'offres au catalogue** — une entrée `set-plan-*` par offre à `--plan` figé + `reset-credits`, seule porte d'attribution ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
 
 > **État courant** : SA0, SA1, la console read-only SA2, le socle
 > d'historisation SA3-A, la supervision SA3-B, la planification fiable SA3-C et
@@ -254,6 +254,13 @@ enregistre le paiement de la saison SUIVANTE — l'abonnement se paie par saison
 ouvre le gate de bascule ; idempotente, le marqueur ne recule jamais), `reset-current-season` (vide la saison
 courante — le club repart au wizard, la saison et le club survivent) et
 `purge-old-seasons` (supprime les saisons au-delà de la rétention).
+
+**Attribution d'offres (P1-3 PR A, 2026-08-10)** : une entrée du catalogue **par offre**
+(`set-plan-decouverte` … `set-plan-beta` — `--plan` figé dans l'entrée, seul `--club` est
+runtime : la console reste incapable d'exécuter un argument libre) + `reset-credits`
+(ré-ouvre le pool de crédits de sortie du plan Découverte). C'est la **seule porte
+d'attribution** d'une offre — l'offre Bêta n'a aucun autre chemin par construction, et le
+paiement v1 (virement) se matérialise par `set-plan` + `mark-season-paid`.
 
 **Arbitrages P3-4 (PR B, 2026-08-05)** : `GET /api/admin/club-requests` liste les demandes
 de création de club **pending ET expirées** (« le superadmin peut valider si besoin » — le

@@ -54,7 +54,7 @@ class ClubResource
     public string $slug = '';
 
     #[Groups(['read'])]
-    public ?int $planId = null;
+    public ?string $planId = null;
 
     #[Groups(['read'])]
     public ?string $billingCycle = null;

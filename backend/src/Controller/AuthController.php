@@ -22,6 +22,7 @@ use App\Service\ClubApprovalService;
 use App\Service\ClubProvisioner;
 use App\Service\EmailVerifier;
 use App\Service\PasswordPolicy;
+use App\Service\PlanEntitlements;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
@@ -70,6 +71,7 @@ final class AuthController extends AbstractController
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly ClubProvisioner $clubProvisioner,
         private readonly ClubApprovalService $clubApprovalService,
+        private readonly PlanEntitlements $planEntitlements,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -410,6 +412,9 @@ final class AuthController extends AbstractController
                 // ci-dessus restent la vérité tant que la bascule n'a pas eu lieu.
                 if ($selected instanceof Season) {
                     $seasonPlan = $this->schedulePlanProvisioner->seasonPlanPayload($selected->getId());
+                    // P1-3 — droits de l'offre EFFECTIVE (calculés à la lecture) : caps,
+                    // crédits de sortie, bascule de saison. L'enforcement est la PR B.
+                    $club['entitlements'] = $this->planEntitlements->forClub($clubEntity, $selected);
                 }
 
                 foreach ($allSeasons as $season) {

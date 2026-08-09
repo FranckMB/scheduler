@@ -45,7 +45,7 @@ final class ClubBillingNotClientWritableTest extends WebTestCase
             'timezone' => 'Europe/Paris',
             'locale' => 'fr',
             // Attacker payload: try to self-assign a plan + billing state + wipe the quota.
-            'planId' => 999,
+            'planId' => '00000000-0000-4000-8000-000000000002',
             'billingCycle' => 'annual',
             'planExpiresAt' => '2099-12-31T00:00:00+00:00',
             'generationCountSeason' => 0,
