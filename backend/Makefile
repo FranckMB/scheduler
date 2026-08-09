@@ -116,7 +116,11 @@ DB_ADMIN_URL = $(shell cat .env .env.local 2>/dev/null | awk -F= '$$1=="DATABASE
 .PHONY: fixtures ## Load backend fixtures + seed school-holiday reference data (clears var/generate)
 fixtures: APP_ENV = dev
 fixtures:
-	$(FIG) exec -e APP_ENV=$(APP_ENV) -e DATABASE_URL='$(DB_ADMIN_URL)' -u $(USERID):$(GROUPID) php-fpm php bin/console doctrine:fixtures:load --no-interaction
+	# --purge-exclusions=subscription_plan : le catalogue d'offres (P1-3) est
+	# GLOBAL, seedé par la migration (comme en prod, où les fixtures ne tournent
+	# jamais). Sans l'exclusion, le purge des fixtures le viderait et le club dev
+	# ne pourrait plus pointer l'offre bêta (BcclSeeder).
+	$(FIG) exec -e APP_ENV=$(APP_ENV) -e DATABASE_URL='$(DB_ADMIN_URL)' -u $(USERID):$(GROUPID) php-fpm php bin/console doctrine:fixtures:load --no-interaction --purge-exclusions=subscription_plan
 	$(EXECROOT) rm -rf ./var/generate/*
 	# Backfill the holiday reference data (global, non-tenant) so the seeded club's
 	# school zone actually shows holidays — offline JSON, deterministic. Last so a
