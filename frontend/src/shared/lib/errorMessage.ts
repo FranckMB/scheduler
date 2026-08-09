@@ -46,11 +46,22 @@ export async function errorMessage(error: unknown): Promise<string> {
       }
     }
 
+    // AUD-FRT-18 — deux codes que le backend émet VRAIMENT manquaient à la table, et
+    // tombaient donc dans le repli « Une erreur est survenue (429) ». Un nombre n'est pas
+    // un message : il ne dit ni ce qui s'est passé, ni quoi faire.
+    //
+    //  · 401 — le cookie JWT a expiré (`AuthController:322,453`). Le geste utile est de se
+    //    reconnecter, pas de réessayer, et le gestionnaire n'a aucun moyen de le deviner.
+    //  · 429 — le throttle par utilisateur (SEC-11, `ApiRateLimitTest`). Ici « réessayez
+    //    plus tard » est LA bonne conduite ; « (429) » pousse au contraire à re-cliquer,
+    //    ce qui prolonge exactement la fenêtre de blocage.
     if (status === 400) return "Requête invalide.";
+    if (status === 401) return "Session expirée. Reconnectez-vous.";
     if (status === 403) return "Accès refusé.";
     if (status === 404) return "Ressource introuvable.";
     if (status === 409) return "Conflit : l'action n'a pas pu être effectuée.";
     if (status === 422) return "Données invalides. Vérifiez votre saisie.";
+    if (status === 429) return "Trop de requêtes d'affilée. Patientez quelques instants avant de réessayer.";
     if (status >= 500) return "Erreur serveur. Réessayez plus tard.";
     return `Une erreur est survenue (${status}).`;
   }

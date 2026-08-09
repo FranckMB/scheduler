@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = {
   status: null as string | null,
   diagnostics: [] as unknown[],
   diagLoading: false,
+  // AUD-FRT-09 — spy STABLE : le harnais en recréait un à chaque rendu, donc l'argument
+  // du lancement était inobservable. On ne pouvait pas voir ce que l'écran demandait.
+  launch: vi.fn().mockResolvedValue("sched-1"),
 };
 
 vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { club: { name: "BCCL" } } }) }));
@@ -26,7 +30,7 @@ vi.mock("../store", () => ({ useWizardStore: () => ({ mode: "season", calendarEn
 vi.mock("../queries", () => ({
   // Le lancement rend un id → le composant poll useScheduleStatus, que le
   // harnais pilote via h.status (FAILED = échec de SOLVE).
-  useLaunchGeneration: () => ({ isPending: false, isError: false, mutateAsync: vi.fn().mockResolvedValue("sched-1"), reset: vi.fn() }),
+  useLaunchGeneration: () => ({ isPending: false, isError: false, mutateAsync: h.launch, reset: vi.fn() }),
   useScheduleStatus: () => ({ data: null === h.status ? undefined : { status: h.status } }),
 }));
 
@@ -53,6 +57,7 @@ describe("GenerateStep — écran d'échec expliqué", () => {
     h.status = null;
     h.diagnostics = [];
     h.diagLoading = false;
+    h.launch.mockClear();
   });
 
   it("le launcher s'affiche au repos (pas d'échec fantôme)", () => {
@@ -91,5 +96,45 @@ describe("GenerateStep — écran d'échec expliqué", () => {
 
     expect(await screen.findByText(/n'a pas abouti/)).toBeInTheDocument();
     expect(screen.getByText(/Une erreur est survenue/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * AUD-FRT-09 — « Réessayer » ne doit pas empiler une version de plus.
+ *
+ * Le mode période réutilisait déjà l'overlay en vol ; le mode saison créait une version
+ * neuve à CHAQUE clic. Pas de corruption — l'unicité du socle est tenue par un 409
+ * serveur — mais un historique de versions FAILED que le gestionnaire doit trier, et qui
+ * grossit précisément quand ça va mal.
+ *
+ * ⚠ Le test vérifie les DEUX sens, parce qu'ils se contredisent : premier lancement =
+ * version neuve (sinon on écraserait), reprise après échec = même version. Un test qui
+ * n'épinglerait que la reprise laisserait passer « réutiliser toujours ».
+ */
+describe("GenerateStep — la reprise après échec ne crée pas de version (AUD-FRT-09)", () => {
+  beforeEach(() => {
+    h.status = null;
+    h.diagnostics = [];
+    h.diagLoading = false;
+    h.launch.mockClear();
+  });
+
+  it("premier lancement : version neuve ; reprise après FAILED : la même", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderStep();
+
+    await user.click(screen.getByRole("button", { name: /Lancer la génération/ }));
+    expect(h.launch).toHaveBeenCalledWith({ existingScheduleId: undefined });
+
+    // Le solve échoue : l'écran passe en échec, et le scheduleId local pointe la version.
+    h.status = "FAILED";
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <GenerateStep />
+      </QueryClientProvider>,
+    );
+
+    await user.click(await screen.findByRole("button", { name: /Réessayer/ }));
+    expect(h.launch).toHaveBeenLastCalledWith({ existingScheduleId: "sched-1" });
   });
 });
