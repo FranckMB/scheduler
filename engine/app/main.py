@@ -379,7 +379,6 @@ def _solve(
         assignments,
         teams=data.get("teams", []),
         coaches=data.get("coaches", []),
-        fixed_assignments=parsed["fixed_slots"],
         forbidden_assignments=parsed["forbidden_assignments"],
         coach_unavailability=parsed["coach_unavailability"],
         forced_venues=parsed["forced_venues"],

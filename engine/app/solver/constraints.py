@@ -37,7 +37,6 @@ class ParsedConstraints(TypedDict):
     compared to a slot string with no type error). Now mypy checks every
     producer and consumer of these collections."""
 
-    fixed_slots: list[str]
     forbidden_assignments: list[dict[str, str | None]]
     # coach id → set of blocked (weekday, from_minute, to_minute) intervals. A
     # whole-day block is (day, 0, 1440). Union semantics — a slot is blocked if it
@@ -158,7 +157,6 @@ def add_level_1_hard_constraints(
     teams: Iterable[Any] = (),
     coaches: Iterable[Any] = (),
     min_sessions_by_team: Mapping[Any, int] | None = None,
-    fixed_assignments: Iterable[Any] = (),
     forbidden_assignments: Iterable[Any] = (),
     coach_unavailability: RuleCollection = (),
     forced_venues: Mapping[Any, Any] | None = None,
@@ -243,7 +241,7 @@ def add_level_1_hard_constraints(
     stats.team_no_overlap = add_team_no_overlap(model, assignment_list)
 
     # 5. Pre-placed slots are fixed and excluded from optimization choices.
-    stats.fixed_slots = add_fixed_slots(model, assignment_list, fixed_assignments)
+    stats.fixed_slots = add_fixed_slots(model, assignment_list)
 
     # 6. Explicitly forbidden assignment variables are forced to 0.
     stats.forbidden_assignments = add_forbidden_assignments(model, assignment_list, forbidden_assignments)
@@ -747,16 +745,26 @@ def add_team_no_overlap(model: Any, assignments: Sequence[AssignmentVariable]) -
     return _add_at_most_one_groups(model, groups.values())
 
 
-def add_fixed_slots(
-    model: Any, assignments: Sequence[AssignmentVariable], fixed_assignments: Iterable[Any] = ()
-) -> int:
-    """Constraint 5: pre-placed slots are fixed to 1."""
+def add_fixed_slots(model: Any, assignments: Sequence[AssignmentVariable]) -> int:
+    """Constraint 5: pre-placed slots are fixed to 1.
 
-    fixed_ids = set(fixed_assignments or ())
+    ⚑ AUD-ENG-31 (2026-08-09) — cette contrainte n'ajoute RIEN en production, et c'est
+    voulu : les verrous HARD sont pré-placés **hors** du solveur (P2-9 PR B), donc leur
+    variable n'existe pas et aucun constructeur de production ne pose ``fixed=True``.
+
+    Ce qui a été RETIRÉ, c'est la seconde entrée : une liste d'identifiants
+    ``fixed_assignments`` alimentée par ``parsed["fixed_slots"]``. Cette clé était
+    initialisée à ``[]`` et **plus personne ne l'écrivait** depuis que le chemin UUID des
+    contraintes LOCK a été supprimé (il ne matchait jamais). Elle restait pourtant câblée
+    jusqu'au solveur : du code qui annonce « le payload peut épingler des créneaux » alors
+    qu'aucun payload ne le peut.
+
+    L'attribut ``fixed`` reste, lui : il est le chemin naturel si les verrous devenaient un
+    jour des variables du modèle, et il est testé.
+    """
     added = 0
     for assignment in assignments:
-        assignment_id = assignment.id
-        if assignment.fixed or (assignment_id is not None and assignment_id in fixed_ids):
+        if assignment.fixed:
             model.Add(assignment.var == 1)
             added += 1
     return added
@@ -1811,7 +1819,6 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
     """Parse v2 constraints[] array into typed, solver-ready rule collections."""
 
     result: ParsedConstraints = {
-        "fixed_slots": [],
         "forbidden_assignments": [],
         "coach_unavailability": {},
         "forced_venues": {},

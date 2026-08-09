@@ -102,8 +102,19 @@ def coach_availability(
     unavailable_days: list[int] | None = None,
     available_days: list[int] | None = None,
 ) -> dict[str, Any]:
-    """A COACH_AVAILABILITY constraint scoped to a coach."""
-    config: dict[str, Any] = {"coachId": coach_id}
+    """A COACH_AVAILABILITY constraint scoped to a coach.
+
+    AUD-ENG-29 (2026-08-09) — le config ne porte PLUS ``coachId``. Le coach est identifié
+    par ``scopeTargetId``, et ``coachId`` en était un doublon supprimé par SEC-13 : le
+    backend refuse aujourd'hui toute clé hors liste (`ConstraintConfigValidator::errors`),
+    donc un payload réel la portant prendrait 422. Le harnais se dit « contract-accurate » ;
+    il émettait un payload que l'API rejetterait.
+
+    Zéro effet sur le solveur — il n'a jamais lu que ``scopeTargetId`` pour cette famille.
+    C'est une dérive de FIDÉLITÉ : un harnais qui ment sur le contrat fait passer des tests
+    pour une preuve qu'ils ne sont pas.
+    """
+    config: dict[str, Any] = {}
     if unavailable_days is not None:
         config["unavailableDays"] = unavailable_days
     if available_days is not None:
