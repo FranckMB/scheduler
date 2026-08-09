@@ -96,11 +96,21 @@ restent pour l'anti-abus, indépendamment du plan).
 L'hypothèse la plus risquée du modèle : **« un club de 20-30 équipes investit la saisie face à un mur à
 12 équipes, et le sous-ensemble suffit au wow »**. Deux tests, AVANT ou PENDANT la construction :
 
-1. **Test wow-12 (~1 h)** : générer sur un club tronqué à 12 équipes (démo ou BCCL) et juger le rendu —
-   si le solveur paraît trivial, remonter le cap (15) avant de coder le chiffre en dur → le cap vit en
-   **config**, pas en constante.
+1. ✅ **Test wow-12 — FAIT le 2026-08-09, CONCLUANT (cap 12 confirmé).** Protocole : payload réel BCCL
+   tronqué à 12 équipes (U9→U21 + seniors + 2 groupes école mutualisés + 3x3), 3 gymnases (21 places
+   hebdo), 6 coachs dont 5 multi-équipes, 11 règles horaires dures + indispos coach — envoyé directement
+   au moteur (contrat 2.2, chemin debug dev). Résultat en deux temps, tous deux démonstratifs :
+   (a) le jeu initial (3 coachs indispo le vendredi) est **détecté IMPOSSIBLE en 3 ms** avec suggestions —
+   un humain l'aurait découvert après des heures ; (b) une indispo relâchée → **17/17 séances placées en
+   41 ms, zéro violation sur 16 contrôles** (fenêtres EMB ≤ 17h30, mercredis interdits, adultes ≥ 18h50,
+   U15 ≤ 19h00, chevauchements coach), avec **enchaînements coach optimisés** (Jordan 17h30→19h00,
+   Thomas 19h00→20h30 deux soirs, âge croissant dans chaque soirée) et les 4 créneaux restés libres
+   **nommés**. Un problème à 12 équipes n'est PAS trivial. ⚠ Nuance honnête : le wow dépend des
+   **contraintes saisies** — un club qui ne saisit rien verra un rendu plus plat (c'est l'insight
+   produit connu : la valeur est dans la capture des contraintes).
 2. **Question aux clubs bêta (15 min)** : « si l'app était gratuite jusqu'à 12 équipes et payante au-delà,
-   tu aurais fait quoi le premier jour ? » — teste le risque « n'investit pas la saisie ».
+   tu aurais fait quoi le premier jour ? » — teste le risque « n'investit pas la saisie ». **Reste à faire**
+   (panel : Rillieux en premier — ~25-35 équipes app, le profil exact du mur).
 
 Le chiffre 12 est une **valeur de config ajustable**, pas une promesse produit.
 
