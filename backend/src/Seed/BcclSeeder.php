@@ -15,6 +15,7 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
+use App\Entity\SubscriptionPlan;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\User;
@@ -113,6 +114,14 @@ final class BcclSeeder
         }
         if (null === $club->getAccentColorDark()) {
             $club->setAccentColorDark('#E53935');
+        }
+        // P1-3 — le club dev/démo vit en Bêta (tout illimité) : « les tests sont de
+        // facto en bêta » (fondateur). Only-fill-when-empty, comme les champs ci-dessus.
+        if (null === $club->getPlanId()) {
+            $beta = $manager->getRepository(SubscriptionPlan::class)->findOneBy(['code' => 'beta']);
+            if ($beta instanceof SubscriptionPlan) {
+                $club->setPlanId($beta->getId());
+            }
         }
         $manager->flush();
 
