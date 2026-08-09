@@ -197,7 +197,9 @@ export function GenerateStep() {
             ) : (
               <p className="max-w-md text-sm text-muted-foreground">
                 {timedOut
-                  ? "Le service met trop de temps à répondre. Vérifie que le moteur tourne, puis réessaie."
+                  // AUD-UXC-11 — seule phrase au TUTOIEMENT d'un écran qui vouvoie partout
+                  // ailleurs (« Générez », « vos équipes », « votre planning »).
+                  ? "Le service met trop de temps à répondre. Vérifiez que le moteur tourne, puis réessayez."
                   : (launchReason ?? ("FAILED" === status && failedDiagnostics.isLoading ? "Lecture du motif de l'échec…" : (launchReason ?? "Une erreur est survenue (données ou moteur indisponible). Tu peux réessayer.")))}
               </p>
             )}
@@ -213,7 +215,10 @@ export function GenerateStep() {
         <div className="flex flex-col items-center gap-4 py-12 text-center">
           <Rocket className="size-12 text-accent" />
           <p className="max-w-sm text-sm text-muted-foreground">
-            {periodMode ? "Tout est prêt. Générez le plan de la période." : "Tout est prêt. Lancez la génération de votre planning."}
+            {/* AUD-UXC-11 — « le plan » était le seul écart : les deux autres phrases de
+                l'écran disent « le planning » (:173, :236). Un mot par concept, sinon le
+                gestionnaire se demande si « plan » et « planning » désignent deux choses. */}
+            {periodMode ? "Tout est prêt. Générez le planning de la période." : "Tout est prêt. Lancez la génération de votre planning."}
           </p>
           {isFirstOverlay ? (
             <p className="max-w-sm rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-muted-foreground">

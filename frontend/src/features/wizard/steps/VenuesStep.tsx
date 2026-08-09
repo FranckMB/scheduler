@@ -349,6 +349,7 @@ function VenuesEditor() {
             ref={nameRef}
             aria-label="Nom du gymnase"
             aria-invalid={null !== addError}
+            aria-describedby={null !== addError ? "venue-add-error" : undefined}
             placeholder="Nom du gymnase"
             className={`h-8 flex-1 ${null !== addError ? "border-destructive focus-visible:ring-destructive" : ""}`}
             value={name}
@@ -411,8 +412,13 @@ function VenuesEditor() {
         ) : null}
       </form>
 
+      {/* AUD-A11Y-13 — `aria-invalid` disait « ce champ est fautif » sans jamais dire
+          POURQUOI : le message existait à côté, non relié. Un lecteur d'écran l'annonce
+          une fois par `role="alert"` (interruption), puis le champ redevient muet — on
+          revient dessus, on sait que c'est faux, on ne sait plus ce qu'on doit corriger.
+          `aria-describedby` le rattache : le motif se relit avec le champ, à volonté. */}
       {null !== addError ? (
-        <p role="alert" className="mb-3 text-sm text-destructive">
+        <p id="venue-add-error" role="alert" className="mb-3 text-sm text-destructive">
           {addError}
         </p>
       ) : null}

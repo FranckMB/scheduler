@@ -695,6 +695,7 @@ function TeamsEditor() {
               ref={nameRef}
               aria-label="Nom de l'équipe"
               aria-invalid={nameError}
+              aria-describedby={nameError ? "team-name-error" : undefined}
               placeholder="Nom de l'équipe"
               className={cn("h-8 min-w-0 flex-1", nameError ? "border-destructive focus-visible:ring-destructive" : "")}
               value={name}
@@ -708,6 +709,7 @@ function TeamsEditor() {
             <Select
               aria-label="Catégorie"
               aria-invalid={catError}
+              aria-describedby={catError ? "team-cat-error" : undefined}
               className={cn("h-8 w-28", catError ? "border-destructive focus-visible:ring-destructive" : "")}
               value={effectiveCat}
               onChange={(e) => {
@@ -750,13 +752,18 @@ function TeamsEditor() {
               <Plus className="size-4" />
             </Button>
           </form>
+          {/* AUD-A11Y-13 — `aria-invalid` disait « ce champ est fautif » sans jamais dire
+          POURQUOI : le message existait à côté, non relié. Un lecteur d'écran l'annonce
+          une fois par `role="alert"` (interruption), puis le champ redevient muet — on
+          revient dessus, on sait que c'est faux, on ne sait plus ce qu'on doit corriger.
+          `aria-describedby` le rattache : le motif se relit avec le champ, à volonté. */}
           {nameError ? (
-            <p role="alert" className="-mt-4 mb-4 text-sm text-destructive">
+            <p id="team-name-error" role="alert" className="-mt-4 mb-4 text-sm text-destructive">
               Le nom de l'équipe est obligatoire.
             </p>
           ) : null}
           {catError ? (
-            <p role="alert" className="-mt-4 mb-4 text-sm text-destructive">
+            <p id="team-cat-error" role="alert" className="-mt-4 mb-4 text-sm text-destructive">
               Choisissez la catégorie de l'équipe.
             </p>
           ) : null}

@@ -245,6 +245,7 @@ function CoachesEditor() {
           ref={firstRef}
           aria-label="Prénom"
           aria-invalid={firstError}
+          aria-describedby={firstError ? "coach-first-error" : undefined}
           placeholder="Prénom"
           className={`h-9 w-40 ${firstError ? "border-destructive focus-visible:ring-destructive" : ""}`}
           value={first}
@@ -265,8 +266,13 @@ function CoachesEditor() {
         </Button>
       </form>
 
+      {/* AUD-A11Y-13 — `aria-invalid` disait « ce champ est fautif » sans jamais dire
+          POURQUOI : le message existait à côté, non relié. Un lecteur d'écran l'annonce
+          une fois par `role="alert"` (interruption), puis le champ redevient muet — on
+          revient dessus, on sait que c'est faux, on ne sait plus ce qu'on doit corriger.
+          `aria-describedby` le rattache : le motif se relit avec le champ, à volonté. */}
       {firstError ? (
-        <p role="alert" className="mb-4 text-sm text-destructive">
+        <p id="coach-first-error" role="alert" className="mb-4 text-sm text-destructive">
           Indiquez au moins le prénom du coach avant de l'ajouter.
         </p>
       ) : null}
