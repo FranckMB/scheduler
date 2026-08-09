@@ -144,7 +144,7 @@ export function MatchesPage() {
       swapFixtures.mutate(
         { a: swapSource, b: target },
         {
-          onSuccess: () => toast.success("Placements échangés (salle + heure — les dates ne bougent pas)"),
+          onSuccess: () => toast.success("Placements échangés (gymnase + heure — les dates ne bougent pas)"),
         },
       );
       setSwapSourceId(null);
@@ -315,7 +315,7 @@ export function MatchesPage() {
           {null !== swapSource ? (
             <p className="flex items-center justify-between gap-2 rounded-md border border-accent/50 bg-accent/10 px-3 py-2 text-sm">
               <span>
-                Échange : cliquez le match à échanger avec <strong>{teamsMap.get(swapSource.teamId)?.name ?? "?"}</strong> (salle + heure — les dates ne bougent pas).
+                Échange : cliquez le match à échanger avec <strong>{teamsMap.get(swapSource.teamId)?.name ?? "?"}</strong> (gymnase + heure — les dates ne bougent pas).
               </span>
               <Button variant="outline" size="sm" onClick={() => setSwapSourceId(null)}>
                 Annuler

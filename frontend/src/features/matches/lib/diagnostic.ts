@@ -17,7 +17,9 @@ export interface DiagnosticGroup {
 }
 
 const GROUP_TITLES: Record<number, string> = {
-  1: "Collision de salle",
+  // AUD-UXC-13 — « gymnase » partout dans l'app ; « salle » ne subsistait que dans le
+  // module matchs. Deux mots pour un objet, c'est un objet de plus à comprendre.
+  1: "Collision de gymnase",
   2: "Hors fenêtre ligue",
   3: "Coach principal en double",
   4: "Placement fragilisé",

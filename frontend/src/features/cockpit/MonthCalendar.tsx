@@ -109,7 +109,7 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
                 {publicHoliday ? (
                   // A11Y-08: was a bare red dot (info by colour alone). A shape + the
                   // letter "F" makes "férié" legible without relying on colour.
-                  <span title={`Férié — ${publicHoliday.label}`} className="rounded-sm bg-destructive/15 px-0.5 text-[9px] font-bold leading-none text-destructive">
+                  <span title={`Férié — ${publicHoliday.label}`} className="rounded-sm bg-destructive/15 px-0.5 text-[10px] font-bold leading-none text-destructive">
                     F
                   </span>
                 ) : null}

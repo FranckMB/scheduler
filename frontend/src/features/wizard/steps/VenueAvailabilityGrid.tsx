@@ -123,7 +123,7 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
             <div
               key={`mw-${window.id}`}
               aria-hidden="true"
-              className="pointer-events-none z-0 m-px overflow-hidden rounded border border-dashed border-accent/60 px-1 pt-0.5 text-[9px] font-medium leading-tight text-accent/80"
+              className="pointer-events-none z-0 m-px overflow-hidden rounded border border-dashed border-accent/60 px-1 pt-0.5 text-[10px] font-medium leading-tight text-accent/80"
               style={{
                 gridColumn: 2 + di,
                 gridRow: `${startRow} / span ${span}`,

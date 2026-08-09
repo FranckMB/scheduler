@@ -153,6 +153,30 @@ describe("TeamsStep", () => {
     expect(screen.queryByText(/nom de l'équipe est obligatoire/i)).toBeNull();
   });
 
+  /**
+   * AUD-A11Y-13 — le message d'erreur doit être RELIÉ au champ, pas seulement affiché.
+   *
+   * `aria-invalid` disait « ce champ est fautif » sans jamais dire pourquoi : le motif
+   * vivait dans un `<p role="alert">` voisin, annoncé UNE fois par interruption puis perdu.
+   * Un lecteur d'écran qui revient sur le champ apprend qu'il est invalide et rien d'autre.
+   *
+   * ⚠ Ce test regarde le LIEN (`aria-describedby` → l'id du message), pas la présence du
+   * texte : celle-ci était déjà vérifiée plus haut, et elle passait pendant que le champ
+   * restait muet.
+   */
+  it("links the error message to the field it describes", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TeamsStep />);
+    await user.click(screen.getByRole("button", { name: "Ajouter l'équipe" }));
+
+    const field = screen.getByLabelText("Nom de l'équipe");
+    expect(field).toHaveAttribute("aria-invalid", "true");
+
+    const describedBy = field.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy ?? "")).toHaveTextContent(/nom de l'équipe est obligatoire/i);
+  });
+
   it("sends the play level when changed on a row", async () => {
     const user = userEvent.setup();
     renderWithProviders(<TeamsStep />);

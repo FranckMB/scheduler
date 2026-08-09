@@ -261,7 +261,9 @@ export function useCreateVenueClosure() {
         try {
           await cockpitApi.deleteCalendarEntry(entry.id);
         } catch {
-          throw new Error("La salle n'a pas pu être bloquée et l'annulation a échoué — supprime la période à la main.");
+          // AUD-UXC-13 « salle » → « gymnase ». Et le tutoiement isolé part avec (même axe que
+          // UXC-11) : la phrase était réécrite de toute façon.
+          throw new Error("Le gymnase n'a pas pu être bloqué et l'annulation a échoué — supprimez la période à la main.");
         }
         throw error;
       }
