@@ -43,10 +43,10 @@ class CoachStateProcessor extends AbstractStateProcessor
             $entity->setPhone($input->phone);
         }
         if (null !== $input->maxDaysOverride) {
-            $entity->setMaxDaysOverride($input->maxDaysOverride);
-        }
-        if (null !== $input->maxDaysOverrideConfirmed) {
-            $entity->setMaxDaysOverrideConfirmed($input->maxDaysOverrideConfirmed);
+            // P4-51 — 0 = « retirer le plafond ». Le PUT étant partiel (null = inchangé),
+            // null ne peut pas porter le retrait : sans ce cas, un champ vidé à l'écran
+            // laisserait le plafond en base pour toujours.
+            $entity->setMaxDaysOverride(0 === $input->maxDaysOverride ? null : $input->maxDaysOverride);
         }
         if (null !== $input->acceptableLateMinutes) {
             $entity->setAcceptableLateMinutes($input->acceptableLateMinutes);
@@ -83,10 +83,10 @@ class CoachStateProcessor extends AbstractStateProcessor
             $entity->setPhone($input->phone);
         }
         if (null !== $input->maxDaysOverride) {
-            $entity->setMaxDaysOverride($input->maxDaysOverride);
-        }
-        if (null !== $input->maxDaysOverrideConfirmed) {
-            $entity->setMaxDaysOverrideConfirmed($input->maxDaysOverrideConfirmed);
+            // P4-51 — 0 = « retirer le plafond ». Le PUT étant partiel (null = inchangé),
+            // null ne peut pas porter le retrait : sans ce cas, un champ vidé à l'écran
+            // laisserait le plafond en base pour toujours.
+            $entity->setMaxDaysOverride(0 === $input->maxDaysOverride ? null : $input->maxDaysOverride);
         }
         if (null !== $input->acceptableLateMinutes) {
             $entity->setAcceptableLateMinutes($input->acceptableLateMinutes);

@@ -23,11 +23,14 @@ class CoachInput
     #[Groups(['write'])]
     public ?string $phone = null;
 
+    /**
+     * P4-51 — plafond de jours/semaine (1..6). ⚠ `0` signifie « RETIRER le plafond » :
+     * le PUT est partiel (null = inchangé), donc null ne peut pas porter le retrait —
+     * un champ vidé à l'écran doit pouvoir revenir à « pas de plafond ».
+     */
+    #[Assert\Range(min: 0, max: 6)]
     #[Groups(['write'])]
     public ?int $maxDaysOverride = null;
-
-    #[Groups(['write'])]
-    public ?bool $maxDaysOverrideConfirmed = null;
 
     #[Groups(['write'])]
     public ?int $acceptableLateMinutes = null;

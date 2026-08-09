@@ -88,7 +88,6 @@ class CoachSchema(SerializableModel):
     email: str | None = None
     phone: str | None = None
     max_days_override: int | None = Field(default=None, alias="maxDaysOverride")
-    max_days_override_confirmed: bool = Field(default=False, alias="maxDaysOverrideConfirmed")
     acceptable_late_minutes: int | None = Field(default=None, alias="acceptableLateMinutes")
     is_active: bool = Field(default=False, alias="isActive")
     parent_coach_id: str | None = Field(default=None, alias="parentCoachId")

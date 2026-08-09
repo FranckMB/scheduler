@@ -12,6 +12,7 @@ use App\Enum\SeasonStatus;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -45,6 +46,47 @@ final class CoachApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(201);
         $data = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertTrue($data['isEmployee']);
+    }
+
+    /**
+     * P4-51 — le cycle complet du plafond : poser, puis RETIRER.
+     *
+     * ⚠ Le retrait est le cas piégeux : le PUT est partiel (null = « inchangé »), donc null
+     * ne peut pas le porter — un champ vidé à l'écran laisserait le plafond en base pour
+     * toujours. `0` est la sentinelle « retirer », traduite en null par le processor.
+     * Sans ce test, le geste « enlever le plafond » pourrait mourir sans qu'aucune suite
+     * ne le voie : poser et lire resteraient verts.
+     */
+    public function testTheCapCanBeSetAndRemoved(): void
+    {
+        // ⚠ Bearer à CHAQUE requête : le firewall est stateless, loginUser ne survit
+        // qu'au premier appel (mesuré : 401 « JWT Token not found » dès le PUT).
+        $manager = self::getContainer()->get(JWTTokenManagerInterface::class);
+        \assert($manager instanceof JWTTokenManagerInterface);
+        $headers = [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $manager->create($this->user),
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ];
+
+        $this->client->request('POST', '/api/coaches', [], [], $headers, json_encode(['firstName' => 'Matthieu', 'maxDaysOverride' => 3], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $coach = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame(3, $coach['maxDaysOverride'], 'le plafond posé à la création doit être lu');
+
+        // Un PUT qui ne parle PAS du plafond ne doit pas le toucher (partial PUT).
+        $this->client->request('PUT', '/api/coaches/' . $coach['id'], [], [], $headers, json_encode(['firstName' => 'Matthieu', 'isEmployee' => true], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+        self::assertSame(3, json_decode((string) $this->client->getResponse()->getContent(), true)['maxDaysOverride'], 'un PUT muet sur le plafond ne doit pas l\'effacer');
+
+        // Le retrait : 0 → null.
+        $this->client->request('PUT', '/api/coaches/' . $coach['id'], [], [], $headers, json_encode(['firstName' => 'Matthieu', 'maxDaysOverride' => 0], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+        self::assertNull(json_decode((string) $this->client->getResponse()->getContent(), true)['maxDaysOverride'], '0 doit RETIRER le plafond — null signifiant « inchangé », c\'est le seul chemin de retrait');
+
+        // Hors bornes : refusé, jamais silencieusement corrigé.
+        $this->client->request('PUT', '/api/coaches/' . $coach['id'], [], [], $headers, json_encode(['firstName' => 'Matthieu', 'maxDaysOverride' => 9], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422, 'un plafond hors bornes (1..6) doit être refusé');
     }
 
     protected function setUp(): void

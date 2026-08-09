@@ -16208,10 +16208,6 @@
                             "null"
                         ]
                     },
-                    "maxDaysOverrideConfirmed": {
-                        "default": false,
-                        "type": "boolean"
-                    },
                     "acceptableLateMinutes": {
                         "type": [
                             "integer",
@@ -16269,14 +16265,11 @@
                         ]
                     },
                     "maxDaysOverride": {
+                        "minimum": 0,
+                        "maximum": 6,
+                        "description": "P4-51 \u2014 plafond de jours/semaine (1..6). \u26a0 `0` signifie \u00ab RETIRER le plafond \u00bb :\nle PUT est partiel (null = inchang\u00e9), donc null ne peut pas porter le retrait \u2014\nun champ vid\u00e9 \u00e0 l'\u00e9cran doit pouvoir revenir \u00e0 \u00ab pas de plafond \u00bb.",
                         "type": [
                             "integer",
-                            "null"
-                        ]
-                    },
-                    "maxDaysOverrideConfirmed": {
-                        "type": [
-                            "boolean",
                             "null"
                         ]
                     },
@@ -16351,10 +16344,6 @@
                             "null"
                         ]
                     },
-                    "maxDaysOverrideConfirmed": {
-                        "default": false,
-                        "type": "boolean"
-                    },
                     "acceptableLateMinutes": {
                         "type": [
                             "integer",
@@ -16426,10 +16415,6 @@
                                     "integer",
                                     "null"
                                 ]
-                            },
-                            "maxDaysOverrideConfirmed": {
-                                "default": false,
-                                "type": "boolean"
                             },
                             "acceptableLateMinutes": {
                                 "type": [
@@ -23427,6 +23412,7 @@
                     "capacity": {
                         "minimum": 1,
                         "maximum": 3,
+                        "description": "Nombre d'\u00e9quipes simultan\u00e9es sur le cr\u00e9neau \u2014 3 depuis le 2026-08-05 (certains terrains\nse divisent en trois en travers : cas ADN au BCCL).",
                         "default": 1,
                         "type": [
                             "integer",

@@ -59,9 +59,6 @@ class CoachResource
     public ?int $maxDaysOverride = null;
 
     #[Groups(['read'])]
-    public bool $maxDaysOverrideConfirmed = false;
-
-    #[Groups(['read'])]
     public ?int $acceptableLateMinutes = null;
 
     #[Groups(['read'])]
@@ -85,7 +82,6 @@ class CoachResource
         $dto->email = $entity->getEmail();
         $dto->phone = $entity->getPhone();
         $dto->maxDaysOverride = $entity->getMaxDaysOverride();
-        $dto->maxDaysOverrideConfirmed = $entity->getMaxDaysOverrideConfirmed();
         $dto->acceptableLateMinutes = $entity->getAcceptableLateMinutes();
         $dto->isActive = $entity->getIsActive();
         $dto->isEmployee = $entity->isEmployee();

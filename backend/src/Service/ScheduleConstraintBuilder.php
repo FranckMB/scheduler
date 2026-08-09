@@ -695,7 +695,6 @@ final class ScheduleConstraintBuilder
             'email' => $coach->getEmail(),
             'phone' => $coach->getPhone(),
             'maxDaysOverride' => $coach->getMaxDaysOverride(),
-            'maxDaysOverrideConfirmed' => $coach->getMaxDaysOverrideConfirmed(),
             'acceptableLateMinutes' => $coach->getAcceptableLateMinutes(),
             'isActive' => $coach->getIsActive(),
             'isEmployee' => $coach->isEmployee(),

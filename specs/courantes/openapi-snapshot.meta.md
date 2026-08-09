@@ -4,6 +4,10 @@ Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console 
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P4-51 volet écran (2026-08-09)** : `Coach.maxDaysOverrideConfirmed` **disparaît** du schéma
+  (décision fondateur : un drapeau qui traversait tout le pipeline et n'était lu par personne).
+  Paths inchangés (125) ; le schéma `Coach*` perd le champ. `CoachInput.maxDaysOverride` gagne
+  ses bornes `Range(0,6)` — **0 = retirer** (le PUT partiel rend null inutilisable pour ça).
 - **P4-47 (2026-08-09)** : **107 → 125 paths**. Dix-huit routes `#[Route]` custom étaient
   **invisibles** du contrat — elles portaient pourtant des gestes centraux : valider un
   planning, régénérer, réordonner les équipes, approuver une adhésion, réinitialiser la
