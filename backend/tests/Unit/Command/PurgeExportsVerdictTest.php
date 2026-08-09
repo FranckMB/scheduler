@@ -67,6 +67,24 @@ final class PurgeExportsVerdictTest extends TestCase
         ), 'un export épinglé ne part jamais : ni vieux, ni orphelin');
     }
 
+    /**
+     * Semgrep signale tout `unlink()` à chemin non littéral, et il a raison de le faire.
+     * L'alerte est ici un faux positif — mais on ne le déclare pas sur parole : le motif
+     * lui-même refuse les séparateurs, et c'est ce que ce test épingle. Un `.+` aurait
+     * laissé passer `../../etc/passwd.pdf`, et le `nosemgrep` posé à côté serait devenu un
+     * mensonge signé.
+     */
+    public function testANameCarryingATraversalIsNotEvenARender(): void
+    {
+        self::assertNull(PurgeExportsCommand::verdictFor(
+            'schedule-' . self::GONE . '-../../etc/passwd.pdf',
+            [],
+            [],
+            0,
+            self::CUTOFF,
+        ), 'un nom porteur de traversée ne doit même pas être reconnu comme un rendu');
+    }
+
     public function testANonRenderFileIsLeftAlone(): void
     {
         self::assertNull(PurgeExportsCommand::verdictFor('.gitignore', [], [], 0, self::CUTOFF));

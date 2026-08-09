@@ -52,7 +52,13 @@ final class PurgeExportsCommand extends Command
     /** `schedule-{uuid}-{scope}.{ext}` — le nom EST la seule jointure entre le fichier et sa ligne. */
     private const string PUBLIC_PREFIX = '/exports';
 
-    private const string RENDER_PATTERN = '/^schedule-([0-9a-f-]{36})-.+\.(pdf|png)$/i';
+    /**
+     * `schedule-{uuid}-{scope}.{ext}` — le nom EST la seule jointure entre le fichier et sa
+     * ligne. Le scope vaut `all` ou les 8 premiers caractères d'un uuid de gymnase
+     * (`PdfGenerator`), d'où la classe volontairement étroite : **ni `/` ni `.`** ne peuvent
+     * entrer dans un nom accepté. Un `.+` aurait laissé passer `../../etc/passwd.pdf`.
+     */
+    private const string RENDER_PATTERN = '/^schedule-([0-9a-f-]{36})-[a-z0-9-]+\.(pdf|png)$/i';
 
     public function __construct(
         private readonly ManagerRegistry $managerRegistry,
@@ -152,7 +158,7 @@ final class PurgeExportsCommand extends Command
             'orphan' === $verdict ? ++$orphans : ++$expired;
             $io->writeln(\sprintf('  %s %s', $dryRun ? '[dry-run]' : 'supprimé', $name));
             if (!$dryRun) {
-                @unlink($directory . '/' . $name);
+                $this->deleteInside($directory, $name);
             }
         }
 
@@ -173,5 +179,32 @@ final class PurgeExportsCommand extends Command
         $raw = $input->getOption('days');
 
         return \is_string($raw) && ctype_digit($raw) && (int) $raw > 0 ? (int) $raw : self::RETENTION_DAYS;
+    }
+
+    /**
+     * Supprime un rendu, en PROUVANT d'abord qu'il est bien dans le répertoire d'exports.
+     *
+     * ⚑ Semgrep signale tout `unlink()` dont le chemin n'est pas littéral
+     * (`php.lang.security.unlink-use`), et il a raison de le faire : une suppression pilotée
+     * par une chaîne est le vecteur classique de traversée. Ici l'alerte est un FAUX POSITIF,
+     * mais on ne le déclare pas sur parole — trois bornes le rendent vrai :
+     *
+     *  1. `$name` vient de `scandir()`, qui rend des entrées NUES : jamais de séparateur ;
+     *  2. il a passé `RENDER_PATTERN`, dont la classe de caractères exclut `/` et `.` ;
+     *  3. et surtout, on RÉSOUT le chemin et on vérifie qu'il reste sous le répertoire —
+     *     seule borne qui tienne encore si quelqu'un relâche le motif un jour.
+     *
+     * La règle du projet est de ne jamais élargir `.semgrepignore` pour faire passer la CI :
+     * l'exemption est locale, nommée, et adossée à un contrôle réel.
+     */
+    private function deleteInside(string $directory, string $name): void
+    {
+        $base = realpath($directory);
+        $target = realpath($directory . '/' . basename($name));
+        if (false === $base || false === $target || !str_starts_with($target, $base . '/')) {
+            return;
+        }
+
+        @unlink($target); // nosemgrep: php.lang.security.unlink-use.unlink-use
     }
 }
