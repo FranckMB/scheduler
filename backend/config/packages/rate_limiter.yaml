@@ -44,6 +44,26 @@ framework:
         # par appel — l'usage légitime est ponctuel (quelques exports par an).
         # 10/h par utilisateur = large pour l'usage réel, borne réelle contre
         # un JWT management qui pomperait le workspace en boucle.
+        # P4-45 — les deux caps MÉTIER, comptés PAR CLUB (ClubQuotaSubscriber), là où le
+        # limiteur `api` ci-dessus compte par UTILISATEUR. Les deux bornent des choses
+        # différentes : `api` protège d'un client emballé, ceux-ci d'une ressource partagée
+        # et coûteuse. Un club ne doit pas obtenir trois fois le budget du solveur parce
+        # qu'il a trois gestionnaires — c'est le club qui consomme, pas la personne.
+        #
+        # 5/h couvre les TROIS routes qui déclenchent un solve (generate, regenerate,
+        # regenerate-from) : ne capper que la première aurait laissé le work-loop, donc
+        # l'usage réel, hors de la borne. Un solve tient jusqu'à 600 s de CPU ; 5/h laisse
+        # largement de quoi ajuster un planning dans une session de travail.
+        schedule_generation:
+            policy: 'sliding_window'
+            limit: 5
+            interval: '1 hour'
+        # 10/h : le rendu PDF mobilise un worker Puppeteer. L'XLSX n'est PAS capté (généré
+        # en mémoire, sans worker) — le limiteur global suffit à en borner un abus.
+        schedule_pdf_export:
+            policy: 'sliding_window'
+            limit: 10
+            interval: '1 hour'
         rgpd_export:
             policy: 'sliding_window'
             limit: 10
@@ -57,6 +77,17 @@ framework:
 when@dev:
     framework:
         rate_limiter:
+            # La suite e2e enchaîne générations et exports sur un même club : les caps de
+            # PROD y sont hors sujet. Ils restent des bornes réelles (un dev box exposé ne
+            # devient pas une ferme à solves), mais assez larges pour une suite complète.
+            schedule_generation:
+                policy: 'sliding_window'
+                limit: 200
+                interval: '1 hour'
+            schedule_pdf_export:
+                policy: 'sliding_window'
+                limit: 200
+                interval: '1 hour'
             auth_register:
                 policy: 'sliding_window'
                 limit: 100
