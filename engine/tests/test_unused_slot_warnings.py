@@ -15,33 +15,35 @@ from app.schemas.input_schema import ScheduleInputSchema
 
 
 def _build_input() -> ScheduleInputSchema:
-    return ScheduleInputSchema.model_validate({
-        "clubId": "club-unused-slot",
-        "seasonId": "season-unused-slot",
-        "teams": [
-            {
-                "id": "team-1",
-                "sportCategoryId": "sc-1",
-                "priorityTierId": 3,
-                "name": "Team 1",
-                "sessionsPerWeek": 1,
-                "isActive": True,
-            },
-        ],
-        "venues": [
-            {
-                "id": "venue-1",
-                "name": "Gymnase Test",
-                "isActive": True,
-                "trainingSlots": [
-                    {"dayOfWeek": 1, "startTime": "17:30", "durationMinutes": 90, "capacity": 1},
-                    {"dayOfWeek": 1, "startTime": "19:00", "durationMinutes": 90, "capacity": 1},
-                    {"dayOfWeek": 1, "startTime": "20:30", "durationMinutes": 90, "capacity": 1},
-                ],
-            },
-        ],
-        "slotTemplates": [],
-    })
+    return ScheduleInputSchema.model_validate(
+        {
+            "clubId": "club-unused-slot",
+            "seasonId": "season-unused-slot",
+            "teams": [
+                {
+                    "id": "team-1",
+                    "sportCategoryId": "sc-1",
+                    "priorityTierId": 3,
+                    "name": "Team 1",
+                    "sessionsPerWeek": 1,
+                    "isActive": True,
+                },
+            ],
+            "venues": [
+                {
+                    "id": "venue-1",
+                    "name": "Gymnase Test",
+                    "isActive": True,
+                    "trainingSlots": [
+                        {"dayOfWeek": 1, "startTime": "17:30", "durationMinutes": 90, "capacity": 1},
+                        {"dayOfWeek": 1, "startTime": "19:00", "durationMinutes": 90, "capacity": 1},
+                        {"dayOfWeek": 1, "startTime": "20:30", "durationMinutes": 90, "capacity": 1},
+                    ],
+                },
+            ],
+            "slotTemplates": [],
+        }
+    )
 
 
 def test_unused_slot_warnings_emitted_for_empty_slots() -> None:
@@ -54,14 +56,11 @@ def test_unused_slot_warnings_emitted_for_empty_slots() -> None:
 
     # One team placed in one slot -> two slots remain unused.
     assert len(unused_diags) == 2, (
-        f"Expected 2 unused_slot diagnostics, got {len(unused_diags)}: "
-        f"{[d.model_dump() for d in unused_diags]}"
+        f"Expected 2 unused_slot diagnostics, got {len(unused_diags)}: {[d.model_dump() for d in unused_diags]}"
     )
 
     for diag in unused_diags:
-        assert diag.severity == "WARNING", (
-            f"Expected WARNING severity, got {diag.severity} for {diag.message}"
-        )
+        assert diag.severity == "WARNING", f"Expected WARNING severity, got {diag.severity} for {diag.message}"
         assert diag.venue_id == "venue-1", f"Expected venueId=venue-1, got {diag.venue_id}"
         assert diag.team_id is None, f"Expected teamId=None, got {diag.team_id}"
         assert diag.coach_id is None, f"Expected coachId=None, got {diag.coach_id}"

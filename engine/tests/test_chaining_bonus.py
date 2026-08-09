@@ -95,26 +95,50 @@ class TestChainingBonusIntegration:
 
         # Slot 1: 18:00-19:30 (start=1080, end=1170)
         slot1_coach_S = _assignment(
-            model, "slot1_coach_S",
-            team_id="team-S", slot_id="1:18:00", venue_id="venue-1",
-            coach_id="coach-S", priority_tier="S", start=1080, end=1170,
+            model,
+            "slot1_coach_S",
+            team_id="team-S",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-S",
+            priority_tier="S",
+            start=1080,
+            end=1170,
         )
         slot1_coach_D = _assignment(
-            model, "slot1_coach_D",
-            team_id="team-D", slot_id="1:18:00", venue_id="venue-1",
-            coach_id="coach-D", priority_tier="D", start=1080, end=1170,
+            model,
+            "slot1_coach_D",
+            team_id="team-D",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-D",
+            priority_tier="D",
+            start=1080,
+            end=1170,
         )
 
         # Slot 2: 19:30-21:00 (start=1170, end=1260)
         slot2_coach_S = _assignment(
-            model, "slot2_coach_S",
-            team_id="team-S2", slot_id="1:19:30", venue_id="venue-1",
-            coach_id="coach-S", priority_tier="S", start=1170, end=1260,
+            model,
+            "slot2_coach_S",
+            team_id="team-S2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-S",
+            priority_tier="S",
+            start=1170,
+            end=1260,
         )
         slot2_coach_D = _assignment(
-            model, "slot2_coach_D",
-            team_id="team-D2", slot_id="1:19:30", venue_id="venue-1",
-            coach_id="coach-D", priority_tier="D", start=1170, end=1260,
+            model,
+            "slot2_coach_D",
+            team_id="team-D2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-D",
+            priority_tier="D",
+            start=1170,
+            end=1260,
         )
 
         assignments = [slot1_coach_S, slot1_coach_D, slot2_coach_S, slot2_coach_D]
@@ -124,12 +148,16 @@ class TestChainingBonusIntegration:
         model.Add(slot2_coach_S.var + slot2_coach_D.var <= 1)
 
         # Objective with chaining bonus
-        add_level_2_objective(model, assignments, teams=[
-            {"id": "team-S", "priority_tier": "S"},
-            {"id": "team-S2", "priority_tier": "S"},
-            {"id": "team-D", "priority_tier": "D"},
-            {"id": "team-D2", "priority_tier": "D"},
-        ])
+        add_level_2_objective(
+            model,
+            assignments,
+            teams=[
+                {"id": "team-S", "priority_tier": "S"},
+                {"id": "team-S2", "priority_tier": "S"},
+                {"id": "team-D", "priority_tier": "D"},
+                {"id": "team-D2", "priority_tier": "D"},
+            ],
+        )
 
         status, solver = _solve(model)
         assert status == cp_model.OPTIMAL, f"Expected OPTIMAL, got {status}"
@@ -147,21 +175,37 @@ class TestChainingBonusIntegration:
 
         # Same coach, same time, different venues — no chaining possible
         slot_venue1 = _assignment(
-            model, "slot_venue1",
-            team_id="team-1", slot_id="1:18:00", venue_id="venue-1",
-            coach_id="coach-1", priority_tier="S", start=1080, end=1170,
+            model,
+            "slot_venue1",
+            team_id="team-1",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            priority_tier="S",
+            start=1080,
+            end=1170,
         )
         slot_venue2 = _assignment(
-            model, "slot_venue2",
-            team_id="team-2", slot_id="1:18:00", venue_id="venue-2",
-            coach_id="coach-1", priority_tier="A", start=1080, end=1170,
+            model,
+            "slot_venue2",
+            team_id="team-2",
+            slot_id="1:18:00",
+            venue_id="venue-2",
+            coach_id="coach-1",
+            priority_tier="A",
+            start=1080,
+            end=1170,
         )
 
         assignments = [slot_venue1, slot_venue2]
-        add_level_2_objective(model, assignments, teams=[
-            {"id": "team-1", "priority_tier": "S"},
-            {"id": "team-2", "priority_tier": "A"},
-        ])
+        add_level_2_objective(
+            model,
+            assignments,
+            teams=[
+                {"id": "team-1", "priority_tier": "S"},
+                {"id": "team-2", "priority_tier": "A"},
+            ],
+        )
 
         status, solver = _solve(model)
         assert status == cp_model.OPTIMAL, f"Expected OPTIMAL, got {status}"
@@ -178,22 +222,38 @@ class TestChainingBonusIntegration:
 
         # Slot 1: 18:00-19:30 (start=1080, end=1170)
         slot1 = _assignment(
-            model, "slot1",
-            team_id="team-1", slot_id="1:18:00", venue_id="venue-1",
-            coach_id="coach-1", priority_tier="S", start=1080, end=1170,
+            model,
+            "slot1",
+            team_id="team-1",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            priority_tier="S",
+            start=1080,
+            end=1170,
         )
         # Slot 2: 20:00-21:30 (start=1200, end=1290) — NOT consecutive (gap of 30 min)
         slot2 = _assignment(
-            model, "slot2",
-            team_id="team-2", slot_id="1:20:00", venue_id="venue-1",
-            coach_id="coach-1", priority_tier="A", start=1200, end=1290,
+            model,
+            "slot2",
+            team_id="team-2",
+            slot_id="1:20:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            priority_tier="A",
+            start=1200,
+            end=1290,
         )
 
         assignments = [slot1, slot2]
-        add_level_2_objective(model, assignments, teams=[
-            {"id": "team-1", "priority_tier": "S"},
-            {"id": "team-2", "priority_tier": "A"},
-        ])
+        add_level_2_objective(
+            model,
+            assignments,
+            teams=[
+                {"id": "team-1", "priority_tier": "S"},
+                {"id": "team-2", "priority_tier": "A"},
+            ],
+        )
 
         status, solver = _solve(model)
         assert status == cp_model.OPTIMAL, f"Expected OPTIMAL, got {status}"
@@ -207,18 +267,31 @@ class TestChainingBonusIntegration:
 
         # Two consecutive slots in same venue with same coach
         slot1 = _assignment(
-            model, "slot1",
-            team_id="team-1", slot_id="1:18:00", venue_id="venue-1",
-            coach_id="coach-1", priority_tier="A", start=1080, end=1170,
+            model,
+            "slot1",
+            team_id="team-1",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            priority_tier="A",
+            start=1080,
+            end=1170,
         )
         slot2 = _assignment(
-            model, "slot2",
-            team_id="team-2", slot_id="1:19:30", venue_id="venue-1",
-            coach_id="coach-1", priority_tier="B", start=1170, end=1260,
+            model,
+            "slot2",
+            team_id="team-2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            priority_tier="B",
+            start=1170,
+            end=1260,
         )
 
         terms = add_chaining_bonus(
-            model, [slot1, slot2],
+            model,
+            [slot1, slot2],
             teams=[{"id": "team-1", "priority_tier": "A"}, {"id": "team-2", "priority_tier": "B"}],
         )
         assert len(terms) == 1, f"Expected 1 chaining term, got {len(terms)}"
@@ -235,26 +308,51 @@ class TestChainingBonusIntegration:
         model = cp_model.CpModel()
 
         slot1 = _assignment(
-            model, "slot1", team_id="team-1", slot_id="1:18:00", venue_id="venue-1",
-            coach_id="coach-1", priority_tier="A", start=1080, end=1170,
+            model,
+            "slot1",
+            team_id="team-1",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            priority_tier="A",
+            start=1080,
+            end=1170,
         )
         slot2_chain = _assignment(
-            model, "slot2_chain", team_id="team-2", slot_id="1:19:30", venue_id="venue-1",
-            coach_id="coach-1", priority_tier="A", start=1170, end=1260,
+            model,
+            "slot2_chain",
+            team_id="team-2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            priority_tier="A",
+            start=1170,
+            end=1260,
         )
         slot2_nochain = _assignment(
-            model, "slot2_nochain", team_id="team-2", slot_id="1:19:30", venue_id="venue-1",
-            coach_id="coach-2", priority_tier="A", start=1170, end=1260,
+            model,
+            "slot2_nochain",
+            team_id="team-2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-2",
+            priority_tier="A",
+            start=1170,
+            end=1260,
         )
 
         # team-2 gets exactly one of the two coach options; team-1 always placed.
         model.Add(slot2_chain.var + slot2_nochain.var == 1)
         model.Add(slot1.var == 1)
 
-        add_level_2_objective(model, [slot1, slot2_chain, slot2_nochain], teams=[
-            {"id": "team-1", "priority_tier": "A"},
-            {"id": "team-2", "priority_tier": "A"},
-        ])
+        add_level_2_objective(
+            model,
+            [slot1, slot2_chain, slot2_nochain],
+            teams=[
+                {"id": "team-1", "priority_tier": "A"},
+                {"id": "team-2", "priority_tier": "A"},
+            ],
+        )
 
         status, solver = _solve(model)
         assert status == cp_model.OPTIMAL, f"Expected OPTIMAL, got {status}"
@@ -273,26 +371,50 @@ class TestChainingBonusIntegration:
 
         # Slot 1: 18:00-19:30
         slot1_S = _assignment(
-            model, "slot1_S",
-            team_id="team-S", slot_id="1:18:00", venue_id="venue-1",
-            coach_id="coach-S", priority_tier="S", start=1080, end=1170,
+            model,
+            "slot1_S",
+            team_id="team-S",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-S",
+            priority_tier="S",
+            start=1080,
+            end=1170,
         )
         slot1_C = _assignment(
-            model, "slot1_C",
-            team_id="team-C", slot_id="1:18:00", venue_id="venue-1",
-            coach_id="coach-C", priority_tier="C", start=1080, end=1170,
+            model,
+            "slot1_C",
+            team_id="team-C",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-C",
+            priority_tier="C",
+            start=1080,
+            end=1170,
         )
 
         # Slot 2: 19:30-21:00
         slot2_S = _assignment(
-            model, "slot2_S",
-            team_id="team-S2", slot_id="1:19:30", venue_id="venue-1",
-            coach_id="coach-S", priority_tier="S", start=1170, end=1260,
+            model,
+            "slot2_S",
+            team_id="team-S2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-S",
+            priority_tier="S",
+            start=1170,
+            end=1260,
         )
         slot2_C = _assignment(
-            model, "slot2_C",
-            team_id="team-C2", slot_id="1:19:30", venue_id="venue-1",
-            coach_id="coach-C", priority_tier="C", start=1170, end=1260,
+            model,
+            "slot2_C",
+            team_id="team-C2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-C",
+            priority_tier="C",
+            start=1170,
+            end=1260,
         )
 
         assignments = [slot1_S, slot1_C, slot2_S, slot2_C]
@@ -301,12 +423,16 @@ class TestChainingBonusIntegration:
         model.Add(slot1_S.var + slot1_C.var <= 1)
         model.Add(slot2_S.var + slot2_C.var <= 1)
 
-        add_level_2_objective(model, assignments, teams=[
-            {"id": "team-S", "priority_tier": "S"},
-            {"id": "team-S2", "priority_tier": "S"},
-            {"id": "team-C", "priority_tier": "C"},
-            {"id": "team-C2", "priority_tier": "C"},
-        ])
+        add_level_2_objective(
+            model,
+            assignments,
+            teams=[
+                {"id": "team-S", "priority_tier": "S"},
+                {"id": "team-S2", "priority_tier": "S"},
+                {"id": "team-C", "priority_tier": "C"},
+                {"id": "team-C2", "priority_tier": "C"},
+            ],
+        )
 
         status, solver = _solve(model)
         assert status == cp_model.OPTIMAL, f"Expected OPTIMAL, got {status}"
@@ -324,13 +450,20 @@ class TestChainingBonusIntegration:
         """A single assignment yields no terms (no consecutive pair possible)."""
         model = cp_model.CpModel()
         slot = _assignment(
-            model, "slot1",
-            team_id="team-1", slot_id="1:18:00", venue_id="venue-1",
-            coach_id="coach-1", priority_tier="A", start=1080, end=1170,
+            model,
+            "slot1",
+            team_id="team-1",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            priority_tier="A",
+            start=1080,
+            end=1170,
         )
         assert add_chaining_bonus(model, [slot], teams=[{"id": "team-1", "priority_tier": "A"}]) == []
 
 
 if __name__ == "__main__":
     import unittest
+
     unittest.main()

@@ -10,8 +10,12 @@ from tests.support import make_payload, make_venue, solve_payload, team_constrai
 
 def _team(team_id: str, *, sessions: int = 1, match_day: int | None = None) -> dict[str, Any]:
     team: dict[str, Any] = {
-        "id": team_id, "sportCategoryId": "cat", "priorityTierId": 3,
-        "name": team_id, "sessionsPerWeek": sessions, "isActive": True,
+        "id": team_id,
+        "sportCategoryId": "cat",
+        "priorityTierId": 3,
+        "name": team_id,
+        "sessionsPerWeek": sessions,
+        "isActive": True,
     }
     if match_day is not None:
         team["matchDay"] = match_day
@@ -28,9 +32,12 @@ def _starts(result: dict[str, Any], team_id: str) -> set[str]:
 
 def test_score_formula_version_is_v7() -> None:
     assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V7"
-    result = solve_payload(make_payload(
-        teams=[_team("t")], venues=[make_venue("v", [(2, "18:00")])],
-    ))
+    result = solve_payload(
+        make_payload(
+            teams=[_team("t")],
+            venues=[make_venue("v", [(2, "18:00")])],
+        )
+    )
     assert result["metrics"]["scoreFormulaVersion"] == "T24_LEVEL_2_FIXED_WEIGHTS_V7"
 
 
@@ -63,7 +70,10 @@ def test_preferred_time_window_chosen_over_equal_slot() -> None:
         venues=[make_venue("v", [(2, "17:00"), (2, "20:00")])],
         constraints=[
             team_constraint(
-                constraint_id="c", team_id="t", family="TIME", rule_type="PREFERRED",
+                constraint_id="c",
+                team_id="t",
+                family="TIME",
+                rule_type="PREFERRED",
                 config={"minStartTime": "19:00"},
             )
         ],
@@ -82,7 +92,10 @@ def test_malformed_preferred_time_does_not_crash() -> None:
         venues=[make_venue("v", [(2, "18:00")])],
         constraints=[
             team_constraint(
-                constraint_id="c", team_id="t", family="TIME", rule_type="PREFERRED",
+                constraint_id="c",
+                team_id="t",
+                family="TIME",
+                rule_type="PREFERRED",
                 config={"minStartTime": ""},
             )
         ],
@@ -99,11 +112,17 @@ def test_preferred_time_never_beats_hard_constraint() -> None:
         venues=[make_venue("v", [(2, "17:00"), (2, "20:00")])],
         constraints=[
             team_constraint(
-                constraint_id="hard", team_id="t", family="TIME", rule_type="HARD",
+                constraint_id="hard",
+                team_id="t",
+                family="TIME",
+                rule_type="HARD",
                 config={"maxStartTime": "18:00"},
             ),
             team_constraint(
-                constraint_id="pref", team_id="t", family="TIME", rule_type="PREFERRED",
+                constraint_id="pref",
+                team_id="t",
+                family="TIME",
+                rule_type="PREFERRED",
                 config={"minStartTime": "19:00"},
             ),
         ],

@@ -89,7 +89,9 @@ def scalar_id(value: Any) -> Any:
 
 
 def assignment_var(assignment: AssignmentLike, *, skip_none: bool = False) -> BoolVarLike:
-    variable = get_field(assignment, "var", "variable", "bool_var", "literal", "x", default=MISSING, skip_none=skip_none)
+    variable = get_field(
+        assignment, "var", "variable", "bool_var", "literal", "x", default=MISSING, skip_none=skip_none
+    )
     if variable is MISSING:
         raise ValueError("Assignment is missing a CP-SAT BoolVar field named var/variable/bool_var/literal/x")
     return variable

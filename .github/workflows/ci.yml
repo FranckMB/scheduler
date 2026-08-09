@@ -377,6 +377,13 @@ jobs:
       - name: Run ruff
         run: docker compose run --rm engine ruff check .
 
+      # P4-64 — le formatage est GARDÉ, pas seulement disponible. Sans ce pas, `ruff check`
+      # (lint) passait sur un arbre dont 41 fichiers sur 70 n'étaient pas au format : la
+      # cible `make format` existait, personne ne pouvait la lancer sans churner 41 fichiers
+      # étrangers à son travail, donc personne ne la lançait, donc la dérive grossissait.
+      - name: Check ruff formatting
+        run: docker compose run --rm engine ruff format --check .
+
       - name: Run mypy
         run: docker compose run --rm engine mypy
 

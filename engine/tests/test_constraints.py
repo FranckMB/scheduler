@@ -79,9 +79,7 @@ class LevelOneHardConstraintsTest(unittest.TestCase):
 
     def test_coach_player_overlap_is_impossible(self):
         model = cp_model.CpModel()
-        coaching = self.assignment(
-            model, "coaching", team_id="team-1", venue_id="venue-1", coach_id="person-1"
-        )
+        coaching = self.assignment(model, "coaching", team_id="team-1", venue_id="venue-1", coach_id="person-1")
         playing = self.assignment(
             model,
             "playing",
@@ -199,16 +197,10 @@ class LevelOneHardConstraintsTest(unittest.TestCase):
 
     def test_other_venues_are_forced_to_zero_when_venue_is_forced(self):
         model = cp_model.CpModel()
-        wanted = self.assignment(
-            model, "wanted", team_id="team-1", session_id="session-1", venue_id="venue-1"
-        )
-        other = self.assignment(
-            model, "other", team_id="team-1", session_id="session-1", venue_id="venue-2"
-        )
+        wanted = self.assignment(model, "wanted", team_id="team-1", session_id="session-1", venue_id="venue-1")
+        other = self.assignment(model, "other", team_id="team-1", session_id="session-1", venue_id="venue-2")
 
-        stats = add_level_1_hard_constraints(
-            model, [wanted, other], forced_venues={("team-1", "session-1"): "venue-1"}
-        )
+        stats = add_level_1_hard_constraints(model, [wanted, other], forced_venues={("team-1", "session-1"): "venue-1"})
         model.Add(other.var == 1)
 
         self.assertEqual(stats.forced_venues, 1)
@@ -235,8 +227,14 @@ class ParseV2ConstraintsTest(unittest.TestCase):
         # LOCK on a TIME/DAY rule is enforced as HARD (routed to time_windows).
         # The old fixed_slots UUID path was dead (never matched) and is removed.
         constraints = [
-            {"id": "c1", "isActive": True, "ruleType": "LOCK", "family": "DAY",
-             "scopeTargetId": "team-1", "config": {"forbiddenDays": [2]}},
+            {
+                "id": "c1",
+                "isActive": True,
+                "ruleType": "LOCK",
+                "family": "DAY",
+                "scopeTargetId": "team-1",
+                "config": {"forbiddenDays": [2]},
+            },
         ]
         result = parse_v2_constraints(constraints)
         assert result["fixed_slots"] == []

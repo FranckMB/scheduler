@@ -47,16 +47,12 @@ def test_hard_only_team_no_penalty() -> None:
 
     assert result.status == "completed", f"expected completed, got {result.status}"
     assert result.score is not None, "score must be set for completed status"
-    assert result.score >= 0, (
-        f"score should be >= 0 (HARD-only team not penalized), got {result.score}"
-    )
+    assert result.score >= 0, f"score should be >= 0 (HARD-only team not penalized), got {result.score}"
 
 
 def test_score_formula_version_is_v7() -> None:
     """Guard: version bumped to V5 when preferred_time was added (E-feat)."""
-    assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V7", (
-        f"expected V5, got {SCORE_FORMULA_VERSION!r}"
-    )
+    assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V7", f"expected V5, got {SCORE_FORMULA_VERSION!r}"
 
 
 def test_unplaced_penalty_unchanged() -> None:

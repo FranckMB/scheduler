@@ -55,13 +55,15 @@ def _run_pipeline(
     assignments = []
     for slot_key, var in model.x.items():
         team_id, venue_id, day_of_week, slot_start = slot_key
-        assignments.append({
-            "var": var,
-            "team_id": team_id,
-            "venue_id": venue_id,
-            "slot_id": f"{day_of_week}:{slot_start}",
-            "coach_id": team_coaches.get(team_id),
-        })
+        assignments.append(
+            {
+                "var": var,
+                "team_id": team_id,
+                "venue_id": venue_id,
+                "slot_id": f"{day_of_week}:{slot_start}",
+                "coach_id": team_coaches.get(team_id),
+            }
+        )
 
     add_level_1_hard_constraints(
         model,
@@ -98,7 +100,9 @@ def _team_age_min_by_id(data: dict[str, Any]) -> dict[str, int | None]:
 
 
 def _hard_locked_team_ids(data: dict[str, Any]) -> set[str]:
-    return {tpl["teamId"] for tpl in data.get("slotTemplates", []) if tpl.get("teamId") and tpl.get("lockLevel") == "HARD"}
+    return {
+        tpl["teamId"] for tpl in data.get("slotTemplates", []) if tpl.get("teamId") and tpl.get("lockLevel") == "HARD"
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -436,10 +440,31 @@ class TestInvariants:
             "seasonId": "season-2024",
             "version": "2.0",
             "solverSeed": 42,
-            "venues": [{"id": "gym-a", "name": "Gym A", "isActive": True, "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 15, "capacity": 1}]}],
+            "venues": [
+                {
+                    "id": "gym-a",
+                    "name": "Gym A",
+                    "isActive": True,
+                    "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 15, "capacity": 1}],
+                }
+            ],
             "teams": [
-                {"id": "team-s", "sportCategoryId": "sc-1", "priorityTierId": 1, "name": "Team S", "sessionsPerWeek": 1, "isActive": True},
-                {"id": "team-d", "sportCategoryId": "sc-1", "priorityTierId": 5, "name": "Team D", "sessionsPerWeek": 0, "isActive": True},
+                {
+                    "id": "team-s",
+                    "sportCategoryId": "sc-1",
+                    "priorityTierId": 1,
+                    "name": "Team S",
+                    "sessionsPerWeek": 1,
+                    "isActive": True,
+                },
+                {
+                    "id": "team-d",
+                    "sportCategoryId": "sc-1",
+                    "priorityTierId": 5,
+                    "name": "Team D",
+                    "sessionsPerWeek": 0,
+                    "isActive": True,
+                },
             ],
             "coaches": [],
             "slotTemplates": [],

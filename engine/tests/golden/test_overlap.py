@@ -88,8 +88,7 @@ def _count_overlaps(intervals: dict[str, list[tuple[int, int, str]]]) -> list[st
                     b_start, b_end = day_slots[j]
                     if _intervals_overlap(a_start, a_end, b_start, b_end):
                         overlaps.append(
-                            f"person={person_id} day={day} "
-                            f"slot_A=({a_start},{a_end}) slot_B=({b_start},{b_end})"
+                            f"person={person_id} day={day} slot_A=({a_start},{a_end}) slot_B=({b_start},{b_end})"
                         )
     return overlaps
 
@@ -114,8 +113,7 @@ class TestOverlapConstraints:
         overlaps = _count_overlaps(person_intervals)
 
         assert overlaps == [], (
-            f"Expected 0 overlaps for Nicolas, got {len(overlaps)}: {overlaps}. "
-            f"Person intervals: {person_intervals}"
+            f"Expected 0 overlaps for Nicolas, got {len(overlaps)}: {overlaps}. Person intervals: {person_intervals}"
         )
 
     def test_anna_no_overlap(self) -> None:
@@ -136,6 +134,5 @@ class TestOverlapConstraints:
         overlaps = _count_overlaps(person_intervals)
 
         assert overlaps == [], (
-            f"Expected 0 overlaps for Anna, got {len(overlaps)}: {overlaps}. "
-            f"Person intervals: {person_intervals}"
+            f"Expected 0 overlaps for Anna, got {len(overlaps)}: {overlaps}. Person intervals: {person_intervals}"
         )

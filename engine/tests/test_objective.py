@@ -102,9 +102,7 @@ class LevelTwoObjectiveTest(unittest.TestCase):
         )
         status, solver = self.solve(model)
 
-        expected_bonus_score = EXPECTED_WEIGHTS["A"] + sum(
-            EXPECTED_WEIGHTS[name] for name in BONUS_WEIGHT_NAMES
-        )
+        expected_bonus_score = EXPECTED_WEIGHTS["A"] + sum(EXPECTED_WEIGHTS[name] for name in BONUS_WEIGHT_NAMES)
         self.assertEqual(cp_model.OPTIMAL, status)
         self.assertEqual(EXPECTED_WEIGHTS["A"], stats.coefficient_by_assignment["plain"])
         self.assertEqual(expected_bonus_score, stats.coefficient_by_assignment["with-bonuses"])

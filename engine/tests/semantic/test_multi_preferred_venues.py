@@ -24,8 +24,11 @@ def _venues_of(result: dict[str, Any], team_id: str) -> set[str]:
 
 def _preferred(constraint_id: str, team_id: str, venue_id: str) -> dict[str, Any]:
     return team_constraint(
-        constraint_id=constraint_id, team_id=team_id, family="FACILITY",
-        rule_type="PREFERRED", config={"preferredVenueId": venue_id},
+        constraint_id=constraint_id,
+        team_id=team_id,
+        family="FACILITY",
+        rule_type="PREFERRED",
+        config={"preferredVenueId": venue_id},
     )
 
 
@@ -43,10 +46,12 @@ def test_two_preferred_venues_accumulate_into_a_set() -> None:
 def test_conflicting_hard_venues_still_warn() -> None:
     # Témoin : le last-wins + warning reste la sémantique des règles DURES.
     hard = [
-        team_constraint(constraint_id="c1", team_id="t1", family="FACILITY",
-                        rule_type="HARD", config={"preferredVenueId": "v1"}),
-        team_constraint(constraint_id="c2", team_id="t1", family="FACILITY",
-                        rule_type="HARD", config={"preferredVenueId": "v2"}),
+        team_constraint(
+            constraint_id="c1", team_id="t1", family="FACILITY", rule_type="HARD", config={"preferredVenueId": "v1"}
+        ),
+        team_constraint(
+            constraint_id="c2", team_id="t1", family="FACILITY", rule_type="HARD", config={"preferredVenueId": "v2"}
+        ),
     ]
 
     parsed = parse_v2_constraints(hard)
@@ -75,6 +80,6 @@ def test_sessions_land_in_the_preferred_set() -> None:
     venues = _venues_of(result, "t1")
     assert venues == {"v1", "v2"}, f"les séances doivent tomber dans l'ensemble préféré, obtenu : {venues}"
     # Aucun INFO de remplacement sur des préférences cumulées.
-    assert not any(
-        "la dernière remplace" in d["message"] for d in result.get("diagnostics") or []
-    ), "deux PREFERRED ne doivent plus émettre le diagnostic de remplacement"
+    assert not any("la dernière remplace" in d["message"] for d in result.get("diagnostics") or []), (
+        "deux PREFERRED ne doivent plus émettre le diagnostic de remplacement"
+    )

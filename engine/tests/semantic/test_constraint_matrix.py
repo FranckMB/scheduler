@@ -201,19 +201,32 @@ def test_not_offered_cells_are_locked_by_the_ui_test(cell: MatrixCell) -> None:
 
 # --- ENG-13 (dedicated): multiple coach constraints are UNIONed ----------------
 
+
 def test_multiple_coach_constraints_union_not_last_wins() -> None:
     venues = [make_venue("v", [(1, "18:00"), (3, "18:00"), (5, "18:00")])]
     constraints = [
         team_coach("tc", "t", "coach-1"),
         {
-            "id": "cu-1", "scope": "COACH", "scopeTargetId": "coach-1",
-            "family": "COACH_AVAILABILITY", "ruleType": "HARD", "name": "indispo lundi",
-            "config": {"coachId": "coach-1", "unavailableDays": [1]}, "sortOrder": 0, "isActive": True,
+            "id": "cu-1",
+            "scope": "COACH",
+            "scopeTargetId": "coach-1",
+            "family": "COACH_AVAILABILITY",
+            "ruleType": "HARD",
+            "name": "indispo lundi",
+            "config": {"coachId": "coach-1", "unavailableDays": [1]},
+            "sortOrder": 0,
+            "isActive": True,
         },
         {
-            "id": "cu-2", "scope": "COACH", "scopeTargetId": "coach-1",
-            "family": "COACH_AVAILABILITY", "ruleType": "HARD", "name": "indispo mercredi",
-            "config": {"coachId": "coach-1", "unavailableDays": [3]}, "sortOrder": 0, "isActive": True,
+            "id": "cu-2",
+            "scope": "COACH",
+            "scopeTargetId": "coach-1",
+            "family": "COACH_AVAILABILITY",
+            "ruleType": "HARD",
+            "name": "indispo mercredi",
+            "config": {"coachId": "coach-1", "unavailableDays": [3]},
+            "sortOrder": 0,
+            "isActive": True,
         },
     ]
     result = solve_payload(make_payload(teams=[_team()], venues=venues, constraints=constraints))
@@ -225,13 +238,22 @@ def test_multiple_coach_constraints_union_not_last_wins() -> None:
 
 # --- ENG-12 (dedicated): legacy BONUS rows are honored as PREFERRED ------------
 
+
 def test_legacy_bonus_facility_behaves_as_preferred() -> None:
     venues = [make_venue(GOOD_VENUE, [(1, "18:00")]), make_venue(BAD_VENUE, [(3, "18:00")])]
-    constraints = [{
-        "id": "bonus-1", "scope": "TEAM", "scopeTargetId": "t",
-        "family": "FACILITY", "ruleType": "BONUS", "name": "legacy bonus",
-        "config": {"forbiddenVenueId": BAD_VENUE}, "sortOrder": 0, "isActive": True,
-    }]
+    constraints = [
+        {
+            "id": "bonus-1",
+            "scope": "TEAM",
+            "scopeTargetId": "t",
+            "family": "FACILITY",
+            "ruleType": "BONUS",
+            "name": "legacy bonus",
+            "config": {"forbiddenVenueId": BAD_VENUE},
+            "sortOrder": 0,
+            "isActive": True,
+        }
+    ]
     result = solve_payload(make_payload(teams=[_team()], venues=venues, constraints=constraints))
 
     assert result["status"] == "completed"
@@ -241,18 +263,31 @@ def test_legacy_bonus_facility_behaves_as_preferred() -> None:
 
 # --- Review NR: two soft avoid-day rules must BOTH steer (no mutual cancel) ----
 
+
 def test_two_soft_avoid_day_rules_union_not_cancel() -> None:
     venues = [make_venue("v", [(1, "18:00"), (3, "18:00"), (5, "18:00")])]
     constraints = [
         {
-            "id": "ad-1", "scope": "TEAM", "scopeTargetId": "t",
-            "family": "DAY", "ruleType": "PREFERRED", "name": "éviter lundi",
-            "config": {"forbiddenDays": [1]}, "sortOrder": 0, "isActive": True,
+            "id": "ad-1",
+            "scope": "TEAM",
+            "scopeTargetId": "t",
+            "family": "DAY",
+            "ruleType": "PREFERRED",
+            "name": "éviter lundi",
+            "config": {"forbiddenDays": [1]},
+            "sortOrder": 0,
+            "isActive": True,
         },
         {
-            "id": "ad-2", "scope": "TEAM", "scopeTargetId": "t",
-            "family": "DAY", "ruleType": "PREFERRED", "name": "éviter mercredi",
-            "config": {"forbiddenDays": [3]}, "sortOrder": 0, "isActive": True,
+            "id": "ad-2",
+            "scope": "TEAM",
+            "scopeTargetId": "t",
+            "family": "DAY",
+            "ruleType": "PREFERRED",
+            "name": "éviter mercredi",
+            "config": {"forbiddenDays": [3]},
+            "sortOrder": 0,
+            "isActive": True,
         },
     ]
     result = solve_payload(make_payload(teams=[_team()], venues=venues, constraints=constraints))
@@ -264,19 +299,32 @@ def test_two_soft_avoid_day_rules_union_not_cancel() -> None:
 
 # --- Review NR: two availableDays whitelists INTERSECT (never block every day) -
 
+
 def test_two_available_days_whitelists_intersect_not_block_everything() -> None:
     venues = [make_venue("v", [(1, "18:00"), (2, "18:00"), (5, "18:00")])]
     constraints = [
         team_coach("tc", "t", "coach-1"),
         {
-            "id": "av-1", "scope": "COACH", "scopeTargetId": "coach-1",
-            "family": "COACH_AVAILABILITY", "ruleType": "HARD", "name": "dispo lun+mar",
-            "config": {"coachId": "coach-1", "availableDays": [1, 2]}, "sortOrder": 0, "isActive": True,
+            "id": "av-1",
+            "scope": "COACH",
+            "scopeTargetId": "coach-1",
+            "family": "COACH_AVAILABILITY",
+            "ruleType": "HARD",
+            "name": "dispo lun+mar",
+            "config": {"coachId": "coach-1", "availableDays": [1, 2]},
+            "sortOrder": 0,
+            "isActive": True,
         },
         {
-            "id": "av-2", "scope": "COACH", "scopeTargetId": "coach-1",
-            "family": "COACH_AVAILABILITY", "ruleType": "HARD", "name": "dispo mar+ven",
-            "config": {"coachId": "coach-1", "availableDays": [2, 5]}, "sortOrder": 0, "isActive": True,
+            "id": "av-2",
+            "scope": "COACH",
+            "scopeTargetId": "coach-1",
+            "family": "COACH_AVAILABILITY",
+            "ruleType": "HARD",
+            "name": "dispo mar+ven",
+            "config": {"coachId": "coach-1", "availableDays": [2, 5]},
+            "sortOrder": 0,
+            "isActive": True,
         },
     ]
     result = solve_payload(make_payload(teams=[_team()], venues=venues, constraints=constraints))
@@ -290,13 +338,22 @@ def test_two_available_days_whitelists_intersect_not_block_everything() -> None:
 
 # --- Review NR: cockpit venue_closed rows never raise a false warning ---------
 
+
 def test_cockpit_venue_closed_marker_raises_no_false_warning() -> None:
     venues = [make_venue("v", [(1, "18:00")])]
-    constraints = [{
-        "id": "vc-1", "scope": "FACILITY", "scopeTargetId": "v",
-        "family": "FACILITY", "ruleType": "HARD", "name": "Gymnase fermé",
-        "config": {"type": "venue_closed"}, "sortOrder": 0, "isActive": True,
-    }]
+    constraints = [
+        {
+            "id": "vc-1",
+            "scope": "FACILITY",
+            "scopeTargetId": "v",
+            "family": "FACILITY",
+            "ruleType": "HARD",
+            "name": "Gymnase fermé",
+            "config": {"type": "venue_closed"},
+            "sortOrder": 0,
+            "isActive": True,
+        }
+    ]
     result = solve_payload(make_payload(teams=[_team()], venues=venues, constraints=constraints))
 
     assert result["status"] == "completed"
@@ -306,20 +363,33 @@ def test_cockpit_venue_closed_marker_raises_no_false_warning() -> None:
 
 # --- Review NR: a soft avoid-venue must not displace another team's preference -
 
+
 def test_soft_avoid_venue_does_not_outbid_an_explicit_preference() -> None:
     # One contested slot at venue Y: team B explicitly prefers Y, team A merely
     # avoids X. The complement-bonus bug tied both at the same weight.
     venues = [make_venue("venue-y", [(1, "18:00")]), make_venue("venue-x", [(3, "18:00")])]
     constraints = [
         {
-            "id": "avoid-x", "scope": "TEAM", "scopeTargetId": "a",
-            "family": "FACILITY", "ruleType": "PREFERRED", "name": "A évite X",
-            "config": {"forbiddenVenueId": "venue-x"}, "sortOrder": 0, "isActive": True,
+            "id": "avoid-x",
+            "scope": "TEAM",
+            "scopeTargetId": "a",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "A évite X",
+            "config": {"forbiddenVenueId": "venue-x"},
+            "sortOrder": 0,
+            "isActive": True,
         },
         {
-            "id": "prefer-y", "scope": "TEAM", "scopeTargetId": "b",
-            "family": "FACILITY", "ruleType": "PREFERRED", "name": "B préfère Y",
-            "config": {"preferredVenueId": "venue-y"}, "sortOrder": 0, "isActive": True,
+            "id": "prefer-y",
+            "scope": "TEAM",
+            "scopeTargetId": "b",
+            "family": "FACILITY",
+            "ruleType": "PREFERRED",
+            "name": "B préfère Y",
+            "config": {"preferredVenueId": "venue-y"},
+            "sortOrder": 0,
+            "isActive": True,
         },
     ]
     result = solve_payload(make_payload(teams=[_team("a"), _team("b")], venues=venues, constraints=constraints))

@@ -69,9 +69,7 @@ def test_the_doc_does_not_still_present_an_older_version_as_active() -> None:
     # tournures par lesquelles la dérive est passée les fois précédentes.
     stale = [
         found
-        for found in re.findall(
-            r"(?:[Vv]ersion contrat active\s*:\s*\*\*`\"([\d.]+)\"`|fichier\s*=\s*`([\d.]+)`)", doc
-        )
+        for found in re.findall(r"(?:[Vv]ersion contrat active\s*:\s*\*\*`\"([\d.]+)\"`|fichier\s*=\s*`([\d.]+)`)", doc)
         for found in found
         if found and found != version
     ]

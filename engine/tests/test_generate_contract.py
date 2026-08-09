@@ -57,7 +57,14 @@ class TestGenerateContract:
                 "clubId": "club-unplaced",
                 "seasonId": "season-unplaced",
                 "teams": [
-                    {"id": "team-a", "sportCategoryId": "sc-1", "priorityTierId": 1, "name": "Team A", "sessionsPerWeek": 2, "isActive": True},
+                    {
+                        "id": "team-a",
+                        "sportCategoryId": "sc-1",
+                        "priorityTierId": 1,
+                        "name": "Team A",
+                        "sessionsPerWeek": 2,
+                        "isActive": True,
+                    },
                 ],
                 "slotTemplates": [],
             }
@@ -86,10 +93,22 @@ class TestGenerateContract:
                 "clubId": "club-locked",
                 "seasonId": "season-locked",
                 "teams": [
-                    {"id": "team-a", "sportCategoryId": "sc-1", "priorityTierId": 1, "name": "Team A", "sessionsPerWeek": 1, "isActive": True},
+                    {
+                        "id": "team-a",
+                        "sportCategoryId": "sc-1",
+                        "priorityTierId": 1,
+                        "name": "Team A",
+                        "sessionsPerWeek": 1,
+                        "isActive": True,
+                    },
                 ],
                 "venues": [
-                    {"id": "venue-1", "name": "Court A", "isActive": True, "trainingSlots": [{"dayOfWeek": 2, "startTime": "14:00", "durationMinutes": 60, "capacity": 1}]},
+                    {
+                        "id": "venue-1",
+                        "name": "Court A",
+                        "isActive": True,
+                        "trainingSlots": [{"dayOfWeek": 2, "startTime": "14:00", "durationMinutes": 60, "capacity": 1}],
+                    },
                 ],
                 "slotTemplates": [
                     {
@@ -128,10 +147,22 @@ class TestGenerateContract:
                 "clubId": "club-slots",
                 "seasonId": "season-slots",
                 "teams": [
-                    {"id": "team-a", "sportCategoryId": "sc-1", "priorityTierId": 1, "name": "Team A", "sessionsPerWeek": 1, "isActive": True},
+                    {
+                        "id": "team-a",
+                        "sportCategoryId": "sc-1",
+                        "priorityTierId": 1,
+                        "name": "Team A",
+                        "sessionsPerWeek": 1,
+                        "isActive": True,
+                    },
                 ],
                 "venues": [
-                    {"id": "venue-1", "name": "Court A", "isActive": True, "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 60, "capacity": 1}]},
+                    {
+                        "id": "venue-1",
+                        "name": "Court A",
+                        "isActive": True,
+                        "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 60, "capacity": 1}],
+                    },
                 ],
                 "slotTemplates": [
                     {
@@ -214,13 +245,15 @@ class TestGenerateContract:
         assignments = []
         for slot_key, var in model.x.items():
             team_id, venue_id, day_of_week, slot_start = slot_key
-            assignments.append({
-                "var": var,
-                "team_id": team_id,
-                "venue_id": venue_id,
-                "slot_id": f"{day_of_week}:{slot_start}",
-                "coach_id": team_coaches.get(team_id),
-            })
+            assignments.append(
+                {
+                    "var": var,
+                    "team_id": team_id,
+                    "venue_id": venue_id,
+                    "slot_id": f"{day_of_week}:{slot_start}",
+                    "coach_id": team_coaches.get(team_id),
+                }
+            )
 
         add_level_1_hard_constraints(model, assignments, teams=data.get("teams", []))
 
@@ -354,13 +387,10 @@ class TestGenerateContract:
         result = asyncio.run(build_schedule(input_data))
 
         assert result.status != "failed", (
-            f"Solver returned 'failed' for fully-locked team; "
-            f"status={result.status}, unplaced={result.unplaced}"
+            f"Solver returned 'failed' for fully-locked team; status={result.status}, unplaced={result.unplaced}"
         )
         # The team has 1 hard-locked session — it must appear in output
-        assert len(result.slots) >= 1, (
-            f"Expected at least 1 slot (the hard-locked one), got {len(result.slots)}"
-        )
+        assert len(result.slots) >= 1, f"Expected at least 1 slot (the hard-locked one), got {len(result.slots)}"
 
     @pytest.mark.timeout(30)
     def test_build_schedule_two_teams_share_venue_day_does_not_fail(self) -> None:

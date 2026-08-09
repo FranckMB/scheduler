@@ -91,9 +91,7 @@ def _extract_person_slots(result: Any, data: dict[str, Any]) -> dict[str, list[t
     return person_intervals
 
 
-def _count_overlaps_for_person(
-    intervals: dict[str, list[tuple[int, int, int, str]]], person_id: str
-) -> list[str]:
+def _count_overlaps_for_person(intervals: dict[str, list[tuple[int, int, int, str]]], person_id: str) -> list[str]:
     """Return list of overlap descriptions for the given person on any day.
 
     Overlaps where at least one slot is HARD-locked are ignored: those are input
@@ -110,10 +108,7 @@ def _count_overlaps_for_person(
             if a_lock == "HARD" or b_lock == "HARD":
                 continue
             if _intervals_overlap(a_start, a_end, b_start, b_end):
-                overlaps.append(
-                    f"person={person_id} day={a_day} "
-                    f"slot_A=({a_start},{a_end}) slot_B=({b_start},{b_end})"
-                )
+                overlaps.append(f"person={person_id} day={a_day} slot_A=({a_start},{a_end}) slot_B=({b_start},{b_end})")
     return overlaps
 
 
@@ -138,9 +133,7 @@ def _find_consecutive_triples_any_day(intervals: list[tuple[int, int, int, str]]
             if a_lock == "HARD" or b_lock == "HARD" or c_lock == "HARD":
                 continue
             if a_end == b_start and b_end == c_start:
-                triples.append(
-                    f"day={day} ({a_start}-{a_end}) -> ({b_start}-{b_end}) -> ({c_start}-{c_end})"
-                )
+                triples.append(f"day={day} ({a_start}-{a_end}) -> ({b_start}-{b_end}) -> ({c_start}-{c_end})")
     return triples
 
 
@@ -209,6 +202,4 @@ def test_bccl_regression_all_bugs_fixed() -> None:
 
     # BUG-5: Score must be non-negative when status=completed.
     assert result.score is not None, "score must be set for completed status"
-    assert result.score >= 0, (
-        f"score must be >= 0 (HARD-only teams not penalized), got {result.score}"
-    )
+    assert result.score >= 0, f"score must be >= 0 (HARD-only teams not penalized), got {result.score}"

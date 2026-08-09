@@ -80,6 +80,7 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
         content={"status": "error", "detail": "Internal solver error."},
     )
 
+
 _club_locks: dict[str, asyncio.Lock] = {}
 _club_locks_guard = asyncio.Lock()
 _MAX_CLUB_LOCKS = 256
@@ -207,7 +208,11 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
         solver_status, solver, model, conflicts = await asyncio.to_thread(_solve, data, input_data)
 
     result_dict = build_result(
-        data, solver, model, status=solver_status, fallback_used=False,
+        data,
+        solver,
+        model,
+        status=solver_status,
+        fallback_used=False,
         constraint_version=read_contract_version(),
     )
     if conflicts:
@@ -215,7 +220,9 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
 
     logger.info(
         "solve done club=%s status=%s slots=%d",
-        input_data.club_id, result_dict.get("status"), len(result_dict.get("slots", [])),
+        input_data.club_id,
+        result_dict.get("status"),
+        len(result_dict.get("slots", [])),
     )
     # Validate and return.
     return ScheduleOutputSchema.model_validate(result_dict)
@@ -317,9 +324,7 @@ def _solve(
     # Hard min_sessions forces UNKNOWN when venue capacity < total sessions needed.
     # Soft-only via objective bonus (session_count:20) + WARNING diagnostics.
     adjusted_min_by_team: dict[str, int] = {
-        str(team.get("id") or ""): 0
-        for team in data.get("teams", [])
-        if team.get("id")
+        str(team.get("id") or ""): 0 for team in data.get("teams", []) if team.get("id")
     }
 
     available_assignments_by_team: dict[str, list[Any]] = {}
@@ -357,15 +362,17 @@ def _solve(
         team_coaches = team_coach_map.get(team_id_str) or []
         main_coach_id = team_coaches[0] if team_coaches else None
 
-        assignments.append({
-            "var": var,
-            "team_id": team_id_str,
-            "venue_id": venue_id_str,
-            "slot_id": slot_id,
-            "start": start_minutes,
-            "end": end_minutes,
-            "coach_id": main_coach_id,
-        })
+        assignments.append(
+            {
+                "var": var,
+                "team_id": team_id_str,
+                "venue_id": venue_id_str,
+                "slot_id": slot_id,
+                "start": start_minutes,
+                "end": end_minutes,
+                "coach_id": main_coach_id,
+            }
+        )
 
     add_level_1_hard_constraints(
         model,
@@ -480,8 +487,7 @@ def _solve(
         for phase1_var in model.x.values():
             cast(Any, model).AddHint(phase1_var, solver.Value(phase1_var))
         cast(Any, model).Maximize(
-            objective_stats.placement_expression
-            + sum(weight * var for var, weight in objective_stats.chaining_terms)
+            objective_stats.placement_expression + sum(weight * var for var, weight in objective_stats.chaining_terms)
         )
         phase2_solver = cp_model.CpSolver()
         phase2_solver.parameters.max_time_in_seconds = min(timeout_seconds, CHAINING_PHASE_MAX_SECONDS)
@@ -532,9 +538,7 @@ async def place_matches(input_data: MatchPlacementInputSchema) -> MatchPlacement
 
     lock = await get_club_lock(f"matches:{input_data.club_id}")
     async with lock, _solve_semaphore:
-        logger.info(
-            "match placement start club=%s matches=%d", input_data.club_id, len(input_data.matches)
-        )
+        logger.info("match placement start club=%s matches=%d", input_data.club_id, len(input_data.matches))
         result = await asyncio.to_thread(solve_match_placement, input_data)
     return MatchPlacementOutputSchema.model_validate(result)
 

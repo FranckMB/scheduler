@@ -46,9 +46,7 @@ class TestSalarieDistribution:
     def test_stats_has_salarie_distribution_counter(self) -> None:
         """HardConstraintStats must expose a salarie_distribution counter."""
         stats = HardConstraintStats()
-        assert hasattr(stats, "salarie_distribution"), (
-            "HardConstraintStats must have a salarie_distribution field"
-        )
+        assert hasattr(stats, "salarie_distribution"), "HardConstraintStats must have a salarie_distribution field"
         assert stats.salarie_distribution == 0, (
             f"salarie_distribution should default to 0, got {stats.salarie_distribution}"
         )
@@ -64,27 +62,36 @@ class TestSalarieDistribution:
         # Salarié coach-1 works days 1-2 only
         assignments = [
             _assignment(
-                model, f"salarie_day_{d}",
-                slot_id=f"{d}:18:00", team_id=f"team-{d}",
-                venue_id="venue-A", coach_id="coach-1",
+                model,
+                f"salarie_day_{d}",
+                slot_id=f"{d}:18:00",
+                team_id=f"team-{d}",
+                venue_id="venue-A",
+                coach_id="coach-1",
             )
             for d in range(1, 3)
         ]
         # Salarié coach-2 works days 1-2 only (different venue/time to avoid conflicts)
         assignments += [
             _assignment(
-                model, f"salarie2_day_{d}",
-                slot_id=f"{d}:19:00", team_id=f"team-{d+5}",
-                venue_id="venue-B", coach_id="coach-2",
+                model,
+                f"salarie2_day_{d}",
+                slot_id=f"{d}:19:00",
+                team_id=f"team-{d + 5}",
+                venue_id="venue-B",
+                coach_id="coach-2",
             )
             for d in range(1, 3)
         ]
         # Non-salarié coach-3 works days 1-4 (respects rest day)
         assignments += [
             _assignment(
-                model, f"freelance_day_{d}",
-                slot_id=f"{d}:20:00", team_id=f"team-{d+10}",
-                venue_id="venue-C", coach_id="coach-3",
+                model,
+                f"freelance_day_{d}",
+                slot_id=f"{d}:20:00",
+                team_id=f"team-{d + 10}",
+                venue_id="venue-C",
+                coach_id="coach-3",
             )
             for d in range(1, 5)
         ]
@@ -102,12 +109,8 @@ class TestSalarieDistribution:
             model.Add(a.var == 1)
 
         status = _solve(model)
-        assert stats.salarie_distribution > 0, (
-            f"Expected salarie_distribution > 0, got {stats.salarie_distribution}"
-        )
-        assert status == cp_model.INFEASIBLE, (
-            f"Days 3-5 with no salarié should be INFEASIBLE, got {status}"
-        )
+        assert stats.salarie_distribution > 0, f"Expected salarie_distribution > 0, got {stats.salarie_distribution}"
+        assert status == cp_model.INFEASIBLE, f"Days 3-5 with no salarié should be INFEASIBLE, got {status}"
 
     def test_salarie_on_all_days_is_feasible(self) -> None:
         """If at least one salarié works each day Mon-Fri, the model is feasible.
@@ -120,18 +123,24 @@ class TestSalarieDistribution:
         # Salarié coach-1 works days 1-4 (rest on day 5)
         assignments = [
             _assignment(
-                model, f"salarie_day_{d}",
-                slot_id=f"{d}:18:00", team_id=f"team-{d}",
-                venue_id="venue-A", coach_id="coach-1",
+                model,
+                f"salarie_day_{d}",
+                slot_id=f"{d}:18:00",
+                team_id=f"team-{d}",
+                venue_id="venue-A",
+                coach_id="coach-1",
             )
             for d in range(1, 5)
         ]
         # Salarié coach-2 works days 2-5 (rest on day 1)
         assignments += [
             _assignment(
-                model, f"salarie2_day_{d}",
-                slot_id=f"{d}:19:00", team_id=f"team-{d+5}",
-                venue_id="venue-B", coach_id="coach-2",
+                model,
+                f"salarie2_day_{d}",
+                slot_id=f"{d}:19:00",
+                team_id=f"team-{d + 5}",
+                venue_id="venue-B",
+                coach_id="coach-2",
             )
             for d in range(2, 6)
         ]
@@ -209,10 +218,7 @@ class TestSalarieDistribution:
     def test_no_coaches_means_zero_constraints(self) -> None:
         """When no coaches are passed, salarie_distribution must be 0."""
         model = cp_model.CpModel()
-        assignments = [
-            _assignment(model, f"day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}")
-            for d in range(1, 6)
-        ]
+        assignments = [_assignment(model, f"day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}") for d in range(1, 6)]
 
         stats = add_level_1_hard_constraints(model, assignments, coaches=[])
 
@@ -233,7 +239,8 @@ class TestSalarieDistribution:
         # Salarié coach-1 coaching on days 1-3
         coaching = [
             _assignment(
-                model, f"coach_day_{d}",
+                model,
+                f"coach_day_{d}",
                 slot_id=f"{d}:18:00",
                 team_id=f"team-{d}",
                 coach_id="coach-1",
@@ -242,7 +249,8 @@ class TestSalarieDistribution:
         ]
         # Coach-1 playing on day 4 (as player in another team)
         playing = _assignment(
-            model, "playing_day_4",
+            model,
+            "playing_day_4",
             slot_id="4:18:00",
             team_id="team-4",
             coach_id="coach-other",
@@ -251,9 +259,10 @@ class TestSalarieDistribution:
         # Salarié coach-2 coaching on days 4-5
         coach2_assignments = [
             _assignment(
-                model, f"coach2_day_{d}",
+                model,
+                f"coach2_day_{d}",
                 slot_id=f"{d}:19:00",
-                team_id=f"team-{d+5}",
+                team_id=f"team-{d + 5}",
                 venue_id="venue-B",
                 coach_id="coach-2",
             )
@@ -287,18 +296,24 @@ class TestSalarieDistribution:
         # Salarié coach-1 works days 1-4 (Mon-Thu) + day 6 (Saturday)
         assignments = [
             _assignment(
-                model, f"day_{d}",
-                slot_id=f"{d}:18:00", team_id=f"team-{d}",
-                venue_id="venue-A", coach_id="coach-1",
+                model,
+                f"day_{d}",
+                slot_id=f"{d}:18:00",
+                team_id=f"team-{d}",
+                venue_id="venue-A",
+                coach_id="coach-1",
             )
             for d in (1, 2, 3, 4, 6)
         ]
         # Salarié coach-2 works days 1-4 only
         assignments += [
             _assignment(
-                model, f"day2_{d}",
-                slot_id=f"{d}:19:00", team_id=f"team-{d+5}",
-                venue_id="venue-B", coach_id="coach-2",
+                model,
+                f"day2_{d}",
+                slot_id=f"{d}:19:00",
+                team_id=f"team-{d + 5}",
+                venue_id="venue-B",
+                coach_id="coach-2",
             )
             for d in (1, 2, 3, 4)
         ]
@@ -315,29 +330,31 @@ class TestSalarieDistribution:
             model.Add(a.var == 1)
 
         status = _solve(model)
-        assert stats.salarie_distribution > 0, (
-            f"Expected salarie_distribution > 0, got {stats.salarie_distribution}"
-        )
-        assert status == cp_model.INFEASIBLE, (
-            f"No salarié on Friday should be INFEASIBLE, got {status}"
-        )
+        assert stats.salarie_distribution > 0, f"Expected salarie_distribution > 0, got {stats.salarie_distribution}"
+        assert status == cp_model.INFEASIBLE, f"No salarié on Friday should be INFEASIBLE, got {status}"
 
     def test_total_constraints_includes_salarie_distribution(self) -> None:
         """total_constraints_added must include salarie_distribution in the sum."""
         model = cp_model.CpModel()
         assignments = [
             _assignment(
-                model, f"day_{d}",
-                slot_id=f"{d}:18:00", team_id=f"team-{d}",
-                venue_id="venue-A", coach_id="coach-1",
+                model,
+                f"day_{d}",
+                slot_id=f"{d}:18:00",
+                team_id=f"team-{d}",
+                venue_id="venue-A",
+                coach_id="coach-1",
             )
             for d in range(1, 5)
         ]
         assignments += [
             _assignment(
-                model, f"day2_{d}",
-                slot_id=f"{d}:19:00", team_id=f"team-{d+5}",
-                venue_id="venue-B", coach_id="coach-2",
+                model,
+                f"day2_{d}",
+                slot_id=f"{d}:19:00",
+                team_id=f"team-{d + 5}",
+                venue_id="venue-B",
+                coach_id="coach-2",
             )
             for d in range(2, 6)
         ]
@@ -368,6 +385,5 @@ class TestSalarieDistribution:
                 + stats.salarie_distribution
             )
             assert stats.total_constraints_added == expected_total, (
-                f"total_constraints_added={stats.total_constraints_added} "
-                f"!= expected={expected_total}"
+                f"total_constraints_added={stats.total_constraints_added} != expected={expected_total}"
             )
