@@ -66,9 +66,7 @@ class TestGoldenDatasets:
         # (HARD-infeasible scenarios are exercised via contradictory constraints
         # in tests/semantic/.)
         assert result["status"] == "completed"
-        assert any(
-            d["type"] == "session_below_effective_min" for d in result["diagnostics"]
-        )
+        assert any(d["type"] == "session_below_effective_min" for d in result["diagnostics"])
 
     def test_vacation_week_is_feasible_and_respects_tiers(self) -> None:
         data = _load_fixture("vacation_week")
@@ -86,9 +84,7 @@ class TestGoldenDatasets:
             tid = slot["teamId"]
             team_sessions[tid] = team_sessions.get(tid, 0) + int(slot["durationMinutes"]) // SLOT_MINUTES
 
-        tier_s_a_teams = [
-            t for t in data["teams"] if t["priorityTierId"] in (1, 2) and t.get("isActive", False)
-        ]
+        tier_s_a_teams = [t for t in data["teams"] if t["priorityTierId"] in (1, 2) and t.get("isActive", False)]
         tier_defaults = {1: 3, 2: 2, 3: 2, 4: 2, 5: 1}
         for team in tier_s_a_teams:
             spw = team["sessionsPerWeek"]

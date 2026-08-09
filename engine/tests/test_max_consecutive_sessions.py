@@ -66,27 +66,37 @@ class TestMaxConsecutiveSessions:
         """
         model = cp_model.CpModel()
         a = _assignment(
-            model, "slot_a",
+            model,
+            "slot_a",
             team_id="team-1",
-            slot_id="1:18:00", venue_id="venue-1", coach_id="coach-1",
-            start=18 * 60, end=19 * 60 + 30,
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=18 * 60,
+            end=19 * 60 + 30,
         )
         b = _assignment(
-            model, "slot_b",
+            model,
+            "slot_b",
             team_id="team-2",
-            slot_id="1:19:30", venue_id="venue-1", coach_id="coach-1",
-            start=19 * 60 + 30, end=21 * 60,
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=19 * 60 + 30,
+            end=21 * 60,
         )
         c = _assignment(
-            model, "slot_c",
+            model,
+            "slot_c",
             team_id="team-3",
-            slot_id="1:21:00", venue_id="venue-1", coach_id="coach-1",
-            start=21 * 60, end=22 * 60 + 30,
+            slot_id="1:21:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=21 * 60,
+            end=22 * 60 + 30,
         )
 
-        stats = add_level_1_hard_constraints(
-            model, [a, b, c], coaches=[{"id": "coach-1"}]
-        )
+        stats = add_level_1_hard_constraints(model, [a, b, c], coaches=[{"id": "coach-1"}])
 
         model.Add(a.var == 1)
         model.Add(b.var == 1)
@@ -96,9 +106,7 @@ class TestMaxConsecutiveSessions:
         assert stats.max_consecutive_sessions > 0, (
             f"Expected max_consecutive_sessions > 0, got {stats.max_consecutive_sessions}"
         )
-        assert status == cp_model.INFEASIBLE, (
-            f"Coach in 3 consecutive slots should be INFEASIBLE, got {status}"
-        )
+        assert status == cp_model.INFEASIBLE, f"Coach in 3 consecutive slots should be INFEASIBLE, got {status}"
 
     def test_two_consecutive_slots_is_feasible(self) -> None:
         """Coach coaching 2 of 3 consecutive slots must be allowed.
@@ -108,26 +116,39 @@ class TestMaxConsecutiveSessions:
         """
         model = cp_model.CpModel()
         a = _assignment(
-            model, "slot_a",
+            model,
+            "slot_a",
             team_id="team-1",
-            slot_id="1:18:00", venue_id="venue-1", coach_id="coach-1",
-            start=18 * 60, end=19 * 60 + 30,
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=18 * 60,
+            end=19 * 60 + 30,
         )
         b = _assignment(
-            model, "slot_b",
+            model,
+            "slot_b",
             team_id="team-2",
-            slot_id="1:19:30", venue_id="venue-1", coach_id="coach-1",
-            start=19 * 60 + 30, end=21 * 60,
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=19 * 60 + 30,
+            end=21 * 60,
         )
         c = _assignment(
-            model, "slot_c",
+            model,
+            "slot_c",
             team_id="team-3",
-            slot_id="1:21:00", venue_id="venue-1", coach_id="coach-2",
-            start=21 * 60, end=22 * 60 + 30,
+            slot_id="1:21:00",
+            venue_id="venue-1",
+            coach_id="coach-2",
+            start=21 * 60,
+            end=22 * 60 + 30,
         )
 
         add_level_1_hard_constraints(
-            model, [a, b, c],
+            model,
+            [a, b, c],
             coaches=[{"id": "coach-1"}, {"id": "coach-2"}],
         )
 
@@ -148,27 +169,40 @@ class TestMaxConsecutiveSessions:
         """
         model = cp_model.CpModel()
         a = _assignment(
-            model, "slot_a",
+            model,
+            "slot_a",
             team_id="team-1",
-            slot_id="1:18:00", venue_id="venue-1", coach_id="coach-1",
-            start=18 * 60, end=19 * 60 + 30,
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=18 * 60,
+            end=19 * 60 + 30,
         )
         b = _assignment(
-            model, "slot_b",
+            model,
+            "slot_b",
             team_id="team-2",
-            slot_id="1:19:30", venue_id="venue-1", coach_id="coach-1",
-            start=19 * 60 + 30, end=21 * 60,
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=19 * 60 + 30,
+            end=21 * 60,
         )
         c = _assignment(
-            model, "slot_c",
+            model,
+            "slot_c",
             team_id="team-3",
-            slot_id="1:21:00", venue_id="venue-1", coach_id="coach-2",
+            slot_id="1:21:00",
+            venue_id="venue-1",
+            coach_id="coach-2",
             player_ids=("coach-1",),
-            start=21 * 60, end=22 * 60 + 30,
+            start=21 * 60,
+            end=22 * 60 + 30,
         )
 
         add_level_1_hard_constraints(
-            model, [a, b, c],
+            model,
+            [a, b, c],
             coaches=[{"id": "coach-1"}, {"id": "coach-2"}],
         )
 
@@ -178,8 +212,7 @@ class TestMaxConsecutiveSessions:
 
         status = _solve(model)
         assert status == cp_model.INFEASIBLE, (
-            f"Coach-1 coaching 2 + playing 1 in 3 consecutive slots "
-            f"should be INFEASIBLE, got {status}"
+            f"Coach-1 coaching 2 + playing 1 in 3 consecutive slots should be INFEASIBLE, got {status}"
         )
 
     def test_non_consecutive_slots_not_constrained(self) -> None:
@@ -191,27 +224,37 @@ class TestMaxConsecutiveSessions:
         """
         model = cp_model.CpModel()
         a = _assignment(
-            model, "slot_a",
+            model,
+            "slot_a",
             team_id="team-1",
-            slot_id="1:18:00", venue_id="venue-1", coach_id="coach-1",
-            start=18 * 60, end=19 * 60 + 30,
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=18 * 60,
+            end=19 * 60 + 30,
         )
         b = _assignment(
-            model, "slot_b",
+            model,
+            "slot_b",
             team_id="team-2",
-            slot_id="1:20:00", venue_id="venue-1", coach_id="coach-1",
-            start=20 * 60, end=21 * 60 + 30,
+            slot_id="1:20:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=20 * 60,
+            end=21 * 60 + 30,
         )
         c = _assignment(
-            model, "slot_c",
+            model,
+            "slot_c",
             team_id="team-3",
-            slot_id="1:22:00", venue_id="venue-1", coach_id="coach-1",
-            start=22 * 60, end=23 * 60 + 30,
+            slot_id="1:22:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=22 * 60,
+            end=23 * 60 + 30,
         )
 
-        add_level_1_hard_constraints(
-            model, [a, b, c], coaches=[{"id": "coach-1"}]
-        )
+        add_level_1_hard_constraints(model, [a, b, c], coaches=[{"id": "coach-1"}])
 
         model.Add(a.var == 1)
         model.Add(b.var == 1)
@@ -231,27 +274,37 @@ class TestMaxConsecutiveSessions:
         """
         model = cp_model.CpModel()
         a = _assignment(
-            model, "slot_a",
+            model,
+            "slot_a",
             team_id="team-1",
-            slot_id="1:18:00", venue_id="venue-1", coach_id="coach-1",
-            start=18 * 60, end=19 * 60 + 30,
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=18 * 60,
+            end=19 * 60 + 30,
         )
         b = _assignment(
-            model, "slot_b",
+            model,
+            "slot_b",
             team_id="team-2",
-            slot_id="1:19:30", venue_id="venue-2", coach_id="coach-1",
-            start=19 * 60 + 30, end=21 * 60,
+            slot_id="1:19:30",
+            venue_id="venue-2",
+            coach_id="coach-1",
+            start=19 * 60 + 30,
+            end=21 * 60,
         )
         c = _assignment(
-            model, "slot_c",
+            model,
+            "slot_c",
             team_id="team-3",
-            slot_id="1:21:00", venue_id="venue-1", coach_id="coach-1",
-            start=21 * 60, end=22 * 60 + 30,
+            slot_id="1:21:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=21 * 60,
+            end=22 * 60 + 30,
         )
 
-        add_level_1_hard_constraints(
-            model, [a, b, c], coaches=[{"id": "coach-1"}]
-        )
+        add_level_1_hard_constraints(model, [a, b, c], coaches=[{"id": "coach-1"}])
 
         model.Add(a.var == 1)
         model.Add(b.var == 1)
@@ -266,56 +319,77 @@ class TestMaxConsecutiveSessions:
         """When no coaches are passed, max_consecutive_sessions must be 0."""
         model = cp_model.CpModel()
         a = _assignment(
-            model, "slot_a",
+            model,
+            "slot_a",
             team_id="team-1",
-            slot_id="1:18:00", venue_id="venue-1", coach_id="coach-1",
-            start=18 * 60, end=19 * 60 + 30,
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=18 * 60,
+            end=19 * 60 + 30,
         )
         b = _assignment(
-            model, "slot_b",
+            model,
+            "slot_b",
             team_id="team-2",
-            slot_id="1:19:30", venue_id="venue-1", coach_id="coach-1",
-            start=19 * 60 + 30, end=21 * 60,
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=19 * 60 + 30,
+            end=21 * 60,
         )
         c = _assignment(
-            model, "slot_c",
+            model,
+            "slot_c",
             team_id="team-3",
-            slot_id="1:21:00", venue_id="venue-1", coach_id="coach-1",
-            start=21 * 60, end=22 * 60 + 30,
+            slot_id="1:21:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=21 * 60,
+            end=22 * 60 + 30,
         )
 
         stats = add_level_1_hard_constraints(model, [a, b, c], coaches=[])
 
         assert stats.max_consecutive_sessions == 0, (
-            f"No coaches => max_consecutive_sessions should be 0, "
-            f"got {stats.max_consecutive_sessions}"
+            f"No coaches => max_consecutive_sessions should be 0, got {stats.max_consecutive_sessions}"
         )
 
     def test_total_constraints_includes_max_consecutive_sessions(self) -> None:
         """total_constraints_added must include max_consecutive_sessions in the sum."""
         model = cp_model.CpModel()
         a = _assignment(
-            model, "slot_a",
+            model,
+            "slot_a",
             team_id="team-1",
-            slot_id="1:18:00", venue_id="venue-1", coach_id="coach-1",
-            start=18 * 60, end=19 * 60 + 30,
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=18 * 60,
+            end=19 * 60 + 30,
         )
         b = _assignment(
-            model, "slot_b",
+            model,
+            "slot_b",
             team_id="team-2",
-            slot_id="1:19:30", venue_id="venue-1", coach_id="coach-1",
-            start=19 * 60 + 30, end=21 * 60,
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=19 * 60 + 30,
+            end=21 * 60,
         )
         c = _assignment(
-            model, "slot_c",
+            model,
+            "slot_c",
             team_id="team-3",
-            slot_id="1:21:00", venue_id="venue-1", coach_id="coach-1",
-            start=21 * 60, end=22 * 60 + 30,
+            slot_id="1:21:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=21 * 60,
+            end=22 * 60 + 30,
         )
 
-        stats = add_level_1_hard_constraints(
-            model, [a, b, c], coaches=[{"id": "coach-1"}]
-        )
+        stats = add_level_1_hard_constraints(model, [a, b, c], coaches=[{"id": "coach-1"}])
 
         if stats.max_consecutive_sessions > 0:
             expected_total = (
@@ -337,8 +411,7 @@ class TestMaxConsecutiveSessions:
                 + stats.max_consecutive_sessions
             )
             assert stats.total_constraints_added == expected_total, (
-                f"total_constraints_added={stats.total_constraints_added} "
-                f"!= expected={expected_total}"
+                f"total_constraints_added={stats.total_constraints_added} != expected={expected_total}"
             )
 
     def test_coach_in_first_and_third_only_is_feasible(self) -> None:
@@ -348,26 +421,39 @@ class TestMaxConsecutiveSessions:
         """
         model = cp_model.CpModel()
         a = _assignment(
-            model, "slot_a",
+            model,
+            "slot_a",
             team_id="team-1",
-            slot_id="1:18:00", venue_id="venue-1", coach_id="coach-1",
-            start=18 * 60, end=19 * 60 + 30,
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=18 * 60,
+            end=19 * 60 + 30,
         )
         b = _assignment(
-            model, "slot_b",
+            model,
+            "slot_b",
             team_id="team-2",
-            slot_id="1:19:30", venue_id="venue-1", coach_id="coach-2",
-            start=19 * 60 + 30, end=21 * 60,
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-2",
+            start=19 * 60 + 30,
+            end=21 * 60,
         )
         c = _assignment(
-            model, "slot_c",
+            model,
+            "slot_c",
             team_id="team-3",
-            slot_id="1:21:00", venue_id="venue-1", coach_id="coach-1",
-            start=21 * 60, end=22 * 60 + 30,
+            slot_id="1:21:00",
+            venue_id="venue-1",
+            coach_id="coach-1",
+            start=21 * 60,
+            end=22 * 60 + 30,
         )
 
         add_level_1_hard_constraints(
-            model, [a, b, c],
+            model,
+            [a, b, c],
             coaches=[{"id": "coach-1"}, {"id": "coach-2"}],
         )
 

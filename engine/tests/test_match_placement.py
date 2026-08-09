@@ -28,7 +28,11 @@ def payload(**over: Any) -> MatchPlacementInputSchema:
     return MatchPlacementInputSchema.model_validate(base)
 
 
-def venue(venue_id: str = "v1", windows: list[dict[str, Any]] | None = None, unavailabilities: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def venue(
+    venue_id: str = "v1",
+    windows: list[dict[str, Any]] | None = None,
+    unavailabilities: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
         "id": venue_id,
         "name": venue_id,
@@ -62,9 +66,7 @@ def test_places_inside_the_access_window() -> None:
 
 
 def test_no_access_window_on_that_day_is_named() -> None:
-    result = solve_match_placement(
-        payload(matches=[to_place(match_date=SUNDAY)], venues=[venue()], teams=[team()])
-    )
+    result = solve_match_placement(payload(matches=[to_place(match_date=SUNDAY)], venues=[venue()], teams=[team()]))
     assert result["placements"] == []
     assert result["unplaced"][0]["reason"] == "no_access_window"
     assert result["diagnostics"][0]["type"] == "unplaced_match"
@@ -167,7 +169,14 @@ def test_colliding_fixed_anchors_never_sink_the_whole_solve() -> None:
                 {"id": "fx2", "teamId": "t2", "date": SATURDAY, "kind": "FIXED", "venueId": "v1", "kickoff": "15:00"},
                 to_place("m1", "t3", SUNDAY),
             ],
-            venues=[venue(windows=[{"dayOfWeek": 6, "start": "14:00", "end": "18:00"}, {"dayOfWeek": 7, "start": "14:00", "end": "18:00"}])],
+            venues=[
+                venue(
+                    windows=[
+                        {"dayOfWeek": 6, "start": "14:00", "end": "18:00"},
+                        {"dayOfWeek": 7, "start": "14:00", "end": "18:00"},
+                    ]
+                )
+            ],
             teams=[team("t1"), team("t2"), team("t3")],
         )
     )

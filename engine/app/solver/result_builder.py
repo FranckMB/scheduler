@@ -77,7 +77,9 @@ def build_result(
         # paramètre reste pour les appels directs (tests, harnais) qui construisent
         # un modèle à la main.
         solver_slots = _build_solver_slots(
-            model_data, solver, model,
+            model_data,
+            solver,
+            model,
             team_coach_map if team_coach_map is not None else getattr(model, "team_coach_map", None),
         )
         slots.extend(solver_slots)
@@ -198,39 +200,43 @@ def _build_solver_slots(
             else:
                 # gap — emit previous block and start a new one
                 duration = block_end - block_start
-                slots.append({
-                    "id": _slot_id(team_id, venue_id, day_of_week, _format_time(block_start)),
-                    "teamId": team_id,
-                    "venueId": venue_id,
-                    "coachId": coach_id,
-                    "dayOfWeek": day_of_week,
-                    "startTime": _format_time(block_start),
-                    "durationMinutes": duration,
-                    "lockLevel": "NONE",
-                    "temporaryLock": False,
-                    "temporaryLockFor": None,
-                    "temporaryMinSessionsOverride": None,
-                    "pendingConstraintSuggestion": None,
-                })
+                slots.append(
+                    {
+                        "id": _slot_id(team_id, venue_id, day_of_week, _format_time(block_start)),
+                        "teamId": team_id,
+                        "venueId": venue_id,
+                        "coachId": coach_id,
+                        "dayOfWeek": day_of_week,
+                        "startTime": _format_time(block_start),
+                        "durationMinutes": duration,
+                        "lockLevel": "NONE",
+                        "temporaryLock": False,
+                        "temporaryLockFor": None,
+                        "temporaryMinSessionsOverride": None,
+                        "pendingConstraintSuggestion": None,
+                    }
+                )
                 block_start = s
                 block_end = s + _slot_dur(venue_id, day_of_week, s)
 
         # Emit the last block
         duration = block_end - block_start
-        slots.append({
-            "id": _slot_id(team_id, venue_id, day_of_week, _format_time(block_start)),
-            "teamId": team_id,
-            "venueId": venue_id,
-            "coachId": coach_id,
-            "dayOfWeek": day_of_week,
-            "startTime": _format_time(block_start),
-            "durationMinutes": duration,
-            "lockLevel": "NONE",
-            "temporaryLock": False,
-            "temporaryLockFor": None,
-            "temporaryMinSessionsOverride": None,
-            "pendingConstraintSuggestion": None,
-        })
+        slots.append(
+            {
+                "id": _slot_id(team_id, venue_id, day_of_week, _format_time(block_start)),
+                "teamId": team_id,
+                "venueId": venue_id,
+                "coachId": coach_id,
+                "dayOfWeek": day_of_week,
+                "startTime": _format_time(block_start),
+                "durationMinutes": duration,
+                "lockLevel": "NONE",
+                "temporaryLock": False,
+                "temporaryLockFor": None,
+                "temporaryMinSessionsOverride": None,
+                "pendingConstraintSuggestion": None,
+            }
+        )
     return slots
 
 
@@ -278,8 +284,7 @@ def _diagnose_unplaced(
     # Total training-slot supply — used to distinguish "no slots at all" from
     # "slots exist but were all taken / incompatible".
     total_available_slots = sum(
-        len(_collection(venue, "training_slots", "trainingSlots"))
-        for venue in _collection(model_data, "venues")
+        len(_collection(venue, "training_slots", "trainingSlots")) for venue in _collection(model_data, "venues")
     )
     teams_by_id = {
         str(_get(team, "id", "team_id", "teamId")): team
@@ -324,15 +329,17 @@ def _diagnose_unplaced(
                 "Vérifiez que l'équipe dispose d'au moins un créneau réellement libre.",
             ]
 
-        diagnostics.append({
-            "id": f"diag-unplaced-{team_id}",
-            "type": "unplaced",
-            "severity": "ERROR",
-            "teamId": team_id,
-            "message": f"L'équipe {team_label} n'a pas pu être placée : {reason}",
-            "suggestions": suggestions,
-            "createdAt": datetime.now(UTC).isoformat(),
-        })
+        diagnostics.append(
+            {
+                "id": f"diag-unplaced-{team_id}",
+                "type": "unplaced",
+                "severity": "ERROR",
+                "teamId": team_id,
+                "message": f"L'équipe {team_label} n'a pas pu être placée : {reason}",
+                "suggestions": suggestions,
+                "createdAt": datetime.now(UTC).isoformat(),
+            }
+        )
     return diagnostics
 
 
@@ -365,23 +372,25 @@ def _diagnose_soft_lock_moved(
             for slot in slots
         )
         if not found:
-            diagnostics.append({
-                "id": f"diag-soft-moved-{team_id}-{day_of_week}-{start_time}",
-                "type": "soft_lock_moved",
-                "severity": "WARNING",
-                "teamId": team_id,
-                "venueId": venue_id,
-                "message": (
-                    f"The preferred slot for team {team_id} at {venue_id} "
-                    f"on day {day_of_week} starting at {start_time} was moved. "
-                    "The solver found a better overall fit by shifting this session."
-                ),
-                "suggestions": [
-                    "Review the new time and confirm it still works for the team.",
-                    "If the original time is essential, consider raising the lock to HARD.",
-                ],
-                "createdAt": datetime.now(UTC).isoformat(),
-            })
+            diagnostics.append(
+                {
+                    "id": f"diag-soft-moved-{team_id}-{day_of_week}-{start_time}",
+                    "type": "soft_lock_moved",
+                    "severity": "WARNING",
+                    "teamId": team_id,
+                    "venueId": venue_id,
+                    "message": (
+                        f"The preferred slot for team {team_id} at {venue_id} "
+                        f"on day {day_of_week} starting at {start_time} was moved. "
+                        "The solver found a better overall fit by shifting this session."
+                    ),
+                    "suggestions": [
+                        "Review the new time and confirm it still works for the team.",
+                        "If the original time is essential, consider raising the lock to HARD.",
+                    ],
+                    "createdAt": datetime.now(UTC).isoformat(),
+                }
+            )
     return diagnostics
 
 
@@ -405,22 +414,24 @@ def _diagnose_coach_overload(
         count = len(days)
         threshold = _coach_threshold(model_data, coach_id)
         if count > threshold:
-            diagnostics.append({
-                "id": f"diag-overload-{coach_id}",
-                "type": "coach_overload",
-                "severity": "WARNING",
-                "coachId": coach_id,
-                "message": (
-                    f"Le coach {_label(coach_id, coach_names)} intervient sur {count} jours, "
-                    f"au-dessus de la limite recommandée de {threshold} : "
-                    "risque de fatigue ou de conflits d'agenda."
-                ),
-                "suggestions": [
-                    "Répartissez certaines séances sur un autre coach.",
-                    "Vérifiez le nombre de jours maximum dans le profil du coach.",
-                ],
-                "createdAt": datetime.now(UTC).isoformat(),
-            })
+            diagnostics.append(
+                {
+                    "id": f"diag-overload-{coach_id}",
+                    "type": "coach_overload",
+                    "severity": "WARNING",
+                    "coachId": coach_id,
+                    "message": (
+                        f"Le coach {_label(coach_id, coach_names)} intervient sur {count} jours, "
+                        f"au-dessus de la limite recommandée de {threshold} : "
+                        "risque de fatigue ou de conflits d'agenda."
+                    ),
+                    "suggestions": [
+                        "Répartissez certaines séances sur un autre coach.",
+                        "Vérifiez le nombre de jours maximum dans le profil du coach.",
+                    ],
+                    "createdAt": datetime.now(UTC).isoformat(),
+                }
+            )
     return diagnostics
 
 
@@ -497,29 +508,30 @@ def _diagnose_session_below_effective_min(
                 # "cible", not "garanti" : le minimum de séances est appliqué en
                 # objectif soft (bonus), pas en plancher dur (ENG-18) — le solveur
                 # ne le garantit pas, il le vise. Dire "garanti" serait faux.
-                reason = (
-                    f"en-dessous de son minimum cible de {effective_min} "
-                    "(créneaux de gymnase insuffisants)."
-                )
+                reason = f"en-dessous de son minimum cible de {effective_min} (créneaux de gymnase insuffisants)."
             else:
                 reason = "faute de créneau de gymnase disponible."
-            diagnostics.append({
-                "id": f"diag-session-below-min-{team_id}",
-                "type": "session_below_effective_min",
-                "severity": severity,
-                "teamId": team_id,
-                "message": (
-                    f"L'équipe {team_name} : {spw} séance(s) demandée(s) par semaine, "
-                    f"seulement {placed} placée(s) — {reason}"
-                ),
-                "suggestions": [
-                    "Ajoutez de la disponibilité de gymnase ou un créneau supplémentaire pour cette équipe.",
-                    "Vérifiez le tier de priorité et le nombre de séances/semaine de l'équipe.",
-                ],
-                "createdAt": datetime.now(UTC).isoformat(),
-            })
+            diagnostics.append(
+                {
+                    "id": f"diag-session-below-min-{team_id}",
+                    "type": "session_below_effective_min",
+                    "severity": severity,
+                    "teamId": team_id,
+                    "message": (
+                        f"L'équipe {team_name} : {spw} séance(s) demandée(s) par semaine, "
+                        f"seulement {placed} placée(s) — {reason}"
+                    ),
+                    "suggestions": [
+                        "Ajoutez de la disponibilité de gymnase ou un créneau supplémentaire pour cette équipe.",
+                        "Vérifiez le tier de priorité et le nombre de séances/semaine de l'équipe.",
+                    ],
+                    "createdAt": datetime.now(UTC).isoformat(),
+                }
+            )
 
     return diagnostics
+
+
 def _diagnose_conflicts(
     model_data: Mapping[str, Any] | Any,
     solver_status: int,
@@ -541,54 +553,60 @@ def _diagnose_conflicts(
     coach_names = _coach_name_map(model_data)
 
     if solver_status == cp_model.INFEASIBLE:
-        diagnostics.append({
-            "id": "diag-infeasible",
-            "type": "conflict",
-            "severity": "ERROR",
-            "message": _infeasible_message(model_data),
-            "suggestions": [
-                "Assouplissez ou retirez une contrainte dure (jour/heure imposé, gymnase forcé).",
-                "Ajoutez de la disponibilité de gymnase ou un coach supplémentaire.",
-                "Vérifiez les créneaux verrouillés (LOCK) qui se chevauchent entre équipes.",
-            ],
-            "createdAt": datetime.now(UTC).isoformat(),
-        })
+        diagnostics.append(
+            {
+                "id": "diag-infeasible",
+                "type": "conflict",
+                "severity": "ERROR",
+                "message": _infeasible_message(model_data),
+                "suggestions": [
+                    "Assouplissez ou retirez une contrainte dure (jour/heure imposé, gymnase forcé).",
+                    "Ajoutez de la disponibilité de gymnase ou un coach supplémentaire.",
+                    "Vérifiez les créneaux verrouillés (LOCK) qui se chevauchent entre équipes.",
+                ],
+                "createdAt": datetime.now(UTC).isoformat(),
+            }
+        )
         return diagnostics
 
     if solver_status == cp_model.UNKNOWN:
         # ENG-22: the solver stopped WITHOUT a solution and WITHOUT proving infeasibility — the
         # time budget ran out on a hard instance. Say so, instead of a silent "failed".
-        diagnostics.append({
-            "id": "diag-timeout",
-            "type": "conflict",
-            "severity": "ERROR",
-            "message": (
-                "Le solveur n'a pas trouvé de planning dans le temps imparti (problème trop "
-                "complexe). Aucune infaisabilité prouvée — une solution existe peut-être avec "
-                "plus de temps ou moins de contraintes."
-            ),
-            "suggestions": [
-                "Réduisez la taille du problème (équipes / gymnases) ou le nombre de contraintes.",
-                "Relancez la génération : le solveur peut aboutir sur un nouvel essai.",
-            ],
-            "createdAt": datetime.now(UTC).isoformat(),
-        })
+        diagnostics.append(
+            {
+                "id": "diag-timeout",
+                "type": "conflict",
+                "severity": "ERROR",
+                "message": (
+                    "Le solveur n'a pas trouvé de planning dans le temps imparti (problème trop "
+                    "complexe). Aucune infaisabilité prouvée — une solution existe peut-être avec "
+                    "plus de temps ou moins de contraintes."
+                ),
+                "suggestions": [
+                    "Réduisez la taille du problème (équipes / gymnases) ou le nombre de contraintes.",
+                    "Relancez la génération : le solveur peut aboutir sur un nouvel essai.",
+                ],
+                "createdAt": datetime.now(UTC).isoformat(),
+            }
+        )
         return diagnostics
 
     if solver_status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         # ENG-22: MODEL_INVALID (or any other non-solve status) is a construction bug, NOT a
         # time problem — "retry / shrink" would mislead. Surface it as an internal error.
-        diagnostics.append({
-            "id": "diag-solver-error",
-            "type": "conflict",
-            "severity": "ERROR",
-            "message": (
-                "Erreur interne du solveur (modèle invalide). Ce n'est pas un problème de "
-                "taille ni de temps — signalez-le au support."
-            ),
-            "suggestions": ["Contactez le support : la génération n'a pas pu être construite correctement."],
-            "createdAt": datetime.now(UTC).isoformat(),
-        })
+        diagnostics.append(
+            {
+                "id": "diag-solver-error",
+                "type": "conflict",
+                "severity": "ERROR",
+                "message": (
+                    "Erreur interne du solveur (modèle invalide). Ce n'est pas un problème de "
+                    "taille ni de temps — signalez-le au support."
+                ),
+                "suggestions": ["Contactez le support : la génération n'a pas pu être construite correctement."],
+                "createdAt": datetime.now(UTC).isoformat(),
+            }
+        )
         return diagnostics
 
     _caps: dict[Any, int] = slot_capacities or {}
@@ -608,23 +626,25 @@ def _diagnose_conflicts(
         capacity = _caps.get((venue_id, day_of_week, start_time), 1)
         if len(team_ids) > capacity:
             when = f"{_day_label(day_of_week)} {_time_range(start_time, venue_durations.get((venue_id, day_of_week, start_time)))}"
-            diagnostics.append({
-                "id": f"diag-conflict-venue-{venue_id}-{day_of_week}-{start_time}",
-                "type": "conflict",
-                "severity": "ERROR",
-                "venueId": venue_id,
-                "dayOfWeek": day_of_week,
-                "startTime": str(start_time)[:5],
-                "message": (
-                    f"Le gymnase {_label(venue_id, venue_names)} accueille {len(team_ids)} équipes "
-                    f"en même temps le {when} alors que sa capacité est de {capacity} : "
-                    f"{_named_list(team_ids, team_names)}."
-                ),
-                "suggestions": [
-                    "Déplacez l'une des séances sur un autre horaire ou un autre gymnase.",
-                ],
-                "createdAt": datetime.now(UTC).isoformat(),
-            })
+            diagnostics.append(
+                {
+                    "id": f"diag-conflict-venue-{venue_id}-{day_of_week}-{start_time}",
+                    "type": "conflict",
+                    "severity": "ERROR",
+                    "venueId": venue_id,
+                    "dayOfWeek": day_of_week,
+                    "startTime": str(start_time)[:5],
+                    "message": (
+                        f"Le gymnase {_label(venue_id, venue_names)} accueille {len(team_ids)} équipes "
+                        f"en même temps le {when} alors que sa capacité est de {capacity} : "
+                        f"{_named_list(team_ids, team_names)}."
+                    ),
+                    "suggestions": [
+                        "Déplacez l'une des séances sur un autre horaire ou un autre gymnase.",
+                    ],
+                    "createdAt": datetime.now(UTC).isoformat(),
+                }
+            )
 
     # Post-solve safety check: coach double-booking.
     #
@@ -652,7 +672,13 @@ def _diagnose_conflicts(
         start_minutes = _time_to_minutes(slot["startTime"])
         duration = int(slot.get("durationMinutes") or 0)
         coach_slots[(str(coach_id), slot["dayOfWeek"])].append(
-            (start_minutes, start_minutes + duration, str(slot["teamId"]), str(slot["venueId"]), str(slot["startTime"])),
+            (
+                start_minutes,
+                start_minutes + duration,
+                str(slot["teamId"]),
+                str(slot["venueId"]),
+                str(slot["startTime"]),
+            ),
         )
 
     for (clash_coach, clash_day), clash_booked in sorted(coach_slots.items()):
@@ -669,22 +695,24 @@ def _diagnose_conflicts(
                     continue
                 seen_pairs.add(pair)
                 when = f"{_day_label(clash_day)} {_time_range(a_raw, a_end - a_start)}"
-                diagnostics.append({
-                    "id": f"diag-conflict-coach-{clash_coach}-{clash_day}-{a_raw}",
-                    "type": "conflict",
-                    "severity": "ERROR",
-                    "coachId": clash_coach,
-                    "dayOfWeek": clash_day,
-                    "startTime": str(a_raw)[:5],
-                    "message": (
-                        f"Le coach {_label(clash_coach, coach_names)} est affecté à plusieurs équipes "
-                        f"en même temps le {when}, dans des gymnases différents : {_named_list(list(pair), team_names)}."
-                    ),
-                    "suggestions": [
-                        "Séparez les séances ou affectez un autre coach à l'une des équipes.",
-                    ],
-                    "createdAt": datetime.now(UTC).isoformat(),
-                })
+                diagnostics.append(
+                    {
+                        "id": f"diag-conflict-coach-{clash_coach}-{clash_day}-{a_raw}",
+                        "type": "conflict",
+                        "severity": "ERROR",
+                        "coachId": clash_coach,
+                        "dayOfWeek": clash_day,
+                        "startTime": str(a_raw)[:5],
+                        "message": (
+                            f"Le coach {_label(clash_coach, coach_names)} est affecté à plusieurs équipes "
+                            f"en même temps le {when}, dans des gymnases différents : {_named_list(list(pair), team_names)}."
+                        ),
+                        "suggestions": [
+                            "Séparez les séances ou affectez un autre coach à l'une des équipes.",
+                        ],
+                        "createdAt": datetime.now(UTC).isoformat(),
+                    }
+                )
 
     return diagnostics
 
@@ -747,11 +775,13 @@ def _saturated_venue_minimum(
     for pin in _collection(model_data, "slotTemplates", "slot_templates"):
         if _get(pin, "lockLevel", "lock_level", default=None) != "HARD":
             continue
-        pinned.add((
-            str(_get(pin, "venueId", "venue_id", default="")),
-            str(_get(pin, "dayOfWeek", "day_of_week", default="")),
-            str(_get(pin, "startTime", "start_time", default=""))[:5],
-        ))
+        pinned.add(
+            (
+                str(_get(pin, "venueId", "venue_id", default="")),
+                str(_get(pin, "dayOfWeek", "day_of_week", default="")),
+                str(_get(pin, "startTime", "start_time", default=""))[:5],
+            )
+        )
 
     venue_names = {
         str(_get(venue, "id", default="")): str(_get(venue, "name", default="") or _get(venue, "id", default=""))
@@ -759,10 +789,7 @@ def _saturated_venue_minimum(
     }
     for venue_id, min_by_team in min_by_venue_team.items():
         demand = sum(min_by_team.values())
-        free = sum(
-            capacity for key, capacity in capacities.items()
-            if key[0] == venue_id and key not in pinned
-        )
+        free = sum(capacity for key, capacity in capacities.items() if key[0] == venue_id and key not in pinned)
         if demand > free:
             return venue_names.get(venue_id, venue_id), demand, free
     return None
@@ -781,8 +808,7 @@ def _infeasible_message(model_data: Mapping[str, Any] | Any) -> str:
     supply = sum(capacities.values())
 
     base = (
-        "Le planning n'a pas pu être généré : les contraintes actuelles sont "
-        "impossibles à satisfaire toutes ensemble."
+        "Le planning n'a pas pu être généré : les contraintes actuelles sont impossibles à satisfaire toutes ensemble."
     )
     if demand and supply and demand > supply:
         return (
@@ -829,8 +855,7 @@ def _diagnose_unused_slots(
     diagnostics: list[dict[str, Any]] = []
 
     used: set[tuple[str, int, str]] = {
-        (str(slot["venueId"]), int(slot["dayOfWeek"]), str(slot["startTime"]))
-        for slot in slots
+        (str(slot["venueId"]), int(slot["dayOfWeek"]), str(slot["startTime"])) for slot in slots
     }
 
     for venue in _collection(model_data, "venues"):
@@ -849,20 +874,22 @@ def _diagnose_unused_slots(
             end_time = _format_time(end_minutes)
             day_name = _DAY_NAMES.get(day_of_week, str(day_of_week))
 
-            diagnostics.append({
-                "id": f"diag-unused-slot-{venue_id}-{day_of_week}-{start_time}",
-                "type": "unused_slot",
-                "severity": "WARNING",
-                "venueId": venue_id,
-                "dayOfWeek": day_of_week,
-                "startTime": start_time,
-                "durationMinutes": duration,
-                "message": f"{venue_name} {day_name} {start_time}-{end_time}: no team assigned",
-                "suggestions": [],
-                "teamId": None,
-                "coachId": None,
-                "createdAt": datetime.now(UTC).isoformat(),
-            })
+            diagnostics.append(
+                {
+                    "id": f"diag-unused-slot-{venue_id}-{day_of_week}-{start_time}",
+                    "type": "unused_slot",
+                    "severity": "WARNING",
+                    "venueId": venue_id,
+                    "dayOfWeek": day_of_week,
+                    "startTime": start_time,
+                    "durationMinutes": duration,
+                    "message": f"{venue_name} {day_name} {start_time}-{end_time}: no team assigned",
+                    "suggestions": [],
+                    "teamId": None,
+                    "coachId": None,
+                    "createdAt": datetime.now(UTC).isoformat(),
+                }
+            )
 
     return diagnostics
 
@@ -896,18 +923,20 @@ def _diagnose_coach_rest_days(
     for coach_id, days in coach_days.items():
         if len(days) == 5:
             name = coach_names.get(coach_id, coach_id)
-            diagnostics.append({
-                "id": f"diag-coach-no-rest-day-{coach_id}",
-                "type": "coach_no_rest_day",
-                "severity": "WARNING",
-                "coachId": coach_id,
-                "message": f"Coach {name} n'a pas de jour de repos (lundi-vendredi)",
-                "suggestions": [
-                    "Reduce the number of sessions assigned to this coach.",
-                    "Add coach unavailability constraints for at least one weekday.",
-                ],
-                "createdAt": datetime.now(UTC).isoformat(),
-            })
+            diagnostics.append(
+                {
+                    "id": f"diag-coach-no-rest-day-{coach_id}",
+                    "type": "coach_no_rest_day",
+                    "severity": "WARNING",
+                    "coachId": coach_id,
+                    "message": f"Coach {name} n'a pas de jour de repos (lundi-vendredi)",
+                    "suggestions": [
+                        "Reduce the number of sessions assigned to this coach.",
+                        "Add coach unavailability constraints for at least one weekday.",
+                    ],
+                    "createdAt": datetime.now(UTC).isoformat(),
+                }
+            )
 
     return diagnostics
 

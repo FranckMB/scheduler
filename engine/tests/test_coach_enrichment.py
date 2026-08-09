@@ -134,14 +134,18 @@ class TestCoachAtMostOneWithMap:
 
         assignments = [
             AssignmentVariable(
-                var=var_a, team_id="team-a", venue_id="venue-1",
+                var=var_a,
+                team_id="team-a",
+                venue_id="venue-1",
                 slot_id="1:18:00",
             ),
             AssignmentVariable(
                 # D-14 : gymnase DIFFÉRENT — c'est ce qui rend le cas interdit. Le même
                 # gymnase est désormais AUTORISÉ (cf. les deux tests SAME_venue plus bas),
                 # donc ce test ne prouverait plus rien avec deux fois "venue-1".
-                var=var_b, team_id="team-b", venue_id="venue-2",
+                var=var_b,
+                team_id="team-b",
+                venue_id="venue-2",
                 slot_id="1:18:00",
             ),
         ]
@@ -149,7 +153,9 @@ class TestCoachAtMostOneWithMap:
         team_coach_map = {"team-a": ["coach-1"], "team-b": ["coach-1"]}
 
         stats = add_level_1_hard_constraints(
-            model, assignments, coaches=[{"id": "coach-1"}],
+            model,
+            assignments,
+            coaches=[{"id": "coach-1"}],
             team_coach_map=team_coach_map,
         )
 
@@ -157,12 +163,8 @@ class TestCoachAtMostOneWithMap:
         model.Add(var_b == 1)
 
         status = _solve(model)
-        assert stats.coach_at_most_one > 0, (
-            f"Expected coach_at_most_one > 0, got {stats.coach_at_most_one}"
-        )
-        assert status == cp_model.INFEASIBLE, (
-            f"Same coach in same slot should be INFEASIBLE, got {status}"
-        )
+        assert stats.coach_at_most_one > 0, f"Expected coach_at_most_one > 0, got {stats.coach_at_most_one}"
+        assert status == cp_model.INFEASIBLE, f"Same coach in same slot should be INFEASIBLE, got {status}"
 
     def test_same_coach_two_teams_SAME_venue_is_allowed(self) -> None:
         """D-14 — Matthieu coache les SM1 et les SM2 au même moment, au même endroit.
@@ -189,7 +191,8 @@ class TestCoachAtMostOneWithMap:
         ]
 
         stats = add_level_1_hard_constraints(
-            model, assignments,
+            model,
+            assignments,
             coaches=[{"id": "matthieu"}],
             team_coach_map={"sm1": ["matthieu"], "sm2": ["matthieu"]},
         )
@@ -212,12 +215,17 @@ class TestCoachAtMostOneWithMap:
         var_a = model.NewBoolVar("a")
         var_b = model.NewBoolVar("b")
         assignments = [
-            AssignmentVariable(var=var_a, team_id="sm1", venue_id="gymnase-unique", slot_id="2:17:00", start=1020, end=1110),
-            AssignmentVariable(var=var_b, team_id="sm2", venue_id="gymnase-unique", slot_id="2:17:30", start=1050, end=1140),
+            AssignmentVariable(
+                var=var_a, team_id="sm1", venue_id="gymnase-unique", slot_id="2:17:00", start=1020, end=1110
+            ),
+            AssignmentVariable(
+                var=var_b, team_id="sm2", venue_id="gymnase-unique", slot_id="2:17:30", start=1050, end=1140
+            ),
         ]
 
         stats = add_level_1_hard_constraints(
-            model, assignments,
+            model,
+            assignments,
             coaches=[{"id": "matthieu"}],
             team_coach_map={"sm1": ["matthieu"], "sm2": ["matthieu"]},
         )
@@ -239,12 +247,17 @@ class TestCoachAtMostOneWithMap:
         var_a = model.NewBoolVar("a")
         var_b = model.NewBoolVar("b")
         assignments = [
-            AssignmentVariable(var=var_a, team_id="sm1", venue_id="gymnase-nord", slot_id="2:17:00", start=1020, end=1110),
-            AssignmentVariable(var=var_b, team_id="sm2", venue_id="gymnase-sud", slot_id="2:17:30", start=1050, end=1140),
+            AssignmentVariable(
+                var=var_a, team_id="sm1", venue_id="gymnase-nord", slot_id="2:17:00", start=1020, end=1110
+            ),
+            AssignmentVariable(
+                var=var_b, team_id="sm2", venue_id="gymnase-sud", slot_id="2:17:30", start=1050, end=1140
+            ),
         ]
 
         stats = add_level_1_hard_constraints(
-            model, assignments,
+            model,
+            assignments,
             coaches=[{"id": "matthieu"}],
             team_coach_map={"sm1": ["matthieu"], "sm2": ["matthieu"]},
         )
@@ -267,12 +280,17 @@ class TestCoachAtMostOneWithMap:
         var_a = model.NewBoolVar("a")
         var_b = model.NewBoolVar("b")
         assignments = [
-            AssignmentVariable(var=var_a, team_id="sm1", venue_id="gymnase-unique", slot_id="2:17:00", start=1020, end=1110),
-            AssignmentVariable(var=var_b, team_id="sm2", venue_id="gymnase-unique", slot_id="2:17:30", start=1050, end=1140),
+            AssignmentVariable(
+                var=var_a, team_id="sm1", venue_id="gymnase-unique", slot_id="2:17:00", start=1020, end=1110
+            ),
+            AssignmentVariable(
+                var=var_b, team_id="sm2", venue_id="gymnase-unique", slot_id="2:17:30", start=1050, end=1140
+            ),
         ]
 
         stats = add_level_1_hard_constraints(
-            model, assignments,
+            model,
+            assignments,
             coaches=[{"id": "matthieu"}],
             team_coach_map={"sm1": ["matthieu"], "sm2": ["julie"]},
             team_player_map={"sm2": ["matthieu"]},
@@ -291,11 +309,15 @@ class TestCoachAtMostOneWithMap:
 
         assignments = [
             AssignmentVariable(
-                var=var_a, team_id="team-a", venue_id="venue-1",
+                var=var_a,
+                team_id="team-a",
+                venue_id="venue-1",
                 slot_id="1:18:00",
             ),
             AssignmentVariable(
-                var=var_b, team_id="team-b", venue_id="venue-1",
+                var=var_b,
+                team_id="team-b",
+                venue_id="venue-1",
                 slot_id="1:19:00",
             ),
         ]
@@ -303,7 +325,9 @@ class TestCoachAtMostOneWithMap:
         team_coach_map = {"team-a": ["coach-1"], "team-b": ["coach-1"]}
 
         add_level_1_hard_constraints(
-            model, assignments, coaches=[{"id": "coach-1"}],
+            model,
+            assignments,
+            coaches=[{"id": "coach-1"}],
             team_coach_map=team_coach_map,
         )
 
@@ -323,12 +347,18 @@ class TestCoachAtMostOneWithMap:
 
         assignments = [
             AssignmentVariable(
-                var=var_a, team_id="team-a", venue_id="venue-1",
-                slot_id="1:18:00", coach_id="coach-1",
+                var=var_a,
+                team_id="team-a",
+                venue_id="venue-1",
+                slot_id="1:18:00",
+                coach_id="coach-1",
             ),
             AssignmentVariable(
-                var=var_b, team_id="team-b", venue_id="venue-2",
-                slot_id="1:18:00", coach_id="coach-1",
+                var=var_b,
+                team_id="team-b",
+                venue_id="venue-2",
+                slot_id="1:18:00",
+                coach_id="coach-1",
             ),
         ]
 
@@ -350,7 +380,8 @@ class TestCoachRestDayWithMap:
         assignments = [
             AssignmentVariable(
                 var=model.NewBoolVar(f"team_a_day{d}"),
-                team_id="team-a", venue_id="venue-1",
+                team_id="team-a",
+                venue_id="venue-1",
                 slot_id=f"{d}:18:00",
             )
             for d in range(1, 6)
@@ -359,7 +390,9 @@ class TestCoachRestDayWithMap:
         team_coach_map = {"team-a": ["coach-1"]}
 
         stats = add_level_1_hard_constraints(
-            model, assignments, coaches=[{"id": "coach-1"}],
+            model,
+            assignments,
+            coaches=[{"id": "coach-1"}],
             team_coach_map=team_coach_map,
         )
 
@@ -367,12 +400,8 @@ class TestCoachRestDayWithMap:
             model.Add(a.var == 1)
 
         status = _solve(model)
-        assert stats.coach_rest_day > 0, (
-            f"Expected coach_rest_day > 0, got {stats.coach_rest_day}"
-        )
-        assert status == cp_model.INFEASIBLE, (
-            f"Coach working 5 days should be INFEASIBLE, got {status}"
-        )
+        assert stats.coach_rest_day > 0, f"Expected coach_rest_day > 0, got {stats.coach_rest_day}"
+        assert status == cp_model.INFEASIBLE, f"Coach working 5 days should be INFEASIBLE, got {status}"
 
 
 class TestSalarieDistributionWithMap:
@@ -383,7 +412,8 @@ class TestSalarieDistributionWithMap:
         assignments = [
             AssignmentVariable(
                 var=model.NewBoolVar(f"salarie_day{d}"),
-                team_id=f"team-{d}", venue_id="venue-A",
+                team_id=f"team-{d}",
+                venue_id="venue-A",
                 slot_id=f"{d}:18:00",
             )
             for d in range(1, 3)
@@ -391,7 +421,8 @@ class TestSalarieDistributionWithMap:
         assignments += [
             AssignmentVariable(
                 var=model.NewBoolVar(f"salarie2_day{d}"),
-                team_id=f"team-{d+5}", venue_id="venue-B",
+                team_id=f"team-{d + 5}",
+                venue_id="venue-B",
                 slot_id=f"{d}:19:00",
             )
             for d in range(1, 3)
@@ -410,7 +441,9 @@ class TestSalarieDistributionWithMap:
         }
 
         stats = add_level_1_hard_constraints(
-            model, assignments, coaches=coaches,
+            model,
+            assignments,
+            coaches=coaches,
             team_coach_map=team_coach_map,
         )
 
@@ -418,12 +451,8 @@ class TestSalarieDistributionWithMap:
             model.Add(a.var == 1)
 
         status = _solve(model)
-        assert stats.salarie_distribution > 0, (
-            f"Expected salarie_distribution > 0, got {stats.salarie_distribution}"
-        )
-        assert status == cp_model.INFEASIBLE, (
-            f"Days 3-5 with no salarie should be INFEASIBLE, got {status}"
-        )
+        assert stats.salarie_distribution > 0, f"Expected salarie_distribution > 0, got {stats.salarie_distribution}"
+        assert status == cp_model.INFEASIBLE, f"Days 3-5 with no salarie should be INFEASIBLE, got {status}"
 
 
 class TestMaxConsecutiveWithMap:
@@ -433,21 +462,27 @@ class TestMaxConsecutiveWithMap:
         model = cp_model.CpModel()
         a = AssignmentVariable(
             var=model.NewBoolVar("slot_a"),
-            team_id="team-1", venue_id="venue-1",
+            team_id="team-1",
+            venue_id="venue-1",
             slot_id="1:18:00",
-            start=18 * 60, end=19 * 60 + 30,
+            start=18 * 60,
+            end=19 * 60 + 30,
         )
         b = AssignmentVariable(
             var=model.NewBoolVar("slot_b"),
-            team_id="team-2", venue_id="venue-1",
+            team_id="team-2",
+            venue_id="venue-1",
             slot_id="1:19:30",
-            start=19 * 60 + 30, end=21 * 60,
+            start=19 * 60 + 30,
+            end=21 * 60,
         )
         c = AssignmentVariable(
             var=model.NewBoolVar("slot_c"),
-            team_id="team-3", venue_id="venue-1",
+            team_id="team-3",
+            venue_id="venue-1",
             slot_id="1:21:00",
-            start=21 * 60, end=22 * 60 + 30,
+            start=21 * 60,
+            end=22 * 60 + 30,
         )
 
         team_coach_map = {
@@ -457,7 +492,9 @@ class TestMaxConsecutiveWithMap:
         }
 
         stats = add_level_1_hard_constraints(
-            model, [a, b, c], coaches=[{"id": "coach-1"}],
+            model,
+            [a, b, c],
+            coaches=[{"id": "coach-1"}],
             team_coach_map=team_coach_map,
         )
 
@@ -469,9 +506,7 @@ class TestMaxConsecutiveWithMap:
         assert stats.max_consecutive_sessions > 0, (
             f"Expected max_consecutive_sessions > 0, got {stats.max_consecutive_sessions}"
         )
-        assert status == cp_model.INFEASIBLE, (
-            f"Coach in 3 consecutive slots should be INFEASIBLE, got {status}"
-        )
+        assert status == cp_model.INFEASIBLE, f"Coach in 3 consecutive slots should be INFEASIBLE, got {status}"
 
 
 class TestCoachPlayerNonOverlapWithMap:
@@ -482,12 +517,14 @@ class TestCoachPlayerNonOverlapWithMap:
         model = cp_model.CpModel()
         coaching = AssignmentVariable(
             var=model.NewBoolVar("coaching"),
-            team_id="team-a", venue_id="venue-1",
+            team_id="team-a",
+            venue_id="venue-1",
             slot_id="1:18:00",
         )
         playing = AssignmentVariable(
             var=model.NewBoolVar("playing"),
-            team_id="team-b", venue_id="venue-2",
+            team_id="team-b",
+            venue_id="venue-2",
             slot_id="1:18:00",
         )
 
@@ -495,7 +532,8 @@ class TestCoachPlayerNonOverlapWithMap:
         team_player_map = {"team-b": ["coach-1"]}
 
         stats = add_level_1_hard_constraints(
-            model, [coaching, playing],
+            model,
+            [coaching, playing],
             coaches=[{"id": "coach-1"}, {"id": "coach-2"}],
             team_coach_map=team_coach_map,
             team_player_map=team_player_map,
@@ -524,11 +562,15 @@ class TestMultiCoachTeamWithMap:
         # Each (team, venue, day, slot) appears exactly ONCE
         assignments = [
             AssignmentVariable(
-                var=var_sm1, team_id="sm1", venue_id="venue-1",
+                var=var_sm1,
+                team_id="sm1",
+                venue_id="venue-1",
                 slot_id="1:18:00",
             ),
             AssignmentVariable(
-                var=var_other, team_id="other-team", venue_id="venue-2",
+                var=var_other,
+                team_id="other-team",
+                venue_id="venue-2",
                 slot_id="1:18:00",
             ),
         ]
@@ -539,7 +581,8 @@ class TestMultiCoachTeamWithMap:
         }
 
         stats = add_level_1_hard_constraints(
-            model, assignments,
+            model,
+            assignments,
             coaches=[{"id": "coach-maxime"}, {"id": "coach-thomas"}],
             team_coach_map=team_coach_map,
         )
@@ -548,9 +591,7 @@ class TestMultiCoachTeamWithMap:
         model.Add(var_other == 1)
 
         status = _solve(model)
-        assert stats.coach_at_most_one > 0, (
-            f"Expected coach_at_most_one > 0, got {stats.coach_at_most_one}"
-        )
+        assert stats.coach_at_most_one > 0, f"Expected coach_at_most_one > 0, got {stats.coach_at_most_one}"
         assert status == cp_model.INFEASIBLE, (
             f"Coach-maxime coaching two teams at same time should be INFEASIBLE, got {status}"
         )
@@ -564,11 +605,15 @@ class TestMultiCoachTeamWithMap:
 
         assignments = [
             AssignmentVariable(
-                var=var_sm1, team_id="sm1", venue_id="venue-1",
+                var=var_sm1,
+                team_id="sm1",
+                venue_id="venue-1",
                 slot_id="1:18:00",
             ),
             AssignmentVariable(
-                var=var_sm2, team_id="sm2", venue_id="venue-1",
+                var=var_sm2,
+                team_id="sm2",
+                venue_id="venue-1",
                 slot_id="1:18:00",
             ),
         ]
@@ -579,7 +624,8 @@ class TestMultiCoachTeamWithMap:
         }
 
         stats = add_level_1_hard_constraints(
-            model, assignments,
+            model,
+            assignments,
             coaches=[{"id": "coach-maxime"}, {"id": "coach-thomas"}, {"id": "coach-emeric"}],
             team_coach_map=team_coach_map,
         )
@@ -589,9 +635,5 @@ class TestMultiCoachTeamWithMap:
         model.Add(var_sm2 == 1)
 
         status = _solve(model)
-        assert stats.room_at_most_one > 0, (
-            f"Expected room_at_most_one > 0, got {stats.room_at_most_one}"
-        )
-        assert status == cp_model.INFEASIBLE, (
-            f"Two teams at same venue/slot should be INFEASIBLE, got {status}"
-        )
+        assert stats.room_at_most_one > 0, f"Expected room_at_most_one > 0, got {stats.room_at_most_one}"
+        assert status == cp_model.INFEASIBLE, f"Two teams at same venue/slot should be INFEASIBLE, got {status}"

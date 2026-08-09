@@ -19,8 +19,12 @@ ALLOWED_SEVERITIES = {"ERROR", "WARNING", "INFO", "SUCCESS"}
 
 def _team(team_id: str, sessions: int = 1) -> dict[str, Any]:
     return {
-        "id": team_id, "sportCategoryId": "cat", "priorityTierId": 3,
-        "name": team_id, "sessionsPerWeek": sessions, "isActive": True,
+        "id": team_id,
+        "sportCategoryId": "cat",
+        "priorityTierId": 3,
+        "name": team_id,
+        "sessionsPerWeek": sessions,
+        "isActive": True,
     }
 
 
@@ -29,8 +33,14 @@ def test_duplicate_hard_templates_deduplicated() -> None:
     # ONE slot and NO over-capacity conflict (the "SM3, SM3" false positive).
     venue = make_venue("v", [(2, "18:00")], capacity=1)
     tpl = {
-        "id": "tpl", "teamId": "t", "venueId": "v", "coachId": None,
-        "dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "HARD",
+        "id": "tpl",
+        "teamId": "t",
+        "venueId": "v",
+        "coachId": None,
+        "dayOfWeek": 2,
+        "startTime": "18:00",
+        "durationMinutes": 90,
+        "lockLevel": "HARD",
     }
     payload = make_payload(
         teams=[_team("t")],
@@ -49,8 +59,14 @@ def test_conflict_message_lists_each_team_once() -> None:
     # If a real over-capacity conflict lists teams, each team appears once.
     venue = make_venue("v", [(2, "18:00")], capacity=1)
     tpl_a = {
-        "id": "a", "teamId": "a", "venueId": "v", "coachId": None,
-        "dayOfWeek": 2, "startTime": "18:00", "durationMinutes": 90, "lockLevel": "HARD",
+        "id": "a",
+        "teamId": "a",
+        "venueId": "v",
+        "coachId": None,
+        "dayOfWeek": 2,
+        "startTime": "18:00",
+        "durationMinutes": 90,
+        "lockLevel": "HARD",
     }
     tpl_b = dict(tpl_a, id="b", teamId="b")
     payload = make_payload(
@@ -73,8 +89,12 @@ def test_real_coach_double_booking_not_hidden_by_dedup() -> None:
     # is a real double-booking (the coach cannot be in two places) and must be
     # reported, even though both slots carry the same team id.
     tpl = {
-        "teamId": "a", "coachId": "C", "dayOfWeek": 2, "startTime": "18:00",
-        "durationMinutes": 90, "lockLevel": "HARD",
+        "teamId": "a",
+        "coachId": "C",
+        "dayOfWeek": 2,
+        "startTime": "18:00",
+        "durationMinutes": 90,
+        "lockLevel": "HARD",
     }
     payload = make_payload(
         teams=[_team("a")],
@@ -82,9 +102,7 @@ def test_real_coach_double_booking_not_hidden_by_dedup() -> None:
         slot_templates=[dict(tpl, id="s1", venueId="v1"), dict(tpl, id="s2", venueId="v2")],
     )
     result = solve_payload(payload)
-    coach_conflicts = [
-        d for d in result["diagnostics"] if d["type"] == "conflict" and d.get("coachId") == "C"
-    ]
+    coach_conflicts = [d for d in result["diagnostics"] if d["type"] == "conflict" and d.get("coachId") == "C"]
     assert coach_conflicts, "coach in two gyms at once must be flagged, even for one team"
 
 

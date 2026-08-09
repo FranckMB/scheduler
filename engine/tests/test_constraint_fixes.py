@@ -446,15 +446,29 @@ def _facility_min(team_id: str, venue_id: str, count: int) -> dict[str, object]:
 
 
 def _two_venue_input(team_sessions: int, constraints: list[dict[str, object]]) -> ScheduleInputSchema:
-    return ScheduleInputSchema.model_validate({
-        "clubId": "c", "seasonId": "s",
-        "teams": [make_team("t", team_sessions)],
-        "venues": [
-            {"id": "venue-A", "name": "A", "isActive": True, "trainingSlots": [make_slot(1, "18:00"), make_slot(2, "18:00")]},
-            {"id": "venue-B", "name": "B", "isActive": True, "trainingSlots": [make_slot(3, "18:00"), make_slot(4, "18:00")]},
-        ],
-        "constraints": constraints, "slotTemplates": [],
-    })
+    return ScheduleInputSchema.model_validate(
+        {
+            "clubId": "c",
+            "seasonId": "s",
+            "teams": [make_team("t", team_sessions)],
+            "venues": [
+                {
+                    "id": "venue-A",
+                    "name": "A",
+                    "isActive": True,
+                    "trainingSlots": [make_slot(1, "18:00"), make_slot(2, "18:00")],
+                },
+                {
+                    "id": "venue-B",
+                    "name": "B",
+                    "isActive": True,
+                    "trainingSlots": [make_slot(3, "18:00"), make_slot(4, "18:00")],
+                },
+            ],
+            "constraints": constraints,
+            "slotTemplates": [],
+        }
+    )
 
 
 class TestVenueMinimum:
@@ -484,18 +498,29 @@ class TestVenueMinimum:
         # Reachability is DISTINCT DAYS, not raw slots (≤1 session/day). venue-A has
         # 2 slots but BOTH on day 1 → asking for 2 is unreachable (would be a silent
         # INFEASIBLE if the guard counted raw vars). Regression for review C1.
-        input_data = ScheduleInputSchema.model_validate({
-            "clubId": "c", "seasonId": "s",
-            "teams": [make_team("t", 2)],
-            "venues": [{
-                "id": "venue-A", "name": "A", "isActive": True,
-                "trainingSlots": [make_slot(1, "18:00"), make_slot(1, "20:00")],
-            }, {
-                "id": "venue-B", "name": "B", "isActive": True,
-                "trainingSlots": [make_slot(3, "18:00"), make_slot(4, "18:00")],
-            }],
-            "constraints": [_facility_min("t", "venue-A", 2)], "slotTemplates": [],
-        })
+        input_data = ScheduleInputSchema.model_validate(
+            {
+                "clubId": "c",
+                "seasonId": "s",
+                "teams": [make_team("t", 2)],
+                "venues": [
+                    {
+                        "id": "venue-A",
+                        "name": "A",
+                        "isActive": True,
+                        "trainingSlots": [make_slot(1, "18:00"), make_slot(1, "20:00")],
+                    },
+                    {
+                        "id": "venue-B",
+                        "name": "B",
+                        "isActive": True,
+                        "trainingSlots": [make_slot(3, "18:00"), make_slot(4, "18:00")],
+                    },
+                ],
+                "constraints": [_facility_min("t", "venue-A", 2)],
+                "slotTemplates": [],
+            }
+        )
         result = asyncio.run(build_schedule(input_data))
         diag = [d for d in result.diagnostics if d.type == "venue_minimum_unreachable"]
         assert result.status != "infeasible"

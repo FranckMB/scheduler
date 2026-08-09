@@ -109,15 +109,9 @@ class TestAgeOrder:
         assert "u18m" in st, "U18M not placed"
         assert "senior-m" in st, "SeniorM not placed"
 
-        assert st["u13m"] <= st["u15m"], (
-            f"U13M ({st['u13m']}) should start at or before U15M ({st['u15m']})"
-        )
-        assert st["u15m"] <= st["u18m"], (
-            f"U15M ({st['u15m']}) should start at or before U18M ({st['u18m']})"
-        )
-        assert st["u18m"] <= st["senior-m"], (
-            f"U18M ({st['u18m']}) should start at or before SeniorM ({st['senior-m']})"
-        )
+        assert st["u13m"] <= st["u15m"], f"U13M ({st['u13m']}) should start at or before U15M ({st['u15m']})"
+        assert st["u15m"] <= st["u18m"], f"U15M ({st['u15m']}) should start at or before U18M ({st['u18m']})"
+        assert st["u18m"] <= st["senior-m"], f"U18M ({st['u18m']}) should start at or before SeniorM ({st['senior-m']})"
 
     def test_no_reverse_order(self) -> None:
         """A younger team must never be placed after an older team (same venue+day)."""
@@ -179,9 +173,7 @@ class TestAgeOrder:
 
         st: dict[str, str] = {s["teamId"]: s["startTime"] for s in solver_slots}
         if "u15m" in st and "u18m" in st:
-            assert st["u15m"] <= st["u18m"], (
-                f"U15M ({st['u15m']}) should start at or before U18M ({st['u18m']})"
-            )
+            assert st["u15m"] <= st["u18m"], f"U15M ({st['u15m']}) should start at or before U18M ({st['u18m']})"
         if "u18m" in st and "senior-m" in st:
             assert st["u18m"] <= st["senior-m"], (
                 f"U18M ({st['u18m']}) should start at or before SeniorM ({st['senior-m']})"
@@ -216,15 +208,7 @@ class TestAgeOrder:
         assert "senior-m" in st, "SeniorM not placed"
 
         # Both same-ageMin teams must precede older teams
-        assert st["u13m"] <= st["u18m"], (
-            f"U13M ({st['u13m']}) should start at or before U18M ({st['u18m']})"
-        )
-        assert st["u13f"] <= st["u18m"], (
-            f"U13F ({st['u13f']}) should start at or before U18M ({st['u18m']})"
-        )
-        assert st["u13m"] <= st["senior-m"], (
-            f"U13M ({st['u13m']}) should start at or before SeniorM ({st['senior-m']})"
-        )
-        assert st["u13f"] <= st["senior-m"], (
-            f"U13F ({st['u13f']}) should start at or before SeniorM ({st['senior-m']})"
-        )
+        assert st["u13m"] <= st["u18m"], f"U13M ({st['u13m']}) should start at or before U18M ({st['u18m']})"
+        assert st["u13f"] <= st["u18m"], f"U13F ({st['u13f']}) should start at or before U18M ({st['u18m']})"
+        assert st["u13m"] <= st["senior-m"], f"U13M ({st['u13m']}) should start at or before SeniorM ({st['senior-m']})"
+        assert st["u13f"] <= st["senior-m"], f"U13F ({st['u13f']}) should start at or before SeniorM ({st['senior-m']})"

@@ -79,9 +79,7 @@ def test_explicit_double_pin_shares_slot_no_conflict_T2() -> None:
     assert _placed_on(result, "SM1", 6, "18:00"), "SM1 explicit pin must be placed"
     assert _placed_on(result, "SM2", 6, "18:00"), "SM2 explicit pin must be placed (2 <= capacity 2)"
     over_capacity = [
-        diag
-        for diag in result["diagnostics"]
-        if diag.get("type") == "conflict" and diag.get("venueId") == "gym"
+        diag for diag in result["diagnostics"] if diag.get("type") == "conflict" and diag.get("venueId") == "gym"
     ]
     assert not over_capacity, (
         f"two explicit pins within capacity must NOT raise an over-capacity conflict: {over_capacity}"

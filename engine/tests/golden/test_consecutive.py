@@ -85,9 +85,7 @@ def _find_consecutive_triples(intervals: list[tuple[int, int, int]], day: int) -
         b_start, b_end = day_slots[i + 1]
         c_start, c_end = day_slots[i + 2]
         if a_end == b_start and b_end == c_start:
-            triples.append(
-                f"({a_start}-{a_end}) -> ({b_start}-{b_end}) -> ({c_start}-{c_end})"
-            )
+            triples.append(f"({a_start}-{a_end}) -> ({b_start}-{b_end}) -> ({c_start}-{c_end})")
     return triples
 
 
@@ -113,8 +111,7 @@ class TestConsecutiveConstraints:
         # Emerick is the key person in this scenario.
         emerick_slots = person_intervals.get("emerick", [])
         assert len(emerick_slots) > 0, (
-            f"Expected Emerick to have placed slots, got 0. "
-            f"Person intervals: {person_intervals}"
+            f"Expected Emerick to have placed slots, got 0. Person intervals: {person_intervals}"
         )
 
         triples = _find_consecutive_triples(emerick_slots, day=2)

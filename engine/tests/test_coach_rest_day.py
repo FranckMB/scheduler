@@ -47,35 +47,24 @@ class TestCoachRestDay:
     def test_stats_has_coach_rest_day_counter(self) -> None:
         """HardConstraintStats must expose a coach_rest_day counter."""
         stats = HardConstraintStats()
-        assert hasattr(stats, "coach_rest_day"), (
-            "HardConstraintStats must have a coach_rest_day field"
-        )
-        assert stats.coach_rest_day == 0, (
-            f"coach_rest_day should default to 0, got {stats.coach_rest_day}"
-        )
+        assert hasattr(stats, "coach_rest_day"), "HardConstraintStats must have a coach_rest_day field"
+        assert stats.coach_rest_day == 0, f"coach_rest_day should default to 0, got {stats.coach_rest_day}"
 
     def test_five_coaching_days_is_infeasible(self) -> None:
         """Coach working all 5 days (Mon-Fri) as coach must be rejected."""
         model = cp_model.CpModel()
         assignments = [
-            _assignment(model, f"coach_day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}")
-            for d in range(1, 6)
+            _assignment(model, f"coach_day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}") for d in range(1, 6)
         ]
 
-        stats = add_level_1_hard_constraints(
-            model, assignments, coaches=[{"id": "coach-1"}]
-        )
+        stats = add_level_1_hard_constraints(model, assignments, coaches=[{"id": "coach-1"}])
 
         for a in assignments:
             model.Add(a.var == 1)
 
         status = _solve(model)
-        assert stats.coach_rest_day > 0, (
-            f"Expected coach_rest_day > 0, got {stats.coach_rest_day}"
-        )
-        assert status == cp_model.INFEASIBLE, (
-            f"Coach working 5 days should be INFEASIBLE, got {status}"
-        )
+        assert stats.coach_rest_day > 0, f"Expected coach_rest_day > 0, got {stats.coach_rest_day}"
+        assert status == cp_model.INFEASIBLE, f"Coach working 5 days should be INFEASIBLE, got {status}"
 
     def test_four_coaching_days_is_feasible(self) -> None:
         """Coach working 4 days (Mon-Thu) as coach must be allowed."""
@@ -91,9 +80,7 @@ class TestCoachRestDay:
             model.Add(a.var == 1)
 
         status = _solve(model)
-        assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), (
-            f"Coach working 4 days should be feasible, got {status}"
-        )
+        assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), f"Coach working 4 days should be feasible, got {status}"
 
     def test_playing_assignments_count_as_working(self) -> None:
         """Coach-player playing assignments (player_ids) must count as working days.
@@ -107,7 +94,8 @@ class TestCoachRestDay:
         # Coaching assignments on days 1-4
         coaching = [
             _assignment(
-                model, f"coach_day_{d}",
+                model,
+                f"coach_day_{d}",
                 slot_id=f"{d}:18:00",
                 team_id=f"team-{d}",
                 coach_id="coach-1",
@@ -116,7 +104,8 @@ class TestCoachRestDay:
         ]
         # Playing assignment on day 5 (coach-1 is a player)
         playing = _assignment(
-            model, "playing_day_5",
+            model,
+            "playing_day_5",
             slot_id="5:18:00",
             team_id="team-5",
             coach_id="coach-other",
@@ -124,42 +113,33 @@ class TestCoachRestDay:
         )
 
         all_assignments = [*coaching, playing]
-        add_level_1_hard_constraints(
-            model, all_assignments, coaches=[{"id": "coach-1"}, {"id": "coach-other"}]
-        )
+        add_level_1_hard_constraints(model, all_assignments, coaches=[{"id": "coach-1"}, {"id": "coach-other"}])
 
         for a in all_assignments:
             model.Add(a.var == 1)
 
         status = _solve(model)
         assert status == cp_model.INFEASIBLE, (
-            f"Coach-1 coaching 4 days + playing 1 day = 5 working days; "
-            f"should be INFEASIBLE, got {status}"
+            f"Coach-1 coaching 4 days + playing 1 day = 5 working days; should be INFEASIBLE, got {status}"
         )
 
     def test_max_days_override_le_4_skips_constraint(self) -> None:
         """Coaches with max_days_override <= 4 are skipped (rest day already guaranteed)."""
         model = cp_model.CpModel()
         assignments = [
-            _assignment(model, f"coach_day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}")
-            for d in range(1, 6)
+            _assignment(model, f"coach_day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}") for d in range(1, 6)
         ]
 
-        stats = add_level_1_hard_constraints(
-            model, assignments, coaches=[{"id": "coach-1", "maxDaysOverride": 3}]
-        )
+        stats = add_level_1_hard_constraints(model, assignments, coaches=[{"id": "coach-1", "maxDaysOverride": 3}])
 
         for a in assignments:
             model.Add(a.var == 1)
 
         status = _solve(model)
         assert stats.coach_rest_day == 0, (
-            f"Coach with maxDaysOverride=3 should be skipped, "
-            f"coach_rest_day={stats.coach_rest_day}"
+            f"Coach with maxDaysOverride=3 should be skipped, coach_rest_day={stats.coach_rest_day}"
         )
-        assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), (
-            f"Skipped coach should allow 5 days, got {status}"
-        )
+        assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), f"Skipped coach should allow 5 days, got {status}"
 
     def test_weekend_days_not_constrained(self) -> None:
         """Saturday (6) and Sunday (7) must NOT count toward the rest-day constraint.
@@ -186,28 +166,18 @@ class TestCoachRestDay:
     def test_no_coaches_means_zero_constraints(self) -> None:
         """When no coaches are passed, coach_rest_day must be 0."""
         model = cp_model.CpModel()
-        assignments = [
-            _assignment(model, f"day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}")
-            for d in range(1, 6)
-        ]
+        assignments = [_assignment(model, f"day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}") for d in range(1, 6)]
 
         stats = add_level_1_hard_constraints(model, assignments, coaches=[])
 
-        assert stats.coach_rest_day == 0, (
-            f"No coaches => coach_rest_day should be 0, got {stats.coach_rest_day}"
-        )
+        assert stats.coach_rest_day == 0, f"No coaches => coach_rest_day should be 0, got {stats.coach_rest_day}"
 
     def test_total_constraints_includes_coach_rest_day(self) -> None:
         """total_constraints_added must include coach_rest_day in the sum."""
         model = cp_model.CpModel()
-        assignments = [
-            _assignment(model, f"day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}")
-            for d in range(1, 6)
-        ]
+        assignments = [_assignment(model, f"day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}") for d in range(1, 6)]
 
-        stats = add_level_1_hard_constraints(
-            model, assignments, coaches=[{"id": "coach-1"}]
-        )
+        stats = add_level_1_hard_constraints(model, assignments, coaches=[{"id": "coach-1"}])
 
         if stats.coach_rest_day > 0:
             expected_total = (
@@ -227,6 +197,5 @@ class TestCoachRestDay:
                 + stats.coach_rest_day
             )
             assert stats.total_constraints_added == expected_total, (
-                f"total_constraints_added={stats.total_constraints_added} "
-                f"!= expected={expected_total}"
+                f"total_constraints_added={stats.total_constraints_added} != expected={expected_total}"
             )

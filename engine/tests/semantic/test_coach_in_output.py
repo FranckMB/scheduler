@@ -59,7 +59,9 @@ def test_assistant_only_team_still_reports_no_coach() -> None:
     assert result["status"] != "failed", f"solve failed: {result['status']}"
     placed = _placed(result, "t1")
     assert placed, "team must be placed"
-    assert all(slot["coachId"] is None for slot in placed), "un ASSISTANT seul n'encadre pas la séance au sens du modèle"
+    assert all(slot["coachId"] is None for slot in placed), (
+        "un ASSISTANT seul n'encadre pas la séance au sens du modèle"
+    )
 
 
 def test_no_coach_constraint_still_reports_no_coach() -> None:

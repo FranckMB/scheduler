@@ -44,9 +44,9 @@ def assert_no_hard_violation(input_data: MatchPlacementInputSchema, output: Matc
         kick = _minutes(placement.kickoff)
         day = match.match_date.isoweekday()
 
-        assert not any(
-            u.start_date <= match.match_date <= u.end_date for u in venue.unavailabilities
-        ), f"{placement.match_id}: placed on an unavailable venue"
+        assert not any(u.start_date <= match.match_date <= u.end_date for u in venue.unavailabilities), (
+            f"{placement.match_id}: placed on an unavailable venue"
+        )
 
         assert any(
             w.day_of_week == day
@@ -101,12 +101,36 @@ def wire_payload() -> dict[str, Any]:
             },
         ],
         "teams": [
-            {"id": "pnm", "name": "PNM", "leagueWindows": [{"dayOfWeek": 6, "kickoffMin": "15:30", "kickoffMax": "21:00"}], "habits": [{"dayOfWeek": 6, "kickoff": "15:30", "venueId": "mateo"}], "coaches": [{"coachId": "emerick", "role": "MAIN"}]},
-            {"id": "sf1", "name": "SF1", "leagueWindows": [], "habits": [{"dayOfWeek": 6, "kickoff": "20:30", "venueId": "mateo"}], "coaches": []},
+            {
+                "id": "pnm",
+                "name": "PNM",
+                "leagueWindows": [{"dayOfWeek": 6, "kickoffMin": "15:30", "kickoffMax": "21:00"}],
+                "habits": [{"dayOfWeek": 6, "kickoff": "15:30", "venueId": "mateo"}],
+                "coaches": [{"coachId": "emerick", "role": "MAIN"}],
+            },
+            {
+                "id": "sf1",
+                "name": "SF1",
+                "leagueWindows": [],
+                "habits": [{"dayOfWeek": 6, "kickoff": "20:30", "venueId": "mateo"}],
+                "coaches": [],
+            },
             {"id": "df2", "name": "DF2", "leagueWindows": [], "habits": [], "coaches": []},
-            {"id": "u13", "name": "U13", "leagueWindows": [{"dayOfWeek": 6, "kickoffMin": "13:00", "kickoffMax": "18:00"}], "habits": [], "coaches": []},
+            {
+                "id": "u13",
+                "name": "U13",
+                "leagueWindows": [{"dayOfWeek": 6, "kickoffMin": "13:00", "kickoffMax": "18:00"}],
+                "habits": [],
+                "coaches": [],
+            },
             {"id": "rm2", "name": "RM2", "leagueWindows": [], "habits": [], "coaches": []},
-            {"id": "rf3", "name": "RF3", "leagueWindows": [], "habits": [], "coaches": [{"coachId": "emerick", "role": "MAIN"}]},
+            {
+                "id": "rf3",
+                "name": "RF3",
+                "leagueWindows": [],
+                "habits": [],
+                "coaches": [{"coachId": "emerick", "role": "MAIN"}],
+            },
         ],
         "teamLinks": [{"teamAId": "pnm", "teamBId": "sf1", "type": "BACK_TO_BACK"}],
         "trainingOccupancies": [{"date": SATURDAY, "start": "13:00", "end": "14:30", "coachId": "emerick"}],
@@ -131,12 +155,23 @@ def test_access_window_is_hard_no_kickoff_ever_leaks_out() -> None:
     # d'envoi hors 14:30-16:15, quelles que soient les préférences.
     payload = wire_payload()
     payload["venues"] = [
-        {"id": "mateo", "name": "Mateo", "matchWindows": [{"dayOfWeek": 6, "start": "14:00", "end": "18:00"}], "unavailabilities": []}
+        {
+            "id": "mateo",
+            "name": "Mateo",
+            "matchWindows": [{"dayOfWeek": 6, "start": "14:00", "end": "18:00"}],
+            "unavailabilities": [],
+        }
     ]
     payload["matches"] = [m for m in payload["matches"] if m["kind"] == "TO_PLACE"][:1]
     # A habit OUTSIDE the window (20:30) must not drag the kickoff out.
     payload["teams"] = [
-        {"id": "pnm", "name": "PNM", "leagueWindows": [], "habits": [{"dayOfWeek": 6, "kickoff": "20:30", "venueId": "mateo"}], "coaches": []}
+        {
+            "id": "pnm",
+            "name": "PNM",
+            "leagueWindows": [],
+            "habits": [{"dayOfWeek": 6, "kickoff": "20:30", "venueId": "mateo"}],
+            "coaches": [],
+        }
     ]
     payload["teamLinks"] = []
     payload["trainingOccupancies"] = []

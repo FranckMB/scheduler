@@ -91,9 +91,7 @@ def _candidate_kickoffs(
                 saw_access_candidate = True
                 # League HARD only when the team maps: the kickoff must fall in
                 # SOME league window of that day.
-                if not league_mapped or any(
-                    _minutes(w.kickoff_min) <= kick <= _minutes(w.kickoff_max) for w in league
-                ):
+                if not league_mapped or any(_minutes(w.kickoff_min) <= kick <= _minutes(w.kickoff_max) for w in league):
                     kicks.append(kick)
                 kick += STEP_MIN
         if kicks:
@@ -248,9 +246,7 @@ def solve_match_placement(input_data: MatchPlacementInputSchema) -> dict[str, An
                 objective.append(weight * cand.var)
 
     # 4. Pairwise SOFT between TO_PLACE matches: shared-coach clash, links.
-    def _overlap_pairs(
-        left: MatchSchema, right: MatchSchema, penalty: int, tag: str
-    ) -> None:
+    def _overlap_pairs(left: MatchSchema, right: MatchSchema, penalty: int, tag: str) -> None:
         if left.match_date != right.match_date:
             return
         for lc in candidates[left.id]:
@@ -358,9 +354,7 @@ def solve_match_placement(input_data: MatchPlacementInputSchema) -> dict[str, An
                     {"matchId": match.id, "venueId": chosen.venue_id, "kickoff": _to_time(chosen.kickoff_min)}
                 )
             else:
-                unplaced.append(
-                    {"matchId": match.id, "reason": "venue_full", "message": REASON_MESSAGES["venue_full"]}
-                )
+                unplaced.append({"matchId": match.id, "reason": "venue_full", "message": REASON_MESSAGES["venue_full"]})
     else:  # pragma: no cover — the model is always feasible (placement optional)
         for match in solvable:
             unplaced.append({"matchId": match.id, "reason": "venue_full", "message": REASON_MESSAGES["venue_full"]})

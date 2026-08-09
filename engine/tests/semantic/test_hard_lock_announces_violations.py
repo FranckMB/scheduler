@@ -69,9 +69,7 @@ def _days_of(result: dict[str, Any], team_id: str) -> list[int]:
 
 def _violation_messages(result: dict[str, Any]) -> list[str]:
     return [
-        str(d.get("message", ""))
-        for d in result.get("diagnostics") or []
-        if d.get("type") == "constraint_not_honored"
+        str(d.get("message", "")) for d in result.get("diagnostics") or [] if d.get("type") == "constraint_not_honored"
     ]
 
 
@@ -183,7 +181,9 @@ def test_a_soft_window_is_never_reported_and_never_parsed() -> None:
     result = solve_payload(payload)
 
     assert result["status"] == "completed", "une règle souple malformée ne doit pas faire échouer la génération"
-    assert _violation_messages(result) == [], "une contrainte PREFERRED n'est pas appliquée — l'accuser serait un mensonge"
+    assert _violation_messages(result) == [], (
+        "une contrainte PREFERRED n'est pas appliquée — l'accuser serait un mensonge"
+    )
 
 
 def test_a_lock_overflowing_the_end_window_is_reported() -> None:
@@ -234,13 +234,22 @@ def test_two_distinct_locks_violating_the_same_rule_are_both_reported() -> None:
     assert any("18:00" in m for m in messages) and any("20:00" in m for m in messages)
 
 
-def _day_rule(team_id: str, cid: str, *, allowed: list[int] | None = None, forbidden: list[int] | None = None) -> dict[str, Any]:
+def _day_rule(
+    team_id: str, cid: str, *, allowed: list[int] | None = None, forbidden: list[int] | None = None
+) -> dict[str, Any]:
     config: dict[str, Any] = {}
     if allowed is not None:
         config["allowedDays"] = allowed
     if forbidden is not None:
         config["forbiddenDays"] = forbidden
-    return {"id": cid, "isActive": True, "family": "DAY", "ruleType": "HARD", "scopeTargetId": team_id, "config": config}
+    return {
+        "id": cid,
+        "isActive": True,
+        "family": "DAY",
+        "ruleType": "HARD",
+        "scopeTargetId": team_id,
+        "config": config,
+    }
 
 
 def test_day_rules_are_evaluated_UNITED_not_one_by_one() -> None:

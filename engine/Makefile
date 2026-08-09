@@ -17,6 +17,7 @@ install: ## Install Python dependencies
 
 test: ## Run pytest
 	$(RUN) ruff check .
+	$(RUN) ruff format --check .
 	$(RUN) mypy
 	$(RUN) bandit -r app/
 	$(RUN) pytest
@@ -24,10 +25,11 @@ test: ## Run pytest
 
 lint: ## Run ruff + mypy
 	$(RUN) ruff check .
+	$(RUN) ruff format --check .
 	$(RUN) mypy
 	$(RUN) bandit -r app/
 
-format: ## Format code with ruff
+format: ## Format code with ruff (l'arbre est formaté ET gardé — P4-64)
 	$(RUN) ruff format .
 
 help: ## Display this help

@@ -47,6 +47,7 @@ def _starts(result: dict[str, Any], team_id: str) -> set[str]:
 
 # --- TIME (HARD) --------------------------------------------------------------
 
+
 def test_hard_time_min_start_respected() -> None:
     venue = make_venue("v", [(1, "17:00"), (1, "20:00")])
     payload = make_payload(
@@ -54,7 +55,10 @@ def test_hard_time_min_start_respected() -> None:
         venues=[venue],
         constraints=[
             team_constraint(
-                constraint_id="c", team_id="t", family="TIME", rule_type="HARD",
+                constraint_id="c",
+                team_id="t",
+                family="TIME",
+                rule_type="HARD",
                 config={"minStartTime": "19:00"},
             )
         ],
@@ -72,7 +76,10 @@ def test_hard_time_max_start_respected() -> None:
         venues=[venue],
         constraints=[
             team_constraint(
-                constraint_id="c", team_id="t", family="TIME", rule_type="HARD",
+                constraint_id="c",
+                team_id="t",
+                family="TIME",
+                rule_type="HARD",
                 config={"maxStartTime": "18:00"},
             )
         ],
@@ -85,6 +92,7 @@ def test_hard_time_max_start_respected() -> None:
 
 # --- DAY (HARD) ---------------------------------------------------------------
 
+
 def test_hard_day_forbidden_respected() -> None:
     venue = make_venue("v", [(2, "18:00"), (4, "18:00")])
     payload = make_payload(
@@ -92,7 +100,10 @@ def test_hard_day_forbidden_respected() -> None:
         venues=[venue],
         constraints=[
             team_constraint(
-                constraint_id="c", team_id="t", family="DAY", rule_type="HARD",
+                constraint_id="c",
+                team_id="t",
+                family="DAY",
+                rule_type="HARD",
                 config={"forbiddenDays": [2]},
             )
         ],
@@ -108,7 +119,10 @@ def test_hard_day_forced_has_session_on_day() -> None:
         venues=[venue],
         constraints=[
             team_constraint(
-                constraint_id="c", team_id="t", family="DAY", rule_type="HARD",
+                constraint_id="c",
+                team_id="t",
+                family="DAY",
+                rule_type="HARD",
                 config={"forcedDays": [4]},
             )
         ],
@@ -124,7 +138,10 @@ def test_hard_day_allowed_days_excludes_others() -> None:
         venues=[venue],
         constraints=[
             team_constraint(
-                constraint_id="c", team_id="t", family="DAY", rule_type="HARD",
+                constraint_id="c",
+                team_id="t",
+                family="DAY",
+                rule_type="HARD",
                 config={"allowedDays": [2]},
             )
         ],
@@ -140,7 +157,10 @@ def test_lock_day_behaves_as_hard() -> None:
         venues=[venue],
         constraints=[
             team_constraint(
-                constraint_id="c", team_id="t", family="DAY", rule_type="LOCK",
+                constraint_id="c",
+                team_id="t",
+                family="DAY",
+                rule_type="LOCK",
                 config={"forbiddenDays": [2]},
             )
         ],
@@ -150,6 +170,7 @@ def test_lock_day_behaves_as_hard() -> None:
 
 
 # --- COACH availability (ENG-01) ---------------------------------------------
+
 
 def test_coach_unavailable_day_no_session() -> None:
     # THE test that would have caught ENG-01: a coach entered as unavailable on a
@@ -235,13 +256,17 @@ def test_coach_available_days_complement() -> None:
 
 # --- FACILITY ----------------------------------------------------------------
 
+
 def test_facility_forbidden_venue_respected() -> None:
     payload = make_payload(
         teams=[_team("t")],
         venues=[make_venue("bad", [(2, "18:00")]), make_venue("good", [(3, "18:00")])],
         constraints=[
             team_constraint(
-                constraint_id="c", team_id="t", family="FACILITY", rule_type="HARD",
+                constraint_id="c",
+                team_id="t",
+                family="FACILITY",
+                rule_type="HARD",
                 config={"forbiddenVenueId": "bad"},
             )
         ],
@@ -257,7 +282,10 @@ def test_facility_forced_venue_respected() -> None:
         venues=[make_venue("target", [(2, "18:00")]), make_venue("other", [(2, "18:00")])],
         constraints=[
             team_constraint(
-                constraint_id="c", team_id="t", family="FACILITY", rule_type="HARD",
+                constraint_id="c",
+                team_id="t",
+                family="FACILITY",
+                rule_type="HARD",
                 config={"preferredVenueId": "target"},
             )
         ],

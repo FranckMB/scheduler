@@ -25,9 +25,15 @@ _MINIMAL_OUTPUT = {
 def _minimal_input() -> ScheduleInputSchema:
     return ScheduleInputSchema.model_validate(
         {
-            "clubId": "c", "seasonId": "s", "version": "1.0",
-            "venues": [], "teams": [], "coaches": [], "slotTemplates": [],
-            "constraints": [], "priorityTiers": [],
+            "clubId": "c",
+            "seasonId": "s",
+            "version": "1.0",
+            "venues": [],
+            "teams": [],
+            "coaches": [],
+            "slotTemplates": [],
+            "constraints": [],
+            "priorityTiers": [],
         }
     )
 
@@ -81,10 +87,18 @@ def test_recognised_family_variant_does_not_warn(caplog: Any) -> None:
     # A recognised family (FACILITY) whose specific config variant isn't handled
     # (CLUB scope, no venue action) is an intentional no-op, NOT contract drift.
     with caplog.at_level(logging.WARNING, logger="engine.constraints"):
-        parse_v2_constraints([{
-            "id": "x", "isActive": True, "family": "FACILITY", "scope": "CLUB",
-            "ruleType": "PREFERRED", "config": {},
-        }])
+        parse_v2_constraints(
+            [
+                {
+                    "id": "x",
+                    "isActive": True,
+                    "family": "FACILITY",
+                    "scope": "CLUB",
+                    "ruleType": "PREFERRED",
+                    "config": {},
+                }
+            ]
+        )
     assert not any("unrecognised constraint" in r.message for r in caplog.records)
 
 
@@ -116,9 +130,15 @@ def test_purge_keeps_lock_with_pending_waiter() -> None:
 def _input_with_version(version: str) -> ScheduleInputSchema:
     return ScheduleInputSchema.model_validate(
         {
-            "clubId": "c", "seasonId": "s", "version": version,
-            "venues": [], "teams": [], "coaches": [], "slotTemplates": [],
-            "constraints": [], "priorityTiers": [],
+            "clubId": "c",
+            "seasonId": "s",
+            "version": version,
+            "venues": [],
+            "teams": [],
+            "coaches": [],
+            "slotTemplates": [],
+            "constraints": [],
+            "priorityTiers": [],
         }
     )
 

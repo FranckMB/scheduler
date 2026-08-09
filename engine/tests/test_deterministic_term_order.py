@@ -40,11 +40,7 @@ def test_preferred_day_terms_come_out_in_sorted_team_order() -> None:
 
     # Une variable par (équipe, jour) : le terme porte la variable, donc l'ordre
     # des termes révèle l'ordre dans lequel les équipes ont été traitées.
-    x = {
-        (team_id, "venue-1", day, "18:00"): _RecordingVar((team_id, day))
-        for team_id in team_ids
-        for day in (1, 2)
-    }
+    x = {(team_id, "venue-1", day, "18:00"): _RecordingVar((team_id, day)) for team_id in team_ids for day in (1, 2)}
 
     # Chaque équipe reçoit une règle PREFERRED/DAY — c'est l'agrégation par équipe
     # qui itère sur l'union d'ensembles incriminée.
