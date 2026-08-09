@@ -17,13 +17,16 @@ use App\Service\ManagementAccessGuard;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\OptimisticLockException;
 use ReflectionClass;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 use Symfony\Contracts\Service\Attribute\Required;
 
 /**
@@ -221,6 +224,8 @@ abstract class AbstractStateProcessor implements ProcessorInterface
             }
         }
 
+        $this->assertNotStale($entity);
+
         $this->updateEntityFromInput($entity, $input);
         $this->entityManager->flush();
         $this->afterPersist($entity);
@@ -271,4 +276,45 @@ abstract class AbstractStateProcessor implements ProcessorInterface
      * arrive dans une requête voisine). Ne jamais y placer de logique métier obligatoire.
      */
     protected function afterPersist(object $entity): void {}
+
+    /**
+     * P4-25 — le verrou optimiste, câblé une fois pour toutes.
+     *
+     * ⚑ Le défaut : `processPut` remplaçait tous les champs éditables sans jamais regarder
+     * la colonne `version`. Deux onglets sur la même ligne, ou un cache react-query périmé
+     * de 30 s, et la seconde écriture écrase la première — **sans un mot**. Le premier
+     * éditeur ne l'apprend pas, le second ne sait pas qu'il a effacé quelque chose. Constaté
+     * sur `CoachWish`, mais universel : 30 entités sur 49 portent `#[ORM\Version]`.
+     *
+     * ⚠ Le mécanisme Doctrine EXISTAIT déjà — la colonne est mappée `#[ORM\Version]` partout.
+     * Il n'était simplement jamais engagé : `processPut` recharge l'entité juste avant
+     * d'écrire, donc la version concorde toujours au flush. Une protection présente et
+     * inerte, ce qui est pire qu'absente : on croit l'avoir.
+     *
+     * **`If-Match` plutôt qu'un champ de payload**, et c'est un choix de coût autant que de
+     * standard : un en-tête se lit en UN endroit, un champ aurait demandé de toucher les 30
+     * DTO d'entrée. Son absence conserve exactement le comportement actuel — aucune écriture
+     * existante ne casse, la protection s'active client par client, au rythme du front.
+     */
+    private function assertNotStale(object $entity): void
+    {
+        $ifMatch = $this->requestStack->getCurrentRequest()?->headers->get('If-Match');
+        if (null === $ifMatch || '' === trim($ifMatch)) {
+            return;
+        }
+
+        $expected = filter_var(trim($ifMatch, " \t\n\r\0\x0B\"'W/"), \FILTER_VALIDATE_INT);
+        if (false === $expected) {
+            throw new UnprocessableEntityHttpException('If-Match doit porter le numéro de version de la ressource.');
+        }
+
+        try {
+            $this->entityManager->lock($entity, LockMode::OPTIMISTIC, $expected);
+        } catch (OptimisticLockException) {
+            // 409 et pas 412 : le client n'a rien à re-négocier, il a une version périmée
+            // d'une ressource qui a bougé. Le message dit quoi faire — recharger — parce
+            // qu'un « conflit » sans conduite à tenir renvoie le gestionnaire à lui-même.
+            throw new ConflictHttpException('Cette fiche a été modifiée entre-temps par quelqu\'un d\'autre. Rechargez la page avant d\'enregistrer, sinon vous écraseriez sa saisie.');
+        }
+    }
 }

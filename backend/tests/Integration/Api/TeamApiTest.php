@@ -17,6 +17,7 @@ use App\Enum\TeamLevel;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -88,6 +89,66 @@ final class TeamApiTest extends WebTestCase
 
         self::assertResponseStatusCodeSame(201);
         self::assertSame(5, json_decode((string) $client->getResponse()->getContent(), true)['tierOrder']);
+    }
+
+    /**
+     * P4-25 — deux éditeurs de la même fiche : le second ne doit pas écraser en silence.
+     *
+     * ⚑ `processPut` remplaçait tous les champs éditables sans regarder la colonne
+     * `version`. Deux onglets, ou un cache react-query périmé de 30 s, et la seconde
+     * écriture effaçait la première **sans un mot** — le premier éditeur ne l'apprend
+     * jamais, le second ne sait pas qu'il a effacé quelque chose.
+     *
+     * ⚠ Le mécanisme Doctrine existait déjà (`#[ORM\Version]` sur 30 entités) mais n'était
+     * jamais ENGAGÉ : le processeur recharge l'entité juste avant d'écrire, donc la version
+     * concorde toujours au flush. Une protection présente et inerte — pire qu'absente,
+     * puisqu'on croit l'avoir.
+     *
+     * Les trois cas vont ensemble : sans `If-Match` rien ne change (aucune écriture
+     * existante ne casse), avec la version courante ça passe, avec une version périmée
+     * c'est un 409 qui dit quoi faire.
+     *
+     * ⚠ Bearer à CHAQUE requête : le firewall est stateless, `loginUser` ne survit pas
+     * d'un appel au suivant (gotcha maison, mesuré ici en 401 sur le second appel).
+     */
+    public function testAStaleWriterIsRefusedInsteadOfOverwritingSilently(): void
+    {
+        $client = $this->client;
+        $team = $this->createTeam('Concurrent');
+
+        $manager = self::getContainer()->get(JWTTokenManagerInterface::class);
+        \assert($manager instanceof JWTTokenManagerInterface);
+        $token = $manager->create($this->user);
+
+        $headers = [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ];
+        $uri = \sprintf('/api/teams/%s', $team->getId());
+        $body = fn (string $name): string => json_encode([
+            'name' => $name,
+            'sportCategoryId' => $this->sportCategory->getId(),
+            'priorityTierId' => $this->priorityTier->getId(),
+        ], \JSON_THROW_ON_ERROR);
+
+        // 1. Sans If-Match : comportement inchangé. C'est ce qui permet de câbler le front
+        //    écran par écran sans casser les 30 entités d'un coup.
+        $client->request('PUT', $uri, [], [], $headers, $body('Premier'));
+        self::assertResponseIsSuccessful('sans If-Match, une écriture doit passer comme avant');
+        $stale = (int) json_decode((string) $client->getResponse()->getContent(), true)['version'];
+
+        // 2. Avec la version courante : accepté — et la version avance.
+        $client->request('PUT', $uri, [], [], [...$headers, 'HTTP_IF_MATCH' => (string) $stale], $body('Second'));
+        self::assertResponseIsSuccessful('la version courante doit être acceptée');
+        $fresh = (int) json_decode((string) $client->getResponse()->getContent(), true)['version'];
+        self::assertGreaterThan($stale, $fresh, 'une écriture réelle doit faire avancer la version, sinon le verrou ne verrouille rien');
+
+        // 3. Avec la version que le PREMIER éditeur avait lue : refusé. C'est exactement le
+        //    scénario des deux onglets — sa page est restée sur l'ancienne version.
+        $client->request('PUT', $uri, [], [], [...$headers, 'HTTP_IF_MATCH' => (string) $stale], $body('Ecrasement'));
+        self::assertSame(409, $client->getResponse()->getStatusCode(), 'une version périmée doit être REFUSÉE, jamais écraser silencieusement');
+        self::assertStringContainsString('Rechargez', (string) $client->getResponse()->getContent(), 'le 409 doit dire quoi faire, pas seulement qu\'il y a conflit');
     }
 
     public function testTierOrderIsWritableOnUpdate(): void
