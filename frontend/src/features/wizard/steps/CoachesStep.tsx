@@ -28,7 +28,7 @@ import { useWizardStore } from "../store";
 import { ReadonlyCoaches } from "./StructureSummary";
 
 function payload(coach: Coach, patch: Partial<Coach>) {
-  return { firstName: coach.firstName, lastName: coach.lastName, email: coach.email, isEmployee: coach.isEmployee, isActive: coach.isActive, ...patch };
+  return { firstName: coach.firstName, lastName: coach.lastName, email: coach.email, isEmployee: coach.isEmployee, isActive: coach.isActive, maxDaysOverride: coach.maxDaysOverride, ...patch };
 }
 
 interface CardProps {
@@ -114,6 +114,33 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
             <input type="checkbox" checked={coach.isEmployee} onChange={(e) => update.mutate({ id: coach.id, body: payload(coach, { isEmployee: e.target.checked }) })} />
             Salarié
           </label>
+          {/* P4-51 — le plafond de COMPTE : « peu importe quels jours, pas plus de N par
+              semaine ». Distinct d'une indisponibilité (qui dit QUELS jours, dans
+              Contraintes). Vide = pas de plafond. Le solveur le traite en PRÉFÉRÉ : il
+              regroupe quand il peut, ne sacrifie jamais une séance, et le récap nomme le
+              dépassement sinon. */}
+          <label className="flex items-center gap-1 text-xs text-muted-foreground" title="Nombre maximum de jours au club par semaine — le solveur regroupe les séances quand c'est possible, et le récap signale s'il n'y arrive pas. Vide = pas de plafond.">
+            Max
+            <Input
+              type="number"
+              min={1}
+              max={6}
+              aria-label="Jours maximum par semaine"
+              className="h-8 w-16"
+              value={coach.maxDaysOverride ?? ""}
+              onChange={(e) => {
+                const raw = e.target.value;
+                // ⚠ Vidé → 0, pas null : le PUT est PARTIEL côté serveur (null = « inchangé »),
+                // donc null ne peut pas porter le retrait. 0 est la sentinelle « retirer ».
+                const parsed = "" === raw ? 0 : Number(raw);
+                if (0 !== parsed && (!Number.isInteger(parsed) || parsed < 1 || parsed > 6)) {
+                  return; // hors bornes : on n'envoie rien, le champ reste piloté par le serveur
+                }
+                update.mutate({ id: coach.id, body: payload(coach, { maxDaysOverride: parsed }) });
+              }}
+            />
+            j/sem
+          </label>
           <div className="ml-auto">{actions}</div>
         </div>
       ) : (
@@ -121,6 +148,11 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
         <div className="flex items-center gap-2">
           <span className="whitespace-nowrap text-sm font-medium">{`${coach.firstName} ${coach.lastName}`.trim()}</span>
           {coach.isEmployee ? <span className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent">Salarié</span> : null}
+          {null !== coach.maxDaysOverride ? (
+            <span className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-xs text-accent" title="Plafond préféré : le solveur regroupe les séances quand c'est possible, le récap signale sinon.">
+              ≤ {coach.maxDaysOverride} j/sem
+            </span>
+          ) : null}
           <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
             {coachLinks.map((link) => (
               <span key={link.id} className="whitespace-nowrap rounded-full bg-accent/15 px-2 py-0.5 text-xs">

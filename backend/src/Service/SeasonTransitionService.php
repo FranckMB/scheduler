@@ -244,7 +244,6 @@ final class SeasonTransitionService
             $copy->setEmail($coach->getEmail());
             $copy->setPhone($coach->getPhone());
             $copy->setMaxDaysOverride($coach->getMaxDaysOverride());
-            $copy->setMaxDaysOverrideConfirmed($coach->getMaxDaysOverrideConfirmed());
             $copy->setAcceptableLateMinutes($coach->getAcceptableLateMinutes());
             $copy->setIsActive($coach->getIsActive());
             $copy->setIsEmployee($coach->isEmployee());

@@ -264,6 +264,10 @@ export interface Coach {
   email: string | null;
   isEmployee: boolean;
   isActive: boolean;
+  /** P4-51 — plafond de jours au club par semaine. null = pas de plafond. PRÉFÉRÉ côté
+   *  solveur : il regroupe quand il peut, ne sacrifie jamais une séance, et le récap
+   *  nomme le dépassement quand il n'y arrive pas. */
+  maxDaysOverride: number | null;
 }
 
 export interface TeamCoach {
@@ -286,6 +290,7 @@ export interface CoachPayload {
   email?: string | null;
   isEmployee?: boolean;
   isActive?: boolean;
+  maxDaysOverride?: number | null;
 }
 
 export const listCoaches = (): Promise<Coach[]> => collectionAll<Coach>("coaches");
