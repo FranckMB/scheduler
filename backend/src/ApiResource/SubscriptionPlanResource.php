@@ -12,9 +12,10 @@ use App\State\Provider\SubscriptionPlanStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
-// SEC-14: read-only over the tenant API. SubscriptionPlan is the GLOBAL billing catalogue (prices,
-// maxTeams, maxGenerations) — a write here would let any club member falsify pricing/
-// quotas. Managed out-of-band (fixtures / future super-admin surface), never the tenant API.
+// SEC-14: read-only over the tenant API. SubscriptionPlan is the GLOBAL offer catalogue
+// (code, maxTeams, maxGenerations — no amount anywhere, P1-3) — a write here would let any
+// club member falsify caps/quotas. Managed out-of-band (migration seed / super-admin
+// actions), never the tenant API. The `beta` offer is hidden from the collection (provider).
 #[ApiResource(shortName: 'SubscriptionPlan', operations: [
     new GetCollection,
     new Get,
@@ -34,8 +35,12 @@ class SubscriptionPlanResource
     public DateTimeImmutable $updatedAt;
 
     #[Groups(['read'])]
+    public string $code = '';
+
+    #[Groups(['read'])]
     public string $name = '';
 
+    // Convention 0 = illimité (P1-3).
     #[Groups(['read'])]
     public int $maxTeams = 0;
 
@@ -44,12 +49,6 @@ class SubscriptionPlanResource
 
     #[Groups(['read'])]
     public int $maxGenerations = 0;
-
-    #[Groups(['read'])]
-    public string $monthlyPrice = '';
-
-    #[Groups(['read'])]
-    public string $annualPrice = '';
 
     /** @var array<string, mixed> */
     #[Groups(['read'])]
@@ -62,12 +61,11 @@ class SubscriptionPlanResource
         $dto->version = $entity->getVersion();
         $dto->createdAt = $entity->getCreatedAt();
         $dto->updatedAt = $entity->getUpdatedAt();
+        $dto->code = $entity->getCode();
         $dto->name = $entity->getName();
         $dto->maxTeams = $entity->getMaxTeams();
         $dto->maxVenues = $entity->getMaxVenues();
         $dto->maxGenerations = $entity->getMaxGenerations();
-        $dto->monthlyPrice = $entity->getMonthlyPrice();
-        $dto->annualPrice = $entity->getAnnualPrice();
         $dto->features = $entity->getFeatures();
 
         return $dto;

@@ -36,8 +36,18 @@ class Club
     #[ORM\Column(type: 'string', length: 180)]
     private string $slug;
 
-    #[ORM\Column(type: 'integer', nullable: true)]
-    private ?int $planId = null;
+    // P1-3 — offre souscrite : FK UUID (nullable) vers subscription_plan. null =
+    // offre Découverte (le défaut de tout compte). L'offre EFFECTIVE se calcule à
+    // la lecture (PlanEntitlements) — une offre payante/bêta dont paidSeasonYear
+    // est périmé retombe sur Découverte sans qu'on touche ce champ.
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $planId = null;
+
+    // P1-3 — crédits de SORTIE consommés (offre Découverte : pool club de 10,
+    // partagé entre gestionnaires). Décompté par l'enforcement (PR B) ; posé à 0
+    // par défaut, remis à 0 par l'action superadmin app:clubs:reset-credits.
+    #[ORM\Column(type: 'integer', options: ['default' => 0])]
+    private int $outputCreditsUsed = 0;
 
     #[ORM\Column(type: 'string', length: 20, nullable: true)]
     private ?string $billingCycle = null;
@@ -280,14 +290,26 @@ class Club
         return $this;
     }
 
-    public function getPlanId(): ?int
+    public function getPlanId(): ?string
     {
         return $this->planId;
     }
 
-    public function setPlanId(?int $planId): self
+    public function setPlanId(?string $planId): self
     {
         $this->planId = $planId;
+
+        return $this;
+    }
+
+    public function getOutputCreditsUsed(): int
+    {
+        return $this->outputCreditsUsed;
+    }
+
+    public function setOutputCreditsUsed(int $outputCreditsUsed): self
+    {
+        $this->outputCreditsUsed = $outputCreditsUsed;
 
         return $this;
     }

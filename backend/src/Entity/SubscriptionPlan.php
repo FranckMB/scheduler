@@ -27,9 +27,18 @@ class SubscriptionPlan
     #[ORM\Column(type: 'datetimetz_immutable')]
     private DateTimeImmutable $updatedAt;
 
+    // Stable attribution key (never displayed) : `decouverte`, `essentiel`, `club`,
+    // `grand-club`, `sans-limite`, `beta`. The superadmin set-plan action targets a
+    // plan by CODE, not by its (volatile) display name or UUID.
+    #[ORM\Column(type: 'string', length: 60, unique: true)]
+    private string $code;
+
     #[ORM\Column(type: 'string', length: 120)]
     private string $name;
 
+    // Convention across the three caps: 0 = ILLIMITÉ (P1-3). Découverte has no team
+    // cap (0); the paid tiers set maxTeams; maxGenerations is the Découverte output
+    // credit pool (10) and stays 0 = illimité on every paid/bêta tier.
     #[ORM\Column(type: 'integer')]
     private int $maxTeams;
 
@@ -38,12 +47,6 @@ class SubscriptionPlan
 
     #[ORM\Column(type: 'integer')]
     private int $maxGenerations;
-
-    #[ORM\Column(type: 'decimal', precision: 10, scale: 2)]
-    private string $monthlyPrice;
-
-    #[ORM\Column(type: 'decimal', precision: 10, scale: 2)]
-    private string $annualPrice;
 
     /** @var array<string, mixed> */
     #[ORM\Column(type: 'json')]
@@ -104,6 +107,18 @@ class SubscriptionPlan
         $this->updatedAt = new DateTimeImmutable;
     }
 
+    public function getCode(): string
+    {
+        return $this->code;
+    }
+
+    public function setCode(string $code): self
+    {
+        $this->code = $code;
+
+        return $this;
+    }
+
     public function getName(): string
     {
         return $this->name;
@@ -148,30 +163,6 @@ class SubscriptionPlan
     public function setMaxGenerations(int $maxGenerations): self
     {
         $this->maxGenerations = $maxGenerations;
-
-        return $this;
-    }
-
-    public function getMonthlyPrice(): string
-    {
-        return $this->monthlyPrice;
-    }
-
-    public function setMonthlyPrice(string|int|float $monthlyPrice): self
-    {
-        $this->monthlyPrice = (string) $monthlyPrice;
-
-        return $this;
-    }
-
-    public function getAnnualPrice(): string
-    {
-        return $this->annualPrice;
-    }
-
-    public function setAnnualPrice(string|int|float $annualPrice): self
-    {
-        $this->annualPrice = (string) $annualPrice;
 
         return $this;
     }
