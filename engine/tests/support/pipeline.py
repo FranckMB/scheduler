@@ -27,13 +27,22 @@ def solve_payload(data: dict[str, Any], *, timeout: int | None = None) -> dict[s
     """Run a raw payload dict through the production pipeline, return the output dict.
 
     Mirrors ``POST /generate`` exactly minus the FastAPI/lock layer:
-    ScheduleInputSchema → build_schedule → ScheduleOutputSchema → dict(by_alias).
+    ScheduleInputSchema → build_schedule → ScheduleOutputSchema → dict JSON.
+
+    ⚑ AUD-ENG-28 — ``mode="json"`` n'est pas cosmétique. Sans lui, ``model_dump`` rend des
+    objets PYTHON (``datetime.time(18, 0)``) là où l'API rend des chaînes (``"18:00:00"``) :
+    le harnais qui promet « exactement POST /generate » livrait un type que le backend ne
+    voit jamais. Un test comparant ``slot["startTime"]`` à ``"18:00"`` échouait alors pour
+    une raison qui n'existe pas en production — et, dans l'autre sens, un test aurait pu
+    passer sur une comparaison d'objets que la vraie réponse JSON n'aurait jamais permise.
+
+    FastAPI sérialise ; un harnais qui court-circuite FastAPI doit sérialiser aussi.
     """
     payload = dict(data)
     if timeout is not None:
         payload["solverTimeoutSeconds"] = timeout
     output = asyncio.run(build_schedule(ScheduleInputSchema.model_validate(payload)))
-    return output.model_dump(by_alias=True)
+    return output.model_dump(mode="json", by_alias=True)
 
 
 def make_venue(
