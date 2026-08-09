@@ -519,10 +519,13 @@ def add_coach_rest_day_constraints(
                     person_day_vars[(player_id_str, day)].append(assignment.var)
 
     added = 0
-    for coach_id_str, max_days in coach_max_days.items():
-        # Skip coaches whose max_days_override <= 4 (rest day already guaranteed)
-        if max_days is not None and max_days <= 4:
-            continue
+    for coach_id_str in coach_max_days:
+        # P4-51 — le skip « override ≤ 4 ⇒ repos déjà garanti » est MORT. Il reposait sur
+        # une hypothèse fausse : le plafond n'était appliqué nulle part (il ne servait
+        # qu'au diagnostic post-solve), donc régler « max 3 jours » RETIRAIT la garantie
+        # de repos sans rien plafonner — l'inverse du libellé. Le plafond est désormais
+        # un terme soft de l'objectif (`add_coach_day_cap_penalty`) ; la garantie d'un
+        # jour de repos lun-ven, elle, vaut pour TOUS les coachs, sans exemption.
 
         # Create is_working BoolVars for each day 1-5 using reification
         is_working_vars: list[BoolVarLike] = []

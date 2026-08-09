@@ -123,8 +123,18 @@ class TestCoachRestDay:
             f"Coach-1 coaching 4 days + playing 1 day = 5 working days; should be INFEASIBLE, got {status}"
         )
 
-    def test_max_days_override_le_4_skips_constraint(self) -> None:
-        """Coaches with max_days_override <= 4 are skipped (rest day already guaranteed)."""
+    def test_max_days_override_no_longer_disables_the_rest_day(self) -> None:
+        """P4-51 — l'anti-garde du skip, RETOURNÉ.
+
+        Ce test épinglait : « un coach avec maxDaysOverride ≤ 4 est SAUTÉ (repos déjà
+        garanti) ». L'hypothèse était fausse — le plafond n'était appliqué nulle part, il
+        ne servait qu'au diagnostic post-solve. Régler « max 3 jours » RETIRAIT donc la
+        garantie du jour de repos sans rien plafonner : l'inverse exact du libellé.
+
+        Depuis P4-51 le plafond est un terme soft de l'objectif, et la garantie d'un jour
+        de repos lun-ven vaut pour TOUS les coachs : cinq jours ouvrés imposés à un coach
+        plafonné doivent rendre le modèle INFEASIBLE, exactement comme sans plafond.
+        """
         model = cp_model.CpModel()
         assignments = [
             _assignment(model, f"coach_day_{d}", slot_id=f"{d}:18:00", team_id=f"team-{d}") for d in range(1, 6)
@@ -136,10 +146,8 @@ class TestCoachRestDay:
             model.Add(a.var == 1)
 
         status = _solve(model)
-        assert stats.coach_rest_day == 0, (
-            f"Coach with maxDaysOverride=3 should be skipped, coach_rest_day={stats.coach_rest_day}"
-        )
-        assert status in (cp_model.FEASIBLE, cp_model.OPTIMAL), f"Skipped coach should allow 5 days, got {status}"
+        assert stats.coach_rest_day == 1, "le plafond ne doit PLUS exempter de la règle du jour de repos"
+        assert status == cp_model.INFEASIBLE, "cinq jours ouvrés sans repos doivent rester impossibles, plafonné ou non"
 
     def test_weekend_days_not_constrained(self) -> None:
         """Saturday (6) and Sunday (7) must NOT count toward the rest-day constraint.
