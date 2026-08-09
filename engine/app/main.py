@@ -456,7 +456,9 @@ def _solve(
     soft_terms.extend(add_match_day_rest_bonus(model, model.x, data.get("teams", []), LEVEL_2_OBJECTIVE_WEIGHTS))
     soft_terms.extend(add_spacing_penalty(model, model.x, data.get("teams", []), LEVEL_2_OBJECTIVE_WEIGHTS))
     # P4-51 — le plafond de jours d'un coach (préféré, jamais dur) : voir add_coach_day_cap_penalty.
-    soft_terms.extend(add_coach_day_cap_penalty(model, model.x, data.get("coaches", []), team_coach_map, LEVEL_2_OBJECTIVE_WEIGHTS))
+    soft_terms.extend(
+        add_coach_day_cap_penalty(model, model.x, data.get("coaches", []), team_coach_map, LEVEL_2_OBJECTIVE_WEIGHTS)
+    )
 
     # Phase 1 installs the PLACEMENT objective only; the chaining terms are built
     # into the model but kept out of the objective (apply_chaining=False) so their

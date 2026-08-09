@@ -175,7 +175,6 @@ class Level2ObjectiveStats:
     chaining_terms: tuple[tuple[Any, int], ...] = ()
 
 
-
 def add_coach_day_cap_penalty(
     model: Any,
     x: Mapping[Any, BoolVarLike],
@@ -243,6 +242,7 @@ def add_coach_day_cap_penalty(
             terms.append((literal, "overload_day"))
 
     return terms
+
 
 def add_level_2_objective(
     model: Any,
