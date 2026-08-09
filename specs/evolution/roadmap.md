@@ -142,7 +142,7 @@
 
 ---
 
-## Findings d'audit ouverts (registre `/audit`) — 12
+## Findings d'audit ouverts (registre `/audit`) — 11
 
 > **À quoi sert cette section.** Le skill `/audit` tient un **registre à IDs stables** : un finding garde son
 > identifiant d'une édition à l'autre, ce qui rend la comparaison inter-éditions possible (« ce défaut est-il
@@ -168,7 +168,6 @@
 | AUD-FRT-09 | Le retry d'une génération saison crée une version de plus | Faible | frontend | 2026-07-10 | `GenerateStep.tsx:204` → `queries.ts:614-617` : `existingScheduleId ?? createSchedule(...)`. Le mode période réutilise l'overlay en vol, pas le mode saison. Conséquence : des versions FAILED s'accumulent sous le plan. Pas de corruption (l'unicité du socle est tenue par un 409 serveur) |
 | AUD-FRT-18 | Le fallback d'erreur expose le code HTTP au lieu du sens | Faible | frontend | 2026-07-10 | `errorMessage.ts:55` : « Une erreur est survenue (429) » là où le gestionnaire devrait lire « trop de requêtes, patientez ». Le gros du finding est corrigé (les corps serveur ne sont plus repris qu'en 4xx) ; reste la table de correspondance des codes courants |
 | AUD-FRT-20 | Tests d'écrans qui mockent les hooks porteurs | Faible | frontend | 2026-08-08 | 17× `auth/queries`, 15× `./queries`, 9× cockpit — contre 15× `./api`. Le patron prescrit par §7.2 pt 5 (mocker le module API **voisin**, monter le vrai hook sur un `QueryClient`) coexiste avec du hook-mocking qui ne garde que le câblage. Pas rouge (967 verts) : le filet est simplement inégal selon les features |
-| AUD-ENG-28 | Les invariants tournent sur un pipeline qui n'est pas celui de prod | Faible | engine | 2026-08-08 | `tests/invariants/test_invariants.py:31-36` : `_run_pipeline` local, sans `parse_v2_constraints`, coach lu des `slotTemplates`. « Deferred to E1 » assumé dans le code. Trou limité — le golden BCCL passe, lui, par le vrai `build_schedule` |
 | AUD-A11Y-13 | Messages d'erreur de champ non reliés au champ | Faible | ux | 2026-08-08 | `CoachesStep.tsx:268`, `TeamsStep.tsx:751,756`, `VenuesStep.tsx:412` : le message texte existe (A11Y-11 corrigé) et `aria-invalid` est posé, mais aucun `aria-describedby` ne les lie — l'erreur s'annonce par interruption (`role="alert"`), pas à la relecture du champ |
 | AUD-A11Y-14 | Deux `text-[9px]` sous le plancher que les grilles se sont donné | Faible | ux | 2026-08-08 | `MonthCalendar.tsx:112` (« Férié ») et `VenueAvailabilityGrid.tsx:126`. P4-72 a tranché « les grilles gardent leur densité » à 10 px : ces deux-là sont **sous** leur propre règle |
 | AUD-UXC-11 | Un seul écran, deux incohérences (GenerateStep) | Faible | ux | 2026-08-08 | « Générez le **plan** » (`:215`) vs « Générer le **planning** » (`:236`) ; vouvoiement (`:172-173,215`) vs tutoiement (`:199-200`). Concentre les derniers restes des anciens UXC-07/08/09 : à traiter en une passe, pas en trois |

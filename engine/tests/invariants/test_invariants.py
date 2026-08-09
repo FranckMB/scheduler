@@ -9,10 +9,14 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from ortools.sat.python import cp_model
 
-from app.solver.constraints import add_level_1_hard_constraints
+from app.main import read_contract_version
+from app.solver.constraints import add_level_1_hard_constraints, parse_v2_constraints
 from app.solver.model import build_model
 from app.solver.objective import add_level_2_objective
 from app.solver.result_builder import build_result
+from tests.support.pipeline import solve_payload, team_coach
+
+CONTRACT_VERSION = read_contract_version()
 
 FIXTURES_DIR = pathlib.Path(__file__).resolve().parents[1] / "fixtures"
 
@@ -28,12 +32,19 @@ def _normalize_team_fields(data: dict[str, Any]) -> None:
             team["forced_venue_id"] = team["forcedVenueId"]
 
 
-# NOTE (PR0): this local harness is NOT yet the production pipeline. It enforces
-# coaches from slotTemplates; production enforces them from TEAM_COACH
-# constraints (parse_v2_constraints). Reconciling these invariants onto
-# ``tests.support.solve_payload`` is deferred to E1, where coach semantics are
-# corrected — migrating naively now would break the coach-uniqueness invariant
-# on generated fixtures that carry no TEAM_COACH constraints.
+# AUD-ENG-28 (soldé 2026-08-09) — les invariants tournent désormais sur `solve_payload`,
+# c'est-à-dire sur `build_schedule`, le VRAI pipeline. Ce harnais local ne survit que pour
+# UN test : celui du point d'extension `skip_rest_day_and_distribution`, que l'ADR-0001
+# conserve « documenté et testé, mais dormant » et que la production n'emprunte jamais.
+#
+# Le report annoncé ici (« deferred to E1 ») redoutait à raison qu'une migration naïve vide
+# les invariants coach de leur substance : la prod lit les coachs des contraintes
+# TEAM_COACH, et les fixtures n'en portaient aucune — `team_coach_map` serait resté vide et
+# « aucun coach n'est dédoublé » serait devenu vrai PAR ABSENCE DE COACH.
+#
+# Le piège n'a pas été évité en gardant un pipeline parallèle, mais en faisant porter aux
+# fixtures la forme que le backend sérialise. `test_the_fixtures_really_exercise_coaches`
+# interdit le retour en arrière.
 def _run_pipeline(
     data: dict[str, Any],
     *,
@@ -203,16 +214,40 @@ def random_fixture(draw: st.DrawFn) -> dict[str, Any]:
     for v in venues:
         v["trainingSlots"] = venue_avail_map.get(v["id"], [])
 
+    # AUD-ENG-28 — le coach voyage par une contrainte TEAM_COACH, comme en production.
+    #
+    # Le harnais local lisait `slotTemplates[].coachId` ; la prod, elle, construit son
+    # `team_coach_map` depuis `parse_v2_constraints`. Migrer les invariants sur le vrai
+    # pipeline SANS émettre ces contraintes aurait vidé les invariants coach de leur
+    # substance : `team_coach_map` serait resté vide, aucune contrainte coach n'aurait été
+    # posée, et « aucun coach n'est dédoublé » serait devenu vrai par absence de coach.
+    #
+    # C'est le piège que le commentaire « deferred to E1 » signalait. On ne l'évite pas en
+    # gardant un pipeline parallèle : on l'évite en faisant porter aux fixtures la forme
+    # que le backend sérialise vraiment.
+    # CHAQUE équipe porte un coach MAIN, comme en production — pas seulement celles qui
+    # ont un template. Limiter les coachs aux équipes templatées rendait
+    # `test_no_coach_double_booking` VIDE : au plus deux équipes en avaient un, et
+    # neutraliser les deux contraintes coach du solveur laissait l'invariant vert.
+    coach_by_team = {t["id"]: draw(st.sampled_from(coaches))["id"] for t in teams} if coaches else {}
+    constraints = [team_coach(f"tc-{i}", tid, cid) for i, (tid, cid) in enumerate(coach_by_team.items())]
+
+    # Le coach du template suit la même carte : deux vérités sur « qui coache cette
+    # équipe » se contrediraient, et c'est le template que `result_builder` affiche.
+    for tpl in templates:
+        if tpl["teamId"] in coach_by_team:
+            tpl["coachId"] = coach_by_team[tpl["teamId"]]
+
     return {
         "clubId": "club-hypothesis",
         "seasonId": "season-2024",
-        "version": "2.0",
+        "version": CONTRACT_VERSION,
         "solverSeed": 42,
         "venues": venues,
         "teams": teams,
         "coaches": coaches,
         "slotTemplates": templates,
-        "constraints": [],
+        "constraints": constraints,
         "priorityTiers": [
             {"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 2},
             {"id": 2, "label": "A", "orToolsWeight": 1000, "defaultMinSessions": 2},
@@ -228,11 +263,43 @@ def random_fixture(draw: st.DrawFn) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def test_the_fixtures_really_exercise_coaches() -> None:
+    """AUD-ENG-28 — le garde qui empêche les invariants coach de devenir vides.
+
+    Les invariants tournent sur le vrai pipeline, qui lit les coachs des contraintes
+    TEAM_COACH (`parse_v2_constraints`) et de nulle part ailleurs. Si les fixtures cessaient
+    d'en émettre — par exemple en revenant au `slotTemplates[].coachId` d'avant —
+    `team_coach_map` redeviendrait vide, aucune contrainte coach ne serait posée, et
+    `test_no_coach_double_booking` passerait **sans rien vérifier**.
+
+    C'est le mode de panne le plus dangereux d'une suite de tests : elle reste verte en
+    ayant cessé de prouver quoi que ce soit.
+    """
+    payloads = [random_fixture().example() for _ in range(30)]
+    with_coach = [p for p in payloads if parse_v2_constraints(p["constraints"]).get("team_coach_map")]
+
+    assert with_coach, (
+        "Aucune des 30 fixtures générées ne produit de team_coach_map : les invariants coach "
+        "ne vérifient plus rien. Les fixtures doivent émettre des contraintes TEAM_COACH — "
+        "c'est de là, et de là seulement, que la production tire ses coachs."
+    )
+
+    # Et le lien doit être FIDÈLE : chaque coach épinglé sur un template atteint la carte
+    # que le solveur consomme.
+    for payload in with_coach:
+        mapped = parse_v2_constraints(payload["constraints"])["team_coach_map"]
+        for tpl in payload["slotTemplates"]:
+            if tpl.get("coachId"):
+                assert tpl["coachId"] in mapped.get(tpl["teamId"], []), (
+                    f"le coach {tpl['coachId']} de l'équipe {tpl['teamId']} n'atteint pas le solveur"
+                )
+
+
 class TestInvariants:
     @settings(max_examples=20, deadline=None)
     @given(data=random_fixture())
     def test_no_venue_double_booking(self, data: dict[str, Any]) -> None:
-        result = _run_pipeline(data)
+        result = solve_payload(data, timeout=5)
         if result["status"] != "completed":
             pytest.skip("Solver did not find a feasible solution")
 
@@ -247,7 +314,7 @@ class TestInvariants:
     @settings(max_examples=20, deadline=None)
     @given(data=random_fixture())
     def test_no_coach_double_booking(self, data: dict[str, Any]) -> None:
-        result = _run_pipeline(data)
+        result = solve_payload(data, timeout=5)
         if result["status"] != "completed":
             pytest.skip("Solver did not find a feasible solution")
 
@@ -267,7 +334,7 @@ class TestInvariants:
     @settings(max_examples=20, deadline=None)
     @given(data=random_fixture())
     def test_age_order_per_venue_day(self, data: dict[str, Any]) -> None:
-        result = _run_pipeline(data)
+        result = solve_payload(data, timeout=5)
         if result["status"] != "completed":
             pytest.skip("Solver did not find a feasible solution")
 
@@ -302,7 +369,7 @@ class TestInvariants:
     @settings(max_examples=20, deadline=None)
     @given(data=random_fixture())
     def test_coach_consistency(self, data: dict[str, Any]) -> None:
-        result = _run_pipeline(data)
+        result = solve_payload(data, timeout=5)
         if result["status"] != "completed":
             pytest.skip("Solver did not find a feasible solution")
 
@@ -414,7 +481,7 @@ class TestInvariants:
     @settings(max_examples=20, deadline=None)
     @given(data=random_fixture())
     def test_hard_locked_slots_preserved(self, data: dict[str, Any]) -> None:
-        result = _run_pipeline(data)
+        result = solve_payload(data, timeout=5)
 
         hard_templates = [t for t in data.get("slotTemplates", []) if t.get("lockLevel") == "HARD"]
         hard_slots = [s for s in result["slots"] if s.get("lockLevel") == "HARD"]
@@ -428,7 +495,11 @@ class TestInvariants:
                 s["teamId"] == tpl["teamId"]
                 and s["venueId"] == tpl["venueId"]
                 and s["dayOfWeek"] == tpl["dayOfWeek"]
-                and s["startTime"] == tpl["startTime"]
+                # L'API rend une heure CANONIQUE ("18:00:00") ; la fixture, comme le
+                # backend, écrit "18:00". On compare donc sur HH:MM. Le harnais local
+                # renvoyait la forme d'entrée telle quelle, ce qui masquait cet écart —
+                # et faisait croire que les deux bouts parlaient le même format.
+                and str(s["startTime"])[:5] == tpl["startTime"][:5]
                 for s in hard_slots
             )
             assert found, f"HARD slot for team {tpl['teamId']} not preserved"
@@ -474,7 +545,7 @@ class TestInvariants:
                 {"id": 5, "label": "D", "orToolsWeight": 1, "defaultMinSessions": 0},
             ],
         }
-        result = _run_pipeline(data)
+        result = solve_payload(data, timeout=5)
 
         assert result["status"] == "completed"
         placed_teams = {s["teamId"] for s in result["slots"]}
