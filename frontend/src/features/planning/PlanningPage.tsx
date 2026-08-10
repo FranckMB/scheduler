@@ -12,6 +12,7 @@ import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { useSchedulePlans } from "@/features/cockpit/queries";
 import { useReservations, useVenuePeriodOverrides } from "@/features/wizard/queries";
 import { readFailed, readLoading } from "@/shared/lib/readState";
+import { useCredits } from "@/shared/credits/useCredits";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Modal } from "@/shared/components/ui/modal";
@@ -97,6 +98,8 @@ function EmptyState({ title, description }: { title: string; description: string
 export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
   const { data: me } = useMe();
+  // §4bis pt 2 — solde de crédits sur « Régénérer » (Découverte bridée seulement).
+  const credits = useCredits();
   const chosenScheduleId = me?.seasonPlan?.chosenScheduleId ?? null;
   const { viewMode, selectedScheduleId, selectedSlotId, resourceFilter, setViewMode, setSelectedScheduleId, setSelectedSlotId, toggleResource, clearResourceFilter } =
     usePlanningStore();
@@ -534,6 +537,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               isGenerating={isGenerating || regenerateMutation.isPending || regenerateOverlayMutation.isPending}
               actionBusy={actionBusy}
               disableRegenerate={regenerateDisabled}
+              outputCredits={null === credits ? null : { count: credits.remaining, blocked: !credits.canGenerate }}
               onRegenerate={() => {
                 if (null === validScheduleId) {
                   return;

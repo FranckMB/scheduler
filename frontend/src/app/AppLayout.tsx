@@ -4,6 +4,8 @@ import { NavLink, Outlet, useNavigation } from "react-router";
 import { useLogout, useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
+import { CreditBadge } from "@/shared/credits/CreditBadge";
+import { CreditsBanner } from "@/shared/credits/CreditsBanner";
 import { useApplyClubTheme } from "@/shared/hooks/useApplyClubTheme";
 import { useApplyDemoClock } from "@/shared/hooks/useApplyDemoClock";
 import { cn } from "@/shared/lib/utils";
@@ -56,6 +58,7 @@ export function AppLayout() {
             {import.meta.env.DEV ? <DevClock /> : null}
           </div>
           <nav className="flex items-center gap-1">
+            <CreditBadge />
             <SeasonSelector />
             {/* Matches stay locked until the season's plan points at a version —
                 same condition the server enforces (SocleGuard). */}
@@ -99,6 +102,7 @@ export function AppLayout() {
       <main className="mx-auto max-w-5xl px-4 py-8" aria-busy={navigating}>
         <ReadonlySeasonBanner />
         <SeasonTransitionBanner />
+        <CreditsBanner />
         <Outlet />
       </main>
     </div>

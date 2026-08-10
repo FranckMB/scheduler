@@ -11,6 +11,7 @@ import { PlanningPage } from "@/features/planning/PlanningPage";
 import { useDiagnostics, useSchedules } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
+import { useCredits } from "@/shared/credits/useCredits";
 import { scheduleIdToReuse } from "../lib/retryTarget";
 import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
 import { errorMessage } from "@/shared/lib/errorMessage";
@@ -33,6 +34,12 @@ const TIMEOUT_MS = 20 * 60 * 1000;
 export function GenerateStep() {
   const queryClient = useQueryClient();
   const { data: me } = useMe();
+  // §4bis pts 2/4 — le coût au point d'action : le solde s'affiche sur le bouton
+  // de sortie, désactivé à 0 (Découverte bridée ; null = payant/bêta/démo). Si une
+  // requête part quand même, le 403 serveur s'affiche via `launchReason`.
+  const credits = useCredits();
+  const creditSuffix = null !== credits ? ` (${credits.remaining})` : "";
+  const creditsBlocked = null !== credits && !credits.canGenerate;
   const { mode, calendarEntryId } = useWizardStore();
   const periodMode = "period" === mode;
   const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
@@ -209,9 +216,9 @@ export function GenerateStep() {
               </p>
             )}
           </div>
-          <Button size="lg" onClick={start}>
+          <Button size="lg" onClick={start} disabled={creditsBlocked}>
             <Rocket className="size-4" />
-            Réessayer
+            Réessayer{creditSuffix}
           </Button>
         </div>
       ) : waiting ? (
@@ -242,9 +249,9 @@ export function GenerateStep() {
               Impossible de charger la période — la génération est bloquée.
             </LoadErrorHint>
           ) : null}
-          <Button size="lg" onClick={start} disabled={gateClosed || (periodMode && (!periodEntry || !periodAnchorReady))}>
+          <Button size="lg" onClick={start} disabled={creditsBlocked || gateClosed || (periodMode && (!periodEntry || !periodAnchorReady))}>
             <Rocket className="size-4" />
-            {periodMode ? "Générer le planning de période" : "Lancer la génération"}
+            {periodMode ? "Générer le planning de période" : "Lancer la génération"}{creditSuffix}
           </Button>
         </div>
       )}

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Select } from "@/shared/components/ui/select";
+import { useCredits } from "@/shared/credits/useCredits";
 
 import type { Venue } from "./api";
 import { type ExportFormat, useScheduleExport } from "./queries";
@@ -16,6 +17,12 @@ export function ExportMenu({ scheduleId, venues, exportName = null }: { schedule
   const [scope, setScope] = useState<string>(""); // "" = all venues
   const rootRef = useRef<HTMLDivElement>(null);
   const { run, busy } = useScheduleExport(scheduleId, exportName);
+  // §4bis pt 2 — les TROIS exports (PDF/PNG/Excel) consomment 1 crédit : chaque
+  // entrée affiche le solde et se désactive à 0 (Découverte bridée). null = offre
+  // non bridée (payant/bêta/démo) : ni suffixe, ni blocage.
+  const credits = useCredits();
+  const creditSuffix = null !== credits ? ` (${credits.remaining})` : "";
+  const creditsBlocked = null !== credits && !credits.canExportPdf;
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -74,12 +81,13 @@ export function ExportMenu({ scheduleId, venues, exportName = null }: { schedule
                 key={key}
                 type="button"
                 role="menuitem"
-                disabled={null !== busy}
+                disabled={null !== busy || creditsBlocked}
                 onClick={() => void run(key, venueId)}
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-50"
               >
                 {busy === key ? <Loader2 className="size-4 animate-spin" /> : <Icon className="size-4" />}
                 {label}
+                {creditSuffix}
               </button>
             ))}
           </div>

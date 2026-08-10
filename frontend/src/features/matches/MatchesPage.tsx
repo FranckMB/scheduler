@@ -22,6 +22,7 @@ import { MatchWindowsEditor } from "./MatchWindowsEditor";
 import { PlacementPanel } from "./PlacementPanel";
 import { useCategories, useCoaches, useCompetitions, useConflicts, useDeleteFixture, useFixtures, useLeagueWindows, useLockFixture, useMoveFixture, usePlaceFixture, usePlaceMatches, usePriorityTiers, useSwapFixtures, useTeamMatchHabits, useTeams, useUnlockFixture, useUnplaceFixture, useVenueMatchWindows, useVenues, useVenueUnavailabilities } from "./queries";
 import { toast } from "@/shared/stores/toastStore";
+import { useCredits } from "@/shared/credits/useCredits";
 import { useMatchesStore } from "./store";
 import { UnplacedList } from "./UnplacedList";
 import { WeekendGrid } from "./WeekendGrid";
@@ -33,6 +34,12 @@ function byId<T extends { id: string }>(rows: T[] | undefined): Map<string, T> {
 
 export function MatchesPage() {
   const socleValidated = useSocleValidated();
+  // §4bis pt 2 — le placement de matchs consomme 1 crédit : solde sur le bouton,
+  // désactivé à 0 (Découverte bridée). Si la requête part quand même, le 403
+  // serveur remonte via `usePlaceMatches`.onError (errorMessage → toast).
+  const credits = useCredits();
+  const placeCreditSuffix = null !== credits ? ` (${credits.remaining})` : "";
+  const placeCreditsBlocked = null !== credits && !credits.canPlaceMatches;
   const fixtures = useFixtures();
   const competitions = useCompetitions();
   const leagueWindows = useLeagueWindows();
@@ -181,7 +188,7 @@ export function MatchesPage() {
         <div className="flex gap-2">
           <Button
             size="sm"
-            disabled={placeMatches.isPending}
+            disabled={placeMatches.isPending || placeCreditsBlocked}
             onClick={() =>
               placeMatches.mutate(undefined, {
                 onSuccess: (result) => {
@@ -195,7 +202,7 @@ export function MatchesPage() {
             }
           >
             <Wand2 className="size-4" />
-            {placeMatches.isPending ? "Placement…" : "Placer automatiquement"}
+            {placeMatches.isPending ? "Placement…" : `Placer automatiquement${placeCreditSuffix}`}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setHabitsDialogOpen(true)}>
             <Repeat className="size-4" />

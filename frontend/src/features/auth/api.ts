@@ -19,6 +19,29 @@ export interface MeSeasonPlan {
   currentStructureHash: string | null;
 }
 
+/**
+ * P1-3 — droits de l'offre EFFECTIVE du club, calculés SERVEUR (PlanEntitlements)
+ * et servis tels quels : le front n'en RECALCULE aucun (piège P2-8). `creditsMax`
+ * n'est non-null qu'en Découverte bridée (pool de sorties actif) — null en
+ * payant/bêta/démo, et c'est LE drapeau « faut-il afficher les mécanismes de
+ * crédits ? ». Les booléens `can*` sont les seuls juges du « peut-on encore
+ * sortir ? » ; `creditsMax - creditsUsed` n'est qu'un affichage.
+ */
+export interface ClubEntitlements {
+  planCode: string;
+  planName: string;
+  /** Cap d'équipes de l'offre (null = illimité : Découverte, bêta, sans-limite, démo). */
+  maxTeams: number | null;
+  teamsUsed: number;
+  /** Taille du pool de crédits ; null hors Découverte bridée. */
+  creditsMax: number | null;
+  creditsUsed: number;
+  canGenerate: boolean;
+  canPlaceMatches: boolean;
+  canExportPdf: boolean;
+  seasonTransition: boolean;
+}
+
 /** FFBB institutional contact block (lot C) — league or committee. */
 export interface FfbbOrganisme {
   name: string;
@@ -67,6 +90,8 @@ export interface MeResponse {
     longitude: number | null;
     ffbbCommittee: FfbbOrganisme | null;
     ffbbLeague: FfbbOrganisme | null;
+    /** P1-3 — droits de l'offre effective ; absent tant qu'aucune saison n'est résolue. */
+    entitlements?: ClubEntitlements;
   } | null;
   /**
    * THE season's plan (ADR-0002) for the SELECTED season (X-Season-Id), else the
