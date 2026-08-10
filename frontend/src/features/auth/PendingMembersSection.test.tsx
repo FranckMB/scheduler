@@ -22,13 +22,21 @@ describe("PendingMembersSection", () => {
     pending.isError = false;
   });
 
-  it("approve/reject call the mutations with the member id", async () => {
+  it("approuve avec le rôle MEMBRE par défaut (moindre privilège), et envoie toujours un rôle", async () => {
     const user = userEvent.setup();
     render(<PendingMembersSection />);
     await user.click(screen.getByRole("button", { name: /Approuver/ }));
-    expect(approveMut).toHaveBeenCalledWith("m1");
+    expect(approveMut).toHaveBeenCalledWith({ id: "m1", role: "member" });
     await user.click(screen.getByRole("button", { name: /Refuser/ }));
     expect(rejectMut).toHaveBeenCalledWith("m1");
+  });
+
+  it("choisir Gestionnaire donne les clés — le rôle choisi part avec l'approbation", async () => {
+    const user = userEvent.setup();
+    render(<PendingMembersSection />);
+    await user.selectOptions(screen.getByLabelText("Rôle"), "Gestionnaire");
+    await user.click(screen.getByRole("button", { name: /Approuver/ }));
+    expect(approveMut).toHaveBeenCalledWith({ id: "m1", role: "admin" });
   });
 
   it("shows an empty state with no pending members", () => {

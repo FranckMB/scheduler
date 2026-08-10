@@ -1,9 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { apiErrorMessage } from "@/shared/api/errors";
+import type { AssignableRole } from "@/shared/lib/roles";
 import { useAuthStore } from "@/shared/stores/authStore";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
+import { toast } from "@/shared/stores/toastStore";
 
 import * as authApi from "./api";
+
+/**
+ * Rejoue le message lisible du serveur (l'invariant « au moins un gestionnaire »
+ * renvoie un 409 texte) plutôt qu'un « une erreur est survenue » générique. Le
+ * serveur reste seul juge : l'UI n'anticipe pas le refus, elle le RESTITUE.
+ */
+function toastServerError(err: unknown): void {
+  void apiErrorMessage(err).then((message) => toast.error(message));
+}
 
 /** Current user + club + membership status (server source of truth). */
 export function useMe() {
@@ -124,18 +136,45 @@ export function usePendingMembers(enabled: boolean) {
   });
 }
 
-export function useApproveMember() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: authApi.approveMember,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["memberships", "pending"] }),
+/** Membres actifs + désactivés du club (management) — l'écran de gestion. */
+export function useMembers(enabled: boolean) {
+  return useQuery({
+    queryKey: ["memberships", "list"],
+    queryFn: authApi.getMembers,
+    enabled,
   });
 }
 
-export function useRejectMember() {
+/**
+ * Invalide TOUTE la famille `["memberships", …]` : approuver/rétrograder/désactiver
+ * déplace une adhésion d'une liste à l'autre (pending → actifs, actifs → désactivés),
+ * donc les deux vues doivent se rafraîchir, pas seulement celle d'où part le geste.
+ */
+function useMembershipMutation<TArgs>(mutationFn: (args: TArgs) => Promise<unknown>) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: authApi.rejectMember,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["memberships", "pending"] }),
+    mutationFn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["memberships"] }),
+    onError: toastServerError,
   });
+}
+
+export function useApproveMember() {
+  return useMembershipMutation(({ id, role }: { id: string; role: AssignableRole }) => authApi.approveMember(id, role));
+}
+
+export function useRejectMember() {
+  return useMembershipMutation((id: string) => authApi.rejectMember(id));
+}
+
+export function useChangeMemberRole() {
+  return useMembershipMutation(({ id, role }: { id: string; role: AssignableRole }) => authApi.changeMemberRole(id, role));
+}
+
+export function useDeactivateMember() {
+  return useMembershipMutation((id: string) => authApi.deactivateMember(id));
+}
+
+export function useReactivateMember() {
+  return useMembershipMutation((id: string) => authApi.reactivateMember(id));
 }

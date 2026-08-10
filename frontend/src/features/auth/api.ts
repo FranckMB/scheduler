@@ -1,4 +1,5 @@
 import { api } from "@/shared/api/client";
+import type { AssignableRole } from "@/shared/lib/roles";
 import type { MembershipStatus } from "@/shared/stores/authStore";
 
 export interface MeSeason {
@@ -166,6 +167,37 @@ export interface PendingMember {
   lastName: string;
 }
 
+/** Un membre ACTIF du club (écran de gestion). `isSelf` : la ligne du gestionnaire courant. */
+export interface ActiveMember {
+  id: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  isSelf: boolean;
+}
+
+/** Un membre DÉSACTIVÉ (réactivable) — même forme, sans geste sur soi. */
+export interface DeactivatedMember {
+  id: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+}
+
+/**
+ * `GET /api/memberships?includeDeactivated=1` : membres actifs + désactivés en une
+ * lecture (un seul readState pour toute la section). `deactivated` peut manquer
+ * (réponse sans le paramètre) — le traiter comme vide, jamais comme une erreur.
+ */
+export interface MembersResponse {
+  members: ActiveMember[];
+  deactivated?: DeactivatedMember[];
+}
+
 /**
  * SEC-16 : la réponse n'a PLUS DE CORPS — lexik retire le jeton du JSON dès qu'il
  * le pose en cookie (`remove_token_from_body_when_cookies_used`). Appeler `.json()`
@@ -205,8 +237,26 @@ export function getPendingMembers(): Promise<{ members: PendingMember[] }> {
   return api.get("memberships/pending").json();
 }
 
-export function approveMember(id: string): Promise<unknown> {
-  return api.post(`memberships/${id}/approve`).json();
+/** Membres actifs + désactivés du club (management). Une lecture, un readState. */
+export function getMembers(): Promise<MembersResponse> {
+  return api.get("memberships", { searchParams: { includeDeactivated: "1" } }).json();
+}
+
+/** PR C : le rôle est REQUIS à l'approbation — le serveur refuse (422) un corps sans `role`. */
+export function approveMember(id: string, role: AssignableRole): Promise<unknown> {
+  return api.post(`memberships/${id}/approve`, { json: { role } }).json();
+}
+
+export function changeMemberRole(id: string, role: AssignableRole): Promise<unknown> {
+  return api.post(`memberships/${id}/role`, { json: { role } }).json();
+}
+
+export async function deactivateMember(id: string): Promise<void> {
+  await api.post(`memberships/${id}/deactivate`);
+}
+
+export async function reactivateMember(id: string): Promise<void> {
+  await api.post(`memberships/${id}/reactivate`);
 }
 
 export async function rejectMember(id: string): Promise<void> {
