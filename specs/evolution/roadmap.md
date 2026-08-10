@@ -1,4 +1,4 @@
-# Roadmap (41) — ce qui reste à faire
+# Roadmap (40) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
@@ -32,8 +32,7 @@
 > [`api-ffbb-app-reconnaissance.md`](api-ffbb-app-reconnaissance.md) (**ce que l'API FFBB rend vraiment** — mesuré, alimente P1-4 et P2-18)
 > + son annexe [`api-ffbb-app-traces.md`](api-ffbb-app-traces.md) (**les sorties brutes**, club `ARA0069036`)
 > + le besoin qui en découle [`ffbb-appariement-source-de-verite.md`](ffbb-appariement-source-de-verite.md) (**« on accompagne, on ne décide pas »** — P2-18, P1-4, P4-35) ·
-> [`bridage-freemium-decouverte.md`](bridage-freemium-decouverte.md) (P1-3) ·
-> [`etude-tailles-clubs-ffbb.md`](etude-tailles-clubs-ffbb.md) (**tailles des clubs mesurées sur l'API FFBB** — nourrit le point de cadrage P1-3 et la grille par taille) ·
+> [`etude-tailles-clubs-ffbb.md`](etude-tailles-clubs-ffbb.md) (**tailles des clubs mesurées sur l'API FFBB** — a nourri le cadrage P1-3, sert la grille tarifaire par taille) ·
 > [`enregistrement-ffbb.md`](enregistrement-ffbb.md) (P3-4) · [`compte-demo.md`](compte-demo.md) (P2-4) ·
 > [`console-superadmin.md`](console-superadmin.md) (P4-54) ·
 > [`infrastructure-hebergement.md`](infrastructure-hebergement.md) (étude) ·
@@ -58,12 +57,10 @@
 > 2026-07-31 : le terrain passe avant les chantiers auto-assignés), mais la liste est un jugement de
 > plus-value, pas une file FIFO.
 
-**Au 2026-08-09 :**
-1. **P1-3 — bridage freemium + offres** : aucune monétisation possible sans lui. **Cadrage tranché le 2026-08-09, modèle HYBRIDE à pool de crédits** (tout ouvert, 10 crédits club par sortie ; payants par taille ; Bêta superadmin) : **prête à implémenter**, plan en cours de révision.
-2. **P1-1 — rôles + gestion des membres** : débloque le self-service coach, P4-8, la salle de convivialité — structurant pour toute la surface multi-utilisateur.
+**Au 2026-08-10** *(P1-3 — bridage freemium + offres — est LIVRÉE et sort de la liste : état des lieux §1.11)* **:**
+1. **P1-1 — rôles + gestion des membres** : débloque le self-service coach, P4-8, la salle de convivialité — structurant pour toute la surface multi-utilisateur, et prérequis de plusieurs demandes en attente.
+2. **P2-17 — mutualisation lisible (« SM1/SM2 »)** : la première demande d'usage terrain encore ouverte ; son volet « affichage fusionné » est le moins cher des trois.
 3. **P2-8 — supprimer les miroirs front des règles serveur** : le motif a produit 40 défauts en 4 rounds sur la bascule ADR-0002, et chaque feature nouvelle en rajoute tant qu'il vit.
-
-*(P2-17 — mutualisation lisible, issu du terrain — reste la première demande d'usage ouverte : il talonne ce top 3 et son volet « affichage fusionné » est le seul gratuit des trois.)*
 
 ---
 
@@ -72,7 +69,6 @@
 | # | Sujet | Impact | Effort | Débloque | Note |
 |---|-------|:---:|:---:|---|---|
 | P1-1 | **Rôles non-admin + modèle de permissions** | 🟠 | L | self-service coach · comptes coach · salle convivialité · P4-8 | `ClubUser.role` est hardcodé `admin` au register ; aucune différenciation de droits. `isManagementRole` = amorce, voters à câbler partout. Inclut l'écran **gestion des membres** (inviter / changer rôle / désactiver — le membership existe, pas l'UI) |
-| P1-3 | **Bridage freemium Découverte + offres par statut** | 🟠 | M | monétisation | **Cadrage TRANCHÉ le 2026-08-09 — modèle HYBRIDE** (3ᵉ itération de la journée, historique complet en spec §3) → spec à jour : [`bridage-freemium-decouverte.md`](bridage-freemium-decouverte.md). **Découverte (défaut de tout compte) : périmètre et configuration ILLIMITÉS** (import FFBB complet, tout visible, rien de masqué) + **UN pool CLUB de 10 crédits partagé entre gestionnaires**, non rechargeable (config, reset superadmin) — **1 crédit par SORTIE** (solve planning/période, placement de matchs, export PDF), consulter/ajuster gratuits, seule la transition de saison fermée — pas de lockout à l'épuisement. **Payants = 100 % des features, seul le cap d'équipes varie** (Essentiel ≤ 20 · Club ≤ 30 · Grand club ≤ 50 · Sans limite — `maxTeams` en base, aucun montant affiché) ; **Bêta = offre superadmin-only, une saison** ; expiration → Découverte effective, calculée à la lecture (pas de read-only, pas de cron). **PSP = Stripe, différé** (virement + marquage superadmin en v1). Garde-fous : wow-12 ✅ fait ; **question aux bêta reformulée** (spec §7, Rillieux en premier). Reste : seed des 5 offres, FK `Club.planId` int→guid à réparer, drop colonnes prix, compteur total (le `generation_count_season` se reset par saison — inutilisable) ⚑ **Grille tarifaire (2026-08-04)** : PAR SAISON, fixe mai-sept, dégressif ensuite ; **montants via Van Westendorp** avant toute annonce. Axes NR : generation pipeline (compteur 10 + « payant/bêta jamais refusé business », `ClubQuotaTest` intact) et périmètre (caps payants aux portes de création, features off, expiration) |
 
 ---
 

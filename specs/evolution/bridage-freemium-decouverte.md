@@ -1,6 +1,9 @@
 # Bridage plan Découverte (freemium) + offres par statut — besoin spécifié
 
-> **Statut** : **besoin spécifié** (discovery close, décisions tranchées §5) — **pas un plan**.
+> **Statut** : ✅ **LIVRÉ le 2026-08-10** (P1-3 complet — PR #487 socle · #488 enforcement · #490 crédit XLSX ·
+> PR C UX de conversion ; NR `PlanEntitlementsTest` au gate CI). Ce fichier reste la référence du MODÈLE
+> (et de l'historique de cadrage §3) ; la carte du livré vit dans
+> [`etat-des-lieux.md`](../courantes/etat-des-lieux.md) §1.11. Garde-fou encore ouvert : §7.2 (question aux bêta).
 > **Nature** : fixe le modèle du plan gratuit ET le socle d'offres par statut, business-critique.
 > **Rattachement roadmap** : **P1-3**.
 > ⚑ **Modèle HYBRIDE acté le 2026-08-09 (soir)** — troisième et dernière itération d'une même journée
