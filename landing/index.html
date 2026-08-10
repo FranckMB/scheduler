@@ -3,22 +3,31 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Le planning de ton club, sans le casse-tête</title>
+  <title>Le planning de votre club, sans le casse-tête</title>
   <meta name="description" content="Générez le planning d'entraînements de votre club de basket en quelques minutes : toutes vos contraintes capturées, un planning optimisé, réajustable quand la réalité change." />
   <style>
+    /* ── Voix display : Bricolage Grotesque (OFL, auto-hébergée — assets/fonts/) ── */
+    @font-face {
+      font-family: "Bricolage Grotesque";
+      font-style: normal;
+      font-weight: 700 800;
+      font-display: swap;
+      src: url("assets/fonts/bricolage-latin.woff2") format("woff2");
+    }
     /* ── Palette : sobre, crédible trésorier ; le sport en accent, pas en criard ── */
     :root {
       --paper: #faf9f7;
       --surface: #ffffff;
       --ink: #191714;
       --ink-2: #57534c;
-      --muted: #8a857c;
+      --muted: #6d675d;         /* ≥ 4.5:1 sur --paper, tenable en petit texte */
       --line: #e7e3dc;
-      --accent: #c2571e;        /* cuir de ballon, désaturé */
-      --accent-ink: #9c4210;
+      --accent: #c2571e;        /* cuir de ballon, désaturé — décoratif seulement */
+      --accent-ink: #9c4210;    /* le même cuir, assez sombre pour porter du texte */
+      --accent-deep: #7e340a;
       --accent-soft: #faf0e8;
-      --ok: #1d7a3e;
       --radius: 12px;
+      --display: "Bricolage Grotesque", system-ui, sans-serif;
     }
     * { box-sizing: border-box; margin: 0; }
     html { scroll-behavior: smooth; }
@@ -27,8 +36,9 @@
       font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
       -webkit-font-smoothing: antialiased;
     }
+    ::selection { background: #f0dcc9; color: var(--ink); }
     .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
-    a { color: var(--accent-ink); }
+    a { color: var(--accent-ink); text-underline-offset: 3px; }
 
     /* ── Header ── */
     header.site {
@@ -38,11 +48,17 @@
       border-bottom: 1px solid var(--line);
     }
     header.site .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; }
-    .logotype { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; text-decoration: none; color: var(--ink); }
+    .logotype { font-family: var(--display); font-size: 22px; font-weight: 800; letter-spacing: -0.02em; text-decoration: none; color: var(--ink); }
     .logotype .dot { color: var(--accent); }
     nav.top { display: flex; gap: 22px; align-items: center; font-size: 15px; }
     nav.top a { color: var(--ink-2); text-decoration: none; }
     nav.top a:hover { color: var(--ink); }
+    nav.top a.btn-primary { color: #fff; }
+    nav.top a.btn-primary:hover { color: #fff; }
+    @media (max-width: 720px) {
+      nav.top { gap: 14px; }
+      nav.top a:not(.btn) { display: none; }
+    }
 
     /* ── Boutons ── */
     .btn {
@@ -52,50 +68,46 @@
     }
     .btn:hover { transform: translateY(-1px); }
     .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-    .btn-primary:hover { background: var(--accent-ink); }
+    .btn-primary { background: var(--accent-ink); color: #fff; box-shadow: 0 2px 6px -2px rgba(25,23,20,.35); }
+    .btn-primary:hover { background: var(--accent-deep); }
     .btn-ghost { border: 1.5px solid var(--line); color: var(--ink); background: var(--surface); }
     .btn-ghost:hover { border-color: var(--muted); }
 
     /* ── Hero ── */
-    .hero { padding: 72px 0 40px; }
-    .hero .kicker {
-      display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: .1em;
-      text-transform: uppercase; color: var(--accent-ink);
-      background: var(--accent-soft); padding: 4px 12px; border-radius: 999px; margin-bottom: 20px;
-    }
+    .hero { padding: 80px 0 40px; }
     h1 {
-      font-size: clamp(32px, 5.2vw, 52px); line-height: 1.08; letter-spacing: -0.025em;
+      font-family: var(--display);
+      font-size: clamp(34px, 5.4vw, 56px); line-height: 1.05; letter-spacing: -0.02em;
       font-weight: 800; max-width: 17ch; text-wrap: balance;
     }
     .hero p.lede { margin: 22px 0 0; font-size: 19px; color: var(--ink-2); max-width: 56ch; }
     .hero .ctas { margin-top: 32px; display: flex; gap: 14px; flex-wrap: wrap; }
     .hero .under { margin-top: 14px; font-size: 14px; color: var(--muted); }
 
-    /* ── Capture ── */
+    /* ── Capture — l'unique moment de motion authored de la page ── */
     figure.shot { margin: 56px 0 0; }
     figure.shot img {
       width: 100%; height: auto; display: block; border-radius: var(--radius);
       border: 1px solid var(--line); box-shadow: 0 24px 60px -24px rgba(25,23,20,.25);
+      animation: settle 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    @keyframes settle {
+      from { transform: translateY(18px); box-shadow: 0 6px 18px -12px rgba(25,23,20,.25); }
+      to   { transform: translateY(0);    box-shadow: 0 24px 60px -24px rgba(25,23,20,.25); }
     }
     figure.shot figcaption { margin-top: 10px; font-size: 13.5px; color: var(--muted); text-align: center; }
 
     /* ── Sections ── */
     section { padding: 72px 0; }
     section.alt { background: var(--surface); border-block: 1px solid var(--line); }
-    h2 { font-size: clamp(24px, 3.4vw, 34px); letter-spacing: -0.02em; font-weight: 800; max-width: 26ch; text-wrap: balance; }
+    h2 { font-family: var(--display); font-size: clamp(25px, 3.5vw, 36px); letter-spacing: -0.015em; font-weight: 800; max-width: 26ch; text-wrap: balance; }
     .sub { margin-top: 10px; color: var(--ink-2); max-width: 62ch; }
 
-    /* ── Douleur ── */
-    .pains { margin-top: 36px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
-    .pain {
-      background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-      padding: 22px;
-    }
-    section.alt .pain { background: var(--paper); }
-    .pain h3 { font-size: 17px; margin-bottom: 8px; }
+    /* ── Douleur — trois colonnes éditoriales, pas trois cartes ── */
+    .pains { margin-top: 44px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 36px; }
+    .pain { border-top: 2px solid var(--accent); padding-top: 18px; }
+    .pain h3 { font-size: 17.5px; margin-bottom: 8px; line-height: 1.3; }
     .pain p { font-size: 15px; color: var(--ink-2); }
-    .pain .n { font-size: 13px; font-weight: 800; color: var(--accent); letter-spacing: .06em; }
 
     /* ── Étapes ── */
     .steps { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 0; counter-reset: step; }
@@ -134,8 +146,8 @@
       display: flex; justify-content: space-between; align-items: center; gap: 16px;
     }
     .faq summary::-webkit-details-marker { display: none; }
-    .faq summary::after { content: "+"; font-size: 22px; color: var(--muted); flex-shrink: 0; }
-    .faq details[open] summary::after { content: "–"; }
+    .faq summary svg { flex-shrink: 0; color: var(--muted); transition: transform 240ms cubic-bezier(0.16, 1, 0.3, 1); }
+    .faq details[open] summary svg { transform: rotate(45deg); }
     .faq summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
     .faq .a { padding: 0 4px 18px; color: var(--ink-2); font-size: 15.5px; max-width: 68ch; }
 
@@ -150,6 +162,8 @@
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
       .btn { transition: none; }
+      figure.shot img { animation: none; }
+      .faq summary svg { transition: none; }
     }
   </style>
 </head>
@@ -170,13 +184,12 @@
 <main>
   <div class="wrap">
     <section class="hero">
-      <span class="kicker">Pour les clubs de basket FFBB</span>
-      <h1>Le planning de ton club, sans le casse-tête.</h1>
+      <h1>Le planning de votre club, sans le casse-tête.</h1>
       <p class="lede">
-        Chaque saison, quelqu'un passe des soirées à répartir les créneaux de gymnase entre
-        les équipes — en espérant n'oublier aucune contrainte. <span class="brand">…</span>
-        capture toutes les contraintes du club, <strong>génère un planning optimisé en quelques
-        minutes</strong>, et le réajuste quand la réalité change.
+        Dans chaque club de basket FFBB, quelqu'un passe ses soirées à répartir les créneaux
+        de gymnase entre les équipes, en espérant n'oublier aucune contrainte.
+        <span class="brand">…</span> capture toutes les contraintes du club, <strong>génère un
+        planning optimisé en quelques minutes</strong>, et le réajuste quand la réalité change.
       </p>
       <div class="ctas">
         <a class="btn btn-primary" data-cta="register" href="#">Essayer gratuitement avec mon club</a>
@@ -186,7 +199,7 @@
 
       <figure class="shot">
         <img src="assets/planning.png" alt="La grille de planning générée : chaque équipe placée sur son créneau de gymnase, les contraintes respectées" width="2160" height="1215" />
-        <figcaption>Un planning généré : chaque équipe à sa place, chaque contrainte respectée — et tout reste ajustable à la main.</figcaption>
+        <figcaption>Un planning généré : chaque équipe à sa place, chaque contrainte respectée, et tout reste ajustable à la main.</figcaption>
       </figure>
     </section>
   </div>
@@ -198,20 +211,17 @@
       toutes les règles de tête, et recommencer à zéro quand une seule saute.</p>
       <div class="pains">
         <article class="pain">
-          <span class="n">01</span>
           <h3>Les contraintes vivent dans une seule tête</h3>
           <p>« Le coach des U13 ne peut pas le mardi, la mairie ferme le gymnase pendant les
           vacances, les U9 doivent finir avant 19h… » Rien n'est écrit. Si la personne qui sait
           s'absente, tout s'arrête.</p>
         </article>
         <article class="pain">
-          <span class="n">02</span>
           <h3>Une contrainte oubliée = tout recommencer</h3>
           <p>Le planning était prêt. Puis quelqu'un signale un conflit de coach, et c'est reparti
-          pour une soirée à tout décaler — en risquant d'en casser trois autres.</p>
+          pour une soirée à tout décaler, en risquant d'en casser trois autres.</p>
         </article>
         <article class="pain">
-          <span class="n">03</span>
           <h3>La réalité change en cours de saison</h3>
           <p>La mairie reprend un créneau, un coach devient indisponible, les vacances arrivent.
           Le planning parfait de septembre ne survit pas à novembre.</p>
@@ -229,7 +239,7 @@
         <div class="step">
           <h3>Décrivez votre club</h3>
           <p>Vos équipes s'importent automatiquement depuis la FFBB. Ajoutez vos gymnases, vos
-          créneaux, vos coachs — guidé pas à pas.</p>
+          créneaux, vos coachs, guidé pas à pas.</p>
         </div>
         <div class="step">
           <h3>Posez vos contraintes</h3>
@@ -238,7 +248,7 @@
         </div>
         <div class="step">
           <h3>Générez</h3>
-          <p>Le moteur d'optimisation place toutes les équipes en respectant chaque contrainte —
+          <p>Le moteur d'optimisation place toutes les équipes en respectant chaque contrainte,
           et vous dit honnêtement ce qui coince quand tout ne tient pas.</p>
         </div>
         <div class="step">
@@ -254,7 +264,7 @@
     <div class="wrap">
       <h2>Votre bureau voit tout, en lecture.</h2>
       <p class="sub">Invitez le président ou le trésorier avec un accès lecture : le planning, les
-      contraintes tenues, l'outil au travail — la transparence du club, sans risque qu'un clic ne
+      contraintes tenues, l'outil au travail : la transparence du club, sans risque qu'un clic ne
       dérègle quoi que ce soit. Et les coachs reçoivent leur planning sans avoir besoin d'un compte.</p>
     </div>
   </section>
@@ -262,7 +272,7 @@
   <section id="offres">
     <div class="wrap">
       <h2>Découvrez gratuitement. Payez selon la taille de votre club.</h2>
-      <p class="sub">Un tarif par saison, pas d'abonnement mensuel — parce qu'un club décide
+      <p class="sub">Un tarif par saison, pas d'abonnement mensuel, parce qu'un club décide
       son budget une fois par an.</p>
       <div class="plans">
         <article class="plan free">
@@ -314,42 +324,42 @@
       <h2>Questions fréquentes</h2>
       <div class="faq">
         <details>
-          <summary>Il faut tout ressaisir à la main ?</summary>
+          <summary>Il faut tout ressaisir à la main ? <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></summary>
           <p class="a">Non. Vos équipes engagées s'importent automatiquement depuis les données
           publiques de la FFBB dès l'inscription, avec leurs catégories et niveaux. Vous complétez
           avec vos gymnases, créneaux et contraintes — guidé étape par étape.</p>
         </details>
         <details>
-          <summary>Et si le planning généré ne me convient pas ?</summary>
+          <summary>Et si le planning généré ne me convient pas ? <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></summary>
           <p class="a">Vous gardez la main : chaque séance s'ajuste par glisser-déposer, se
           verrouille, et vous pouvez régénérer autour de vos choix. L'outil optimise, vous décidez.</p>
         </details>
         <details>
-          <summary>Que se passe-t-il quand la mairie change nos créneaux ?</summary>
+          <summary>Que se passe-t-il quand la mairie change nos créneaux ? <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></summary>
           <p class="a">C'est exactement le cas pour lequel l'outil est fait : vous mettez la grille
-          à jour, vous régénérez, et le planning s'adapte — sans repartir d'une feuille blanche, et
+          à jour, vous régénérez, et le planning s'adapte sans repartir d'une feuille blanche, et
           sans perdre les contraintes déjà posées.</p>
         </details>
         <details>
-          <summary>Les coachs doivent-ils créer un compte ?</summary>
+          <summary>Les coachs doivent-ils créer un compte ? <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></summary>
           <p class="a">Non. Les coachs reçoivent leur planning et peuvent transmettre leurs
-          indisponibilités par un simple lien — sans compte, sans mot de passe. L'outil est fait
+          indisponibilités par un simple lien, sans compte ni mot de passe. L'outil est fait
           pour le gestionnaire ; il peut inviter son bureau en lecture s'il le souhaite.</p>
         </details>
         <details>
-          <summary>Combien ça coûte ?</summary>
+          <summary>Combien ça coûte ? <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></summary>
           <p class="a">La découverte est gratuite, avec votre club complet. Ensuite, le tarif
           dépend de la taille du club et se règle par saison — demandez-nous, la grille est
           simple et sans surprise.</p>
         </details>
         <details>
-          <summary>Où sont hébergées nos données ?</summary>
+          <summary>Où sont hébergées nos données ? <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></summary>
           <p class="a">En Europe, sauvegardées quotidiennement. Vos données appartiennent à votre
           club : export complet à la demande et suppression définitive possible à tout moment,
           conformément au RGPD.</p>
         </details>
         <details>
-          <summary>On peut voir avant de s'engager ?</summary>
+          <summary>On peut voir avant de s'engager ? <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></summary>
           <p class="a">Oui, deux façons : créez un compte gratuit avec votre vrai club (vos équipes
           s'importent toutes seules), ou <a data-cta="demo-inline" href="#">demandez une démo</a> — on
           vous montre l'outil sur un club exemple, en visio, en 20 minutes.</p>
