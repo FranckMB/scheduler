@@ -99,11 +99,18 @@ final class AccountErasureService
         //    sauterait silencieusement les memberships des AUTRES clubs d'un
         //    user multi-club → on scope le GUC club par club. Le set_config est
         //    session-scoped : il traverse la transaction sans être annulé.
+        //
+        //    `deactivated_at = NOW()` est POSÉ ici (P4-75) : sans lui, l'adhésion
+        //    effacée (is_active=false, deactivated_at=null) se relit comme une
+        //    demande d'approbation JAMAIS entrée et réapparaît dans la file
+        //    pending du club (GET /api/memberships/pending filtre exactement
+        //    is_active=false AND deactivated_at IS NULL) — une adhésion fantôme.
+        //    `deactivated_at` sépare « sorti » de « en attente » (ClubUser).
         $clubIds = $this->clubUserRepository->findActiveClubIds($user->getId());
         foreach ($clubIds as $clubId) {
             $this->tenantConnectionContext->setClubId($clubId);
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE club_user SET is_active = false, updated_at = NOW() WHERE user_id = :uid AND club_id = :cid',
+                'UPDATE club_user SET is_active = false, deactivated_at = NOW(), updated_at = NOW() WHERE user_id = :uid AND club_id = :cid',
                 ['uid' => $user->getId(), 'cid' => $clubId],
             );
         }

@@ -242,6 +242,34 @@ final class MemberRoleTest extends WebTestCase
         self::assertResponseIsSuccessful('un membre efface son propre compte (jamais 403)');
     }
 
+    /**
+     * P4-75 (axe auth & memberships) : un membre ACTIF qui efface son compte
+     * (RGPD) voit son adhésion désactivée. Sans `deactivated_at`, cette ligne
+     * (is_active=false, deactivated_at=null) se relit comme une demande jamais
+     * approuvée et réapparaît dans la file d'approbation du club — une adhésion
+     * fantôme. `AccountErasureService` doit poser `deactivated_at`.
+     */
+    public function testErasedMemberDoesNotReappearAsPhantomPending(): void
+    {
+        [$adminToken, , $clubA] = $this->register('MRK');
+        [$memberToken, , $memberId] = $this->makeMembership($clubA, 'member', isActive: true);
+
+        // Baseline : un membre actif n'est pas dans la file d'attente.
+        $this->get('/api/memberships/pending', $adminToken);
+        self::assertNotContains($memberId, $this->memberIds());
+
+        // Le membre efface son compte ; le gestionnaire reste actif → pas de purge.
+        $this->client->request('DELETE', '/api/me', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $memberToken,
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['password' => self::PASSWORD], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        // L'adhésion effacée ne revient pas comme demande fantôme.
+        $this->get('/api/memberships/pending', $adminToken);
+        self::assertNotContains($memberId, $this->memberIds(), 'une adhésion effacée ne revient pas dans la file d\'approbation');
+    }
+
     public function testPublicTokenRoutesStayReachable(): void
     {
         // Les pages publiques à token (le token EST l'identité) répondent 404
