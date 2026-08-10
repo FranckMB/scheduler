@@ -332,6 +332,12 @@ jobs:
       - name: PlanEntitlementsTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/PlanEntitlementsTest.php --group phase1'
 
+      # P1-1 PR B (axe auth & memberships) : deux rôles assignables (Gestionnaire/Membre),
+      # le cycle de vie désactiver/réactiver, et l'invariant « au moins un gestionnaire
+      # actif » tenu sous verrou — un membre lit tout, seul le management écrit et pilote.
+      - name: MemberRoleTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/MemberRoleTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest

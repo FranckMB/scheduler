@@ -45,6 +45,16 @@ class ClubUser implements TenantOwnedInterface
     #[ORM\Column(type: 'boolean')]
     private bool $isActive = true;
 
+    /**
+     * P1-1 (PR B) — l'horodatage de désactivation, qui DISTINGUE une adhésion
+     * désactivée d'une adhésion en attente : les deux sont `isActive=false`,
+     * mais une pending a `deactivatedAt=null` (elle n'est jamais entrée), une
+     * désactivée le porte. La file d'approbation ne voit que les pending ;
+     * `/api/me` rend « deactivated » plutôt que « pending » quand il est posé.
+     */
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $deactivatedAt = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -162,6 +172,18 @@ class ClubUser implements TenantOwnedInterface
     public function setIsActive(bool $isActive): self
     {
         $this->isActive = $isActive;
+
+        return $this;
+    }
+
+    public function getDeactivatedAt(): ?DateTimeImmutable
+    {
+        return $this->deactivatedAt;
+    }
+
+    public function setDeactivatedAt(?DateTimeImmutable $deactivatedAt): self
+    {
+        $this->deactivatedAt = $deactivatedAt;
 
         return $this;
     }

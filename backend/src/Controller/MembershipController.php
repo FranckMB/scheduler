@@ -6,28 +6,71 @@ namespace App\Controller;
 
 use App\Entity\ClubUser;
 use App\Entity\User;
+use App\Enum\ClubRole;
 use App\Repository\ClubUserRepository;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
- * Club membership approval — an active admin approves/rejects pending join
- * requests for THEIR club only. A pending membership (isActive=false) is
- * already denied all tenant data by TenantFilterListener; this controls the
- * transition to active.
+ * Cycle de vie des adhésions d'un club — un gestionnaire ACTIF pilote les
+ * membres de SON club uniquement (approbation, changement de rôle, désactivation,
+ * réactivation). Une adhésion en attente (`isActive=false`, `deactivatedAt=null`)
+ * est déjà privée de toute donnée tenant par TenantFilterListener ; ce contrôleur
+ * gouverne les transitions.
+ *
+ * P1-1 (PR B) — deux rôles assignables (ClubRole : Gestionnaire/Membre), la
+ * désactivation réversible, et l'invariant « au moins un gestionnaire actif »
+ * tenu SOUS VERROU pour qu'aucune course ne laisse un club sans pilote.
  */
 final class MembershipController extends AbstractController
 {
     use ResolvesCurrentClubTrait;
+
+    private const string LAST_MANAGER_MESSAGE = 'Un club doit garder au moins un gestionnaire actif';
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly ClubUserRepository $clubUserRepository,
         private readonly RequestStack $requestStack,
     ) {}
+
+    #[Route('/api/memberships', name: 'api_memberships_list', methods: ['GET'])]
+    public function list(): JsonResponse
+    {
+        $adminMembership = $this->requireActiveAdmin();
+        if ($adminMembership instanceof JsonResponse) {
+            return $adminMembership;
+        }
+
+        $active = $this->clubUserRepository->findBy([
+            'clubId' => $adminMembership->getClubId(),
+            'isActive' => true,
+        ]);
+
+        $items = [];
+        foreach ($active as $membership) {
+            $user = $this->entityManager->getRepository(User::class)->find($membership->getUserId());
+            if (null === $user) {
+                continue;
+            }
+            $items[] = [
+                'id' => $membership->getId(),
+                'userId' => $user->getId(),
+                'email' => $user->getEmail(),
+                'firstName' => $user->getFirstName(),
+                'lastName' => $user->getLastName(),
+                'role' => $membership->getRole(),
+                'isSelf' => $membership->getId() === $adminMembership->getId(),
+            ];
+        }
+
+        return $this->json(['members' => $items]);
+    }
 
     #[Route('/api/memberships/pending', name: 'api_memberships_pending', methods: ['GET'])]
     public function pending(): JsonResponse
@@ -37,9 +80,12 @@ final class MembershipController extends AbstractController
             return $adminMembership;
         }
 
+        // `deactivatedAt IS NULL` : un membre DÉSACTIVÉ (sorti) ne re-rentre pas
+        // dans la file d'approbation — seules les adhésions jamais entrées y sont.
         $pending = $this->clubUserRepository->findBy([
             'clubId' => $adminMembership->getClubId(),
             'isActive' => false,
+            'deactivatedAt' => null,
         ]);
 
         $items = [];
@@ -67,11 +113,26 @@ final class MembershipController extends AbstractController
         if ($target instanceof JsonResponse) {
             return $target;
         }
+        // Revue sécu PR B : approve est LE passage pending → actif, et rien d'autre.
+        // Sur une cible active il promouvait silencieusement (défaut admin) ; sur une
+        // désactivée il la réactivait en laissant deactivatedAt posé (état hybride).
+        $pendingOnly = $this->assertGenuinelyPending($target, 'Seule une adhésion en attente peut être approuvée.');
+        if ($pendingOnly instanceof JsonResponse) {
+            return $pendingOnly;
+        }
 
+        // Corps optionnel `{"role":...}` — défaut Gestionnaire (statu quo EXACT
+        // tant que le front n'envoie rien ; le resserrage « requis » est en PR C).
+        $role = $this->readRole($this->requestStack->getCurrentRequest(), ClubRole::MANAGER);
+        if ($role instanceof JsonResponse) {
+            return $role;
+        }
+
+        $target->setRole($role->value);
         $target->setIsActive(true);
         $this->entityManager->flush();
 
-        return $this->json(['id' => $target->getId(), 'isActive' => true]);
+        return $this->json(['id' => $target->getId(), 'isActive' => true, 'role' => $target->getRole()]);
     }
 
     #[Route('/api/memberships/{id}/reject', name: 'api_memberships_reject', methods: ['POST'])]
@@ -81,11 +142,168 @@ final class MembershipController extends AbstractController
         if ($target instanceof JsonResponse) {
             return $target;
         }
+        // Revue sécu PR B : reject supprimait une adhésion de N'IMPORTE quel état —
+        // le dernier gestionnaire pouvait s'auto-supprimer en une requête (invariant
+        // contourné, suppression irréversible sans trace). Pending uniquement : un
+        // actif se désactive (réversible), il ne se rejette pas.
+        $pendingOnly = $this->assertGenuinelyPending($target, 'Seule une adhésion en attente peut être refusée.');
+        if ($pendingOnly instanceof JsonResponse) {
+            return $pendingOnly;
+        }
 
         $this->entityManager->remove($target);
         $this->entityManager->flush();
 
         return $this->json(null, 204);
+    }
+
+    #[Route('/api/memberships/{id}/role', name: 'api_memberships_role', methods: ['POST'])]
+    public function changeRole(string $id): JsonResponse
+    {
+        $adminMembership = $this->requireActiveAdmin();
+        if ($adminMembership instanceof JsonResponse) {
+            return $adminMembership;
+        }
+
+        $role = $this->readRole($this->requestStack->getCurrentRequest(), null);
+        if ($role instanceof JsonResponse) {
+            return $role;
+        }
+
+        // Rétrograder en Membre fait SORTIR la cible du management : le verrou du
+        // dernier gestionnaire s'applique. Promouvoir en Gestionnaire ne menace rien.
+        return $this->mutateUnderManagementLock(
+            $adminMembership,
+            $id,
+            removesManagement: ClubRole::MANAGER !== $role,
+            requireActive: false,
+            mutate: static function (ClubUser $target) use ($role): void {
+                $target->setRole($role->value);
+            },
+        );
+    }
+
+    #[Route('/api/memberships/{id}/deactivate', name: 'api_memberships_deactivate', methods: ['POST'])]
+    public function deactivate(string $id): JsonResponse
+    {
+        $adminMembership = $this->requireActiveAdmin();
+        if ($adminMembership instanceof JsonResponse) {
+            return $adminMembership;
+        }
+
+        // Désactiver retire toujours la cible du management actif → verrou.
+        // `requireActive` : on ne désactive QUE l'actif — désactiver une pending
+        // en ferait un « désactivé » réactivable, chemin de contournement de
+        // l'approbation (approve reste le seul passage pending → actif).
+        return $this->mutateUnderManagementLock(
+            $adminMembership,
+            $id,
+            removesManagement: true,
+            requireActive: true,
+            mutate: static function (ClubUser $target): void {
+                $target->setIsActive(false);
+                $target->setDeactivatedAt(new DateTimeImmutable);
+            },
+        );
+    }
+
+    #[Route('/api/memberships/{id}/reactivate', name: 'api_memberships_reactivate', methods: ['POST'])]
+    public function reactivate(string $id): JsonResponse
+    {
+        $adminMembership = $this->requireActiveAdmin();
+        if ($adminMembership instanceof JsonResponse) {
+            return $adminMembership;
+        }
+
+        $target = $this->clubUserRepository->find($id);
+        if (null === $target || $target->getClubId() !== $adminMembership->getClubId()) {
+            return $this->json(['error' => 'Not found'], 404);
+        }
+        // Réservé aux lignes DÉJÀ désactivées : une pending (`deactivatedAt=null`)
+        // ne se « réactive » pas — l'approbation est son seul chemin d'activation.
+        if (null === $target->getDeactivatedAt()) {
+            return $this->json(['error' => 'Not a deactivated membership'], 409);
+        }
+
+        $target->setIsActive(true);
+        $target->setDeactivatedAt(null);
+        $this->entityManager->flush();
+
+        return $this->json(['id' => $target->getId(), 'isActive' => true, 'role' => $target->getRole()]);
+    }
+
+    /**
+     * Applique une mutation à une adhésion cible SOUS le verrou du dernier
+     * gestionnaire. On fige d'abord les adhésions management actives du club
+     * (`SELECT … FOR UPDATE`) : si la mutation sort la cible du management et
+     * qu'elle en est le DERNIER membre actif, on refuse (409) — jamais zéro
+     * gestionnaire, même sous course concurrente.
+     *
+     * @param callable(ClubUser): void $mutate
+     */
+    private function mutateUnderManagementLock(ClubUser $adminMembership, string $targetId, bool $removesManagement, bool $requireActive, callable $mutate): JsonResponse
+    {
+        $clubId = $adminMembership->getClubId();
+
+        /** @var JsonResponse $result */
+        $result = $this->entityManager->wrapInTransaction(function () use ($clubId, $targetId, $removesManagement, $requireActive, $mutate, $adminMembership): JsonResponse {
+            $lockedManagerIds = $this->clubUserRepository->lockActiveManagementIds($clubId);
+
+            $target = $this->clubUserRepository->find($targetId);
+            if (null === $target || $target->getClubId() !== $clubId) {
+                return $this->json(['error' => 'Not found'], 404);
+            }
+
+            if ($requireActive && !$target->getIsActive()) {
+                return $this->json(['error' => 'Not an active membership'], 409);
+            }
+
+            if ($removesManagement
+                && \in_array($target->getId(), $lockedManagerIds, true)
+                && 1 === \count($lockedManagerIds)
+            ) {
+                return $this->json(['error' => self::LAST_MANAGER_MESSAGE], 409);
+            }
+
+            $mutate($target);
+            $this->entityManager->flush();
+
+            return $this->json([
+                'id' => $target->getId(),
+                'role' => $target->getRole(),
+                'isActive' => $target->getIsActive(),
+                'isSelf' => $target->getId() === $adminMembership->getId(),
+            ]);
+        });
+
+        return $result;
+    }
+
+    /**
+     * Lit et valide le rôle du corps JSON contre l'enum assignable.
+     *
+     * - clé `role` absente : $default s'il est fourni (approbation), sinon 422
+     *   (changement de rôle — le rôle y est requis) ;
+     * - valeur hors enum (« coach », « owner »…) : 422, jamais persistée.
+     */
+    private function readRole(?Request $request, ?ClubRole $default): ClubRole|JsonResponse
+    {
+        $raw = (string) ($request?->getContent() ?? '');
+        $data = '' === trim($raw) ? [] : json_decode($raw, true);
+        if (!\is_array($data) || !\array_key_exists('role', $data)) {
+            if ($default instanceof ClubRole) {
+                return $default;
+            }
+
+            return $this->json(['error' => 'Role is required'], 422);
+        }
+
+        $role = \is_string($data['role']) ? ClubRole::tryFrom($data['role']) : null;
+        if (!$role instanceof ClubRole) {
+            return $this->json(['error' => 'Invalid role'], 422);
+        }
+
+        return $role;
     }
 
     /** @return ClubUser|JsonResponse The acting user's active admin membership, or an error response. */
@@ -120,7 +338,20 @@ final class MembershipController extends AbstractController
         return $membership;
     }
 
-    /** @return ClubUser|JsonResponse The target pending membership within the admin's club, or an error response. */
+    /**
+     * Approve/reject n'opèrent QUE sur le vrai pending (ni actif, ni désactivé) —
+     * 409 sinon, APRÈS le check de club (aucun oracle cross-tenant).
+     */
+    private function assertGenuinelyPending(ClubUser $target, string $message): ?JsonResponse
+    {
+        if ($target->getIsActive() || $target->getDeactivatedAt() instanceof DateTimeImmutable) {
+            return $this->json(['error' => $message], 409);
+        }
+
+        return null;
+    }
+
+    /** @return ClubUser|JsonResponse The target membership within the admin's club, or an error response. */
     private function resolveTargetForAdmin(string $id): ClubUser|JsonResponse
     {
         $adminMembership = $this->requireActiveAdmin();

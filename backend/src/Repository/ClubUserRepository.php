@@ -75,6 +75,31 @@ final class ClubUserRepository extends ServiceEntityRepository
     }
 
     /**
+     * P1-1 (PR B) — les ids des adhésions management ACTIVES du club, VERROUILLÉES
+     * (`FOR UPDATE`). Sert l'invariant « au moins un gestionnaire actif » : deux
+     * rétrogradations/désactivations concurrentes ne peuvent pas converger vers
+     * zéro gestionnaire — la seconde attend le verrou et relit un ensemble à jour.
+     *
+     * ⚠ À N'APPELER QUE dans une transaction (le `FOR UPDATE` est sinon un no-op).
+     * Le `WHERE club_id` est le club courant (GUC posé) : la policy RLS scopée
+     * l'autorise, et la garde borne d'elle-même la portée au tenant.
+     *
+     * @return list<string>
+     */
+    public function lockActiveManagementIds(string $clubId): array
+    {
+        $placeholders = implode(', ', array_fill(0, \count(self::MANAGEMENT_ROLES), '?'));
+
+        /** @var list<string> $ids */
+        $ids = $this->getEntityManager()->getConnection()->fetchFirstColumn(
+            'SELECT id FROM club_user WHERE club_id = ? AND is_active = true AND role IN (' . $placeholders . ') FOR UPDATE',
+            [$clubId, ...self::MANAGEMENT_ROLES],
+        );
+
+        return $ids;
+    }
+
+    /**
      * Emails of a club's active managers (owner + admin). Raw DBAL like
      * findActiveClubIds so the tenant_filter does not narrow the result — the
      * WHERE club_id already scopes it. Used by the reminder cron (no request

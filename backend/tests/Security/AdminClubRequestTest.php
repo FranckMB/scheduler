@@ -128,6 +128,21 @@ final class AdminClubRequestTest extends WebTestCase
         self::assertTrue((bool) $this->admin()->fetchOne('SELECT is_active FROM club_user WHERE id = :id', ['id' => $membershipId]));
         $this->client->request('POST', "/api/admin/pending-memberships/{$membershipId}/activate", [], [], ['HTTP_X_CSRF_TOKEN' => $csrf, 'REMOTE_ADDR' => $this->requestIp]);
         self::assertResponseStatusCodeSame(404, 'déjà active → 404, pas un no-op silencieux');
+
+        // P1-1 PR B : un membre DÉSACTIVÉ par son club (deactivated_at posé) n'est
+        // ni listé ni « activable » par la console — la décision du club se respecte,
+        // seul le geste club POST /api/memberships/{id}/reactivate le restaure.
+        $this->admin()->executeStatement(
+            'UPDATE club_user SET is_active = FALSE, deactivated_at = NOW() WHERE id = :id',
+            ['id' => $membershipId],
+        );
+        $this->client->request('GET', '/api/admin/pending-memberships', [], [], ['REMOTE_ADDR' => $this->requestIp]);
+        self::assertResponseIsSuccessful();
+        $ids = array_column(json_decode((string) $this->client->getResponse()->getContent(), true)['items'], 'id');
+        self::assertNotContains($membershipId, $ids, 'un désactivé ne re-rentre pas dans la file admin');
+        $this->client->request('POST', "/api/admin/pending-memberships/{$membershipId}/activate", [], [], ['HTTP_X_CSRF_TOKEN' => $csrf, 'REMOTE_ADDR' => $this->requestIp]);
+        self::assertResponseStatusCodeSame(404, 'désactivé → la console ne contourne pas le geste club');
+        self::assertFalse((bool) $this->admin()->fetchOne('SELECT is_active FROM club_user WHERE id = :id', ['id' => $membershipId]));
     }
 
     protected function setUp(): void

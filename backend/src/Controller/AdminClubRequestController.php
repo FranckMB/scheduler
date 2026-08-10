@@ -123,7 +123,7 @@ final readonly class AdminClubRequestController
             FROM club_user cu
             JOIN club c ON c.id = cu.club_id
             JOIN app_user u ON u.id = cu.user_id
-            WHERE cu.is_active = false
+            WHERE cu.is_active = false AND cu.deactivated_at IS NULL
             ORDER BY cu.created_at ASC
             SQL);
 
@@ -154,8 +154,12 @@ final readonly class AdminClubRequestController
             return new JsonResponse(['error' => 'Membership not found.'], 404);
         }
 
+        // P1-1 PR B : cette porte n'active que les adhésions EN ATTENTE — un membre
+        // DÉSACTIVÉ par son gestionnaire (deactivated_at posé) ne se « réactive »
+        // que par le geste club dédié (POST /api/memberships/{id}/reactivate),
+        // sinon la console contournerait la décision du club.
         $updated = $this->admin()->executeStatement(
-            'UPDATE club_user SET is_active = true, updated_at = NOW() WHERE id = :id AND is_active = false',
+            'UPDATE club_user SET is_active = true, updated_at = NOW() WHERE id = :id AND is_active = false AND deactivated_at IS NULL',
             ['id' => $id],
         );
         if (0 === $updated) {
