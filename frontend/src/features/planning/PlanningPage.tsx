@@ -31,7 +31,7 @@ import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
-import { isSeasonPlanType, versionsDeletedByValidating } from "./lib/versions";
+import { isSeasonPlanType } from "./lib/versions";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
 
@@ -680,7 +680,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       {validateOpen ? (
         <ValidateDialog
           hasAlerts={diagnostics.length > 0}
-          siblingCount={null === selectedSchedule ? 0 : versionsDeletedByValidating(schedules, selectedSchedule).length}
+          siblingCount={selectedSchedule?.capabilities?.versionsDeletedOnValidate ?? 0}
           busy={validateMutation.isPending}
           onCancel={() => setValidateOpen(false)}
           onConfirm={() => validate()}

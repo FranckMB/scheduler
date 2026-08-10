@@ -1,4 +1,3 @@
-import { IN_FLIGHT_STATUSES } from "./scheduleStatus";
 import type { Schedule } from "../api";
 
 /**
@@ -24,21 +23,6 @@ interface VersionLike {
 /** ADR-0002 C4: a version is the SOCLE iff its plan is the SEASON plan. */
 const isSeasonVersion = (v: VersionLike): boolean => isSeasonPlanType(v.planType);
 
-/** Une version en cours de solve bloque la validation (409) au lieu d'être supprimée. */
-// D-31 : foyer unique dans `api.ts`.
-const IN_FLIGHT_STATUS: readonly string[] = IN_FLIGHT_STATUSES;
-
-/**
- * Les versions que valider `selected` va SUPPRIMER — miroir exact de la règle du
- * serveur (`ValidateScheduleController`) : même portée = MÊME PLAN (`schedulePlanId` ;
- * les versions de saison partagent le plan SEASON, celles d'une période son plan),
- * soi-même exclu, et une version en vol bloque la validation plutôt que d'être emportée.
- *
- * À garder aligné sur le serveur : c'est ce compte qu'on montre AVANT une
- * destruction irréversible. Le compter dans une autre portée, ou en écarter la
- * version en vigueur (elle est supprimée comme les autres), fait consentir le
- * gestionnaire à moins que ce qu'il perd.
- */
 /**
  * La version qui REPRÉSENTE un plan : celle qu'il pointe si le gestionnaire en a
  * choisi une (c'est le planning en vigueur, la seule qui compte), sinon la dernière
@@ -50,14 +34,6 @@ const IN_FLIGHT_STATUS: readonly string[] = IN_FLIGHT_STATUSES;
  */
 export function planRepresentative<T extends VersionLike & { isChosen?: boolean }>(versions: T[]): T | null {
   return versions.find((v) => true === v.isChosen) ?? representativeVersion(versions);
-}
-
-export function versionsDeletedByValidating<T extends VersionLike>(schedules: T[], selected: T): T[] {
-  return schedules.filter(
-    (s) => s.id !== selected.id
-      && s.schedulePlanId === selected.schedulePlanId
-      && !IN_FLIGHT_STATUS.includes(s.status),
-  );
 }
 
 /**
