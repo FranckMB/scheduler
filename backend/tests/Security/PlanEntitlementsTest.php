@@ -84,6 +84,9 @@ final class PlanEntitlementsTest extends WebTestCase
 
         self::assertSame(403, $this->post($ctx['user'], '/api/fixtures/place'), 'placer les matchs sans crédit doit être refusé');
         self::assertSame(403, $this->post($ctx['user'], '/api/schedules/' . self::DUMMY_SCHEDULE_ID . '/export-pdf'), 'exporter un PDF sans crédit doit être refusé');
+        // Revue sécu PR B : sans cette route dans le pool, le mur PDF se contournait
+        // par le second bouton d'export (même livrable en tableur).
+        self::assertSame(403, $this->post($ctx['user'], '/api/schedules/' . self::DUMMY_SCHEDULE_ID . '/export-xlsx'), 'exporter un XLSX sans crédit doit être refusé');
     }
 
     /**

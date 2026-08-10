@@ -47,6 +47,9 @@ final class CreditBudgetSubscriber implements EventSubscriberInterface
         'api_schedule_regenerate',  // POST /api/schedules/{id}/regenerate
         'api_fixtures_place',       // POST /api/fixtures/place
         'export_pdf',               // POST /api/schedules/{id}/export-pdf
+        'export_xlsx',              // POST /api/schedules/{id}/export-xlsx — même livrable que le
+        // PDF : l'exempter contournerait le mur par le 2ᵉ bouton
+        // d'export (revue sécu PR B, décision fondateur 2026-08-10)
     ];
 
     public function __construct(
