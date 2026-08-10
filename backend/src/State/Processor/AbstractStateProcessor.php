@@ -110,14 +110,18 @@ abstract class AbstractStateProcessor implements ProcessorInterface
     }
 
     /**
-     * SEC-07: processors whose writes are management-sensitive (cockpit surface)
-     * override this to true — every POST/PUT/PATCH/DELETE then requires an
-     * owner/admin membership. Opt-in so wizard-entity processors keep their
-     * current semantics until the coach-role permission model is designed.
+     * P1-1: the club role model is in place — every API Platform write is
+     * management by default. Any POST/PUT/PATCH/DELETE requires an owner/admin
+     * membership (ManagementAccessGuard). Wizard/cockpit entities are all
+     * management-sensitive, so this is the correct default; a processor only
+     * opts OUT explicitly, with its reason (see UserStateProcessor: self-edit).
+     *
+     * (The former opt-in `true` overrides on the six cockpit processors are now
+     * redundant but kept — removing them is out of this PR's scope.)
      */
     protected function requiresManagementRole(): bool
     {
-        return false;
+        return true;
     }
 
     /**

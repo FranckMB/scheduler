@@ -91,6 +91,57 @@ final class ManagementRoleTest extends WebTestCase
     }
 
     /**
+     * P1-1 (PR A) — le cœur de la bascule : `requiresManagementRole()` passe à
+     * `true` PAR DÉFAUT dans AbstractStateProcessor. Les familles d'écriture de
+     * l'atelier (équipes, gymnases, contraintes, entrées calendaires, saisons,
+     * périodes), jusque-là ouvertes à tout membre actif, se ferment au management.
+     *
+     * Corps valides EN FORME : le guard tire dans le processor, APRÈS la
+     * validation API Platform — un corps invalide 422-erait avant d'atteindre le
+     * 403 (même idiome que apiPlatformWriteEndpoints : UUID non-nil, jamais le
+     * nil-uuid qui échoue la validation Uuid stricte en amont). Le seul champ
+     * requis à la validation suffit ; la garde précède toute résolution de FK.
+     *
+     * Familles couvertes via POST (création) : la garde tire avant le persist,
+     * donc un corps valide-en-forme atteint le 403 sans dépendre d'une ligne
+     * existante — contrairement à un PUT dont la lecture d'item renverrait 404
+     * sur un id bidon avant même le processor.
+     *
+     * @return list<array{0: string, 1: string, 2: string}>
+     */
+    public static function newlyClosedApiWriteEndpoints(): array
+    {
+        $uuid = '11111111-1111-4111-8111-111111111111';
+
+        return [
+            ['POST', '/api/teams', '{"name":"NR","sportCategoryId":"' . $uuid . '"}'],
+            ['POST', '/api/venues', '{"name":"NR Gym","source":"manual"}'],
+            ['POST', '/api/constraints', '{"name":"NR","scope":"CLUB","family":"DAY","ruleType":"HARD","config":{"forbiddenDays":[6]},"isActive":true,"sortOrder":1}'],
+            ['POST', '/api/calendar_entries', '{"kind":"event","title":"NR","startDate":"2027-01-10","endDate":"2027-01-10"}'],
+            ['POST', '/api/seasons', '{"name":"NR Saison","startDate":"2030-07-15","endDate":"2031-07-14"}'],
+            ['POST', '/api/team_period_overrides', '{"schedulePlanId":"' . $uuid . '","teamId":"' . $uuid . '"}'],
+        ];
+    }
+
+    /**
+     * Contre-test de lecture : la bascule ne ferme QUE les écritures. Un membre
+     * non-management garde l'accès en lecture aux mêmes familles (le cockpit
+     * reste consultable) — sinon le 403 ne prouverait pas un gate de rôle mais
+     * un blocage global.
+     *
+     * @return list<array{0: string}>
+     */
+    public static function readableCollections(): array
+    {
+        return [
+            ['/api/teams'],
+            ['/api/venues'],
+            ['/api/constraints'],
+            ['/api/calendar_entries'],
+        ];
+    }
+
+    /**
      * A5/A6: membership writes are REMOVED from the ClubUser API entirely (only
      * GetCollection/Get remain) — closing self-escalation (POST role=owner),
      * last-owner demotion (PUT isActive=false) and approval-bypass at once.
@@ -141,6 +192,66 @@ final class ManagementRoleTest extends WebTestCase
         ], $body);
 
         self::assertResponseStatusCodeSame(403, \sprintf('%s %s must be management-only', $method, $url));
+    }
+
+    #[DataProvider('newlyClosedApiWriteEndpoints')]
+    public function testNonManagementMemberIsForbiddenOnNewlyClosedWrites(string $method, string $url, string $body): void
+    {
+        // 'member' = la future valeur d'enum non-management (PR B). Aujourd'hui
+        // toute adhésion est 'admin', donc la bascule est inerte en prod ; ici on
+        // fabrique le premier membre non-management pour prouver la fermeture.
+        [, , $clubA] = $this->register('MGN');
+        $memberToken = $this->addActiveMember($clubA, 'member');
+
+        $this->client->request($method, $url, [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $memberToken,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], $body);
+
+        self::assertResponseStatusCodeSame(403, \sprintf('%s %s doit devenir management-only (bascule P1-1)', $method, $url));
+    }
+
+    #[DataProvider('readableCollections')]
+    public function testNonManagementMemberCanStillRead(string $url): void
+    {
+        [, , $clubA] = $this->register('MGR');
+        $memberToken = $this->addActiveMember($clubA, 'member');
+
+        $this->client->request('GET', $url, [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $memberToken]);
+
+        self::assertResponseIsSuccessful(); // 200 : la lecture reste ouverte
+    }
+
+    public function testManagerStillWritesNewlyClosedFamily(): void
+    {
+        // Contre-preuve : le défaut à true ne bloque pas le management — un admin
+        // crée toujours dans une famille nouvellement fermée (sinon le 403
+        // ci-dessus témoignerait d'un blocage global, pas d'un gate de rôle).
+        [$adminToken] = $this->register('MGW');
+
+        $this->client->request('POST', '/api/venues', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $adminToken,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], '{"name":"NR Gym","source":"manual"}');
+
+        self::assertResponseStatusCodeSame(201, 'un manager écrit toujours dans les familles fermées');
+    }
+
+    public function testNonManagementMemberCanEditOwnProfile(): void
+    {
+        // Opt-out P1-1 : éditer SON profil n'est pas une action de management
+        // (UserStateProcessor::requiresManagementRole() = false, self-only gardé
+        // par SEC-02/UserSelfOnlyTest). Un membre non-management doit pouvoir
+        // modifier son propre User malgré le défaut à true.
+        [, , $clubA] = $this->register('MGS');
+        [$memberToken, $memberId] = $this->addActiveMemberReturningId($clubA, 'member');
+
+        $this->client->request('PUT', '/api/users/' . $memberId, [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $memberToken,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], '{"firstName":"Renommé","lastName":"Member"}');
+
+        self::assertResponseIsSuccessful(); // 200 : l'opt-out laisse passer le self-edit
     }
 
     #[DataProvider('clubUserWriteVerbs')]
@@ -241,6 +352,14 @@ final class ManagementRoleTest extends WebTestCase
 
     private function addActiveMember(string $clubId, string $role): string
     {
+        return $this->addActiveMemberReturningId($clubId, $role)[0];
+    }
+
+    /**
+     * @return array{0: string, 1: string} [token, userId]
+     */
+    private function addActiveMemberReturningId(string $clubId, string $role): array
+    {
         $container = self::getContainer();
         $em = $container->get(EntityManagerInterface::class);
         $hasher = $container->get(UserPasswordHasherInterface::class);
@@ -261,7 +380,7 @@ final class ManagementRoleTest extends WebTestCase
         $em->persist($membership);
         $em->flush();
 
-        return $container->get(JWTTokenManagerInterface::class)->create($user);
+        return [$container->get(JWTTokenManagerInterface::class)->create($user), $user->getId()];
     }
 
     /**
