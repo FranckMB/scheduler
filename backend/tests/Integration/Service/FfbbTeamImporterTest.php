@@ -13,6 +13,7 @@ use App\Enum\SeasonStatus;
 use App\Service\Basketball\FfbbApiClient;
 use App\Service\Basketball\FfbbEngagementReader;
 use App\Service\Basketball\FfbbTeamImporter;
+use App\Service\PlanEntitlements;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -173,6 +174,6 @@ final class FfbbTeamImporterTest extends KernelTestCase
         $api = new FfbbApiClient($http);
         $reader = new FfbbEngagementReader($api);
 
-        return new FfbbTeamImporter($this->em, $reader, self::getContainer()->get(SeasonResolver::class), new NullLogger);
+        return new FfbbTeamImporter($this->em, $reader, self::getContainer()->get(SeasonResolver::class), new NullLogger, self::getContainer()->get(PlanEntitlements::class));
     }
 }

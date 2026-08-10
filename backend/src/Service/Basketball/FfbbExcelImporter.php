@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Service\Basketball;
 
 use App\Entity\Club;
+use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Exception\ImportRejectedException;
+use App\Service\PlanEntitlements;
 use Doctrine\ORM\EntityManagerInterface;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use RuntimeException;
@@ -20,7 +22,10 @@ final class FfbbExcelImporter
 
     private ?int $nextSortOrderValue = null;
 
-    public function __construct(private readonly EntityManagerInterface $entityManager) {}
+    public function __construct(
+        private readonly EntityManagerInterface $entityManager,
+        private readonly PlanEntitlements $planEntitlements,
+    ) {}
 
     /**
      * @return array{created: int, skipped: int, errors: list<string>}
@@ -65,6 +70,8 @@ final class FfbbExcelImporter
         $created = 0;
         $skipped = 0;
         $errors = [];
+        /** @var list<Team> $toCreate équipes NEUVES retenues — persistées seulement après le contrôle de cap (tout-ou-rien). */
+        $toCreate = [];
 
         // P4-35 — l'identité d'une équipe est (club, saison, NOM). L'ancien test
         // `findOneBy([clubId, seasonId])` demandait « cette saison a-t-elle UNE
@@ -118,8 +125,23 @@ final class FfbbExcelImporter
                 ->setSessionsPerWeek(self::DEFAULT_SESSIONS_PER_WEEK)
                 ->setIsActive(true);
 
-            $this->entityManager->persist($team);
+            $toCreate[] = $team;
             ++$created;
+        }
+
+        // P1-3 — cap payant : refus tout-ou-rien AVANT le premier persist, avec décompte.
+        // Découverte/Bêta/démo (cap null via PlanEntitlements) importent tout. `remainingTeamSlots`
+        // = cap − équipes déjà en base ; les doublons sautés ci-dessus n'y comptent pas.
+        $season = $this->entityManager->getRepository(Season::class)->find($seasonId);
+        if ($season instanceof Season) {
+            $remaining = $this->planEntitlements->remainingTeamSlots($club, $season);
+            if (null !== $remaining && \count($toCreate) > $remaining) {
+                throw ImportRejectedException::unprocessable(\sprintf('%d équipe(s) à créer dans le fichier, %d place(s) restante(s) sur votre offre. Retirez des lignes ou passez à l\'offre supérieure.', \count($toCreate), $remaining));
+            }
+        }
+
+        foreach ($toCreate as $team) {
+            $this->entityManager->persist($team);
         }
 
         // Flush UNIQUE et FINAL (P4-35) : l'import est tout-ou-rien. L'ancien

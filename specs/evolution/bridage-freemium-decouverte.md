@@ -86,11 +86,32 @@ planning obtenu est l'argument que le bénévole porte à son bureau. La convers
    active si l'offre EFFECTIVE est Découverte : refus à 0 crédit avec message de conversion, sinon
    décompte. Champ compteur **total au niveau CLUB** (l'existant `generation_count_season` se remet à
    zéro par saison — inutilisable tel quel). Reset superadmin.
-2. **Cap payant aux portes de création d'équipes** (création unitaire, import Excel, import FFBB,
-   confirm engagements) : ne s'applique QU'AUX offres payantes (Découverte et Bêta sans cap).
+2. **Cap payant aux portes de création d'équipes** : ne s'applique QU'AUX offres payantes (Découverte
+   et Bêta sans cap). Trois portes réelles : création unitaire, import Excel, import FFBB. ⚑ Constat
+   PR B (2026-08-10) : `engagements/confirm` n'en est PAS une — il apparie des équipes EXISTANTES
+   sans en créer, un cap y serait inerte ; écarté, pas de code spéculatif.
 3. **Offre effective calculée à la lecture** (service de droits) : `planId` null → Découverte ;
    offre payante/bêta avec `paidSeasonYear` périmé → Découverte. Pas de cron, pas d'état stocké.
-   Club démo (`isDemo`) : droits pleins, toujours.
+   Club démo (`isDemo`) : droits pleins, toujours. ⚠ **L'attribution est en DEUX gestes** (choix PR A) :
+   `set-plan` pose l'offre, la saison réglée (`mark-season-paid`) la rend effective — **Bêta comprise**
+   (une bêta sans saison réglée naît expirée ; le piège a mordu le seeder dev, corrigé en PR B).
+
+## 4bis. UX de la conversion (fondateur, 2026-08-10 — implémentation en PR C)
+
+Découverte SEULEMENT (payant/bêta/démo ne voient rien de tout ça), toujours piloté par les compteurs
+SERVEUR (`entitlements` de `/api/me` — le front ne calcule rien, règle P2-8) :
+
+1. **Compteur permanent** dans le shell : badge « Crédits : 8/10 », tooltip « une génération, un
+   placement de matchs ou un export PDF consomme 1 crédit — ajuster et consulter sont gratuits » ;
+   ambre à ≤ 5.
+2. **Le coût au point d'action** : chaque bouton de sortie affiche le solde — « Générer (8) »,
+   « Placer les matchs (8) », « Exporter en PDF (8) ».
+3. **Bandeau d'urgence à ≤ 3 crédits** : rouge, fermable, CTA « Voir les offres ». Il ne se ré-affiche
+   PAS à chaque navigation (un bandeau qui crie tout le temps n'alerte plus — règle §7.2) : il revient
+   quand le solde BAISSE encore, ou à la session suivante.
+4. **À 0 crédit** : bandeau permanent non fermable au ton juste — « Vos crédits gratuits sont épuisés.
+   Consultez et ajustez librement — passez à une offre pour générer à nouveau. » Boutons de sortie
+   « (0) » désactivés avec le message de conversion.
 
 ## 5. Décisions tranchées (2026-08-09 soir — remplacent toutes les précédentes)
 
