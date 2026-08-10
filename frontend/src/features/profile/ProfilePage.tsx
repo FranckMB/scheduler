@@ -37,6 +37,9 @@ function ProfileForm({
   const [first, setFirst] = useState(firstName);
   const [last, setLast] = useState(lastName);
   const [mail, setMail] = useState(email);
+  // Le serveur exige le mot de passe courant (revue sécu P4-74 : changer
+  // l'adresse transfère le compte — un JWT emprunté ne doit pas suffire).
+  const [emailPassword, setEmailPassword] = useState("");
 
   const nameDirty = first.trim() !== firstName || last.trim() !== lastName;
   const emailChanged = mail.trim() !== email && mail.trim() !== "";
@@ -50,7 +53,15 @@ function ProfileForm({
   // demande (lien envoyé à la nouvelle adresse). L'adresse actuelle reste
   // active : on la remet dans le champ, la nouvelle passe « en attente ».
   const requestEmailChange = () => {
-    requestEmail.mutate(mail.trim(), { onSuccess: () => setMail(email) });
+    requestEmail.mutate(
+      { email: mail.trim(), currentPassword: emailPassword },
+      {
+        onSuccess: () => {
+          setMail(email);
+          setEmailPassword("");
+        },
+      },
+    );
   };
 
   return (
@@ -81,8 +92,19 @@ function ProfileForm({
           <Input id="email" type="email" value={mail} onChange={(e) => setMail(e.target.value)} />
           <p className="text-xs text-muted-foreground">
             Changer d'adresse envoie un lien de confirmation à la nouvelle adresse. Votre adresse actuelle reste active
-            tant que vous n'avez pas confirmé.
+            tant que vous n'avez pas confirmé, et reçoit un avertissement.
           </p>
+          {emailChanged ? (
+            <div className="space-y-1">
+              <Label htmlFor="email-password">Votre mot de passe</Label>
+              <PasswordInput
+                id="email-password"
+                autoComplete="current-password"
+                value={emailPassword}
+                onChange={(e) => setEmailPassword(e.target.value)}
+              />
+            </div>
+          ) : null}
           {null !== pendingEmail ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted p-3 text-sm">
               <span>
@@ -93,7 +115,7 @@ function ProfileForm({
               </Button>
             </div>
           ) : null}
-          <Button type="button" variant="outline" disabled={!emailChanged || requestEmail.isPending} onClick={requestEmailChange}>
+          <Button type="button" variant="outline" disabled={!emailChanged || emailPassword === "" || requestEmail.isPending} onClick={requestEmailChange}>
             {requestEmail.isPending ? <Spinner className="size-4" /> : null}
             Envoyer un lien de confirmation
           </Button>

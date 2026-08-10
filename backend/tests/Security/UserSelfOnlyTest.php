@@ -7,6 +7,7 @@ namespace App\Tests\Security;
 use App\Entity\EmailChangeToken;
 use App\Entity\User;
 use App\Service\EmailChangeVerifier;
+use App\Tests\StartsFreshBrowserSession;
 use App\Tests\VerifiesRegistration;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
@@ -28,6 +29,7 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 #[Group('integration')]
 final class UserSelfOnlyTest extends WebTestCase
 {
+    use StartsFreshBrowserSession;
     use VerifiesRegistration;
 
     private KernelBrowser $client;
@@ -124,7 +126,7 @@ final class UserSelfOnlyTest extends WebTestCase
         $newEmail = 'new-' . substr(md5(uniqid('', true)), 0, 6) . '@test.fr';
 
         // Demande : stocke le pending, ne touche PAS l'adresse courante.
-        $this->request('POST', '/api/me/email', $token, ['email' => $newEmail]);
+        $this->request('POST', '/api/me/email', $token, ['email' => $newEmail, 'currentPassword' => 'Password123!']);
         self::assertResponseIsSuccessful();
         $me = $this->me($token);
         self::assertSame($email, $me['email'], 'l\'adresse courante reste inchangée');
@@ -154,7 +156,7 @@ final class UserSelfOnlyTest extends WebTestCase
         self::assertResponseStatusCodeSame(400, 'token inconnu → 400');
 
         // Token expiré → 400 (la bascule n'a pas lieu).
-        $this->request('POST', '/api/me/email', $token, ['email' => $newEmail]);
+        $this->request('POST', '/api/me/email', $token, ['email' => $newEmail, 'currentPassword' => 'Password123!']);
         $rawExpired = $this->mintConfirmToken($userId);
         $this->em()->getConnection()->executeStatement('UPDATE email_change_token SET expires_at = NOW() - INTERVAL \'1 hour\'');
         $this->confirm($rawExpired);
@@ -175,7 +177,7 @@ final class UserSelfOnlyTest extends WebTestCase
         [$tokenB] = $this->register('USRR');
 
         // B demande l'adresse ACTIVE de A → 409, rien n'est mis en attente.
-        $this->request('POST', '/api/me/email', $tokenB, ['email' => $emailA]);
+        $this->request('POST', '/api/me/email', $tokenB, ['email' => $emailA, 'currentPassword' => 'Password123!']);
         self::assertResponseStatusCodeSame(409);
         self::assertNull($this->me($tokenB)['pendingEmail']);
     }
@@ -186,7 +188,7 @@ final class UserSelfOnlyTest extends WebTestCase
         [$tokenB] = $this->register('USRT');
         $target = 'shared-' . substr(md5(uniqid('', true)), 0, 6) . '@test.fr';
 
-        $this->request('POST', '/api/me/email', $tokenA, ['email' => $target]);
+        $this->request('POST', '/api/me/email', $tokenA, ['email' => $target, 'currentPassword' => 'Password123!']);
         self::assertResponseIsSuccessful();
 
         // Le /api/me de B ne voit JAMAIS le pending de A (self-only par construction).
@@ -201,6 +203,60 @@ final class UserSelfOnlyTest extends WebTestCase
         $this->request('DELETE', '/api/me/email', $tokenA);
         self::assertResponseIsSuccessful();
         self::assertNull($this->me($tokenA)['pendingEmail']);
+    }
+
+    /**
+     * Revue sécu P4-74 — changer d'adresse TRANSFÈRE le compte (l'e-mail est
+     * l'identifiant de connexion) : un JWT emprunté ne suffit pas, le mot de
+     * passe courant est exigé, comme pour DELETE /api/me.
+     */
+    public function testEmailChangeRequiresTheCurrentPassword(): void
+    {
+        [$token, , $email] = $this->register('USRW');
+        $newEmail = 'pw-' . substr(md5(uniqid('', true)), 0, 6) . '@test.fr';
+
+        $this->request('POST', '/api/me/email', $token, ['email' => $newEmail]);
+        self::assertResponseStatusCodeSame(400, 'sans mot de passe, la demande est refusée');
+        self::assertNull($this->me($token)['pendingEmail'], 'aucun pending posé');
+
+        $this->request('POST', '/api/me/email', $token, ['email' => $newEmail, 'currentPassword' => 'MauvaisMotDePasse!1']);
+        self::assertResponseStatusCodeSame(400, 'mot de passe faux → refus');
+        self::assertNull($this->me($token)['pendingEmail']);
+
+        $this->request('POST', '/api/me/email', $token, ['email' => $newEmail, 'currentPassword' => 'Password123!']);
+        self::assertResponseIsSuccessful('avec le bon mot de passe, la demande passe');
+        self::assertSame($newEmail, $this->me($token)['pendingEmail']);
+        self::assertSame($email, $this->me($token)['email'], 'et l\'adresse courante ne bouge toujours pas');
+    }
+
+    /**
+     * Revue sécu P4-74 (finding HIGH) — l'effacement RGPD est TERMINAL : un lien
+     * de changement d'e-mail encore vivant ne doit pas réécrire une vraie adresse
+     * sur le compte anonymisé ni rendre un cookie de session.
+     */
+    public function testErasureKillsAPendingEmailChangeAndItsToken(): void
+    {
+        [$token, $userId] = $this->register('USRE');
+        $newEmail = 'resurrect-' . substr(md5(uniqid('', true)), 0, 6) . '@test.fr';
+
+        $this->request('POST', '/api/me/email', $token, ['email' => $newEmail, 'currentPassword' => 'Password123!']);
+        self::assertResponseIsSuccessful();
+        // Un lien VIVANT au moment de l'effacement (même fabrique que le mail).
+        $rawToken = $this->mintConfirmToken($userId);
+
+        $this->request('DELETE', '/api/me', $token, ['password' => 'Password123!']);
+        self::assertResponseIsSuccessful('le compte est effacé');
+
+        // La route de confirmation est PUBLIQUE (le token EST la preuve) : on repart
+        // d'une session vierge, sinon browser-kit rejoue le cookie du compte effacé
+        // et le firewall répond 401 avant que le garde ne s'exprime.
+        $this->startFreshBrowserSession($this->client);
+        $this->client->request('POST', '/api/me/email/confirm', [], [], ['CONTENT_TYPE' => 'application/json'], json_encode(['token' => $rawToken], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(400, 'un compte effacé ne se ressuscite pas par un lien');
+        self::assertNull(
+            $this->em()->getRepository(User::class)->findOneBy(['email' => $newEmail]),
+            'l\'adresse réelle n\'a PAS été réécrite sur le compte anonymisé',
+        );
     }
 
     protected function setUp(): void

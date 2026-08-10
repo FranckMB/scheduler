@@ -25,7 +25,8 @@ export function useUpdateProfile() {
 export function useRequestEmailChange() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (email: string) => profileApi.requestEmailChange(email),
+    mutationFn: ({ email, currentPassword }: { email: string; currentPassword: string }) =>
+      profileApi.requestEmailChange(email, currentPassword),
     onSuccess: (result) => {
       toast.info(`Un lien de confirmation a été envoyé à ${result.pendingEmail} — votre adresse actuelle reste active.`);
       void queryClient.invalidateQueries({ queryKey: ["me"] });

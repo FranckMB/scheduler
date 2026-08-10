@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Club;
+use App\Entity\EmailChangeToken;
 use App\Entity\EmailVerificationToken;
 use App\Entity\ResetPasswordRequest;
 use App\Entity\User;
@@ -92,6 +93,16 @@ final class AccountErasureService
             ->where('r.user = :user')
             ->setParameter('user', $user)
             ->getQuery()->execute();
+        // ⚠ Revue sécu P4-74 : le token de CHANGEMENT d'e-mail doit mourir ici
+        // aussi. Sans lui, un lien vivant (24 h) réécrivait une VRAIE adresse sur
+        // le compte anonymisé ET rendait un cookie JWT valide — l'effacement
+        // cessait d'être terminal. Le `pendingEmail` part avec (§3), sinon il
+        // garderait une réservation unique éternelle sur l'adresse d'un tiers.
+        $this->entityManager->createQueryBuilder()
+            ->delete(EmailChangeToken::class, 'c')
+            ->where('c.user = :user')
+            ->setParameter('user', $user)
+            ->getQuery()->execute();
 
         // 2. Memberships désactivés AVANT le comptage des clubs orphelins.
         //    club_user se LIT hors tenant (policy SELECT USING(true)) mais son
@@ -120,6 +131,7 @@ final class AccountErasureService
         //    aléa jamais valide. random_bytes garantit qu'aucun mot de passe ne
         //    matchera jamais ce "hash" (ce n'est pas un hash bcrypt/argon).
         $user->setEmail(\sprintf('deleted-%s@anonymized.invalid', $user->getId()));
+        $user->setPendingEmail(null);
         $user->setFirstName('Compte');
         $user->setLastName('Supprimé');
         $user->setPasswordHash(bin2hex(random_bytes(32)));

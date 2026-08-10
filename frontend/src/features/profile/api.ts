@@ -30,8 +30,8 @@ export interface RequestEmailChangeResult {
  * d'abord, basculer ensuite ». L'adresse actuelle reste active ; un lien de
  * confirmation part à la NOUVELLE adresse. Rien ne bascule avant le clic.
  */
-export const requestEmailChange = (email: string): Promise<RequestEmailChangeResult> =>
-  api.post("me/email", { json: { email } }).json();
+export const requestEmailChange = (email: string, currentPassword: string): Promise<RequestEmailChangeResult> =>
+  api.post("me/email", { json: { email, currentPassword } }).json();
 
 /** P4-74 — annuler la demande en attente (DELETE /api/me/email). */
 export const cancelEmailChange = (): Promise<{ status: string }> => api.delete("me/email").json();

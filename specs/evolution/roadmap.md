@@ -1,4 +1,4 @@
-# Roadmap (42) — ce qui reste à faire
+# Roadmap (41) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
@@ -66,8 +66,9 @@
 
 ## P1 — Enablers à fort levier
 
-| # | Sujet | Impact | Effort | Débloque | Note |
-|---|-------|:---:|:---:|---|---|
+> **Section VIDE depuis le 2026-08-10** : les deux enablers (P1-1 rôles, P1-3 offres) sont livrés le
+> même jour — état des lieux §1.11/§1.12. Elle reste ici parce que la numérotation `P1-x` est stable
+> et qu'un futur enabler structurant s'y rangera.
 
 ---
 
@@ -111,9 +112,8 @@
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
 | P4-35 | **Import Excel d'équipes — la correspondance EXPLICITE persistée** | ⚪ | M | ⚑ **Volet technique LIVRÉ le 2026-08-04** (identité par nom, import tout-ou-rien, sortOrder des catégories créées — voir état des lieux) ; **reste le design décidé** : le gestionnaire APPARIE (jamais une clé naturelle devinée), la correspondance est **persistée** pour le ré-import — c'est l'écran P3-7 qui la porte, à livrer avec lui |
+| P4-77 | **Un compte anonymisé (RGPD) peut être réactivé/approuvé par un gestionnaire** | ⚪ | XS | Relevé par la revue sécu de P4-74 (défaut PRÉ-existant, hors périmètre) : ni `POST /api/memberships/{id}/reactivate` ni l'approbation ne regardent `user.anonymizedAt` — un gestionnaire peut donc rendre `is_active=true` une adhésion dont le compte est détruit. Effets : elle compte dans `hasActiveMember()` (annule une purge de club programmée) et dans l'invariant « au moins un gestionnaire actif », avec un compte où personne ne peut se connecter. Correctif : refuser les deux gestes si `anonymizedAt` est posé, + un cas de test |
 | P4-76 | **UX Membre : les boutons d'écriture restent visibles (403 serveur au clic)** | ⚪ | M | Assumé à la livraison de P1-1 (2026-08-10, décision de plan) : le serveur refuse TOUTES les écritures d'un Membre (gate PR A), mais le front ne masque que les sections déjà keyées `isManagement` (page club). Un Membre voit ailleurs des boutons Générer/éditer qui rendront 403. Polish : consommer `me.role` pour griser/masquer écran par écran — sans jamais recalculer une règle (P2-8) |
-| P4-75 | **L'effacement RGPD ne pose pas `deactivated_at`** | ⚪ | XS | Signalé par la PR B de P1-1 (défaut PRÉ-existant, hors périmètre du lot) : `AccountErasureService:106` pose `is_active=false` sans `deactivated_at` → un membership effacé/anonymisé apparaît encore dans la file d'approbation du club (`GET /api/memberships/pending`) comme une demande fantôme. Correctif : poser `deactivated_at = NOW()` à l'effacement. Une ligne + un cas de test |
-| P4-74 | **Changer son email ne re-déclenche pas la vérification** | 🟡 | S | Observé par la revue sécu de P1-1 PR A (défaut PRÉ-existant, hors diff — consigné plutôt que corrigé en douce) : `UserStateProcessor::updateEntityFromInput` laisse un self-edit changer `email` sans remettre `emailVerifiedAt` ni ré-envoyer le mail de vérification — l'adresse affichée du compte peut n'avoir jamais été prouvée. Correctif : changer d'email = re-vérifier (patron du register). Axe auth §7.1 → NR |
 | P4-73 | **Verrou optimiste — l'adoption côté écrans** | ⚪ | M | Le mécanisme est livré côté serveur (P4-25, 2026-08-09) : un `If-Match: <version>` sur PUT/PATCH rend un **409** au lieu d'écraser. ⚠ **Aucun écran ne l'envoie encore**, donc la protection est disponible et INACTIVE — dit franchement plutôt que compté comme corrigé. Adoption écran par écran : le type doit porter `version` (déjà exposé par les ressources), la mutation doit la transmettre, et le 409 doit se traduire en invitation à recharger. Commencer par **`CoachWish`**, le cas où le défaut a été constaté. Les PUT sont dispersés par feature (`api.put(...)`), il n'y a pas de point unique à câbler |
 | P4-26 | **Deux coachs d'une même équipe partagent la doléance de la semaine** | ⚪ | M | `CoachWish` est clé sur `(calendarEntryId, teamId, weekStart)` **sans dimension coach** : une équipe à MAIN + ASSISTANT n'a qu'**une** doléance par semaine, et le second à saisir écrase le premier. **Atténué** (le pré-remplissage montre la valeur courante, et « un souhait, jamais une contrainte »). Décision fondateur explicite (« un souhait par équipe × semaine ») → laissé tel quel en V0. Même famille que P4-25. **Relue le 2026-08-01 au moment de P3-14 : inchangée** — borner le coach aux MAIN de l'équipe ne change pas la clé de la doléance, et le fondateur maintient « un souhait par équipe × semaine » |
 | P4-8 | **`resolveClubId` choisit arbitrairement pour un gestionnaire multi-club** | ⚪ | M | Le front n'envoie pas `X-Club-Id`, donc `TenantFilterListener::resolveClubId` retombe sur `findOneBy(['userId','isActive'])` **sans ORDER BY** : pour un humain gérant deux clubs, « quel club est courant ? » n'a pas de réponse définie. **Fix = choix produit** (sélecteur de club explicite, ou club par défaut sur l'adhésion). ⚑ P1-1 (rôles) est livrée le 2026-08-10 SANS ce volet — différé sur décision fondateur (« aucun humain ne gère deux clubs ») ; la ligne vit seule |

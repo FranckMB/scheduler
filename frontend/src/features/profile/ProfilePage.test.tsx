@@ -77,10 +77,17 @@ describe("ProfilePage — zone de danger (RGPD)", () => {
     await user.clear(emailInput);
     await user.type(emailInput, "nouvelle@club.fr");
 
+    // Revue sécu P4-74 : le mot de passe courant est exigé — le bouton reste
+    // fermé tant qu'il manque (le serveur refuse de toute façon en 400).
     const button = screen.getByRole("button", { name: /Envoyer un lien de confirmation/ });
+    expect(button).toBeDisabled();
+    await user.type(screen.getByLabelText("Votre mot de passe"), "MonMotDePasse!1");
     expect(button).toBeEnabled();
     await user.click(button);
-    expect(requestEmailMut).toHaveBeenCalledWith("nouvelle@club.fr", expect.anything());
+    expect(requestEmailMut).toHaveBeenCalledWith(
+      { email: "nouvelle@club.fr", currentPassword: "MonMotDePasse!1" },
+      expect.anything(),
+    );
 
     // Le message dit clairement que l'adresse actuelle reste active.
     expect(screen.getByText(/adresse actuelle reste active/)).toBeInTheDocument();

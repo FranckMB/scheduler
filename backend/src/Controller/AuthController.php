@@ -29,6 +29,7 @@ use App\Service\PlanEntitlements;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
+use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
@@ -581,6 +582,16 @@ final class AuthController extends AbstractController
             return $this->json(['error' => 'Invalid JSON'], 400);
         }
 
+        // ⚠ Revue sécu P4-74 : changer l'e-mail TRANSFÈRE le compte (l'adresse EST
+        // l'identifiant de connexion) — c'est plus grave que le supprimer. La règle
+        // maison des gestes d'identité s'applique donc ici aussi : le mot de passe
+        // courant est exigé, comme pour DELETE /api/me et le changement de mot de
+        // passe. Un JWT emprunté ne suffit pas à s'approprier un compte.
+        $currentPassword = \is_string($data['currentPassword'] ?? null) ? $data['currentPassword'] : '';
+        if ('' === $currentPassword || !$this->passwordHasher->isPasswordValid($user, $currentPassword)) {
+            return $this->json(['error' => 'Mot de passe incorrect.'], 400);
+        }
+
         $email = \is_string($data['email'] ?? null) ? strtolower(trim($data['email'])) : '';
         if ('' === $email || false === filter_var($email, \FILTER_VALIDATE_EMAIL)) {
             return $this->json(['error' => 'Adresse e-mail invalide.'], 400);
@@ -604,6 +615,7 @@ final class AuthController extends AbstractController
         }
 
         $this->sendEmailChangeConfirmation($request, $email, $rawToken);
+        $this->notifyPreviousAddress((string) $user->getEmail(), $email, switched: false);
 
         return $this->json(['status' => 'confirmation_sent', 'pendingEmail' => $email]);
     }
@@ -634,6 +646,18 @@ final class AuthController extends AbstractController
         }
 
         $user = $token->getUser();
+        // ⚠ Revue sécu P4-74, défense en profondeur : un compte EFFACÉ ne se
+        // ressuscite pas par un lien. L'effacement supprime déjà ces tokens et le
+        // pending (AccountErasureService) ; ce garde tient même si un token
+        // survivait — la route rend un cookie JWT, elle ne doit jamais le rendre
+        // pour une identité détruite.
+        if ($user->getAnonymizedAt() instanceof DateTimeImmutable) {
+            $this->emailChangeVerifier->consume($token);
+            $this->entityManager->flush();
+
+            return $this->json(['error' => 'Lien de confirmation invalide ou expiré.'], 400);
+        }
+
         $pending = $user->getPendingEmail();
         if (null === $pending) {
             // Déjà confirmé/annulé : le token n'a plus d'adresse cible.
@@ -655,6 +679,7 @@ final class AuthController extends AbstractController
 
         // La bascule — et SEULEMENT ici. emailVerifiedAt reste NON NULL : le compte
         // était déjà vérifié, l'utilisateur ne repasse pas par le gate d'activation.
+        $previousEmail = (string) $user->getEmail();
         $user->setEmail($pending);
         $user->setPendingEmail(null);
         $this->emailChangeVerifier->consume($token);
@@ -663,6 +688,8 @@ final class AuthController extends AbstractController
         } catch (UniqueConstraintViolationException) {
             return $this->json(['error' => 'Cet e-mail est désormais utilisé par un autre compte.'], 409);
         }
+
+        $this->notifyPreviousAddress($previousEmail, $pending, switched: true);
 
         $response = $this->json(['status' => 'email_confirmed', 'email' => $user->getEmail()]);
         $response->headers->setCookie($this->jwtCookieFactory->create($this->jwtManager->create($user)));
@@ -744,6 +771,33 @@ final class AuthController extends AbstractController
                     ->to($email)
                     ->subject('Confirmez votre nouvelle adresse e-mail ClubScheduler')
                     ->text("Vous avez demandé à changer l'adresse e-mail de votre compte ClubScheduler.\n\nPour confirmer cette nouvelle adresse, ouvrez ce lien :\n{$link}\n\nVotre adresse actuelle reste active tant que vous n'avez pas confirmé.\n\nCe lien expire dans 24 heures. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message."),
+            );
+        } catch (Throwable) {
+        }
+    }
+
+    /**
+     * ⚠ Revue sécu P4-74 — l'ANCIENNE adresse est prévenue, aux deux moments
+     * (demande et bascule). C'est le seul signal qui atteint le titulaire légitime
+     * quand quelqu'un d'autre pilote la session, et le seul filet contre la faute
+     * de frappe : au moment où il arrive, l'ancienne adresse est encore délivrable.
+     */
+    private function notifyPreviousAddress(string $previousEmail, string $newEmail, bool $switched): void
+    {
+        $subject = $switched
+            ? 'Votre adresse e-mail ClubScheduler a été modifiée'
+            : 'Demande de changement d’adresse e-mail sur ClubScheduler';
+        $body = $switched
+            ? "L'adresse e-mail de votre compte ClubScheduler est désormais {$newEmail}.\n\nSi vous n'êtes pas à l'origine de ce changement, contactez-nous immédiatement : votre compte a pu être compromis."
+            : "Une demande de changement d'adresse vers {$newEmail} vient d'être faite sur votre compte ClubScheduler.\n\nVotre adresse actuelle reste active tant que la nouvelle n'est pas confirmée.\n\nSi vous n'êtes pas à l'origine de cette demande, changez votre mot de passe : quelqu'un a accès à votre session.";
+
+        try {
+            $this->mailer->send(
+                (new Email)
+                    ->from('no-reply@clubscheduler.app')
+                    ->to($previousEmail)
+                    ->subject($subject)
+                    ->text($body),
             );
         } catch (Throwable) {
         }
