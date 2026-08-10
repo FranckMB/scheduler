@@ -12,7 +12,25 @@ import { type ExportFormat, useScheduleExport } from "./queries";
  * Export the currently viewed schedule to PDF / PNG / Excel, scoped to every gym
  * or a single one (venue-only, per product). Each export fits one landscape page.
  */
-export function ExportMenu({ scheduleId, venues, exportName = null }: { scheduleId: string; venues: Venue[]; exportName?: string | null }) {
+export function ExportMenu({
+  scheduleId,
+  venues,
+  exportName = null,
+  screenFilterCount = 0,
+}: {
+  scheduleId: string;
+  venues: Venue[];
+  exportName?: string | null;
+  /**
+   * P4-62 — combien de ressources le filtre de l'ÉCRAN masque actuellement. Le
+   * filtre est une loupe de lecture, jamais le périmètre de l'export (le PDF est
+   * rendu serveur, qui n'en sait rien) : décision fondateur « annoncer, ne pas
+   * coupler ». On le DIT donc ici, plutôt que de laisser croire que ce qu'on voit
+   * est ce qu'on emporte — la règle maison est de ne jamais masquer ce qu'un
+   * export contient.
+   */
+  screenFilterCount?: number;
+}) {
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<string>(""); // "" = all venues
   const rootRef = useRef<HTMLDivElement>(null);
@@ -48,6 +66,7 @@ export function ExportMenu({ scheduleId, venues, exportName = null }: { schedule
   }, [open]);
 
   const venueId = "" === scope ? null : scope;
+  const scopeLabel = null === venueId ? "tous les gymnases" : (venues.find((v) => v.id === venueId)?.name ?? "un gymnase");
   const formats: { key: ExportFormat; label: string; icon: typeof FileText }[] = [
     { key: "pdf", label: "PDF", icon: FileText },
     { key: "png", label: "Image (PNG)", icon: FileImage },
@@ -91,6 +110,12 @@ export function ExportMenu({ scheduleId, venues, exportName = null }: { schedule
               </button>
             ))}
           </div>
+          {screenFilterCount > 0 ? (
+            <p className="mt-2 rounded-md bg-muted p-2 text-xs leading-tight">
+              L'écran est filtré ({screenFilterCount} {1 === screenFilterCount ? "ressource" : "ressources"}), mais
+              l'export porte sur <strong>{scopeLabel}</strong> — le filtre d'affichage ne le restreint pas.
+            </p>
+          ) : null}
           <p className="mt-2 text-xs leading-tight text-muted-foreground">Une page paysage, ajustée pour rester lisible.</p>
         </div>
       ) : null}

@@ -557,10 +557,21 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onDelete={() => validScheduleId && deleteMutation.mutate(validScheduleId)}
               onRegenerateFrom={() => setRegenerateFromOpen(true)}
               embedded={embedded}
-              rightSlot={null !== validScheduleId && !isGenerating && slots.length > 0 ? <ExportMenu scheduleId={validScheduleId} venues={venues} exportName={exportName} /> : null}
+              rightSlot={
+                null !== validScheduleId && !isGenerating && slots.length > 0 ? (
+                  <ExportMenu
+                    scheduleId={validScheduleId}
+                    venues={venues}
+                    exportName={exportName}
+                    screenFilterCount={resourceFilter.length}
+                  />
+                ) : null
+              }
               // Le filtre part en ligne 1, contre le sélecteur de vue dont il porte le
-              // libellé (P4-43). ⚠ Il n'est PAS couplé à l'export : `ExportMenu` a son
-              // propre périmètre gymnase et le rendu serveur ignore tout filtre client.
+              // libellé (P4-43). ⚠ Il n'est toujours PAS couplé à l'export (le rendu PDF
+              // est serveur et ignore tout filtre client) — mais depuis P4-62 l'export
+              // ANNONCE son périmètre quand l'écran est filtré : on ne masque jamais ce
+              // qu'un export contient.
               filterSlot={<ResourceFilter viewMode={viewMode} groups={resourceGroups} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />}
             />
           </div>
