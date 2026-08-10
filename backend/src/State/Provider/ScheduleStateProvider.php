@@ -5,25 +5,39 @@ declare(strict_types=1);
 namespace App\State\Provider;
 
 use ApiPlatform\Metadata\Operation;
+use ApiPlatform\State\Pagination\Pagination;
 use App\ApiResource\ScheduleResource;
 use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
 use App\Entity\ScheduleStructureSnapshot;
 use App\Entity\Season;
 use App\Enum\SchedulePlanType;
+use App\Service\ScheduleCapabilityResolver;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
  * @extends AbstractStateProvider<Schedule, ScheduleResource>
  */
 class ScheduleStateProvider extends AbstractStateProvider
 {
+    public function __construct(
+        EntityManagerInterface $entityManager,
+        RequestStack $requestStack,
+        Pagination $pagination,
+        private readonly ScheduleCapabilityResolver $capabilityResolver,
+    ) {
+        parent::__construct($entityManager, $requestStack, $pagination);
+    }
+
     /**
      * Enrich the mapped DTO(s) with `hasStructurePhoto` (D3 gating), `isLiveContext`
-     * (★), `isChosen` (ADR-0002: its plan points at it) and `planType` (ADR-0002 C4:
-     * SEASON = socle vs overlay) in FOUR batch queries — a per-DTO EXISTS would N+1
-     * the schedules collection. All lookups are tenant-scoped by the Doctrine
-     * tenant_filter (ScheduleStructureSnapshot / Season / SchedulePlan each own a
-     * club_id), so they never cross clubs.
+     * (★), `isChosen` (ADR-0002: its plan points at it), `planType` (ADR-0002 C4:
+     * SEASON = socle vs overlay) and the P2-8 `capabilities` block (permissions computed
+     * server-side by the SAME code as the write guards) — all in BATCH, so a per-DTO
+     * lookup never N+1s the schedules collection. All lookups are tenant-scoped by the
+     * Doctrine tenant_filter (ScheduleStructureSnapshot / Season / SchedulePlan / Schedule
+     * each own a club_id), so they never cross clubs.
      */
     public function provide(Operation $operation, array $uriVariables = [], array $context = []): object|array|null
     {
@@ -46,11 +60,21 @@ class ScheduleStateProvider extends AbstractStateProvider
         $liveContext = $this->liveContextScheduleIds($ids);
         $chosen = $this->chosenScheduleIds($ids);
         $planType = $this->planTypeByScheduleId($ids);
+        // P2-8 : le résolveur travaille sur les ENTITÉS (il lui faut club/saison, absents
+        // du DTO). Une seule requête pour tout le lot (identity-map déjà chaude), puis les
+        // ensembles déjà calculés ci-dessus sont réutilisés — pas de double interrogation.
+        $capabilities = $this->capabilityResolver->forSchedules(
+            $this->entityManager->getRepository(Schedule::class)->findBy(['id' => $ids]),
+            $chosen,
+            $planType,
+            $withPhoto,
+        );
         foreach ($dtos as $dto) {
             $dto->hasStructurePhoto = isset($withPhoto[$dto->id]);
             $dto->isLiveContext = isset($liveContext[$dto->id]);
             $dto->isChosen = isset($chosen[$dto->id]);
             $dto->planType = $planType[$dto->id] ?? null;
+            $dto->capabilities = $capabilities[$dto->id] ?? null;
         }
 
         return $result;
