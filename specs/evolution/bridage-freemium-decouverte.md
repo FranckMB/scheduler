@@ -36,7 +36,8 @@ planning obtenu est l'argument que le bénévole porte à son bureau. La convers
   **Chaque ACTION DE SORTIE consomme 1 crédit** :
   - générer / régénérer un planning (les 3 routes de solve — plans de période compris) ;
   - placer les matchs (`POST /api/fixtures/place`) ;
-  - exporter un PDF.
+  - exporter un livrable — **PDF ou XLSX** (revue sécu PR B, 2026-08-10 : sans le tableur dans le
+    pool, le mur PDF se contournait par le second bouton d'export).
   Consulter et **ajuster à la main** ne consomment jamais rien. Reset **superadmin seulement**.
   À l'épuisement : plus aucune sortie — la configuration, la consultation et l'ajustement manuel
   restent ouverts. Pas de read-only, pas de lockout : l'envie de régénérer convertit.
