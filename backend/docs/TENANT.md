@@ -103,6 +103,11 @@ services:
 ## Security Considerations
 
 - Defence in depth is real now: Doctrine filter (layer 2) **and** RLS (layer 3). Keep `TenantIsolationTest`, `TenantJwtIsolationTest` and `RlsIsolationTest` green — they are the blocking guards.
+- **Role layer on top of the membership (P1-1 PR A, 2026-08-10):** every API Platform write is
+  **management-only by default** — `AbstractStateProcessor::requiresManagementRole()` defaults to `true`
+  (`ManagementAccessGuard`, SEC-07), with a single explicit opt-out (`UserStateProcessor`, self-only edits).
+  Custom write controllers carry their own guard (same SEC-07 rule). A non-management member reads
+  everything, writes nothing. Guarded by `ManagementRoleTest` (blocking gate step).
 - **Connection separation (wired):** runtime = `app_user` (`DATABASE_URL`), migrations/ops/fixtures = `clubscheduler` via the Doctrine `admin` connection (`DATABASE_ADMIN_URL`). `clubscheduler` bypasses RLS — that is the deliberate superadmin supervision door (see `docs/security/rls.md`).
 - ⚠ pgbouncer transaction-pooling is incompatible with the session-scoped GUC — redesign before introducing a pooler.
 
