@@ -6,15 +6,19 @@ namespace App\State\Processor;
 
 use App\ApiResource\TeamResource;
 use App\Dto\TeamInput;
+use App\Entity\Club;
+use App\Entity\Season;
 use App\Entity\Team;
 use App\Enum\Gender;
 use App\Enum\TeamLevel;
 use App\Service\ManagementAccessGuard;
+use App\Service\PlanEntitlements;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use App\Service\TeamEngagementGuard;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * @extends AbstractStateProcessor<Team, TeamInput, TeamResource>
@@ -28,6 +32,7 @@ class TeamStateProcessor extends AbstractStateProcessor
         SeasonAccessGuard $seasonAccessGuard,
         ManagementAccessGuard $managementAccessGuard,
         private readonly TeamEngagementGuard $teamEngagementGuard,
+        private readonly PlanEntitlements $planEntitlements,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -66,6 +71,10 @@ class TeamStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): Team
     {
+        // P1-3 — cap payant aux portes de création : au-delà du cap de l'offre effective, refus
+        // 422 nommant le palier supérieur. Découverte/Bêta/démo (cap null) passent sans test.
+        $this->assertWithinTeamCap();
+
         $entity = new Team;
         $entity->setSportCategoryId($input->sportCategoryId ?? '33333333-3333-3333-3333-333333333333');
         $entity->setPriorityTierId($input->priorityTierId ?? 1);
@@ -193,5 +202,37 @@ class TeamStateProcessor extends AbstractStateProcessor
         $dto->isEngaged = $this->teamEngagementGuard->isEngaged($entity->getId());
 
         return $dto;
+    }
+
+    /**
+     * Refuse la création d'une équipe de plus si l'offre effective (payante) a atteint son
+     * cap. La décision est centralisée dans `PlanEntitlements` — pas de règle dupliquée. Le
+     * club/saison viennent du tenant résolu par le listener (mêmes attributs que `process()`).
+     */
+    private function assertWithinTeamCap(): void
+    {
+        $request = $this->requestStack->getCurrentRequest();
+        $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
+        if (!\is_string($clubId) || '' === $clubId) {
+            return;
+        }
+
+        $club = $this->entityManager->getRepository(Club::class)->find($clubId);
+        if (!$club instanceof Club) {
+            return;
+        }
+
+        $seasonId = $request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id');
+        $season = \is_string($seasonId) && '' !== $seasonId
+            ? $this->entityManager->getRepository(Season::class)->find($seasonId)
+            : $this->seasonResolver->currentSeason($clubId);
+        if (!$season instanceof Season) {
+            return;
+        }
+
+        $message = $this->planEntitlements->teamCapExceededMessage($club, $season);
+        if (null !== $message) {
+            throw new UnprocessableEntityHttpException($message);
+        }
     }
 }

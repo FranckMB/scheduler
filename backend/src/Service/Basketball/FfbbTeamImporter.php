@@ -10,6 +10,7 @@ use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Enum\Gender;
 use App\Enum\TeamLevel;
+use App\Service\PlanEntitlements;
 use App\Service\SeasonResolver;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -50,6 +51,7 @@ final class FfbbTeamImporter
         private readonly FfbbEngagementReader $reader,
         private readonly SeasonResolver $seasonResolver,
         private readonly LoggerInterface $logger,
+        private readonly PlanEntitlements $planEntitlements,
     ) {}
 
     /**
@@ -97,6 +99,20 @@ final class FfbbTeamImporter
             $decoded[] = [...$parsed, 'category' => $category, 'competitionName' => $row['competitionName']];
         }
         usort($decoded, static fn (array $a, array $b): int => [$a['tierRank'], -$a['ageMax']] <=> [$b['tierRank'], -$b['ageMax']]);
+
+        // P1-3 — cap payant : n'importe que jusqu'au cap, le reste est sauté et loggé. Ce chemin
+        // ne tourne que sur un club VIDE (borne ci-dessus), donc teamsUsed = 0 → remaining = cap.
+        // À l'onboarding le club est Découverte (cap null) : rien n'est bridé ; en pratique seul un
+        // club payant qui ré-importe après vidage est concerné (spec §4, note assumée).
+        $cap = $this->planEntitlements->teamCap($club, $season);
+        if (null !== $cap && \count($decoded) > $cap) {
+            $this->logger->warning('FFBB team import: offer cap reached, extra engagements skipped', [
+                'clubId' => $club->getId(),
+                'cap' => $cap,
+                'engagements' => \count($decoded),
+            ]);
+            $decoded = \array_slice($decoded, 0, $cap);
+        }
 
         $created = 0;
         $usedNames = [];

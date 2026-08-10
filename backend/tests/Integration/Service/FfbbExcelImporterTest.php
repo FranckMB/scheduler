@@ -12,6 +12,7 @@ use App\Entity\Team;
 use App\Enum\SeasonStatus;
 use App\Exception\ImportRejectedException;
 use App\Service\Basketball\FfbbExcelImporter;
+use App\Service\PlanEntitlements;
 use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -156,7 +157,7 @@ final class FfbbExcelImporterTest extends KernelTestCase
 
     private function importer(): FfbbExcelImporter
     {
-        return new FfbbExcelImporter($this->em);
+        return new FfbbExcelImporter($this->em, self::getContainer()->get(PlanEntitlements::class));
     }
 
     private function categoryId(string $name): string
