@@ -12,6 +12,7 @@ use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
 use App\Service\ManagementAccessGuard;
 use App\Service\OverlayManager;
+use App\Service\ScheduleCapabilityResolver;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
@@ -35,6 +36,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         private readonly OverlayManager $overlayManager,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly SocleGuard $socleGuard,
+        private readonly ScheduleCapabilityResolver $capabilityResolver,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -193,13 +195,15 @@ class ScheduleStateProcessor extends AbstractStateProcessor
             $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
             if ($schedule instanceof Schedule && (null === $clubId || $schedule->getClubId() === $clubId)) {
                 // ADR-0002 inv. 1 : la version CHOISIE ancre le plan — la rouvrir
-                // (dépointer) avant de la supprimer.
-                if ($this->schedulePlanProvisioner->isChosen($schedule->getId())) {
+                // (dépointer) avant de la supprimer. Les trois refus DÉLÈGUENT à
+                // ScheduleCapabilityResolver (P2-8) : le bloc `capabilities` sérialisé
+                // lit EXACTEMENT ces mêmes prédicats — canDelete false ⇔ ce 409.
+                if ($this->capabilityResolver->isChosen($schedule)) {
                     throw new ConflictHttpException('La version choisie ne peut pas être supprimée. Rouvrez le planning d\'abord.');
                 }
                 // A version whose solve is still running cannot be deleted out
                 // from under the worker (its import would resurrect artifacts).
-                if (\in_array($schedule->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
+                if ($this->capabilityResolver->isInFlight($schedule)) {
                     throw new ConflictHttpException('This schedule is still generating. Wait for it to finish before deleting.');
                 }
                 // La DERNIÈRE version terminée du plan de la saison ancre la saison :
@@ -207,7 +211,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
                 // sans cockpit ni matchs (inv. 8/16 le renverrait au wizard guidé, ses
                 // matchs orphelins). Rouvrir dépointe (inv. 2) mais ne doit pas ouvrir
                 // cette porte : le geste pour remplacer un planning, c'est régénérer.
-                if ($this->isLastFinishedSeasonVersion($schedule)) {
+                if ($this->capabilityResolver->isLastFinishedSeasonVersion($schedule)) {
                     throw new ConflictHttpException('C\'est le seul planning de la saison — régénérez-en un autre plutôt que de supprimer celui-ci.');
                 }
                 // Atomique : purgeScheduleArtifacts relâche le pointeur via un
@@ -281,32 +285,6 @@ class ScheduleStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): ScheduleResource
     {
         return ScheduleResource::fromEntity($entity);
-    }
-
-    /**
-     * Cette version est-elle la seule version TERMINÉE du plan de la saison ? Les
-     * overlays de période ne comptent pas : ils ont leur propre plan, et une période
-     * sans planning est un état normal.
-     */
-    private function isLastFinishedSeasonVersion(Schedule $schedule): bool
-    {
-        // ADR-0002 C4 : « version de saison ? » = plan.type === SEASON. Garde de
-        // SUPPRESSION → variante NON levante (planIsSeason) : un schedule sans plan est une
-        // anomalie qui doit rester SUPPRIMABLE (purge, ruling 2026-07-17), jamais un 500.
-        $planId = $schedule->getSchedulePlanId();
-        if (ScheduleStatus::COMPLETED !== $schedule->getStatus() || !$this->schedulePlanProvisioner->planIsSeason($planId)) {
-            return false;
-        }
-
-        // Les autres versions terminées du MÊME plan (= le plan SEASON, puisque planIsSeason).
-        $others = $this->entityManager->getRepository(Schedule::class)->count([
-            'clubId' => $schedule->getClubId(),
-            'seasonId' => $schedule->getSeasonId(),
-            'schedulePlanId' => $planId,
-            'status' => ScheduleStatus::COMPLETED,
-        ]);
-
-        return $others <= 1;
     }
 
     /** P2-5 E1 : cette période a-t-elle des semaines enfants ? SQL brut (hors season_filter), RLS scope le club. */

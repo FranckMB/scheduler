@@ -13,6 +13,7 @@ use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
+use App\Dto\ScheduleCapabilities;
 use App\Dto\ScheduleInput;
 use App\Entity\Schedule;
 use App\Enum\ScheduleStatus;
@@ -165,6 +166,16 @@ class ScheduleResource
      */
     #[Groups(['read'])]
     public bool $isChosen = false;
+
+    /**
+     * P2-8 (PR A) : le bloc de permissions de CETTE version, calculé SERVEUR par le même
+     * code que les gardes d'écriture (ScheduleCapabilityResolver) — « capacité affichée ==
+     * verdict du refus ». Renseigné EN BATCH par ScheduleStateProvider ; null sur le chemin
+     * fromEntity nu (réponse POST/PUT), comme planType/isChosen — le front le recharge via
+     * un GET après une mutation.
+     */
+    #[Groups(['read'])]
+    public ?ScheduleCapabilities $capabilities = null;
 
     public static function fromEntity(Schedule $entity): self
     {

@@ -338,6 +338,15 @@ jobs:
       - name: MemberRoleTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/MemberRoleTest.php --group phase1'
 
+      # P2-8 PR A (axe planning lifecycle) : PARITÉ capacité affichée == verdict du refus.
+      # Le bloc `capabilities` sérialisé sur chaque Schedule est calculé par le MÊME code que
+      # les gardes d'écriture (ScheduleCapabilityResolver) — canDelete/canValidate/
+      # canRegenerateFrom et les deux compteurs annoncent EXACTEMENT ce que DELETE/validate/
+      # regenerate-from FONT. Sans ce gate, une dérive serveur↔serveur (capacité ≠ refus)
+      # passerait, et le front (PR B) afficherait un bouton que le serveur rejette.
+      - name: ScheduleCapabilityParityTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/ScheduleCapabilityParityTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest

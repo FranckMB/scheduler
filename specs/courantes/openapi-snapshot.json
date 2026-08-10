@@ -19532,6 +19532,16 @@
                         "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
                         "default": false,
                         "type": "boolean"
+                    },
+                    "capabilities": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/ScheduleCapabilities"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
                     }
                 }
             },
@@ -19738,6 +19748,16 @@
                         "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
                         "default": false,
                         "type": "boolean"
+                    },
+                    "capabilities": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/ScheduleCapabilities.html"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
                     }
                 }
             },
@@ -19903,10 +19923,80 @@
                                 "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
                                 "default": false,
                                 "type": "boolean"
+                            },
+                            "capabilities": {
+                                "anyOf": [
+                                    {
+                                        "$ref": "#/components/schemas/ScheduleCapabilities.jsonld"
+                                    },
+                                    {
+                                        "type": "null"
+                                    }
+                                ]
                             }
                         }
                     }
                 ]
+            },
+            "ScheduleCapabilities": {
+                "type": "object",
+                "properties": {
+                    "canDelete": {
+                        "type": "boolean"
+                    },
+                    "canValidate": {
+                        "type": "boolean"
+                    },
+                    "canRegenerateFrom": {
+                        "type": "boolean"
+                    },
+                    "versionsDeletedOnValidate": {
+                        "type": "integer"
+                    },
+                    "overlaysDroppedOnValidate": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "ScheduleCapabilities.html": {
+                "type": "object",
+                "properties": {
+                    "canDelete": {
+                        "type": "boolean"
+                    },
+                    "canValidate": {
+                        "type": "boolean"
+                    },
+                    "canRegenerateFrom": {
+                        "type": "boolean"
+                    },
+                    "versionsDeletedOnValidate": {
+                        "type": "integer"
+                    },
+                    "overlaysDroppedOnValidate": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "ScheduleCapabilities.jsonld": {
+                "type": "object",
+                "properties": {
+                    "canDelete": {
+                        "type": "boolean"
+                    },
+                    "canValidate": {
+                        "type": "boolean"
+                    },
+                    "canRegenerateFrom": {
+                        "type": "boolean"
+                    },
+                    "versionsDeletedOnValidate": {
+                        "type": "integer"
+                    },
+                    "overlaysDroppedOnValidate": {
+                        "type": "integer"
+                    }
+                }
             },
             "ScheduleDiagnostic": {
                 "type": "object",

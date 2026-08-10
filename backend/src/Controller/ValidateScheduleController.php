@@ -10,6 +10,7 @@ use App\Entity\Season;
 use App\Enum\ScheduleStatus;
 use App\Service\ManagementAccessGuard;
 use App\Service\OverlayManager;
+use App\Service\ScheduleCapabilityResolver;
 use App\Service\SchedulePlanProvisioner;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -40,6 +41,7 @@ final class ValidateScheduleController extends AbstractController implements Sea
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly OverlayManager $overlayManager,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly ScheduleCapabilityResolver $capabilityResolver,
     ) {}
 
     #[Route('/api/schedules/{id}/validate', name: 'api_schedule_validate', methods: ['POST'])]
@@ -130,7 +132,7 @@ final class ValidateScheduleController extends AbstractController implements Sea
                 if ($sibling->getId() === $schedule->getId()) {
                     continue;
                 }
-                if (\in_array($sibling->getStatus(), [ScheduleStatus::PENDING, ScheduleStatus::GENERATING], true)) {
+                if ($this->capabilityResolver->isInFlight($sibling)) {
                     return $this->json(['error' => 'Une autre version est en cours de génération — attendez sa fin avant de valider.'], Response::HTTP_CONFLICT);
                 }
                 $siblings[] = $sibling;

@@ -8,6 +8,7 @@ use App\Entity\Schedule;
 use App\Entity\Season;
 use App\Enum\ScheduleStatus;
 use App\Service\ManagementAccessGuard;
+use App\Service\ScheduleCapabilityResolver;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SocleGuard;
 use App\Service\StructureRestorer;
@@ -31,8 +32,6 @@ use Throwable;
 #[AsController]
 final class RegenerateFromVersionController extends AbstractController implements SeasonScopedWriteInterface
 {
-    private const IN_FLIGHT = [ScheduleStatus::PENDING, ScheduleStatus::GENERATING];
-
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
@@ -40,6 +39,7 @@ final class RegenerateFromVersionController extends AbstractController implement
         private readonly StructureRestorer $structureRestorer,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly SocleGuard $socleGuard,
+        private readonly ScheduleCapabilityResolver $capabilityResolver,
     ) {}
 
     #[Route('/api/schedules/{id}/regenerate-from', name: 'api_schedule_regenerate_from', methods: ['POST'])]
@@ -83,12 +83,9 @@ final class RegenerateFromVersionController extends AbstractController implement
         // season is still solving, or a concurrent import would land slots
         // referencing teams/venues the wipe just deleted (the ClubGenerationLock
         // only serialises solves, it does not guard this destructive write).
-        $inFlight = $this->entityManager->getRepository(Schedule::class)->count([
-            'clubId' => $source->getClubId(),
-            'seasonId' => $source->getSeasonId(),
-            'status' => self::IN_FLIGHT,
-        ]);
-        if ($inFlight > 0) {
+        // Délégué à ScheduleCapabilityResolver (P2-8) : le bloc `capabilities` lit le
+        // MÊME prédicat — canRegenerateFrom false ⇔ ce 409.
+        if ($this->capabilityResolver->inFlightInSeason($source->getClubId(), $source->getSeasonId())) {
             return $this->json(['error' => 'Une génération est en cours — attendez sa fin avant de charger une autre version.'], Response::HTTP_CONFLICT);
         }
 
