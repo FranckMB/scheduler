@@ -880,6 +880,12 @@
                                         "email": {
                                             "type": "string"
                                         },
+                                        "pendingEmail": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
                                         "firstName": {
                                             "type": "string"
                                         },
@@ -1048,6 +1054,12 @@
                                         "email": {
                                             "type": "string"
                                         },
+                                        "pendingEmail": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
                                         "firstName": {
                                             "type": "string"
                                         },
@@ -1060,13 +1072,13 @@
                         }
                     },
                     "400": {
-                        "description": "Validation error (empty name / invalid email)"
+                        "description": "Validation error (empty name)"
                     },
-                    "409": {
-                        "description": "E-mail already in use"
+                    "422": {
+                        "description": "E-mail changes go through the confirmation flow (POST /api/me/email)"
                     }
                 },
-                "summary": "Update the connected user profile (name / e-mail)",
+                "summary": "Update the connected user profile (name only \u2014 e-mail changes go through POST /api/me/email)",
                 "requestBody": {
                     "content": {
                         "application/json": {
@@ -1078,10 +1090,159 @@
                                     },
                                     "lastName": {
                                         "type": "string"
-                                    },
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
+        "/api/me/email": {
+            "post": {
+                "operationId": "postApiMeEmail",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Confirmation link sent to the new address; the current address stays active until confirmed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "confirmation_sent"
+                                            ]
+                                        },
+                                        "pendingEmail": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid e-mail, or same as the current address"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "409": {
+                        "description": "E-mail already used (active or pending) by another account"
+                    },
+                    "429": {
+                        "description": "Too many requests (per-user rate limit)"
+                    }
+                },
+                "summary": "Request an e-mail change: store it as pending and send a confirmation link to the NEW address",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "email"
+                                ],
+                                "properties": {
                                     "email": {
                                         "type": "string",
                                         "format": "email"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            },
+            "delete": {
+                "operationId": "deleteApiMeEmail",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pending e-mail change cancelled",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "cancelled"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "summary": "Cancel a pending e-mail change (clears pendingEmail and its tokens)"
+            }
+        },
+        "/api/me/email/confirm": {
+            "post": {
+                "operationId": "postApiMeEmailConfirm",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "E-mail switched; a fresh httpOnly JWT cookie is set for the new identity (the account stays verified/connectable)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "email_confirmed"
+                                            ]
+                                        },
+                                        "email": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid/expired token, or no pending change"
+                    },
+                    "409": {
+                        "description": "The pending address was taken by another account in the meantime"
+                    },
+                    "429": {
+                        "description": "Too many attempts (per-IP rate limit)"
+                    }
+                },
+                "summary": "Confirm the pending e-mail change (PUBLIC_ACCESS \u2014 the token is the identity)",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "token"
+                                ],
+                                "properties": {
+                                    "token": {
+                                        "type": "string",
+                                        "description": "The raw token from the confirmation email link"
                                     }
                                 }
                             }

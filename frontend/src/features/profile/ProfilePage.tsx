@@ -11,30 +11,54 @@ import { isPasswordValid } from "@/shared/lib/passwordPolicy";
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { toast } from "@/shared/stores/toastStore";
 
-import { useChangePassword, useDeleteAccount, useDownloadMyData, useUpdateProfile } from "./queries";
+import {
+  useCancelEmailChange,
+  useChangePassword,
+  useDeleteAccount,
+  useDownloadMyData,
+  useRequestEmailChange,
+  useUpdateProfile,
+} from "./queries";
 
-function ProfileForm({ firstName, lastName, email }: { firstName: string; lastName: string; email: string }) {
+function ProfileForm({
+  firstName,
+  lastName,
+  email,
+  pendingEmail,
+}: {
+  firstName: string;
+  lastName: string;
+  email: string;
+  pendingEmail: string | null;
+}) {
   const update = useUpdateProfile();
-  const logout = useLogout();
+  const requestEmail = useRequestEmailChange();
+  const cancelEmail = useCancelEmailChange();
   const [first, setFirst] = useState(firstName);
   const [last, setLast] = useState(lastName);
   const [mail, setMail] = useState(email);
+  // Le serveur exige le mot de passe courant (revue sécu P4-74 : changer
+  // l'adresse transfère le compte — un JWT emprunté ne doit pas suffire).
+  const [emailPassword, setEmailPassword] = useState("");
 
-  const dirty = first.trim() !== firstName || last.trim() !== lastName || mail.trim() !== email;
+  const nameDirty = first.trim() !== firstName || last.trim() !== lastName;
+  const emailChanged = mail.trim() !== email && mail.trim() !== "";
 
-  const submit = (event: FormEvent) => {
+  const saveName = (event: FormEvent) => {
     event.preventDefault();
-    const emailChanged = mail.trim() !== email;
-    update.mutate(
-      { firstName: first.trim(), lastName: last.trim(), email: mail.trim() },
+    update.mutate({ firstName: first.trim(), lastName: last.trim() });
+  };
+
+  // P4-74 — « confirmer d'abord, basculer ensuite » : la saisie DÉCLENCHE la
+  // demande (lien envoyé à la nouvelle adresse). L'adresse actuelle reste
+  // active : on la remet dans le champ, la nouvelle passe « en attente ».
+  const requestEmailChange = () => {
+    requestEmail.mutate(
+      { email: mail.trim(), currentPassword: emailPassword },
       {
         onSuccess: () => {
-          // Changing the email invalidates the current session (identity = email):
-          // sign out so the user re-logs in with the new address.
-          if (emailChanged) {
-            toast.info("E-mail modifié — reconnectez-vous.");
-            logout();
-          }
+          setMail(email);
+          setEmailPassword("");
         },
       },
     );
@@ -45,8 +69,8 @@ function ProfileForm({ firstName, lastName, email }: { firstName: string; lastNa
       <CardHeader>
         <CardTitle>Mes informations</CardTitle>
       </CardHeader>
-      <CardContent>
-        <form className="space-y-4" onSubmit={submit}>
+      <CardContent className="space-y-6">
+        <form className="space-y-4" onSubmit={saveName}>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <Label htmlFor="firstName">Prénom</Label>
@@ -57,16 +81,45 @@ function ProfileForm({ firstName, lastName, email }: { firstName: string; lastNa
               <Input id="lastName" value={last} onChange={(e) => setLast(e.target.value)} required />
             </div>
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="email">E-mail</Label>
-            <Input id="email" type="email" value={mail} onChange={(e) => setMail(e.target.value)} required />
-            <p className="text-xs text-muted-foreground">Changer l'e-mail vous déconnectera (à utiliser pour vous reconnecter).</p>
-          </div>
-          <Button type="submit" disabled={!dirty || update.isPending}>
+          <Button type="submit" disabled={!nameDirty || update.isPending}>
             {update.isPending ? <Spinner className="size-4" /> : null}
             Enregistrer
           </Button>
         </form>
+
+        <div className="space-y-2 border-t border-border pt-4">
+          <Label htmlFor="email">E-mail</Label>
+          <Input id="email" type="email" value={mail} onChange={(e) => setMail(e.target.value)} />
+          <p className="text-xs text-muted-foreground">
+            Changer d'adresse envoie un lien de confirmation à la nouvelle adresse. Votre adresse actuelle reste active
+            tant que vous n'avez pas confirmé, et reçoit un avertissement.
+          </p>
+          {emailChanged ? (
+            <div className="space-y-1">
+              <Label htmlFor="email-password">Votre mot de passe</Label>
+              <PasswordInput
+                id="email-password"
+                autoComplete="current-password"
+                value={emailPassword}
+                onChange={(e) => setEmailPassword(e.target.value)}
+              />
+            </div>
+          ) : null}
+          {null !== pendingEmail ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted p-3 text-sm">
+              <span>
+                En attente de confirmation : <strong>{pendingEmail}</strong>
+              </span>
+              <Button type="button" variant="ghost" size="sm" disabled={cancelEmail.isPending} onClick={() => cancelEmail.mutate()}>
+                Annuler
+              </Button>
+            </div>
+          ) : null}
+          <Button type="button" variant="outline" disabled={!emailChanged || emailPassword === "" || requestEmail.isPending} onClick={requestEmailChange}>
+            {requestEmail.isPending ? <Spinner className="size-4" /> : null}
+            Envoyer un lien de confirmation
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -212,7 +265,7 @@ export function ProfilePage() {
           {data.club?.name ?? "—"} · {data.role ?? "—"}
         </p>
       </div>
-      <ProfileForm firstName={data.firstName} lastName={data.lastName} email={data.email} />
+      <ProfileForm firstName={data.firstName} lastName={data.lastName} email={data.email} pendingEmail={data.pendingEmail} />
       <PasswordForm />
       <ExportSection />
       <DangerZone />

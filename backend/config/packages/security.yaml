@@ -52,6 +52,11 @@ security:
         - { path: ^/api/logout$, roles: PUBLIC_ACCESS }
         - { path: ^/api/register, roles: PUBLIC_ACCESS }
         - { path: ^/api/password, roles: PUBLIC_ACCESS }
+        # P4-74 : confirmer un changement d'e-mail — le token EST l'identité
+        # (envoyé à la nouvelle adresse) et le lien est souvent ouvert dans un
+        # onglet non connecté. POST seul ; /api/me et /api/me/email (demande +
+        # annulation) restent authentifiés (catch-all ^/api plus bas).
+        - { path: ^/api/me/email/confirm$, methods: [POST], roles: PUBLIC_ACCESS }
         - { path: ^/api/health, roles: PUBLIC_ACCESS }
         - { path: ^/api/docs, roles: PUBLIC_ACCESS }
         # SEC-10 (accepted): a club logo is a public brand asset, served to

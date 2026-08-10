@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Club;
+use App\Entity\EmailChangeToken;
 use App\Entity\EmailVerificationToken;
 use App\Entity\ResetPasswordRequest;
 use App\Entity\User;
@@ -92,6 +93,16 @@ final class AccountErasureService
             ->where('r.user = :user')
             ->setParameter('user', $user)
             ->getQuery()->execute();
+        // ⚠ Revue sécu P4-74 : le token de CHANGEMENT d'e-mail doit mourir ici
+        // aussi. Sans lui, un lien vivant (24 h) réécrivait une VRAIE adresse sur
+        // le compte anonymisé ET rendait un cookie JWT valide — l'effacement
+        // cessait d'être terminal. Le `pendingEmail` part avec (§3), sinon il
+        // garderait une réservation unique éternelle sur l'adresse d'un tiers.
+        $this->entityManager->createQueryBuilder()
+            ->delete(EmailChangeToken::class, 'c')
+            ->where('c.user = :user')
+            ->setParameter('user', $user)
+            ->getQuery()->execute();
 
         // 2. Memberships désactivés AVANT le comptage des clubs orphelins.
         //    club_user se LIT hors tenant (policy SELECT USING(true)) mais son
@@ -99,11 +110,18 @@ final class AccountErasureService
         //    sauterait silencieusement les memberships des AUTRES clubs d'un
         //    user multi-club → on scope le GUC club par club. Le set_config est
         //    session-scoped : il traverse la transaction sans être annulé.
+        //
+        //    `deactivated_at = NOW()` est POSÉ ici (P4-75) : sans lui, l'adhésion
+        //    effacée (is_active=false, deactivated_at=null) se relit comme une
+        //    demande d'approbation JAMAIS entrée et réapparaît dans la file
+        //    pending du club (GET /api/memberships/pending filtre exactement
+        //    is_active=false AND deactivated_at IS NULL) — une adhésion fantôme.
+        //    `deactivated_at` sépare « sorti » de « en attente » (ClubUser).
         $clubIds = $this->clubUserRepository->findActiveClubIds($user->getId());
         foreach ($clubIds as $clubId) {
             $this->tenantConnectionContext->setClubId($clubId);
             $this->entityManager->getConnection()->executeStatement(
-                'UPDATE club_user SET is_active = false, updated_at = NOW() WHERE user_id = :uid AND club_id = :cid',
+                'UPDATE club_user SET is_active = false, deactivated_at = NOW(), updated_at = NOW() WHERE user_id = :uid AND club_id = :cid',
                 ['uid' => $user->getId(), 'cid' => $clubId],
             );
         }
@@ -113,6 +131,7 @@ final class AccountErasureService
         //    aléa jamais valide. random_bytes garantit qu'aucun mot de passe ne
         //    matchera jamais ce "hash" (ce n'est pas un hash bcrypt/argon).
         $user->setEmail(\sprintf('deleted-%s@anonymized.invalid', $user->getId()));
+        $user->setPendingEmail(null);
         $user->setFirstName('Compte');
         $user->setLastName('Supprimé');
         $user->setPasswordHash(bin2hex(random_bytes(32)));

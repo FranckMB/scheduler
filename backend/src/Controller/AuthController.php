@@ -8,6 +8,7 @@ use App\Entity\Basketball\FfbbCommittee;
 use App\Entity\Basketball\FfbbLeague;
 use App\Entity\Club;
 use App\Entity\ClubCreationRequest;
+use App\Entity\EmailChangeToken;
 use App\Entity\EmailVerificationToken;
 use App\Entity\Season;
 use App\Entity\User;
@@ -21,12 +22,14 @@ use App\Security\JwtCookieFactory;
 use App\Service\AuditTrail;
 use App\Service\ClubApprovalService;
 use App\Service\ClubProvisioner;
+use App\Service\EmailChangeVerifier;
 use App\Service\EmailVerifier;
 use App\Service\PasswordPolicy;
 use App\Service\PlanEntitlements;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
+use DateTimeImmutable;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
@@ -64,7 +67,10 @@ final class AuthController extends AbstractController
         private readonly PasswordPolicy $passwordPolicy,
         private readonly MailerInterface $mailer,
         private readonly EmailVerifier $emailVerifier,
+        private readonly EmailChangeVerifier $emailChangeVerifier,
         private readonly RateLimiterFactory $authRegisterVerifyLimiter,
+        private readonly RateLimiterFactory $emailChangeLimiter,
+        private readonly RateLimiterFactory $emailChangeConfirmLimiter,
         private readonly string $frontendBaseUrl,
         private readonly FfbbLeagueRepository $ffbbLeagues,
         private readonly FfbbCommitteeRepository $ffbbCommittees,
@@ -444,6 +450,9 @@ final class AuthController extends AbstractController
         return $this->json([
             'id' => $user->getId(),
             'email' => $user->getEmail(),
+            // P4-74 : l'adresse en attente de confirmation (le front affiche
+            // « en attente : x@y.z » + un geste d'annulation). Null = aucune.
+            'pendingEmail' => $user->getPendingEmail(),
             'firstName' => $user->getFirstName(),
             'lastName' => $user->getLastName(),
             'membershipStatus' => $membershipStatus,
@@ -488,30 +497,27 @@ final class AuthController extends AbstractController
             }
             $user->setLastName($lastName);
         }
+        // P4-74 : le PATCH ne change PLUS l'e-mail en direct — ce serait basculer
+        // l'identité (email = identifiant de connexion) sans confirmer la nouvelle
+        // adresse, enfermant l'utilisateur dehors à la moindre faute de frappe. Le
+        // changement passe par « confirmer d'abord, basculer ensuite »
+        // (POST /api/me/email). Un e-mail IDENTIQUE à l'actuel est ignoré (no-op) ;
+        // un e-mail DIFFÉRENT → 422 explicite pointant la bonne route.
         if (isset($data['email']) && \is_string($data['email'])) {
             $email = strtolower(trim($data['email']));
-            if (false === filter_var($email, \FILTER_VALIDATE_EMAIL)) {
-                return $this->json(['error' => 'Adresse e-mail invalide.'], 400);
-            }
             if ($email !== $user->getEmail()) {
-                if (null !== $this->entityManager->getRepository(User::class)->findOneBy(['email' => $email])) {
-                    return $this->json(['error' => 'Cet e-mail est déjà utilisé.'], 409);
-                }
-                $user->setEmail($email);
+                return $this->json([
+                    'error' => 'Pour changer votre adresse e-mail, demandez un lien de confirmation (POST /api/me/email).',
+                ], 422);
             }
         }
 
-        try {
-            $this->entityManager->flush();
-        } catch (UniqueConstraintViolationException) {
-            // The findOneBy check above is not atomic with the flush — a
-            // concurrent request could have taken the email in between.
-            return $this->json(['error' => 'Cet e-mail est déjà utilisé.'], 409);
-        }
+        $this->entityManager->flush();
 
         return $this->json([
             'id' => $user->getId(),
             'email' => $user->getEmail(),
+            'pendingEmail' => $user->getPendingEmail(),
             'firstName' => $user->getFirstName(),
             'lastName' => $user->getLastName(),
         ]);
@@ -548,6 +554,166 @@ final class AuthController extends AbstractController
     }
 
     /**
+     * P4-74 — demander un changement d'e-mail (confirmer d'abord, basculer ensuite).
+     *
+     * L'adresse actuelle reste ACTIVE et inchangée : on stocke la nouvelle en
+     * attente (User::pendingEmail) et on envoie un lien de confirmation À CETTE
+     * nouvelle adresse. Rien ne bascule tant que le lien n'est pas suivi
+     * (confirmEmailChange) — un login sur l'adresse courante continue de marcher,
+     * donc une faute de frappe n'enferme jamais l'utilisateur dehors (le gate
+     * UserChecker exige emailVerifiedAt, qu'on ne touche pas).
+     */
+    #[Route('/api/me/email', name: 'api_me_email_request', methods: ['POST'])]
+    public function requestEmailChange(Request $request): JsonResponse
+    {
+        $user = $this->getUser();
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+
+        // Anti-abus : borne PAR UTILISATEUR — la route envoie un mail vers une
+        // adresse tierce (patron des routes sensibles, ici keyé sur le JWT).
+        if (!$this->emailChangeLimiter->create($user->getId())->consume(1)->isAccepted()) {
+            return $this->json(['error' => 'Trop de demandes, réessayez plus tard.'], 429);
+        }
+
+        $data = json_decode($request->getContent(), true);
+        if (!\is_array($data)) {
+            return $this->json(['error' => 'Invalid JSON'], 400);
+        }
+
+        // ⚠ Revue sécu P4-74 : changer l'e-mail TRANSFÈRE le compte (l'adresse EST
+        // l'identifiant de connexion) — c'est plus grave que le supprimer. La règle
+        // maison des gestes d'identité s'applique donc ici aussi : le mot de passe
+        // courant est exigé, comme pour DELETE /api/me et le changement de mot de
+        // passe. Un JWT emprunté ne suffit pas à s'approprier un compte.
+        $currentPassword = \is_string($data['currentPassword'] ?? null) ? $data['currentPassword'] : '';
+        if ('' === $currentPassword || !$this->passwordHasher->isPasswordValid($user, $currentPassword)) {
+            return $this->json(['error' => 'Mot de passe incorrect.'], 400);
+        }
+
+        $email = \is_string($data['email'] ?? null) ? strtolower(trim($data['email'])) : '';
+        if ('' === $email || false === filter_var($email, \FILTER_VALIDATE_EMAIL)) {
+            return $this->json(['error' => 'Adresse e-mail invalide.'], 400);
+        }
+        if ($email === $user->getEmail()) {
+            return $this->json(['error' => 'Cette adresse est déjà la vôtre.'], 400);
+        }
+        // Déjà prise par un AUTRE compte (adresse active OU en attente ailleurs) →
+        // 409, même sémantique qu'au register et qu'à l'ancien PATCH.
+        if ($this->emailIsClaimedByAnother($email, $user->getId())) {
+            return $this->json(['error' => 'Cet e-mail est déjà utilisé.'], 409);
+        }
+
+        $user->setPendingEmail($email);
+        $rawToken = $this->emailChangeVerifier->generateToken($user);
+        try {
+            $this->entityManager->flush();
+        } catch (UniqueConstraintViolationException) {
+            // Course sur pending_email (unique) : réservée entre-temps par un autre compte.
+            return $this->json(['error' => 'Cet e-mail est déjà utilisé.'], 409);
+        }
+
+        $this->sendEmailChangeConfirmation($request, $email, $rawToken);
+        $this->notifyPreviousAddress((string) $user->getEmail(), $email, switched: false);
+
+        return $this->json(['status' => 'confirmation_sent', 'pendingEmail' => $email]);
+    }
+
+    /**
+     * P4-74 — confirmer la nouvelle adresse : le clic sur le lien bascule l'e-mail.
+     *
+     * PUBLIC_ACCESS : le token EST la preuve (envoyé à la nouvelle adresse, que
+     * seul son titulaire relève) — comme /api/register/verify et /api/password/reset,
+     * et parce que le lien est souvent ouvert dans un onglet non connecté. Le JWT
+     * courant porte l'ANCIENNE adresse comme identifiant ; une fois l'e-mail
+     * basculé il ne résout plus le compte, donc on repose un cookie frais pour la
+     * nouvelle identité (continuité de session, même fabrique que verify).
+     */
+    #[Route('/api/me/email/confirm', name: 'api_me_email_confirm', methods: ['POST'])]
+    public function confirmEmailChange(Request $request): JsonResponse
+    {
+        if (!$this->emailChangeConfirmLimiter->create($request->getClientIp())->consume(1)->isAccepted()) {
+            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+        }
+
+        $data = json_decode((string) $request->getContent(), true);
+        $rawToken = \is_array($data) && \is_string($data['token'] ?? null) ? $data['token'] : '';
+
+        $token = $this->emailChangeVerifier->resolve($rawToken);
+        if (!$token instanceof EmailChangeToken) {
+            return $this->json(['error' => 'Lien de confirmation invalide ou expiré.'], 400);
+        }
+
+        $user = $token->getUser();
+        // ⚠ Revue sécu P4-74, défense en profondeur : un compte EFFACÉ ne se
+        // ressuscite pas par un lien. L'effacement supprime déjà ces tokens et le
+        // pending (AccountErasureService) ; ce garde tient même si un token
+        // survivait — la route rend un cookie JWT, elle ne doit jamais le rendre
+        // pour une identité détruite.
+        if ($user->getAnonymizedAt() instanceof DateTimeImmutable) {
+            $this->emailChangeVerifier->consume($token);
+            $this->entityManager->flush();
+
+            return $this->json(['error' => 'Lien de confirmation invalide ou expiré.'], 400);
+        }
+
+        $pending = $user->getPendingEmail();
+        if (null === $pending) {
+            // Déjà confirmé/annulé : le token n'a plus d'adresse cible.
+            $this->emailChangeVerifier->consume($token);
+            $this->entityManager->flush();
+
+            return $this->json(['error' => 'Aucun changement d\'adresse en attente.'], 400);
+        }
+
+        // Course : l'adresse a pu être prise par un autre compte depuis la demande.
+        $claimant = $this->entityManager->getRepository(User::class)->findOneBy(['email' => $pending]);
+        if ($claimant instanceof User && $claimant->getId() !== $user->getId()) {
+            $user->setPendingEmail(null);
+            $this->emailChangeVerifier->consume($token);
+            $this->entityManager->flush();
+
+            return $this->json(['error' => 'Cet e-mail est désormais utilisé par un autre compte.'], 409);
+        }
+
+        // La bascule — et SEULEMENT ici. emailVerifiedAt reste NON NULL : le compte
+        // était déjà vérifié, l'utilisateur ne repasse pas par le gate d'activation.
+        $previousEmail = (string) $user->getEmail();
+        $user->setEmail($pending);
+        $user->setPendingEmail(null);
+        $this->emailChangeVerifier->consume($token);
+        try {
+            $this->entityManager->flush();
+        } catch (UniqueConstraintViolationException) {
+            return $this->json(['error' => 'Cet e-mail est désormais utilisé par un autre compte.'], 409);
+        }
+
+        $this->notifyPreviousAddress($previousEmail, $pending, switched: true);
+
+        $response = $this->json(['status' => 'email_confirmed', 'email' => $user->getEmail()]);
+        $response->headers->setCookie($this->jwtCookieFactory->create($this->jwtManager->create($user)));
+
+        return $response;
+    }
+
+    /** P4-74 — annuler la demande : efface l'adresse en attente et ses tokens. */
+    #[Route('/api/me/email', name: 'api_me_email_cancel', methods: ['DELETE'])]
+    public function cancelEmailChange(): JsonResponse
+    {
+        $user = $this->getUser();
+        if (!$user instanceof User) {
+            return $this->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $user->setPendingEmail(null);
+        $this->emailChangeVerifier->clearForUser($user);
+        $this->entityManager->flush();
+
+        return $this->json(['status' => 'cancelled']);
+    }
+
+    /**
      * The single, identical response for every register outcome (fresh email, taken
      * email, join or create) — byte-for-byte, so nothing distinguishes the branches.
      */
@@ -572,6 +738,66 @@ final class AuthController extends AbstractController
                     ->to($email)
                     ->subject('Confirmez votre adresse e-mail ClubScheduler')
                     ->text("Bienvenue sur ClubScheduler !\n\nPour activer votre compte, ouvrez ce lien :\n{$link}\n\nCe lien expire dans 24 heures."),
+            );
+        } catch (Throwable) {
+        }
+    }
+
+    /** P4-74 — l'adresse est-elle déjà revendiquée (active ou en attente) par un AUTRE compte ? */
+    private function emailIsClaimedByAnother(string $email, string $selfId): bool
+    {
+        $repo = $this->entityManager->getRepository(User::class);
+        $byEmail = $repo->findOneBy(['email' => $email]);
+        if ($byEmail instanceof User && $byEmail->getId() !== $selfId) {
+            return true;
+        }
+        $byPending = $repo->findOneBy(['pendingEmail' => $email]);
+
+        return $byPending instanceof User && $byPending->getId() !== $selfId;
+    }
+
+    private function sendEmailChangeConfirmation(Request $request, string $email, string $rawToken): void
+    {
+        // FRONTEND_BASE_URL en prod ; repli sur l'hôte de la requête en dev/e2e
+        // (origine unique via le proxy Vite) — même patron que la vérification.
+        $base = '' !== $this->frontendBaseUrl ? rtrim($this->frontendBaseUrl, '/') : $request->getSchemeAndHttpHost();
+        $link = $base . '/confirm-email/' . $rawToken;
+
+        // On avale les échecs d'envoi (best-effort, comme la vérification / le reset).
+        try {
+            $this->mailer->send(
+                (new Email)
+                    ->from('no-reply@clubscheduler.app')
+                    ->to($email)
+                    ->subject('Confirmez votre nouvelle adresse e-mail ClubScheduler')
+                    ->text("Vous avez demandé à changer l'adresse e-mail de votre compte ClubScheduler.\n\nPour confirmer cette nouvelle adresse, ouvrez ce lien :\n{$link}\n\nVotre adresse actuelle reste active tant que vous n'avez pas confirmé.\n\nCe lien expire dans 24 heures. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message."),
+            );
+        } catch (Throwable) {
+        }
+    }
+
+    /**
+     * ⚠ Revue sécu P4-74 — l'ANCIENNE adresse est prévenue, aux deux moments
+     * (demande et bascule). C'est le seul signal qui atteint le titulaire légitime
+     * quand quelqu'un d'autre pilote la session, et le seul filet contre la faute
+     * de frappe : au moment où il arrive, l'ancienne adresse est encore délivrable.
+     */
+    private function notifyPreviousAddress(string $previousEmail, string $newEmail, bool $switched): void
+    {
+        $subject = $switched
+            ? 'Votre adresse e-mail ClubScheduler a été modifiée'
+            : 'Demande de changement d’adresse e-mail sur ClubScheduler';
+        $body = $switched
+            ? "L'adresse e-mail de votre compte ClubScheduler est désormais {$newEmail}.\n\nSi vous n'êtes pas à l'origine de ce changement, contactez-nous immédiatement : votre compte a pu être compromis."
+            : "Une demande de changement d'adresse vers {$newEmail} vient d'être faite sur votre compte ClubScheduler.\n\nVotre adresse actuelle reste active tant que la nouvelle n'est pas confirmée.\n\nSi vous n'êtes pas à l'origine de cette demande, changez votre mot de passe : quelqu'un a accès à votre session.";
+
+        try {
+            $this->mailer->send(
+                (new Email)
+                    ->from('no-reply@clubscheduler.app')
+                    ->to($previousEmail)
+                    ->subject($subject)
+                    ->text($body),
             );
         } catch (Throwable) {
         }

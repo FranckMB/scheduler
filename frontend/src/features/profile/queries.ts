@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { apiErrorMessage } from "@/shared/api/errors";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { ChangePasswordPayload, UpdateProfilePayload } from "./api";
@@ -11,6 +12,36 @@ export function useUpdateProfile() {
     mutationFn: (body: UpdateProfilePayload) => profileApi.updateProfile(body),
     onSuccess: () => {
       toast.success("Profil mis à jour.");
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+}
+
+/**
+ * P4-74 — demander un changement d'e-mail. Succès = lien envoyé à la nouvelle
+ * adresse ; l'adresse actuelle reste active. On invalide `me` pour afficher le
+ * pending. Les erreurs serveur (409 adresse prise, 400 invalide) sont restituées.
+ */
+export function useRequestEmailChange() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ email, currentPassword }: { email: string; currentPassword: string }) =>
+      profileApi.requestEmailChange(email, currentPassword),
+    onSuccess: (result) => {
+      toast.info(`Un lien de confirmation a été envoyé à ${result.pendingEmail} — votre adresse actuelle reste active.`);
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+    onError: (err) => void apiErrorMessage(err).then((message) => toast.error(message)),
+  });
+}
+
+/** P4-74 — annuler la demande de changement d'e-mail en attente. */
+export function useCancelEmailChange() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => profileApi.cancelEmailChange(),
+    onSuccess: () => {
+      toast.success("Changement d'e-mail annulé.");
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     },
   });

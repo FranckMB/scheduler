@@ -90,6 +90,12 @@ export const routes: RouteObject[] = [
         lazy: async () => ({ Component: (await import("@/features/auth/VerifyEmailPage")).VerifyEmailPage }),
       },
       {
+        // P4-74 — confirmer un changement d'e-mail (le token du lien reçu à la
+        // nouvelle adresse est l'identité ; la bascule a lieu ici).
+        path: "/confirm-email/:token",
+        lazy: async () => ({ Component: (await import("@/features/auth/ConfirmEmailChangePage")).ConfirmEmailChangePage }),
+      },
+      {
         // P3-4 PR C — page PUBLIQUE d'approbation de création de club (le token
         // du mail officiel FFBB est l'identité, pas de compte).
         path: "/club-approval/:token",
