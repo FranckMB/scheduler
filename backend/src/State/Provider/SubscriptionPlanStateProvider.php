@@ -18,13 +18,28 @@ class SubscriptionPlanStateProvider extends AbstractStateProvider
         return SubscriptionPlan::class;
     }
 
-    // La bêta est une offre superadmin-only : jamais dans le catalogue public.
-    // (Le GET item par id n'est pas masqué — la spec ne borne que la collection.)
+    // La bêta est une offre superadmin-only : jamais dans le catalogue public (collection).
     protected function applyRequestFilters(QueryBuilder $qb): bool
     {
         $qb->andWhere('e.code != :betaCode')->setParameter('betaCode', 'beta');
 
         return false;
+    }
+
+    /**
+     * … et jamais non plus en GET item (finding revue sécu P1-3, fondateur POUR) : masquer la
+     * bêta de la collection tout en la servant par id resterait une invisibilité en trompe-l'œil.
+     *
+     * @param array<string, mixed> $uriVariables
+     */
+    protected function provideItem(array $uriVariables, ?string $clubId): ?object
+    {
+        $output = parent::provideItem($uriVariables, $clubId);
+        if ($output instanceof SubscriptionPlanResource && 'beta' === $output->code) {
+            return null;
+        }
+
+        return $output;
     }
 
     /**
