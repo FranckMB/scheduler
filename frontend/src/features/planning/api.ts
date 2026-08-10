@@ -64,6 +64,26 @@ export type LockLevel = "NONE" | "HARD";
 export type DiagnosticSeverity = "ERROR" | "WARNING" | "INFO" | "SUCCESS";
 /** ADR-0002: a plan's type — SEASON is the socle, CLOSURE/HOLIDAY are period overlays. */
 export type SchedulePlanType = "SEASON" | "CLOSURE" | "HOLIDAY";
+
+/**
+ * P2-8 : les permissions d'une version, calculées SERVEUR par le même code que les
+ * gardes d'écriture (`ScheduleCapabilityResolver`) — « capacité affichée == verdict du
+ * refus ». Le front ne re-dérive plus ces règles. Absent (`null`) sur les réponses
+ * d'écriture (POST/PUT, le front refetch la collection) et fail-closed sur cache périmé :
+ * un geste ne s'offre que sur `=== true`, jamais par défaut permissif.
+ *  - canDelete         : supprimer cette version (choisie / en vol / seule terminée de saison → false)
+ *  - canValidate       : la valider (terminée, aucune sœur en vol ; la choisie reste validable — no-op)
+ *  - canRegenerateFrom : recharger sa structure (socle terminé non-choisi, rien en cours, photo présente)
+ *  - versionsDeletedOnValidate : nb de sœurs supprimées si l'on valide (annoncé avant le clic)
+ *  - overlaysDroppedOnValidate : nb de plannings de période détruits si l'on valide (= count du 409 overlays_exist)
+ */
+export interface ScheduleCapabilities {
+  canDelete: boolean;
+  canValidate: boolean;
+  canRegenerateFrom: boolean;
+  versionsDeletedOnValidate: number;
+  overlaysDroppedOnValidate: number;
+}
 // isSeasonPlanType vit dans ./lib/versions (module PUR, jamais mocké) : le définir ici,
 // où plusieurs tests posent un vi.mock("./api") manuel, le rendait indéfini sous le mock.
 
@@ -102,6 +122,12 @@ export interface Schedule {
    * calendar and a period's overlay alike (set server-side).
    */
   isChosen?: boolean;
+  /**
+   * P2-8: server-computed permissions for THIS version — the front reads them
+   * instead of re-deriving the write guards. null on write responses (POST/PUT,
+   * the front refetches the collection) and treated fail-closed when absent.
+   */
+  capabilities?: ScheduleCapabilities | null;
 }
 
 /** Export scope: all venues (null) or a single one. */

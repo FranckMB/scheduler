@@ -1,12 +1,22 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { Schedule } from "./api";
+import type { Schedule, ScheduleCapabilities } from "./api";
 import { PlanningToolbar } from "./PlanningToolbar";
 
 const noop = () => {};
 
-const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Schedule => ({ id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", planType: "SEASON", schedulePlanId: "season-plan", generatedTeamCount: 12, hasStructurePhoto: true, isLiveContext: true, ...over });
+// P2-8 : les gestes de la toolbar (Supprimer / Valider / Charger) sont désormais pilotés
+// par le bloc `capabilities` SERVEUR, plus par un calcul client. Défaut = une version de
+// travail terminée « ordinaire » ; chaque test surcharge le champ qui porte son scénario.
+// `capabilities: null` force l'absence (réponse d'écriture / cache périmé → fail-closed).
+const DEFAULT_CAPS: ScheduleCapabilities = { canDelete: false, canValidate: true, canRegenerateFrom: true, versionsDeletedOnValidate: 0, overlaysDroppedOnValidate: 0 };
+type ScheduleOver = Partial<Omit<Schedule, "capabilities">> & { capabilities?: Partial<ScheduleCapabilities> | null };
+
+const schedule = (status: Schedule["status"], over: ScheduleOver = {}): Schedule => {
+  const { capabilities: capsOver, ...rest } = over;
+  return { id: "s1", name: "Plan A", status, score: 100, createdAt: "2026-01-01", updatedAt: "2026-01-01", planType: "SEASON", schedulePlanId: "season-plan", generatedTeamCount: 12, hasStructurePhoto: true, isLiveContext: true, capabilities: null === capsOver ? null : { ...DEFAULT_CAPS, ...capsOver }, ...rest };
+};
 
 function renderToolbar(
   schedules: Schedule | Schedule[],
@@ -120,8 +130,9 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
 
   it("offers Supprimer on a plain work version, but not on the one in force", () => {
     // Deux versions : celle qu'on regarde n'est pas la dernière, donc la saison reste
-    // ancrée — c'est bien « une version de travail ordinaire » qu'on teste.
-    renderToolbar([schedule("COMPLETED", { id: "s1" }), schedule("COMPLETED", { id: "s2", createdAt: "2026-02-01" })]);
+    // ancrée — le serveur la déclare supprimable (canDelete), c'est bien « une version
+    // de travail ordinaire » qu'on teste.
+    renderToolbar([schedule("COMPLETED", { id: "s1", capabilities: { canDelete: true } }), schedule("COMPLETED", { id: "s2", createdAt: "2026-02-01" })]);
     expect(screen.getByRole("button", { name: /supprimer cette version/i })).toBeInTheDocument();
   });
 
@@ -130,8 +141,8 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
   });
 
-  it("hides Valider while a sibling is still solving — the server refuses the whole validation", () => {
-    renderToolbar([schedule("COMPLETED", { id: "s1" }), schedule("GENERATING", { id: "s2", createdAt: "2026-02-01" })]);
+  it("hides Valider while a sibling is still solving — the server refuses the whole validation (canValidate:false)", () => {
+    renderToolbar([schedule("COMPLETED", { id: "s1", capabilities: { canValidate: false } }), schedule("GENERATING", { id: "s2", createdAt: "2026-02-01" })]);
     expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
   });
 
@@ -176,8 +187,8 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.getByRole("button", { name: "Régénérer" })).toBeDisabled();
   });
 
-  it("hides « Charger cette version » on a pre-D2 version with no structure photo (would 409)", () => {
-    renderToolbar(schedule("COMPLETED", { hasStructurePhoto: false }));
+  it("hides « Charger cette version » on a pre-D2 version with no structure photo (server: canRegenerateFrom:false)", () => {
+    renderToolbar(schedule("COMPLETED", { hasStructurePhoto: false, capabilities: { canRegenerateFrom: false } }));
     expect(screen.queryByRole("button", { name: /charger cette version/i })).not.toBeInTheDocument();
   });
 
@@ -189,6 +200,16 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     // season pointer is elsewhere, so only the per-version isChosen catches it.
     renderToolbar(schedule("COMPLETED", { isChosen: true }));
     expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
+  });
+
+  it("fail-closed : capabilities absent (réponse d'écriture / cache périmé) → aucun geste destructif offert", () => {
+    // P2-8 : un geste ne s'offre que sur `capabilities.* === true`. Sans le bloc (POST/PUT
+    // rend `null`, ou cache périmé), on n'OFFRE PAS — jamais de défaut permissif : offrir
+    // « Supprimer » puis se faire refuser en 409 est pire que ne pas l'offrir.
+    renderToolbar(schedule("COMPLETED", { capabilities: null }));
+    expect(screen.queryByRole("button", { name: /supprimer cette version/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /charger cette version/i })).not.toBeInTheDocument();
   });
 
   it("standalone /planning (not embedded) hides the version selector and the status badge", () => {

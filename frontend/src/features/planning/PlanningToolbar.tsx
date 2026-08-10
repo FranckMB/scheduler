@@ -80,7 +80,6 @@ export function PlanningToolbar({
   // sur le plan de sa période. Une seule question, une seule réponse : rejouer la
   // comparaison contre le pointeur de /api/me remettrait deux vérités en présence.
   const isChosen = true === selected?.isChosen;
-  const isCompleted = null !== selected && "COMPLETED" === selected.status;
   const isOverlay = null !== selected && !isSeasonPlanType(selected.planType);
   // ★ = the version whose structure is the currently LOADED context. Season plans:
   // the server pointer (seasonLiveContextId, with a latest-visible fallback for a
@@ -91,36 +90,22 @@ export function PlanningToolbar({
   const overlayLiveId = isOverlay && null !== selected?.schedulePlanId ? liveContextScheduleId(schedules, selected.schedulePlanId) : null;
   const isStarred = (schedule: Schedule): boolean =>
     isOverlay ? !isSeasonPlanType(schedule.planType) && schedule.id === overlayLiveId : isSeasonPlanType(schedule.planType) && schedule.id === seasonLiveId;
-  const isInFlight = null !== selected && ("PENDING" === selected.status || "GENERATING" === selected.status);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const labels = versionLabels(schedules);
   // When an overlay is selected, its period's versions get their own V{n} labels.
   const overlayLabels = isOverlay && null !== selected?.schedulePlanId ? overlayVersionLabels(schedules, selected.schedulePlanId) : null;
   const labelOf = (schedule: Schedule): string => overlayLabels?.get(schedule.id) ?? labels.get(schedule.id) ?? schedule.name;
-  // Deletable = a plain work version: never the one in force (read-only), never
-  // mid-solve, never an overlay — et jamais la DERNIÈRE version terminée de la
-  // saison, qui l'ancre (le serveur la refuse : ne pas offrir un geste toujours
-  // rejeté). Miroir de ScheduleStateProcessor::isLastFinishedSeasonVersion.
-  const isLastFinishedSeasonVersion =
-    null !== selected
-    && isSeasonPlanType(selected.planType)
-    && "COMPLETED" === selected.status
-    && visibleSeasonPlans(schedules).filter((s) => "COMPLETED" === s.status).length <= 1;
-  const canDelete = null !== selected && !isChosen && !isInFlight && !isOverlay && !isLastFinishedSeasonVersion;
-  // Le serveur refuse la validation ENTIÈRE tant qu'une sœur solve (il ne supprime
-  // pas un planning sous les pieds du worker). Offrir « Valider » puis annoncer un
-  // décompte de suppression que la requête ne fera jamais, c'est promettre à vide.
-  const hasInFlightSibling =
-    null !== selected
-    && schedules.some((s) => s.id !== selected.id && s.schedulePlanId === selected.schedulePlanId && ("PENDING" === s.status || "GENERATING" === s.status));
-  // "Load this version" (restore its structure + regenerate) is offered only on a
-  // finished COMPLETED version that is NOT in force — the chosen one is read-only
-  // and the backend refuses the restore (reopen first). The status used to carry
-  // that exclusion (le statut « validé » n'était pas COMPLETED) ; seul le pointeur le fait.
-  // It must also carry a structure photo: a pre-D2 plan has a solver payload but no
-  // photo, so the restore would 409 — don't offer an action that cannot succeed.
-  const canRegenerateFrom = null !== selected && isCompleted && !isChosen && !isOverlay && true === selected.hasStructurePhoto;
+  // P2-8 : les permissions viennent du SERVEUR (`capabilities`, même code que les
+  // gardes d'écriture) — le front ne re-dérive plus « supprimable / validable /
+  // rechargeable ». Fail-closed : un geste ne s'offre que sur `=== true` (cache
+  // périmé ou réponse d'écriture → capabilities absent → geste NON offert).
+  const canDelete = true === selected?.capabilities?.canDelete;
+  // `canValidate` porte à lui seul « terminée ET aucune sœur en vol » (le serveur
+  // refuse la validation entière tant qu'une sœur solve). `isChosen` reste un choix
+  // d'UI (la version en vigueur montre « Rouvrir », pas « Valider » — geste no-op).
+  const canValidate = true === selected?.capabilities?.canValidate;
+  const canRegenerateFrom = true === selected?.capabilities?.canRegenerateFrom;
   // Reloading the version that IS the live context (★) is a no-op when its
   // snapshot already matches the current club structure — keep the button
   // visible but greyed with a reason, so the state reads as deliberate. The
@@ -171,7 +156,7 @@ export function PlanningToolbar({
             ) : null}
           </span>
         ) : null}
-        {isCompleted && !isChosen && !hasInFlightSibling ? (
+        {canValidate && !isChosen ? (
           // Choosing a version the plan ALREADY points at is a no-op: the status
           // used to hide this (le statut « validé » n'était pas COMPLETED) ; seul le
           // pointeur dit « en vigueur » désormais, donc on le lui demande directement.
