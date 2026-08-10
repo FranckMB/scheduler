@@ -35,7 +35,7 @@ final readonly class AdminJobRunStore
     {
         $connection = $this->connection();
         $connection->executeStatement(
-            'UPDATE admin_job_run SET status = :interrupted, finished_at = NOW(), duration_ms = GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000))::INT WHERE job_key = :job_key AND status = :running',
+            'UPDATE admin_job_run SET status = :interrupted, finished_at = NOW(), duration_ms = LEAST(GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)), 2147483647)::INT WHERE job_key = :job_key AND status = :running',
             ['job_key' => $definition->key, 'interrupted' => AdminJobStatus::INTERRUPTED->value, 'running' => AdminJobStatus::RUNNING->value],
         );
 
@@ -70,7 +70,7 @@ final readonly class AdminJobRunStore
     public function finish(string $runId, AdminJobStatus $status, int $exitCode): void
     {
         $this->connection()->executeStatement(
-            'UPDATE admin_job_run SET status = :status, finished_at = NOW(), duration_ms = GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000))::INT, exit_code = :exit_code WHERE id = :id',
+            'UPDATE admin_job_run SET status = :status, finished_at = NOW(), duration_ms = LEAST(GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)), 2147483647)::INT, exit_code = :exit_code WHERE id = :id',
             ['id' => $runId, 'status' => $status->value, 'exit_code' => $exitCode],
         );
     }
