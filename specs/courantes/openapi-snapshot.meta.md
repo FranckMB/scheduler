@@ -1,9 +1,15 @@
-Last verified @ 2026-08-09 (JSON **régénéré** depuis le backend vivant)
+Last verified @ 2026-08-10 (JSON **régénéré** depuis le backend vivant)
 
 Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P2-8 PR A (2026-08-10)** : `Schedule` gagne un objet `capabilities` (schéma
+  `ScheduleCapabilities` : `canDelete`/`canValidate`/`canRegenerateFrom` + les compteurs
+  `versionsDeletedOnValidate`/`overlaysDroppedOnValidate`). Additif, aucun path touché — le
+  bloc est calculé serveur par le MÊME code que les gardes d'écriture
+  (`ScheduleCapabilityResolver`) et sérialisé en lecture ; `null` sur le chemin `fromEntity`
+  nu (réponse POST/PUT), comme `planType`/`isChosen`. Gardé par `ScheduleCapabilityParityTest`.
 - **P4-51 volet écran (2026-08-09)** : `Coach.maxDaysOverrideConfirmed` **disparaît** du schéma
   (décision fondateur : un drapeau qui traversait tout le pipeline et n'était lu par personne).
   Paths inchangés (125) ; le schéma `Coach*` perd le champ. `CoachInput.maxDaysOverride` gagne
