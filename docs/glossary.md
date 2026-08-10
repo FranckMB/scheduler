@@ -92,6 +92,8 @@ Clés racine : `version` · `clubId` · `seasonId` · `scheduleName` · `solverS
 | **Mercure** | Hub SSE ; topic `club:{clubId}:schedule:{scheduleId}` ; publication **best-effort** (le front polle en secours). |
 | **ClubGenerationLock** | Verrou Redis (`SETEX NX` + token) : une génération à la fois par club. |
 | **phase1** | Groupe PHPUnit bloquant (tests structurants tenant/RLS/contrat/vie du planning). |
+| **Gestionnaire / Membre** | Les deux rôles assignables d'une adhésion (`ClubRole`, P1-1) : Gestionnaire (`admin`) pilote tout ; Membre (`member`) lit tout, n'écrit rien — toute écriture API est management par défaut. `owner` : legacy, toléré en lecture comme management, jamais assignable. |
+| **Désactivé** | État d'adhésion (`deactivated_at`) distinct de « en attente » : sorti du club, réversible par le geste Réactiver du gestionnaire — jamais par la file d'approbation ni par la console superadmin. |
 
 ## Wizard & frontend
 
