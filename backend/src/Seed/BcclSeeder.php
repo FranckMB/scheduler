@@ -33,6 +33,7 @@ use App\Service\Basketball\CategoryCatalog;
 use App\Service\LeagueResolver;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SchoolZoneResolver;
+use App\Service\SeasonResolver;
 use App\Storage\LogoStorage;
 use App\Storage\LogoUrl;
 use DateTimeImmutable;
@@ -121,6 +122,13 @@ final class BcclSeeder
             $beta = $manager->getRepository(SubscriptionPlan::class)->findOneBy(['code' => 'beta']);
             if ($beta instanceof SubscriptionPlan) {
                 $club->setPlanId($beta->getId());
+                // L'attribution est en DEUX gestes (set-plan + saison réglée) :
+                // sans paidSeasonYear, la bêta naît EXPIRÉE → Découverte effective
+                // → les smokes décomptent le pool puis se font refuser à 10.
+                // Constaté sur la PR B ; le seeder fait donc les deux gestes.
+                if (null === $club->getPaidSeasonYear()) {
+                    $club->setPaidSeasonYear(SeasonResolver::seasonYear(new DateTimeImmutable));
+                }
             }
         }
         $manager->flush();
