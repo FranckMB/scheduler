@@ -10,14 +10,18 @@ import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
+import { useCredits } from "@/shared/credits/useCredits";
 import { readableForeground } from "@/shared/lib/color";
+import { readFailed, readLoading } from "@/shared/lib/readState";
+import { cn } from "@/shared/lib/utils";
 import { extractPalette } from "@/shared/lib/palette";
 
 import { useSlots, useVenues } from "@/features/planning/queries";
 
+import type { SubscriptionPlan } from "./api";
 import { LogoCropper } from "./LogoCropper";
 import { computeVenueStats, formatHours, seasonWeeks } from "./lib/venueStats";
-import { useDeleteLogo, useDownloadClubExport, useFfbbImport, useResetClub, useUpdateAppearance, useUploadLogo } from "./queries";
+import { useDeleteLogo, useDownloadClubExport, useFfbbImport, useResetClub, useSubscriptionPlans, useUpdateAppearance, useUploadLogo } from "./queries";
 import { isManagementRole } from "@/shared/lib/roles";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -475,6 +479,79 @@ function ExportClubSection() {
   );
 }
 
+/** Paliers triés pour l'affichage : Découverte d'abord, puis payants par cap
+ *  d'équipes croissant (0 = illimité → en dernier). */
+function sortPlans(plans: SubscriptionPlan[]): SubscriptionPlan[] {
+  const rank = (p: SubscriptionPlan): number => ("decouverte" === p.code ? -1 : 0 === p.maxTeams ? Number.MAX_SAFE_INTEGER : p.maxTeams);
+  return [...plans].sort((a, b) => rank(a) - rank(b));
+}
+
+/** Capacité en équipes d'un palier, en clair (convention 0 = illimité). */
+function planCapacityLabel(plan: SubscriptionPlan): string {
+  if ("decouverte" === plan.code) {
+    return "Toutes vos équipes, sans limite";
+  }
+  return 0 === plan.maxTeams ? "Équipes illimitées" : `Jusqu'à ${plan.maxTeams} équipes`;
+}
+
+/**
+ * P1-3 §4bis pt 5 — section « Offre » (management). Offre courante (nom du palier ;
+ * pour un payant « X/Y équipes »), grille des paliers « sur demande » (bêta absente
+ * du catalogue), et pour Découverte le solde de crédits. Rendue pour TOUTES les
+ * offres — payant/bêta la voient aussi ; seuls les mécanismes de crédits
+ * (badge/bandeau/coûts) sont réservés à Découverte.
+ */
+function OfferSection({ me }: { me: MeResponse }) {
+  const plansQuery = useSubscriptionPlans();
+  const credits = useCredits();
+  const entitlements = me.club?.entitlements;
+
+  return (
+    <div className="space-y-4">
+      {undefined !== entitlements ? (
+        <div className="rounded-lg border border-accent/40 bg-accent/5 p-3">
+          <p className="text-xs text-muted-foreground">Votre offre</p>
+          <p className="text-base font-semibold">{entitlements.planName}</p>
+          {null !== entitlements.maxTeams ? (
+            <p className="text-sm text-muted-foreground">
+              {entitlements.teamsUsed}/{entitlements.maxTeams} équipes
+            </p>
+          ) : null}
+          {null !== credits ? (
+            <p className="text-sm text-muted-foreground">
+              Crédits gratuits : {credits.remaining}/{credits.max}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {readFailed(plansQuery) ? (
+        <p className="text-sm text-destructive">Les offres n'ont pas pu être chargées.</p>
+      ) : readLoading(plansQuery) ? (
+        <p className="text-sm text-muted-foreground">Chargement des offres…</p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {sortPlans(plansQuery.data ?? []).map((plan) => {
+            const current = undefined !== entitlements && plan.code === entitlements.planCode;
+            return (
+              <div key={plan.id} className={cn("rounded-lg border p-3", current ? "border-accent bg-accent/5" : "border-border")}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{plan.name}</p>
+                  {current ? <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">Votre offre</span> : null}
+                </div>
+                <p className="text-sm text-muted-foreground">{planCapacityLabel(plan)}</p>
+                {/* Aucun montant dans l'app (décision fondateur) : « sur demande » partout,
+                    sauf le gratuit qui n'a pas de tarif. */}
+                <p className="mt-1 text-sm font-medium text-accent">{"decouverte" === plan.code ? "Gratuit" : "Sur demande"}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClubHub({ me }: { me: MeResponse }) {
   const isAdmin = me.role === "admin";
   // Le gate backend management = owner|admin (SEC-07) — l'UI doit matcher,
@@ -485,6 +562,12 @@ function ClubHub({ me }: { me: MeResponse }) {
       <h1 className="mb-1 border-l-[3px] border-accent pl-3 text-xl font-semibold">Gestion du club</h1>
       <p className="mb-4 text-sm text-muted-foreground">{me.club?.name ?? "—"}</p>
       <div className="space-y-3">
+        {isManagement ? (
+          <AccordionSection title="Offre" defaultOpen>
+            <p className="mb-3 text-sm text-muted-foreground">Votre offre actuelle et les paliers disponibles.</p>
+            <OfferSection me={me} />
+          </AccordionSection>
+        ) : null}
         {isAdmin ? (
           <AccordionSection title="Demandes" defaultOpen>
             <p className="mb-3 text-sm text-muted-foreground">Approuvez ou refusez les personnes qui souhaitent rejoindre votre club.</p>

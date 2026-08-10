@@ -1,9 +1,14 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { toast } from "@/shared/stores/toastStore";
 
 import type { AppearancePayload } from "./api";
 import * as clubApi from "./api";
+
+/** P1-3 §4bis pt 5 — catalogue des offres (sans montant, bêta absente). Quasi-statique. */
+export function useSubscriptionPlans() {
+  return useQuery({ queryKey: ["subscription_plans"], queryFn: clubApi.listSubscriptionPlans, staleTime: 300_000 });
+}
 
 /** Save the club accent; refetch /me so the theme re-applies live. */
 export function useUpdateAppearance() {

@@ -1,4 +1,5 @@
 import { api } from "@/shared/api/client";
+import { collection } from "@/shared/api/collection";
 import { downloadBlob } from "@/shared/lib/download";
 
 export interface AppearancePayload {
@@ -57,3 +58,19 @@ export async function downloadClubExport(): Promise<void> {
   const blob = await api.get("club/export", { timeout: false }).blob();
   downloadBlob(blob, "donnees-club.json");
 }
+
+/**
+ * P1-3 §4bis pt 5 — catalogue public des offres (`GET /api/subscription_plans`).
+ * SANS montant (décision fondateur : « sur demande » partout), la bêta ABSENTE
+ * (masquée côté provider). Convention `maxTeams === 0` = illimité.
+ */
+export interface SubscriptionPlan {
+  id: string;
+  code: string;
+  name: string;
+  maxTeams: number;
+  maxVenues: number;
+  maxGenerations: number;
+}
+
+export const listSubscriptionPlans = (): Promise<SubscriptionPlan[]> => collection<SubscriptionPlan>("subscription_plans");

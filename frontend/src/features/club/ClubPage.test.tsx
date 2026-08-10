@@ -19,12 +19,25 @@ vi.mock("@/features/auth/queries", () => ({
 
 const ffbbImport = vi.fn();
 
+// Catalogue des offres (P1-3) — mutable pour piloter chargement/échec par test.
+const plans: { data: unknown[] | undefined; isError: boolean } = {
+  data: [
+    { id: "p-dec", code: "decouverte", name: "Découverte", maxTeams: 0, maxVenues: 0, maxGenerations: 10 },
+    { id: "p-ess", code: "essentiel", name: "Essentiel", maxTeams: 20, maxVenues: 0, maxGenerations: 0 },
+    { id: "p-club", code: "club", name: "Club", maxTeams: 30, maxVenues: 0, maxGenerations: 0 },
+    { id: "p-sl", code: "sans-limite", name: "Sans limite", maxTeams: 0, maxVenues: 0, maxGenerations: 0 },
+  ],
+  isError: false,
+};
+
 vi.mock("./queries", () => ({
   useUpdateAppearance: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useUploadLogo: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteLogo: () => ({ mutate: vi.fn(), isPending: false }),
   useFfbbImport: () => ({ mutate: ffbbImport, isPending: false }),
   useResetClub: () => ({ mutate: vi.fn(), isPending: false }),
+  useDownloadClubExport: () => ({ mutate: vi.fn(), isPending: false }),
+  useSubscriptionPlans: () => plans,
 }));
 
 import { ClubPage } from "./ClubPage";
@@ -32,6 +45,13 @@ import { ClubPage } from "./ClubPage";
 describe("ClubPage", () => {
   beforeEach(() => {
     me.data = { role: "admin", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } };
+    plans.data = [
+      { id: "p-dec", code: "decouverte", name: "Découverte", maxTeams: 0, maxVenues: 0, maxGenerations: 10 },
+      { id: "p-ess", code: "essentiel", name: "Essentiel", maxTeams: 20, maxVenues: 0, maxGenerations: 0 },
+      { id: "p-club", code: "club", name: "Club", maxTeams: 30, maxVenues: 0, maxGenerations: 0 },
+      { id: "p-sl", code: "sans-limite", name: "Sans limite", maxTeams: 0, maxVenues: 0, maxGenerations: 0 },
+    ];
+    plans.isError = false;
   });
 
   it("shows both sections for an admin, Demandes open by default", () => {
@@ -131,5 +151,53 @@ describe("ClubPage", () => {
     render(<ClubPage />);
     expect(screen.queryByRole("button", { name: /Demandes/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Visuel/ })).toBeInTheDocument();
+  });
+
+  // --- P1-3 §4bis pt 5 — section « Offre » ---------------------------------
+
+  const withEntitlements = (entitlements: Record<string, unknown>): ClubMock => ({
+    name: "BC Test",
+    accentColor: null,
+    accentColorDark: null,
+    accentPalette: null,
+    logoUrl: null,
+    entitlements: entitlements as never,
+  });
+
+  it("Offre (Découverte) : offre courante + solde de crédits + paliers « sur demande », aucun montant", () => {
+    me.data = { role: "admin", club: withEntitlements({ planCode: "decouverte", planName: "Découverte", maxTeams: null, teamsUsed: 6, creditsMax: 10, creditsUsed: 3, canGenerate: true, canPlaceMatches: true, canExportPdf: true, seasonTransition: false }) };
+    render(<ClubPage />);
+    // Section ouverte par défaut : le solde de crédits (10 - 3 = 7) s'affiche.
+    expect(screen.getByText(/Crédits gratuits : 7\/10/)).toBeInTheDocument();
+    // Les paliers PAYANTS affichent « Sur demande » (aucun montant nulle part).
+    expect(screen.getAllByText("Sur demande").length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText(/€|euro/i)).toBeNull();
+    // Le gratuit n'a pas de tarif.
+    expect(screen.getByText("Gratuit")).toBeInTheDocument();
+  });
+
+  it("Offre (payant) : « X/Y équipes », AUCUN compteur de crédits", () => {
+    me.data = { role: "admin", club: withEntitlements({ planCode: "essentiel", planName: "Essentiel", maxTeams: 20, teamsUsed: 15, creditsMax: null, creditsUsed: 0, canGenerate: true, canPlaceMatches: true, canExportPdf: true, seasonTransition: true }) };
+    render(<ClubPage />);
+    expect(screen.getByText("15/20 équipes")).toBeInTheDocument();
+    // Payant : jamais de mécanisme de crédits.
+    expect(screen.queryByText(/Crédits gratuits/)).toBeNull();
+    // Le palier courant est mis en avant.
+    expect(screen.getAllByText("Votre offre").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("Offre : le chargement ne crie pas « échec » (readState à trois états)", () => {
+    plans.data = undefined;
+    plans.isError = false;
+    me.data = { role: "admin", club: withEntitlements({ planCode: "decouverte", planName: "Découverte", maxTeams: null, teamsUsed: 0, creditsMax: 10, creditsUsed: 0, canGenerate: true, canPlaceMatches: true, canExportPdf: true, seasonTransition: false }) };
+    render(<ClubPage />);
+    expect(screen.getByText("Chargement des offres…")).toBeInTheDocument();
+    expect(screen.queryByText(/n'ont pas pu être chargées/)).toBeNull();
+  });
+
+  it("hides the Offre section for a non-management member", () => {
+    me.data = { role: "member", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } };
+    render(<ClubPage />);
+    expect(screen.queryByRole("button", { name: /^Offre$/ })).toBeNull();
   });
 });
