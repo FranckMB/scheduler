@@ -107,7 +107,9 @@ vi.mock("@/features/auth/queries", () => ({
   useWorkingSeason: () => ({ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }),
 }));
 
-const workVersion: Schedule[] = [{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }];
+// P2-8 : la toolbar lit les gestes (Valider…) du bloc `capabilities` serveur, plus d'un
+// calcul client — une version de travail terminée « ordinaire » est validable.
+const workVersion: Schedule[] = [{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", capabilities: { canDelete: false, canValidate: true, canRegenerateFrom: false, versionsDeletedOnValidate: 0, overlaysDroppedOnValidate: 0 } }];
 
 beforeEach(() => {
   meState.chosenScheduleId = null;
