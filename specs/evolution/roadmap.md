@@ -1,4 +1,4 @@
-# Roadmap (39) — ce qui reste à faire
+# Roadmap (38) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
@@ -57,10 +57,10 @@
 > 2026-07-31 : le terrain passe avant les chantiers auto-assignés), mais la liste est un jugement de
 > plus-value, pas une file FIFO.
 
-**Au 2026-08-10 (nuit)** *(P2-8 LIVRÉE — les miroirs front sont supprimés, gardés par le test de parité ; état des lieux §1.13)* **:**
+**Au 2026-08-10 (nuit)** *(P2-8 LIVRÉE ; P2-6 RETIRÉE — déjà livrée aux lots C2/C3, l'ADR-0002 est close depuis le 2026-07-18 ; la ligne retardait sur le code)* **:**
 1. **P2-17 — mutualisation lisible (« SM1/SM2 »)** : la première demande d'usage terrain encore ouverte ; son volet « affichage fusionné » est le moins cher des trois.
 2. **P5-5 — page de vente publique (+ FAQ)** : la rentrée est LA fenêtre d'achat des clubs (mesuré : le bureau achète avant-saison) et le recrutement des bêta démarre — un mail ou une démo sans page où atterrir ne convertit pas.
-3. **P2-6 — pattern « Plan » lot C** : dernier lot de la reconstruction ADR-0002 (réglages & génération par plan) ; ferme un chantier structurant à moitié ouvert, débloque la suite du module planning.
+3. **P2-2 — boucle d'ajustement « corriger sur place »** : glisser une équipe dans un créneau vide pour réparer un diagnostic ; ⭐ même primitive que la grille de réservation pré-génération (une brique, deux moments) — fort levier produit, jumeau des diagnostics actionnables.
 
 ---
 
@@ -77,7 +77,6 @@
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
 | P2-17 | **Mutualisation lisible : « SM1/SM2 » sur un créneau partagé** | 🟡 | M | Besoin fondateur 2026-07-31, sur les périodes de vacances. La **mécanique** est livrée (réservation de 2 équipes sur un créneau à capacité 2, zéro engine — état des lieux §1.2), mais rien ne la **donne à lire** : le gestionnaire veut voir **« SM1/SM2 »** comme une seule ligne de planning, avec **le coach des SM1** considéré comme le coach de la séance. Et il veut pouvoir **proposer la mutualisation depuis les doléances** (« ces deux équipes peuvent s'entraîner ensemble cette semaine-là »). Trois volets distincts : affichage fusionné (grille + exports), règle de coach porteur (⚠ elle a un effet **solveur** : aujourd'hui les deux coachs sont contraints, pas un seul — l'affirmer sans le câbler serait un placebo, axe *constraint semantics* → NR), et le geste dans la modale doléances. **Cadrer les trois séparément** : seul le premier est gratuit |
-| P2-6 | **Pattern « Plan » — lot C** (réglages & génération par plan) | 🟠 | M | Dernier lot de la reconstruction ADR-0002. Lots A et B livrés (état des lieux §1.3) → [ADR-0002](../../docs/architecture/adr-0002-pattern-plan.md) |
 | P2-2 | **Boucle d'ajustement — « corriger sur place »** | 🟠 | M | « Naviguer » est livré (#180) : les diagnostics surlignent les créneaux vides du gymnase concerné et la vue bascule dessus. **Reste** : glisser une équipe dans un créneau vide pour réparer. **⭐ Même primitive que la grille de réservation pré-génération** (grille + créneaux vides + clic = affecter) : une seule brique, deux moments (avant génération = LOCK HARD, après = réparer). À spécifier ensemble le jour venu. Jumeau : rendre les **diagnostics actionnables** (actions + liens entités dans le jsonb) plutôt que du texte |
 | P2-3 | **Versions — « Travailler sur cette version » + savepoint auto (D4)** | 🟡 | M | Moitié manquante de la décision 5 ; D1→D3quater livrés (état des lieux) |
 
