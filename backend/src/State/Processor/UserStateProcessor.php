@@ -37,6 +37,17 @@ class UserStateProcessor extends AbstractStateProcessor
     }
 
     /**
+     * P1-1 opt-out: editing a User is self-only, NOT a management action. A
+     * plain member edits its OWN profile (assertSelf → 404 on any other id,
+     * SEC-02 / UserSelfOnlyTest). Requiring a management role here would lock
+     * non-management members out of their own account, so this stays false.
+     */
+    protected function requiresManagementRole(): bool
+    {
+        return false;
+    }
+
+    /**
      * SEC-02: a user may only modify its own record; any other id → 404.
      *
      * @param UserInput            $input
