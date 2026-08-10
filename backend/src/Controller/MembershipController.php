@@ -344,7 +344,7 @@ final class MembershipController extends AbstractController
      */
     private function assertGenuinelyPending(ClubUser $target, string $message): ?JsonResponse
     {
-        if ($target->getIsActive() || null !== $target->getDeactivatedAt()) {
+        if ($target->getIsActive() || $target->getDeactivatedAt() instanceof DateTimeImmutable) {
             return $this->json(['error' => $message], 409);
         }
 
