@@ -1,4 +1,4 @@
-# Roadmap (39) — ce qui reste à faire
+# Roadmap (38) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
@@ -57,10 +57,10 @@
 > 2026-07-31 : le terrain passe avant les chantiers auto-assignés), mais la liste est un jugement de
 > plus-value, pas une file FIFO.
 
-**Au 2026-08-10 (nuit)** *(P2-8 LIVRÉE — les miroirs front sont supprimés, gardés par le test de parité ; état des lieux §1.13)* **:**
+**Au 2026-08-10 (nuit)** *(P2-8 LIVRÉE ; P2-6 RETIRÉE — déjà livrée aux lots C2/C3, l'ADR-0002 est close depuis le 2026-07-18 ; la ligne retardait sur le code)* **:**
 1. **P2-17 — mutualisation lisible (« SM1/SM2 »)** : la première demande d'usage terrain encore ouverte ; son volet « affichage fusionné » est le moins cher des trois.
 2. **P5-5 — page de vente publique (+ FAQ)** : la rentrée est LA fenêtre d'achat des clubs (mesuré : le bureau achète avant-saison) et le recrutement des bêta démarre — un mail ou une démo sans page où atterrir ne convertit pas.
-3. **P2-6 — pattern « Plan » lot C** : dernier lot de la reconstruction ADR-0002 (réglages & génération par plan) ; ferme un chantier structurant à moitié ouvert, débloque la suite du module planning.
+3. **P2-2 — boucle d'ajustement « corriger sur place »** : glisser une équipe dans un créneau vide pour réparer un diagnostic ; ⭐ même primitive que la grille de réservation pré-génération (une brique, deux moments) — fort levier produit, jumeau des diagnostics actionnables.
 
 ---
 
@@ -77,7 +77,6 @@
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
 | P2-17 | **Mutualisation lisible : « SM1/SM2 » sur un créneau partagé** | 🟡 | M | Besoin fondateur 2026-07-31, sur les périodes de vacances. La **mécanique** est livrée (réservation de 2 équipes sur un créneau à capacité 2, zéro engine — état des lieux §1.2), mais rien ne la **donne à lire** : le gestionnaire veut voir **« SM1/SM2 »** comme une seule ligne de planning, avec **le coach des SM1** considéré comme le coach de la séance. Et il veut pouvoir **proposer la mutualisation depuis les doléances** (« ces deux équipes peuvent s'entraîner ensemble cette semaine-là »). Trois volets distincts : affichage fusionné (grille + exports), règle de coach porteur (⚠ elle a un effet **solveur** : aujourd'hui les deux coachs sont contraints, pas un seul — l'affirmer sans le câbler serait un placebo, axe *constraint semantics* → NR), et le geste dans la modale doléances. **Cadrer les trois séparément** : seul le premier est gratuit |
-| P2-6 | **Pattern « Plan » — lot C** (réglages & génération par plan) | 🟠 | M | Dernier lot de la reconstruction ADR-0002. Lots A et B livrés (état des lieux §1.3) → [ADR-0002](../../docs/architecture/adr-0002-pattern-plan.md) |
 | P2-2 | **Boucle d'ajustement — « corriger sur place »** | 🟠 | M | « Naviguer » est livré (#180) : les diagnostics surlignent les créneaux vides du gymnase concerné et la vue bascule dessus. **Reste** : glisser une équipe dans un créneau vide pour réparer. **⭐ Même primitive que la grille de réservation pré-génération** (grille + créneaux vides + clic = affecter) : une seule brique, deux moments (avant génération = LOCK HARD, après = réparer). À spécifier ensemble le jour venu. Jumeau : rendre les **diagnostics actionnables** (actions + liens entités dans le jsonb) plutôt que du texte |
 | P2-3 | **Versions — « Travailler sur cette version » + savepoint auto (D4)** | 🟡 | M | Moitié manquante de la décision 5 ; D1→D3quater livrés (état des lieux) |
 
@@ -147,7 +146,7 @@
 | P5-2 | **Hook off-site des backups (résidu INF-02)** | 🟠 | XS | Action d'exploitation, pas de code : brancher la copie hors-site des dumps `pg_dump` le jour du déploiement → [`backup-restore.md`](../../docs/ops/backup-restore.md) |
 | P5-3 | **Anti-abus à l'ouverture publique : Turnstile + anti-énumération** | 🟡 | S/M | Le socle existe (rate limiting multi-axes SEC-11, quotas de solve par club P4-45, email verification) — restent les deux trous qui n'ont de sens qu'exposé au public : **Cloudflare Turnstile sur register** (adaptatif de préférence), et **audit anti-énumération** sur register/reset-password (réponses et délais identiques compte existant/inexistant — jamais vérifié). Axe auth §7.1 → NR |
 | P5-4 | **Mesure de charge multi-club — jamais faite** | 🟡 | M | La stack tient un club (BCCL, 49 équipes) ; personne n'a mesuré N clubs simultanés (générations concurrentes × workers, RAM OR-Tools, Redis, Postgres). Pas de refonte préventive : **une mesure**, qui dit si l'archi actuelle tient l'objectif 5 clubs bêta et où elle casse. Recoupe [`infrastructure-hebergement.md`](infrastructure-hebergement.md) |
-| P5-5 | **Page de vente publique (+ FAQ statique)** | 🟠 | M | Rien n'existe. Landing produit hors app : ce que fait l'outil, pour qui, captures, appel à contact — prérequis de toute prospection (un mail sans page où atterrir ne convertit pas). La FAQ statique y vit. À cadrer : hébergement (statique séparé vs route publique du front) et contenu. Le compte démo vendeur (livré) et le mode démo self-service (parking) s'y raccrocheront |
+| P5-5 | **Page de vente publique (+ FAQ statique) — reste : PUBLIER** | 🟠 | S | **La page est CONSTRUITE le 2026-08-10** (`landing/` — statique pur, zéro build ; nom paramétrable dans `landing/config.js` tant que l'INPI n'a pas tranché Creneo/Kreno ; capture réelle du club démo ; CTA essai gratuit → register + démo → mailto ; FAQ 7 questions ; offres sans montants). **Reste, dans l'ordre** : (1) trancher le nom (INPI classes 9+42 — action fondateur, `business/naming.md`) ; (2) acheter le domaine + créer l'email pro ; (3) recaler `config.js` (brand, appUrl, contactEmail) ; (4) brancher un vhost nginx prod sur le domaine (geste ops) ; (5) relire le texte à voix haute une fois le nom réel posé |
 | P5-6 | **Canal signalement + support/repro — à spécifier** | 🟡 | M | Besoin fondateur 2026-08-09 : un endroit où un gestionnaire signale un bug, une contrainte manquante, une idée — et de quoi **reproduire** ce qu'un utilisateur a rencontré. Base saine voulue d'emblée (pas un `mailto:` jetable), sans sur-ingénierie tickets. **Cadrage dédié à faire** : rien n'est tranché (in-app vs externe, lien avec Sentry, quelles données de contexte joindre) |
 
 ---
