@@ -176,6 +176,7 @@
       <a href="#fonctionnement">Comment ça marche</a>
       <a href="#offres">Offres</a>
       <a href="#faq">FAQ</a>
+      <a data-cta="login" href="#">Se connecter</a>
       <a class="btn btn-primary" data-cta="register" href="#">Essayer gratuitement</a>
     </nav>
   </div>
@@ -397,6 +398,7 @@
       + "?subject=" + encodeURIComponent("Demande de démo — " + brand)
       + "&body=" + encodeURIComponent("Bonjour,\n\nJe souhaite voir " + brand + " en démo pour mon club.\n\nClub : \nNombre d'équipes (environ) : \nDisponibilités : ");
     document.querySelectorAll("[data-cta=register]").forEach((a) => { a.href = appUrl + "/register"; });
+    document.querySelectorAll("[data-cta=login]").forEach((a) => { a.href = appUrl + "/login"; });
     document.querySelectorAll("[data-cta=demo],[data-cta=demo-inline]").forEach((a) => { a.href = mailto; });
   })();
 </script>
