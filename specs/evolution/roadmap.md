@@ -1,4 +1,4 @@
-# Roadmap (41) — ce qui reste à faire
+# Roadmap (40) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
@@ -105,7 +105,6 @@
 
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
-| P4-62 | **L'export ignore le filtre de ressources de l'écran** | ⚪ | S | **Constaté au moment de P4-43 (2026-08-02), non couplé délibérément.** `ResourceFilter` filtre la grille **côté client** ; `ExportMenu` (`frontend/src/features/planning/ExportMenu.tsx:16`) porte son **propre** périmètre gymnase (`scope`, `""` = tous) et le PDF est rendu **serveur**, qui ne connaît aucun filtre client. Les deux contrôles vivent désormais sur le même écran et se ressemblent : un gestionnaire qui filtre sur deux gymnases puis exporte obtient tout. ⚠ **Ce n'est pas un bug à corriger mécaniquement** — coupler les deux est un CHOIX produit (le filtre est-il une loupe de lecture, ou la définition de ce qu'on emporte ?). Trancher avant de coder ; à défaut, au minimum l'annoncer à l'export. Croise la règle §7.2 pt 2 : « jamais masquer ce qu'un export contient » |
 
 ### Dette technique et polish antérieurs
 
