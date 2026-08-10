@@ -1,6 +1,6 @@
 # Project Map — ClubScheduler (engine + backend)
 
-Last verified @ 2026-08-08 (périmètre frontend recompté contre `frontend/src/features/` ; renvois sécurité/ops re-vérifiés — audit DOC-29)
+Last verified @ 2026-08-11 (ajout de `landing/` au layout — dossier vérifié sur disque, contrat `config.js` relu ; périmètre frontend re-vérifié contre `frontend/src/features/`, toujours 11)
 
 Detailed companion to the short index in [`/CLAUDE.md`](../CLAUDE.md). Frontend has been **rebuilt (React 19) and is active** — **11 features** livrées : `auth`, `wizard` (data entry), `planning` (work-loop), `cockpit`, `matches`, `coach-wishes` (doléances), `club`, `profile`, `season-transition`, `legal` et `admin` (console superadmin, garde et session distinctes) ; voir `specs/courantes/frontend-wizard.md` et `frontend-spec.md`. Generated/verified during onboarding against the real code and the `code-review-graph` knowledge graph.
 
@@ -12,6 +12,8 @@ Detailed companion to the short index in [`/CLAUDE.md`](../CLAUDE.md). Frontend 
 backend/   PHP 8.4 · Symfony 7.4 · API Platform 4.3 · Doctrine ORM 3.6 · Messenger · Mercure · JWT
 engine/    Python 3.12 · FastAPI · OR-Tools CP-SAT
 frontend/  TS · React 19 · Vite · TW4  (active: auth · planning work-loop · wizard)
+landing/   Page de vente publique — HTML/CSS statique PUR (zéro build, AUCUN lien avec frontend/) ;
+           marque + liens dans landing/config.js (une source) ; en prod : vhost nginx dédié (P5-5)
 specs/     Living specs (initiales / courantes / evolution) — see specs/README.md
 docs/      This documentation set + docs/technique/
 docker/    Per-service Dockerfiles (php, frontend, pdf-worker, postgres, …) + edge nginx confs
