@@ -6917,7 +6917,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Active members of the current club (id, userId, email, firstName, lastName, role, isSelf)"
+                        "description": "Active members of the current club (id, userId, email, firstName, lastName, role, isSelf); with `?includeDeactivated=1`, also a `deactivated` array of the same shape"
                     },
                     "401": {
                         "description": "Unauthorized"
@@ -6926,7 +6926,18 @@
                         "description": "Member but not a management role"
                     }
                 },
-                "summary": "List the active members of the current club (management-only)"
+                "summary": "List the active members of the current club (management-only)",
+                "parameters": [
+                    {
+                        "name": "includeDeactivated",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "boolean"
+                        },
+                        "description": "When truthy (1/true), also return a `deactivated` array of deactivated (reactivable) memberships alongside `members`"
+                    }
+                ]
             }
         },
         "/api/memberships/pending": {
@@ -6957,7 +6968,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Membership activated (optional body {\"role\":\"admin\"|\"member\"}, defaults to admin)"
+                        "description": "Membership activated with the required role (body {\"role\":\"admin\"|\"member\"})"
                     },
                     "401": {
                         "description": "Unauthorized"
@@ -6972,10 +6983,10 @@
                         "description": "Target is not genuinely pending (already active, or deactivated \u2014 use reactivate)"
                     },
                     "422": {
-                        "description": "Role outside the assignable set (admin|member)"
+                        "description": "Role missing, or outside the assignable set (admin|member)"
                     }
                 },
-                "summary": "Approve a membership request, optionally setting its role"
+                "summary": "Approve a membership request, setting its role (required body {\"role\":\"admin\"|\"member\"})"
             }
         },
         "/api/memberships/{id}/deactivate": {

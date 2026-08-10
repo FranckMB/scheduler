@@ -2,7 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 // P3-4 : club_pending = demande de CRÉATION en attente d'approbation (club FFBB ou superadmin).
-export type MembershipStatus = "none" | "pending" | "club_pending" | "active";
+// P1-1 : deactivated = adhésion sortie par un gestionnaire (réversible), distincte de pending.
+export type MembershipStatus = "none" | "pending" | "club_pending" | "active" | "deactivated";
 
 /**
  * SEC-16 (audit) — ce store NE PORTE PLUS DE JETON.

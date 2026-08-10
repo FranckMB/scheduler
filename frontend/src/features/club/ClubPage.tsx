@@ -5,6 +5,7 @@ import { useNavigate } from "react-router";
 import { useMe } from "@/features/auth/queries";
 import type { FfbbOrganisme, MeResponse } from "@/features/auth/api";
 import { PendingMembersSection } from "@/features/auth/PendingMembersSection";
+import { MembersSection } from "@/features/club/MembersSection";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
@@ -569,9 +570,15 @@ function ClubHub({ me }: { me: MeResponse }) {
           </AccordionSection>
         ) : null}
         {isAdmin ? (
-          <AccordionSection title="Demandes" defaultOpen>
+          <AccordionSection title="Demandes d'adhésion" defaultOpen>
             <p className="mb-3 text-sm text-muted-foreground">Approuvez ou refusez les personnes qui souhaitent rejoindre votre club.</p>
             <PendingMembersSection />
+          </AccordionSection>
+        ) : null}
+        {isManagement ? (
+          <AccordionSection title="Membres">
+            <p className="mb-3 text-sm text-muted-foreground">Gérez les rôles de vos membres, désactivez ou réactivez un accès. Un club garde toujours au moins un gestionnaire.</p>
+            <MembersSection />
           </AccordionSection>
         ) : null}
         <AccordionSection title="Visuel">

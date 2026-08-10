@@ -40,8 +40,13 @@ export function WaitingApprovalPage() {
   }, [data?.membershipStatus, navigate]);
 
   const request = data?.clubRequest ?? null;
-  const state =
-    request === null
+  // P1-1 : un accès DÉSACTIVÉ par un gestionnaire n'est pas une attente d'approbation —
+  // dire « demande en attente » ici mentirait. Distinct, et réversible : la page entre
+  // toute seule dès la réactivation (le poll bascule sur `active`).
+  const deactivated = data?.membershipStatus === "deactivated";
+  const state = deactivated
+    ? ({ title: "Accès désactivé", description: "Votre accès au club a été suspendu.", icon: ShieldX } as const)
+    : request === null
       ? ({ title: "Demande en attente", description: "Votre demande a bien été enregistrée.", icon: Clock } as const)
       : request.status === "refused"
         ? ({ title: "Demande refusée", description: `La création de l'espace ${request.clubName} a été refusée.`, icon: ShieldX } as const)
@@ -63,7 +68,11 @@ export function WaitingApprovalPage() {
         <span className="flex size-12 items-center justify-center rounded-full bg-muted">
           <state.icon className="size-6 text-accent" />
         </span>
-        {request === null ? (
+        {deactivated ? (
+          <p className="text-sm text-muted-foreground">
+            Votre accès a été désactivé par un gestionnaire du club. Rapprochez-vous de lui pour le réactiver. Cette page se mettra à jour automatiquement dès la réactivation.
+          </p>
+        ) : request === null ? (
           <p className="text-sm text-muted-foreground">
             Le gestionnaire{data?.club ? ` de ${data.club.name}` : ""} doit approuver votre demande avant que vous puissiez accéder à l'espace du club. Cette page se mettra à jour automatiquement dès l'approbation.
           </p>

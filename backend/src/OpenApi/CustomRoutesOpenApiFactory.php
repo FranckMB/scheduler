@@ -1037,11 +1037,14 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 operationId: 'getApiMembershipsList',
                 tags: ['Memberships'],
                 responses: [
-                    '200' => new Response('Active members of the current club (id, userId, email, firstName, lastName, role, isSelf)'),
+                    '200' => new Response('Active members of the current club (id, userId, email, firstName, lastName, role, isSelf); with `?includeDeactivated=1`, also a `deactivated` array of the same shape'),
                     '401' => $unauthorized,
                     '403' => new Response('Member but not a management role'),
                 ],
                 summary: 'List the active members of the current club (management-only)',
+                parameters: [
+                    ['name' => 'includeDeactivated', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'boolean'], 'description' => 'When truthy (1/true), also return a `deactivated` array of deactivated (reactivable) memberships alongside `members`'],
+                ],
             )),
             '/api/memberships/pending' => new PathItem(get: new Operation(
                 operationId: 'getApiMembershipsPending',
@@ -1057,14 +1060,14 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 operationId: 'postApiMembershipApprove',
                 tags: ['Memberships'],
                 responses: [
-                    '200' => new Response('Membership activated (optional body {"role":"admin"|"member"}, defaults to admin)'),
+                    '200' => new Response('Membership activated with the required role (body {"role":"admin"|"member"})'),
                     '401' => $unauthorized,
                     '403' => new Response('Member but not a management role'),
                     '404' => $notFound,
                     '409' => new Response('Target is not genuinely pending (already active, or deactivated — use reactivate)'),
-                    '422' => new Response('Role outside the assignable set (admin|member)'),
+                    '422' => new Response('Role missing, or outside the assignable set (admin|member)'),
                 ],
-                summary: 'Approve a membership request, optionally setting its role',
+                summary: 'Approve a membership request, setting its role (required body {"role":"admin"|"member"})',
             )),
             '/api/memberships/{id}/role' => new PathItem(post: new Operation(
                 operationId: 'postApiMembershipRole',

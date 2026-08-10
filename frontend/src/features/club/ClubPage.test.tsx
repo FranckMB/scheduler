@@ -15,6 +15,10 @@ vi.mock("@/features/auth/queries", () => ({
   usePendingMembers: () => ({ data: { members: [] }, isLoading: false }),
   useApproveMember: () => ({ mutate: vi.fn(), isPending: false }),
   useRejectMember: () => ({ mutate: vi.fn(), isPending: false }),
+  useMembers: () => ({ data: { members: [{ id: "self", userId: "us", email: "boss@club.fr", firstName: "Grace", lastName: "Hopper", role: "admin", isSelf: true }], deactivated: [] }, isError: false }),
+  useChangeMemberRole: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeactivateMember: () => ({ mutate: vi.fn(), isPending: false }),
+  useReactivateMember: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const ffbbImport = vi.fn();
@@ -151,6 +155,21 @@ describe("ClubPage", () => {
     render(<ClubPage />);
     expect(screen.queryByRole("button", { name: /Demandes/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Visuel/ })).toBeInTheDocument();
+  });
+
+  it("shows the Membres section for management (expand → active member list)", async () => {
+    const user = userEvent.setup();
+    render(<ClubPage />);
+    const membres = screen.getByRole("button", { name: /^Membres$/ });
+    await user.click(membres);
+    expect(screen.getByText("Grace Hopper")).toBeInTheDocument();
+    expect(screen.getByText("vous")).toBeInTheDocument();
+  });
+
+  it("hides the Membres section for a non-management member", () => {
+    me.data = { role: "member", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } };
+    render(<ClubPage />);
+    expect(screen.queryByRole("button", { name: /^Membres$/ })).toBeNull();
   });
 
   // --- P1-3 §4bis pt 5 — section « Offre » ---------------------------------

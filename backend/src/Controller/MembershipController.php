@@ -40,7 +40,7 @@ final class MembershipController extends AbstractController
     ) {}
 
     #[Route('/api/memberships', name: 'api_memberships_list', methods: ['GET'])]
-    public function list(): JsonResponse
+    public function list(Request $request): JsonResponse
     {
         $adminMembership = $this->requireActiveAdmin();
         if ($adminMembership instanceof JsonResponse) {
@@ -52,24 +52,17 @@ final class MembershipController extends AbstractController
             'isActive' => true,
         ]);
 
-        $items = [];
-        foreach ($active as $membership) {
-            $user = $this->entityManager->getRepository(User::class)->find($membership->getUserId());
-            if (null === $user) {
-                continue;
-            }
-            $items[] = [
-                'id' => $membership->getId(),
-                'userId' => $user->getId(),
-                'email' => $user->getEmail(),
-                'firstName' => $user->getFirstName(),
-                'lastName' => $user->getLastName(),
-                'role' => $membership->getRole(),
-                'isSelf' => $membership->getId() === $adminMembership->getId(),
-            ];
+        $response = ['members' => $this->serializeMembers($active, $adminMembership)];
+
+        // P1-1 (PR C) : l'écran de gestion des membres demande AUSSI les désactivés
+        // (réactivables) — opt-in par `?includeDeactivated=1`. Sans le paramètre, la
+        // réponse reste EXACTEMENT « actifs seuls » (aucun appelant existant impacté).
+        if ($request->query->getBoolean('includeDeactivated')) {
+            $deactivated = $this->clubUserRepository->findDeactivated($adminMembership->getClubId());
+            $response['deactivated'] = $this->serializeMembers($deactivated, $adminMembership);
         }
 
-        return $this->json(['members' => $items]);
+        return $this->json($response);
     }
 
     #[Route('/api/memberships/pending', name: 'api_memberships_pending', methods: ['GET'])]
@@ -121,9 +114,10 @@ final class MembershipController extends AbstractController
             return $pendingOnly;
         }
 
-        // Corps optionnel `{"role":...}` — défaut Gestionnaire (statu quo EXACT
-        // tant que le front n'envoie rien ; le resserrage « requis » est en PR C).
-        $role = $this->readRole($this->requestStack->getCurrentRequest(), ClubRole::MANAGER);
+        // PR C : le rôle est désormais REQUIS — le front l'envoie toujours (choix
+        // actif du gestionnaire, défaut Membre à l'écran). Corps absent ou sans
+        // clé `role` → 422, aucune adhésion activée par défaut silencieux.
+        $role = $this->readRole($this->requestStack->getCurrentRequest(), null);
         if ($role instanceof JsonResponse) {
             return $role;
         }
@@ -349,6 +343,37 @@ final class MembershipController extends AbstractController
         }
 
         return null;
+    }
+
+    /**
+     * Sérialise une liste d'adhésions en jointant leur `User` (identité). Source
+     * unique pour les membres actifs ET désactivés — même forme, `isSelf` inclus
+     * (inoffensif pour un désactivé, jamais soi-même en pratique).
+     *
+     * @param list<ClubUser> $memberships
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function serializeMembers(array $memberships, ClubUser $adminMembership): array
+    {
+        $items = [];
+        foreach ($memberships as $membership) {
+            $user = $this->entityManager->getRepository(User::class)->find($membership->getUserId());
+            if (null === $user) {
+                continue;
+            }
+            $items[] = [
+                'id' => $membership->getId(),
+                'userId' => $user->getId(),
+                'email' => $user->getEmail(),
+                'firstName' => $user->getFirstName(),
+                'lastName' => $user->getLastName(),
+                'role' => $membership->getRole(),
+                'isSelf' => $membership->getId() === $adminMembership->getId(),
+            ];
+        }
+
+        return $items;
     }
 
     /** @return ClubUser|JsonResponse The target membership within the admin's club, or an error response. */

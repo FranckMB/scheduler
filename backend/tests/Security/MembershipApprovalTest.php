@@ -36,7 +36,8 @@ final class MembershipApprovalTest extends WebTestCase
         self::assertCount(1, $pending['members']);
         $membershipId = $pending['members'][0]['id'];
 
-        $this->authPost("/api/memberships/{$membershipId}/approve", $ownerToken);
+        // PR C : le rôle est REQUIS à l'approbation (le front l'envoie toujours).
+        $this->authPost("/api/memberships/{$membershipId}/approve", $ownerToken, '{"role":"member"}');
         self::assertResponseIsSuccessful();
 
         self::assertSame('active', $this->authGet('/api/me', $joinerToken)['membershipStatus']);
@@ -112,11 +113,11 @@ final class MembershipApprovalTest extends WebTestCase
         return json_decode((string) $this->client->getResponse()->getContent(), true) ?? [];
     }
 
-    private function authPost(string $path, string $token): void
+    private function authPost(string $path, string $token, string $body = ''): void
     {
         $this->client->request('POST', $path, [], [], [
             'CONTENT_TYPE' => 'application/json', 'HTTP_AUTHORIZATION' => 'Bearer ' . $token,
-        ]);
+        ], $body);
     }
 
     private function owner(string $ara): string
