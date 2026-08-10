@@ -27,6 +27,10 @@ interface PlanningToolbarProps {
   onDelete: () => void;
   onRegenerateFrom: () => void;
   disableRegenerate?: boolean;
+  /** P1-3 §4bis pt 2 — solde de crédits sur « Régénérer » (Découverte bridée) ;
+   *  null = offre non bridée (payant/bêta/démo) : ni suffixe, ni blocage. La page
+   *  le calcule (`useCredits`) pour garder ce composant pur (test sans provider). */
+  outputCredits?: { count: number; blocked: boolean } | null;
   isGenerating: boolean;
   actionBusy: boolean;
   /** Export, rendered right-aligned on the actions row (owned by the page). */
@@ -63,6 +67,7 @@ export function PlanningToolbar({
   onDelete,
   onRegenerateFrom,
   disableRegenerate = false,
+  outputCredits = null,
   isGenerating,
   actionBusy,
   rightSlot,
@@ -210,9 +215,15 @@ export function PlanningToolbar({
           // Disabled during a "Charger" restore too (actionBusy) — but the busy
           // LABEL/spinner keys only on isGenerating, so a restore (no solve) does
           // not show a misleading "Génération…".
-          <Button size="sm" variant="default" className="h-8" disabled={isGenerating || actionBusy || disableRegenerate || null === selectedScheduleId} onClick={onRegenerate}>
+          <Button
+            size="sm"
+            variant="default"
+            className="h-8"
+            disabled={isGenerating || actionBusy || disableRegenerate || null === selectedScheduleId || (null !== outputCredits && outputCredits.blocked)}
+            onClick={onRegenerate}
+          >
             <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
-            {isGenerating ? "Génération…" : "Régénérer"}
+            {isGenerating ? "Génération…" : `Régénérer${null !== outputCredits ? ` (${outputCredits.count})` : ""}`}
           </Button>
         )}
         {canRegenerateFrom ? (

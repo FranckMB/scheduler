@@ -12,8 +12,12 @@ const { placeFixture, unplaceFixture } = vi.hoisted(() => ({
   unplaceFixture: vi.fn(() => Promise.resolve({})),
 }));
 
-// Matches are unlocked only once the season's socle is validated.
-vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "s1", hasFinishedVersion: true } } }) }));
+// Matches are unlocked only once the season's socle is validated. `club`
+// (avec entitlements) est mutable pour piloter le solde de crédits par test.
+const meState = vi.hoisted(() => ({ club: undefined as Record<string, unknown> | undefined }));
+vi.mock("@/features/auth/queries", () => ({
+  useMe: () => ({ data: { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "s1", hasFinishedVersion: true }, club: meState.club } }),
+}));
 
 vi.mock("./api", () => ({
   getFixtures: vi.fn(() =>
@@ -89,6 +93,7 @@ vi.mock("./api", () => ({
 beforeEach(() => {
   placeFixture.mockClear();
   unplaceFixture.mockClear();
+  meState.club = undefined;
   useMatchesStore.setState({ selectedWeekend: null, selectedFixtureId: null, swapSourceId: null, fixtureFormOpen: false });
 });
 
@@ -117,6 +122,20 @@ describe("MatchesPage (integration)", () => {
     // The named reason lands under the still-unplaced match — the
     // ask-your-derogation-early signal.
     expect(await screen.findByText(/Aucune fenêtre d'accès match/)).toBeInTheDocument();
+  });
+
+  it("P1-3 §4bis — le bouton « Placer » affiche le solde et se désactive à 0 (Découverte bridée)", async () => {
+    meState.club = { entitlements: { planCode: "decouverte", planName: "Découverte", maxTeams: null, teamsUsed: 4, creditsMax: 10, creditsUsed: 10, canGenerate: false, canPlaceMatches: false, canExportPdf: false, seasonTransition: false } };
+    renderWithProviders(<MatchesPage />);
+    const place = await screen.findByRole("button", { name: /Placer automatiquement \(0\)/ });
+    expect(place).toBeDisabled();
+  });
+
+  it("P1-3 §4bis — offre payante : le bouton « Placer » n'affiche AUCUN solde", async () => {
+    meState.club = { entitlements: { planCode: "essentiel", planName: "Essentiel", maxTeams: 20, teamsUsed: 4, creditsMax: null, creditsUsed: 0, canGenerate: true, canPlaceMatches: true, canExportPdf: true, seasonTransition: true } };
+    renderWithProviders(<MatchesPage />);
+    const place = await screen.findByRole("button", { name: "Placer automatiquement" });
+    expect(place).toBeEnabled();
   });
 
   it("opens the placement panel and places a home fixture (venue + kickoff)", async () => {

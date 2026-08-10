@@ -10,7 +10,13 @@ const schedule = (status: Schedule["status"], over: Partial<Schedule> = {}): Sch
 
 function renderToolbar(
   schedules: Schedule | Schedule[],
-  { embedded = true, selectedScheduleId = "s1", disableRegenerate = false, slots = false }: { embedded?: boolean; selectedScheduleId?: string; disableRegenerate?: boolean; slots?: boolean } = {},
+  {
+    embedded = true,
+    selectedScheduleId = "s1",
+    disableRegenerate = false,
+    slots = false,
+    outputCredits = null,
+  }: { embedded?: boolean; selectedScheduleId?: string; disableRegenerate?: boolean; slots?: boolean; outputCredits?: { count: number; blocked: boolean } | null } = {},
 ) {
   return render(
     <PlanningToolbar
@@ -27,6 +33,7 @@ function renderToolbar(
       onDelete={noop}
       onRegenerateFrom={noop}
       disableRegenerate={disableRegenerate}
+      outputCredits={outputCredits}
       isGenerating={false}
       actionBusy={false}
       embedded={embedded}
@@ -52,6 +59,23 @@ describe("PlanningToolbar — où vivent le filtre et l'export (P4-43)", () => {
     expect(filter.compareDocumentPosition(regenerate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // L'export, lui, reste après les actions.
     expect(regenerate.compareDocumentPosition(exported) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("PlanningToolbar — coût en crédits sur « Régénérer » (P1-3 §4bis)", () => {
+  it("affiche le solde sur « Régénérer » en Découverte bridée", () => {
+    renderToolbar(schedule("COMPLETED"), { outputCredits: { count: 8, blocked: false } });
+    expect(screen.getByRole("button", { name: "Régénérer (8)" })).toBeEnabled();
+  });
+
+  it("désactive « Régénérer (0) » quand le serveur ne laisse plus sortir", () => {
+    renderToolbar(schedule("COMPLETED"), { outputCredits: { count: 0, blocked: true } });
+    expect(screen.getByRole("button", { name: "Régénérer (0)" })).toBeDisabled();
+  });
+
+  it("aucun suffixe ni blocage hors Découverte bridée (outputCredits null)", () => {
+    renderToolbar(schedule("COMPLETED"), { outputCredits: null });
+    expect(screen.getByRole("button", { name: "Régénérer" })).toBeEnabled();
   });
 });
 
