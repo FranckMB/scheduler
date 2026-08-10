@@ -111,7 +111,7 @@ SERVEUR (`entitlements` de `/api/me` — le front ne calcule rien, règle P2-8) 
 2. **Le coût au point d'action** : chaque bouton de sortie affiche le solde — « Générer (8) »,
    « Placer les matchs (8) », « Exporter en PDF (8) ».
 3. **Bandeau d'urgence à ≤ 3 crédits** : rouge, fermable, CTA « Voir les offres ». Il ne se ré-affiche
-   PAS à chaque navigation (un bandeau qui crie tout le temps n'alerte plus — règle §7.2) : il revient
+   PAS à chaque navigation (un bandeau qui crie tout le temps n'alerte plus — règle du protocole `review-response`) : il revient
    quand le solde BAISSE encore, ou à la session suivante.
 4. **À 0 crédit** : bandeau permanent non fermable au ton juste — « Vos crédits gratuits sont épuisés.
    Consultez et ajustez librement — passez à une offre pour générer à nouveau. » Boutons de sortie

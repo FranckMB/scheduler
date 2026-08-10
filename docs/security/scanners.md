@@ -1,7 +1,7 @@
 # Outillage sécurité externe (SEC A19 — 2026-08-05)
 
 > Décision fondateur : la revue IA systématique (`/code-review` par PR) sort du cycle —
-> coût en tokens + régressions en boucle (mesuré, CLAUDE.md §7.2). Le filet AUTOMATIQUE
+> coût en tokens + régressions en boucle (mesuré — protocole `review-response`, `.claude/skills/`). Le filet AUTOMATIQUE
 > est désormais **à zéro token** : scanners gratuits en CI + tests de non-régression +
 > suite bloquante. Les revues IA (`/code-review`, `/audit`) restent disponibles **à la
 > demande du fondateur** ; `/security-review` reste systématique sur les diffs
