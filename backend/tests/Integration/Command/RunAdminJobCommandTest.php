@@ -74,7 +74,10 @@ final class RunAdminJobCommandTest extends KernelTestCase
             'command_name' => 'test:job:old',
             'source' => 'scheduled',
             'status' => 'running',
-            'started_at' => '2026-07-16 08:00:00+00',
+            // Date RELATIVE, > 24,86 jours (2^31 ms) : une date figée a explosé le
+            // 2026-08-10 (integer out of range sur duration_ms) — le cas ancien doit
+            // rester EXERCÉ, c'est lui qui garde le plafond LEAST du run store.
+            'started_at' => new DateTimeImmutable('-40 days')->format('Y-m-d H:i:sP'),
         ]);
 
         $tester = $this->testerFor('test:job:success', Command::SUCCESS);
