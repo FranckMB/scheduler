@@ -14,6 +14,21 @@ framework:
             policy: 'sliding_window'
             limit: 10
             interval: '15 minutes'
+        # P4-74 — demander un changement d'e-mail (POST /api/me/email), keyé PAR
+        # UTILISATEUR (JWT) : la route envoie un mail vers une adresse tierce, donc
+        # une borne dédiée en plus du limiteur `api` global. 5/15min couvre l'usage
+        # réel (on change d'adresse rarement) et borne un envoi en boucle.
+        email_change:
+            policy: 'sliding_window'
+            limit: 5
+            interval: '15 minutes'
+        # P4-74 — consommer le lien de confirmation (POST /api/me/email/confirm),
+        # PUBLIC, keyé par IP (anti brute-force de token), même patron que
+        # auth_register_verify.
+        email_change_confirm:
+            policy: 'sliding_window'
+            limit: 10
+            interval: '15 minutes'
         admin_auth:
             policy: 'sliding_window'
             limit: 5
@@ -100,6 +115,14 @@ when@dev:
                 policy: 'sliding_window'
                 limit: 1000
                 interval: '15 minutes'
+            email_change:
+                policy: 'sliding_window'
+                limit: 100
+                interval: '15 minutes'
+            email_change_confirm:
+                policy: 'sliding_window'
+                limit: 100
+                interval: '15 minutes'
 
 # Test: a small API bound so ApiRateLimitTest can trip the 429 in a handful of
 # requests. Keyed per user, so it never leaks across the other functional tests
@@ -112,6 +135,15 @@ when@test:
                 limit: 30
                 interval: '1 minute'
             coach_wish_public:
+                policy: 'sliding_window'
+                limit: 1000
+                interval: '15 minutes'
+            # P4-74 : larges en test pour ne pas tripper pendant les suites.
+            email_change:
+                policy: 'sliding_window'
+                limit: 1000
+                interval: '15 minutes'
+            email_change_confirm:
                 policy: 'sliding_window'
                 limit: 1000
                 interval: '15 minutes'

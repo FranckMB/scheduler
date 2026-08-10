@@ -80,14 +80,18 @@ class UserStateProcessor extends AbstractStateProcessor
     }
 
     /**
+     * P4-74 : l'e-mail n'est PLUS muté ici. Le changer en direct basculerait
+     * l'identité (email = identifiant de connexion) sans confirmer la nouvelle
+     * adresse. Le champ `email` d'un PUT est donc IGNORÉ en silence (choix : ce
+     * chemin ressource est legacy — l'UI passe par PATCH /api/me, qui renvoie un
+     * 422 explicite ; l'ignorer ici ne casse aucun test PUT existant). Le vrai
+     * changement passe par « confirmer d'abord, basculer ensuite » (POST /api/me/email).
+     *
      * @param User      $entity
      * @param UserInput $input
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        if (null !== $input->email) {
-            $entity->setEmail($input->email);
-        }
         if (null !== $input->firstName) {
             $entity->setFirstName($input->firstName);
         }

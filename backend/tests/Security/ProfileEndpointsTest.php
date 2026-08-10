@@ -35,32 +35,17 @@ final class ProfileEndpointsTest extends WebTestCase
         self::assertSame('Nom', $me['lastName']);
     }
 
-    public function testUpdateProfileEmailReturnsUpdatedBody(): void
+    public function testUpdateProfileDoesNotChangeEmailInPlace(): void
     {
-        [$token] = $this->register('PRFH');
+        [$token, $email] = $this->register('PRFH');
 
-        // The PATCH response carries the new email; the old JWT (identity = old
-        // email) is intentionally no longer usable afterwards → assert on the body.
+        // P4-74 : le PATCH ne bascule PLUS l'e-mail (ce serait changer l'identité
+        // sans confirmer la nouvelle adresse). Un e-mail DIFFÉRENT → 422 pointant
+        // POST /api/me/email ; l'adresse courante ne bouge pas. Le format/l'unicité
+        // et la bascule sont couverts par UserSelfOnlyTest sur la nouvelle route.
         $this->patch('/api/me', $token, ['email' => 'prfh-new@test.fr']);
-        self::assertResponseIsSuccessful();
-        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertSame('prfh-new@test.fr', $body['email']);
-    }
-
-    public function testUpdateProfileRejectsTakenEmail(): void
-    {
-        [$tokenA] = $this->register('PRFB');
-        [, $emailB] = $this->register('PRFC');
-
-        $this->patch('/api/me', $tokenA, ['email' => $emailB]);
-        self::assertResponseStatusCodeSame(409, 'an already-used email must be rejected');
-    }
-
-    public function testUpdateProfileRejectsInvalidEmail(): void
-    {
-        [$token] = $this->register('PRFD');
-        $this->patch('/api/me', $token, ['email' => 'not-an-email']);
-        self::assertResponseStatusCodeSame(400);
+        self::assertResponseStatusCodeSame(422);
+        self::assertSame($email, $this->getJson('/api/me', $token)['email'], 'le PATCH ne change pas l\'e-mail');
     }
 
     public function testChangePasswordRequiresCorrectCurrent(): void

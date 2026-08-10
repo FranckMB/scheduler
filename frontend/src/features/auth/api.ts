@@ -58,6 +58,8 @@ export interface FfbbOrganisme {
 export interface MeResponse {
   id: string;
   email: string;
+  /** P4-74 — adresse en attente de confirmation (le compte garde son adresse actuelle). null = aucune. */
+  pendingEmail: string | null;
   firstName: string;
   lastName: string;
   membershipStatus: MembershipStatus;
@@ -219,6 +221,21 @@ export function register(body: RegisterPayload): Promise<RegisterResponse> {
 
 export function verifyEmail(token: string): Promise<VerifyEmailResponse> {
   return api.post("register/verify", { json: { token } }).json();
+}
+
+/** SEC-16 : la confirmation repose un cookie httpOnly frais (nouvelle identité) — pas de jeton dans le corps. */
+export interface ConfirmEmailChangeResponse {
+  status: "email_confirmed";
+  email: string;
+}
+
+/**
+ * P4-74 — consommer le lien de confirmation de changement d'e-mail (PUBLIC : le
+ * token EST l'identité). La bascule a lieu ici ; le serveur repose un cookie
+ * pour la nouvelle adresse (le compte reste connecté).
+ */
+export function confirmEmailChange(token: string): Promise<ConfirmEmailChangeResponse> {
+  return api.post("me/email/confirm", { json: { token } }).json();
 }
 
 export function getMe(): Promise<MeResponse> {

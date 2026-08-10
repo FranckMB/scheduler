@@ -4,18 +4,37 @@ import { downloadBlob } from "@/shared/lib/download";
 export interface UpdateProfilePayload {
   firstName?: string;
   lastName?: string;
-  email?: string;
 }
 
 export interface UpdateProfileResult {
   id: string;
   email: string;
+  pendingEmail: string | null;
   firstName: string;
   lastName: string;
 }
 
-/** Update the connected user's own profile (PATCH /api/me). */
+/**
+ * Update the connected user's own profile (PATCH /api/me) — name only. P4-74:
+ * the e-mail is NOT changed here (POST /api/me/email drives the confirm flow).
+ */
 export const updateProfile = (body: UpdateProfilePayload): Promise<UpdateProfileResult> => api.patch("me", { json: body }).json();
+
+export interface RequestEmailChangeResult {
+  status: "confirmation_sent";
+  pendingEmail: string;
+}
+
+/**
+ * P4-74 — demander un changement d'e-mail (POST /api/me/email) : « confirmer
+ * d'abord, basculer ensuite ». L'adresse actuelle reste active ; un lien de
+ * confirmation part à la NOUVELLE adresse. Rien ne bascule avant le clic.
+ */
+export const requestEmailChange = (email: string): Promise<RequestEmailChangeResult> =>
+  api.post("me/email", { json: { email } }).json();
+
+/** P4-74 — annuler la demande en attente (DELETE /api/me/email). */
+export const cancelEmailChange = (): Promise<{ status: string }> => api.delete("me/email").json();
 
 export interface ChangePasswordPayload {
   currentPassword: string;

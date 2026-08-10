@@ -45,6 +45,13 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?DateTimeImmutable $emailVerifiedAt = null;
 
+    // P4-74 : adresse e-mail EN ATTENTE de confirmation. Le patron « confirmer
+    // d'abord, basculer ensuite » : `email` reste actif et inchangé tant que la
+    // nouvelle adresse n'est pas confirmée (via EmailChangeToken envoyé à CETTE
+    // adresse). Unique en base — deux comptes ne peuvent pas réserver la même.
+    #[ORM\Column(type: 'string', length: 180, nullable: true)]
+    private ?string $pendingEmail = null;
+
     // RGPD (droit à l'effacement) : non-null = compte anonymisé — l'identité a
     // été écrasée (email/nom/hash) et ne peut plus servir à s'authentifier.
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
@@ -239,6 +246,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setEmailVerifiedAt(?DateTimeImmutable $emailVerifiedAt): self
     {
         $this->emailVerifiedAt = $emailVerifiedAt;
+
+        return $this;
+    }
+
+    public function getPendingEmail(): ?string
+    {
+        return $this->pendingEmail;
+    }
+
+    public function setPendingEmail(?string $pendingEmail): self
+    {
+        $this->pendingEmail = $pendingEmail;
 
         return $this;
     }

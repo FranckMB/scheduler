@@ -120,6 +120,23 @@ export function useLogout() {
   };
 }
 
+/**
+ * P4-74 — confirme un changement d'e-mail via le lien reçu. Le serveur repose un
+ * cookie frais pour la nouvelle identité : on marque la session active et on
+ * invalide `me` (l'ancien JWT ne résolvait plus l'adresse basculée).
+ */
+export function useConfirmEmailChange() {
+  const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: authApi.confirmEmailChange,
+    onSuccess: () => {
+      setAuthenticated(true);
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+}
+
 export function useForgotPassword() {
   return useMutation({ mutationFn: authApi.forgotPassword });
 }

@@ -111,6 +111,8 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'application/json' => ['schema' => ['type' => 'object', 'properties' => [
                             'id' => ['type' => 'string'],
                             'email' => ['type' => 'string'],
+                            // P4-74 — l'adresse en attente de confirmation (null = aucune).
+                            'pendingEmail' => ['type' => ['string', 'null']],
                             'firstName' => ['type' => 'string'],
                             'lastName' => ['type' => 'string'],
                             'membershipStatus' => ['type' => 'string', 'enum' => ['none', 'pending', 'active']],
@@ -182,24 +184,90 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'properties' => [
                             'id' => ['type' => 'string'],
                             'email' => ['type' => 'string'],
+                            'pendingEmail' => ['type' => ['string', 'null']],
                             'firstName' => ['type' => 'string'],
                             'lastName' => ['type' => 'string'],
                         ],
                     ]),
-                    '400' => new Response('Validation error (empty name / invalid email)'),
-                    '409' => new Response('E-mail already in use'),
+                    '400' => new Response('Validation error (empty name)'),
+                    // P4-74 — le PATCH ne change plus l'e-mail : un e-mail DIFFÉRENT
+                    // de l'actuel est refusé et pointe POST /api/me/email.
+                    '422' => new Response('E-mail changes go through the confirmation flow (POST /api/me/email)'),
                 ],
-                summary: 'Update the connected user profile (name / e-mail)',
+                summary: 'Update the connected user profile (name only — e-mail changes go through POST /api/me/email)',
                 requestBody: $this->jsonBody([
                     'type' => 'object',
                     'properties' => [
                         'firstName' => ['type' => 'string'],
                         'lastName' => ['type' => 'string'],
-                        'email' => ['type' => 'string', 'format' => 'email'],
                     ],
                 ]),
             ),
         ));
+
+        // P4-74 — changer d'e-mail : confirmer d'abord (lien envoyé à la nouvelle
+        // adresse), basculer ensuite. L'adresse courante reste active tant qu'on
+        // n'a pas confirmé.
+        $paths->addPath('/api/me/email', new PathItem(
+            post: new Operation(
+                operationId: 'postApiMeEmail',
+                tags: ['Auth'],
+                responses: [
+                    '200' => $this->jsonResponse('Confirmation link sent to the new address; the current address stays active until confirmed', [
+                        'type' => 'object',
+                        'properties' => [
+                            'status' => ['type' => 'string', 'enum' => ['confirmation_sent']],
+                            'pendingEmail' => ['type' => 'string'],
+                        ],
+                    ]),
+                    '400' => new Response('Invalid e-mail, or same as the current address'),
+                    '401' => new Response('Unauthorized'),
+                    '409' => new Response('E-mail already used (active or pending) by another account'),
+                    '429' => new Response('Too many requests (per-user rate limit)'),
+                ],
+                summary: 'Request an e-mail change: store it as pending and send a confirmation link to the NEW address',
+                requestBody: $this->jsonBody([
+                    'type' => 'object',
+                    'required' => ['email'],
+                    'properties' => ['email' => ['type' => 'string', 'format' => 'email']],
+                ]),
+            ),
+            delete: new Operation(
+                operationId: 'deleteApiMeEmail',
+                tags: ['Auth'],
+                responses: [
+                    '200' => $this->jsonResponse('Pending e-mail change cancelled', [
+                        'type' => 'object',
+                        'properties' => ['status' => ['type' => 'string', 'enum' => ['cancelled']]],
+                    ]),
+                    '401' => new Response('Unauthorized'),
+                ],
+                summary: 'Cancel a pending e-mail change (clears pendingEmail and its tokens)',
+            ),
+        ));
+
+        $paths->addPath('/api/me/email/confirm', new PathItem(post: new Operation(
+            operationId: 'postApiMeEmailConfirm',
+            tags: ['Auth'],
+            responses: [
+                '200' => $this->jsonResponse('E-mail switched; a fresh httpOnly JWT cookie is set for the new identity (the account stays verified/connectable)', [
+                    'type' => 'object',
+                    'properties' => [
+                        'status' => ['type' => 'string', 'enum' => ['email_confirmed']],
+                        'email' => ['type' => 'string'],
+                    ],
+                ]),
+                '400' => new Response('Invalid/expired token, or no pending change'),
+                '409' => new Response('The pending address was taken by another account in the meantime'),
+                '429' => new Response('Too many attempts (per-IP rate limit)'),
+            ],
+            summary: 'Confirm the pending e-mail change (PUBLIC_ACCESS — the token is the identity)',
+            requestBody: $this->jsonBody([
+                'type' => 'object',
+                'required' => ['token'],
+                'properties' => ['token' => ['type' => 'string', 'description' => 'The raw token from the confirmation email link']],
+            ]),
+        )));
 
         // SEC-16 (audit) — RÉÉCRITURE du path que le décorateur de lexik écrit en
         // dur (`OpenApi/OpenApiFactory.php` : 200 + `{token}`). Depuis que le
