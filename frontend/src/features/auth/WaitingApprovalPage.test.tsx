@@ -69,6 +69,13 @@ describe("WaitingApprovalPage", () => {
     expect(await screen.findByText(/Le gestionnaire de BC Testville doit approuver/)).toBeInTheDocument();
   });
 
+  it("désactivé : message dédié (accès suspendu), jamais « demande en attente »", async () => {
+    renderPage({ membershipStatus: "deactivated", clubRequest: null, club: { name: "BC Testville" } as MeResponse["club"] });
+    expect(await screen.findByText("Accès désactivé")).toBeInTheDocument();
+    expect(screen.getByText(/désactivé par un gestionnaire du club/)).toBeInTheDocument();
+    expect(screen.queryByText(/doit approuver votre demande/)).not.toBeInTheDocument();
+  });
+
   it("actif → entre dans l'app (le poll aboutit)", async () => {
     renderPage({ membershipStatus: "active", clubRequest: null });
     await vi.waitFor(() => expect(h.navigate).toHaveBeenCalledWith("/", { replace: true }));
