@@ -1,6 +1,6 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-Last verified @ 2026-08-10 (recalé ce jour par P1-3 PR A : **attribution d'offres au catalogue** — une entrée `set-plan-*` par offre à `--plan` figé + `reset-credits`, seule porte d'attribution ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
+Last verified @ 2026-08-10 (recalé ce jour par P1-1 PR B : **la porte d'activation d'adhésion ignore les membres désactivés par leur club** ; et par P1-3 PR A : **attribution d'offres au catalogue** — une entrée `set-plan-*` par offre à `--plan` figé + `reset-credits`, seule porte d'attribution ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
 
 > **État courant** : SA0, SA1, la console read-only SA2, le socle
 > d'historisation SA3-A, la supervision SA3-B, la planification fiable SA3-C et
@@ -268,7 +268,10 @@ lien public meurt à J+7, pas la console) ; `POST /api/admin/club-requests/{id}/
 approuve (provisionne, comme la page publique) ou refuse — mêmes gardes que les actions
 (session + CSRF + audit posé avant toute garde). `GET /api/admin/pending-memberships` +
 `POST /api/admin/pending-memberships/{id}/activate` : **activer une adhésion** quand la
-passation n'a pas lieu (gestionnaire parti fâché — décision fondateur). Le job planifié
+passation n'a pas lieu (gestionnaire parti fâché — décision fondateur). ⚠ Depuis P1-1 PR B
+(2026-08-10), la porte ne voit et n'active que les adhésions **en attente** (`deactivated_at IS NULL`) —
+un membre **désactivé par son club** ne se restaure que par le geste club
+(`POST /api/memberships/{id}/reactivate`) : la console ne contourne pas la décision du club. Le job planifié
 `club-approval-digest` (quotidien 08:30, relançable) porte les relances (3 j restants +
 jour J) et l'expiration.
 
