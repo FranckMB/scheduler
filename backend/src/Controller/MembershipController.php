@@ -113,6 +113,13 @@ final class MembershipController extends AbstractController
         if ($target instanceof JsonResponse) {
             return $target;
         }
+        // Revue sécu PR B : approve est LE passage pending → actif, et rien d'autre.
+        // Sur une cible active il promouvait silencieusement (défaut admin) ; sur une
+        // désactivée il la réactivait en laissant deactivatedAt posé (état hybride).
+        $pendingOnly = $this->assertGenuinelyPending($target, 'Seule une adhésion en attente peut être approuvée.');
+        if ($pendingOnly instanceof JsonResponse) {
+            return $pendingOnly;
+        }
 
         // Corps optionnel `{"role":...}` — défaut Gestionnaire (statu quo EXACT
         // tant que le front n'envoie rien ; le resserrage « requis » est en PR C).
@@ -134,6 +141,14 @@ final class MembershipController extends AbstractController
         $target = $this->resolveTargetForAdmin($id);
         if ($target instanceof JsonResponse) {
             return $target;
+        }
+        // Revue sécu PR B : reject supprimait une adhésion de N'IMPORTE quel état —
+        // le dernier gestionnaire pouvait s'auto-supprimer en une requête (invariant
+        // contourné, suppression irréversible sans trace). Pending uniquement : un
+        // actif se désactive (réversible), il ne se rejette pas.
+        $pendingOnly = $this->assertGenuinelyPending($target, 'Seule une adhésion en attente peut être refusée.');
+        if ($pendingOnly instanceof JsonResponse) {
+            return $pendingOnly;
         }
 
         $this->entityManager->remove($target);
@@ -323,7 +338,20 @@ final class MembershipController extends AbstractController
         return $membership;
     }
 
-    /** @return ClubUser|JsonResponse The target pending membership within the admin's club, or an error response. */
+    /**
+     * Approve/reject n'opèrent QUE sur le vrai pending (ni actif, ni désactivé) —
+     * 409 sinon, APRÈS le check de club (aucun oracle cross-tenant).
+     */
+    private function assertGenuinelyPending(ClubUser $target, string $message): ?JsonResponse
+    {
+        if ($target->getIsActive() || null !== $target->getDeactivatedAt()) {
+            return $this->json(['error' => $message], 409);
+        }
+
+        return null;
+    }
+
+    /** @return ClubUser|JsonResponse The target membership within the admin's club, or an error response. */
     private function resolveTargetForAdmin(string $id): ClubUser|JsonResponse
     {
         $adminMembership = $this->requireActiveAdmin();

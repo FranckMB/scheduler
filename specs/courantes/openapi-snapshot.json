@@ -6968,6 +6968,9 @@
                     "404": {
                         "description": "Resource not found"
                     },
+                    "409": {
+                        "description": "Target is not genuinely pending (already active, or deactivated \u2014 use reactivate)"
+                    },
                     "422": {
                         "description": "Role outside the assignable set (admin|member)"
                     }
@@ -7045,6 +7048,9 @@
                     },
                     "404": {
                         "description": "Resource not found"
+                    },
+                    "409": {
+                        "description": "Target is not genuinely pending (an active member is deactivated, never rejected)"
                     }
                 },
                 "summary": "Reject a membership request"

@@ -163,6 +163,45 @@ final class MemberRoleTest extends WebTestCase
         // Une pending ne se « réactive » pas — l'approbation est son seul chemin.
         $this->post('/api/memberships/' . $genuinePending . '/reactivate', $adminToken);
         self::assertResponseStatusCodeSame(409, 'une pending ne se réactive pas');
+
+        // Revue sécu PR B — approve/reject n'opèrent QUE sur le vrai pending :
+        // (a) approve sur un ACTIF ne le promeut pas silencieusement en admin ;
+        $this->post('/api/memberships/' . $memberId . '/approve', $adminToken);
+        self::assertResponseStatusCodeSame(409, 'approve sur un actif est refusé');
+        $this->get('/api/memberships', $adminToken);
+        self::assertSame('member', $this->roleOf($memberId), 'le rôle du membre actif n\'a pas bougé');
+
+        // (b) approve sur un DÉSACTIVÉ ne fabrique pas l'état hybride actif+deactivatedAt ;
+        $this->post('/api/memberships/' . $memberId . '/deactivate', $adminToken);
+        self::assertResponseIsSuccessful();
+        $this->post('/api/memberships/' . $memberId . '/approve', $adminToken);
+        self::assertResponseStatusCodeSame(409, 'approve sur un désactivé est refusé — reactivate est le geste');
+
+        // (c) reject sur un désactivé ne supprime pas la ligne (l'archive reste réversible).
+        $this->post('/api/memberships/' . $memberId . '/reject', $adminToken);
+        self::assertResponseStatusCodeSame(409, 'reject sur un désactivé est refusé');
+        $this->post('/api/memberships/' . $memberId . '/reactivate', $adminToken);
+        self::assertResponseIsSuccessful('la ligne a survécu et se réactive');
+    }
+
+    /**
+     * Revue sécu PR B (finding F1) : le DERNIER gestionnaire ne peut pas s'auto-
+     * SUPPRIMER via reject — l'invariant « ≥ 1 gestionnaire actif » tenait pour
+     * la rétrogradation et la désactivation, reject le contournait en une requête.
+     */
+    public function testLastManagerCannotSelfDeleteViaReject(): void
+    {
+        [$adminToken, , $clubA] = $this->register('MRJ');
+
+        $this->get('/api/memberships', $adminToken);
+        $selfId = $this->body()['members'][0]['id'] ?? null;
+        self::assertIsString($selfId);
+
+        $this->post('/api/memberships/' . $selfId . '/reject', $adminToken);
+        self::assertResponseStatusCodeSame(409, 'un actif ne se rejette pas — a fortiori le dernier gestionnaire');
+
+        $this->get('/api/memberships', $adminToken);
+        self::assertContains($selfId, $this->memberIds(), 'la ligne du gestionnaire a survécu');
     }
 
     public function testMemberKeepsSelfServiceProfileAndErasure(): void
@@ -313,6 +352,21 @@ final class MemberRoleTest extends WebTestCase
         \assert(\is_array($members));
 
         return array_map(static fn (array $m): string => (string) $m['id'], $members);
+    }
+
+    /** Le rôle d'un membre dans la dernière réponse `{members: [...]}`, ou null. */
+    private function roleOf(string $membershipId): ?string
+    {
+        $members = $this->body()['members'] ?? [];
+        \assert(\is_array($members));
+        foreach ($members as $m) {
+            \assert(\is_array($m));
+            if ((string) $m['id'] === $membershipId) {
+                return isset($m['role']) ? (string) $m['role'] : null;
+            }
+        }
+
+        return null;
     }
 
     private function nilUuid(): string
