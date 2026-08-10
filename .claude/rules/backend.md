@@ -1,0 +1,27 @@
+---
+paths:
+  - "backend/**"
+---
+
+# Backend — conventions & pièges (chargé quand backend/ est touché)
+
+- **PHPStan level 8** (extensions Doctrine + Symfony) · **CS-Fixer** `@Symfony` + `@PHP84Migration`
+  + risky + Yoda + strict comparisons + `fully_qualified_strict_types` avec `import_symbols`.
+- **Rector cible PHP 8.4** (aligné composer `>=8.4`) et son style **fait convention sur `src/` ET
+  `tests/`** — notamment `!$x instanceof Foo` plutôt que `null === $x` pour un `?Foo` (P4-24).
+  Aucune règle n'est `withSkip`. **Lancer `make -C backend rector` avant tout push backend**
+  (dry-run : il montre, il ne fixe pas — le fix : `composer rector` dans le conteneur).
+- **Stack Symfony sur la LTS 7.4** (bugs nov. 2028, sécurité nov. 2029) via
+  `extra.symfony.require` — Flex filtre TOUS les splits Symfony, transitifs compris.
+  ⚠ **Sa seule échappatoire est le LOCK** : un paquet déjà verrouillé en 8.0.x est exempté du
+  filtre et n'en sort plus par mise à jour partielle (19 paquets ont vécu ainsi, P4-31).
+  **Correctif d'une dérive : `composer update <les paquets>`** — surtout PAS un pin dans
+  `composer.json`. Audit : `composer show "symfony/*"` (hors `*-contracts`, `flex`, `mercure`,
+  `polyfill-*`) ; gardé par `SymfonyStackAlignmentTest` (lit l'INSTALLÉ, pas le lock).
+- **PHPUnit 11** via `vendor/bin/phpunit` — même binaire en CI, `Makefile` et `composer test`.
+  Les conteneurs sont en `APP_ENV=dev` par défaut : les tests exigent `-e APP_ENV=test` explicite.
+- Piège tests : browser-kit rejoue le cookie JWT d'une requête à l'autre →
+  `App\Tests\StartsFreshBrowserSession` là où l'identité change.
+- `JWT_COOKIE_SECURE` : `backend/.env` entre dans l'image de prod — le `false` de dev vit dans
+  `.env.dev`/`.env.test`, `.env.prod` + `services.yaml` disent `true`
+  (gardé par `JwtCookieSecureDefaultTest`).
