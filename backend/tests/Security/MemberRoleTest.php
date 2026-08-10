@@ -69,17 +69,25 @@ final class MemberRoleTest extends WebTestCase
         self::assertResponseStatusCodeSame(403, 'réactiver est management-only');
     }
 
-    public function testApproveDefaultsToManagerAndHonoursExplicitRole(): void
+    public function testApproveRequiresAnExplicitAssignableRole(): void
     {
         [$adminToken, , $clubA] = $this->register('MRB');
 
-        // Sans corps : défaut Gestionnaire (statu quo EXACT).
+        // PR C — le rôle est désormais REQUIS : sans corps → 422, rien n'est activé
+        // (fini le défaut Gestionnaire silencieux ; le front envoie toujours le rôle).
         [, , $pendingA] = $this->makeMembership($clubA, 'member', isActive: false);
         $this->post('/api/memberships/' . $pendingA . '/approve', $adminToken);
-        self::assertResponseIsSuccessful();
-        self::assertSame('admin', $this->body()['role'] ?? null, 'approve sans corps → Gestionnaire');
+        self::assertResponseStatusCodeSame(422, 'approve sans corps → 422 (rôle requis)');
+        $this->get('/api/memberships/pending', $adminToken);
+        self::assertContains($pendingA, $this->memberIds(), 'un approve refusé laisse la cible en attente');
 
-        // Corps {"role":"member"} : membre explicite.
+        // Corps {"role":"admin"} : Gestionnaire explicite.
+        [, , $pendingMgr] = $this->makeMembership($clubA, 'member', isActive: false);
+        $this->post('/api/memberships/' . $pendingMgr . '/approve', $adminToken, '{"role":"admin"}');
+        self::assertResponseIsSuccessful();
+        self::assertSame('admin', $this->body()['role'] ?? null, 'approve {role:admin} → Gestionnaire');
+
+        // Corps {"role":"member"} : Membre explicite.
         [, , $pendingB] = $this->makeMembership($clubA, 'member', isActive: false);
         $this->post('/api/memberships/' . $pendingB . '/approve', $adminToken, '{"role":"member"}');
         self::assertResponseIsSuccessful();
@@ -143,6 +151,15 @@ final class MemberRoleTest extends WebTestCase
 
         $this->get('/api/memberships', $adminToken);
         self::assertNotContains($memberId, $this->memberIds(), 'un désactivé ne figure plus dans les membres actifs');
+        self::assertArrayNotHasKey('deactivated', $this->body(), 'la réponse par défaut reste actifs seuls');
+
+        // PR C — l'écran de gestion demande les désactivés via `?includeDeactivated=1` :
+        // ils arrivent dans une clé `deactivated` dédiée, jamais mêlés aux actifs.
+        $this->get('/api/memberships?includeDeactivated=1', $adminToken);
+        $withDeactivated = $this->body();
+        self::assertArrayHasKey('deactivated', $withDeactivated);
+        self::assertNotContains($memberId, array_column($withDeactivated['members'], 'id'), 'un désactivé n\'est pas dans les actifs');
+        self::assertContains($memberId, array_column($withDeactivated['deactivated'], 'id'), 'un désactivé figure dans la liste dédiée');
 
         $this->get('/api/memberships/pending', $adminToken);
         $pendingIds = $this->memberIds();

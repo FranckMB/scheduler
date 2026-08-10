@@ -69,6 +69,29 @@ final class ClubUserRepository extends ServiceEntityRepository
         return $ids;
     }
 
+    /**
+     * P1-1 (PR C) — les adhésions DÉSACTIVÉES d'un club (`isActive=false` ET
+     * `deactivatedAt` posé). Distinctes des pending (`deactivatedAt=null`) : un
+     * désactivé se RÉACTIVE, une pending s'approuve. Sert l'onglet « désactivés »
+     * de l'écran de gestion des membres. Le `WHERE club_id` borne au tenant
+     * courant (policy RLS scopée quand le GUC est posé).
+     *
+     * @return list<ClubUser>
+     */
+    public function findDeactivated(string $clubId): array
+    {
+        /** @var list<ClubUser> $rows */
+        $rows = $this->createQueryBuilder('cu')
+            ->where('cu.clubId = :clubId')
+            ->andWhere('cu.isActive = false')
+            ->andWhere('cu.deactivatedAt IS NOT NULL')
+            ->setParameter('clubId', $clubId)
+            ->getQuery()
+            ->getResult();
+
+        return $rows;
+    }
+
     public function isManagementRole(string $role): bool
     {
         return \in_array($role, self::MANAGEMENT_ROLES, true);
