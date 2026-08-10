@@ -12,6 +12,7 @@ use App\Entity\EmailVerificationToken;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\AuditAction;
+use App\Enum\ClubRole;
 use App\Repository\Basketball\FfbbCommitteeRepository;
 use App\Repository\Basketball\FfbbLeagueRepository;
 use App\Repository\ClubRepository;
@@ -236,7 +237,9 @@ final class AuthController extends AbstractController
                     // reprend le club directement (même confiance que la
                     // création : premier arrivé sur un ARA sans propriétaire).
                     $this->tenantConnectionContext->setClubId($existingClub->getId());
-                    $this->createMembership($existingClub->getId(), $user->getId(), true);
+                    // Reprise RGPD d'un club sans membre actif : le repreneur en
+                    // devient Gestionnaire, actif d'office (même confiance que la création).
+                    $this->createMembership($existingClub->getId(), $user->getId(), true, ClubRole::MANAGER);
                     $existingClub->setUnsubscribedAt(null);
                     $existingClub->setErasureScheduledAt(null);
                     // Re-seed uniquement si le workspace a réellement été purgé
@@ -248,7 +251,9 @@ final class AuthController extends AbstractController
                     $status = 'active';
                 } elseif (null !== $existingClub) {
                     $this->tenantConnectionContext->setClubId($existingClub->getId());
-                    $this->createMembership($existingClub->getId(), $user->getId(), false);
+                    // Adhésion à un club existant : PENDING au moindre privilège
+                    // (Membre) — un gestionnaire du club l'approuvera.
+                    $this->createMembership($existingClub->getId(), $user->getId(), false, ClubRole::MEMBER);
                     $status = 'pending';
                 } else {
                     // P3-4 (décision fondateur 2026-08-05) — anti-squatting : un ARA
@@ -332,7 +337,13 @@ final class AuthController extends AbstractController
         $seasons = [];
         $currentSeasonId = null;
         if (null !== $clubUser) {
-            $membershipStatus = $clubUser->getIsActive() ? 'active' : 'pending';
+            // P1-1 (PR B) : `isActive=false` recouvre DEUX états distincts —
+            // en attente d'approbation (jamais entré) vs désactivé (sorti). Le
+            // `deactivatedAt` les sépare ; sans lui un désactivé se lirait
+            // « pending » et retomberait dans une file d'approbation qu'il a déjà quittée.
+            $membershipStatus = $clubUser->getIsActive()
+                ? 'active'
+                : (null !== $clubUser->getDeactivatedAt() ? 'deactivated' : 'pending');
             $clubEntity = $this->clubRepository->find($clubUser->getClubId());
             if (null !== $clubEntity) {
                 $club = [
@@ -669,9 +680,9 @@ final class AuthController extends AbstractController
         ] : null;
     }
 
-    private function createMembership(string $clubId, string $userId, bool $isActive): void
+    private function createMembership(string $clubId, string $userId, bool $isActive, ClubRole $role): void
     {
-        $this->clubProvisioner->createMembership($clubId, $userId, $isActive);
+        $this->clubProvisioner->createMembership($clubId, $userId, $isActive, $role);
     }
 
     private function seedNewClub(Club $club): void

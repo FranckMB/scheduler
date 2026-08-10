@@ -7,6 +7,7 @@ namespace App\Command;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\User;
+use App\Enum\ClubRole;
 use App\Service\Basketball\FfbbClubPopulator;
 use App\Service\Basketball\FfbbTeamImporter;
 use App\Service\ClubProvisioner;
@@ -141,7 +142,7 @@ final class DemoCreateCommand extends Command
         $this->tenantConnectionContext->setClubId($club->getId());
 
         try {
-            $this->clubProvisioner->createMembership($club->getId(), $animator->getId(), true);
+            $this->clubProvisioner->createMembership($club->getId(), $animator->getId(), true, ClubRole::MANAGER);
             $this->clubProvisioner->seedWorkspace($club);
             $this->entityManager->flush();
 

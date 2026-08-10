@@ -9,6 +9,7 @@ use App\Entity\ClubUser;
 use App\Entity\Season;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
+use App\Enum\ClubRole;
 use App\Enum\SeasonStatus;
 use App\Repository\SportRepository;
 use App\Service\Basketball\CategoryCatalog;
@@ -62,12 +63,12 @@ final class ClubProvisioner
         return $club;
     }
 
-    public function createMembership(string $clubId, string $userId, bool $isActive): void
+    public function createMembership(string $clubId, string $userId, bool $isActive, ClubRole $role): void
     {
         $clubUser = new ClubUser;
         $clubUser->setClubId($clubId);
         $clubUser->setUserId($userId);
-        $clubUser->setRole('admin');
+        $clubUser->setRole($role->value);
         $clubUser->setIsActive($isActive);
         $this->entityManager->persist($clubUser);
     }

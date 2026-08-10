@@ -6909,6 +6909,26 @@
                 "summary": "Venue unavailability impact (alert-only, computed on the fly \u2014 blocks nothing)"
             }
         },
+        "/api/memberships": {
+            "get": {
+                "operationId": "getApiMembershipsList",
+                "tags": [
+                    "Memberships"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Active members of the current club (id, userId, email, firstName, lastName, role, isSelf)"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Member but not a management role"
+                    }
+                },
+                "summary": "List the active members of the current club (management-only)"
+            }
+        },
         "/api/memberships/pending": {
             "get": {
                 "operationId": "getApiMembershipsPending",
@@ -6917,10 +6937,13 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Pending membership requests for the current club"
+                        "description": "Pending membership requests for the current club (deactivated members excluded)"
                     },
                     "401": {
                         "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Member but not a management role"
                     }
                 },
                 "summary": "Membership requests awaiting a decision"
@@ -6933,8 +6956,8 @@
                     "Memberships"
                 ],
                 "responses": {
-                    "204": {
-                        "description": "Membership activated"
+                    "200": {
+                        "description": "Membership activated (optional body {\"role\":\"admin\"|\"member\"}, defaults to admin)"
                     },
                     "401": {
                         "description": "Unauthorized"
@@ -6944,9 +6967,64 @@
                     },
                     "404": {
                         "description": "Resource not found"
+                    },
+                    "422": {
+                        "description": "Role outside the assignable set (admin|member)"
                     }
                 },
-                "summary": "Approve a membership request"
+                "summary": "Approve a membership request, optionally setting its role"
+            }
+        },
+        "/api/memberships/{id}/deactivate": {
+            "post": {
+                "operationId": "postApiMembershipDeactivate",
+                "tags": [
+                    "Memberships"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Membership deactivated"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Member but not a management role"
+                    },
+                    "404": {
+                        "description": "Resource not found"
+                    },
+                    "409": {
+                        "description": "Not an active membership, or would leave the club without an active manager"
+                    }
+                },
+                "summary": "Deactivate an active membership (management-only)"
+            }
+        },
+        "/api/memberships/{id}/reactivate": {
+            "post": {
+                "operationId": "postApiMembershipReactivate",
+                "tags": [
+                    "Memberships"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Membership reactivated with its prior role"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Member but not a management role"
+                    },
+                    "404": {
+                        "description": "Resource not found"
+                    },
+                    "409": {
+                        "description": "Not a deactivated membership (a pending one activates only via approve)"
+                    }
+                },
+                "summary": "Reactivate a deactivated membership (management-only)"
             }
         },
         "/api/memberships/{id}/reject": {
@@ -6970,6 +7048,35 @@
                     }
                 },
                 "summary": "Reject a membership request"
+            }
+        },
+        "/api/memberships/{id}/role": {
+            "post": {
+                "operationId": "postApiMembershipRole",
+                "tags": [
+                    "Memberships"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Role changed"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Member but not a management role"
+                    },
+                    "404": {
+                        "description": "Resource not found"
+                    },
+                    "409": {
+                        "description": "Would leave the club without an active manager"
+                    },
+                    "422": {
+                        "description": "Role missing, or outside the assignable set (admin|member)"
+                    }
+                },
+                "summary": "Change a member role (required body {\"role\":\"admin\"|\"member\"}, management-only)"
             }
         },
         "/api/health": {

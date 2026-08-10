@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\Club;
 use App\Entity\ClubCreationRequest;
 use App\Entity\User;
+use App\Enum\ClubRole;
 use App\Message\Basketball\PopulateClubFromFfbbMessage;
 use App\Repository\ClubCreationRequestRepository;
 use App\Repository\ClubRepository;
@@ -135,7 +136,9 @@ final class ClubApprovalService
                     // Le club est né entre-temps (autre demande approuvée) : cette
                     // demande devient une adhésion pending — jamais un 2e club.
                     $this->tenantContext->setClubId($existing->getId());
-                    $this->provisioner->createMembership($existing->getId(), $request->getUserId(), false);
+                    // Adhésion sur un club déjà né : PENDING au moindre privilège
+                    // (Membre) — un gestionnaire du club l'approuvera.
+                    $this->provisioner->createMembership($existing->getId(), $request->getUserId(), false, ClubRole::MEMBER);
                     $this->close($request, ClubCreationRequest::STATUS_APPROVED);
 
                     return $existing;
@@ -143,7 +146,8 @@ final class ClubApprovalService
 
                 $club = $this->provisioner->createClub($request->getClubName(), $request->getAra());
                 $this->tenantContext->setClubId($club->getId());
-                $this->provisioner->createMembership($club->getId(), $request->getUserId(), true);
+                // Le créateur du club en est le premier Gestionnaire, actif d'office.
+                $this->provisioner->createMembership($club->getId(), $request->getUserId(), true, ClubRole::MANAGER);
                 $this->provisioner->seedWorkspace($club);
                 $this->close($request, ClubCreationRequest::STATUS_APPROVED);
 
@@ -156,7 +160,9 @@ final class ClubApprovalService
                     if ($sibling->getId() === $request->getId()) {
                         continue;
                     }
-                    $this->provisioner->createMembership($club->getId(), $sibling->getUserId(), false);
+                    // Demandes concurrentes sur le même ARA : PENDING au moindre
+                    // privilège (Membre), approuvables par le premier gestionnaire.
+                    $this->provisioner->createMembership($club->getId(), $sibling->getUserId(), false, ClubRole::MEMBER);
                     $this->close($sibling, ClubCreationRequest::STATUS_APPROVED);
                 }
 
