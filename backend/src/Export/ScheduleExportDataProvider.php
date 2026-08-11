@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Export;
 
 use App\Entity\Coach;
+use App\Entity\PriorityTier;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\SportCategory;
@@ -43,11 +44,29 @@ final class ScheduleExportDataProvider
             $categoryNames[$category->getId()] = $category->getName();
         }
 
+        // Priority tiers are global (S→A→B→C→D, id 1..5) — not club-scoped. Mapped once so the
+        // PDF matrix can group team rows by rank and print each tier's subtitle.
+        $tiers = [];
+        foreach ($this->entityManager->getRepository(PriorityTier::class)->findAll() as $tier) {
+            $tiers[$tier->getId()] = ['label' => $tier->getLabel(), 'name' => $tier->getName()];
+        }
+
         $teamNames = [];
         $teamCategories = [];
+        $teamRanks = [];
         foreach ($this->entityManager->getRepository(Team::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
             $teamNames[$team->getId()] = $team->getName();
             $teamCategories[$team->getId()] = $categoryNames[$team->getSportCategoryId()] ?? '';
+            // tierRank = the tier id itself : the seed orders S=1 … D=5, so ascending id IS the
+            // S→A→B→C→D group order the founder froze. tierOrder = position WITHIN the tier
+            // (the two together are the team's global rank — Team.php).
+            $tierId = $team->getPriorityTierId();
+            $teamRanks[$team->getId()] = [
+                'label' => $tiers[$tierId]['label'] ?? '',
+                'name' => $tiers[$tierId]['name'] ?? '',
+                'tierRank' => $tierId,
+                'tierOrder' => $team->getTierOrder(),
+            ];
         }
 
         $venues = [];
@@ -85,7 +104,7 @@ final class ScheduleExportDataProvider
             }
         }
 
-        return new ScheduleExportData($slots, $teamNames, $teamCategories, $venues, $coachNames, $emptySlots);
+        return new ScheduleExportData($slots, $teamNames, $teamCategories, $venues, $coachNames, $emptySlots, $teamRanks);
     }
 
     /**
