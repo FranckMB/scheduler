@@ -1,6 +1,6 @@
 # Testing Strategy — ClubScheduler
 
-Last verified @ 2026-08-08 (graphe des jobs + `needs` re-vérifiés contre `.github/workflows/ci.yml` ; la liste des blocking-tests a été **retirée d'ici** — elle vit en `CLAUDE.md` §4, ses deux copies ayant dérivé, audit DOC-26)
+Last verified @ 2026-08-11 (recalé ce jour : spec `modal-reachability` + socle superadmin e2e, préflight en DEUX endroits — Makefile et step CI ; précédemment 2026-08-08 : graphe des jobs + `needs` re-vérifiés contre `.github/workflows/ci.yml` ; la liste des blocking-tests a été **retirée d'ici** — elle vit en `CLAUDE.md` §4, ses deux copies ayant dérivé, audit DOC-26)
 
 Scope: backend + engine. The rebuilt frontend has its own tests (Vitest + RTL unit/integration with `vi.mock`, Playwright e2e in `frontend/tests/e2e`, and the container screenshot pipelines). Companion to [`/CLAUDE.md`](../../CLAUDE.md) §4 and [`../project-map.md`](../project-map.md).
 
@@ -96,6 +96,31 @@ cd engine  && make test                      # pytest + ruff + mypy
 Backend & engine tests run **inside Docker** — running `phpunit`/`pytest` on the host will fail. If the stack is down, `ContractSchemaTest` and other integration tests skip or fail rather than silently passing.
 
 **Frontend e2e (Playwright)** self-heal the stack: a `globalSetup` (`frontend/tests/e2e/global-setup.ts`) runs `docker compose up -d --wait` before any test — it starts any stopped service (a dead `messenger-worker`/`engine` was the recurring flake: the generation never completes → the planning never appears) and blocks until every healthcheck passes. No-op when already healthy; skipped when `E2E_BASE_URL` targets an externally managed stack.
+
+**Modales — reflow WCAG 1.4.10 (2026-08-11)** : `modal-reachability.spec.ts` vérifie qu'une
+modale LONGUE tient à l'écran et que ce qui dépasse défile, en 1440×900, 1440×600 et
+**320×256** (la condition de reflow du standard, équivalent 400 % de zoom). C'est le pendant
+navigateur de `modal-overflow.test.tsx` : jsdom n'ayant aucun moteur de mise en page, l'unitaire
+est réduit à épingler les CLASSES du contrat — il ne voit ni un appelant qui le défait via
+`className`, ni la mise en page interne d'un écran, ni `dvh`.
+
+⚑ **Deux enseignements payés comptant, à ne pas re-payer.** (1) La première version visait deux
+modales bon marché du wizard et rendait un **FAUX VERT** : mesurées à **192 px** et **190 px**,
+elles tiennent dans n'importe quelle fenêtre — le scénario ne testait rien. D'où le **témoin** :
+si rien ne déborde, le spec ÉCHOUE en le disant. (2) Le défaut ne se manifeste que sur une modale
+longue, et la seule qui le soit est le catalogue d'actions superadmin — celle qui a réellement
+cassé. Ce spec **ouvre donc le premier parcours e2e vers `/admin`**.
+
+**Le socle superadmin e2e** (`support-admin.ts`) : login par les vrais écrans (mot de passe puis
+TOTP), le code étant calculé dans le test (RFC 6238) à partir d'une clé semée au préflight.
+⚠ **Aucune route dev n'est ajoutée pour ça, délibérément** — une porte `/api/dev/*` délivrant une
+session superadmin mettrait la compromission complète de la surface cross-tenant derrière un seul
+`APP_DEBUG` mal réglé, ce qui n'est pas comparable au simulateur d'horloge existant. Le préflight
+(recréation du compte + purge de `cache.rate_limiter`) vit **en DEUX endroits qui doivent rester
+d'accord** : la cible `make -C frontend e2e` et un step du job CI. ⚠ Sans le step CI, le spec se
+**skipperait en silence** — exactement le piège D-04 ci-dessus. ⚠ Et sans la purge du limiteur,
+`admin_auth` (5 essais / 15 min PAR IP) fait rougir le spec en désignant l'écran TOTP : ça
+ressemble à une régression, c'est le quota.
 
 **Dockerized run (P4-33, 2026-08-04)** : `make -C frontend e2e` exécute la suite DANS le service compose `e2e` (image officielle Playwright **épinglée sur la version de `@playwright/test`** du lock — une dérive = « browser not found ») : l'hôte n'a plus besoin de Node, dernier maillon qui l'exigeait. Cibles internes au réseau (`E2E_BASE_URL=http://frontend-dev:5173`, `MAILPIT_WEB_URL=http://mailpit:8025`), donc stack + `make -C frontend dev` doivent tourner ; Vite doit autoriser le host interne (`server.allowedHosts: ['frontend-dev']` — sans quoi 403 « Blocked request »). La CI, elle, garde son chemin Node natif (elle installe déjà Node pour Vite).
 

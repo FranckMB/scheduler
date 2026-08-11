@@ -521,6 +521,29 @@ jobs:
           done
           echo "Vite dev server did not come up" && exit 1
 
+      # Préflight SUPERADMIN — miroir de la cible `make -C frontend e2e`, sans quoi
+      # `modal-reachability.spec.ts` se SKIPPERAIT ici en silence. C'est exactement le piège
+      # D-04 documenté quelques lignes plus bas (un spec qui se skippait à chaque run et dont
+      # personne ne voyait l'absence) : un garde qui ne tourne pas en CI ne garde rien.
+      #
+      # Compte JETABLE, base de CI éphémère. Aucune porte dev n'est ouverte côté backend : le
+      # code TOTP est calculé dans le test (RFC 6238) à partir de la clé que la commande
+      # imprime À LA CRÉATION — d'où le DELETE préalable, sans lequel elle ne la réaffiche
+      # jamais. Le `cache:pool:clear` remet à zéro le compteur `admin_auth` (5 essais/15 min
+      # par IP), qui ferait autrement rougir le spec en désignant l'écran TOTP.
+      - name: Seed the e2e super-admin (modal reachability)
+        run: |
+          docker compose exec -T php-fpm php bin/console cache:pool:clear cache.rate_limiter
+          docker compose exec -T postgres psql -U clubscheduler -d clubscheduler -c \
+            "DELETE FROM super_admin WHERE email='e2e-admin@clubscheduler.test'"
+          printf 'E2eAdminPass!2026\nE2eAdminPass!2026\n' \
+            | docker compose exec -T php-fpm php bin/console app:superadmin:create e2e-admin@clubscheduler.test > /tmp/e2e-sa.txt
+          {
+            echo "E2E_SUPERADMIN_EMAIL=e2e-admin@clubscheduler.test"
+            echo "E2E_SUPERADMIN_PASSWORD=E2eAdminPass!2026"
+            echo "E2E_SUPERADMIN_TOTP_SECRET=$(sed -n 's/.*setup key: *//p' /tmp/e2e-sa.txt | tr -d '\r\n')"
+          } >> "$GITHUB_ENV"
+
       - name: Run Playwright suite
         working-directory: frontend
         run: E2E_BASE_URL=http://localhost:5173 npx playwright test
