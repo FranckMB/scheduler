@@ -161,6 +161,34 @@ final class SpreadsheetTeamDayMatrixTest extends TestCase
         }
     }
 
+    public function testTeamWithoutAnySlotStillGetsAnEmptyRow(): void
+    {
+        // Décision figée : une équipe sans séance est un TROU dans le planning, le premier
+        // défaut que le gestionnaire doit voir — sa ligne reste, cellules vides, jamais masquée.
+        $data = new ScheduleExportData(
+            slots: [
+                $this->slot('t-u13', 'v-a', 1, '18:30'),
+                $this->slot('t-u15', 'v-b', 3, '20:00'),
+            ],
+            teamNames: ['t-u13' => 'U13 F', 't-u15' => 'U15 M', 't-u17' => 'U17 M'],
+            teamCategories: ['t-u13' => 'U13', 't-u15' => 'U15', 't-u17' => 'U17'],
+            venues: ['v-a' => ['name' => 'Gymnase Municipal', 'color' => null], 'v-b' => ['name' => 'Salle B', 'color' => null]],
+            coachNames: [],
+        );
+
+        $book = $this->renderAndReadBack($data);
+        $sheet = $book->getSheetByName(self::MATRIX_SHEET);
+        self::assertNotNull($sheet);
+
+        // U17 n'a aucun créneau : sa ligne existe quand même...
+        $teamColumn = array_column(\array_slice($sheet->toArray(), 1), 0);
+        self::assertContains('U17 M', $teamColumn, 'une équipe sans séance garde sa ligne dans la matrice');
+        // ...et chacune de ses cellules de jour est vide (matrixCell échoue si la ligne manque).
+        foreach (['Lundi', 'Mercredi'] as $day) {
+            self::assertSame('', $this->matrixCell($book, 'U17 M', $day), 'U17 n’a aucune séance : cellule vide, ligne présente');
+        }
+    }
+
     private function slot(string $teamId, string $venueId, int $day, string $time, ?string $coachId = null): ScheduleSlotTemplate
     {
         return new ScheduleSlotTemplate()

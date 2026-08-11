@@ -151,28 +151,36 @@ class SpreadsheetGenerator
             return; // mono-gymnase en portée : la matrice n'apporte rien que la feuille Planning ne dise mieux.
         }
 
-        // Model indexed by (team, day). Teams carry their category+name for the row order.
+        // Rows = EVERY team of the season : a team with no session is a hole in the planning, the
+        // first thing a manager must see — it keeps its row with empty cells, it is never hidden.
+        // No misleading empty row can leak in from a reduced scope : a venue-scoped export has a
+        // single distinct venue and returns above, so the matrix only ever renders on a full
+        // multi-venue club export, where "all season teams" is exactly the right set.
         /** @var array<string, array{name: string, category: string}> $teams */
         $teams = [];
+        foreach ($data->teamNames as $teamId => $name) {
+            $teams[$teamId] = ['name' => $name, 'category' => $data->teamCategories[$teamId] ?? ''];
+        }
+
+        // Model indexed by (team, day), built from the placements.
         /** @var array<string, array<int, list<array{start: string, text: string}>>> $matrix */
         $matrix = [];
         $daysUsed = [];
         foreach ($data->slots as $slot) {
-            $teamId = $slot->getTeamId();
             $day = $slot->getDayOfWeek();
             $start = $slot->getStartTime()->format('H:i');
-            $teams[$teamId] ??= [
-                'name' => $data->teamNames[$teamId] ?? '',
-                'category' => $data->teamCategories[$teamId] ?? '',
-            ];
             // Never drop a slot silently : a team training twice the same day keeps BOTH entries.
-            $matrix[$teamId][$day][] = ['start' => $start, 'text' => trim($venueName($slot->getVenueId()) . ' · ' . $start)];
+            $matrix[$slot->getTeamId()][$day][] = ['start' => $start, 'text' => trim($venueName($slot->getVenueId()) . ' · ' . $start)];
             $daysUsed[$day] = true;
+        }
+        // Defence : a placement whose team is absent from teamNames (an anomaly) still keeps a
+        // row — a slot never vanishes in silence.
+        foreach (array_keys($matrix) as $teamId) {
+            $teams[$teamId] ??= ['name' => $data->teamNames[$teamId] ?? '', 'category' => $data->teamCategories[$teamId] ?? ''];
         }
 
         // Columns = only the days actually used, kept in DAY_LABELS order (a training week is
-        // usually Mon–Sat ; empty day columns would only add noise). A team with no placement
-        // has no slot here, so it gets no row — the matrix lists the teams that DO train.
+        // usually Mon–Sat ; empty day columns would only add noise).
         $dayColumns = array_values(array_filter(
             array_keys(ScheduleExportData::DAY_LABELS),
             static fn (int $d): bool => isset($daysUsed[$d]),
