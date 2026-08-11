@@ -18,8 +18,14 @@ import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
 import { Select } from "@/shared/components/ui/select";
+import { WishRecap } from "@/features/coach-wishes/WishRecap";
+import { WishTeamStep } from "@/features/coach-wishes/WishTeamStep";
+import { sectionKey, type SectionState } from "@/features/coach-wishes/wishSections";
 
 import { expectNoA11yViolations } from "./utils";
+
+// Fixture: la page publique de doléances est le cas MOBILE (coach sans login).
+const wishSections = (over: Partial<SectionState> = {}): Map<string, SectionState> => new Map([[sectionKey("t1", "2026-02-16"), { slotsWanted: 2, days: new Set([3]), comment: "note", ...over }]]);
 
 describe("a11y — shared UI primitives", () => {
   it("Button has no violations", async () => {
@@ -63,6 +69,27 @@ describe("a11y — shared UI primitives", () => {
 
     await userEvent.keyboard("{Escape}");
     expect(onCancel).toHaveBeenCalledOnce();
+  });
+});
+
+describe("a11y — étapes de doléances (cas public mobile)", () => {
+  it("WishTeamStep (une équipe × ses semaines) has no violations", async () => {
+    await expectNoA11yViolations(<WishTeamStep team={{ id: "t1", name: "SM1" }} weeks={["2026-02-16"]} sections={wishSections()} onPatch={() => {}} onToggleDay={() => {}} />);
+  });
+
+  it("WishRecap (récapitulatif avant envoi) has no violations", async () => {
+    await expectNoA11yViolations(
+      <WishRecap
+        teams={[
+          { id: "t1", name: "SM1" },
+          { id: "t2", name: "U13" },
+        ]}
+        weeks={["2026-02-16"]}
+        sections={wishSections({ slotsWanted: 4 })}
+        initial={wishSections()}
+        onEditTeam={() => {}}
+      />,
+    );
   });
 });
 
