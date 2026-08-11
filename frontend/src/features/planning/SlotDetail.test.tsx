@@ -73,10 +73,14 @@ describe("SlotDetail — origine du verrou (F1)", () => {
   it.each<[LockOrigin, string]>([
     ["RESERVATION", "Réservation gymnase"],
     ["MANUAL", "Épinglé manuellement"],
-    ["UNKNOWN", "origine inconnue"],
+    ["UNKNOWN", "Verrouillé — origine inconnue"],
   ])("affiche l'origine %s en clair, sans code d'enum", (origin, label) => {
     renderDetail({ slot: { lockOrigin: origin } });
-    expect(screen.getByText(new RegExp(label, "i"))).toBeInTheDocument();
+    // Libellé EXACT, pas une correspondance approchée : c'est le texte que le
+    // gestionnaire lit, et sa formulation est le sujet du test (voir le cas UNKNOWN
+    // ci-dessous). Un `new RegExp(label, "i")` relâchait l'assertion — et semgrep le
+    // refusait à raison (ReDoS sur regex construite dynamiquement).
+    expect(screen.getByText(label)).toBeInTheDocument();
     // Jamais le code brut de l'enum à l'écran.
     expect(screen.queryByText(origin)).not.toBeInTheDocument();
   });
