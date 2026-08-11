@@ -5,6 +5,56 @@
 > l'upgrade apporte, et ce qu'il a fallu adapter chez nous. But : comprendre les mises à jour,
 > pas les subir. Ordre antichronologique.
 
+## 2026-08-11 — lot Dependabot
+
+### Groupe backend-composer — PHP-CS-Fixer, PHPStan, Rector (outils de dev, PR #504)
+
+**C'est quoi** : les trois outils qui relisent le code PHP automatiquement. **PHP-CS-Fixer** met le
+code en forme (indentation, ordre des imports…), **PHPStan** cherche les erreurs de logique sans
+exécuter le programme, **Rector** modernise le code vers les tournures de PHP 8.4. Aucun des trois
+ne part en production : ils tournent chez nous et dans la CI. Chacun est un verrou qui bloque une
+fusion s'il n'est pas content.
+
+**Ça apporte** : PHP-CS-Fixer 3.95.17 → **3.95.18** et PHPStan 2.2.6 → **2.2.8** sont des correctifs
+d'entretien, sans effet visible — on les prend au fil de l'eau pour ne pas accumuler du retard qui
+devient un jour un saut coûteux. Rector 2.5.8 → **2.5.9** apporte une règle de plus.
+
+**Adapté chez nous** : **un fichier**, `FfbbEngagementsController`. Rector 2.5.9 y demande d'écrire
+« si cette variable EST une réponse d'erreur » plutôt que « si elle n'est pas vide » — c'est
+exactement la convention que le projet s'est donnée (P4-24), et elle dit plus précisément ce que le
+code vérifie.
+
+**⚠ Et une version a été volontairement REFUSÉE : Rector 2.6.** Dependabot proposait 2.6.1. Testée,
+elle réécrit deux fichiers de sécurité (le cookie qui porte la connexion, l'authentification
+Mercure) en remplaçant les noms courts par des chemins complets — et **PHP-CS-Fixer les remet
+aussitôt en noms courts**. Les deux outils se contredisent, chacun défaisant le travail de l'autre :
+comme les deux bloquent la fusion, **plus aucune modification ne pourrait passer**. Vérifié que la
+faute vient bien de l'outil et pas de notre code : Rector déclare lui-même n'appliquer **aucune
+règle** sur ces fichiers (`applied_rectors: []`) — c'est son moteur d'écriture qui déraille, pas une
+convention nouvelle qu'il faudrait suivre. 2.6.0 a le même défaut, 2.5.9 est saine. La version est
+donc bornée à la série 2.5 (`~2.5.9` : les correctifs 2.5.x continuent d'arriver, la série 2.6 est
+tenue dehors) jusqu'à ce que l'outil soit réparé — suivi en **P4-80**.
+
+### Groupe frontend-npm — 13 paquets (PR #505)
+
+*(entrée rédigée avec le traitement de la PR)*
+
+### ⚠ Découvert pendant le lot, sans rapport avec les dépendances : un test qui rougit au hasard
+
+`Engine Tests` — l'un des contrôles qui bloquent les fusions — est tombé sur la PR #504, **qui ne
+touche pourtant pas le moteur**. Ce n'est ni un caprice ni la faute de la mise à jour : l'un de nos
+tests se trompe.
+
+Ce test vérifie qu'un gymnase n'accueille jamais deux équipes en même temps. Il travaille sur des
+situations **tirées au hasard**, et il est tombé sur celle-ci : le gestionnaire a **épinglé
+lui-même** deux équipes sur le même créneau, alors que ce créneau ne peut en accueillir qu'une. Le
+moteur a fait ce qu'on lui a demandé — c'est une règle assumée du produit, l'épingle prime sur tout
+(« il a le droit d'épingler, il a le droit de savoir »). Le test, lui, crie à l'erreur.
+
+Conséquence concrète : **une fusion sur deux peut se retrouver bloquée sans raison**, selon les
+situations tirées au sort ce jour-là. Suivi en **P4-81**, avec le correctif identifié (le patron
+existe déjà dans le même fichier pour un test voisin).
+
 ## 2026-07-29 — lot Dependabot (4 PRs : 3 mergées, 1 toujours bloquée) + passage à Node 24
 
 > Ce lot rattrape le retard signalé par l'audit doc du même jour : le journal avait quatre lots

@@ -65,7 +65,7 @@ final class FfbbEngagementsController extends AbstractController
         $this->managementAccessGuard->assertManager(); // SEC-07
 
         [$clubCode, $seasonYear, $error] = $this->context($request);
-        if (null !== $error) {
+        if ($error instanceof JsonResponse) {
             return $error;
         }
         \assert(null !== $clubCode && null !== $seasonYear);
@@ -115,7 +115,7 @@ final class FfbbEngagementsController extends AbstractController
         $this->socleGuard->assertSeasonPlanChosen($request->attributes->get('_season_id') ?? $request->headers->get('X-Season-Id'));
 
         [$clubCode, $seasonYear, $error] = $this->context($request);
-        if (null !== $error) {
+        if ($error instanceof JsonResponse) {
             return $error;
         }
         \assert(null !== $clubCode && null !== $seasonYear);
