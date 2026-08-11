@@ -113,7 +113,113 @@ class SpreadsheetGenerator
         $headerStyle->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
         $sheet->freezePane('A2');
 
+        // Second sheet, added AFTER "Planning" is complete so that sheet is never touched.
+        $this->appendTeamDayMatrix($spreadsheet, $data);
+
         return $this->toBinary($spreadsheet);
+    }
+
+    /**
+     * Second sheet — a team × day matrix answering "l'équipe U13 s'entraîne quand ?"
+     * at a glance : rows = teams, columns = the days actually used, cell = venue + time.
+     *
+     * No coach on purpose : it already lives in the Planning sheet and here it would only
+     * clutter the scan (founder decision).
+     *
+     * Empty windows (`$data->emptySlots`) belong to no team, so they NEVER enter the matrix ;
+     * they stay in the Planning sheet as "(vide)" rows.
+     *
+     * Not added at all when the placements span a single venue : the matrix exists to
+     * disambiguate WHICH gym, and a venue-scoped export (all slots share the venue) or a
+     * single-gym club has nothing to disambiguate — the Planning sheet already says it better.
+     * The trigger reads the REALITY of the placements, not the `$venueId` argument nor
+     * `$data->venues` (which always holds every club venue regardless of scope).
+     *
+     * ⚠ Same D-18 discipline as the Planning sheet : the model is indexed by (team, day) and
+     * PROJECTED onto ordered rows/columns — never written positionally. A day column and its
+     * cells are always looked up by the SAME day key, so no silent column-shift can happen.
+     */
+    private function appendTeamDayMatrix(Spreadsheet $spreadsheet, ScheduleExportData $data): void
+    {
+        $venueName = static fn (string $id): string => $data->venues[$id]['name'] ?? '';
+
+        $venuesUsed = [];
+        foreach ($data->slots as $slot) {
+            $venuesUsed[$slot->getVenueId()] = true;
+        }
+        if (\count($venuesUsed) < 2) {
+            return; // mono-gymnase en portée : la matrice n'apporte rien que la feuille Planning ne dise mieux.
+        }
+
+        // Model indexed by (team, day). Teams carry their category+name for the row order.
+        /** @var array<string, array{name: string, category: string}> $teams */
+        $teams = [];
+        /** @var array<string, array<int, list<array{start: string, text: string}>>> $matrix */
+        $matrix = [];
+        $daysUsed = [];
+        foreach ($data->slots as $slot) {
+            $teamId = $slot->getTeamId();
+            $day = $slot->getDayOfWeek();
+            $start = $slot->getStartTime()->format('H:i');
+            $teams[$teamId] ??= [
+                'name' => $data->teamNames[$teamId] ?? '',
+                'category' => $data->teamCategories[$teamId] ?? '',
+            ];
+            // Never drop a slot silently : a team training twice the same day keeps BOTH entries.
+            $matrix[$teamId][$day][] = ['start' => $start, 'text' => trim($venueName($slot->getVenueId()) . ' · ' . $start)];
+            $daysUsed[$day] = true;
+        }
+
+        // Columns = only the days actually used, kept in DAY_LABELS order (a training week is
+        // usually Mon–Sat ; empty day columns would only add noise). A team with no placement
+        // has no slot here, so it gets no row — the matrix lists the teams that DO train.
+        $dayColumns = array_values(array_filter(
+            array_keys(ScheduleExportData::DAY_LABELS),
+            static fn (int $d): bool => isset($daysUsed[$d]),
+        ));
+        // Rows sorted by category then name, coherent with the on-screen order.
+        uasort($teams, static fn (array $a, array $b): int => [$a['category'], $a['name']] <=> [$b['category'], $b['name']]);
+
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle('Équipes × jours');
+
+        // Header : two fixed columns then one per day. Kept as a name-indexed list so the day
+        // header and the cells beneath it are projected from the SAME `$dayColumns` order.
+        $sheet->setCellValue([1, 1], 'Équipe');
+        $sheet->setCellValue([2, 1], 'Catégorie');
+        $firstDayCol = 3;
+        foreach ($dayColumns as $offset => $day) {
+            $sheet->setCellValue([$firstDayCol + $offset, 1], ScheduleExportData::DAY_LABELS[$day]);
+        }
+        $lastCol = $firstDayCol + \count($dayColumns) - 1;
+
+        $row = 2;
+        foreach ($teams as $teamId => $meta) {
+            $sheet->setCellValue([1, $row], $meta['name']);
+            $sheet->setCellValue([2, $row], $meta['category']);
+            foreach ($dayColumns as $offset => $day) {
+                // Projection PAR (équipe, jour) : la cellule sous « Mardi » lit toujours le mardi
+                // de CETTE équipe — jamais l'écriture positionnelle qui produirait un décalage muet.
+                $entries = $matrix[$teamId][$day] ?? [];
+                usort($entries, static fn (array $a, array $b): int => $a['start'] <=> $b['start']);
+                $text = implode("\n", array_map(static fn (array $e): string => $e['text'], $entries));
+                $sheet->setCellValue([$firstDayCol + $offset, $row], $text);
+                if (str_contains($text, "\n")) {
+                    $sheet->getStyle([$firstDayCol + $offset, $row])->getAlignment()->setWrapText(true);
+                }
+            }
+            ++$row;
+        }
+
+        $headerStyle = $sheet->getStyle('A1:' . Coordinate::stringFromColumnIndex($lastCol) . '1');
+        $headerStyle->getFont()->setBold(true);
+        $headerStyle->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E8E8E8');
+        $headerStyle->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        foreach (range(1, $lastCol) as $col) {
+            $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
+        }
+        // Freeze the header row and the two identity columns so a wide week stays readable.
+        $sheet->freezePane('C2');
     }
 
     private function toBinary(Spreadsheet $spreadsheet): string
