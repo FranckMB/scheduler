@@ -1,6 +1,6 @@
 # Frontend Strategy — TDD, Stack Fixée & Anti-patterns
 
-Last verified @ 2026-08-08 (statut posé ce jour ; convention de TAILLE DE CIBLE ajoutée — WCAG 2.5.8, que le linter ne mesure pas, AUD-A11Y-12 ; versions re-lues dans `frontend/package.json` le 2026-07-29 ; contenu recalé depuis par P4-65 — activer Sentry ne peut plus échouer en silence, garde de build `sentryCspGuard`)
+Last verified @ 2026-08-11 (recalé ce jour : convention de MODALE — hauteur bornée + contenu défilant dans les deux composants partagés, WCAG 1.4.10, que le linter ne voit pas ; précédemment 2026-08-08 : statut posé ; convention de TAILLE DE CIBLE ajoutée — WCAG 2.5.8, que le linter ne mesure pas, AUD-A11Y-12 ; versions re-lues dans `frontend/package.json` le 2026-07-29 ; contenu recalé depuis par P4-65 — activer Sentry ne peut plus échouer en silence, garde de build `sentryCspGuard`)
 
 > **Statut : le rebuild est LIVRÉ.** Les formulations « pour le rebuild » ci-dessous sont
 > historiques ; le document reste la référence vivante des **versions de la stack**, des
@@ -78,6 +78,21 @@ Quand le padding casserait une densité voulue (pastille, poignée de tri), le c
 **marge négative de même valeur** (`p-1 -m-1`, `p-1.5 -m-1.5` pour une icône `size-3`) : la
 surface cliquable grandit, la mise en page ne bouge pas. Un `aria-label` ne dispense de rien —
 il sert les lecteurs d'écran, pas la motricité (audit AUD-A11Y-12, 2026-08-08).
+
+**Ce que le linter NE voit PAS non plus : une modale plus haute que l'écran.** WCAG 1.4.10
+(reflow) exige que le contenu reste atteignable ; un panneau centré (`items-center`) qui
+dépasse déborde **en haut ET en bas**, hors viewport, et sans zone défilante le seul recours
+est de dézoomer le navigateur. **Le comportement vit dans les DEUX composants partagés**
+(`shared/components/ui/modal.tsx` et `confirm-dialog.tsx` — deux copies du même markup) :
+panneau `flex flex-col max-h-[calc(100dvh-2rem)]`, en-tête `shrink-0`, contenu enveloppé dans
+`min-h-0 overflow-y-auto`. **Aucun écran ne doit re-borner sa hauteur localement** — c'est ce
+que trois d'entre eux faisaient, avec trois valeurs arbitraires différentes, pendant que les
+autres restaient cassés. `dvh` et non `vh` (sur mobile `vh` ignore la barre d'adresse), et
+`min-h-0` est ce qui rend le défilement possible : sans lui un enfant flex refuse de rétrécir
+sous son contenu et la zone « défilante » ne défile jamais. Gardé par
+`modal-overflow.test.tsx` — jsdom n'ayant aucun moteur de mise en page, le test épingle les
+classes qui portent le contrat, faute de pouvoir mesurer le débordement (même limite qu'A11Y-06
+pour le contraste). Retour fondateur 2026-08-11.
 
 ---
 

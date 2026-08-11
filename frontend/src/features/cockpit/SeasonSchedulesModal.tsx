@@ -138,7 +138,7 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
 
   return (
     <Modal label="Plannings de la saison" title="Plannings de la saison" onClose={onClose} className="max-w-lg">
-      <ul className="mt-4 max-h-[60vh] space-y-2 overflow-y-auto">
+      <ul className="mt-4 space-y-2">
         {rows.map((row) => {
           const resumeBlocked = row.isOverlay && row.isOpen && (null === row.schedulePlanId || !entryByPlan.has(row.schedulePlanId));
           const period = periodLabel(row);

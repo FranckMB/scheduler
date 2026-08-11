@@ -64,6 +64,12 @@ export function ConfirmDialog({
     undefined === confirmPhrase || phraseInput.trim().toLowerCase() === confirmPhrase.trim().toLowerCase();
   const confirmBlocked = confirmDisabled || !phraseSatisfied;
 
+  // ⚠ Hauteur bornée + contenu défilant : MÊME défaut, MÊME correctif que `modal.tsx`, dont
+  // le docblock porte le pourquoi complet. Les deux panneaux sont deux copies du même markup
+  // (motif « une vérité, deux endroits ») : toucher l'un sans l'autre laisserait la moitié
+  // des modales cassée.
+  // Ici les BOUTONS restent HORS de la zone défilante — une confirmation dont on ne voit
+  // plus « Confirmer » est pire qu'une modale trop longue.
   return createPortal(
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" aria-hidden="true" onClick={onCancel} />
@@ -73,28 +79,30 @@ export function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative w-full max-w-md rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xl"
+        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xl"
       >
-        <h2 id={titleId} className="text-lg font-semibold">
+        <h2 id={titleId} className="shrink-0 text-lg font-semibold">
           {title}
         </h2>
-        {description ? <div className="mt-2 text-sm text-muted-foreground">{description}</div> : null}
-        {undefined === confirmPhrase ? null : (
-          <div className="mt-4">
-            <label htmlFor={phraseInputId} className="block text-sm text-muted-foreground">
-              Tapez «&nbsp;{confirmPhrase}&nbsp;» pour confirmer
-            </label>
-            <input
-              id={phraseInputId}
-              type="text"
-              autoComplete="off"
-              value={phraseInput}
-              onChange={(event) => setPhraseInput(event.target.value)}
-              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            />
-          </div>
-        )}
-        <div className="mt-6 flex justify-end gap-2">
+        <div className="min-h-0 overflow-y-auto">
+          {description ? <div className="mt-2 text-sm text-muted-foreground">{description}</div> : null}
+          {undefined === confirmPhrase ? null : (
+            <div className="mt-4">
+              <label htmlFor={phraseInputId} className="block text-sm text-muted-foreground">
+                Tapez «&nbsp;{confirmPhrase}&nbsp;» pour confirmer
+              </label>
+              <input
+                id={phraseInputId}
+                type="text"
+                autoComplete="off"
+                value={phraseInput}
+                onChange={(event) => setPhraseInput(event.target.value)}
+                className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          )}
+        </div>
+        <div className="mt-6 flex shrink-0 justify-end gap-2">
           <Button variant="ghost" onClick={onCancel}>
             {cancelLabel}
           </Button>
