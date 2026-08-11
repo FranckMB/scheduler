@@ -43,7 +43,7 @@ use Throwable;
  */
 #[AsCommand(
     name: 'app:demo:create',
-    description: 'Create a DEMO club from a FFBB code and point the demo-animator account at it (P2-4). Support action (SA4).',
+    description: 'Create a DEMO club from a FFBB code and point the demo-animator account at it. Support action.',
 )]
 final class DemoCreateCommand extends Command
 {

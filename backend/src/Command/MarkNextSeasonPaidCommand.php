@@ -29,7 +29,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 #[AsCommand(
     name: 'app:clubs:mark-next-season-paid',
-    description: 'Mark the club\'s NEXT season as paid (per-season subscription, P1-5). Support action (SA4).',
+    description: 'Mark the club\'s NEXT season as paid (per-season subscription). Support action.',
 )]
 final class MarkNextSeasonPaidCommand extends Command
 {

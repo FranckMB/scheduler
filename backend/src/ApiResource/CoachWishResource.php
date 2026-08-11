@@ -22,7 +22,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 /**
  * Doléance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une
  * contrainte : aucun effet solveur. Ancrée à l'entrée MÈRE des vacances + le lundi de la
- * semaine. Writes management-only (SEC-07, cf. processor).
+ * semaine. Writes management-only (cf. processor).
  */
 #[ApiResource(shortName: 'CoachWish', operations: [
     new GetCollection,

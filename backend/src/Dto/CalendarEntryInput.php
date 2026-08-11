@@ -43,7 +43,7 @@ class CalendarEntryInput
     #[Groups(['write'])]
     public ?string $schoolHolidayId = null;
 
-    /** Semaine enfant d'une période mère (P2-5 E1). POST uniquement — l'identité
+    /** Semaine enfant d'une période mère. POST uniquement — l'identité
      *  d'une entrée à plan est gelée, le processor refuse tout changement au PUT. */
     #[Assert\Uuid]
     #[Groups(['write'])]

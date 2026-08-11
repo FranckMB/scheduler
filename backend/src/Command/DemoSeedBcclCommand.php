@@ -34,7 +34,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 #[AsCommand(
     name: 'app:demo:seed-bccl',
-    description: 'Create or RESET the permanent anonymised BCCL demo club (P2-4). Needs the admin connection, like make fixtures.',
+    description: 'Create or RESET the permanent anonymised BCCL demo club. Needs the admin connection, like make fixtures.',
 )]
 final class DemoSeedBcclCommand extends Command
 {

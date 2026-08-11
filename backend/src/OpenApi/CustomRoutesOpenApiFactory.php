@@ -82,7 +82,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             operationId: 'postApiRegisterVerify',
             tags: ['Auth'],
             responses: [
-                '200' => $this->jsonResponse('Verified — materialises the club and logs in (SEC-16: the JWT is set as the httpOnly BEARER cookie, NOT returned here)', [
+                '200' => $this->jsonResponse('Verified — materialises the club and logs in (the JWT is set as the httpOnly BEARER cookie, NOT returned here)', [
                     'type' => 'object',
                     'properties' => [
                         'membershipStatus' => ['type' => 'string', 'enum' => ['none', 'pending', 'active']],
@@ -283,7 +283,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 '204' => new Response('Authenticated: the JWT is set as the httpOnly `BEARER` cookie (path /api, SameSite=Strict) — the response has NO body'),
                 '401' => new Response('Bad credentials (identical answer for an unverified account — A3 anti-enumeration)'),
             ],
-            summary: 'Log in: sets the httpOnly JWT cookie (SEC-16 — the token is never returned in the body)',
+            summary: 'Log in: sets the httpOnly JWT cookie (the token is never returned in the body)',
             requestBody: $this->jsonBody([
                 'type' => 'object',
                 'required' => ['email', 'password'],
@@ -303,7 +303,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     'properties' => ['status' => ['type' => 'string', 'enum' => ['logged_out']]],
                 ]),
             ],
-            summary: 'SEC-16: clear the httpOnly JWT cookie (public and idempotent — the JS cannot clear what it cannot read)',
+            summary: 'Clear the httpOnly JWT cookie (public and idempotent — the JS cannot clear what it cannot read)',
         )));
 
         $paths->addPath('/api/mercure/auth', new PathItem(get: new Operation(
@@ -484,7 +484,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             operationId: 'getVenueUnavailabilityImpact',
             tags: ['Match'],
             responses: [
-                '200' => $this->jsonResponse('Per-unavailability impact: affected placed matches + training sessions of the effective schedules (cockpit alert feed — P1-4 PR B)', [
+                '200' => $this->jsonResponse('Per-unavailability impact: affected placed matches + training sessions of the effective schedules (cockpit alert feed)', [
                     'type' => 'object',
                     'properties' => [
                         'clubId' => ['type' => 'string'],
@@ -511,7 +511,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             operationId: 'placeMatches',
             tags: ['Match'],
             responses: [
-                '200' => $this->jsonResponse('Synchronous match placement (P1-4 PR D, ADR-0003): the solver places every placeable UNPLACED home match; the rest comes back named', [
+                '200' => $this->jsonResponse('Synchronous match placement: the solver places every placeable UNPLACED home match; the rest comes back named', [
                     'type' => 'object',
                     'properties' => [
                         'placed' => ['type' => 'integer'],
@@ -527,7 +527,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ]),
                 '400' => new Response('No club in context'),
                 '401' => new Response('Unauthorized (missing/expired JWT)'),
-                '403' => new Response('Not a management member (SEC-07)'),
+                '403' => new Response('Not a management member'),
                 '409' => new Response('Placement already running, season plan not chosen, or archived season'),
                 '502' => new Response('Engine unreachable — retry, nothing was written'),
             ],
@@ -538,7 +538,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             operationId: 'listFfbbEngagements',
             tags: ['Match'],
             responses: [
-                '200' => $this->jsonResponse('The club\'s FFBB engagements of the current season (P1-4 PR F) — on-demand, never cached; each row carries a pre-fill suggestion', [
+                '200' => $this->jsonResponse('The club\'s FFBB engagements of the current season — on-demand, never cached; each row carries a pre-fill suggestion', [
                     'type' => 'object',
                     'properties' => [
                         'engagements' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
@@ -559,7 +559,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ]),
                 '400' => new Response('No club/season in context'),
                 '401' => new Response('Unauthorized (missing/expired JWT)'),
-                '403' => new Response('Not a management member (SEC-07)'),
+                '403' => new Response('Not a management member'),
                 '422' => new Response('The club has no FFBB code'),
                 '502' => new Response('FFBB unreachable — retry later'),
             ],
@@ -582,7 +582,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ]),
                 '400' => new Response('No club/season in context'),
                 '401' => new Response('Unauthorized (missing/expired JWT)'),
-                '403' => new Response('Not a management member (SEC-07)'),
+                '403' => new Response('Not a management member'),
                 '409' => new Response('Season plan not chosen, or archived season'),
                 '422' => new Response('Unknown engagement for this season, foreign/unknown team, or malformed pairing — nothing written'),
                 '502' => new Response('FFBB unreachable — retry later'),
@@ -1353,7 +1353,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             'longitude' => ['type' => ['string', 'null']],
         ]]];
         $unavailable = new Response('FFBB unreachable — best effort, never a broken gesture');
-        $forbidden = new Response('Management role required (SEC-07)');
+        $forbidden = new Response('Management role required');
 
         return [
             '/api/ffbb-logos/{scope}/{code}' => new PathItem(get: new Operation(
@@ -1558,7 +1558,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     '401' => $unauthorized,
                     '409' => new Response('A version is already in force for this plan, or the schedule is not COMPLETED'),
                 ],
-                summary: 'ADR-0002 — point this version as the plan in force',
+                summary: 'Point this version as the plan in force',
             )),
             '/api/schedules/{id}/reopen' => new PathItem(post: new Operation(
                 operationId: 'postApiScheduleReopen',
@@ -1568,7 +1568,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     '401' => $unauthorized,
                     '409' => new Response('This version is not the one in force'),
                 ],
-                summary: 'ADR-0002 — un-point the plan so it can be regenerated',
+                summary: 'Un-point the plan so it can be regenerated',
             )),
             '/api/schedules/{id}/regenerate' => new PathItem(post: new Operation(
                 operationId: 'postApiScheduleRegenerate',
@@ -1577,7 +1577,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     '202' => new Response('Regeneration queued (async, progress on the Mercure topic)'),
                     '401' => $unauthorized,
                     '409' => new Response('Version in force, or a generation is already running for this club'),
-                    '429' => new Response('Club generation quota reached (P4-45)'),
+                    '429' => new Response('Club generation quota reached'),
                 ],
                 summary: 'Regenerate this version in place',
             )),
@@ -1588,7 +1588,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     '202' => new Response('New version queued from the source version structure'),
                     '401' => $unauthorized,
                     '409' => new Response('Version in force, or a generation is already running'),
-                    '429' => new Response('Club generation quota reached (P4-45)'),
+                    '429' => new Response('Club generation quota reached'),
                 ],
                 summary: 'Create a new version from an existing one and regenerate it',
             )),

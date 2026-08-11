@@ -19,7 +19,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 
 /**
  * La campagne de collecte des doléances coachs d'une période (feature #10, lot C2). Writes
- * management-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs
+ * management-only. La sortie porte les compteurs du radar et la liste des coachs
  * avec leur token (le front construit l'URL publique) — jamais les doléances elles-mêmes.
  */
 #[ApiResource(shortName: 'CoachWishCampaign', operations: [

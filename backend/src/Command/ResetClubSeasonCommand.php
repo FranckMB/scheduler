@@ -30,7 +30,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 #[AsCommand(
     name: 'app:clubs:reset-season',
-    description: 'Wipe a club\'s CURRENT season data (Season row and club survive — back to the wizard). Support action (SA4).',
+    description: 'Wipe a club\'s CURRENT season data (Season row and club survive — back to the wizard). Support action.',
 )]
 final class ResetClubSeasonCommand extends Command
 {

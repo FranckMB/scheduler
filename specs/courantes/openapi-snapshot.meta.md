@@ -1,9 +1,21 @@
-Last verified @ 2026-08-11 (JSON **régénéré** depuis le backend vivant — le rail SA4 `POST /api/admin/clubs/{clubId}/actions/{key}` gagne un requestBody à schéma fermé + un 400 nommé, et `GET /api/admin/actions` expose le schéma d'arguments des actions (A3) ; en amont : `GET /api/admin/clubs` troque `planId` contre `plan`/`paidSeasonYear`/`effectivePlan` (A1))
+Last verified @ 2026-08-11 (JSON **régénéré** depuis le backend vivant — purge des identifiants INTERNES de suivi (Pn-x, SEC-n, ENG-n, ADR-nnnn, SAn…) de tout texte AFFICHÉ du contrat : 45 `summary`/`description` (paths, réponses, propriétés de schéma, tags) perdent leur référence, la substance reste ; aucun path/schéma/opération touché — 146 paths)
 
 Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P4-83 — purge des identifiants internes du contrat (2026-08-11)** : les jetons de suivi
+  du dépôt (`Pn-x`, `SEC-n`, `ENG-n`, `ADR-nnnn`, `SAn`…) quittent TOUT texte lu par un
+  consommateur de `/api/docs` — 45 `summary`/`description` (paths, réponses, propriétés de
+  schéma, tags) perdent leur référence, la phrase reste (« Management role required (SEC-07) »
+  → « Management role required »). La SUBSTANCE ne bouge pas, et **aucun path/schéma/opération**
+  ne change (146 paths — set-diff : seuls des `description`/`summary` diffèrent). Décision
+  fondateur : le contrat compte, le catalogue support compte, les descriptions CLI comptent ;
+  les COMMENTAIRES de code restent. Gardé par `PublicTextIsFreeOfInternalIdentifiersTest`, qui
+  walk le contrat **GÉNÉRÉ** (`OpenApiFactoryInterface`, pas le snapshot — « corrigé côté
+  snapshot mais pas la source » ne le trompe pas) + le catalogue `AdminActionCatalog` + les
+  `getDescription()`/`getHelp()` de toutes les commandes console, avec un contrôle positif
+  embarqué qui prouve que le motif mord.
 - **A3 — bouton « Offre » unique + rail SA4 à arguments BORNÉS (2026-08-11)** : le rail des
   actions support gagne des arguments RUNTIME, mais bornés par un **schéma fermé** (enum de
   valeurs seule, aucun texte libre représentable). `GET /api/admin/actions` expose désormais,

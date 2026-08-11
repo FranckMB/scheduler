@@ -37,7 +37,7 @@ final readonly class AdminActionCatalog
             new AdminActionDefinition(
                 'mark-next-season-paid',
                 'Marquer la saison suivante payée',
-                'Enregistre le paiement de la SAISON SUIVANTE du club (abonnement par saison, P1-5) : ouvre le gate de bascule. Idempotent — le marqueur ne recule jamais.',
+                'Enregistre le paiement de la SAISON SUIVANTE du club (abonnement par saison) : ouvre le gate de bascule. Idempotent — le marqueur ne recule jamais.',
                 'app:clubs:mark-next-season-paid',
                 dangerous: false,
             ),

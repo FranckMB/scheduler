@@ -25,3 +25,8 @@ paths:
 - `JWT_COOKIE_SECURE` : `backend/.env` entre dans l'image de prod — le `false` de dev vit dans
   `.env.dev`/`.env.test`, `.env.prod` + `services.yaml` disent `true`
   (gardé par `JwtCookieSecureDefaultTest`).
+- **Aucun identifiant interne** (`Pn-x`, `SEC-n`, `ENG-n`, `ADR-n`, `AUD-*`, `DOC-n`, `ALIGN-n`,
+  `D-n`, `SAn`…) dans un texte LU par un humain — OpenAPI/`/api/docs` (docblocks de propriété
+  SÉRIALISÉS compris), catalogue admin, descriptions/help CLI, messages d'erreur, emails,
+  exports. Les COMMENTAIRES de code (`//`, blocs, docblocks NON sérialisés), oui. La substance
+  reste, la référence part. Gardé par `PublicTextIsFreeOfInternalIdentifiersTest`.
