@@ -183,7 +183,8 @@ Extending this list = user decision.
 ## 8. Documentation rules
 
 `CLAUDE.md` = index court ; `docs/` = détail ; **one canonical home, no duplication**. Root
-`AGENTS.md` pointe ici ; `backend/AGENTS.md` & `engine/AGENTS.md` = détail de zone. Mise à jour via
+`AGENTS.md` pointe ici ; `backend/AGENTS.md`, `engine/AGENTS.md` & **`frontend/AGENTS.md`**
+(le plus fourni des trois) = détail de zone ; `landing/` n'en a pas — tout tient dans sa règle. Mise à jour via
 le skill `documentation-update` avant chaque PR. Décisions structurantes → ADR
 (`docs/architecture/adr-index.md`).
 

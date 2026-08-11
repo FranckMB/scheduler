@@ -9,6 +9,11 @@
 
 ---
 
+> ⚑ Les pièges qui rendent un test **vert à tort** (image tooling, `dist` cuit,
+> `tsc --noEmit`, jsdom sans moteur de mise en page) sont AUSSI dans
+> [`.claude/rules/frontend.md`](../.claude/rules/frontend.md), **chargé automatiquement** dès
+> qu'un fichier de `frontend/` est touché — ce fichier-ci ne l'est pas.
+
 ## Boundaries (never cross)
 
 - Talks to the backend **only** via `/api/*`. **Never contacts the engine directly** —
@@ -110,8 +115,10 @@ Only `frontend-dev` (profile `dev`, port 5173) mounts `./frontend` — that is t
 path, not what the e2e targets. Found the hard way on P4-43: the journey spec went green
 while a screenshot showed the old toolbar.
 
-E2E Playwright is **not** Dockerized yet and is driven by CI (tracked as P4-33 in
-`../specs/evolution/roadmap.md`).
+E2E Playwright **is** fully Dockerized: `make -C frontend e2e` (compose profile `tools`,
+service `e2e`) — it needs the stack **and** `make -C frontend dev` running. The target also
+carries the superadmin preflight (it seeds the account and exports its TOTP secret); without
+it the `/admin` specs SKIP explicitly rather than fail.
 
 ---
 
