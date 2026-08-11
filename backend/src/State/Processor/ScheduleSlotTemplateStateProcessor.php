@@ -8,6 +8,8 @@ use App\ApiResource\ScheduleSlotTemplateResource;
 use App\Dto\ScheduleSlotTemplateInput;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
+use App\Enum\LockLevel;
+use App\Enum\LockOrigin;
 use App\Service\SchedulePlanProvisioner;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Contracts\Service\Attribute\Required;
@@ -70,6 +72,9 @@ class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->lockLevel) {
             $entity->setLockLevel($input->lockLevel);
+            // Raw slot CRUD est management-only (SEC-07) et miroir de l'épinglage manuel :
+            // un verrou posé ici est un geste humain → MANUAL, NULL quand on déverrouille.
+            $entity->setLockOrigin(LockLevel::NONE === $input->lockLevel ? null : LockOrigin::MANUAL);
         }
         if (null !== $input->temporaryLock) {
             $entity->setTemporaryLock($input->temporaryLock);
@@ -115,6 +120,9 @@ class ScheduleSlotTemplateStateProcessor extends AbstractStateProcessor
         }
         if (null !== $input->lockLevel) {
             $entity->setLockLevel($input->lockLevel);
+            // Raw slot CRUD est management-only (SEC-07) et miroir de l'épinglage manuel :
+            // un verrou posé ici est un geste humain → MANUAL, NULL quand on déverrouille.
+            $entity->setLockOrigin(LockLevel::NONE === $input->lockLevel ? null : LockOrigin::MANUAL);
         }
         if (null !== $input->temporaryLock) {
             $entity->setTemporaryLock($input->temporaryLock);

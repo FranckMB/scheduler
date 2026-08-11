@@ -15,6 +15,7 @@ use ApiPlatform\Metadata\Put;
 use App\Dto\ScheduleSlotTemplateInput;
 use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
+use App\Enum\LockOrigin;
 use App\State\Processor\ScheduleSlotTemplateStateProcessor;
 use App\State\Provider\ScheduleSlotTemplateStateProvider;
 use DateTimeImmutable;
@@ -66,6 +67,10 @@ class ScheduleSlotTemplateResource
     #[Groups(['read'])]
     public LockLevel $lockLevel = LockLevel::NONE;
 
+    /** Pourquoi le verrou : réservation de gymnase, épinglage manuel, ou origine inconnue. NULL si non verrouillé. */
+    #[Groups(['read'])]
+    public ?LockOrigin $lockOrigin = null;
+
     #[Groups(['read'])]
     public bool $temporaryLock = false;
 
@@ -94,6 +99,7 @@ class ScheduleSlotTemplateResource
         $dto->startTime = $entity->getStartTime();
         $dto->durationMinutes = $entity->getDurationMinutes();
         $dto->lockLevel = $entity->getLockLevel();
+        $dto->lockOrigin = $entity->getLockOrigin();
         $dto->temporaryLock = $entity->getTemporaryLock();
         $dto->temporaryLockFor = $entity->getTemporaryLockFor();
         $dto->temporaryMinSessionsOverride = $entity->getTemporaryMinSessionsOverride();
