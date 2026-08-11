@@ -33,7 +33,6 @@
 > + son annexe [`api-ffbb-app-traces.md`](api-ffbb-app-traces.md) (**les sorties brutes**, club `ARA0069036`)
 > + le besoin qui en découle [`ffbb-appariement-source-de-verite.md`](ffbb-appariement-source-de-verite.md) (**« on accompagne, on ne décide pas »** — P2-18, P1-4, P4-35) ·
 > [`etude-tailles-clubs-ffbb.md`](etude-tailles-clubs-ffbb.md) (**tailles des clubs mesurées sur l'API FFBB** — a nourri le cadrage P1-3, sert la grille tarifaire par taille) ·
-> [`enregistrement-ffbb.md`](enregistrement-ffbb.md) (P3-4) · [`compte-demo.md`](compte-demo.md) (P2-4) ·
 > [`console-superadmin.md`](console-superadmin.md) (P4-54) ·
 > [`infrastructure-hebergement.md`](infrastructure-hebergement.md) (étude) ·
 > [`reprise-perimetre-engage.md`](reprise-perimetre-engage.md) (mémoire produit du planning de saison) ·
@@ -43,6 +42,12 @@
 > `grep -c '^| \*\*D-[0-9]*\*\* ⬜'` (un `grep -c '⬜'` nu compte aussi la légende et deux lignes
 > de prose). Le dernier, **D-11, est dormant** : `match_day` est NULL sur les 69 équipes et
 > aucun écran ne l'expose — à traiter le jour où le champ sera exposé, pas avant).
+>
+> ⚠ **Cette liste ne contient QUE de l'ouvert, et c'est une règle d'entretien** : un fichier de détail dont
+> l'item est soldé **quitte cette liste ET le dépôt** — l'historique vit dans git, et un cadrage pré-décision
+> n'a plus de valeur une fois ses questions tranchées. `compte-demo.md` (P2-4) et `enregistrement-ffbb.md`
+> (P3-4) y ont survécu à leur livraison jusqu'au 2026-08-11 : un agent qui lisait ce header en concluait que
+> le sujet restait à faire. Supprimés ce jour, décision fondateur.
 >
 > **Réf historiques** : `FF#n` / `BG G#n` = identifiants des anciens `features-futures.md` / `backend-gaps.md`,
 > absorbés le 2026-07-05. `v3 §x` / `contraintes-v2` = specs figées de `specs/initiales/`.

@@ -59,7 +59,7 @@ Livré : persistance `solver_metrics` à chaque tentative de génération (statu
 - **Refresh FFBB club** (route lot C déjà prête) : à la demande sur un club, ou **batch** (rafraîchir les ligues/comités périmés).
 
 ### SA4 — Actions support *(🟠 durci, chaque action confirmée + auditée)*
-Reset quota Découverte · purge saison (`app:seasons:purge`) · reset club (`ResetSeasonController` élargi) · **suspendre/désactiver** un club · **approuver** un gestionnaire en fallback (cf. [`enregistrement-ffbb.md`](enregistrement-ffbb.md)).
+Reset quota Découverte · purge saison (`app:seasons:purge`) · reset club (`ResetSeasonController` élargi) · **suspendre/désactiver** un club · **approuver** un gestionnaire en fallback (le cadrage d'origine est soldé avec P3-4 — comportement livré dans [`../courantes/superadmin-auth.md`](../courantes/superadmin-auth.md)).
 
 ### SA5 — Impersonation support *(🔴 le plus sensible, en dernier)*
 Se mettre à la place d'un club — **lecture d'abord**, bornée dans le temps, **bannière visible**, **tout audité**. Écriture éventuelle = décision ultérieure séparée.
