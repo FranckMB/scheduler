@@ -110,6 +110,48 @@ def _team_age_min_by_id(data: dict[str, Any]) -> dict[str, int | None]:
     return {team["id"]: team.get("ageMin") for team in data.get("teams", []) if team.get("id")}
 
 
+def _assert_venue_capacity_respected(data: dict[str, Any], result: dict[str, Any]) -> None:
+    """L'invariant de capacité, en UN endroit — partagé par le test hypothesis et le cas figé.
+
+    ⚑ P4-81 : les deux tests doivent juger sur la MÊME règle. Recopier l'assertion dans le cas
+    déterministe l'aurait laissée diverger, et c'est justement la divergence entre ce qu'on
+    croit garder et ce qu'on garde vraiment qui a produit ce défaut.
+    """
+
+    # Le payload écrit "17:00", la réponse JSON rend "17:00:00" (le `mode="json"` du harnais,
+    # AUD-ENG-28). Sans normalisation, AUCUNE capacité ne serait retrouvée : le test
+    # retomberait silencieusement sur le défaut de 1 — vert, mais pour une mauvaise raison.
+    def hhmm(value: object) -> str:
+        return ":".join(str(value).split(":")[:2])
+
+    capacities: dict[tuple[str, int, str], int] = {}
+    for venue in data.get("venues", []):
+        for ts in venue.get("trainingSlots", []):
+            capacities[(venue["id"], ts["dayOfWeek"], hhmm(ts["startTime"]))] = int(ts.get("capacity", 1))
+
+    venue_bookings: dict[tuple[str, int, str], list[dict[str, Any]]] = {}
+    for slot in result["slots"]:
+        key = (slot["venueId"], slot["dayOfWeek"], hhmm(slot["startTime"]))
+        venue_bookings.setdefault(key, []).append(slot)
+
+    for key, slots in venue_bookings.items():
+        pinned = [s for s in slots if s.get("lockLevel") == "HARD"]
+
+        if pinned:
+            intruders = [s["teamId"] for s in slots if s.get("lockLevel") != "HARD"]
+            assert not intruders, (
+                f"Créneau VERROUILLÉ {key} : le solveur y a placé {intruders} en plus des épingles. "
+                "`blocked_venue_slots` (model.py:67) doit retirer ce créneau du solveur — ALIGN-07."
+            )
+            continue
+
+        teams = [s["teamId"] for s in slots]
+        capacity = capacities.get(key, 1)
+        assert len(teams) <= capacity, (
+            f"Gymnase sur-rempli par le SOLVEUR en {key} : {teams} pour une capacité de {capacity}"
+        )
+
+
 def _hard_locked_team_ids(data: dict[str, Any]) -> set[str]:
     return {
         tpl["teamId"] for tpl in data.get("slotTemplates", []) if tpl.get("teamId") and tpl.get("lockLevel") == "HARD"
@@ -299,17 +341,192 @@ class TestInvariants:
     @settings(max_examples=20, deadline=None)
     @given(data=random_fixture())
     def test_no_venue_double_booking(self, data: dict[str, Any]) -> None:
+        """Un gymnase n'accueille jamais plus d'équipes que sa CAPACITÉ — côté solveur.
+
+        ⚑ P4-81. L'assertion était `len(team_ids) <= 1` **en dur**, et elle ignorait deux
+        faits du modèle. Elle rougissait donc **au hasard des tirages hypothesis**, sur un
+        required check, bloquant des PR qui ne touchaient même pas le moteur (constaté le
+        2026-08-11 sur la PR Dependabot #504).
+
+        (1) **La capacité n'est pas toujours 1.** `model.py:58` lit `capacity` du créneau et
+        `add_room_at_most_one` la fait respecter — un terrain divisible en 2 ou 3 accueille
+        légitimement autant d'équipes. Le générateur n'émet aujourd'hui que `capacity: 1`
+        (`:176`), donc l'ancienne assertion PASSAIT par coïncidence ; elle serait devenue
+        fausse au premier créneau divisible tiré.
+
+        (2) **Un verrou HARD est SOUVERAIN** (ALIGN-07). `model.py:67` saute la création de
+        la variable quand le créneau est dans `blocked_venue_slots` : le solveur ne peut
+        placer personne dessus. Or la dédup du générateur porte sur
+        `(teamId, venueId, jour, heure)` (`:194`) — **deux ÉQUIPES différentes** peuvent donc
+        être co-épinglées sur le même créneau, au-delà de sa capacité. Le moteur honore les
+        épingles ; l'invariant, lui, criait à l'erreur.
+
+        Même doctrine que `test_no_coach_double_booking` juste dessous : **l'invariant porte
+        sur ce que le MOTEUR décide**, le seul périmètre dont il répond. Ce que le
+        gestionnaire épingle lui-même relève de sa décision, pas d'une garantie du solveur
+        (décision fondateur 2026-08-11 : l'encart des règles implicites ne nuance PAS son
+        énoncé pour autant — cf. état des lieux §2).
+
+        ⚑ Et le test GAGNE une garantie qu'il n'avait pas : sur un créneau verrouillé, tous
+        les occupants doivent être des épingles. Si le solveur en plaçait une de plus, il
+        aurait contourné `blocked_venue_slots` — exactement le trou qu'ALIGN-07 a fermé, et
+        que rien ne gardait ici.
+        """
         result = solve_payload(data, timeout=5)
         if result["status"] != "completed":
             pytest.skip("Solver did not find a feasible solution")
 
-        venue_bookings: dict[tuple[str, int, str], list[str]] = {}
-        for slot in result["slots"]:
-            key = (slot["venueId"], slot["dayOfWeek"], slot["startTime"])
-            venue_bookings.setdefault(key, []).append(slot["teamId"])
+        _assert_venue_capacity_respected(data, result)
 
-        for key, team_ids in venue_bookings.items():
-            assert len(team_ids) <= 1, f"Venue double-booking at {key}: {team_ids}"
+    def test_the_exact_case_that_reddened_ci_at_random(self) -> None:
+        """NR P4-81 — le contre-exemple RÉEL, rejoué à l'identique et sans hasard.
+
+        Recopié du log CI du 2026-08-11 (PR Dependabot #504, job `Engine Tests`), qui rendait
+        `Venue double-booking at ('gym-a', 1, '17:00:00'): ['team-s', 'team-a']`. Un gymnase,
+        UN créneau de capacité 1, et DEUX épingles HARD dessus.
+
+        ⚠ Sans ce cas figé, la garde reposerait sur un tirage : hypothesis ne produit cette
+        forme qu'occasionnellement — c'est précisément ce qui rendait la panne intermittente
+        et le diagnostic coûteux. Un test qui ne rougit qu'un jour sur trois ne garde rien.
+
+        Ce qu'il prouve : le moteur honore les deux épingles (le verrou est souverain), et
+        l'invariant ne le lui reproche plus — tout en vérifiant qu'aucune équipe NON épinglée
+        ne s'est ajoutée.
+        """
+        data: dict[str, Any] = {
+            "clubId": "club-hypothesis",
+            "seasonId": "season-2024",
+            "version": CONTRACT_VERSION,
+            "solverSeed": 42,
+            "venues": [
+                {
+                    "id": "gym-a",
+                    "name": "Venue gym-a",
+                    "isActive": True,
+                    "trainingSlots": [{"dayOfWeek": 1, "startTime": "17:00", "durationMinutes": 60, "capacity": 1}],
+                }
+            ],
+            "teams": [
+                {
+                    "id": tid,
+                    "sportCategoryId": "sc-1",
+                    "priorityTierId": 1,
+                    "name": f"Team {tid}",
+                    "sessionsPerWeek": 1,
+                    "isActive": True,
+                }
+                for tid in ("team-s", "team-a")
+            ],
+            "coaches": [{"id": "coach-1", "firstName": "Coach0", "lastName": "X", "isActive": True}],
+            "slotTemplates": [
+                {
+                    "id": f"tpl-{i}",
+                    "teamId": tid,
+                    "venueId": "gym-a",
+                    "coachId": "coach-1",
+                    "dayOfWeek": 1,
+                    "startTime": "17:00",
+                    "durationMinutes": 60,
+                    "lockLevel": "HARD",
+                }
+                for i, tid in enumerate(("team-s", "team-a"))
+            ],
+            "constraints": [team_coach(f"tc-{i}", tid, "coach-1") for i, tid in enumerate(("team-s", "team-a"))],
+            "priorityTiers": [{"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 2}],
+        }
+
+        result = solve_payload(data, timeout=5)
+        assert result["status"] == "completed", f"le solve doit aboutir, statut={result['status']}"
+
+        on_the_slot = [s for s in result["slots"] if s["venueId"] == "gym-a" and s["dayOfWeek"] == 1]
+        assert {s["teamId"] for s in on_the_slot} == {"team-s", "team-a"}, (
+            "les DEUX épingles doivent sortir : le verrou est souverain (ALIGN-07), "
+            "le moteur ne doit pas en écarter une pour tenir la capacité"
+        )
+        assert all(s.get("lockLevel") == "HARD" for s in on_the_slot), (
+            "toutes les occupations de ce créneau viennent des épingles — "
+            "le solveur n'a pas le droit d'en ajouter une (`blocked_venue_slots`, model.py:67)"
+        )
+
+        # Et l'invariant lui-même — la MÊME règle que le test hypothesis — ne doit plus
+        # crier au loup sur ce payload.
+        _assert_venue_capacity_respected(data, result)
+
+    def test_the_solver_never_sneaks_a_team_onto_a_locked_slot(self) -> None:
+        """NR P4-81 — le filet « un créneau verrouillé ne contient QUE des épingles ».
+
+        ⚠ Ce cas existe parce que les fixtures aléatoires ne l'atteignent PAS : mesuré en
+        désarmant `blocked_venue_slots` dans `model.py` — les deux tests de capacité
+        restaient VERTS. Un filet qu'aucun scénario ne met à l'épreuve ne garde rien, et
+        c'est le genre de vide qui ne se voit jamais tant qu'on ne le cherche pas.
+
+        Le montage force la main du solveur : UN seul créneau dans tout le club, déjà
+        verrouillé pour `team-pinned`, et une seconde équipe `team-greedy` qui n'a aucune
+        autre place où aller. Si `blocked_venue_slots` (model.py:67) cessait de retirer ce
+        créneau du modèle, le solveur y poserait `team-greedy` — sur-remplissant un créneau
+        de capacité 1 que le gestionnaire croyait réservé à son épingle.
+
+        Vérifié dans les deux sens : désarmer `blocked_venue_slots` fait rougir ce test.
+        """
+        data: dict[str, Any] = {
+            "clubId": "club-lock",
+            "seasonId": "season-2024",
+            "version": CONTRACT_VERSION,
+            "solverSeed": 42,
+            "venues": [
+                {
+                    "id": "gym-a",
+                    "name": "Venue gym-a",
+                    "isActive": True,
+                    "trainingSlots": [{"dayOfWeek": 1, "startTime": "18:00", "durationMinutes": 60, "capacity": 1}],
+                }
+            ],
+            "teams": [
+                {
+                    "id": tid,
+                    "sportCategoryId": "sc-1",
+                    "priorityTierId": 1,
+                    "name": f"Team {tid}",
+                    "sessionsPerWeek": 1,
+                    "isActive": True,
+                }
+                for tid in ("team-pinned", "team-greedy")
+            ],
+            "coaches": [
+                {"id": "coach-1", "firstName": "A", "lastName": "X", "isActive": True},
+                {"id": "coach-2", "firstName": "B", "lastName": "X", "isActive": True},
+            ],
+            "slotTemplates": [
+                {
+                    "id": "tpl-0",
+                    "teamId": "team-pinned",
+                    "venueId": "gym-a",
+                    "coachId": "coach-1",
+                    "dayOfWeek": 1,
+                    "startTime": "18:00",
+                    "durationMinutes": 60,
+                    "lockLevel": "HARD",
+                }
+            ],
+            # Coachs DISTINCTS : sans ça, l'exclusivité coach suffirait à écarter
+            # `team-greedy` et le test passerait sans rien devoir à `blocked_venue_slots`.
+            "constraints": [
+                team_coach("tc-0", "team-pinned", "coach-1"),
+                team_coach("tc-1", "team-greedy", "coach-2"),
+            ],
+            "priorityTiers": [{"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 1}],
+        }
+
+        result = solve_payload(data, timeout=5)
+        assert result["status"] == "completed", f"le solve doit aboutir, statut={result['status']}"
+
+        occupants = {s["teamId"] for s in result["slots"] if s["venueId"] == "gym-a" and s["dayOfWeek"] == 1}
+        assert occupants == {"team-pinned"}, (
+            f"le créneau verrouillé doit rester à la seule épingle, occupants={sorted(occupants)} — "
+            "`team-greedy` n'a nulle part où aller, et c'est très bien : elle reste non placée"
+        )
+
+        _assert_venue_capacity_respected(data, result)
 
     @settings(max_examples=20, deadline=None)
     @given(data=random_fixture())

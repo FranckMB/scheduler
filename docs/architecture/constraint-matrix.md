@@ -89,6 +89,17 @@ Verrous de non-régression : `engine/tests/semantic/test_hard_lock_announces_vio
 TÉMOIN explicite — sans lui, constater que SM1 joue le samedi n'accuserait pas le verrou) et
 `engine/tests/semantic/test_hard_lock_divisible_slot.py`.
 
+⚠ **La souveraineté du verrou vaut aussi contre les INVARIANTS, et il a fallu le leur apprendre**
+(P4-81, 2026-08-11). `test_no_venue_double_booking` affirmait `len(team_ids) <= 1` en dur : il
+ignorait la capacité du créneau **et** le fait qu'un co-épinglage HARD au-delà de la capacité est
+honoré. Il rougissait donc au hasard des tirages hypothesis, sur un required check, bloquant des PR
+étrangères au moteur. L'invariant porte désormais sur **ce que le SOLVEUR décide** — même doctrine
+que le jumeau coach — et gagne au passage la garantie inverse : sur un créneau verrouillé, tous les
+occupants doivent être des épingles, faute de quoi `blocked_venue_slots` (`model.py:67`) aurait été
+contourné. Deux cas **déterministes** gardent l'ensemble (`tests/invariants/test_invariants.py`) :
+le contre-exemple réel de la CI, et un montage qui force la main du solveur — ce dernier parce que
+**aucune fixture aléatoire n'atteignait ce filet**, mesuré en désarmant `blocked_venue_slots`.
+
 ## Règles structurelles JAMAIS saisies — et ce que l'écran en montre (P4-55, 2026-08-11)
 
 `add_level_1_hard_constraints` (`engine/app/solver/constraints.py:153`) pose une douzaine de
