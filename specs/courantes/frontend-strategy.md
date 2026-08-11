@@ -1,6 +1,6 @@
 # Frontend Strategy — TDD, Stack Fixée & Anti-patterns
 
-Last verified @ 2026-08-11 (recalé ce jour : convention de MODALE — hauteur bornée + contenu défilant dans les deux composants partagés, WCAG 1.4.10, que le linter ne voit pas ; précédemment 2026-08-08 : statut posé ; convention de TAILLE DE CIBLE ajoutée — WCAG 2.5.8, que le linter ne mesure pas, AUD-A11Y-12 ; versions re-lues dans `frontend/package.json` le 2026-07-29 ; contenu recalé depuis par P4-65 — activer Sentry ne peut plus échouer en silence, garde de build `sentryCspGuard`)
+Last verified @ 2026-08-11 (recalé ce jour : RÈGLE DE PASSE DE DESIGN — `ui-ux-pro-max` borné à l'apparence, dans un agent, et il ne valide rien ; convention de MODALE — hauteur bornée + contenu défilant dans les deux composants partagés, WCAG 1.4.10, que le linter ne voit pas ; précédemment 2026-08-08 : statut posé ; convention de TAILLE DE CIBLE ajoutée — WCAG 2.5.8, que le linter ne mesure pas, AUD-A11Y-12 ; versions re-lues dans `frontend/package.json` le 2026-07-29 ; contenu recalé depuis par P4-65 — activer Sentry ne peut plus échouer en silence, garde de build `sentryCspGuard`)
 
 > **Statut : le rebuild est LIVRÉ.** Les formulations « pour le rebuild » ci-dessous sont
 > historiques ; le document reste la référence vivante des **versions de la stack**, des
@@ -93,6 +93,37 @@ sous son contenu et la zone « défilante » ne défile jamais. Gardé par
 `modal-overflow.test.tsx` — jsdom n'ayant aucun moteur de mise en page, le test épingle les
 classes qui portent le contrat, faute de pouvoir mesurer le débordement (même limite qu'A11Y-06
 pour le contraste). Retour fondateur 2026-08-11.
+
+### La passe de design — quand on invoque `ui-ux-pro-max`, et quand on s'en abstient
+
+Le pack `ui-ux-pro-max` est installé (décision fondateur révisée le 2026-08-11, état des lieux
+§2), et son usage est **borné**. Il ne s'invoque pas à chaque PR frontend : 5 packs de design en
+contexte permanent, ce sont des doctrines contradictoires à chaque session — c'est le motif qui
+avait fait écarter leur installation, et il tient toujours. Sa valeur est le **crible ponctuel**.
+
+**Règle : une passe de design se lance quand un écran change d'APPARENCE ou naît.**
+
+| Cas | Passe design |
+|---|---|
+| Nouvel écran, nouvelle page publique, refonte visuelle | **oui** |
+| Changement de mise en page, de couleurs, de typographie | **oui** |
+| Correctif de comportement, test, renommage, refactor | non |
+| Correction d'un bug UI **déjà identifié** | non — on corrige, et on pose un garde |
+
+**Dans un agent**, pas dans le fil principal : une passe sur plusieurs écrans consomme beaucoup
+de contexte et ne doit remonter que ses findings. Les agents `general-purpose` et `coder` portent
+l'outil `Skill` ; `Explore`, `planner` et les `cavecrew-*` ne l'ont pas.
+
+⚠ **Le skill ne VALIDE rien, et l'écrire ici évite de le croire.** Il lit du code et des
+décisions de design ; il ne rend aucune page et ne mesure rien. Mesuré le 2026-08-11 : sa base de
+99 règles UX ne contient **rien** sur la hauteur d'une modale — sa seule règle « modale » porte
+sur la confirmation d'un geste destructif, et sa ligne la plus proche dit « no horizontal
+scroll », l'axe opposé. **Il n'aurait pas attrapé le défaut de reflow du même jour.** Ce qui
+valide, ce sont les gardes : Vitest, l'e2e Playwright, les tests d'a11y.
+
+Ce qu'il apporte quand on le sollicite, mesuré sur la landing (PR #502) : 2 échecs WCAG de
+contraste invisibles aux gardes jsdom, 2 bugs de rendu, une rupture de ton, et 17 tirets
+cadratins de cadence IA.
 
 ---
 
