@@ -28,7 +28,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 #[AsCommand(
     name: 'app:clubs:ffbb-resync',
-    description: 'Re-import a club\'s FFBB identity (name, contact, logo, committee/league). Support action (SA4).',
+    description: 'Re-import a club\'s FFBB identity (name, contact, logo, committee/league). Support action.',
 )]
 final class FfbbResyncClubCommand extends Command
 {

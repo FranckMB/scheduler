@@ -24,7 +24,7 @@ class CoachInput
     public ?string $phone = null;
 
     /**
-     * P4-51 — plafond de jours/semaine (1..6). ⚠ `0` signifie « RETIRER le plafond » :
+     * Plafond de jours/semaine (1..6). ⚠ `0` signifie « RETIRER le plafond » :
      * le PUT est partiel (null = inchangé), donc null ne peut pas porter le retrait —
      * un champ vidé à l'écran doit pouvoir revenir à « pas de plafond ».
      */

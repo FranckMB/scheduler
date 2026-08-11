@@ -20,7 +20,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 #[AsCommand(
     name: 'app:clubs:reset-quota',
-    description: 'Reset a club\'s generation counter to zero (Découverte quota unblock). Support action (SA4).',
+    description: 'Reset a club\'s generation counter to zero (Découverte quota unblock). Support action.',
 )]
 final class ResetClubQuotaCommand extends Command
 {

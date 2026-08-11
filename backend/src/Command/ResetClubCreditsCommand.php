@@ -22,7 +22,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 #[AsCommand(
     name: 'app:clubs:reset-credits',
-    description: 'Reset a club\'s output-credit pool to zero (Découverte). Support action (SA4).',
+    description: 'Reset a club\'s output-credit pool to zero (Découverte). Support action.',
 )]
 final class ResetClubCreditsCommand extends Command
 {

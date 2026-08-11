@@ -29,7 +29,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 #[AsCommand(
     name: 'app:demo:clock',
-    description: 'Set (or clear with --clear) the simulated "today" of a demo club (P4-16/P2-4). Support action (SA4).',
+    description: 'Set (or clear with --clear) the simulated "today" of a demo club. Support action.',
 )]
 final class DemoClockCommand extends Command
 {

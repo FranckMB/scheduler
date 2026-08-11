@@ -38,7 +38,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  */
 #[AsCommand(
     name: 'app:clubs:set-plan',
-    description: 'Assign a subscription offer (by code) to a club (P1-3). Support action (SA4).',
+    description: 'Assign a subscription offer (by code) to a club. Support action.',
 )]
 final class SetClubPlanCommand extends Command
 {

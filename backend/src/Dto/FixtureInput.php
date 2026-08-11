@@ -49,7 +49,7 @@ class FixtureInput
     public ?string $kickoffTime = null;
 
     /**
-     * P1-4 PR E — "rendre au solveur": SOLVER is accepted on an update ONLY when
+     * "rendre au solveur": SOLVER is accepted on an update ONLY when
      * the placement (venue/kickoff/date) is untouched and the match stays PLACED;
      * any other manual write keeps stamping MANUAL. MANUAL is accepted as a
      * no-op echo (the stamp rule produces it anyway).

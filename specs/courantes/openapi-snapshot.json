@@ -1745,7 +1745,7 @@
                         }
                     }
                 },
-                "summary": "SEC-16: clear the httpOnly JWT cookie (public and idempotent \u2014 the JS cannot clear what it cannot read)"
+                "summary": "Clear the httpOnly JWT cookie (public and idempotent \u2014 the JS cannot clear what it cannot read)"
             }
         },
         "/api/me": {
@@ -2360,7 +2360,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Verified \u2014 materialises the club and logs in (SEC-16: the JWT is set as the httpOnly BEARER cookie, NOT returned here)",
+                        "description": "Verified \u2014 materialises the club and logs in (the JWT is set as the httpOnly BEARER cookie, NOT returned here)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -6805,7 +6805,7 @@
                         "description": "Unauthorized"
                     },
                     "403": {
-                        "description": "Management role required (SEC-07)"
+                        "description": "Management role required"
                     },
                     "502": {
                         "description": "FFBB unreachable \u2014 best effort, never a broken gesture"
@@ -6903,7 +6903,7 @@
                         "description": "Unauthorized"
                     },
                     "403": {
-                        "description": "Management role required (SEC-07)"
+                        "description": "Management role required"
                     },
                     "502": {
                         "description": "FFBB unreachable \u2014 best effort, never a broken gesture"
@@ -7551,7 +7551,7 @@
                         "description": "Bad credentials (identical answer for an unverified account \u2014 A3 anti-enumeration)"
                     }
                 },
-                "summary": "Log in: sets the httpOnly JWT cookie (SEC-16 \u2014 the token is never returned in the body)",
+                "summary": "Log in: sets the httpOnly JWT cookie (the token is never returned in the body)",
                 "requestBody": {
                     "content": {
                         "application/json": {
@@ -7755,7 +7755,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "The club's FFBB engagements of the current season (P1-4 PR F) \u2014 on-demand, never cached; each row carries a pre-fill suggestion",
+                        "description": "The club's FFBB engagements of the current season \u2014 on-demand, never cached; each row carries a pre-fill suggestion",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -7825,7 +7825,7 @@
                         "description": "Unauthorized (missing/expired JWT)"
                     },
                     "403": {
-                        "description": "Not a management member (SEC-07)"
+                        "description": "Not a management member"
                     },
                     "422": {
                         "description": "The club has no FFBB code"
@@ -7880,7 +7880,7 @@
                         "description": "Unauthorized (missing/expired JWT)"
                     },
                     "403": {
-                        "description": "Not a management member (SEC-07)"
+                        "description": "Not a management member"
                     },
                     "409": {
                         "description": "Season plan not chosen, or archived season"
@@ -7989,7 +7989,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Synchronous match placement (P1-4 PR D, ADR-0003): the solver places every placeable UNPLACED home match; the rest comes back named",
+                        "description": "Synchronous match placement: the solver places every placeable UNPLACED home match; the rest comes back named",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -8047,7 +8047,7 @@
                         "description": "Unauthorized (missing/expired JWT)"
                     },
                     "403": {
-                        "description": "Not a management member (SEC-07)"
+                        "description": "Not a management member"
                     },
                     "409": {
                         "description": "Placement already running, season plan not chosen, or archived season"
@@ -8132,7 +8132,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Per-unavailability impact: affected placed matches + training sessions of the effective schedules (cockpit alert feed \u2014 P1-4 PR B)",
+                        "description": "Per-unavailability impact: affected placed matches + training sessions of the effective schedules (cockpit alert feed)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -11096,7 +11096,7 @@
                         "description": "Version in force, or a generation is already running for this club"
                     },
                     "429": {
-                        "description": "Club generation quota reached (P4-45)"
+                        "description": "Club generation quota reached"
                     }
                 },
                 "summary": "Regenerate this version in place"
@@ -11119,7 +11119,7 @@
                         "description": "Version in force, or a generation is already running"
                     },
                     "429": {
-                        "description": "Club generation quota reached (P4-45)"
+                        "description": "Club generation quota reached"
                     }
                 },
                 "summary": "Create a new version from an existing one and regenerate it"
@@ -11142,7 +11142,7 @@
                         "description": "This version is not the one in force"
                     }
                 },
-                "summary": "ADR-0002 \u2014 un-point the plan so it can be regenerated"
+                "summary": "Un-point the plan so it can be regenerated"
             }
         },
         "/api/schedules/{id}/validate": {
@@ -11162,7 +11162,7 @@
                         "description": "A version is already in force for this plan, or the schedule is not COMPLETED"
                     }
                 },
-                "summary": "ADR-0002 \u2014 point this version as the plan in force"
+                "summary": "Point this version as the plan in force"
             }
         },
         "/api/reset-season": {
@@ -17153,7 +17153,7 @@
                         ]
                     },
                     "parentEntryId": {
-                        "description": "Semaine enfant d'une p\u00e9riode m\u00e8re (P2-5 E1) ; null = entr\u00e9e racine.",
+                        "description": "Semaine enfant d'une p\u00e9riode m\u00e8re ; null = entr\u00e9e racine.",
                         "type": [
                             "string",
                             "null"
@@ -17242,7 +17242,7 @@
                     },
                     "parentEntryId": {
                         "format": "uuid",
-                        "description": "Semaine enfant d'une p\u00e9riode m\u00e8re (P2-5 E1). POST uniquement \u2014 l'identit\u00e9\n d'une entr\u00e9e \u00e0 plan est gel\u00e9e, le processor refuse tout changement au PUT.",
+                        "description": "Semaine enfant d'une p\u00e9riode m\u00e8re. POST uniquement \u2014 l'identit\u00e9\n d'une entr\u00e9e \u00e0 plan est gel\u00e9e, le processor refuse tout changement au PUT.",
                         "externalDocs": {
                             "url": "https://schema.org/identifier"
                         },
@@ -17322,7 +17322,7 @@
                         ]
                     },
                     "parentEntryId": {
-                        "description": "Semaine enfant d'une p\u00e9riode m\u00e8re (P2-5 E1) ; null = entr\u00e9e racine.",
+                        "description": "Semaine enfant d'une p\u00e9riode m\u00e8re ; null = entr\u00e9e racine.",
                         "type": [
                             "string",
                             "null"
@@ -17397,7 +17397,7 @@
                                 ]
                             },
                             "parentEntryId": {
-                                "description": "Semaine enfant d'une p\u00e9riode m\u00e8re (P2-5 E1) ; null = entr\u00e9e racine.",
+                                "description": "Semaine enfant d'une p\u00e9riode m\u00e8re ; null = entr\u00e9e racine.",
                                 "type": [
                                     "string",
                                     "null"
@@ -18042,7 +18042,7 @@
                     "maxDaysOverride": {
                         "minimum": 0,
                         "maximum": 6,
-                        "description": "P4-51 \u2014 plafond de jours/semaine (1..6). \u26a0 `0` signifie \u00ab RETIRER le plafond \u00bb :\nle PUT est partiel (null = inchang\u00e9), donc null ne peut pas porter le retrait \u2014\nun champ vid\u00e9 \u00e0 l'\u00e9cran doit pouvoir revenir \u00e0 \u00ab pas de plafond \u00bb.",
+                        "description": "Plafond de jours/semaine (1..6). \u26a0 `0` signifie \u00ab RETIRER le plafond \u00bb :\nle PUT est partiel (null = inchang\u00e9), donc null ne peut pas porter le retrait \u2014\nun champ vid\u00e9 \u00e0 l'\u00e9cran doit pouvoir revenir \u00e0 \u00ab pas de plafond \u00bb.",
                         "type": [
                             "integer",
                             "null"
@@ -18374,7 +18374,7 @@
             },
             "CoachWish": {
                 "type": "object",
-                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (SEC-07, cf. processor).",
+                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (cf. processor).",
                 "properties": {
                     "id": {
                         "default": "",
@@ -18435,7 +18435,7 @@
             },
             "CoachWish.CoachWishInput": {
                 "type": "object",
-                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (SEC-07, cf. processor).",
+                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (cf. processor).",
                 "required": [
                     "calendarEntryId",
                     "weekStart",
@@ -18517,7 +18517,7 @@
             },
             "CoachWish.html": {
                 "type": "object",
-                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (SEC-07, cf. processor).",
+                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (cf. processor).",
                 "properties": {
                     "id": {
                         "default": "",
@@ -18642,11 +18642,11 @@
                         }
                     }
                 ],
-                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (SEC-07, cf. processor)."
+                "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (cf. processor)."
             },
             "CoachWishCampaign": {
                 "type": "object",
-                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames.",
+                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only. La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames.",
                 "properties": {
                     "id": {
                         "default": "",
@@ -18711,7 +18711,7 @@
             },
             "CoachWishCampaign.CoachWishCampaignInput": {
                 "type": "object",
-                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames.",
+                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only. La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames.",
                 "required": [
                     "calendarEntryId",
                     "deadline"
@@ -18758,7 +18758,7 @@
             },
             "CoachWishCampaign.html": {
                 "type": "object",
-                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames.",
+                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only. La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames.",
                 "properties": {
                     "id": {
                         "default": "",
@@ -18891,7 +18891,7 @@
                         }
                     }
                 ],
-                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames."
+                "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only. La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames."
             },
             "Competition": {
                 "type": "object",
@@ -20191,7 +20191,7 @@
                             "MANUAL",
                             "SOLVER"
                         ],
-                        "description": "P1-4 PR E \u2014 \"rendre au solveur\": SOLVER is accepted on an update ONLY when\nthe placement (venue/kickoff/date) is untouched and the match stays PLACED;\nany other manual write keeps stamping MANUAL. MANUAL is accepted as a\nno-op echo (the stamp rule produces it anyway).",
+                        "description": "\"rendre au solveur\": SOLVER is accepted on an update ONLY when\nthe placement (venue/kickoff/date) is untouched and the match stays PLACED;\nany other manual write keeps stamping MANUAL. MANUAL is accepted as a\nno-op echo (the stamp rule produces it anyway).",
                         "type": [
                             "string",
                             "null"
@@ -20899,21 +20899,21 @@
                         ]
                     },
                     "planType": {
-                        "description": "ADR-0002 C4: the type of THIS version's plan \u2014 SEASON | CLOSURE | HOLIDAY. The\nSOLE truth of \"is this the socle?\" (SEASON) vs a period overlay, replacing the\nderivation from `calendarEntryId`. Batched by ScheduleStateProvider (a per-DTO\nlookup would N+1); null on the bare fromEntity path and for an anomalous version\nwith no plan (which should not exist \u2014 ADR-0002 ruling).",
+                        "description": "The type of THIS version's plan \u2014 SEASON | CLOSURE | HOLIDAY. The\nSOLE truth of \"is this the socle?\" (SEASON) vs a period overlay, replacing the\nderivation from `calendarEntryId`. Batched by ScheduleStateProvider (a per-DTO\nlookup would N+1); null on the bare fromEntity path and for an anomalous version\nwith no plan (which should not exist).",
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "schedulePlanId": {
-                        "description": "ADR-0002: the SchedulePlan this schedule is a version of (null pre-backfill).",
+                        "description": "The SchedulePlan this schedule is a version of (null pre-backfill).",
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "versionNumber": {
-                        "description": "ADR-0002: this schedule's version number within its plan (V1, V2\u2026).",
+                        "description": "This schedule's version number within its plan (V1, V2\u2026).",
                         "type": [
                             "integer",
                             "null"
@@ -21019,7 +21019,7 @@
                         "type": "boolean"
                     },
                     "isChosen": {
-                        "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
+                        "description": "Does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
                         "default": false,
                         "type": "boolean"
                     },
@@ -21040,7 +21040,7 @@
                 "properties": {
                     "name": {
                         "maxLength": 180,
-                        "description": "ADR-0002 inv. 12 : le nom vit sur le PLAN, pas sur la version. ABSENT au POST = le\nserveur nomme la version d'apr\u00e8s son plan (source unique) ; absent au PUT = inchang\u00e9.",
+                        "description": "Le nom vit sur le PLAN, pas sur la version. ABSENT au POST = le\nserveur nomme la version d'apr\u00e8s son plan (source unique) ; absent au PUT = inchang\u00e9.",
                         "type": [
                             "string",
                             "null"
@@ -21067,7 +21067,7 @@
                     },
                     "schedulePlanId": {
                         "format": "uuid",
-                        "description": "ADR-0002 C4 : POST cr\u00e9e une version SOUS un plan nomm\u00e9. Fourni \u2192 ce plan (overlay de\np\u00e9riode) ; omis \u2192 le plan SEASON de la saison (le socle). Ignor\u00e9 sur PUT. Le back valide\nque le plan appartient au club.",
+                        "description": "POST cr\u00e9e une version SOUS un plan nomm\u00e9. Fourni \u2192 ce plan (overlay de\np\u00e9riode) ; omis \u2192 le plan SEASON de la saison (le socle). Ignor\u00e9 sur PUT. Le back valide\nque le plan appartient au club.",
                         "externalDocs": {
                             "url": "https://schema.org/identifier"
                         },
@@ -21115,21 +21115,21 @@
                         ]
                     },
                     "planType": {
-                        "description": "ADR-0002 C4: the type of THIS version's plan \u2014 SEASON | CLOSURE | HOLIDAY. The\nSOLE truth of \"is this the socle?\" (SEASON) vs a period overlay, replacing the\nderivation from `calendarEntryId`. Batched by ScheduleStateProvider (a per-DTO\nlookup would N+1); null on the bare fromEntity path and for an anomalous version\nwith no plan (which should not exist \u2014 ADR-0002 ruling).",
+                        "description": "The type of THIS version's plan \u2014 SEASON | CLOSURE | HOLIDAY. The\nSOLE truth of \"is this the socle?\" (SEASON) vs a period overlay, replacing the\nderivation from `calendarEntryId`. Batched by ScheduleStateProvider (a per-DTO\nlookup would N+1); null on the bare fromEntity path and for an anomalous version\nwith no plan (which should not exist).",
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "schedulePlanId": {
-                        "description": "ADR-0002: the SchedulePlan this schedule is a version of (null pre-backfill).",
+                        "description": "The SchedulePlan this schedule is a version of (null pre-backfill).",
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "versionNumber": {
-                        "description": "ADR-0002: this schedule's version number within its plan (V1, V2\u2026).",
+                        "description": "This schedule's version number within its plan (V1, V2\u2026).",
                         "type": [
                             "integer",
                             "null"
@@ -21235,7 +21235,7 @@
                         "type": "boolean"
                     },
                     "isChosen": {
-                        "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
+                        "description": "Does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
                         "default": false,
                         "type": "boolean"
                     },
@@ -21290,21 +21290,21 @@
                                 ]
                             },
                             "planType": {
-                                "description": "ADR-0002 C4: the type of THIS version's plan \u2014 SEASON | CLOSURE | HOLIDAY. The\nSOLE truth of \"is this the socle?\" (SEASON) vs a period overlay, replacing the\nderivation from `calendarEntryId`. Batched by ScheduleStateProvider (a per-DTO\nlookup would N+1); null on the bare fromEntity path and for an anomalous version\nwith no plan (which should not exist \u2014 ADR-0002 ruling).",
+                                "description": "The type of THIS version's plan \u2014 SEASON | CLOSURE | HOLIDAY. The\nSOLE truth of \"is this the socle?\" (SEASON) vs a period overlay, replacing the\nderivation from `calendarEntryId`. Batched by ScheduleStateProvider (a per-DTO\nlookup would N+1); null on the bare fromEntity path and for an anomalous version\nwith no plan (which should not exist).",
                                 "type": [
                                     "string",
                                     "null"
                                 ]
                             },
                             "schedulePlanId": {
-                                "description": "ADR-0002: the SchedulePlan this schedule is a version of (null pre-backfill).",
+                                "description": "The SchedulePlan this schedule is a version of (null pre-backfill).",
                                 "type": [
                                     "string",
                                     "null"
                                 ]
                             },
                             "versionNumber": {
-                                "description": "ADR-0002: this schedule's version number within its plan (V1, V2\u2026).",
+                                "description": "This schedule's version number within its plan (V1, V2\u2026).",
                                 "type": [
                                     "integer",
                                     "null"
@@ -21410,7 +21410,7 @@
                                 "type": "boolean"
                             },
                             "isChosen": {
-                                "description": "ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
+                                "description": "Does this version's plan POINT at it? That is the whole of\n\"validated\" \u2014 the plan holds the version that counts, and there is no status\nsaying so. True for the season's calendar in force and for a period's overlay\nin force alike. Set by ScheduleStateProvider (batched); false on the bare\nfromEntity path.",
                                 "default": false,
                                 "type": "boolean"
                             },
@@ -25607,11 +25607,11 @@
         },
         {
             "name": "CoachWishCampaign",
-            "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only (SEC-07). La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames."
+            "description": "La campagne de collecte des dol\u00e9ances coachs d'une p\u00e9riode (feature #10, lot C2). Writes\nmanagement-only. La sortie porte les compteurs du radar et la liste des coachs\navec leur token (le front construit l'URL publique) \u2014 jamais les dol\u00e9ances elles-m\u00eames."
         },
         {
             "name": "CoachWish",
-            "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (SEC-07, cf. processor)."
+            "description": "Dol\u00e9ance coach pour une semaine de vacances (feature #10, lot C1). Souhait, jamais une\ncontrainte : aucun effet solveur. Ancr\u00e9e \u00e0 l'entr\u00e9e M\u00c8RE des vacances + le lundi de la\nsemaine. Writes management-only (cf. processor)."
         },
         {
             "name": "Competition",

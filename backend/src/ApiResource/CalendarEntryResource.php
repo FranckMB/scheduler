@@ -59,7 +59,7 @@ class CalendarEntryResource
     #[Groups(['read'])]
     public ?string $schoolHolidayId = null;
 
-    /** Semaine enfant d'une période mère (P2-5 E1) ; null = entrée racine. */
+    /** Semaine enfant d'une période mère ; null = entrée racine. */
     #[Groups(['read'])]
     public ?string $parentEntryId = null;
 

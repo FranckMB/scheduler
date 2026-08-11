@@ -71,20 +71,20 @@ class ScheduleResource
     public ScheduleStatus $status;
 
     /**
-     * ADR-0002 C4: the type of THIS version's plan — SEASON | CLOSURE | HOLIDAY. The
+     * The type of THIS version's plan — SEASON | CLOSURE | HOLIDAY. The
      * SOLE truth of "is this the socle?" (SEASON) vs a period overlay, replacing the
      * derivation from `calendarEntryId`. Batched by ScheduleStateProvider (a per-DTO
      * lookup would N+1); null on the bare fromEntity path and for an anomalous version
-     * with no plan (which should not exist — ADR-0002 ruling).
+     * with no plan (which should not exist).
      */
     #[Groups(['read'])]
     public ?string $planType = null;
 
-    /** ADR-0002: the SchedulePlan this schedule is a version of (null pre-backfill). */
+    /** The SchedulePlan this schedule is a version of (null pre-backfill). */
     #[Groups(['read'])]
     public ?string $schedulePlanId = null;
 
-    /** ADR-0002: this schedule's version number within its plan (V1, V2…). */
+    /** This schedule's version number within its plan (V1, V2…). */
     #[Groups(['read'])]
     public ?int $versionNumber = null;
 
@@ -158,7 +158,7 @@ class ScheduleResource
     public bool $isLiveContext = false;
 
     /**
-     * ADR-0002 inv. 1: does this version's plan POINT at it? That is the whole of
+     * Does this version's plan POINT at it? That is the whole of
      * "validated" — the plan holds the version that counts, and there is no status
      * saying so. True for the season's calendar in force and for a period's overlay
      * in force alike. Set by ScheduleStateProvider (batched); false on the bare
