@@ -6,8 +6,10 @@ namespace App\AdminJob;
 
 /**
  * One explicitly allowed SUPPORT ACTION on a single club (SA4). Manual only —
- * never scheduled. The only runtime parameter is the target club id, injected
- * as `--club` by the controller: the allowlist stays total (no free arguments).
+ * never scheduled. Runtime input is BOUNDED BY A CLOSED SCHEMA: the target club id
+ * (always injected as `--club`) plus, when $argumentSchema is set, the enum-valued
+ * arguments it declares — nothing free-text is representable by construction. An
+ * action with no schema accepts NO body (allowlist stays total).
  */
 final readonly class AdminActionDefinition
 {
@@ -27,6 +29,11 @@ final readonly class AdminActionDefinition
          * walking the same tables (revue SA4, finding 3). null → "action:{key}".
          */
         public ?string $runKey = null,
+        /**
+         * Closed schema for the RUNTIME arguments this action accepts from the
+         * request (enum-valued only). null → the action takes no body.
+         */
+        public ?AdminActionArgumentSchema $argumentSchema = null,
     ) {}
 
     public function lockKey(): string

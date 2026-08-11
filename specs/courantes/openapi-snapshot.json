@@ -1282,6 +1282,51 @@
                                                     },
                                                     "dangerous": {
                                                         "type": "boolean"
+                                                    },
+                                                    "arguments": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "key": {
+                                                                    "type": "string"
+                                                                },
+                                                                "label": {
+                                                                    "type": "string"
+                                                                },
+                                                                "required": {
+                                                                    "type": "boolean"
+                                                                },
+                                                                "choices": {
+                                                                    "type": "array",
+                                                                    "items": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                            "value": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "label": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
+                                                                "gate": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                        "argument": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "forbiddenValues": {
+                                                                            "type": "array",
+                                                                            "items": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1494,6 +1539,9 @@
                             }
                         }
                     },
+                    "400": {
+                        "description": "The optional argument body violated the action's closed schema: unknown key, value outside the enum, a required argument missing, a forbidden argument present, or any body on a schema-less action"
+                    },
                     "401": {
                         "description": "No authenticated super-admin session"
                     },
@@ -1540,7 +1588,21 @@
                             "type": "string"
                         }
                     }
-                ]
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": {
+                                    "type": "string"
+                                },
+                                "description": "Enum-valued arguments bounded by the action's closed schema (see GET /api/admin/actions). Empty/absent for schema-less actions."
+                            }
+                        }
+                    },
+                    "required": false
+                }
             }
         },
         "/api/admin/pending-memberships": {

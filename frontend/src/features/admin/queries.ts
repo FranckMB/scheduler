@@ -87,13 +87,15 @@ export function useRunAdminClubAction() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ clubId, key }: { clubId: string; key: string }) => {
+    mutationFn: ({ clubId, key, args }: { clubId: string; key: string; args?: Record<string, string> }) => {
       const csrfToken = useAdminStore.getState().csrfToken;
       if (!csrfToken) {
         return Promise.reject(new Error("Missing super-admin CSRF token."));
       }
 
-      return runAdminClubAction(clubId, key, csrfToken);
+      // Pas de body pour une action sans schéma : on garde l'appel à 3 arguments
+      // (le backend refuse tout body sur une action sans schéma).
+      return args ? runAdminClubAction(clubId, key, csrfToken, args) : runAdminClubAction(clubId, key, csrfToken);
     },
     // Une action mute le club (quota, saison) : rafraîchir la liste ET l'overview.
     onSettled: () => {

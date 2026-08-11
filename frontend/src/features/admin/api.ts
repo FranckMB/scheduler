@@ -166,6 +166,27 @@ export interface AdminJobRunResponse {
   exitCode: 0;
 }
 
+/** Un choix d'un argument fermé (valeur CLI + libellé lisible pour le picker). */
+export interface AdminActionChoice {
+  value: string;
+  label: string;
+}
+
+/**
+ * Un argument runtime BORNÉ d'une action (A3) : enum fermée de choix, servie par le
+ * backend — la console rend ses pickers DEPUIS ce schéma, jamais d'une liste en dur.
+ * `gate` présent = argument conditionnel : masqué quand la valeur du gate ∈
+ * `forbiddenValues`, requis sinon (règle de set-plan : saison encaissée exigée pour
+ * une offre payante, interdite sur Découverte).
+ */
+export interface AdminActionArgumentSpec {
+  key: string;
+  label: string;
+  required: boolean;
+  choices: AdminActionChoice[];
+  gate?: { argument: string; forbiddenValues: string[] };
+}
+
 /** SA4 — action support sur un club, du catalogue FERMÉ (backend AdminActionCatalog). */
 export interface AdminAction {
   key: string;
@@ -173,6 +194,8 @@ export interface AdminAction {
   description: string;
   /** Destructif → confirmation nominative (taper le nom du club). */
   dangerous: boolean;
+  /** Schéma d'arguments fermé (vide = l'action ne prend aucun body). */
+  arguments: AdminActionArgumentSpec[];
 }
 
 export interface AdminActionsResponse {
@@ -318,8 +341,15 @@ export function getAdminFreshness(): Promise<AdminFreshnessResponse> {
   return adminApi.get("freshness").json();
 }
 
-export function runAdminClubAction(clubId: string, key: string, csrfToken: string): Promise<AdminClubActionRunResponse> {
-  return adminApi.post(`clubs/${encodeURIComponent(clubId)}/actions/${encodeURIComponent(key)}`, { headers: { "X-CSRF-Token": csrfToken } }).json();
+export function runAdminClubAction(clubId: string, key: string, csrfToken: string, body?: Record<string, string>): Promise<AdminClubActionRunResponse> {
+  // Body OPTIONNEL : seulement pour une action à schéma (ex. set-plan). Absent → POST
+  // sans corps (l'action sans schéma n'accepte aucun argument, garde fail-closed côté backend).
+  return adminApi
+    .post(`clubs/${encodeURIComponent(clubId)}/actions/${encodeURIComponent(key)}`, {
+      headers: { "X-CSRF-Token": csrfToken },
+      ...(body ? { json: body } : {}),
+    })
+    .json();
 }
 
 export function logoutAdmin(csrfToken: string): Promise<void> {

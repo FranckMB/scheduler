@@ -1,9 +1,22 @@
-Last verified @ 2026-08-11 (JSON **régénéré** depuis le backend vivant — `GET /api/admin/clubs` troque `planId` contre `plan`/`paidSeasonYear`/`effectivePlan` (A1) ; les 15 dernières routes custom au contrat, `KNOWN_UNDOCUMENTED` vide)
+Last verified @ 2026-08-11 (JSON **régénéré** depuis le backend vivant — le rail SA4 `POST /api/admin/clubs/{clubId}/actions/{key}` gagne un requestBody à schéma fermé + un 400 nommé, et `GET /api/admin/actions` expose le schéma d'arguments des actions (A3) ; en amont : `GET /api/admin/clubs` troque `planId` contre `plan`/`paidSeasonYear`/`effectivePlan` (A1))
 
 Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **A3 — bouton « Offre » unique + rail SA4 à arguments BORNÉS (2026-08-11)** : le rail des
+  actions support gagne des arguments RUNTIME, mais bornés par un **schéma fermé** (enum de
+  valeurs seule, aucun texte libre représentable). `GET /api/admin/actions` expose désormais,
+  par action, son schéma `arguments` (`key`, `label`, `required`, `choices[{value,label}]`, et
+  `gate {argument, forbiddenValues}` pour un argument conditionnel) — la console rend ses pickers
+  DEPUIS ce schéma, jamais d'une liste en dur. `POST /api/admin/clubs/{clubId}/actions/{key}`
+  gagne un **requestBody** optionnel (objet `string→string`) et un **400 nommé** : clé inconnue,
+  valeur hors enum, argument requis manquant, argument interdit présent, ou tout body sur une
+  action SANS schéma. Fail-closed : rien ne s'exécute avant validation. Le catalogue passe de
+  **12 à 7 entrées** — les 6 `set-plan-*` figées fusionnent en UNE « Offre » à schéma (`plan` +
+  `paidSeason` conditionnel : requis pour toute offre payante, interdit sur Découverte). Aucun
+  path nouveau (146). Gardé par `AdminClubActionTest` (schéma fail-closed) et
+  `SetClubPlanCommandTest` (encaissement sur l'horloge démo, monotone).
 - **A1 — le badge de la console dit l'offre EFFECTIVE (2026-08-11)** : `GET /api/admin/clubs`
   retire `planId` (annoncé `integer`, c'était en fait un uuid — type faux) et le remplace par
   trois champs : `plan { code, name } | null` (l'offre **STOCKÉE**, null en Découverte par

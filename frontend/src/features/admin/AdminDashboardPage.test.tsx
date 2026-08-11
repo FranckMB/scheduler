@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { axe } from "vitest-axe";
@@ -151,11 +151,47 @@ const jobs: AdminJobsResponse = {
   ],
 };
 
-// SA4 — catalogue fermé d'actions support (miroir du backend AdminActionCatalog).
+// SA4 — catalogue fermé d'actions support (miroir du backend AdminActionCatalog : 7 items,
+// dont « Offre » à SCHÉMA fermé). Les pickers viennent de ce schéma, jamais d'une liste en dur.
 const actions: AdminActionsResponse = {
   items: [
-    { key: "reset-generation-quota", label: "Réinitialiser le quota de générations", description: "Remet le compteur à zéro.", dangerous: false },
-    { key: "reset-current-season", label: "Réinitialiser la saison courante", description: "Vide toutes les données de la saison courante.", dangerous: true },
+    { key: "reset-generation-quota", label: "Réinitialiser le quota de générations", description: "Remet le compteur à zéro.", dangerous: false, arguments: [] },
+    { key: "ffbb-resync", label: "Resynchroniser depuis la FFBB", description: "Ré-importe l’identité FFBB du club.", dangerous: false, arguments: [] },
+    { key: "mark-next-season-paid", label: "Marquer la saison suivante payée", description: "Enregistre le paiement de la saison suivante.", dangerous: false, arguments: [] },
+    {
+      key: "set-plan",
+      label: "Offre",
+      description: "Attribue une offre au club et, pour toute offre payante, marque la saison encaissée.",
+      dangerous: false,
+      arguments: [
+        {
+          key: "plan",
+          label: "Offre",
+          required: true,
+          choices: [
+            { value: "decouverte", label: "Découverte" },
+            { value: "essentiel", label: "Essentiel" },
+            { value: "club", label: "Club" },
+            { value: "grand-club", label: "Grand club" },
+            { value: "sans-limite", label: "Sans limite" },
+            { value: "beta", label: "Bêta" },
+          ],
+        },
+        {
+          key: "paidSeason",
+          label: "Saison encaissée",
+          required: false,
+          gate: { argument: "plan", forbiddenValues: ["decouverte"] },
+          choices: [
+            { value: "current", label: "Saison en cours (le club a réglé)" },
+            { value: "next", label: "Saison suivante" },
+          ],
+        },
+      ],
+    },
+    { key: "reset-credits", label: "Réinitialiser les crédits de sortie", description: "Remet à zéro le pool de crédits.", dangerous: false, arguments: [] },
+    { key: "reset-current-season", label: "Réinitialiser la saison courante", description: "Vide toutes les données de la saison courante.", dangerous: true, arguments: [] },
+    { key: "purge-old-seasons", label: "Purger les anciennes saisons", description: "Supprime les saisons au-delà de la rétention.", dangerous: true, arguments: [] },
   ],
 };
 
@@ -317,6 +353,71 @@ describe("AdminDashboardPage", () => {
     await user.click(execute);
 
     await waitFor(() => expect(mockRunClubAction).toHaveBeenCalledWith("club-1", "reset-current-season", "csrf-123"));
+  });
+
+  it("lists the full closed catalogue (7 items) in the support-actions modal (A3)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin?tab=clubs" });
+
+    await user.click(await screen.findByRole("button", { name: "Actions" }));
+    const dialog = await screen.findByRole("dialog", { name: /Actions support/ });
+    // Le catalogue est FERMÉ : exactement 7 entrées, dont l'unique bouton « Offre » (A3).
+    expect(within(dialog).getAllByRole("listitem")).toHaveLength(7);
+    expect(within(dialog).getByRole("button", { name: /^Offre/ })).toBeInTheDocument();
+  });
+
+  it("renders the offer pickers FROM the served schema and sends the chosen offer + season (A3)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin?tab=clubs" });
+
+    await user.click(await screen.findByRole("button", { name: "Actions" }));
+    await user.click(await screen.findByRole("button", { name: /^Offre/ }));
+
+    // Le picker d'offre n'offre QUE les codes servis par le schéma (aucune liste en dur).
+    const planPicker = screen.getByLabelText("Offre", { selector: "select" });
+    const planOptions = within(planPicker).getAllByRole("option").map((option) => option.textContent);
+    expect(planOptions).toEqual(["Choisir…", "Découverte", "Essentiel", "Club", "Grand club", "Sans limite", "Bêta"]);
+
+    // Tant que l'offre n'est pas choisie, pas de sélecteur de saison ; le bouton reste bloqué.
+    expect(screen.queryByLabelText("Saison encaissée")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exécuter" })).toBeDisabled();
+
+    await user.selectOptions(planPicker, "essentiel");
+    // Offre payante → la saison encaissée APPARAÎT et devient exigée : soumission
+    // impossible tant qu'elle n'est pas choisie.
+    const seasonPicker = screen.getByLabelText("Saison encaissée", { selector: "select" });
+    expect(screen.getByRole("button", { name: "Exécuter" })).toBeDisabled();
+    await user.selectOptions(seasonPicker, "next");
+    expect(screen.getByRole("button", { name: "Exécuter" })).toBeEnabled();
+
+    // Popup de confirmation OBLIGATOIRE, nommant l'offre et la saison, avant tout envoi.
+    await user.click(screen.getByRole("button", { name: "Exécuter" }));
+    const confirm = await screen.findByRole("dialog", { name: /Confirmer : Offre/ });
+    expect(within(confirm).getByText(/Essentiel/)).toBeInTheDocument();
+    expect(within(confirm).getByText(/Saison suivante/)).toBeInTheDocument();
+    expect(mockRunClubAction).not.toHaveBeenCalled();
+
+    await user.click(within(confirm).getByRole("button", { name: "Confirmer l’attribution" }));
+    await waitFor(() => expect(mockRunClubAction).toHaveBeenCalledWith("club-1", "set-plan", "csrf-123", { plan: "essentiel", paidSeason: "next" }));
+  });
+
+  it("hides the season selector for Découverte and never sends it (A3)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin?tab=clubs" });
+
+    await user.click(await screen.findByRole("button", { name: "Actions" }));
+    await user.click(await screen.findByRole("button", { name: /^Offre/ }));
+
+    await user.selectOptions(screen.getByLabelText("Offre", { selector: "select" }), "decouverte");
+    // Découverte : aucune saison à encaisser → pas de sélecteur, exécution possible directe.
+    expect(screen.queryByLabelText("Saison encaissée")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exécuter" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Exécuter" }));
+    const confirm = await screen.findByRole("dialog", { name: /Confirmer : Offre/ });
+    await user.click(within(confirm).getByRole("button", { name: "Confirmer l’attribution" }));
+    // Le corps envoyé ne porte QUE l'offre — jamais paidSeason sur Découverte.
+    await waitFor(() => expect(mockRunClubAction).toHaveBeenCalledWith("club-1", "set-plan", "csrf-123", { plan: "decouverte" }));
   });
 
   it("searches and paginates through the clubs API", async () => {

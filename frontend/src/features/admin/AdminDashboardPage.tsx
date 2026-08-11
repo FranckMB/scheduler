@@ -28,7 +28,7 @@ import { Spinner } from "@/shared/components/ui/spinner";
 import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
 
-import type { AdminAction, AdminClub, AdminFreshnessResponse, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
+import type { AdminAction, AdminActionArgumentSpec, AdminClub, AdminFreshnessResponse, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
 import { useAdminActions, useAdminClubs, useAdminFreshness, useAdminHealth, useAdminJobs, useAdminOverview, useRunAdminClubAction, useRunAdminJob } from "./queries";
 import { ClubRequestsSection } from "./sections/ClubRequestsSection";
 import { ContainersSection } from "./sections/ContainersSection";
@@ -630,29 +630,70 @@ function ClubRow({ club, onActions }: { club: AdminClub; onActions: () => void }
   );
 }
 
+/** Un argument à schéma est-il VISIBLE au vu des valeurs choisies ? Sans gate → toujours.
+ *  Avec gate → seulement quand la valeur du gate est posée ET hors des valeurs interdites
+ *  (ex. « saison encaissée » masquée tant que l'offre n'est pas choisie, et sur Découverte). */
+function isArgVisible(arg: AdminActionArgumentSpec, values: Record<string, string>): boolean {
+  if (!arg.gate) return true;
+  const gateValue = values[arg.gate.argument];
+  return gateValue !== undefined && gateValue !== "" && !arg.gate.forbiddenValues.includes(gateValue);
+}
+
+/** Requis pour soumettre : un argument sans gate suit son `required` ; un conditionnel
+ *  est requis exactement quand il est visible (offre payante → saison exigée). */
+function isArgRequired(arg: AdminActionArgumentSpec, values: Record<string, string>): boolean {
+  return arg.gate ? isArgVisible(arg, values) : arg.required;
+}
+
 /**
- * SA4 — dialog des actions support sur UN club. Catalogue FERMÉ servi par le
- * backend ; une action `dangerous` exige de TAPER LE NOM du club (confirmation
- * nominative, pattern GitHub) — le clic réflexe ne suffit jamais pour du destructif.
+ * SA4 — dialog des actions support sur UN club. Catalogue FERMÉ servi par le backend.
+ * Une action à SCHÉMA (ex. « Offre ») rend ses pickers DEPUIS le schéma servi (aucune
+ * liste d'offres en dur), puis exige une popup de confirmation NOMMANT l'offre et la
+ * saison choisies avant d'exécuter. Une action `dangerous` exige de TAPER LE NOM du
+ * club (confirmation nominative, pattern GitHub) — le clic réflexe ne suffit jamais.
  */
 function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => void }) {
   const actions = useAdminActions();
   const run = useRunAdminClubAction();
   const [selected, setSelected] = useState<AdminAction | null>(null);
   const [confirmName, setConfirmName] = useState("");
+  const [argValues, setArgValues] = useState<Record<string, string>>({});
+  const [confirmingOffer, setConfirmingOffer] = useState(false);
+
+  const schema = selected?.arguments ?? [];
+  const hasSchema = schema.length > 0;
 
   // trim SYMÉTRIQUE : un nom de club stocké avec un espace de bord resterait
   // inconfirmable sinon (revue SA4, finding 5). Un nom VIDE après trim reste
   // INCONFIRMABLE (fail-closed) : sinon un champ vide validerait le destructif
   // sur un club au nom blanc (round 2) — bloquer vaut mieux que contourner.
   const normalizedClubName = club.name.trim();
-  const confirmBlocked = null !== selected && selected.dangerous && ("" === normalizedClubName || confirmName.trim() !== normalizedClubName);
+  const nameBlocked = null !== selected && selected.dangerous && ("" === normalizedClubName || confirmName.trim() !== normalizedClubName);
+  const schemaIncomplete = schema.some((arg) => isArgRequired(arg, argValues) && !argValues[arg.key]);
+  const primaryBlocked = nameBlocked || (hasSchema && schemaIncomplete) || run.isPending;
 
-  const execute = () => {
-    if (!selected || confirmBlocked || run.isPending) return;
+  // Corps soumis = seulement les arguments VISIBLES et renseignés (la saison masquée
+  // sur Découverte n'est jamais envoyée — le backend la refuserait, fail-closed des deux côtés).
+  const submitArgs = (): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const arg of schema) {
+      if (isArgVisible(arg, argValues) && argValues[arg.key]) out[arg.key] = argValues[arg.key];
+    }
+    return out;
+  };
+
+  const reset = () => {
+    setSelected(null);
+    setConfirmName("");
+    setArgValues({});
+    setConfirmingOffer(false);
+  };
+
+  const doRun = () => {
+    if (!selected || primaryBlocked) return;
     const action = selected;
     run.mutate(
-      { clubId: club.id, key: action.key },
+      { clubId: club.id, key: action.key, args: hasSchema ? submitArgs() : undefined },
       {
         onSuccess: () => {
           toast.success(`${action.label} — terminé pour ${club.name}.`);
@@ -662,6 +703,22 @@ function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => 
       },
     );
   };
+
+  // Une action à schéma passe TOUJOURS par la popup de confirmation ; les autres exécutent
+  // directement (le destructif étant déjà gardé par la saisie nominative ci-dessus).
+  const onPrimary = () => {
+    if (primaryBlocked) return;
+    if (hasSchema) {
+      setConfirmingOffer(true);
+      return;
+    }
+    doRun();
+  };
+
+  // Résumé nominatif pour la popup : chaque argument visible → « Libellé : Choix ».
+  const chosenSummary = schema
+    .filter((arg) => isArgVisible(arg, argValues) && argValues[arg.key])
+    .map((arg) => ({ label: arg.label, value: arg.choices.find((c) => c.value === argValues[arg.key])?.label ?? argValues[arg.key] }));
 
   return (
     <Modal label={`Actions support — ${club.name}`} title={`Actions support — ${club.name}`} onClose={onClose}>
@@ -679,6 +736,7 @@ function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => 
                   onClick={() => {
                     setSelected(action);
                     setConfirmName("");
+                    setArgValues({});
                   }}
                 >
                   <span className="flex items-center justify-between gap-3">
@@ -696,6 +754,30 @@ function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => 
           <div className="space-y-3">
             <p className="text-sm font-medium">{selected.label}</p>
             <p className="text-xs text-muted-foreground">{selected.description}</p>
+
+            {schema.map((arg) =>
+              isArgVisible(arg, argValues) ? (
+                <div key={arg.key} className="space-y-1">
+                  <label className="block text-xs text-muted-foreground" htmlFor={`action-arg-${arg.key}`}>
+                    {arg.label}
+                  </label>
+                  <select
+                    id={`action-arg-${arg.key}`}
+                    value={argValues[arg.key] ?? ""}
+                    onChange={(event) => setArgValues((previous) => ({ ...previous, [arg.key]: event.target.value }))}
+                    className="h-10 w-full rounded-md border border-border bg-transparent px-3 text-sm outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    <option value="">Choisir…</option>
+                    {arg.choices.map((choice) => (
+                      <option key={choice.value} value={choice.value}>
+                        {choice.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null,
+            )}
+
             {selected.dangerous ? (
               <div className="space-y-2">
                 <label className="block text-xs text-muted-foreground" htmlFor="confirm-club-name">
@@ -712,10 +794,10 @@ function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => 
               </div>
             ) : null}
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setSelected(null)} disabled={run.isPending}>
+              <Button type="button" variant="ghost" onClick={reset} disabled={run.isPending}>
                 Retour
               </Button>
-              <Button type="button" variant={selected.dangerous ? "destructive" : "default"} disabled={confirmBlocked || run.isPending} onClick={execute}>
+              <Button type="button" variant={selected.dangerous ? "destructive" : "default"} disabled={primaryBlocked} onClick={onPrimary}>
                 {run.isPending ? <Spinner className="size-4" /> : null}
                 Exécuter
               </Button>
@@ -723,6 +805,26 @@ function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => 
           </div>
         ) : null}
       </div>
+
+      <ConfirmDialog
+        open={confirmingOffer}
+        title={selected ? `Confirmer : ${selected.label}` : "Confirmer"}
+        description={
+          <span className="block space-y-1">
+            <span className="block">Pour {club.name} :</span>
+            {chosenSummary.map((line) => (
+              <span key={line.label} className="block font-medium">
+                {line.label} : {line.value}
+              </span>
+            ))}
+          </span>
+        }
+        confirmLabel="Confirmer l’attribution"
+        destructive={false}
+        confirmDisabled={run.isPending}
+        onConfirm={doRun}
+        onCancel={() => setConfirmingOffer(false)}
+      />
     </Modal>
   );
 }
