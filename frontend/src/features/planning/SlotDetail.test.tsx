@@ -83,8 +83,9 @@ describe("SlotDetail — origine du verrou (F1)", () => {
 
   it("UNKNOWN se lit comme une IGNORANCE, pas comme une absence de verrou", () => {
     renderDetail({ slot: { lockOrigin: "UNKNOWN" } });
-    // Le mot « verrouillé » DOIT apparaître : le créneau est bien bloqué.
-    expect(screen.getByText(/verrouill/i)).toBeInTheDocument();
+    // Le mot « verrouillé » DOIT apparaître (label ET explication) : le créneau est bien
+    // bloqué, on ne sait juste pas d'où vient le verrou.
+    expect(screen.getAllByText(/verrouill/i).length).toBeGreaterThan(0);
   });
 
   it("n'affiche aucune origine quand le créneau n'est pas verrouillé", () => {
