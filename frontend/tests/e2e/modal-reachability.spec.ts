@@ -99,21 +99,28 @@ test.describe("une modale longue reste atteignable", () => {
     const actions = page.getByRole("button", { name: "Actions" }).first();
     await expect(actions, "la console doit lister au moins un club").toBeVisible({ timeout: 20_000 });
 
-    for (const viewport of [
-      // Une fenêtre de bureau ORDINAIRE : c'est là que le bug a été vu, la modale dépasse
-      // déjà sans qu'on ait besoin de rétrécir quoi que ce soit.
-      { width: 1440, height: 900 },
-      // ⚠ Fenêtre de bureau COURTE (portable, barre des tâches, navigateur non maximisé).
-      // Mesuré : la modale fait ~880 px, donc à 900 elle tient TOUT JUSTE même cassée —
-      // c'est à 600 que le défaut est franc et que l'assertion de débordement le nomme.
-      { width: 1440, height: 600 },
-      // 320×256 = la condition de reflow de WCAG 1.4.10 (équivalent 400 % de zoom sur
-      // 1280×1024). Le standard l'exige, on la teste telle quelle.
-      { width: 320, height: 256 },
+    // ⚠ On ne PARIE plus sur une hauteur de fenêtre fixe — c'est ce qui a rendu ce test faux
+    // quand A3 a raccourci la modale de 12 à 7 items : à 1440×900 une modale de 7 items ne
+    // dépasse plus, le TÉMOIN refuse (à juste titre) un scénario qui ne teste rien, et le
+    // test rougit sans qu'aucun bug de reflow existe. La propriété n'est pas « telle modale
+    // dépasse à 900 px », c'est « le panneau s'adapte au viewport, quelle que soit sa
+    // hauteur ». On MESURE donc la modale, puis on force une fenêtre plus basse qu'elle : le
+    // débordement est garanti quel que soit le nombre d'items, aujourd'hui comme demain.
+    for (const width of [
+      1440, // bureau
+      320, //  la largeur de reflow WCAG 1.4.10 (équivalent 400 % de zoom sur 1280×1024)
     ]) {
-      await page.setViewportSize(viewport);
+      // Ouvrir d'abord à hauteur ample pour mesurer la modale à sa taille naturelle.
+      await page.setViewportSize({ width, height: 900 });
       await actions.click();
-      await expectDialogFitsAndScrolls(page, `Actions support · ${viewport.width}×${viewport.height}`);
+      const box = await page.getByRole("dialog").boundingBox();
+      expect(box, "la modale doit être mesurable avant de rétrécir").not.toBeNull();
+
+      // Fenêtre plus basse que la modale (plancher 200 px) : le débordement est forcé.
+      const height = Math.max(200, Math.round(box!.height) - 80);
+      await page.setViewportSize({ width, height });
+      await expectDialogFitsAndScrolls(page, `Actions support · ${width}×${height}`);
+
       await page.getByRole("dialog").getByRole("button", { name: "Fermer", exact: true }).click();
       await expect(page.getByRole("dialog")).toBeHidden();
     }
