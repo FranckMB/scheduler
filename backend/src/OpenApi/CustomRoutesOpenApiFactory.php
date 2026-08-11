@@ -24,10 +24,13 @@ use Symfony\Component\DependencyInjection\Attribute\AsDecorator;
  *
  * ⚠ EVERY custom `#[Route]` must be declared here — a route missing from this
  * factory is invisible to the export even after the snapshot is regenerated.
- * Currently covered: `/api/register`, `/api/me` (AuthController),
- * `/api/schedule-slots/{id}/manual-edit/*` (ManualEditController),
- * `/api/school-holidays`, `/api/public-holidays` (holiday feeds). The remaining
- * custom routes are tracked as a gap in `specs/evolution/roadmap.md` §9.
+ *
+ * ⚑ **La dette est soldée depuis P4-47** : les 15 routes qui restaient hors contrat
+ * (console superadmin, pages publiques à token, proxy FFBB) sont déclarées, et
+ * `EveryCustomRouteIsDocumentedTest::KNOWN_UNDOCUMENTED` est VIDE. Ce test confronte la
+ * factory au ROUTEUR dans les deux sens — il n'y a donc plus de baseline où se réfugier :
+ * **toute route custom ajoutée sans son entrée ici fait rougir la CI**. Le réflexe est
+ * désormais « nouvelle `#[Route]` custom = nouvelle entrée dans cette factory », point.
  */
 // SEC-16 : priorité NÉGATIVE pour être le décorateur le PLUS EXTERNE — lexik
 // décore aussi cette factory (priorité 0) et écrit `/api/login` en dur avec un
@@ -385,6 +388,22 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             $paths->addPath($path, $pathItem);
         }
 
+        foreach ($this->adminSupportPaths() as $path => $pathItem) {
+            $paths->addPath($path, $pathItem);
+        }
+
+        foreach ($this->adminJournalPaths() as $path => $pathItem) {
+            $paths->addPath($path, $pathItem);
+        }
+
+        foreach ($this->publicTokenPaths() as $path => $pathItem) {
+            $paths->addPath($path, $pathItem);
+        }
+
+        foreach ($this->ffbbPaths() as $path => $pathItem) {
+            $paths->addPath($path, $pathItem);
+        }
+
         $paths->addPath('/api/seasons/{id}/transition', new PathItem(post: new Operation(
             operationId: 'transitionSeason',
             tags: ['Season'],
@@ -709,6 +728,28 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ],
                 summary: 'Probe DB, Redis, engine, worker heartbeat, Mercure and Messenger queues',
             )),
+            '/api/admin/freshness' => new PathItem(get: new Operation(
+                operationId: 'getAdminFreshness',
+                tags: ['AdminMonitoring'],
+                responses: [
+                    // « Jamais importé » est PÉRIMÉ, pas inconnu (fail-visible) : `lastUpdatedAt`
+                    // null va toujours avec `stale` true. Le job d'alerte lit la même liste.
+                    '200' => $this->jsonResponse('Reference-data freshness board (school holidays, public holidays, FFBB directory, DB backup)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'key' => ['type' => 'string', 'enum' => ['school-holidays', 'public-holidays', 'ffbb-directory', 'db-backup']],
+                                'label' => ['type' => 'string'],
+                                'lastUpdatedAt' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                                'staleAfterDays' => ['type' => 'integer'],
+                                'stale' => ['type' => 'boolean'],
+                            ]]],
+                        ],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'Read the data-freshness board of the reference datasets',
+            )),
             '/api/admin/overview' => new PathItem(get: new Operation(
                 operationId: 'getAdminOverview',
                 tags: ['AdminMonitoring'],
@@ -867,6 +908,515 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ],
             )),
         ];
+    }
+
+    /**
+     * SA4 — le catalogue d'actions support et les deux portes de déblocage (P3-4 PR B).
+     *
+     * ⚠ Les 404 de cette famille sont VOLONTAIREMENT indistincts : action inconnue, uuid
+     * malformé et club inexistant rendent la même réponse (`AdminClubActionController:84-99`).
+     * Documenter trois codes distincts inviterait un client à croire qu'il peut les
+     * discriminer — et un jour quelqu'un l'implémenterait côté serveur pour « respecter le
+     * contrat ».
+     *
+     * @return array<string, PathItem>
+     */
+    private function adminSupportPaths(): array
+    {
+        $csrfHeader = ['name' => 'X-CSRF-Token', 'in' => 'header', 'required' => true, 'schema' => ['type' => 'string']];
+        $decisionBody = $this->jsonBody([
+            'type' => 'object',
+            'required' => ['decision'],
+            'properties' => ['decision' => ['type' => 'string', 'enum' => ['approve', 'refuse']]],
+        ]);
+
+        return [
+            '/api/admin/actions' => new PathItem(get: new Operation(
+                operationId: 'getAdminActions',
+                tags: ['AdminSupport'],
+                responses: [
+                    '200' => $this->jsonResponse('The CLOSED catalogue of support actions (never an arbitrary command)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'key' => ['type' => 'string'],
+                                'label' => ['type' => 'string'],
+                                'description' => ['type' => 'string'],
+                                // Le client DOIT exiger une confirmation nominative dessus.
+                                'dangerous' => ['type' => 'boolean'],
+                            ]]],
+                        ],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'List the closed catalogue of per-club support actions',
+            )),
+            '/api/admin/clubs/{clubId}/actions/{key}' => new PathItem(post: new Operation(
+                operationId: 'runAdminClubAction',
+                tags: ['AdminSupport'],
+                responses: [
+                    '200' => $this->jsonResponse('The action ran and its command exited 0', [
+                        'type' => 'object',
+                        'properties' => [
+                            'key' => ['type' => 'string'],
+                            'clubId' => ['type' => 'string', 'format' => 'uuid'],
+                            'status' => ['type' => 'string', 'enum' => [AdminJobStatus::SUCCEEDED->value]],
+                            'exitCode' => ['type' => 'integer', 'enum' => [0]],
+                        ],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                    '403' => new Response('Invalid CSRF token'),
+                    '404' => new Response('Unknown action key, malformed club id, or unknown club (deliberately indistinct)'),
+                    '409' => new Response('The same action (or its scheduled twin) is already running'),
+                    '500' => new Response('Unexpected execution failure'),
+                    '502' => new Response('The command returned a non-zero exit code (body carries exitCode)'),
+                ],
+                summary: 'Run one catalogue support action against one club (audited, locked, historised)',
+                parameters: [
+                    // Aucun `requirements` de route sur clubId côté Symfony, délibérément : un
+                    // 404 AU ROUTEUR précéderait le firewall et renseignerait un probe anonyme
+                    // sans laisser de trace. Le format est donc décrit ici, validé en controller.
+                    ['name' => 'clubId', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'uuid']],
+                    ['name' => 'key', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string']],
+                    $csrfHeader,
+                ],
+            )),
+            '/api/admin/club-requests' => new PathItem(get: new Operation(
+                operationId: 'getAdminClubRequests',
+                tags: ['AdminSupport'],
+                responses: [
+                    '200' => $this->jsonResponse('Club-creation requests still actionable — PENDING and EXPIRED alike (an expired one leaves the public link, not the console)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'id' => ['type' => 'string', 'format' => 'uuid'],
+                                'clubName' => ['type' => 'string'],
+                                'ara' => ['type' => 'string'],
+                                'clubEmail' => ['type' => ['string', 'null']],
+                                'status' => ['type' => 'string', 'enum' => ['pending', 'expired']],
+                                'requesterName' => ['type' => 'string'],
+                                'requesterEmail' => ['type' => 'string'],
+                                'createdAt' => ['type' => 'string', 'format' => 'date'],
+                                'expiresAt' => ['type' => 'string', 'format' => 'date'],
+                            ]]],
+                        ],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'List the club-creation requests awaiting a decision',
+            )),
+            '/api/admin/club-requests/{id}/decision' => new PathItem(post: new Operation(
+                operationId: 'decideAdminClubRequest',
+                tags: ['AdminSupport'],
+                responses: [
+                    '200' => $this->jsonResponse('Decision recorded — `clubId` is present on approve only', [
+                        'type' => 'object',
+                        'properties' => [
+                            'status' => ['type' => 'string', 'enum' => ['approved', 'refused']],
+                            'clubId' => ['type' => 'string', 'format' => 'uuid'],
+                        ],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                    '403' => new Response('Invalid CSRF token'),
+                    '404' => new Response('Unknown request, malformed id, or already decided'),
+                    '422' => new Response('decision must be "approve" or "refuse"'),
+                ],
+                summary: 'Approve or refuse a club-creation request from the console (fallback when the FFBB mail path is dead)',
+                parameters: [
+                    ['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'uuid']],
+                    $csrfHeader,
+                ],
+                requestBody: $decisionBody,
+            )),
+            '/api/admin/pending-memberships' => new PathItem(get: new Operation(
+                operationId: 'getAdminPendingMemberships',
+                tags: ['AdminSupport'],
+                responses: [
+                    '200' => $this->jsonResponse('Memberships awaiting approval, all clubs', [
+                        'type' => 'object',
+                        'properties' => [
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'id' => ['type' => 'string', 'format' => 'uuid'],
+                                'clubName' => ['type' => 'string'],
+                                'ara' => ['type' => ['string', 'null']],
+                                'userName' => ['type' => 'string'],
+                                'userEmail' => ['type' => 'string'],
+                                'createdAt' => ['type' => 'string', 'format' => 'date'],
+                            ]]],
+                        ],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'List the pending club memberships across all clubs',
+            )),
+            '/api/admin/pending-memberships/{id}/activate' => new PathItem(post: new Operation(
+                operationId: 'activateAdminPendingMembership',
+                tags: ['AdminSupport'],
+                responses: [
+                    '200' => $this->jsonResponse('Membership activated', [
+                        'type' => 'object',
+                        'properties' => ['status' => ['type' => 'string', 'enum' => ['activated']]],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                    '403' => new Response('Invalid CSRF token'),
+                    // Un membre DÉSACTIVÉ par son club tombe ici aussi : cette porte n'ouvre
+                    // que le PENDING, jamais une réactivation (elle contournerait le club).
+                    '404' => new Response('Unknown, malformed, already active, or deactivated-by-the-club membership'),
+                ],
+                summary: 'Activate a pending membership when the club hand-over never happened',
+                parameters: [
+                    ['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'uuid']],
+                    $csrfHeader,
+                ],
+            )),
+        ];
+    }
+
+    /**
+     * Les trois journaux read-only de la console (livrés avec les onglets, 2026-07-25).
+     *
+     * @return array<string, PathItem>
+     */
+    private function adminJournalPaths(): array
+    {
+        $pageParameters = [
+            ['name' => 'page', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'minimum' => 1, 'default' => 1]],
+        ];
+
+        return [
+            '/api/admin/audit-log' => new PathItem(get: new Operation(
+                operationId: 'getAdminAuditLog',
+                tags: ['AdminJournal'],
+                responses: [
+                    '200' => $this->jsonResponse('Paginated super-admin audit trail (who did what on the cross-tenant surface)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'id' => ['type' => 'string'],
+                                'actorId' => ['type' => ['string', 'null'], 'format' => 'uuid'],
+                                'actorEmail' => ['type' => ['string', 'null']],
+                                'route' => ['type' => ['string', 'null']],
+                                // `details` du modèle : le contexte fusionné par
+                                // AdminAuditSubscriber (clubId, actionKey…), forme libre.
+                                'context' => ['type' => 'object', 'additionalProperties' => true],
+                                'status' => ['type' => ['integer', 'null']],
+                                'createdAt' => ['type' => 'string', 'format' => 'date-time'],
+                            ]]],
+                            'pagination' => $this->paginationSchema(),
+                        ],
+                    ]),
+                    '400' => new Response('Invalid page, limit, actor UUID or since date'),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'Read the paginated super-admin audit log',
+                parameters: [
+                    ...$pageParameters,
+                    ['name' => 'limit', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 200, 'default' => 50]],
+                    ['name' => 'actor', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'format' => 'uuid']],
+                    ['name' => 'route', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string'], 'description' => 'Substring match on the audited route'],
+                    ['name' => 'since', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'format' => 'date'], 'description' => 'ISO date (YYYY-MM-DD)'],
+                ],
+            )),
+            '/api/admin/messenger/failed' => new PathItem(get: new Operation(
+                operationId: 'getAdminMessengerFailed',
+                tags: ['AdminJournal'],
+                responses: [
+                    // ⚠ JAMAIS le body du message — il porte de la donnée club (PII). Seuls la
+                    // classe, l'horodatage et le message d'erreur sortent.
+                    '200' => $this->jsonResponse('Paginated Messenger failure queue — metadata only, never the message body (PII)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'id' => ['type' => 'string'],
+                                'class' => ['type' => 'string', 'description' => 'Message FQCN, or "(classe inconnue)" when the class no longer exists in the code'],
+                                'failedAt' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                                'lastErrorMessage' => ['type' => 'string'],
+                            ]]],
+                            'pagination' => $this->paginationSchema(),
+                        ],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'List the failed Messenger envelopes (metadata only)',
+                parameters: [
+                    ...$pageParameters,
+                    ['name' => 'limit', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 100, 'default' => 10]],
+                ],
+            )),
+            '/api/admin/system-errors' => new PathItem(get: new Operation(
+                operationId: 'getAdminSystemErrors',
+                tags: ['AdminJournal'],
+                responses: [
+                    '200' => $this->jsonResponse('Paginated union of failed job runs and auth failures, deduplicated per (message, hour)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'source' => ['type' => 'string', 'enum' => ['job', 'audit']],
+                                'message' => ['type' => 'string'],
+                                'severity' => ['type' => 'string', 'enum' => ['error']],
+                                'createdAt' => ['type' => 'string', 'format' => 'date-time'],
+                            ]]],
+                            'pagination' => $this->paginationSchema(),
+                        ],
+                    ]),
+                    '400' => new Response('Invalid page, limit or since date'),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'Read the deduplicated system-error journal',
+                parameters: [
+                    ...$pageParameters,
+                    ['name' => 'limit', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 200, 'default' => 50]],
+                    ['name' => 'since', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'format' => 'date'], 'description' => 'ISO date (YYYY-MM-DD)'],
+                ],
+            )),
+        ];
+    }
+
+    /**
+     * Les pages PUBLIQUES à token : approbation de club et doléances coach.
+     *
+     * ⚠ **Le token EST l'identité** — il n'y a pas de JWT sur ces pages. Ne cherchez pas ça
+     * dans l'absence de `security` sur l'opération : ce document déclare `security: []` au
+     * GLOBAL et aucune opération ne porte de scheme, authentifiée ou non — l'absence n'y
+     * distingue donc rien. Ce que le contrat doit porter, sous peine d'induire un client en
+     * erreur, ce sont les trois conséquences OBSERVABLES : le 404 est BYTE-IDENTIQUE pour un
+     * token inconnu, malformé ou déjà consommé (rien ne distingue une ressource close d'un
+     * token inventé) ; le rate-limit par IP passe AVANT toute résolution, donc un 429 ne dit
+     * rien de l'existence du token ; et l'expiration répond 410, seul code de cette famille
+     * qui admette l'existence de la ressource — elle ne fuite rien, le lien ayant été envoyé
+     * à son destinataire. L'accès réel se lit dans `config/packages/security.yaml`
+     * (`^/api/coach-wishes/public/` et `^/api/club-approvals/` en `PUBLIC_ACCESS`, GET+POST).
+     *
+     * @return array<string, PathItem>
+     */
+    private function publicTokenPaths(): array
+    {
+        $tokenParameter = [
+            'name' => 'token',
+            'in' => 'path',
+            'required' => true,
+            'schema' => ['type' => 'string', 'pattern' => '^[0-9a-f]{64}$'],
+            'description' => 'The raw 64-hex token from the emailed link — it IS the identity',
+        ];
+        $notFound = new Response('Not found — identical for an unknown, malformed or already-consumed token');
+        $tooMany = new Response('Too many attempts from this IP (rate limited before any resolution)');
+
+        return [
+            '/api/club-approvals/{token}' => new PathItem(
+                get: new Operation(
+                    operationId: 'getPublicClubApproval',
+                    tags: ['PublicToken'],
+                    responses: [
+                        '200' => $this->jsonResponse('What the institutional recipient must decide on', [
+                            'type' => 'object',
+                            'properties' => [
+                                'clubName' => ['type' => 'string'],
+                                'ara' => ['type' => 'string'],
+                                'requesterName' => ['type' => 'string'],
+                                'expiresAt' => ['type' => 'string', 'format' => 'date'],
+                            ],
+                        ]),
+                        '404' => $notFound,
+                        '410' => new Response('The request expired — the super-admin console remains the fallback'),
+                        '429' => $tooMany,
+                    ],
+                    summary: 'Read a pending club-creation request from its public approval link (no account, no JWT)',
+                    parameters: [$tokenParameter],
+                ),
+                post: new Operation(
+                    operationId: 'decidePublicClubApproval',
+                    tags: ['PublicToken'],
+                    responses: [
+                        // La décision est UNIQUE : le premier POST gagne, les suivants voient 404.
+                        '200' => $this->jsonResponse('Decision recorded (single-shot — a second call sees the 404)', [
+                            'type' => 'object',
+                            'properties' => ['status' => ['type' => 'string', 'enum' => ['approved', 'refused']]],
+                        ]),
+                        '404' => $notFound,
+                        '410' => new Response('The request expired'),
+                        '422' => new Response('decision must be "approve" or "refuse"'),
+                        '429' => $tooMany,
+                    ],
+                    summary: 'Approve or refuse a club creation from the public link',
+                    parameters: [$tokenParameter],
+                    requestBody: $this->jsonBody([
+                        'type' => 'object',
+                        'required' => ['decision'],
+                        'properties' => ['decision' => ['type' => 'string', 'enum' => ['approve', 'refuse']]],
+                    ]),
+                ),
+            ),
+            '/api/coach-wishes/public/{token}' => new PathItem(
+                get: new Operation(
+                    operationId: 'getPublicCoachWish',
+                    tags: ['PublicToken'],
+                    responses: [
+                        '200' => $this->jsonResponse('The coach perimeter and the current value of its wishes (pre-fill)', [
+                            'type' => 'object',
+                            'properties' => [
+                                'coachFirstName' => ['type' => 'string'],
+                                'periodTitle' => ['type' => 'string'],
+                                'deadline' => ['type' => 'string', 'format' => 'date'],
+                                'weeks' => ['type' => 'array', 'items' => ['type' => 'string', 'format' => 'date']],
+                                // Le périmètre du coach SEUL — jamais les équipes d'un autre.
+                                'teams' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                    'id' => ['type' => 'string', 'format' => 'uuid'],
+                                    'name' => ['type' => 'string'],
+                                ]]],
+                                'wishes' => ['type' => 'array', 'items' => $this->coachWishSchema()],
+                                'respondedAt' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                            ],
+                        ]),
+                        '404' => $notFound,
+                        '410' => new Response('Campaign past its deadline, or its season is archived (read-only)'),
+                        '429' => $tooMany,
+                    ],
+                    summary: 'Read a coach wish form from its public link (no account, no JWT)',
+                    parameters: [$tokenParameter],
+                ),
+                post: new Operation(
+                    operationId: 'submitPublicCoachWish',
+                    tags: ['PublicToken'],
+                    responses: [
+                        '200' => $this->jsonResponse('Wishes upserted (idempotent — the last line of a duplicated team+week wins)', [
+                            'type' => 'object',
+                            'properties' => ['deadline' => ['type' => 'string', 'format' => 'date']],
+                        ]),
+                        '404' => $notFound,
+                        '410' => new Response('Campaign past its deadline, or its season is archived (read-only)'),
+                        // Validation COMPLÈTE avant toute écriture : un 422 n'écrit rien.
+                        '422' => new Response('Missing/oversized submissions, team outside the perimeter, week outside the collection, or invalid slot/day'),
+                        '429' => $tooMany,
+                    ],
+                    summary: 'Submit the coach wishes for the weeks of the campaign',
+                    parameters: [$tokenParameter],
+                    requestBody: $this->jsonBody([
+                        'type' => 'object',
+                        'required' => ['submissions'],
+                        'properties' => [
+                            'submissions' => ['type' => 'array', 'items' => $this->coachWishSchema()],
+                        ],
+                    ]),
+                ),
+            ),
+        ];
+    }
+
+    /**
+     * Le proxy FFBB — le frontend n'appelle JAMAIS la fédération (frontière §2), et seuls
+     * les champs utiles sont relayés, jamais le hit brut.
+     *
+     * @return array<string, PathItem>
+     */
+    private function ffbbPaths(): array
+    {
+        $salleList = ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+            'name' => ['type' => 'string'],
+            'address' => ['type' => ['string', 'null']],
+            'city' => ['type' => ['string', 'null']],
+            'externalRef' => ['type' => ['string', 'null']],
+            // Décimaux rendus en STRING : `Venue` les stocke ainsi, on normalise à la source.
+            'latitude' => ['type' => ['string', 'null']],
+            'longitude' => ['type' => ['string', 'null']],
+        ]]];
+        $unavailable = new Response('FFBB unreachable — best effort, never a broken gesture');
+        $forbidden = new Response('Management role required (SEC-07)');
+
+        return [
+            '/api/ffbb-logos/{scope}/{code}' => new PathItem(get: new Operation(
+                operationId: 'getFfbbLogo',
+                tags: ['Ffbb'],
+                responses: [
+                    '200' => new Response('The rehosted logo bytes (public brand asset, no personal data)', new ArrayObject([
+                        'image/*' => ['schema' => ['type' => 'string', 'format' => 'binary']],
+                    ])),
+                    '404' => new Response('No logo stored under this scope+code'),
+                ],
+                summary: 'Serve a rehosted FFBB league or committee logo',
+                parameters: [
+                    ['name' => 'scope', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'enum' => ['league', 'committee']]],
+                    ['name' => 'code', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'pattern' => '^[A-Za-z0-9]{1,24}$']],
+                ],
+            )),
+            '/api/ffbb/salles' => new PathItem(get: new Operation(
+                operationId: 'getFfbbSalles',
+                tags: ['Ffbb'],
+                responses: [
+                    // Ni le param ni le club ne donnent un CP exploitable ⇒ liste VIDE et
+                    // `postalCode` null, jamais une erreur : le wizard garde la saisie libre.
+                    '200' => $this->jsonResponse('The FFBB venues of a postal code, sorted by name (empty list when no usable postal code)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'postalCode' => ['type' => ['string', 'null']],
+                            'salles' => $salleList,
+                        ],
+                    ]),
+                    '401' => new Response('Unauthorized'),
+                    '403' => $forbidden,
+                    '502' => $unavailable,
+                ],
+                summary: 'Search the FFBB venues of a postal code (defaults to the club\'s)',
+                parameters: [
+                    ['name' => 'postalCode', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'string', 'pattern' => '^\d{5}$'], 'description' => 'Defaults to the current club\'s postal code'],
+                ],
+            )),
+            '/api/ffbb/salles-proches' => new PathItem(get: new Operation(
+                operationId: 'getFfbbSallesNearby',
+                tags: ['Ffbb'],
+                responses: [
+                    // Club sans géoloc ⇒ liste vide et `radiusKm` null : la combobox par CP
+                    // reste le chemin. `radiusKm` rend le palier RETENU, pas le demandé —
+                    // sans `radius`, la recherche s'élargit 3→5→10→20 tant qu'elle est maigre.
+                    '200' => $this->jsonResponse('The FFBB venues near the club, sorted by distance (empty when the club has no geolocation)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'radiusKm' => ['type' => ['integer', 'null'], 'enum' => [3, 5, 10, 20, null]],
+                            'salles' => $salleList,
+                        ],
+                    ]),
+                    '401' => new Response('Unauthorized'),
+                    '403' => $forbidden,
+                    '502' => $unavailable,
+                ],
+                summary: 'List the FFBB venues near the club, auto-widening the radius until the result is useful',
+                parameters: [
+                    ['name' => 'radius', 'in' => 'query', 'required' => false, 'schema' => ['type' => 'integer', 'enum' => [3, 5, 10, 20]], 'description' => 'Manual radius step in km; absent = auto-widening from 3 km'],
+                ],
+            )),
+        ];
+    }
+
+    /**
+     * La forme d'une doléance — LUE au pré-remplissage et ÉCRITE à la soumission. Une seule
+     * définition : les deux sens partagent réellement la même forme (`PublicCoachWishController`
+     * lit ce qu'il vient d'écrire), et deux copies divergeraient au premier champ ajouté.
+     *
+     * @return array<string, mixed>
+     */
+    private function coachWishSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'required' => ['teamId', 'weekStart'],
+            'properties' => [
+                'teamId' => ['type' => 'string', 'format' => 'uuid'],
+                'weekStart' => ['type' => 'string', 'format' => 'date', 'description' => 'Must be one of the campaign weeks AND still intersect the parent period'],
+                'slotsWanted' => ['type' => 'integer', 'minimum' => 0, 'maximum' => 7],
+                'unavailableDays' => ['type' => 'array', 'items' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 7]],
+                'comment' => ['type' => ['string', 'null'], 'maxLength' => 2000],
+            ],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function paginationSchema(): array
+    {
+        return ['type' => 'object', 'properties' => [
+            'page' => ['type' => 'integer'],
+            'limit' => ['type' => 'integer'],
+            'total' => ['type' => 'integer'],
+            'pages' => ['type' => 'integer'],
+        ]];
     }
 
     /** @return array<string, mixed> */

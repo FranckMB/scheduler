@@ -1,6 +1,6 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-Last verified @ 2026-08-10 (recalé ce jour par P1-1 PR B : **la porte d'activation d'adhésion ignore les membres désactivés par leur club** ; et par P1-3 PR A : **attribution d'offres au catalogue** — une entrée `set-plan-*` par offre à `--plan` figé + `reset-credits`, seule porte d'attribution ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
+Last verified @ 2026-08-11 (recalé ce jour par P4-47 : **toute la surface `/api/admin/**` est désormais déclarée au contrat OpenAPI** — les trois journaux ne sont plus « absents de l'export » ; précédemment recalé par P1-1 PR B : **la porte d'activation d'adhésion ignore les membres désactivés par leur club** ; et par P1-3 PR A : **attribution d'offres au catalogue** — une entrée `set-plan-*` par offre à `--plan` figé + `reset-credits`, seule porte d'attribution ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
 
 > **État courant** : SA0, SA1, la console read-only SA2, le socle
 > d'historisation SA3-A, la supervision SA3-B, la planification fiable SA3-C et
@@ -307,6 +307,8 @@ côté serveur) et rendent **400** sur un paramètre malformé plutôt que de le
 atteindre PostgreSQL. `GET /api/admin/health` a par ailleurs été étendu de façon
 **append-only** par `containers[]` et `externalDependencies[]`.
 
-⚠ Ces trois routes sont des **contrôleurs purs** : elles ne sont pas déclarées dans
-`CustomRoutesOpenApiFactory`, donc **absentes de l'export OpenAPI** — même gap que les
-autres routes `#[Route]` custom, suivi en roadmap sous **P4-47**.
+Ces trois routes sont des **contrôleurs purs**, donc invisibles de l'export tant qu'une
+entrée ne les déclare pas — elles le sont depuis le 2026-08-11 (P4-47, soldée) dans
+`CustomRoutesOpenApiFactory::adminJournalPaths()`, avec toute la surface `/api/admin/**`.
+⚠ Le contrat de `/api/admin/messenger/failed` porte explicitement que le **body d'un message
+n'est jamais rendu** (PII) : seuls la classe, l'horodatage et le message d'erreur sortent.
