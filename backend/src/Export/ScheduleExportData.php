@@ -12,6 +12,7 @@ use App\Entity\ScheduleSlotTemplate;
  * (previously copy-pasted across both). Rendering diverges; the data does not.
  *
  * @phpstan-type VenueInfo array{name: string, color: string|null}
+ * @phpstan-type TeamRankInfo array{label: string, name: string, tierRank: int, tierOrder: int}
  */
 final readonly class ScheduleExportData
 {
@@ -19,12 +20,14 @@ final readonly class ScheduleExportData
     public const DAY_LABELS = [1 => 'Lundi', 2 => 'Mardi', 3 => 'Mercredi', 4 => 'Jeudi', 5 => 'Vendredi', 6 => 'Samedi', 7 => 'Dimanche'];
 
     /**
-     * @param list<ScheduleSlotTemplate> $slots          scoped to a venue when the export is
-     * @param array<string, string>      $teamNames
-     * @param array<string, string>      $teamCategories teamId → category name
-     * @param array<string, VenueInfo>   $venues
-     * @param array<string, string>      $coachNames
-     * @param list<ExportEmptyWindow>    $emptySlots     defined-but-unfilled venue windows
+     * @param list<ScheduleSlotTemplate>  $slots          scoped to a venue when the export is
+     * @param array<string, string>       $teamNames
+     * @param array<string, string>       $teamCategories teamId → category name
+     * @param array<string, VenueInfo>    $venues
+     * @param array<string, string>       $coachNames
+     * @param list<ExportEmptyWindow>     $emptySlots     defined-but-unfilled venue windows
+     * @param array<string, TeamRankInfo> $teamRanks      teamId → its priority tier, for the PDF
+     *                                                    "team × day" matrix grouped by rank
      */
     public function __construct(
         public array $slots,
@@ -33,5 +36,6 @@ final readonly class ScheduleExportData
         public array $venues,
         public array $coachNames,
         public array $emptySlots = [],
+        public array $teamRanks = [],
     ) {}
 }

@@ -19,11 +19,17 @@ use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 /**
- * Renders a weekly training schedule as a one-page landscape grid (days ×
- * venues, time down the rows) and hands the HTML to the Puppeteer worker, which
- * fits it to a single A4 landscape page (shrinking the font as needed — a
- * multi-page training week is not useful). Scope is either every venue or a
- * single one (venue-only export, per product: no per-team / per-coach view).
+ * Renders a weekly training schedule as a landscape grid (days × venues, time
+ * down the rows) and hands the HTML to the Puppeteer worker.
+ *
+ * Section 1 (page 1) is the manager grid — the worker fits it to a single A4
+ * landscape page (shrinking the font as needed) and shoots the PNG from it.
+ * On a multi-venue export a second section is appended: a "team × day" matrix
+ * (one line per team, grouped by rank) flowing onto page(s) 2+, so a manager can
+ * hand each team the page that concerns it. The worker's multi-section mode is
+ * opt-in and back-compatible — a single-section call produces the same one-page
+ * PDF as before. Scope is either every venue or a single one; a single-venue (or
+ * single-gym) export carries no matrix — nothing to disambiguate.
  */
 class PdfGenerator
 {
@@ -65,7 +71,13 @@ class PdfGenerator
      */
     public function generate(Schedule $schedule, ?string $venueId = null): array
     {
-        $html = $this->buildHtml($schedule, $this->exportData->load($schedule, $venueId), $venueId);
+        $data = $this->exportData->load($schedule, $venueId);
+        // A "team × day" matrix is appended as a second section only on a genuinely
+        // multi-venue export (see hasMatrix). That is exactly when the PDF becomes
+        // multi-page, so the two facts are the same flag: it drives both the HTML
+        // and the worker's multi-section paging.
+        $multiSection = $this->hasMatrix($data);
+        $html = $this->buildHtml($schedule, $data, $venueId, $multiSection);
         // Scope suffix keeps the all-venues and per-venue exports as distinct files.
         $scope = null === $venueId ? 'all' : substr($venueId, 0, 8);
         $pdfFilename = \sprintf('schedule-%s-%s.pdf', $schedule->getId(), $scope);
@@ -77,7 +89,7 @@ class PdfGenerator
         // the worker, and forced a world-writable chmod).
 
         try {
-            $this->callWorker($html, $pdfFilename);
+            $this->callWorker($html, $pdfFilename, $multiSection);
         } catch (TransportExceptionInterface $e) {
             throw new RuntimeException('PDF worker unreachable: ' . $e->getMessage(), $e->getCode(), $e);
         }
@@ -90,14 +102,22 @@ class PdfGenerator
         ];
     }
 
-    private function callWorker(string $html, string $filename): void
+    private function callWorker(string $html, string $filename, bool $multiSection = false): void
     {
+        // Single-section exports keep the EXACT historical payload (no extra key), so the
+        // worker takes its unchanged one-page path and produces the same file as before.
+        // The multi-section flag is added ONLY when a matrix section is present.
+        $json = [
+            'html' => $html,
+            'filename' => $filename,
+            'landscape' => true,
+        ];
+        if ($multiSection) {
+            $json['multiSection'] = true;
+        }
+
         $response = $this->httpClient->request('POST', self::PDF_WORKER_URL, [
-            'json' => [
-                'html' => $html,
-                'filename' => $filename,
-                'landscape' => true,
-            ],
+            'json' => $json,
             'timeout' => 30,
         ]);
 
@@ -108,7 +128,7 @@ class PdfGenerator
         }
     }
 
-    private function buildHtml(Schedule $schedule, ScheduleExportData $data, ?string $venueId): string
+    private function buildHtml(Schedule $schedule, ScheduleExportData $data, ?string $venueId, bool $multiSection = false): string
     {
         $slots = $data->slots;
         $teamNames = $data->teamNames;
@@ -180,9 +200,17 @@ class PdfGenerator
         $planningName = $this->schedulePlanProvisioner->displayNameOf($schedule);
         $title = htmlspecialchars($club?->getName() ?? $planningName);
 
-        $body = [] === $columns
+        $grid = [] === $columns
             ? '<p class="empty">Aucun créneau planifié.</p>'
             : \sprintf('<table><thead>%s</thead><tbody>%s</tbody></table>', $header, $rows);
+        // Section 1 = the manager grid (page 1). The worker scales THIS section to one page
+        // and shoots the PNG from it, exactly as before.
+        $body = \sprintf('<section class="page-grid">%s</section>', $grid);
+        // Section 2 = the "team × day" matrix, on its own page(s). Only present on a
+        // multi-venue export — the same condition that set $multiSection.
+        if ($multiSection) {
+            $body .= $this->buildMatrixSection($data);
+        }
 
         return $this->wrapDocument($title, htmlspecialchars($scopeLabel), htmlspecialchars($planningName), $body, $logoImg);
     }
@@ -314,6 +342,163 @@ class PdfGenerator
     }
 
     /**
+     * Whether the "team × day" matrix (section 2) is worth appending.
+     *
+     * Same trigger as the XLSX second sheet (SpreadsheetGenerator::appendTeamDayMatrix): the
+     * matrix exists to disambiguate WHICH gym, so it only makes sense once the placements span
+     * ≥ 2 distinct venues. It reads the REALITY of the placements — never the $venueId argument
+     * nor $data->venues, which always holds every club venue regardless of scope.
+     */
+    private function hasMatrix(ScheduleExportData $data): bool
+    {
+        $venuesUsed = [];
+        foreach ($data->slots as $slot) {
+            $venuesUsed[$slot->getVenueId()] = true;
+        }
+
+        return \count($venuesUsed) >= 2;
+    }
+
+    /**
+     * Section 2 — a one-line-per-team matrix (rows = teams, columns = the days actually used,
+     * cell = gym + time, NO coach) so a manager can hand each team the page that concerns it.
+     *
+     * Mirrors the XLSX second sheet's data rules (empty windows belong to no team and never
+     * enter it; a team with no session keeps an empty row — the hole a manager must see; a
+     * team training twice a day keeps both entries). It diverges from the XLSX on ROW ORDER on
+     * purpose (founder-frozen for the PDF): rows are grouped by priority tier S→A→B→C→D, each
+     * group carrying a subtitle and kept atomic in landscape pagination (tbody break-inside:
+     * avoid), whereas the XLSX sheet sorts by category then name.
+     *
+     * Assumes hasMatrix($data) is true (caller-guarded): it still renders every season team.
+     */
+    private function buildMatrixSection(ScheduleExportData $data): string
+    {
+        $venueName = static fn (string $id): string => $data->venues[$id]['name'] ?? '';
+        $venueColor = static fn (string $id): string => $data->venues[$id]['color'] ?? '#666666';
+
+        // Model indexed by (team, day) from the placements; each entry carries its own venue
+        // colour so a cell stacking two sessions colours each like the grid does.
+        /** @var array<string, array<int, list<array{start:string, text:string, color:string}>>> $matrix */
+        $matrix = [];
+        $daysUsed = [];
+        foreach ($data->slots as $slot) {
+            $day = $slot->getDayOfWeek();
+            $start = $slot->getStartTime()->format('H:i');
+            $venueId = $slot->getVenueId();
+            // No coach on purpose (founder decision): it already lives in the grid and would
+            // only clutter the scan.
+            $matrix[$slot->getTeamId()][$day][] = [
+                'start' => $start,
+                'text' => trim($venueName($venueId) . ' · ' . $start),
+                'color' => $venueColor($venueId),
+            ];
+            $daysUsed[$day] = true;
+        }
+
+        // Rows = EVERY season team (a team with no session is a hole to surface, never hidden),
+        // plus any placement whose team is missing from teamNames (anomaly) so no slot vanishes.
+        /** @var array<string, array{name:string, label:string, subtitle:string, tierRank:int, tierOrder:int}> $teams */
+        $teams = [];
+        $teamIds = array_keys($data->teamNames + $matrix);
+        foreach ($teamIds as $teamId) {
+            $rank = $data->teamRanks[$teamId] ?? ['label' => '', 'name' => '', 'tierRank' => \PHP_INT_MAX, 'tierOrder' => \PHP_INT_MAX];
+            $subtitle = trim($rank['label'] . ('' !== $rank['name'] ? ' · ' . $rank['name'] : ''));
+            $teams[$teamId] = [
+                'name' => $data->teamNames[$teamId] ?? '',
+                'label' => $rank['label'],
+                'subtitle' => '' === $subtitle ? 'Sans rang' : $subtitle,
+                'tierRank' => $rank['tierRank'],
+                'tierOrder' => $rank['tierOrder'],
+            ];
+        }
+
+        // Columns = only the days actually used, kept in DAY_LABELS order (Sam/Dim appear only
+        // when occupied). Group teams by tier (S→A→B→C→D = ascending tierRank), then by their
+        // in-tier order, then name — the global rank the manager sees on screen.
+        $dayColumns = array_values(array_filter(
+            array_keys(ScheduleExportData::DAY_LABELS),
+            static fn (int $d): bool => isset($daysUsed[$d]),
+        ));
+        uasort($teams, static fn (array $a, array $b): int => [$a['tierRank'], $a['tierOrder'], $a['name']] <=> [$b['tierRank'], $b['tierOrder'], $b['name']]);
+
+        $colspan = 1 + \count($dayColumns);
+        $head = '<tr><th class="team-col">Équipe</th>';
+        foreach ($dayColumns as $day) {
+            $head .= \sprintf('<th>%s</th>', htmlspecialchars(ScheduleExportData::DAY_LABELS[$day]));
+        }
+        $head .= '</tr>';
+
+        // One <tbody class="rank-group"> per tier: break-inside:avoid keeps a whole group on a
+        // single page, so a rank is never split by landscape pagination.
+        $groups = '';
+        $currentRank = null;
+        $groupRows = '';
+        $groupSubtitle = '';
+        foreach ($teams as $teamId => $meta) {
+            if ($meta['tierRank'] !== $currentRank) {
+                $groups .= $this->renderRankGroup($colspan, $groupSubtitle, $groupRows);
+                $currentRank = $meta['tierRank'];
+                $groupSubtitle = $meta['subtitle'];
+                $groupRows = '';
+            }
+            $groupRows .= $this->matrixRow($teamId, $meta['name'], $matrix, $dayColumns);
+        }
+        $groups .= $this->renderRankGroup($colspan, $groupSubtitle, $groupRows);
+
+        return \sprintf(
+            '<section class="page-matrix"><h2 class="matrix-title">Par équipe — quand chaque équipe s’entraîne</h2>'
+            . '<table class="matrix"><thead>%s</thead>%s</table></section>',
+            $head,
+            $groups,
+        );
+    }
+
+    /** One rank group as a break-inside-safe tbody (subtitle row + its team rows); '' when empty. */
+    private function renderRankGroup(int $colspan, string $subtitle, string $rows): string
+    {
+        if ('' === $rows) {
+            return '';
+        }
+
+        return \sprintf(
+            '<tbody class="rank-group"><tr class="rank-title"><th colspan="%d">%s</th></tr>%s</tbody>',
+            $colspan,
+            htmlspecialchars($subtitle),
+            $rows,
+        );
+    }
+
+    /**
+     * One matrix row for a team, projected by (teamId, day) — the cell under "Mardi" always
+     * reads THIS team's Tuesday, never a positional neighbour (same D-18 discipline as the XLSX).
+     *
+     * @param array<string, array<int, list<array{start:string, text:string, color:string}>>> $matrix
+     * @param list<int>                                                                       $dayColumns
+     */
+    private function matrixRow(string $teamId, string $teamName, array $matrix, array $dayColumns): string
+    {
+        $cells = \sprintf('<th class="team-col">%s</th>', htmlspecialchars($teamName));
+        foreach ($dayColumns as $day) {
+            $entries = $matrix[$teamId][$day] ?? [];
+            usort($entries, static fn (array $a, array $b): int => $a['start'] <=> $b['start']);
+            $chips = '';
+            foreach ($entries as $entry) {
+                $color = $entry['color'];
+                $chips .= \sprintf(
+                    '<span class="chip" style="background:%s;color:%s">%s</span>',
+                    htmlspecialchars($color),
+                    htmlspecialchars($this->readableForeground($color)),
+                    htmlspecialchars($entry['text']),
+                );
+            }
+            $cells .= \sprintf('<td>%s</td>', $chips);
+        }
+
+        return \sprintf('<tr>%s</tr>', $cells);
+    }
+
+    /**
      * @param array<ScheduleSlotTemplate> $slots
      * @param list<ExportEmptyWindow>     $emptySlots
      *
@@ -390,6 +575,15 @@ class PdfGenerator
                 td.filled .sub { display: block; font-size: 8px; opacity: 0.9; line-height: 1.1; }
                 .empty { color: #999; font-style: italic; }
                 td.cell.empty { text-align: center; vertical-align: middle; color: #999; font-style: italic; font-size: 8px; border: 1px dashed #ccc; }
+                /* Section 2 — the team × day matrix, on its own page(s). */
+                .page-matrix { break-before: page; }
+                .matrix-title { font-size: 13px; margin: 0 0 8px; }
+                table.matrix td { text-align: left; height: 16px; }
+                table.matrix .team-col { text-align: left; font-weight: bold; width: 92px; background: #fafafa; }
+                /* A whole rank group stays on one page — never split by landscape pagination. */
+                table.matrix tbody.rank-group { break-inside: avoid; }
+                table.matrix tr.rank-title th { text-align: left; background: #e9e9ee; color: #222; font-size: 10px; padding: 3px 4px; border-top: 2px solid #999; }
+                table.matrix .chip { display: inline-block; padding: 1px 4px; margin: 1px; border-radius: 3px; font-size: 8px; line-height: 1.3; white-space: nowrap; }
             </style></head><body>
                 <header>%s<h1>%s</h1><span class="scope">%s</span><span class="sched">%s</span></header>
                 %s
