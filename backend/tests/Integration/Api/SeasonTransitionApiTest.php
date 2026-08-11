@@ -80,7 +80,7 @@ final class SeasonTransitionApiTest extends WebTestCase
         self::assertStringContainsString('n\'est pas réglée', (string) $this->responseData()['error']);
 
         // Le geste support (SA4) : « Marquer la saison suivante payée » ouvre le gate.
-        $tester = new CommandTester(new Application(self::$kernel)->find('app:clubs:mark-season-paid'));
+        $tester = new CommandTester(new Application(self::$kernel)->find('app:clubs:mark-next-season-paid'));
         self::assertSame(Command::SUCCESS, $tester->execute(['--club' => $club->getId()]));
 
         $this->client->request('POST', '/api/seasons/' . $season->getId() . '/transition', [], [], $auth);

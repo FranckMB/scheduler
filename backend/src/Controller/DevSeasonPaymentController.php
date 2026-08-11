@@ -18,7 +18,7 @@ use Symfony\Component\Routing\Attribute\Route;
 
 /**
  * Dev-only (P1-5) : marque la saison SUIVANTE du club appelant comme payée —
- * le relais e2e/dev du geste support `mark-season-paid` (console admin), sans
+ * le relais e2e/dev du geste support `mark-next-season-paid` (console admin), sans
  * lequel aucun parcours de bascule ne passerait le gate en environnement de
  * test. Même patron que DevClockController : gardé par kernel.debug, 404 en
  * prod. Respecte l'horloge simulée (un scénario épinglé en mai 2027 paie la

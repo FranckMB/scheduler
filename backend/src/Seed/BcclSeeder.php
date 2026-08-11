@@ -48,8 +48,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
  * `doctrine-fixtures` est en require-dev : la classe fixture (FixtureInterface)
  * n'existe pas dans l'image de prod, or le club de démonstration permanent doit
  * s'y (re)seeder (`app:demo:seed-bccl`). Ce service porte donc TOUTE la logique ;
- * `BasketballInit` (dev) n'est plus qu'un habillage qui l'appelle avec le profil
- * `dev()`. L'identité (club, gestionnaire, coachs, logo, FakeClub) vient du
+ * `BasketballInit` (dev) n'est plus qu'un habillage qui l'appelle avec les profils
+ * `dev()` PUIS `demo()`. L'identité (club, gestionnaire, coachs, logo) vient du
  * {@see BcclSeedProfile} — le corps du seed est identique pour les deux visages.
  */
 final class BcclSeeder
@@ -91,8 +91,7 @@ final class BcclSeeder
             $club->setIsDemo($profile->isDemo);
             $club->setTimezone('Europe/Paris');
             $club->setLocale('fr');
-            // Established demo club: onboarding done → free wizard navigation
-            // (FakeClub stays not-onboarded to exercise the guided flow).
+            // Established club: onboarding done → free wizard navigation.
             $club->setOnboardingCompleted(true);
             $manager->persist($club);
         }
@@ -1046,107 +1045,7 @@ final class BcclSeeder
 
         $manager->flush();
 
-        if ($profile->seedFakeClub) {
-            $this->loadFakeClubFromScratch($manager);
-        }
-
         return $club;
-    }
-
-    /**
-     * Fresh "from scratch" account (N'Gnima EBLIN / FakeClub, ffbb ARA00TEST).
-     * Mirrors AuthController::register for a NEW club: active admin membership,
-     * seeded active season + sport + sport categories, onboarding NOT completed
-     * (so the account lands on the wizard). No teams/venues/coaches on purpose.
-     */
-    private function loadFakeClubFromScratch(EntityManagerInterface $manager): void
-    {
-        $ara = 'ARA00TEST';
-
-        $club = $manager->getRepository(Club::class)->findOneBy(['ffbbClubCode' => $ara]);
-        if (!$club instanceof Club) {
-            $club = new Club;
-            $club->setName('FakeClub');
-            $club->setSlug('fakeclub');
-            $club->setFfbbClubCode($ara);
-            $club->setTimezone('Europe/Paris');
-            $club->setLocale('fr');
-            $club->setOnboardingCompleted(false);
-            $manager->persist($club);
-            $manager->flush();
-        }
-
-        $clubId = $club->getId();
-        $manager->getConnection()->executeStatement('SELECT set_config(\'app.club_id\', ?, false)', [$clubId]);
-
-        $user = $manager->getRepository(User::class)->findOneBy(['email' => 'n.eblin@gmail.com']);
-        if (!$user instanceof User) {
-            $user = new User;
-            $user->setEmail('n.eblin@gmail.com');
-            $user->setFirstName('N\'Gnima');
-            $user->setLastName('EBLIN');
-            $user->setEmailVerifiedAt(new DateTimeImmutable);
-            $user->setPasswordHash($this->passwordHasher->hashPassword($user, 'jennifer'));
-            $manager->persist($user);
-            $manager->flush();
-        }
-
-        $existingMembership = $manager->getRepository(ClubUser::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'userId' => $user->getId(),
-        ]);
-        if (null === $existingMembership) {
-            $clubUser = new ClubUser;
-            $clubUser->setClubId($club->getId());
-            $clubUser->setUserId($user->getId());
-            $clubUser->setRole('admin');
-            $clubUser->setIsActive(true);
-            $manager->persist($clubUser);
-        }
-
-        $existingSeason = $manager->getRepository(Season::class)->findOneBy([
-            'clubId' => $club->getId(),
-            'status' => SeasonStatus::ACTIVE->value,
-        ]);
-        if (null === $existingSeason) {
-            $currentYear = (int) (new DateTimeImmutable)->format('Y');
-            $season = new Season;
-            $season->setClubId($club->getId());
-            $season->setName((string) $currentYear);
-            $season->setStartDate(new DateTimeImmutable($currentYear . '-08-01'));
-            $season->setEndDate(new DateTimeImmutable($currentYear . '-07-15'));
-            $season->setStatus(SeasonStatus::ACTIVE);
-            $season->setTransitionData([]);
-            $manager->persist($season);
-            // ADR-0002 Lot A: seed the season's empty SEASON plan.
-            $this->schedulePlanProvisioner->ensureSeasonPlan($season);
-
-            $sport = $manager->getRepository(Sport::class)->findOneBy(['slug' => 'basketball']);
-            if (!$sport instanceof Sport) {
-                $sport = new Sport;
-                $sport->setName('Basketball');
-                $sport->setSlug('basketball');
-                $sport->setIsActive(true);
-                $manager->persist($sport);
-                $manager->flush();
-            }
-            $club->setSportId($sport->getId());
-
-            $categories = CategoryCatalog::categories();
-            foreach ($categories as $categoryData) {
-                $sportCategory = new SportCategory;
-                $sportCategory->setClubId($club->getId());
-                $sportCategory->setSportId($sport->getId());
-                $sportCategory->setName($categoryData['name']);
-                $sportCategory->setAgeMin($categoryData['ageMin']);
-                $sportCategory->setAgeMax($categoryData['ageMax']);
-                $sportCategory->setIsCustom(false);
-                $sportCategory->setSortOrder($categoryData['sortOrder']);
-                $manager->persist($sportCategory);
-            }
-        }
-
-        $manager->flush();
     }
 
     /**

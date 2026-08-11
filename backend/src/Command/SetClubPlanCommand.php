@@ -20,11 +20,11 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * une entrée figée PAR offre (AdminActionCatalog).
  *
  * N'ouvre pas à elle seule le droit payant : l'offre effective exige aussi une
- * saison réglée (action « Marquer la saison suivante payée », app:clubs:mark-season-paid).
+ * saison réglée (action « Marquer la saison suivante payée », app:clubs:mark-next-season-paid).
  * Ce partage tient l'invariant PlanEntitlements — une offre non réglée retombe sur
  * Découverte à la lecture.
  *
- * Connexion PAR DÉFAUT (même patron que MarkSeasonPaidCommand) : `club` n'a pas de
+ * Connexion PAR DÉFAUT (même patron que MarkNextSeasonPaidCommand) : `club` n'a pas de
  * colonne club_id, donc pas de policy RLS — l'UPDATE ciblé par id passe, et le rail
  * SA4 gate déjà l'accès.
  */

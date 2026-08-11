@@ -1,6 +1,6 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-Last verified @ 2026-08-11 (recalé ce jour par A1/offres : **le contrat de `GET /api/admin/clubs` rend l'offre stockée ET l'offre effective, `planId` supprimé** ; et par P4-47 : **toute la surface `/api/admin/**` est désormais déclarée au contrat OpenAPI** — les trois journaux ne sont plus « absents de l'export » ; précédemment recalé par P1-1 PR B : **la porte d'activation d'adhésion ignore les membres désactivés par leur club** ; et par P1-3 PR A : **attribution d'offres au catalogue** — une entrée `set-plan-*` par offre à `--plan` figé + `reset-credits`, seule porte d'attribution ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
+Last verified @ 2026-08-11 (recalé ce jour par A2/offres : **l'action support `mark-season-paid` est renommée `mark-next-season-paid`** (commande `app:clubs:mark-next-season-paid`, clé catalogue idem — la route dev `/api/dev/mark-season-paid` ne change pas), et elle pivote sur `demo_today` pour un club de démonstration épinglé (D6) ; par A1/offres : **le contrat de `GET /api/admin/clubs` rend l'offre stockée ET l'offre effective, `planId` supprimé** ; et par P4-47 : **toute la surface `/api/admin/**` est désormais déclarée au contrat OpenAPI** — les trois journaux ne sont plus « absents de l'export » ; précédemment recalé par P1-1 PR B : **la porte d'activation d'adhésion ignore les membres désactivés par leur club** ; et par P1-3 PR A : **attribution d'offres au catalogue** — une entrée `set-plan-*` par offre à `--plan` figé + `reset-credits`, seule porte d'attribution ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
 
 > **État courant** : SA0, SA1, la console read-only SA2, le socle
 > d'historisation SA3-A, la supervision SA3-B, la planification fiable SA3-C et
@@ -257,7 +257,7 @@ Les actions livrées sont `reset-generation-quota` (remise à zéro du compteur 
 générations de la saison, non destructive), `ffbb-resync` (P2-18, 2026-08-04 : ré-importe
 l'identité FFBB du club — nom, coordonnées, logo, comité/ligue — le même `FfbbClubPopulator`
 en mode refresh que le bouton de la fiche club ; échec FRANC si l'organisme est introuvable,
-jamais un succès silencieux), `mark-season-paid` (P1-5, 2026-08-04 :
+jamais un succès silencieux), `mark-next-season-paid` (P1-5, 2026-08-04 :
 enregistre le paiement de la saison SUIVANTE — l'abonnement se paie par saison — et
 ouvre le gate de bascule ; idempotente, le marqueur ne recule jamais), `reset-current-season` (vide la saison
 courante — le club repart au wizard, la saison et le club survivent) et
@@ -268,7 +268,7 @@ courante — le club repart au wizard, la saison et le club survivent) et
 runtime : la console reste incapable d'exécuter un argument libre) + `reset-credits`
 (ré-ouvre le pool de crédits de sortie du plan Découverte). C'est la **seule porte
 d'attribution** d'une offre — l'offre Bêta n'a aucun autre chemin par construction, et le
-paiement v1 (virement) se matérialise par `set-plan` + `mark-season-paid`.
+paiement v1 (virement) se matérialise par `set-plan` + `mark-next-season-paid`.
 
 **Arbitrages P3-4 (PR B, 2026-08-05)** : `GET /api/admin/club-requests` liste les demandes
 de création de club **pending ET expirées** (« le superadmin peut valider si besoin » — le

@@ -9,11 +9,10 @@ namespace App\Seed;
  * gymnases, créneaux, contraintes, réservations — l'état terrain), sous deux
  * visages.
  *
- * - `dev()` : les fixtures d'aujourd'hui, à l'identique (BCCL réel, logo,
- *   FakeClub d'onboarding) — le comportement de `make fixtures` ne bouge pas.
+ * - `dev()` : le BCCL réel (logo compris) — le club dev de `make fixtures`.
  * - `demo(password)` : le club de DÉMONSTRATION permanent — noms de club et de
- *   coachs FICTIFS (RGPD : l'écran part en rendez-vous), pas de logo BCCL, pas
- *   de FakeClub, flag `is_demo` posé.
+ *   coachs FICTIFS (RGPD : l'écran part en rendez-vous), pas de logo BCCL, flag
+ *   `is_demo` posé.
  *
  * Les gymnases gardent leurs noms/ancrages réels : ce sont des bâtiments
  * publics, et l'ancre fédérale fait marcher les écrans (stats, autocomplétion).
@@ -66,7 +65,6 @@ final readonly class BcclSeedProfile
         public string $managerLastName,
         public string $managerPassword,
         public bool $seedLogo,
-        public bool $seedFakeClub,
         public bool $isDemo,
         public ?array $coachNames,
     ) {}
@@ -82,7 +80,6 @@ final readonly class BcclSeedProfile
             managerLastName: 'Mb',
             managerPassword: 'maraboubccl',
             seedLogo: true,
-            seedFakeClub: true,
             isDemo: false,
             coachNames: null,
         );
@@ -102,7 +99,6 @@ final readonly class BcclSeedProfile
             managerLastName: 'ClubScheduler',
             managerPassword: $managerPassword,
             seedLogo: false,
-            seedFakeClub: false,
             isDemo: true,
             coachNames: self::FICTIONAL_COACHES,
         );

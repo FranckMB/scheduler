@@ -1,4 +1,4 @@
-// Screenshot the club management screen + accent applied (FakeClub / n.eblin).
+// Screenshot the club management screen + accent applied (BCCL dev / mara.mb).
 const fs = require("fs");
 const puppeteer = require("puppeteer");
 
