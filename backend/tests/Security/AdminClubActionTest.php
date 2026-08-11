@@ -120,6 +120,71 @@ final class AdminClubActionTest extends WebTestCase
         ));
     }
 
+    public function testSetPlanValidatesTheClosedArgumentSchemaFailClosed(): void
+    {
+        // A3 — le rail SA4 gagne des arguments BORNÉS par schéma fermé, validés fail-closed
+        // AVANT toute exécution. L'exécuteur ne doit JAMAIS voir une clé/valeur hors schéma.
+        $clubId = $this->seedClub('Club offre SA4');
+        [$secret] = $this->createSuperAdmin('offre@example.test', 'VeryStrongPassword!');
+        $csrfToken = $this->authenticate('offre@example.test', 'VeryStrongPassword!', $secret);
+        $this->client->disableReboot();
+        $executor = self::getContainer()->get(RecordingAdminJobExecutor::class);
+        $executor->reset();
+
+        // Le catalogue est passé de 12 à 7 entrées : une SEULE « Offre » à schéma.
+        $this->client->request('GET', '/api/admin/actions');
+        self::assertResponseIsSuccessful();
+        $items = $this->responseBody()['items'];
+        self::assertCount(7, $items);
+        $byKey = array_column($items, null, 'key');
+        self::assertArrayHasKey('set-plan', $byKey);
+        self::assertArrayNotHasKey('set-plan-essentiel', $byKey, 'les entrées set-plan-* figées ont disparu');
+        // Le schéma d'arguments est servi (les pickers du front en dérivent).
+        $setPlan = $byKey['set-plan'];
+        self::assertSame('plan', $setPlan['arguments'][0]['key']);
+        self::assertTrue($setPlan['arguments'][0]['required']);
+        self::assertSame('paidSeason', $setPlan['arguments'][1]['key']);
+        self::assertSame(['argument' => 'plan', 'forbiddenValues' => ['decouverte']], $setPlan['arguments'][1]['gate']);
+
+        // Chemin nominal : l'action part avec EXACTEMENT les arguments bornés + --club.
+        $this->postAction($clubId, 'set-plan', ['plan' => 'essentiel', 'paidSeason' => 'next'], $csrfToken);
+        self::assertResponseIsSuccessful();
+        self::assertSame([[
+            'key' => 'action:set-plan',
+            'superAdminId' => $this->adminId,
+            'arguments' => ['--plan' => 'essentiel', '--paid-season' => 'next', '--club' => $clubId],
+        ]], $executor->calls);
+
+        // Valeur hors enum → 400, rien exécuté. Le body est PAR AILLEURS complet (saison
+        // fournie) : le SEUL défaut est l'enum du plan — ainsi la falsification (désactiver
+        // `!$argument->allows($value)` dans AdminActionArgumentSchema) fait rougir CETTE ligne,
+        // sans être sauvée par une autre garde (le « required » de paidSeason).
+        $executor->reset();
+        $this->postAction($clubId, 'set-plan', ['plan' => 'platine', 'paidSeason' => 'next'], $csrfToken);
+        self::assertResponseStatusCodeSame(400);
+        self::assertSame([], $executor->calls);
+
+        // Clé inconnue → 400, rien exécuté.
+        $this->postAction($clubId, 'set-plan', ['plan' => 'essentiel', 'extra' => '--help'], $csrfToken);
+        self::assertResponseStatusCodeSame(400);
+        self::assertSame([], $executor->calls);
+
+        // Offre payante (Bêta comprise) SANS saison encaissée → 400 : sans marqueur elle naît expirée.
+        $this->postAction($clubId, 'set-plan', ['plan' => 'beta'], $csrfToken);
+        self::assertResponseStatusCodeSame(400);
+        self::assertSame([], $executor->calls);
+
+        // Découverte + saison encaissée → 400 : rien à encaisser sur l'offre gratuite.
+        $this->postAction($clubId, 'set-plan', ['plan' => 'decouverte', 'paidSeason' => 'next'], $csrfToken);
+        self::assertResponseStatusCodeSame(400);
+        self::assertSame([], $executor->calls);
+
+        // Un body sur une action SANS schéma → 400 (l'allowlist reste totale).
+        $this->postAction($clubId, 'ffbb-resync', ['plan' => 'essentiel'], $csrfToken);
+        self::assertResponseStatusCodeSame(400);
+        self::assertSame([], $executor->calls);
+    }
+
     public function testRunHistoryPersistsTheTargetClubInArguments(): void
     {
         // La trace « quelle action, sur QUEL club » : le store écrit les arguments.
@@ -276,6 +341,23 @@ final class AdminClubActionTest extends WebTestCase
         $em->flush();
 
         return [$club->getId(), $season->getId()];
+    }
+
+    /**
+     * POST une action support avec un body JSON (schéma d'arguments A3) et le CSRF.
+     *
+     * @param array<string, string> $body
+     */
+    private function postAction(string $clubId, string $key, array $body, string $csrfToken): void
+    {
+        $this->client->request(
+            'POST',
+            "/api/admin/clubs/{$clubId}/actions/{$key}",
+            [],
+            [],
+            ['HTTP_X_CSRF_TOKEN' => $csrfToken, 'CONTENT_TYPE' => 'application/json'],
+            json_encode($body, \JSON_THROW_ON_ERROR),
+        );
     }
 
     private function seedClub(string $name, int $generationCount = 0): string

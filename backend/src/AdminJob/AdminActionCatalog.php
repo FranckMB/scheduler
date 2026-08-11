@@ -42,52 +42,41 @@ final readonly class AdminActionCatalog
                 dangerous: false,
             ),
             new AdminActionDefinition(
-                'set-plan-decouverte',
-                'Offre : Découverte',
-                'Repasse le club sur l\'offre Découverte (gratuit) : périmètre complet, pool de crédits de sortie, bascule de saison fermée.',
+                'set-plan',
+                'Offre',
+                'Attribue une offre au club et, pour toute offre payante, marque la saison encaissée — une offre payante retombe sur Découverte tant que la saison n\'est pas réglée. Découverte se pose seule (aucune saison à encaisser).',
                 'app:clubs:set-plan',
                 dangerous: false,
-                arguments: ['--plan' => 'decouverte'],
-            ),
-            new AdminActionDefinition(
-                'set-plan-essentiel',
-                'Offre : Essentiel',
-                'Attribue l\'offre Essentiel (≤ 20 équipes). L\'offre reste effective tant que la saison est réglée (« Marquer la saison suivante payée »).',
-                'app:clubs:set-plan',
-                dangerous: false,
-                arguments: ['--plan' => 'essentiel'],
-            ),
-            new AdminActionDefinition(
-                'set-plan-club',
-                'Offre : Club',
-                'Attribue l\'offre Club (≤ 30 équipes). L\'offre reste effective tant que la saison est réglée.',
-                'app:clubs:set-plan',
-                dangerous: false,
-                arguments: ['--plan' => 'club'],
-            ),
-            new AdminActionDefinition(
-                'set-plan-grand-club',
-                'Offre : Grand club',
-                'Attribue l\'offre Grand club (≤ 50 équipes). L\'offre reste effective tant que la saison est réglée.',
-                'app:clubs:set-plan',
-                dangerous: false,
-                arguments: ['--plan' => 'grand-club'],
-            ),
-            new AdminActionDefinition(
-                'set-plan-sans-limite',
-                'Offre : Sans limite',
-                'Attribue l\'offre Sans limite (aucun cap d\'équipes). L\'offre reste effective tant que la saison est réglée.',
-                'app:clubs:set-plan',
-                dangerous: false,
-                arguments: ['--plan' => 'sans-limite'],
-            ),
-            new AdminActionDefinition(
-                'set-plan-beta',
-                'Offre : Bêta',
-                'Attribue l\'offre Bêta (superadmin-only, tout illimité). L\'offre reste effective tant que la saison est réglée.',
-                'app:clubs:set-plan',
-                dangerous: false,
-                arguments: ['--plan' => 'beta'],
+                // Schéma FERMÉ : le plan (enum des codes d'offre, miroir de SetClubPlanCommand)
+                // et la saison encaissée (enum current|next). Règle fondateur portée par le
+                // schéma : `paidSeason` est REQUIS pour toute offre payante (Bêta comprise —
+                // sans marqueur elle naît expirée) et INTERDIT sur Découverte.
+                argumentSchema: new AdminActionArgumentSchema([
+                    new AdminActionArgument(
+                        'plan',
+                        'Offre',
+                        '--plan',
+                        [
+                            'decouverte' => 'Découverte',
+                            'essentiel' => 'Essentiel',
+                            'club' => 'Club',
+                            'grand-club' => 'Grand club',
+                            'sans-limite' => 'Sans limite',
+                            'beta' => 'Bêta',
+                        ],
+                    ),
+                    new AdminActionArgument(
+                        'paidSeason',
+                        'Saison encaissée',
+                        '--paid-season',
+                        [
+                            'current' => 'Saison en cours (le club a réglé)',
+                            'next' => 'Saison suivante',
+                        ],
+                        gateArgument: 'plan',
+                        forbiddenWhenGateIn: ['decouverte'],
+                    ),
+                ]),
             ),
             new AdminActionDefinition(
                 'reset-credits',

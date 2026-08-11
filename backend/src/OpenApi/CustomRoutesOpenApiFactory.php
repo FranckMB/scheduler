@@ -952,6 +952,22 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                                 'description' => ['type' => 'string'],
                                 // Le client DOIT exiger une confirmation nominative dessus.
                                 'dangerous' => ['type' => 'boolean'],
+                                // Schéma FERMÉ des arguments runtime : le client rend ses pickers DEPUIS
+                                // cette liste (choix + présence), jamais d'une liste en dur. `gate`
+                                // présent = argument conditionnel (masqué quand le gate ∈ forbiddenValues).
+                                'arguments' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                    'key' => ['type' => 'string'],
+                                    'label' => ['type' => 'string'],
+                                    'required' => ['type' => 'boolean'],
+                                    'choices' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                        'value' => ['type' => 'string'],
+                                        'label' => ['type' => 'string'],
+                                    ]]],
+                                    'gate' => ['type' => 'object', 'properties' => [
+                                        'argument' => ['type' => 'string'],
+                                        'forbiddenValues' => ['type' => 'array', 'items' => ['type' => 'string']],
+                                    ]],
+                                ]]],
                             ]]],
                         ],
                     ]),
@@ -972,6 +988,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                             'exitCode' => ['type' => 'integer', 'enum' => [0]],
                         ],
                     ]),
+                    '400' => new Response('The optional argument body violated the action\'s closed schema: unknown key, value outside the enum, a required argument missing, a forbidden argument present, or any body on a schema-less action'),
                     '401' => new Response('No authenticated super-admin session'),
                     '403' => new Response('Invalid CSRF token'),
                     '404' => new Response('Unknown action key, malformed club id, or unknown club (deliberately indistinct)'),
@@ -988,6 +1005,14 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     ['name' => 'key', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string']],
                     $csrfHeader,
                 ],
+                // Body OPTIONNEL : présent seulement pour une action à schéma (ex. set-plan →
+                // {plan, paidSeason}). Les clés/valeurs autorisées sont servies par GET /actions ;
+                // toute dérive est un 400 fail-closed, jamais un argument libre vers la commande.
+                requestBody: $this->jsonBody([
+                    'type' => 'object',
+                    'additionalProperties' => ['type' => 'string'],
+                    'description' => 'Enum-valued arguments bounded by the action\'s closed schema (see GET /api/admin/actions). Empty/absent for schema-less actions.',
+                ]),
             )),
             '/api/admin/club-requests' => new PathItem(get: new Operation(
                 operationId: 'getAdminClubRequests',

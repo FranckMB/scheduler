@@ -1,6 +1,6 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-Last verified @ 2026-08-11 (recalé ce jour par A2/offres : **l'action support `mark-season-paid` est renommée `mark-next-season-paid`** (commande `app:clubs:mark-next-season-paid`, clé catalogue idem — la route dev `/api/dev/mark-season-paid` ne change pas), et elle pivote sur `demo_today` pour un club de démonstration épinglé (D6) ; par A1/offres : **le contrat de `GET /api/admin/clubs` rend l'offre stockée ET l'offre effective, `planId` supprimé** ; et par P4-47 : **toute la surface `/api/admin/**` est désormais déclarée au contrat OpenAPI** — les trois journaux ne sont plus « absents de l'export » ; précédemment recalé par P1-1 PR B : **la porte d'activation d'adhésion ignore les membres désactivés par leur club** ; et par P1-3 PR A : **attribution d'offres au catalogue** — une entrée `set-plan-*` par offre à `--plan` figé + `reset-credits`, seule porte d'attribution ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
+Last verified @ 2026-08-11 (recalé ce jour par A3/offres : **le rail SA4 gagne des arguments RUNTIME bornés par un schéma FERMÉ** (enum de valeurs seule, validation fail-closed → 400 nommé côté contrôleur) et `GET /api/admin/actions` publie ce schéma d'arguments ; **les six entrées `set-plan-*` fusionnent en UNE `set-plan` « Offre »** à schéma `plan` + `paidSeason` conditionnel (requis pour toute offre payante, interdit sur Découverte), l'attribution posant offre + saison encaissée en une transaction ; précédemment par A2/offres : **l'action support `mark-season-paid` renommée `mark-next-season-paid`** (commande `app:clubs:mark-next-season-paid`), pivot sur `demo_today` pour un club démo épinglé (D6) ; par A1/offres : **le contrat de `GET /api/admin/clubs` rend l'offre stockée ET l'offre effective, `planId` supprimé** ; et par P4-47 : **toute la surface `/api/admin/**` est désormais déclarée au contrat OpenAPI** — les trois journaux ne sont plus « absents de l'export » ; précédemment recalé par P1-1 PR B : **la porte d'activation d'adhésion ignore les membres désactivés par leur club** ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
 
 > **État courant** : SA0, SA1, la console read-only SA2, le socle
 > d'historisation SA3-A, la supervision SA3-B, la planification fiable SA3-C et
@@ -252,7 +252,11 @@ toutes les 10 minutes.
 ## Actions de support SA4 v1
 
 `GET /api/admin/actions` publie un **catalogue fermé** (`AdminActionCatalog`) : clé,
-libellé, description et un drapeau `dangerous` qui pilote la confirmation côté UI.
+libellé, description, un drapeau `dangerous` qui pilote la confirmation côté UI, et le
+**schéma d'arguments** de l'action (A3, 2026-08-11) — par argument : un `key`, un `label`,
+un `required`, une **enum fermée de `choices` `{value,label}`** et, pour un argument
+conditionnel, un `gate {argument, forbiddenValues}`. La console rend ses pickers DEPUIS ce
+schéma, jamais d'une liste en dur.
 Les actions livrées sont `reset-generation-quota` (remise à zéro du compteur de
 générations de la saison, non destructive), `ffbb-resync` (P2-18, 2026-08-04 : ré-importe
 l'identité FFBB du club — nom, coordonnées, logo, comité/ligue — le même `FfbbClubPopulator`
@@ -263,12 +267,18 @@ ouvre le gate de bascule ; idempotente, le marqueur ne recule jamais), `reset-cu
 courante — le club repart au wizard, la saison et le club survivent) et
 `purge-old-seasons` (supprime les saisons au-delà de la rétention).
 
-**Attribution d'offres (P1-3 PR A, 2026-08-10)** : une entrée du catalogue **par offre**
-(`set-plan-decouverte` … `set-plan-beta` — `--plan` figé dans l'entrée, seul `--club` est
-runtime : la console reste incapable d'exécuter un argument libre) + `reset-credits`
-(ré-ouvre le pool de crédits de sortie du plan Découverte). C'est la **seule porte
-d'attribution** d'une offre — l'offre Bêta n'a aucun autre chemin par construction, et le
-paiement v1 (virement) se matérialise par `set-plan` + `mark-next-season-paid`.
+**Attribution d'offres (A3, 2026-08-11)** : une **seule** entrée `set-plan` (« Offre »)
+remplace les six `set-plan-*` figées. Son schéma d'arguments fermé porte `plan` (enum des
+codes d'offre — `decouverte`…`beta`, miroir de `SetClubPlanCommand`) et `paidSeason`
+(enum `current|next`, la saison encaissée). Règle fondateur portée par le schéma, pas par
+un `if` du contrôleur : `paidSeason` est **requis** pour toute offre payante (Bêta
+comprise — sans marqueur elle naît expirée) et **interdit** sur `decouverte` (rien à
+encaisser). Avec `paidSeason`, la commande pose l'offre ET marque la saison encaissée dans
+la MÊME transaction (pivot sur `demo_today` pour un club démo, D6). `reset-credits` (ré-ouvre
+le pool de crédits de sortie du plan Découverte) reste une entrée à part. C'est la **seule
+porte d'attribution** d'une offre — l'offre Bêta n'a aucun autre chemin par construction,
+et le paiement v1 (virement) se matérialise par `set-plan` (offre + saison encaissée)
+directement.
 
 **Arbitrages P3-4 (PR B, 2026-08-05)** : `GET /api/admin/club-requests` liste les demandes
 de création de club **pending ET expirées** (« le superadmin peut valider si besoin » — le
@@ -285,11 +295,16 @@ jour J) et l'expiration.
 
 `POST /api/admin/clubs/{clubId}/actions/{key}` exécute l'action. La route **n'accepte
 jamais un nom de commande brut** : elle prend la commande et ses arguments **fixes** du
-catalogue, et n'ajoute qu'un seul argument runtime, le club — lui-même validé. L'ordre
-des gardes est délibéré : le contexte d'audit (club visé + action visée) est posé
-**avant toute garde**, pour qu'une tentative *refusée* soit tracée ; puis CSRF de
-session, puis identité `SuperAdmin`, puis existence de l'action, puis forme UUID du
-club, puis existence du club. Aucun `requirements` de route sur `clubId` : il ferait un
+catalogue, et n'ajoute que des **arguments runtime bornés par le schéma fermé** de l'action
+(enum de valeurs seule, aucun texte libre représentable) plus le club — lui-même validé.
+Le body JSON optionnel est validé **fail-closed** AVANT toute exécution : clé inconnue,
+valeur hors enum, argument requis manquant, argument interdit présent, ou tout body sur une
+action SANS schéma → **400**, rien ne tourne. Le **schéma porte la règle** (dont la
+conditionnalité de `set-plan`) ; le contrôleur ne fait que l'appliquer. L'ordre des gardes
+est délibéré : le contexte d'audit (club visé + action visée) est posé **avant toute garde**,
+pour qu'une tentative *refusée* soit tracée ; puis CSRF de session, puis identité
+`SuperAdmin`, puis existence de l'action, puis validation du body (schéma), puis forme UUID
+du club, puis existence du club. Aucun `requirements` de route sur `clubId` : il ferait un
 404 **au routeur, avant le firewall**, ce qui apprendrait la forme attendue à un probe
 non authentifié sans rien tracer.
 
