@@ -260,6 +260,68 @@ final class TeamTagScopeTest extends KernelTestCase
         self::assertTrue($this->em->isOpen(), 'l\'EntityManager doit rester ouvert — un flush en violation le fermerait');
     }
 
+    /**
+     * NR — P4-50 (b). ÉDITER LA CATÉGORIE DOIT DÉPLACER LES ÉQUIPES, pas les laisser en arrière.
+     *
+     * Les tags sont dérivés du NOM et des bornes d'âge de la `SportCategory`
+     * (`TeamTagService::determineTagNames`), mais `TeamTagSyncListener` n'écoutait que
+     * `Team` : corriger une catégorie — geste normal, on ne retouche pas les équipes —
+     * laissait leurs tags périmés, et aucun écran ne le disait.
+     *
+     * Le scénario est celui du terrain : la catégorie a été créée « U11 » par erreur, elle
+     * est en réalité U13. Après correction, une contrainte « groupe U13 » DOIT atteindre
+     * l'équipe — sans le correctif elle n'atteint personne, pendant qu'une contrainte
+     * « U11 » frappe une équipe qui n'est plus U11. Génération `COMPLETED`, zéro
+     * diagnostic, planning faux : le pire mode de panne.
+     *
+     * ⚠ Les quatre assertions comptent, et les NÉGATIVES autant que les positives. Un
+     * correctif qui ajouterait les nouveaux tags sans retirer les anciens (par exemple en
+     * n'appelant pas `syncTeamTags`, qui purge d'abord) laisserait l'équipe dans les DEUX
+     * groupes — vert sur les positives seules.
+     */
+    public function testEditingACategoryRetagsItsTeams(): void
+    {
+        $this->scopeGucToClub($this->club->getId());
+        $equipe = $this->teams['U11']->getId();
+
+        // Pré-état : l'équipe est bien U11+EMB. Sans ce témoin, un test vert ne prouverait
+        // pas que quelque chose a BOUGÉ — il pourrait l'être depuis toujours.
+        self::assertContains($equipe, $this->resolver->tagTeamIds('U11', $this->season->getId(), $this->club->getId()));
+        self::assertContains($equipe, $this->resolver->tagTeamIds('EMB', $this->season->getId(), $this->club->getId()));
+
+        $categorie = $this->em->getRepository(SportCategory::class)->find($this->teams['U11']->getSportCategoryId());
+        self::assertInstanceOf(SportCategory::class, $categorie);
+        $categorie->setName('U13');
+        $categorie->setAgeMin(12);
+        $categorie->setAgeMax(13);
+        // AUCUNE écriture sur la Team : c'est tout l'objet du test.
+        $this->em->flush();
+
+        // Le mémo du résolveur est par requête : il a mémorisé l'état d'AVANT.
+        $this->resolver->reset();
+
+        self::assertContains(
+            $equipe,
+            $this->resolver->tagTeamIds('U13', $this->season->getId(), $this->club->getId()),
+            'la catégorie corrigée en U13 doit retaguer son équipe — sinon une contrainte « groupe U13 » ne l\'atteint pas',
+        );
+        self::assertContains(
+            $equipe,
+            $this->resolver->tagTeamIds('JEUNE', $this->season->getId(), $this->club->getId()),
+            'U13 a ageMax 13 : la tranche passe d\'EMB à JEUNE',
+        );
+        self::assertNotContains(
+            $equipe,
+            $this->resolver->tagTeamIds('U11', $this->season->getId(), $this->club->getId()),
+            'l\'ancien tag doit être RETIRÉ — sinon une contrainte « groupe U11 » frappe une équipe qui n\'en est plus',
+        );
+        self::assertNotContains(
+            $equipe,
+            $this->resolver->tagTeamIds('EMB', $this->season->getId(), $this->club->getId()),
+            'l\'ancienne tranche doit être retirée elle aussi',
+        );
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
