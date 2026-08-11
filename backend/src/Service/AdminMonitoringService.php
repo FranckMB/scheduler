@@ -4,15 +4,20 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
+use Symfony\Component\Clock\ClockInterface;
 
 /** Read-only cross-tenant aggregates, deliberately executed through the admin connection. */
 final readonly class AdminMonitoringService
 {
     private const METRICS_WINDOW_DAYS = 30;
 
-    public function __construct(private ManagerRegistry $registry) {}
+    public function __construct(
+        private ManagerRegistry $registry,
+        private ClockInterface $clock,
+    ) {}
 
     /**
      * @return array{
@@ -234,15 +239,18 @@ final readonly class AdminMonitoringService
                 c.slug,
                 c.ffbb_club_code,
                 c.is_demo,
-                c.plan_id,
+                c.paid_season_year,
                 c.billing_cycle,
                 c.generation_count_season,
                 c.created_at,
                 c.last_activity_at,
                 c.unsubscribed_at,
+                stored_plan.code AS plan_code,
+                stored_plan.name AS plan_name,
                 current_season.id AS season_id,
                 current_season.name AS season_name,
                 current_season.status AS season_status,
+                current_season.start_date AS season_start_date,
                 COALESCE(volumes.teams, 0) AS teams,
                 COALESCE(volumes.venues, 0) AS venues,
                 COALESCE(volumes.coaches, 0) AS coaches,
@@ -254,10 +262,11 @@ final readonly class AdminMonitoringService
                 latest_metric.status AS latest_status,
                 latest_metric.created_at AS latest_created_at
             FROM selected_clubs c
+            LEFT JOIN subscription_plan stored_plan ON stored_plan.id = c.plan_id
             LEFT JOIN LATERAL (
                 -- Même règle que clubSizes : dans le creux d'été, la saison déjà commencée
                 -- (peuplée) plutôt que la future vide.
-                SELECT s.id, s.name, s.status
+                SELECT s.id, s.name, s.status, s.start_date
                 FROM season s
                 WHERE s.club_id = c.id
                 ORDER BY (CURRENT_DATE BETWEEN s.start_date AND s.end_date) DESC, (s.start_date <= CURRENT_DATE) DESC, s.start_date DESC
@@ -289,8 +298,15 @@ final readonly class AdminMonitoringService
             ORDER BY COALESCE(c.last_activity_at, c.created_at) DESC, c.id
             SQL, $parameters);
 
+        // Le socle Découverte, lu UNE fois (pas de requête par ligne) : c'est le nom affiché
+        // quand l'offre effective d'un club retombe sur Découverte (absente ou expirée).
+        $decouverteRow = $this->connection()->fetchAssociative('SELECT code, name FROM subscription_plan WHERE code = \'decouverte\'');
+        $decouverte = false === $decouverteRow
+            ? ['code' => 'decouverte', 'name' => 'Découverte']
+            : ['code' => (string) $decouverteRow['code'], 'name' => (string) $decouverteRow['name']];
+
         return [
-            'items' => array_map(fn (array $row): array => $this->club($row), $rows),
+            'items' => array_map(fn (array $row): array => $this->club($row, $decouverte), $rows),
             'pagination' => [
                 'page' => $page,
                 'limit' => $limit,
@@ -302,14 +318,17 @@ final readonly class AdminMonitoringService
     }
 
     /**
-     * @param array<string, mixed> $row
+     * @param array<string, mixed>              $row
+     * @param array{code: string, name: string} $decouverte socle Découverte (nom affiché en repli)
      *
      * @return array<string, mixed>
      */
-    private function club(array $row): array
+    private function club(array $row, array $decouverte): array
     {
         $generations = $this->integer($row, 'generations');
         $infeasible = $this->integer($row, 'infeasible');
+        $storedCode = $this->nullableString($row, 'plan_code');
+        $storedName = $this->nullableString($row, 'plan_name');
 
         return [
             'id' => (string) $row['id'],
@@ -317,7 +336,11 @@ final readonly class AdminMonitoringService
             'slug' => (string) $row['slug'],
             'ffbbClubCode' => $this->nullableString($row, 'ffbb_club_code'),
             'isDemo' => (bool) ($row['is_demo'] ?? false),
-            'planId' => $this->nullableString($row, 'plan_id'),
+            // Offre STOCKÉE (plan_id résolu) vs paidSeasonYear vs offre EFFECTIVE calculée
+            // ci-dessous — la console affiche l'effective, jamais un binaire sur le stocké.
+            'plan' => null === $storedCode ? null : ['code' => $storedCode, 'name' => (string) $storedName],
+            'paidSeasonYear' => $this->nullableInteger($row, 'paid_season_year'),
+            'effectivePlan' => $this->effectivePlan($row, $storedCode, $storedName, $decouverte),
             'billingCycle' => $this->nullableString($row, 'billing_cycle'),
             'generationCountSeason' => $this->integer($row, 'generation_count_season'),
             'createdAt' => (string) $row['created_at'],
@@ -344,6 +367,31 @@ final readonly class AdminMonitoringService
                 'latestAt' => $this->nullableString($row, 'latest_created_at'),
             ],
         ];
+    }
+
+    /**
+     * L'offre EFFECTIVE d'une ligne, via la MAISON UNIQUE `PlanEntitlements::effectivePlanCode`
+     * (miroir SQL interdit — la règle pivot vit en un seul endroit ; `AdminMonitoringClubsPlanTest`
+     * casse si les deux divergent). Année-pivot depuis la saison courante ; club SANS saison → pivot
+     * sur l'horloge réelle (D1). AUCUN cas démo (D2) : le badge dit la vérité comptable, le chip
+     * « Démo » voisin porte déjà « droits pleins ».
+     *
+     * @param array<string, mixed>              $row
+     * @param array{code: string, name: string} $decouverte
+     *
+     * @return array{code: string, name: string}
+     */
+    private function effectivePlan(array $row, ?string $storedCode, ?string $storedName, array $decouverte): array
+    {
+        $seasonStart = $this->nullableString($row, 'season_start_date');
+        $pivotDate = null === $seasonStart ? $this->clock->now() : new DateTimeImmutable($seasonStart);
+        $pivotYear = SeasonResolver::seasonYear($pivotDate);
+
+        $effectiveCode = PlanEntitlements::effectivePlanCode($storedCode, $this->nullableInteger($row, 'paid_season_year'), $pivotYear);
+
+        return null !== $storedCode && $effectiveCode === $storedCode
+            ? ['code' => $storedCode, 'name' => (string) $storedName]
+            : $decouverte;
     }
 
     private function connection(): Connection

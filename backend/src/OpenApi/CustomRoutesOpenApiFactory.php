@@ -795,7 +795,15 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                                 'name' => ['type' => 'string'],
                                 'slug' => ['type' => 'string'],
                                 'ffbbClubCode' => ['type' => 'string', 'nullable' => true],
-                                'planId' => ['type' => 'integer', 'nullable' => true],
+                                'plan' => ['type' => 'object', 'nullable' => true, 'properties' => [
+                                    'code' => ['type' => 'string'],
+                                    'name' => ['type' => 'string'],
+                                ]],
+                                'paidSeasonYear' => ['type' => 'integer', 'nullable' => true],
+                                'effectivePlan' => ['type' => 'object', 'properties' => [
+                                    'code' => ['type' => 'string'],
+                                    'name' => ['type' => 'string'],
+                                ]],
                                 'billingCycle' => ['type' => 'string', 'nullable' => true],
                                 'generationCountSeason' => ['type' => 'integer'],
                                 'createdAt' => ['type' => 'string', 'format' => 'date-time'],

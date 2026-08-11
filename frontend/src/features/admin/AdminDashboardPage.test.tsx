@@ -86,7 +86,9 @@ const clubs: AdminClubsResponse = {
       slug: "basket-club-des-lacs",
       ffbbClubCode: "ARA001",
       isDemo: false,
-      planId: null,
+      plan: null,
+      paidSeasonYear: null,
+      effectivePlan: { code: "decouverte", name: "Découverte" },
       billingCycle: null,
       generationCountSeason: 3,
       createdAt: "2026-06-01T09:00:00+00:00",
@@ -205,6 +207,42 @@ describe("AdminDashboardPage", () => {
     expect(mockHealth).toHaveBeenCalledOnce();
     expect(mockJobs).toHaveBeenCalledOnce();
     expect(mockClubs).toHaveBeenCalledWith(1, 25, "");
+  });
+
+  it("shows the EFFECTIVE offer in the club badge, never the stored one (A1)", async () => {
+    const divergent: AdminClubsResponse = {
+      items: [
+        {
+          ...clubs.items[0],
+          id: "club-beta-unpaid",
+          name: "BCCL (Bêta non réglée)",
+          // Offre Bêta POSÉE mais saison non réglée → effective = Découverte.
+          plan: { code: "beta", name: "Bêta" },
+          paidSeasonYear: null,
+          effectivePlan: { code: "decouverte", name: "Découverte" },
+        },
+        {
+          ...clubs.items[0],
+          id: "club-beta-paid",
+          name: "Club Bêta réglé",
+          plan: { code: "beta", name: "Bêta" },
+          paidSeasonYear: 2026,
+          effectivePlan: { code: "beta", name: "Bêta" },
+        },
+      ],
+      pagination: { page: 1, limit: 25, total: 2, pages: 1 },
+      metricsWindowDays: 30,
+    };
+    mockClubs.mockReset().mockResolvedValue(divergent);
+    renderWithProviders(<AdminDashboardPage />, { route: "/admin" });
+
+    expect(await screen.findByText("BCCL (Bêta non réglée)")).toBeInTheDocument();
+    // Le badge de l'offre non réglée dit l'EFFECTIVE (Découverte), jamais « Payant ».
+    expect(screen.getByText("Découverte")).toBeInTheDocument();
+    expect(screen.getByText("Bêta posée — saison non réglée")).toBeInTheDocument();
+    expect(screen.queryByText("Payant")).not.toBeInTheDocument();
+    // L'offre réglée affiche « Bêta » (badge seul, aucun sous-texte de divergence).
+    expect(screen.getByText("Bêta")).toBeInTheDocument();
   });
 
   it("renders the usage stats: plans by type, time-to-close and club sizes (SA2-stats)", async () => {

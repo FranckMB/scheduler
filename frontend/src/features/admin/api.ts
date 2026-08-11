@@ -107,7 +107,11 @@ export interface AdminClub {
   ffbbClubCode: string | null;
   /** P2-4 — club de démonstration : badgé dans la liste, exclu des KPI. */
   isDemo: boolean;
-  planId: number | null;
+  /** Offre STOCKÉE (plan_id résolu) : null en Découverte par défaut. */
+  plan: { code: string; name: string } | null;
+  paidSeasonYear: number | null;
+  /** Offre EFFECTIVE calculée côté backend (règle pivot) — ce que la console affiche. */
+  effectivePlan: { code: string; name: string };
   billingCycle: string | null;
   generationCountSeason: number;
   createdAt: string;

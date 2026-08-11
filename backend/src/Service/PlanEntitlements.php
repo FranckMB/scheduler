@@ -36,6 +36,24 @@ final readonly class PlanEntitlements
     ) {}
 
     /**
+     * La règle PURE de l'offre effective (code seul, sur primitives) — MAISON UNIQUE,
+     * partagée avec `AdminMonitoringService` (badge de la console SA). Découverte si
+     * l'offre stockée est absente ou déjà Découverte ; sinon l'offre stockée SI elle est
+     * réglée pour la saison courante (`paidSeasonYear >= année-pivot`), Découverte sinon
+     * (expiration). Miroir du narratif de `effectivePlan()` juste dessous.
+     */
+    public static function effectivePlanCode(?string $storedCode, ?int $paidSeasonYear, int $pivotYear): string
+    {
+        if (null === $storedCode || self::DECOUVERTE_CODE === $storedCode) {
+            return self::DECOUVERTE_CODE;
+        }
+
+        // Offre payante/bêta : effective seulement si la saison courante est réglée
+        // (même règle d'année-pivot que SeasonTransitionService). Sinon → Découverte.
+        return ($paidSeasonYear ?? \PHP_INT_MIN) < $pivotYear ? self::DECOUVERTE_CODE : $storedCode;
+    }
+
+    /**
      * @return array{
      *     planCode: string,
      *     planName: string,
@@ -191,18 +209,16 @@ final readonly class PlanEntitlements
         }
 
         $plan = $this->plans->find($planId);
-        if (!$plan instanceof SubscriptionPlan || self::DECOUVERTE_CODE === $plan->getCode()) {
-            return $plan ?? $decouverte;
-        }
-
-        // Offre payante/bêta : effective seulement si la saison courante est réglée
-        // (même règle d'année-pivot que SeasonTransitionService). Sinon → Découverte.
-        $pivot = SeasonResolver::seasonYear($season->getStartDate());
-        if (($club->getPaidSeasonYear() ?? \PHP_INT_MIN) < $pivot) {
+        if (!$plan instanceof SubscriptionPlan) {
             return $decouverte;
         }
 
-        return $plan;
+        $pivot = SeasonResolver::seasonYear($season->getStartDate());
+        $effectiveCode = self::effectivePlanCode($plan->getCode(), $club->getPaidSeasonYear(), $pivot);
+
+        // Le code reste stocké (Découverte stockée, ou payant/bêta encore réglé) → l'entité
+        // stockée ; sinon (expiration) le socle Découverte.
+        return $effectiveCode === $plan->getCode() ? $plan : $decouverte;
     }
 
     /** 0 en base = illimité → null côté lecture. */

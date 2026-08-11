@@ -1,9 +1,19 @@
-Last verified @ 2026-08-11 (JSON **régénéré** depuis le backend vivant — les 15 dernières routes custom entrent au contrat, `KNOWN_UNDOCUMENTED` est vide)
+Last verified @ 2026-08-11 (JSON **régénéré** depuis le backend vivant — `GET /api/admin/clubs` troque `planId` contre `plan`/`paidSeasonYear`/`effectivePlan` (A1) ; les 15 dernières routes custom au contrat, `KNOWN_UNDOCUMENTED` vide)
 
 Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **A1 — le badge de la console dit l'offre EFFECTIVE (2026-08-11)** : `GET /api/admin/clubs`
+  retire `planId` (annoncé `integer`, c'était en fait un uuid — type faux) et le remplace par
+  trois champs : `plan { code, name } | null` (l'offre **STOCKÉE**, null en Découverte par
+  défaut), `paidSeasonYear` (int|null) et `effectivePlan { code, name }` (l'offre **EFFECTIVE**
+  calculée serveur). La règle pivot (payante/bêta dont `paidSeasonYear` < année-pivot de la
+  saison courante → retombe sur Découverte) a une **maison unique**
+  `PlanEntitlements::effectivePlanCode`, relayée par `AdminMonitoringService` sans re-dérivation
+  SQL — gardée par `AdminMonitoringClubsPlanTest`. Aucun path touché (146). Motif : la console
+  affichait un binaire Découverte/Payant sur l'offre stockée et **mentait** (une bêta non réglée
+  s'affichait « Payant »).
 - **P4-47 — solde de la dette (2026-08-11)** : **131 → 146 paths**. Les 15 routes `#[Route]`
   custom qui restaient hors contrat y entrent, en trois familles : la **console superadmin**
   (catalogue d'actions support + exécution par club, demandes de création de club et leur
