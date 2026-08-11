@@ -347,6 +347,19 @@ jobs:
       - name: ScheduleCapabilityParityTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/ScheduleCapabilityParityTest.php --group phase1'
 
+      # DOC-3, tranché le 2026-08-11 (option (a) : en faire un step). Le fichier se
+      # sous-titrait « NR BLOQUANT — SÉMANTIQUE DE CONTRAINTE » depuis P4-42 sans qu'aucun
+      # step ne le lance : il bloquait le merge via `unit-tests` (contexte requis de main),
+      # mais PAS `build-docker` — l'image se construisait sur une base rouge, et le verdict
+      # arrivait tard. Même écart que P2-9ter, même correctif.
+      # Ce qu'il garde : la PORTÉE d'un tag, c'est-à-dire ce que le solveur applique
+      # vraiment — `resolveTagToTeamIds` éclate un `targetTag` en N contraintes TEAM dans le
+      # payload. Les frontières d'âge (BABY/EMB/JEUNE, P4-42), la réutilisation d'un tag
+      # homonyme non-système, l'unicité en base (P4-64), et depuis P4-50 le fait qu'éditer
+      # une `SportCategory` retague ses équipes.
+      - name: TeamTagScopeTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TeamTagScopeTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest

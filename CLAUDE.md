@@ -52,8 +52,8 @@ Ce qu'il faut retenir en toute session :
 - **Bloquant = step NOMMÉ du job `blocking-tests` dans `.github/workflows/ci.yml`** — jamais
   l'annotation `#[Group('phase1')]` (143 fichiers la portent, ~26 sont des steps). Un test annoté
   mais non listé tourne dans `unit-tests` : après le gate, sans bloquer `build-docker`. Toute
-  affirmation « X est bloquant » se vérifie dans `ci.yml`. Cas ouvert : `Security/TeamTagScopeTest`
-  porte `phase1` sans être un step (bloque le merge via `Unit Tests`, pas `build-docker` — DOC-3).
+  affirmation « X est bloquant » se vérifie dans `ci.yml`. *(Le dernier cas ouvert,
+  `TeamTagScopeTest`, est devenu un step le 2026-08-11 — DOC-3 fermée.)*
 - La liste ci-dessous est **la maison unique** de « quels tests gatent » (copie supprimée de
   testing-strategy après dérive, DOC-26) ; `BlockingTestsListMatchesCiTest` la compare à `ci.yml`
   dans les deux sens. Ce que chaque test garde en détail : **son propre docblock**.
@@ -88,7 +88,8 @@ Ce qu'il faut retenir en toute session :
 `Integration/ScheduleConstraintBuilderOverlayTest` (le build overlay n'écrit pas) ·
 `Security/PlanEntitlementsTest` (crédits Découverte + caps payants) ·
 `Security/MemberRoleTest` (rôles Gestionnaire/Membre, dernier gestionnaire) ·
-`Security/ScheduleCapabilityParityTest` (capacité affichée == verdict).
+`Security/ScheduleCapabilityParityTest` (capacité affichée == verdict) ·
+`Security/TeamTagScopeTest` (portée d'un tag = ce que le solveur applique).
 Detail: `docs/testing/testing-strategy.md`.
 
 ## 5. Conventions (core — détail par zone dans `.claude/rules/`)
