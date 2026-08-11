@@ -23,7 +23,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * le front via `/api/me` → `clock.ts`. Rejouer « à trois semaines des vacances »
  * en plein été, en rendez-vous.
  *
- * Même idiome que app:clubs:mark-season-paid : connexion PAR DÉFAUT (`club` n'a
+ * Même idiome que app:clubs:mark-next-season-paid : connexion PAR DÉFAUT (`club` n'a
  * pas de colonne club_id, donc pas de policy RLS — l'UPDATE ciblé par id passe),
  * action support pilotée par --club (SA4).
  */

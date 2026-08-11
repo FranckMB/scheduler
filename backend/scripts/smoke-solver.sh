@@ -38,7 +38,7 @@ if ! php 'test -f config/jwt/private.pem && echo yes' | grep -q yes; then
 fi
 
 # 3. Dev fixtures — need a seeded club the smoke USER belongs to. Multiple
-#    clubs exist in fixtures (e.g. FakeClub), so pick the club tied to
+#    clubs exist in fixtures (BCCL + the demo club), so pick the club tied to
 #    USER_EMAIL's membership — a bare "club LIMIT 1" can return a club the
 #    token user isn't a member of, yielding a 403 at generate time.
 club_for_user() {

@@ -1,6 +1,6 @@
 # Cycle de vie des plannings — le pointeur du plan (N3)
 
-Last verified @ 2026-08-08 (statut posé ce jour ; aucune modification de fond depuis le 2026-07-31 — ADR-0002 et ses amendements restent la source)
+Last verified @ 2026-08-11 (recalé ce jour par le lot fixtures : **le FakeClub d'onboarding (ARA00TEST) est supprimé du seed**, la fixture dev seede désormais le club BCCL PUIS le club de DÉMONSTRATION — les deux en état 1 ; sur le fond, aucune modification depuis le 2026-07-31 — ADR-0002 et ses amendements restent la source)
 
 > **Bascule 2026-07-16 (ADR-0002, `docs/architecture/adr-0002-pattern-plan.md`)** : le **plan de
 > type SEASON** (`schedule_plan`) et **la version qu'il pointe** (`chosen_schedule_id`) SONT le
@@ -27,7 +27,7 @@ Les deux critères sont **indépendants** : `hasFinishedVersion` est dérivé de
 | **2. A généré, rien de choisi** | `hasFinishedVersion = true`, `chosenScheduleId = null` | **cockpit** (déverrouillé) + bandeau « valider pour débloquer » | → **/wizard** étape **Génération** | **matchs** + **plannings secondaires** bloqués (front désactivé + `SocleGuard` 409) |
 | **3. Une version choisie** | `chosenScheduleId ≠ null` | **cockpit** (tout ouvert) | → /planning | aucune |
 
-Ancrages : `AuthGuard.tsx` (onboarding = `!seasonPlan.hasFinishedVersion`), `CockpitPage.tsx` (idem → /wizard), `WizardLayout.tsx` (guided = `!hasFinishedVersion`, landing Récap), `SeasonPlanBanner.tsx` (« Ouvrir » état 2→wizard génération), `AppLayout.tsx` + `MatchesPage.tsx` (matchs verrouillés tant que `chosenScheduleId` est null), `App\Service\SocleGuard::assertSeasonPlanChosen` (409 création match/import/overlay tant qu'aucune version n'est pointée, appliqué dans `FixtureStateProcessor`, `ImportFixturesController`, `ScheduleStateProcessor` et `GenerateScheduleController`). Fixtures : BCCL et FakeClub sont seedés en **état 1** (données saisies, aucune génération).
+Ancrages : `AuthGuard.tsx` (onboarding = `!seasonPlan.hasFinishedVersion`), `CockpitPage.tsx` (idem → /wizard), `WizardLayout.tsx` (guided = `!hasFinishedVersion`, landing Récap), `SeasonPlanBanner.tsx` (« Ouvrir » état 2→wizard génération), `AppLayout.tsx` + `MatchesPage.tsx` (matchs verrouillés tant que `chosenScheduleId` est null), `App\Service\SocleGuard::assertSeasonPlanChosen` (409 création match/import/overlay tant qu'aucune version n'est pointée, appliqué dans `FixtureStateProcessor`, `ImportFixturesController`, `ScheduleStateProcessor` et `GenerateScheduleController`). Fixtures : le club BCCL dev et le club de DÉMONSTRATION sont seedés en **état 1** (données saisies, aucune génération).
 
 ## 1. Modèle produit (validé avec le gestionnaire)
 

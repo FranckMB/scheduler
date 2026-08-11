@@ -28,10 +28,10 @@ use Symfony\Component\Console\Style\SymfonyStyle;
  * l'UPDATE ciblé par id passe, et le rail SA4 gate déjà l'accès.
  */
 #[AsCommand(
-    name: 'app:clubs:mark-season-paid',
+    name: 'app:clubs:mark-next-season-paid',
     description: 'Mark the club\'s NEXT season as paid (per-season subscription, P1-5). Support action (SA4).',
 )]
-final class MarkSeasonPaidCommand extends Command
+final class MarkNextSeasonPaidCommand extends Command
 {
     public function __construct(private readonly ManagerRegistry $managerRegistry)
     {
@@ -53,19 +53,34 @@ final class MarkSeasonPaidCommand extends Command
             return Command::FAILURE;
         }
 
-        // La saison « suivante » au sens du pivot système (15 juillet) : celle
-        // que la prochaine bascule créera pour un club à jour.
-        $nextYear = SeasonResolver::seasonYear(new DateTimeImmutable) + 1;
-
-        $updated = $this->connection()->executeStatement(
-            'UPDATE club SET paid_season_year = GREATEST(COALESCE(paid_season_year, 0), :year) WHERE id = :id',
-            ['year' => $nextYear, 'id' => $clubId],
+        // Horloge démo (D6, décision fondateur) : un club de DÉMONSTRATION épinglé
+        // à une date simulée (`demo_today`) doit pivoter sur CETTE date, jamais sur
+        // l'horloge réelle — sinon la démo de bascule ment (un pin au 2028-05-15
+        // doit régler la saison 2028-2029, quand l'horloge réelle réglerait 2027-2028).
+        // DemoAwareClock reste request-scoped ; hors requête, la commande lit
+        // directement le pin du club cible — le même SELECT que l'UPDATE ci-dessous.
+        // Une valeur non-NULL n'existe QUE pour un club is_demo (DemoClockCommand
+        // ne l'écrit que là), le CASE le réaffirme et fail-close sur un vrai club.
+        $pin = $this->connection()->fetchOne(
+            'SELECT CASE WHEN is_demo AND demo_today IS NOT NULL THEN demo_today END FROM club WHERE id = :id',
+            ['id' => $clubId],
         );
-        if (0 === $updated) {
+        if (false === $pin) {
             $io->error(\sprintf('Club %s not found.', $clubId));
 
             return Command::FAILURE;
         }
+        $pivot = null === $pin ? new DateTimeImmutable : new DateTimeImmutable((string) $pin);
+
+        // La saison « suivante » au sens du pivot système (15 juillet) : celle
+        // que la prochaine bascule créera pour un club à jour.
+        $nextYear = SeasonResolver::seasonYear($pivot) + 1;
+
+        // Idempotent et monotone : GREATEST ne recule jamais le marqueur.
+        $this->connection()->executeStatement(
+            'UPDATE club SET paid_season_year = GREATEST(COALESCE(paid_season_year, 0), :year) WHERE id = :id',
+            ['year' => $nextYear, 'id' => $clubId],
+        );
 
         $io->success(\sprintf('Season %d-%d marked as paid for club %s — the transition gate is open.', $nextYear, $nextYear + 1, $clubId));
 

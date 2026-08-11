@@ -97,7 +97,7 @@ planning obtenu est l'argument que le bénévole porte à son bureau. La convers
 3. **Offre effective calculée à la lecture** (service de droits) : `planId` null → Découverte ;
    offre payante/bêta avec `paidSeasonYear` périmé → Découverte. Pas de cron, pas d'état stocké.
    Club démo (`isDemo`) : droits pleins, toujours. ⚠ **L'attribution est en DEUX gestes** (choix PR A) :
-   `set-plan` pose l'offre, la saison réglée (`mark-season-paid`) la rend effective — **Bêta comprise**
+   `set-plan` pose l'offre, la saison réglée (`mark-next-season-paid`) la rend effective — **Bêta comprise**
    (une bêta sans saison réglée naît expirée ; le piège a mordu le seeder dev, corrigé en PR B).
 
 ## 4bis. UX de la conversion (fondateur, 2026-08-10 — implémentation en PR C)
