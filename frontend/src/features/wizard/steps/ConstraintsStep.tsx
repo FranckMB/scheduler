@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { PeriodAnchorGate } from "./PeriodAnchorGate";
+import { ImplicitRulesPanel } from "./ImplicitRulesPanel";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
@@ -441,11 +442,17 @@ export function ConstraintsStep() {
 
   return (
     <div>
-      <p className="mb-4 text-sm text-muted-foreground">
-        Le système gère déjà les règles de base (pas 2 équipes au même endroit, coach jamais en double…). Ici, ajoutez vos préférences et restrictions : ciblez
+      {/* P4-55 — « coach jamais en double » a été RETIRÉ de cette phrase : c'est faux depuis
+          D-14 (deux équipes d'un même coach au MÊME gymnase sont autorisées), et le
+          raccourci décourageait une pratique que le produit permet. Le détail exact vit
+          désormais dans l'encart ci-dessous, gardé contre la dérive du moteur. */}
+      <p className="mb-3 text-sm text-muted-foreground">
+        Ici, ajoutez vos préférences et restrictions : ciblez
         <strong> tout le club</strong>, un <strong>groupe</strong> (ex. les jeunes → pas de créneau après 19h50) ou une <strong>équipe</strong> précise. La capacité d'un gymnase se règle
         sur l'écran <strong>Gymnases</strong> (1, 2 ou 3 équipes par créneau).
       </p>
+
+      <ImplicitRulesPanel />
 
       {/* Même règle qu'au récap : quand les réglages de la période ne sont pas lus, on ne
           masque RIEN — mais on ne laisse pas croire que la liste est celle de la période.

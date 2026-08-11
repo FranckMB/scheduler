@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test/utils";
 
 import type { Constraint } from "../api";
+import { IMPLICIT_RULES } from "./ImplicitRulesPanel";
 
 const h = vi.hoisted(() => ({
   createMut: vi.fn(),
@@ -846,5 +847,46 @@ describe("ConstraintsStep — période : choisir, nommer, atteindre", () => {
     expect(scrollIntoView).toHaveBeenCalled();
 
     raf.mockRestore();
+  });
+  it("montre les règles implicites en lecture seule, repliées par défaut (P4-55)", async () => {
+    // Le besoin fondateur : « le gestionnaire ne sait pas ce qui s'applique gratuitement ».
+    // On garde le CONTRAT, pas la mise en forme : l'encart existe, il est fermé, il annonce
+    // les six règles triées, et il ne propose AUCUNE écriture.
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    const panel = screen.getByText("Ce que le système applique déjà, sans que vous le saisissiez").closest("details");
+    expect(panel).toBeInTheDocument();
+    expect((panel as HTMLDetailsElement).open).toBe(false); // replié : il informe, il n'encombre pas
+
+    await user.click(screen.getByText("Ce que le système applique déjà, sans que vous le saisissiez"));
+
+    for (const rule of IMPLICIT_RULES) {
+      expect(within(panel as HTMLElement).getByText(rule.title)).toBeInTheDocument();
+    }
+    // Lecture seule : le moteur n'expose aucune de ces règles à l'édition. Un bouton ici
+    // promettrait un réglage qui n'existe pas.
+    expect(within(panel as HTMLElement).queryByRole("button")).toBeNull();
+    expect(within(panel as HTMLElement).queryByRole("textbox")).toBeNull();
+    expect(within(panel as HTMLElement).queryByRole("checkbox")).toBeNull();
+  });
+
+  it("GÈLE le texte des règles implicites — il doit rester d'accord avec le moteur (P4-55)", () => {
+    // ⚠ Ce gel n'est pas de la cosmétique. Chaque ligne AFFIRME un comportement du solveur ;
+    // la réécrire à la légère fait mentir le produit. Deux affirmations ont déjà été
+    // corrigées en écrivant l'encart : le coach PEUT doubler dans le même gymnase (D-14), et
+    // « une séance par jour » n'a PAS d'exception atteignable (allowMultipleSessionsPerDay
+    // est absent de TeamInput — P4-79). Si vous changez ce tableau, allez d'abord relire
+    // `engine/app/solver/constraints.py`.
+    expect(IMPLICIT_RULES.map((r) => r.id)).toEqual(["venue-capacity", "coach-two-venues", "coach-player", "team-overlap", "one-session-per-day", "coach-rest-day"]);
+
+    // Le même gymnase est AUTORISÉ — la formulation inverse était affichée avant P4-55.
+    const coachRule = IMPLICIT_RULES.find((r) => "coach-two-venues" === r.id);
+    expect(coachRule?.detail).toContain("MÊME gymnase");
+    expect(coachRule?.detail).toContain("autorisées");
+
+    // Aucune règle ne doit renvoyer vers un réglage inexistant.
+    const perDay = IMPLICIT_RULES.find((r) => "one-session-per-day" === r.id);
+    expect(perDay?.detail).not.toMatch(/sauf si|autoris/i);
   });
 });
