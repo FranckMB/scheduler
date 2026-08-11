@@ -39,10 +39,7 @@ final class Version20260812120000 extends AbstractMigration
     public function up(Schema $schema): void
     {
         $this->addSql('ALTER TABLE schedule_slot_template ADD lock_origin VARCHAR(20) DEFAULT NULL');
-        $this->addSql(
-            "ALTER TABLE schedule_slot_template ADD CONSTRAINT chk_schedule_slot_template_lock_origin "
-            . "CHECK (lock_origin IS NULL OR lock_origin IN ('RESERVATION', 'MANUAL', 'UNKNOWN'))",
-        );
+        $this->addSql('ALTER TABLE schedule_slot_template ADD CONSTRAINT chk_schedule_slot_template_lock_origin CHECK (lock_origin IS NULL OR lock_origin IN (\'RESERVATION\', \'MANUAL\', \'UNKNOWN\'))');
 
         // 1. RESERVATION — un créneau verrouillé apparié à une réservation qui l'aurait
         //    produit, en respectant quel plan chaque réservation alimente réellement.

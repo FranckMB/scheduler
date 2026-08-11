@@ -62,7 +62,9 @@ final class LockOriginEnumMatchesTheCheckConstraintTest extends TestCase
             self::CONSTRAINT,
         ));
 
-        preg_match_all("/'([A-Z_]+)'/", $matches[1], $values);
+        // CS-Fixer écrit les littéraux en quotes simples ÉCHAPPÉES (\'RESERVATION\') : tolérer
+        // le backslash optionnel autour de la quote, comme AdminJobEnumsMatchTheCheckConstraintTest.
+        preg_match_all('/\\\\?\'([A-Z_]+)\\\\?\'/', $matches[1], $values);
 
         return $values[1];
     }
