@@ -89,6 +89,48 @@ Verrous de non-régression : `engine/tests/semantic/test_hard_lock_announces_vio
 TÉMOIN explicite — sans lui, constater que SM1 joue le samedi n'accuserait pas le verrou) et
 `engine/tests/semantic/test_hard_lock_divisible_slot.py`.
 
+## Règles structurelles JAMAIS saisies — et ce que l'écran en montre (P4-55, 2026-08-11)
+
+`add_level_1_hard_constraints` (`engine/app/solver/constraints.py:153`) pose une douzaine de
+règles que **personne n'entre nulle part**. Elles ne sont ni dans le wizard, ni dans le
+`config` d'une contrainte, ni dans le payload : elles sont le modèle lui-même. Le gestionnaire
+ne savait donc pas ce qu'il obtient gratuitement, ni pourquoi un placement « qui aurait dû
+passer » est refusé.
+
+**Six sont montrées** dans un encart replié, **lecture seule**, en tête de l'étape Contraintes
+(`frontend/src/features/wizard/steps/ImplicitRulesPanel.tsx`) :
+
+| Affiché | Fonction moteur | Nuance qui compte |
+|---|---|---|
+| Un gymnase ne dépasse jamais sa capacité | `add_room_at_most_one:284` | « au plus la CAPACITÉ », pas « une seule équipe » — la capacité se règle par créneau |
+| Un coach n'est jamais dans deux gymnases à la fois | `add_coach_at_most_one:311` | **venue-aware** : le MÊME gymnase est AUTORISÉ (D-14, arbitrage fondateur 2026-08-09) |
+| Une personne ne peut pas encadrer et jouer en même temps | `add_coach_player_non_overlap:374` | coach-joueur, les deux rôles |
+| Une équipe n'a jamais deux séances en même temps | `add_team_no_overlap:745` | — |
+| Au plus une séance par jour et par équipe | `add_one_session_per_day_constraints:1590` | ⚠ l'exception `allowMultipleSessionsPerDay` est **inatteignable** (voir ci-dessous) |
+| Chaque coach garde un jour de repos | `add_coach_rest_day_constraints:452` | lundi→vendredi ; le week-end ne compte pas |
+
+**Trois sont TUES, délibérément** (décision fondateur 2026-08-11) : `add_age_ascending_constraints`
+(les jeunes avant les grands, même gymnase+jour), `add_salarie_distribution_constraints` (au moins
+un salarié chaque jour ouvré) et `add_max_consecutive_sessions_constraints` (pas trois créneaux
+consécutifs pour un coach). Détails d'implémentation ou règles de confort : les énoncer coûterait
+plus de confusion qu'il n'apporte.
+
+⚠ **`allowMultipleSessionsPerDay` est un levier MORT** : le moteur le lit (`:1590`, `:1642`) et le
+backend le sérialise (`ScheduleConstraintBuilder.php:680`), mais le champ est **absent de
+`TeamInput`** — aucune route, aucun écran ne l'écrit ; seule la bascule de saison en recopie la
+valeur. Il vaut donc `false` partout. L'encart n'annonce **pas** l'exception, qui enverrait le
+gestionnaire chercher un réglage inexistant. Tracé en **P4-79**.
+
+⚠ **Le docstring d'`add_level_1_hard_constraints` a menti longtemps** : il décrivait un
+« two-pass fallback » abandonnant repos-coach et distribution-salariés sur INFEASIBLE. Ce chemin
+n'existe pas — ADR-0001 pose un solve **single-pass sans relaxation**. Corrigé au même lot.
+
+**Le garde anti-mensonge, dans les deux zones** : `ConstraintsStep.test.tsx` gèle le texte des six
+règles côté écran, et `engine/tests/semantic/test_implicit_rules_are_still_applied.py` vérifie que
+les six fonctions sont **toujours appelées sans condition** — retirer une règle du moteur sans
+toucher l'écran fait rougir la CI, en nommant l'intitulé affiché. Sans ce second verrou, le gel
+Vitest figerait un texte que plus personne n'honore.
+
 ## Verrous
 
 | Verrou | Fichier |

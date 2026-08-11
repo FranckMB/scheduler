@@ -185,10 +185,17 @@ def add_level_1_hard_constraints(
      10. one_session_per_day  — at most one session per day per team
      11. age_ascending        — younger teams train earlier than older teams (same venue+day)
 
-    When ``skip_rest_day_and_distribution`` is True, constraints 3b (coach_rest_day)
-    and 3c (salarie_distribution) are skipped. This is used in the two-pass fallback:
-    Pass 1 runs all constraints; if INFEASIBLE, Pass 2 drops these two to find a
-    feasible solution, and a WARNING diagnostic is emitted instead.
+    ``skip_rest_day_and_distribution=True`` skips 3b (coach_rest_day) and 3c
+    (salarie_distribution).
+
+    ⚠ This flag has NO applicative caller. The docstring used to present it as "the
+    two-pass fallback: pass 1 runs all constraints; if INFEASIBLE, pass 2 drops these
+    two". That fallback does not exist — ADR-0001 settled on a single pass with **no
+    relaxation**: INFEASIBLE yields ``status="failed"`` plus diagnostics, never a
+    quietly relaxed plan. Left in the signature for tests that exercise the branch;
+    flipping the DEFAULT would silently weaken the model, and (since P4-55) would also
+    make the wizard lie — its read-only panel announces the coach rest day with no
+    caveat, and ``tests/semantic/test_implicit_rules_are_still_applied.py`` guards that.
     """
 
     if assignments is None:
