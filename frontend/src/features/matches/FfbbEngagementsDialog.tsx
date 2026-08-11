@@ -55,7 +55,7 @@ export function FfbbEngagementsDialog({ teams, tiers, onClose }: FfbbEngagements
             Aucun engagement trouvé pour cette saison (les poules sortent généralement après le 20 juillet).
           </p>
         ) : (
-          <ul className="flex max-h-[24rem] flex-col gap-2 overflow-y-auto">
+          <ul className="flex flex-col gap-2">
             {rows.map((row) => (
               <li key={row.ffbbCompetitionId} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
                 <span className="min-w-0 text-sm">

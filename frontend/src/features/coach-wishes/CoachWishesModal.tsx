@@ -157,7 +157,7 @@ export function CoachWishesModal({ mother, weekFilter, onClose }: { mother: Cale
         </div>
       ) : null}
 
-      <div className="mt-3 max-h-[55vh] space-y-3 overflow-y-auto">
+      <div className="mt-3 space-y-3">
         {shownWeeks.map((week) => {
           const items = visible.filter((w) => w.weekStart === week.monday);
           return (
