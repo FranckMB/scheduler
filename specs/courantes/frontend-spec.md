@@ -4,7 +4,7 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-08 (stores re-vérifiés contre `frontend/src/shared/stores/` — la règle « `persist` pour le token » contredisait le tableau des stores depuis SEC-16, audit DOC-28 ; routes/stack/pagination/export re-vérifiés le 2026-07-29)
+Last verified @ 2026-08-11 (recalé ce jour par P2-24 : la page publique de doléances passe en STEPPER par équipe — envoi unique, confirmation vide, sessionStorage ; précédemment : 2026-08-08 (stores re-vérifiés contre `frontend/src/shared/stores/` — la règle « `persist` pour le token » contredisait le tableau des stores depuis SEC-16, audit DOC-28 ; routes/stack/pagination/export re-vérifiés le 2026-07-29))
 
 ---
 
@@ -76,7 +76,7 @@ découpage sûr et **aucun n'est optionnel** quand on ajoute une route :
 | `/club` | Identité du club : logo (upload + recadrage `LogoCropper` + suppression), couleur d'accent (+ palette), **section « Informations du club »** (champs FFBB — voir ci-dessous, admin) **et section « Demandes »** (approbation des adhésions `pending`, admin — l'ancienne route `/pending-members` a été repliée ici) | Required | `AppLayout` |
 | `/profile` | Profil utilisateur | Required | `AppLayout` |
 | `/confidentialite` | Politique de confidentialité (`PrivacyPage`) — atteignable depuis le menu compte | Public | aucun (autonome) |
-| **`/doleances/:token`** | **Page publique SANS login** (#10, lot C2) : le coach saisit ses disponibilités par équipe × semaine depuis son lien personnel tokenisé, pré-rempli de l'état courant ; il n'envoie que les sections qu'il a modifiées. Route **plate, hors `AuthGuard`** — aucune session requise. Contrat : `types-de-planning.md` §E5 | **Public** | aucun (autonome) |
+| **`/doleances/:token`** | **Page publique SANS login** (#10, lot C2 ; **stepper P2-24, 2026-08-11**) : parcours en ÉTAPES — intro (le pourquoi, + bandeau « déjà répondu le… » si `respondedAt`) → une étape PAR équipe (ses semaines, pré-remplies ; « Rien à signaler » avance sans rien modifier) → récap (« aucune modification » par équipe intacte, « Modifier » qui saute à l'équipe puis REVIENT au récap) qui porte la validation : « Valider et envoyer », ou « Confirmer sans modification » (envoie `submissions: []` — le coach passe ✓ répondu au lieu de rester silencieux). Envoi UNIQUE à la fin, seules les sections modifiées partent (payload inchangé, gardé par test NR) ; filet `sessionStorage` par token (restauré au montage, purgé au succès — jamais côté serveur). Route **plate, hors `AuthGuard`**. Contrat : `types-de-planning.md` §E5 | **Public** | aucun (autonome) |
 | `/admin/login` | Authentification **superadmin SA0** (mot de passe + TOTP obligatoire) | Public | `AdminAuthLayout` |
 | `/admin` | **Console superadmin** derrière `AdminGuard` → `AdminShell` : santé des services et conteneurs, dépendances externes, journaux (audit · messenger failed · erreurs système). Identité **globale et séparée** — un JWT club ne franchit jamais ce pare-feu, et la session admin ne pose jamais `app.club_id`. Client HTTP dédié (`adminApi`, préfixe `/api/admin`, cookie de session) qui **ne lit jamais** le store JWT club. Contrat : `superadmin-auth.md` | Session SA0 | `AdminShell` |
 | `/admin/*` (inconnue) | Redirige vers `/admin` — **hors du shell lazy**, pour qu'une URL admin inconnue ne télécharge pas la console entière | Session SA0 | — |

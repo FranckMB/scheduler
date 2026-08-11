@@ -1,45 +1,24 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useParams } from "react-router";
 
 import { AuthLayout } from "@/features/auth/AuthLayout";
 import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
 import { Spinner } from "@/shared/components/ui/spinner";
 
 import { getPublicWishContext, isPublicWishError, submitPublicWishes, type PublicWishContext, type PublicWishSubmission } from "./publicApi";
-
-/** Jours ISO 1–7 (1 = lundi) et leur libellé court FR. */
-const DAY_LABELS: { day: number; label: string }[] = [
-  { day: 1, label: "Lun" },
-  { day: 2, label: "Mar" },
-  { day: 3, label: "Mer" },
-  { day: 4, label: "Jeu" },
-  { day: 5, label: "Ven" },
-  { day: 6, label: "Sam" },
-  { day: 7, label: "Dim" },
-];
-
-/** État éditable d'une section (équipe × semaine). */
-interface SectionState {
-  slotsWanted: number;
-  days: Set<number>;
-  comment: string;
-}
-
-const frDate = (iso: string): string => {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-};
-
-const sectionKey = (teamId: string, weekStart: string): string => `${teamId}|${weekStart}`;
+import { useWishStepper } from "./useWishStepper";
+import { WishRecap } from "./WishRecap";
+import { WishTeamStep } from "./WishTeamStep";
+import { clearDraft, loadDraft, saveDraft } from "./wishDraft";
+import { buildInitialSections, cloneSections, frDate, isSectionDirty, toSubmission, type SectionState } from "./wishSections";
 
 /**
- * Page publique de collecte (feature #10, lot C2) — SANS LOGIN. Le coach ouvre son lien
- * `/doleances/:token` : ses équipes retenues × les semaines, pré-remplies de l'état courant
- * (y compris les saisies « au nom de » du gestionnaire). Il n'envoie que les sections qu'il
- * MODIFIE (dirty-tracking) — une section non touchée n'écrit rien et ne remet pas « à traiter »
- * une doléance déjà traitée. Réutilisable/révisable jusqu'à la deadline.
+ * Page publique de collecte (feature #10) — SANS LOGIN, en ÉTAPES (lot E, P2-24). Le coach
+ * ouvre son lien `/doleances/:token` : intro (le pourquoi) → une étape PAR équipe (ses
+ * semaines) → récapitulatif → validation. L'envoi est UNIQUE, à la fin ; il n'envoie que
+ * les sections MODIFIÉES (dirty-tracking) — une section non touchée n'écrit rien. Un filet
+ * sessionStorage LOCAL survit à un rechargement d'onglet (purgé au succès).
  */
 export function PublicWishPage() {
   const { token = "" } = useParams();
@@ -85,29 +64,42 @@ export function PublicWishPage() {
 }
 
 function PublicWishForm({ token, context }: { token: string; context: PublicWishContext }) {
-  // Snapshot initial (état courant pré-rempli) — sert de référence au dirty-tracking.
-  const initial = useMemo(() => {
-    const map = new Map<string, SectionState>();
-    for (const team of context.teams) {
-      for (const week of context.weeks) {
-        const existing = context.wishes.find((w) => w.teamId === team.id && w.weekStart === week);
-        map.set(sectionKey(team.id, week), {
-          slotsWanted: existing?.slotsWanted ?? 0,
-          days: new Set(existing?.unavailableDays ?? []),
-          comment: existing?.comment ?? "",
-        });
+  // Snapshot initial (état courant pré-rempli côté serveur) — référence du dirty-tracking.
+  const initial = useMemo(() => buildInitialSections(context), [context]);
+
+  // Brouillon LOCAL éventuel (rechargement d'onglet) — lu une seule fois au montage.
+  const draft = useMemo(() => loadDraft(token), [token]);
+
+  const [sections, setSections] = useState<Map<string, SectionState>>(() => {
+    const base = cloneSections(initial);
+    if (null !== draft) {
+      for (const [key, value] of draft.sections) {
+        if (base.has(key)) {
+          base.set(key, { slotsWanted: value.slotsWanted, days: new Set(value.days), comment: value.comment });
+        }
       }
     }
-    return map;
-  }, [context]);
-
-  const [sections, setSections] = useState<Map<string, SectionState>>(() => new Map([...initial].map(([k, v]) => [k, { slotsWanted: v.slotsWanted, days: new Set(v.days), comment: v.comment }])));
+    return base;
+  });
   const [done, setDone] = useState(false);
+
+  const teamIds = useMemo(() => context.teams.map((t) => t.id), [context.teams]);
+  const stepper = useWishStepper(teamIds, draft?.stepIndex ?? 0);
 
   const mutation = useMutation({
     mutationFn: (submissions: PublicWishSubmission[]) => submitPublicWishes(token, submissions),
-    onSuccess: () => setDone(true),
+    onSuccess: () => {
+      clearDraft(token);
+      setDone(true);
+    },
   });
+
+  // Filet LOCAL : sauvegarde à chaque changement de section ou d'étape (jamais serveur).
+  useEffect(() => {
+    if (!done) {
+      saveDraft(token, sections, stepper.index);
+    }
+  }, [done, sections, stepper.index, token]);
 
   const patch = (key: string, next: Partial<SectionState>) =>
     setSections((prev) => {
@@ -137,38 +129,10 @@ function PublicWishForm({ token, context }: { token: string; context: PublicWish
       return map;
     });
 
-  // Une section est MODIFIÉE si elle diffère de l'état initial — seules celles-là partent.
-  const isDirty = (key: string): boolean => {
-    const a = sections.get(key);
-    const b = initial.get(key);
-    if (undefined === a || undefined === b) {
-      return false;
-    }
-    if (a.slotsWanted !== b.slotsWanted || a.comment.trim() !== b.comment.trim() || a.days.size !== b.days.size) {
-      return true;
-    }
-    for (const d of a.days) {
-      if (!b.days.has(d)) {
-        return true;
-      }
-    }
-    return false;
-  };
-
-  const dirtyKeys = [...sections.keys()].filter(isDirty);
+  const dirtyKeys = [...sections.keys()].filter((key) => isSectionDirty(sections.get(key), initial.get(key)));
 
   const submit = () => {
-    const submissions: PublicWishSubmission[] = dirtyKeys.map((key) => {
-      const [teamId, weekStart] = key.split("|");
-      const s = sections.get(key) as SectionState;
-      return {
-        teamId,
-        weekStart,
-        slotsWanted: s.slotsWanted,
-        unavailableDays: [...s.days].sort((x, y) => x - y),
-        comment: s.comment.trim() || null,
-      };
-    });
+    const submissions: PublicWishSubmission[] = dirtyKeys.map((key) => toSubmission(key, sections.get(key) as SectionState));
     mutation.mutate(submissions);
   };
 
@@ -188,62 +152,107 @@ function PublicWishForm({ token, context }: { token: string; context: PublicWish
     );
   }
 
+  const description = `${context.periodTitle} · à renvoyer avant le ${frDate(context.deadline)}`;
+  const { current } = stepper;
+
+  const title = "intro" === current.kind ? `Bonjour ${context.coachFirstName}` : "team" === current.kind ? (context.teams[current.teamIndex ?? 0]?.name ?? "Votre équipe") : "Récapitulatif";
+
   return (
-    <AuthLayout title={`Bonjour ${context.coachFirstName}`} description={`${context.periodTitle} · à renvoyer avant le ${frDate(context.deadline)}`}>
-      <p className="mb-4 text-sm text-muted-foreground">Indiquez, pour chaque équipe et chaque semaine, combien de séances vous souhaitez et vos jours d'indisponibilité. C'est un souhait, pas un engagement.</p>
-      <div className="space-y-4">
-        {context.teams.map((team) =>
-          context.weeks.map((week) => {
-            const key = sectionKey(team.id, week);
-            const s = sections.get(key) as SectionState;
-            return (
-              <fieldset key={key} className="rounded-lg border border-border bg-card p-3">
-                <legend className="px-1 text-sm font-medium">
-                  {team.name} · semaine du {frDate(week)}
-                </legend>
-                <label className="mt-2 flex items-center gap-2 text-sm">
-                  Séances souhaitées
-                  <Input
-                    type="number"
-                    min={0}
-                    max={7}
-                    aria-label={`Séances souhaitées — ${team.name}, semaine du ${frDate(week)}`}
-                    className="h-8 w-16"
-                    value={s.slotsWanted}
-                    onChange={(e) => patch(key, { slotsWanted: Math.max(0, Math.min(7, Number(e.target.value) || 0)) })}
-                  />
-                </label>
-                <div className="mt-2">
-                  <span className="text-sm text-muted-foreground">Jours d'indisponibilité</span>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    {DAY_LABELS.map(({ day, label }) => (
-                      <label key={day} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs">
-                        <input type="checkbox" className="size-3.5 accent-[var(--accent)]" checked={s.days.has(day)} onChange={() => toggleDay(key, day)} aria-label={`${label} indisponible — ${team.name}, semaine du ${frDate(week)}`} />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <label className="mt-2 block text-sm">
-                  <span className="text-muted-foreground">Commentaire</span>
-                  <textarea
-                    className="mt-1 w-full rounded-md border border-border bg-background p-2 text-sm"
-                    rows={2}
-                    aria-label={`Commentaire — ${team.name}, semaine du ${frDate(week)}`}
-                    value={s.comment}
-                    onChange={(e) => patch(key, { comment: e.target.value })}
-                  />
-                </label>
-              </fieldset>
-            );
-          }),
-        )}
-      </div>
-      {mutation.isError ? <p className="mt-3 text-sm text-destructive">Envoi impossible pour le moment. Réessayez dans un instant.</p> : null}
-      <Button className="mt-4 w-full" disabled={mutation.isPending || 0 === dirtyKeys.length} onClick={submit}>
-        {mutation.isPending ? <Spinner className="size-4" /> : null}
-        {0 === dirtyKeys.length ? "Aucune modification" : `Envoyer${dirtyKeys.length > 1 ? ` (${dirtyKeys.length} sections)` : ""}`}
-      </Button>
+    <AuthLayout title={title} description={description}>
+      <WishProgress stepper={stepper} teams={context.teams} />
+
+      {"intro" === current.kind ? (
+        <div className="space-y-4">
+          {null !== context.respondedAt ? <p className="rounded-md border border-accent/40 bg-accent/10 p-3 text-sm text-foreground">Vous avez déjà répondu le {frDate(context.respondedAt.slice(0, 10))}. Révisable jusqu'au {frDate(context.deadline)}.</p> : null}
+          <p className="text-sm text-muted-foreground">
+            Bonjour {context.coachFirstName} — votre club prépare le planning de {context.periodTitle}. Pour chaque équipe, indiquez combien de séances vous souhaitez et vos jours d'indisponibilité, semaine par semaine. C'est un souhait, pas un engagement&nbsp;: le club arbitre selon les
+            gymnases disponibles. Comptez 5&nbsp;minutes — vos réponses partent en une seule fois, à la fin. À renvoyer avant le {frDate(context.deadline)}.
+          </p>
+          <Button className="w-full" onClick={() => stepper.next()}>
+            {null !== context.respondedAt ? "Réviser mes réponses" : "Commencer"}
+          </Button>
+        </div>
+      ) : null}
+
+      {"team" === current.kind ? (
+        <div className="space-y-4">
+          <WishTeamStep team={context.teams[current.teamIndex ?? 0]} weeks={context.weeks} sections={sections} onPatch={patch} onToggleDay={toggleDay} />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" onClick={() => stepper.prev()}>
+              Précédent
+            </Button>
+            <div className="flex-1" />
+            {stepper.returningToRecap ? (
+              <Button onClick={() => stepper.next()}>Revenir au récapitulatif</Button>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => stepper.next()}>
+                  Rien à signaler
+                </Button>
+                <Button onClick={() => stepper.next()}>Suivant</Button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {"recap" === current.kind ? (
+        <div className="space-y-4">
+          <WishRecap teams={context.teams} weeks={context.weeks} sections={sections} initial={initial} onEditTeam={(id) => stepper.editTeam(id)} />
+          {mutation.isError ? <p className="text-sm text-destructive">Envoi impossible pour le moment. Réessayez dans un instant.</p> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" onClick={() => stepper.prev()}>
+              Précédent
+            </Button>
+            <div className="flex-1" />
+            <Button disabled={mutation.isPending} onClick={submit}>
+              {mutation.isPending ? <Spinner className="size-4" /> : null}
+              {0 === dirtyKeys.length ? "Confirmer sans modification" : `Valider et envoyer${dirtyKeys.length > 1 ? ` (${dirtyKeys.length})` : ""}`}
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </AuthLayout>
+  );
+}
+
+/** Fil d'Ariane des étapes : visitées cliquables (✓), courante `aria-current`, à venir inertes. */
+function WishProgress({ stepper, teams }: { stepper: ReturnType<typeof useWishStepper>; teams: { id: string; name: string }[] }) {
+  const label = (index: number): string => {
+    const step = stepper.steps[index];
+    if ("intro" === step.kind) {
+      return "Début";
+    }
+    if ("recap" === step.kind) {
+      return "Récap";
+    }
+    return teams[step.teamIndex ?? 0]?.name ?? "Équipe";
+  };
+
+  return (
+    <nav aria-label="Progression" className="mb-4">
+      <ol className="flex flex-wrap items-center gap-1.5 text-xs">
+        {stepper.steps.map((step, i) => {
+          const isCurrent = i === stepper.index;
+          const visited = stepper.isVisited(i);
+          const content = `${visited && !isCurrent ? "✓ " : ""}${label(i)}`;
+          return (
+            <li key={`${step.kind}-${step.teamId ?? i}`}>
+              {isCurrent ? (
+                <span aria-current="step" className="rounded-full bg-accent px-2.5 py-1.5 font-medium text-accent-foreground">
+                  {label(i)}
+                </span>
+              ) : stepper.canGoTo(i) ? (
+                <button type="button" onClick={() => stepper.goTo(i)} className="rounded-full border border-border px-2.5 py-1.5 text-muted-foreground hover:text-foreground">
+                  {content}
+                </button>
+              ) : (
+                <span className="rounded-full px-2.5 py-1.5 text-muted-foreground/70">{label(i)}</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }
