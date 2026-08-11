@@ -22,11 +22,11 @@ use Symfony\Component\Routing\RouterInterface;
  * parfaitement d'accord entre eux, et faux tous les deux — exactement le motif relevé sur
  * `VENUE_AT_MOST_ONE`. Il fallait confronter le contrat au **routeur**, pas à lui-même.
  *
- * ⚠ **Ce test est un CLIQUET, pas un mur.** La dette existante est déclarée dans
- * `KNOWN_UNDOCUMENTED` : la liste est une baseline qui ne peut que **rétrécir**. Une route
- * ajoutée sans documentation fait rougir ; une route documentée doit sortir de la liste,
- * sinon le test le dit aussi. Sans ce second sens, la baseline pourrirait en liste
- * d'excuses.
+ * ⚠ **Ce test était un CLIQUET ; la baseline ayant atteint zéro (P4-47), c'est désormais un
+ * MUR.** `KNOWN_UNDOCUMENTED` est vide : toute route custom non déclarée dans
+ * `CustomRoutesOpenApiFactory` fait rougir, sans échappatoire. Le second sens du cliquet
+ * (une route documentée doit SORTIR de la liste) reste gardé — il est ce qui a empêché la
+ * baseline de pourrir en liste d'excuses pendant qu'elle se vidait.
  */
 #[Group('phase1')]
 final class EveryCustomRouteIsDocumentedTest extends KernelTestCase
@@ -51,33 +51,21 @@ final class EveryCustomRouteIsDocumentedTest extends KernelTestCase
     private const string ENTRYPOINT = '/api/{index}.{_format}';
 
     /**
-     * ⚠ DETTE DÉCLARÉE — baseline du 2026-08-09, à faire DÉCROÎTRE.
+     * ⚠ DETTE DÉCLARÉE — **vide depuis P4-47** (2026-08-11), et c'est l'état à défendre.
      *
-     * Chaque ligne est une capacité réelle que le contrat public ne montre pas. Elles sont
-     * listées plutôt que tolérées en silence : une dette qu'on peut compter se résorbe, une
-     * dette invisible s'installe. Documenter une route = la retirer d'ici.
+     * La baseline du 2026-08-09 portait 15 routes hors contrat (10 sur la console
+     * superadmin, 2 pages publiques à token, 3 utilitaires FFBB) ; elles sont toutes
+     * déclarées dans `CustomRoutesOpenApiFactory`. Le cliquet a fait son travail : la
+     * liste ne pouvait que rétrécir, elle a atteint zéro.
      *
-     * Les 10 routes `/api/admin/**` sont groupées à part : la console superadmin a son
-     * propre contrat (`specs/courantes/superadmin-auth.md`) et n'est pas consommée par le
-     * frontend club — sa documentation OpenAPI a donc une valeur moindre, pas nulle.
+     * ⚠ **Ne la re-remplissez pas.** Elle n'existe plus que comme mécanisme ; y rajouter
+     * une ligne, c'est rouvrir la dette pour de bon. Une route custom nouvelle se
+     * documente, elle ne se déclare pas exemptée — le seul motif légitime d'exemption
+     * est « hors contrat public par NATURE », et il a sa propre liste
+     * (`OUT_OF_SCOPE_PREFIXES`), séparée précisément pour que les deux ne se confondent
+     * pas.
      */
-    private const array KNOWN_UNDOCUMENTED = [
-        '/api/admin/actions',
-        '/api/admin/audit-log',
-        '/api/admin/club-requests',
-        '/api/admin/club-requests/{id}/decision',
-        '/api/admin/clubs/{clubId}/actions/{key}',
-        '/api/admin/freshness',
-        '/api/admin/messenger/failed',
-        '/api/admin/pending-memberships',
-        '/api/admin/pending-memberships/{id}/activate',
-        '/api/admin/system-errors',
-        '/api/club-approvals/{token}',
-        '/api/coach-wishes/public/{token}',
-        '/api/ffbb-logos/{scope}/{code}',
-        '/api/ffbb/salles',
-        '/api/ffbb/salles-proches',
-    ];
+    private const array KNOWN_UNDOCUMENTED = [];
 
     public function testNoCustomRouteEscapesTheContract(): void
     {

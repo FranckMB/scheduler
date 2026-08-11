@@ -1,9 +1,27 @@
-Last verified @ 2026-08-10 (JSON **régénéré** depuis le backend vivant)
+Last verified @ 2026-08-11 (JSON **régénéré** depuis le backend vivant — les 15 dernières routes custom entrent au contrat, `KNOWN_UNDOCUMENTED` est vide)
 
 Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun
 path orphelin).
 Changements récents :
+- **P4-47 — solde de la dette (2026-08-11)** : **131 → 146 paths**. Les 15 routes `#[Route]`
+  custom qui restaient hors contrat y entrent, en trois familles : la **console superadmin**
+  (catalogue d'actions support + exécution par club, demandes de création de club et leur
+  décision, adhésions en attente et leur activation, board de fraîcheur, et les trois journaux
+  audit / échecs Messenger / erreurs système), les **pages publiques à token** (approbation de
+  club, doléances coach — GET et POST chacune) et le **proxy FFBB** (logos ligue/comité,
+  salles par code postal, salles proches). ⚑ Trois traits du contrat sont désormais ÉCRITS,
+  parce qu'un client qui les ignore écrit du code faux : les 404 de la console sont
+  **volontairement indistincts** (action inconnue, uuid malformé et club absent rendent la
+  même réponse) ; sur les pages à token, **le token EST l'identité** (pas de JWT) et ce sont
+  les CODES qui le portent — 404 byte-identique, rate-limit par IP avant toute résolution,
+  410 sur expiration. ⚠ Ne le lisez pas dans l'absence de `security` : ce document déclare
+  `security: []` au global et aucune opération ne porte de scheme, authentifiée ou non —
+  l'accès réel se lit dans `backend/config/packages/security.yaml` ;
+  la file d'échecs Messenger ne rend **jamais le body** d'un message (PII), seulement sa
+  classe, son horodatage et son erreur. **`KNOWN_UNDOCUMENTED` est vide** : le cliquet de
+  `EveryCustomRouteIsDocumentedTest` est devenu un mur, une route custom ajoutée sans son
+  entrée factory ne peut plus passer.
 - **P2-8 PR A (2026-08-10)** : `Schedule` gagne un objet `capabilities` (schéma
   `ScheduleCapabilities` : `canDelete`/`canValidate`/`canRegenerateFrom` + les compteurs
   `versionsDeletedOnValidate`/`overlaysDroppedOnValidate`). Additif, aucun path touché — le
@@ -263,8 +281,8 @@ Changements récents :
 - **Calendriers (PR #53/#62/#63, rattrapage 2026-07-06)** : `GET /api/school-holidays` et
   `GET /api/public-holidays` (contrôleurs Symfony custom) ajoutés à
   `App\OpenApi\CustomRoutesOpenApiFactory` puis au snapshot — ils manquaient aux deux.
-  ⚠ Le même gap subsiste pour la plupart des autres routes `#[Route]` custom — liste
-  exhaustive + suivi en roadmap sous **P4-47**.
+  ⚠ Le même gap valait alors pour la plupart des autres routes `#[Route]` custom — **soldé le
+  2026-08-11** (entrée P4-47 en tête de cette liste).
 - **G4/G5 (ex `backend-gaps`, livrés — cf. [`etat-des-lieux.md`](etat-des-lieux.md) §Réf historiques)** : les routes Symfony custom `/api/register`, `/api/me`
   (AuthController) et `/api/schedule-slots/{id}/manual-edit/{constraint,lock,one-time}`
   (ManualEditController) sont documentées dans l'OpenAPI via

@@ -374,6 +374,345 @@
                 ]
             }
         },
+        "/api/admin/audit-log": {
+            "get": {
+                "operationId": "getAdminAuditLog",
+                "tags": [
+                    "AdminJournal"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated super-admin audit trail (who did what on the cross-tenant surface)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "actorId": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ],
+                                                        "format": "uuid"
+                                                    },
+                                                    "actorEmail": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "route": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "context": {
+                                                        "type": "object",
+                                                        "additionalProperties": true
+                                                    },
+                                                    "status": {
+                                                        "type": [
+                                                            "integer",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "createdAt": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "pagination": {
+                                            "type": "object",
+                                            "properties": {
+                                                "page": {
+                                                    "type": "integer"
+                                                },
+                                                "limit": {
+                                                    "type": "integer"
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                },
+                                                "pages": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid page, limit, actor UUID or since date"
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "Read the paginated super-admin audit log",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 200,
+                            "default": 50
+                        }
+                    },
+                    {
+                        "name": "actor",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "route",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Substring match on the audited route"
+                    },
+                    {
+                        "name": "since",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "ISO date (YYYY-MM-DD)"
+                    }
+                ]
+            }
+        },
+        "/api/admin/messenger/failed": {
+            "get": {
+                "operationId": "getAdminMessengerFailed",
+                "tags": [
+                    "AdminJournal"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated Messenger failure queue \u2014 metadata only, never the message body (PII)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "class": {
+                                                        "type": "string",
+                                                        "description": "Message FQCN, or \"(classe inconnue)\" when the class no longer exists in the code"
+                                                    },
+                                                    "failedAt": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ],
+                                                        "format": "date-time"
+                                                    },
+                                                    "lastErrorMessage": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "pagination": {
+                                            "type": "object",
+                                            "properties": {
+                                                "page": {
+                                                    "type": "integer"
+                                                },
+                                                "limit": {
+                                                    "type": "integer"
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                },
+                                                "pages": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "List the failed Messenger envelopes (metadata only)",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100,
+                            "default": 10
+                        }
+                    }
+                ]
+            }
+        },
+        "/api/admin/system-errors": {
+            "get": {
+                "operationId": "getAdminSystemErrors",
+                "tags": [
+                    "AdminJournal"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated union of failed job runs and auth failures, deduplicated per (message, hour)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "source": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "job",
+                                                            "audit"
+                                                        ]
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "severity": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "error"
+                                                        ]
+                                                    },
+                                                    "createdAt": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "pagination": {
+                                            "type": "object",
+                                            "properties": {
+                                                "page": {
+                                                    "type": "integer"
+                                                },
+                                                "limit": {
+                                                    "type": "integer"
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                },
+                                                "pages": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid page, limit or since date"
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "Read the deduplicated system-error journal",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 200,
+                            "default": 50
+                        }
+                    },
+                    {
+                        "name": "since",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "ISO date (YYYY-MM-DD)"
+                    }
+                ]
+            }
+        },
         "/api/admin/clubs": {
             "get": {
                 "operationId": "getAdminClubs",
@@ -566,6 +905,65 @@
                         }
                     }
                 ]
+            }
+        },
+        "/api/admin/freshness": {
+            "get": {
+                "operationId": "getAdminFreshness",
+                "tags": [
+                    "AdminMonitoring"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reference-data freshness board (school holidays, public holidays, FFBB directory, DB backup)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "key": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "school-holidays",
+                                                            "public-holidays",
+                                                            "ffbb-directory",
+                                                            "db-backup"
+                                                        ]
+                                                    },
+                                                    "label": {
+                                                        "type": "string"
+                                                    },
+                                                    "lastUpdatedAt": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ],
+                                                        "format": "date-time"
+                                                    },
+                                                    "staleAfterDays": {
+                                                        "type": "integer"
+                                                    },
+                                                    "stale": {
+                                                        "type": "boolean"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "Read the data-freshness board of the reference datasets"
             }
         },
         "/api/admin/health": {
@@ -829,6 +1227,411 @@
                     }
                 },
                 "summary": "Read the global fleet and solver monitoring overview"
+            }
+        },
+        "/api/admin/actions": {
+            "get": {
+                "operationId": "getAdminActions",
+                "tags": [
+                    "AdminSupport"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The CLOSED catalogue of support actions (never an arbitrary command)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "key": {
+                                                        "type": "string"
+                                                    },
+                                                    "label": {
+                                                        "type": "string"
+                                                    },
+                                                    "description": {
+                                                        "type": "string"
+                                                    },
+                                                    "dangerous": {
+                                                        "type": "boolean"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "List the closed catalogue of per-club support actions"
+            }
+        },
+        "/api/admin/club-requests": {
+            "get": {
+                "operationId": "getAdminClubRequests",
+                "tags": [
+                    "AdminSupport"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Club-creation requests still actionable \u2014 PENDING and EXPIRED alike (an expired one leaves the public link, not the console)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "clubName": {
+                                                        "type": "string"
+                                                    },
+                                                    "ara": {
+                                                        "type": "string"
+                                                    },
+                                                    "clubEmail": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "status": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "pending",
+                                                            "expired"
+                                                        ]
+                                                    },
+                                                    "requesterName": {
+                                                        "type": "string"
+                                                    },
+                                                    "requesterEmail": {
+                                                        "type": "string"
+                                                    },
+                                                    "createdAt": {
+                                                        "type": "string",
+                                                        "format": "date"
+                                                    },
+                                                    "expiresAt": {
+                                                        "type": "string",
+                                                        "format": "date"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "List the club-creation requests awaiting a decision"
+            }
+        },
+        "/api/admin/club-requests/{id}/decision": {
+            "post": {
+                "operationId": "decideAdminClubRequest",
+                "tags": [
+                    "AdminSupport"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Decision recorded \u2014 `clubId` is present on approve only",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "approved",
+                                                "refused"
+                                            ]
+                                        },
+                                        "clubId": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "404": {
+                        "description": "Unknown request, malformed id, or already decided"
+                    },
+                    "422": {
+                        "description": "decision must be \"approve\" or \"refuse\""
+                    }
+                },
+                "summary": "Approve or refuse a club-creation request from the console (fallback when the FFBB mail path is dead)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "decision"
+                                ],
+                                "properties": {
+                                    "decision": {
+                                        "type": "string",
+                                        "enum": [
+                                            "approve",
+                                            "refuse"
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
+        "/api/admin/clubs/{clubId}/actions/{key}": {
+            "post": {
+                "operationId": "runAdminClubAction",
+                "tags": [
+                    "AdminSupport"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The action ran and its command exited 0",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "key": {
+                                            "type": "string"
+                                        },
+                                        "clubId": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "succeeded"
+                                            ]
+                                        },
+                                        "exitCode": {
+                                            "type": "integer",
+                                            "enum": [
+                                                0
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "404": {
+                        "description": "Unknown action key, malformed club id, or unknown club (deliberately indistinct)"
+                    },
+                    "409": {
+                        "description": "The same action (or its scheduled twin) is already running"
+                    },
+                    "500": {
+                        "description": "Unexpected execution failure"
+                    },
+                    "502": {
+                        "description": "The command returned a non-zero exit code (body carries exitCode)"
+                    }
+                },
+                "summary": "Run one catalogue support action against one club (audited, locked, historised)",
+                "parameters": [
+                    {
+                        "name": "clubId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "key",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            }
+        },
+        "/api/admin/pending-memberships": {
+            "get": {
+                "operationId": "getAdminPendingMemberships",
+                "tags": [
+                    "AdminSupport"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Memberships awaiting approval, all clubs",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "clubName": {
+                                                        "type": "string"
+                                                    },
+                                                    "ara": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "userName": {
+                                                        "type": "string"
+                                                    },
+                                                    "userEmail": {
+                                                        "type": "string"
+                                                    },
+                                                    "createdAt": {
+                                                        "type": "string",
+                                                        "format": "date"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "List the pending club memberships across all clubs"
+            }
+        },
+        "/api/admin/pending-memberships/{id}/activate": {
+            "post": {
+                "operationId": "activateAdminPendingMembership",
+                "tags": [
+                    "AdminSupport"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Membership activated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "activated"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "404": {
+                        "description": "Unknown, malformed, already active, or deactivated-by-the-club membership"
+                    }
+                },
+                "summary": "Activate a pending membership when the club hand-over never happened",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
             }
         },
         "/api/logout": {
@@ -5799,6 +6602,248 @@
                 "summary": "Advisory gate \u2014 never writes, and does NOT run on generate/regenerate"
             }
         },
+        "/api/ffbb-logos/{scope}/{code}": {
+            "get": {
+                "operationId": "getFfbbLogo",
+                "tags": [
+                    "Ffbb"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The rehosted logo bytes (public brand asset, no personal data)",
+                        "content": {
+                            "image/*": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "No logo stored under this scope+code"
+                    }
+                },
+                "summary": "Serve a rehosted FFBB league or committee logo",
+                "parameters": [
+                    {
+                        "name": "scope",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "league",
+                                "committee"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "code",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9]{1,24}$"
+                        }
+                    }
+                ]
+            }
+        },
+        "/api/ffbb/salles": {
+            "get": {
+                "operationId": "getFfbbSalles",
+                "tags": [
+                    "Ffbb"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The FFBB venues of a postal code, sorted by name (empty list when no usable postal code)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "postalCode": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "salles": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "address": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "city": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "externalRef": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "latitude": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "longitude": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Management role required (SEC-07)"
+                    },
+                    "502": {
+                        "description": "FFBB unreachable \u2014 best effort, never a broken gesture"
+                    }
+                },
+                "summary": "Search the FFBB venues of a postal code (defaults to the club's)",
+                "parameters": [
+                    {
+                        "name": "postalCode",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^\\d{5}$"
+                        },
+                        "description": "Defaults to the current club's postal code"
+                    }
+                ]
+            }
+        },
+        "/api/ffbb/salles-proches": {
+            "get": {
+                "operationId": "getFfbbSallesNearby",
+                "tags": [
+                    "Ffbb"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The FFBB venues near the club, sorted by distance (empty when the club has no geolocation)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "radiusKm": {
+                                            "type": [
+                                                "integer",
+                                                "null"
+                                            ],
+                                            "enum": [
+                                                3,
+                                                5,
+                                                10,
+                                                20,
+                                                null
+                                            ]
+                                        },
+                                        "salles": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "address": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "city": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "externalRef": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "latitude": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "longitude": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Management role required (SEC-07)"
+                    },
+                    "502": {
+                        "description": "FFBB unreachable \u2014 best effort, never a broken gesture"
+                    }
+                },
+                "summary": "List the FFBB venues near the club, auto-widening the radius until the result is useful",
+                "parameters": [
+                    {
+                        "name": "radius",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "enum": [
+                                3,
+                                5,
+                                10,
+                                20
+                            ]
+                        },
+                        "description": "Manual radius step in km; absent = auto-widening from 3 km"
+                    }
+                ]
+            }
+        },
         "/api/fixtures": {
             "get": {
                 "operationId": "api_fixtures_get_collection",
@@ -7409,6 +8454,366 @@
                         "explode": false
                     }
                 ]
+            }
+        },
+        "/api/club-approvals/{token}": {
+            "get": {
+                "operationId": "getPublicClubApproval",
+                "tags": [
+                    "PublicToken"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "What the institutional recipient must decide on",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "clubName": {
+                                            "type": "string"
+                                        },
+                                        "ara": {
+                                            "type": "string"
+                                        },
+                                        "requesterName": {
+                                            "type": "string"
+                                        },
+                                        "expiresAt": {
+                                            "type": "string",
+                                            "format": "date"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found \u2014 identical for an unknown, malformed or already-consumed token"
+                    },
+                    "410": {
+                        "description": "The request expired \u2014 the super-admin console remains the fallback"
+                    },
+                    "429": {
+                        "description": "Too many attempts from this IP (rate limited before any resolution)"
+                    }
+                },
+                "summary": "Read a pending club-creation request from its public approval link (no account, no JWT)",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "description": "The raw 64-hex token from the emailed link \u2014 it IS the identity"
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "decidePublicClubApproval",
+                "tags": [
+                    "PublicToken"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Decision recorded (single-shot \u2014 a second call sees the 404)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "approved",
+                                                "refused"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found \u2014 identical for an unknown, malformed or already-consumed token"
+                    },
+                    "410": {
+                        "description": "The request expired"
+                    },
+                    "422": {
+                        "description": "decision must be \"approve\" or \"refuse\""
+                    },
+                    "429": {
+                        "description": "Too many attempts from this IP (rate limited before any resolution)"
+                    }
+                },
+                "summary": "Approve or refuse a club creation from the public link",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "description": "The raw 64-hex token from the emailed link \u2014 it IS the identity"
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "decision"
+                                ],
+                                "properties": {
+                                    "decision": {
+                                        "type": "string",
+                                        "enum": [
+                                            "approve",
+                                            "refuse"
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
+        "/api/coach-wishes/public/{token}": {
+            "get": {
+                "operationId": "getPublicCoachWish",
+                "tags": [
+                    "PublicToken"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The coach perimeter and the current value of its wishes (pre-fill)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "coachFirstName": {
+                                            "type": "string"
+                                        },
+                                        "periodTitle": {
+                                            "type": "string"
+                                        },
+                                        "deadline": {
+                                            "type": "string",
+                                            "format": "date"
+                                        },
+                                        "weeks": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "string",
+                                                "format": "date"
+                                            }
+                                        },
+                                        "teams": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "wishes": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "required": [
+                                                    "teamId",
+                                                    "weekStart"
+                                                ],
+                                                "properties": {
+                                                    "teamId": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "weekStart": {
+                                                        "type": "string",
+                                                        "format": "date",
+                                                        "description": "Must be one of the campaign weeks AND still intersect the parent period"
+                                                    },
+                                                    "slotsWanted": {
+                                                        "type": "integer",
+                                                        "minimum": 0,
+                                                        "maximum": 7
+                                                    },
+                                                    "unavailableDays": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "integer",
+                                                            "minimum": 1,
+                                                            "maximum": 7
+                                                        }
+                                                    },
+                                                    "comment": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ],
+                                                        "maxLength": 2000
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "respondedAt": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found \u2014 identical for an unknown, malformed or already-consumed token"
+                    },
+                    "410": {
+                        "description": "Campaign past its deadline, or its season is archived (read-only)"
+                    },
+                    "429": {
+                        "description": "Too many attempts from this IP (rate limited before any resolution)"
+                    }
+                },
+                "summary": "Read a coach wish form from its public link (no account, no JWT)",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "description": "The raw 64-hex token from the emailed link \u2014 it IS the identity"
+                    }
+                ]
+            },
+            "post": {
+                "operationId": "submitPublicCoachWish",
+                "tags": [
+                    "PublicToken"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Wishes upserted (idempotent \u2014 the last line of a duplicated team+week wins)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "deadline": {
+                                            "type": "string",
+                                            "format": "date"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found \u2014 identical for an unknown, malformed or already-consumed token"
+                    },
+                    "410": {
+                        "description": "Campaign past its deadline, or its season is archived (read-only)"
+                    },
+                    "422": {
+                        "description": "Missing/oversized submissions, team outside the perimeter, week outside the collection, or invalid slot/day"
+                    },
+                    "429": {
+                        "description": "Too many attempts from this IP (rate limited before any resolution)"
+                    }
+                },
+                "summary": "Submit the coach wishes for the weeks of the campaign",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[0-9a-f]{64}$"
+                        },
+                        "description": "The raw 64-hex token from the emailed link \u2014 it IS the identity"
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "submissions"
+                                ],
+                                "properties": {
+                                    "submissions": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "required": [
+                                                "teamId",
+                                                "weekStart"
+                                            ],
+                                            "properties": {
+                                                "teamId": {
+                                                    "type": "string",
+                                                    "format": "uuid"
+                                                },
+                                                "weekStart": {
+                                                    "type": "string",
+                                                    "format": "date",
+                                                    "description": "Must be one of the campaign weeks AND still intersect the parent period"
+                                                },
+                                                "slotsWanted": {
+                                                    "type": "integer",
+                                                    "minimum": 0,
+                                                    "maximum": 7
+                                                },
+                                                "unavailableDays": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "integer",
+                                                        "minimum": 1,
+                                                        "maximum": 7
+                                                    }
+                                                },
+                                                "comment": {
+                                                    "type": [
+                                                        "string",
+                                                        "null"
+                                                    ],
+                                                    "maxLength": 2000
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
             }
         },
         "/api/reservations": {
