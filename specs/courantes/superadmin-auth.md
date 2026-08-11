@@ -1,6 +1,6 @@
 # Console superadmin — authentification, télémétrie et API de supervision
 
-Last verified @ 2026-08-11 (recalé ce jour par P4-47 : **toute la surface `/api/admin/**` est désormais déclarée au contrat OpenAPI** — les trois journaux ne sont plus « absents de l'export » ; précédemment recalé par P1-1 PR B : **la porte d'activation d'adhésion ignore les membres désactivés par leur club** ; et par P1-3 PR A : **attribution d'offres au catalogue** — une entrée `set-plan-*` par offre à `--plan` figé + `reset-credits`, seule porte d'attribution ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
+Last verified @ 2026-08-11 (recalé ce jour par A1/offres : **le contrat de `GET /api/admin/clubs` rend l'offre stockée ET l'offre effective, `planId` supprimé** ; et par P4-47 : **toute la surface `/api/admin/**` est désormais déclarée au contrat OpenAPI** — les trois journaux ne sont plus « absents de l'export » ; précédemment recalé par P1-1 PR B : **la porte d'activation d'adhésion ignore les membres désactivés par leur club** ; et par P1-3 PR A : **attribution d'offres au catalogue** — une entrée `set-plan-*` par offre à `--plan` figé + `reset-credits`, seule porte d'attribution ; précédemment : catalogue support « Resynchroniser depuis la FFBB » P2-18 · bascule de saison réservée aux saisons payées P1-5 · relances d'approbation de club et arbitrage console P3-4 PR B · **CSRF central SEC-18** et skip `/api/admin` SEC-17)
 
 > **État courant** : SA0, SA1, la console read-only SA2, le socle
 > d'historisation SA3-A, la supervision SA3-B, la planification fiable SA3-C et
@@ -98,9 +98,17 @@ réutilisent ni le firewall ni le JWT club :
   type de plan) et `clubSizes` (répartition par tranche de taille, avec la médiane de
   gymnases) ;
 - `GET /api/admin/clubs?page=1&limit=25&query=...` recherche sur nom, slug ou code FFBB
-  et retourne une liste paginée avec offre/compteur, dates d'activité, saison courante,
-  volumétrie active de la saison et indicateurs solveur sur 30 jours. `limit` est borné
-  à 100 et `query` à 100 caractères.
+  et retourne une liste paginée avec dates d'activité, saison courante, volumétrie active
+  de la saison et indicateurs solveur sur 30 jours. `limit` est borné à 100 et `query` à
+  100 caractères. **L'offre est rendue en DEUX vérités distinctes depuis A1 (2026-08-11)** :
+  `plan` (l'offre STOCKÉE — `{code, name}` ou null) et `effectivePlan` (l'offre qui
+  S'APPLIQUE, calculée par la même règle que `PlanEntitlements` : payante/bêta effective
+  seulement si `paidSeasonYear` couvre l'année-pivot de la saison courante, sinon
+  Découverte ; club sans saison → pivot sur l'horloge réelle). `paidSeasonYear` est exposé.
+  ⚑ L'ancien champ `planId` (uuid typé `number` côté front — doublement faux) est SUPPRIMÉ :
+  le badge console affiche l'effective, avec un sous-texte quand la stockée diverge
+  (« Bêta posée — saison non réglée »). Un club démo n'a AUCUN cas spécial ici : badge =
+  vérité comptable, le chip « Démo » porte déjà « droits pleins » (décision fondateur).
 
 La « saison courante » est la saison couvrant la date du jour ; en son absence, l'API
 retourne la saison la plus récente. Toutes les lectures sont auditées par la garantie
