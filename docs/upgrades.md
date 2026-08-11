@@ -37,7 +37,23 @@ tenue dehors) jusqu'à ce que l'outil soit réparé — suivi en **P4-80**.
 
 ### Groupe frontend-npm — 13 paquets (PR #505)
 
-*(entrée rédigée avec le traitement de la PR)*
+**C'est quoi** : treize briques de l'interface web. Trois seulement partent chez l'utilisateur —
+**Sentry** (le mouchard qui nous remonte les erreurs rencontrées par un vrai gestionnaire),
+**lucide-react** (les icônes) et **Vite** (l'outil qui assemble l'application livrée). Les dix
+autres ne servent qu'à nous : compilateur TypeScript, moteur de tests, navigateur simulé,
+Storybook, Playwright.
+
+**Ça apporte** : que des mises à jour d'entretien, aucune rupture. La plus notable est **Vite
+8.1 → 8.2**, qui touche la fabrication du paquet livré — c'est celle qu'on surveille, parce qu'un
+défaut là se voit chez tous les clubs à la fois et nulle part avant. Prendre ces mises à jour au fil
+de l'eau évite le saut coûteux : c'est exactement ce qui bloque TypeScript 7 chez nous depuis des
+mois, faute d'un écosystème qui suit.
+
+**Adapté chez nous** : **rien**. Vérifié dans le conteneur d'outillage, jamais sur le poste — et
+l'image a été **reconstruite avant** de tester, sans quoi on aurait validé une version périmée du
+code (le piège de 2026-07-29). ESLint, la compilation TypeScript et les **1038 tests** passent ; le
+paquet de production se construit et **ne grossit pas** (le fichier principal passe même de 274 à
+271 ko).
 
 ### ⚠ Découvert pendant le lot, sans rapport avec les dépendances : un test qui rougit au hasard
 
