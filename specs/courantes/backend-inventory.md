@@ -3,7 +3,7 @@
 > Backward inventory of the existing backend (Symfony 7.4 + API Platform). This document
 > describes what exists in the codebase at the time of verification — it is not a roadmap.
 
-Last verified @ 2026-08-08 (audit DOC-04, 5e réouverture — re-vérifié au code sur `backend/src/{Entity,ApiResource,Controller,Service,EventListener,Enum}` et `backend/config/`: JWT en cookie httpOnly SEC-16, module démo, approbation de club par token public P3-4, liste blanche `config` des contraintes SEC-13, console superadmin/SEC-17/SEC-18, RLS de `team_tag_assignment` BCK-11, `regenerate`/`regenerate-from`/`export-xlsx`, JWT de souscription Mercure, `TeamLink`/`TeamMatchHabit`)
+Last verified @ 2026-08-11 (recalé ce jour par P2-23 : l'export XLSX gagne sa 2ᵉ feuille « Équipes × jours » — §route export-xlsx ; précédemment : 2026-08-08 (audit DOC-04, 5e réouverture — re-vérifié au code sur `backend/src/{Entity,ApiResource,Controller,Service,EventListener,Enum}` et `backend/config/`: JWT en cookie httpOnly SEC-16, module démo, approbation de club par token public P3-4, liste blanche `config` des contraintes SEC-13, console superadmin/SEC-17/SEC-18, RLS de `team_tag_assignment` BCK-11, `regenerate`/`regenerate-from`/`export-xlsx`, JWT de souscription Mercure, `TeamLink`/`TeamMatchHabit`))
 
 ---
 
@@ -272,7 +272,7 @@ Référentiels globaux display-only (jamais consommés par le solveur). Détail 
 | Route | Méthode | Contrôleur | Description |
 |-------|---------|------------|-------------|
 | `/api/schedules/{id}/export-pdf` | POST | `ExportPdfController` | Lance l'export PDF asynchrone. Passe `pdfExportStatus` à `pending`, dispatche `ExportPdfMessage`. Retourne 202. |
-| `/api/schedules/{id}/export-xlsx` | POST | `ExportXlsxController` | Export Excel **synchrone** (`PhpSpreadsheet`, pas de tête sans écran à attendre) : flux `.xlsx` en téléchargement direct, filtrable par gymnase. Contrôle club courant (403). Nom de fichier = le nom **vivant** du plan (`SchedulePlanProvisioner::displayNameOf`, pas la photo `Schedule.name`) ; `/`/`\` remplacés avant `makeDisposition` (sinon 500 générique — Symfony lève sur un séparateur de chemin dans un nom de fichier). |
+| `/api/schedules/{id}/export-xlsx` | POST | `ExportXlsxController` | Export Excel **synchrone** (`PhpSpreadsheet`, pas de tête sans écran à attendre) : flux `.xlsx` en téléchargement direct, filtrable par gymnase. Contrôle club courant (403). Nom de fichier = le nom **vivant** du plan (`SchedulePlanProvisioner::displayNameOf`, pas la photo `Schedule.name`) ; `/`/`\` remplacés avant `makeDisposition` (sinon 500 générique — Symfony lève sur un séparateur de chemin dans un nom de fichier).  **Deux feuilles depuis P2-23 (2026-08-11)** : « Planning » (le tableau plat triable, une ligne par créneau ET par fenêtre vide) et **« Équipes × jours »** — matrice lignes = **toutes** les équipes de la saison (une équipe sans séance garde sa ligne vide : le trou est l'information), colonnes = les seuls jours occupés, cellule = `gymnase · HH:MM` **sans le coach**, deux séances le même jour empilées dans la cellule. ⚠ La 2ᵉ feuille n'est **pas créée** quand les placements ne couvrent qu'un seul gymnase (export scopé ou club mono-gymnase) : elle n'aurait rien à désambiguïser. Même route, même fichier, **1 crédit inchangé**. Les deux feuilles projettent leurs colonnes **par nom** (D-18) — gardé par `SpreadsheetColumnsAreProjectedByNameTest` et `SpreadsheetTeamDayMatrixTest`.|
 
 ### Édition manuelle (`ManualEditController.php`)
 
