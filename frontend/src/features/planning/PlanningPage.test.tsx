@@ -35,9 +35,10 @@ vi.mock("./api", () => {
   listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }])),
   getSlots: vi.fn(() =>
     Promise.resolve([
-      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", temporaryLock: false },
+      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null, temporaryLock: false },
     ]),
   ),
+  getConstraints: vi.fn(() => Promise.resolve([])),
   getDiagnostics: vi.fn(() =>
     Promise.resolve([
       { id: "diag-1", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, message: "Conflit de gymnase.", suggestions: [] },
@@ -122,7 +123,7 @@ beforeEach(() => {
   // gymnase désactivé) et `mockResolvedValue` SURVIT au test suivant — une fuite qui
   // rendrait un échec ultérieur incompréhensible.
   vi.mocked(getSlots).mockResolvedValue([
-    { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", temporaryLock: false },
+    { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null, temporaryLock: false },
   ]);
   vi.mocked(getVenues).mockResolvedValue([{ id: "venue-1", name: "Gymnase Alpha", color: "#00aa00" }]);
   vi.mocked(getTrainingSlots).mockResolvedValue([
@@ -357,7 +358,7 @@ describe("PlanningPage (integration)", () => {
     // FENÊTRES LIBRES d'un gymnase désactivé (le bruit du retour terrain), pas celui des
     // séances déjà placées — c'est le test au-dessus qui les garde.
     vi.mocked(getSlots).mockResolvedValue([
-      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-2", coachId: null, dayOfWeek: 3, startTime: "17:00:00", durationMinutes: 90, lockLevel: "NONE", temporaryLock: false },
+      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-2", coachId: null, dayOfWeek: 3, startTime: "17:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null, temporaryLock: false },
     ]);
     venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
     usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });

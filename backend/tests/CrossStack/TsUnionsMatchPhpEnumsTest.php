@@ -42,6 +42,7 @@ final class TsUnionsMatchPhpEnumsTest extends TestCase
         'ScheduleDiagnosticSeverity' => 'planning/api.ts',
         'SchedulePlanType' => 'planning/api.ts',
         'LockLevel' => 'planning/api.ts',
+        'LockOrigin' => 'planning/api.ts',
         'CalendarEntryKind' => 'cockpit/api.ts',
         'CalendarEntryPeriodType' => 'cockpit/api.ts',
         'CalendarEntryStatus' => 'cockpit/api.ts',

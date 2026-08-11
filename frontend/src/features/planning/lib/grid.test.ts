@@ -14,6 +14,7 @@ function slot(over: Partial<Slot>): Slot {
     startTime: "18:00:00",
     durationMinutes: 90,
     lockLevel: "NONE",
+    lockOrigin: null,
     temporaryLock: false,
     ...over,
   };

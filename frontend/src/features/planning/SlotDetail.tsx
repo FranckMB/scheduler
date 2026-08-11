@@ -5,7 +5,8 @@ import { useState } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
-import type { Slot, SlotMovePatch, Venue } from "./api";
+import type { Constraint, LockOrigin, Slot, SlotMovePatch, Venue } from "./api";
+import { applicableConstraints } from "./lib/applicableConstraints";
 import { DAYS, type GridCell, toHourMinute } from "./lib/grid";
 
 interface SlotDetailProps {
@@ -13,6 +14,8 @@ interface SlotDetailProps {
   slot: Slot;
   venues: Venue[];
   categoryLabel: string;
+  /** All club constraints — the applicable ones are composed here (F1). */
+  constraints: Constraint[];
   busy: boolean;
   /** VALIDATED schedule → the slot is read-only (no move/lock). */
   readOnly?: boolean;
@@ -30,12 +33,26 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function SlotDetail({ cell, slot, venues, categoryLabel, busy, readOnly = false, onClose, onToggleLock, onMove }: SlotDetailProps) {
+/**
+ * L'origine du verrou EN CLAIR (F1). ⚠ `UNKNOWN` se lit comme une IGNORANCE — le créneau EST
+ * bien verrouillé, on ne sait simplement pas d'où vient le verrou : c'est cette nuance qui
+ * décide si le gestionnaire ose y toucher. Jamais de code d'enum à l'écran.
+ */
+const LOCK_ORIGIN: Record<LockOrigin, { label: string; hint: string }> = {
+  RESERVATION: { label: "Réservation gymnase", hint: "Ce créneau est réservé auprès du gymnase — ne le déplacez pas sans vérifier." },
+  MANUAL: { label: "Épinglé manuellement", hint: "Vous (ou un gestionnaire) avez fixé ce créneau à la main. Vous pouvez le retirer." },
+  UNKNOWN: { label: "Verrouillé — origine inconnue", hint: "Ce créneau est bien verrouillé, mais on ne sait pas pourquoi. Vérifiez avant d'y toucher." },
+};
+
+export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, busy, readOnly = false, onClose, onToggleLock, onMove }: SlotDetailProps) {
   const [day, setDay] = useState(slot.dayOfWeek);
   const [time, setTime] = useState(toHourMinute(slot.startTime));
   const [venueId, setVenueId] = useState(slot.venueId);
 
   const dirty = day !== slot.dayOfWeek || time !== toHourMinute(slot.startTime) || venueId !== slot.venueId;
+
+  const origin = null !== slot.lockOrigin ? LOCK_ORIGIN[slot.lockOrigin] : null;
+  const applicable = applicableConstraints(slot, constraints);
 
   return (
     <Card>
@@ -52,6 +69,32 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, busy, readOnly =
         <Row label="Catégorie" value={categoryLabel} />
         <Row label="Coach" value={cell.coachLabel} />
         <Row label="Durée" value={`${slot.durationMinutes} min`} />
+
+        {null !== origin ? (
+          <div className="mt-3 border-t border-border pt-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Lock className="size-4 text-muted-foreground" aria-hidden="true" />
+              <span>{origin.label}</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{origin.hint}</p>
+          </div>
+        ) : null}
+
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="text-xs font-medium text-muted-foreground">Contraintes applicables</p>
+          {applicable.length > 0 ? (
+            <ul className="mt-1 flex flex-col gap-1">
+              {applicable.map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-2 text-sm">
+                  <span>{c.name}</span>
+                  <span className="shrink-0 rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{"HARD" === c.ruleType ? "obligatoire" : "préférence"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">Aucune contrainte spécifique à ce créneau.</p>
+          )}
+        </div>
 
         {readOnly ? (
           <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">Planning validé (lecture seule). Rouvrez-le pour modifier ce créneau.</p>

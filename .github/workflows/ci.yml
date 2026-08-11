@@ -360,6 +360,14 @@ jobs:
       - name: TeamTagScopeTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/TeamTagScopeTest.php --group phase1'
 
+      # F1 (axes planning lifecycle + constraint semantics) : la PROVENANCE d'un verrou de
+      # créneau est VRAIE. Un verrou né d'une réservation se lit RESERVATION, un épinglage
+      # manuel MANUAL, et un verrou d'origine indécidable UNKNOWN — jamais deviné. Sans ce
+      # gate, une dérive (deviner RESERVATION, ou downgrader une réservation en MANUAL)
+      # rendrait le gestionnaire confiant à tort sur ce qu'il peut retirer.
+      - name: LockOriginProvenanceTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Integration/Service/LockOriginProvenanceTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
