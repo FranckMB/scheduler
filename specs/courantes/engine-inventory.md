@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 2026-08-12 (recalé ce jour : gymnase imposé dans le diagnostic de verrou + dimension `lock_silence` de la matrice ; précédemment : 2026-08-12 (CONTRACT_VERSION **2.4** = troisième endpoint `/validate-assignments`, verdict moteur sur un candidat, P2-2 F2a — bump recalé ici et dans les docs gardés ; 2.3 = retrait de `maxDaysOverrideConfirmed`, P4-51 ; 2.2 = second problème `/place-matches`, P1-4 PR D · 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156 · P2-9 volet 1 : diagnostics de verrou, #317))
+Last verified @ 2026-08-13 (stamp recalé — le commit du contenu du 2026-08-12 a franchi minuit : PR #536 mergée à 00:03 ; contenu inchangé depuis) (recalé ce jour : gymnase imposé dans le diagnostic de verrou + dimension `lock_silence` de la matrice ; précédemment : 2026-08-12 (CONTRACT_VERSION **2.4** = troisième endpoint `/validate-assignments`, verdict moteur sur un candidat, P2-2 F2a — bump recalé ici et dans les docs gardés ; 2.3 = retrait de `maxDaysOverrideConfirmed`, P4-51 ; 2.2 = second problème `/place-matches`, P1-4 PR D · 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156 · P2-9 volet 1 : diagnostics de verrou, #317))
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
