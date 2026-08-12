@@ -21,13 +21,6 @@ final readonly class AdminActionCatalog
     {
         return [
             new AdminActionDefinition(
-                'reset-generation-quota',
-                'Réinitialiser le quota de générations',
-                'Remet le compteur de générations de la saison à zéro (offre Découverte).',
-                'app:clubs:reset-quota',
-                dangerous: false,
-            ),
-            new AdminActionDefinition(
                 'ffbb-resync',
                 'Resynchroniser depuis la FFBB',
                 'Ré-importe l\'identité FFBB du club (nom, coordonnées, logo, comité/ligue) — le même ré-import que le bouton de la fiche club, déclenché par le support.',
