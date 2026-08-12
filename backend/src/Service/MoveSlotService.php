@@ -49,10 +49,10 @@ final class MoveSlotService
     ) {}
 
     /**
-     * @return array{valid: bool, violations: list<array{rule: string, message: string}>}
-     *
      * @throws ScheduleGenerationInProgressException une génération tourne pour ce club (→ 409)
      * @throws InvalidArgumentException              le créneau n'a pas de planning parent (état incohérent)
+     *
+     * @return array{valid: bool, violations: list<array{rule: string, message: string}>}
      */
     public function move(ScheduleSlotTemplate $slot, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId): array
     {
@@ -117,7 +117,8 @@ final class MoveSlotService
             ? $this->constraintBuilder->buildForOverlay($schedule, $overlayEntry)
             : $this->constraintBuilder->buildForClubSeason($schedule->getClubId(), $schedule->getSeasonId());
 
-        $payload['slotTemplates'] = $this->baselineWithoutSourceAndSiblings($payload['slotTemplates'] ?? [], $schedule, $slot);
+        $currentSlotTemplates = \is_array($payload['slotTemplates'] ?? null) ? $payload['slotTemplates'] : [];
+        $payload['slotTemplates'] = $this->baselineWithoutSourceAndSiblings($currentSlotTemplates, $schedule, $slot);
         $payload['version'] = self::CONTRACT_VERSION;
         $payload['solverTimeoutSeconds'] = self::VALIDATE_TIMEOUT_SECONDS;
         $payload['candidate'] = [
