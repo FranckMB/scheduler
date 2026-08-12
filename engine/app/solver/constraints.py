@@ -2391,6 +2391,276 @@ def diagnose_locked_slot_violations(
     return warnings
 
 
+def diagnose_candidate_conflicts(
+    *,
+    candidate: Mapping[str, Any],
+    baseline_slots: Sequence[Mapping[str, Any]],
+    parsed: Mapping[str, Any],
+    teams: Sequence[Mapping[str, Any]] = (),
+    coaches: Sequence[Mapping[str, Any]] = (),
+    slot_capacities: Mapping[tuple[str, int, str], int] | None = None,
+    team_names: Mapping[str, str] | None = None,
+    coach_names: Mapping[str, str] | None = None,
+    venue_names: Mapping[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    """Name the HARD rules a move candidate would break (P2-2 F2a).
+
+    The SOLVE is the sovereign verdict (baseline frozen via ``add_fixed_slots`` +
+    candidate pinned): it says valid / invalid. This function only EXPLAINS an
+    invalid verdict — « un non sans motif est inutilisable ». It mirrors the
+    enforcement rules of ``add_level_1_hard_constraints`` exactly, so it does not
+    lie about what the solver applies (same discipline as
+    ``diagnose_locked_slot_violations``). Anything the solve rejects that no check
+    here attributes falls back to a generic ``unknown_hard_conflict`` upstream.
+
+    Coverage is deliberately the families the one-time rail silently ignored —
+    capacity, windows, rest — plus the structural double-booking that is the
+    founder's motivating example (« le coach Dupont a déjà les U15 à 20h dans un
+    autre gymnase »).
+    """
+    coach_map: Mapping[str, Sequence[str]] = parsed.get("team_coach_map") or {}
+    player_map: Mapping[str, Sequence[str]] = parsed.get("team_player_map") or {}
+    unavailability: Mapping[str, Any] = parsed.get("coach_unavailability") or {}
+    forced_venues: Mapping[str, str] = parsed.get("forced_venues") or {}
+    forbidden = parsed.get("forbidden_assignments") or ()
+    windows = parsed.get("time_windows") or ()
+    caps = slot_capacities or {}
+
+    def _team(team_id: str) -> str:
+        return (team_names or {}).get(team_id) or team_id
+
+    def _coach(coach_id: str) -> str:
+        return (coach_names or {}).get(coach_id) or coach_id
+
+    def _venue(venue_id: str) -> str:
+        return (venue_names or {}).get(venue_id) or venue_id
+
+    c_team = str(candidate["team_id"])
+    c_venue = str(candidate["venue_id"])
+    c_day = int(candidate["day"])
+    c_start = int(candidate["start"])
+    c_end = int(candidate["end"])
+    c_start_text = str(candidate.get("start_time") or "")
+
+    c_coaches = [str(cid) for cid in coach_map.get(c_team, ())]
+    c_players = [str(pid) for pid in player_map.get(c_team, ())]
+    c_persons_role: dict[str, str] = {}
+    for cid in c_coaches:
+        c_persons_role.setdefault(cid, "coach")
+    for pid in c_players:
+        c_persons_role[pid] = "player"
+
+    coach_ids_in_payload = {
+        str(_scalar_id(_get(coach, "id", "coach_id", default=None)))
+        for coach in coaches
+        if _get(coach, "id", "coach_id", default=None) is not None
+    }
+    multi_allowed = {
+        str(_scalar_id(_get(team, "id", "team_id", "teamId", default=None)))
+        for team in teams
+        if _get(team, "allowMultipleSessionsPerDay", "allow_multiple_sessions_per_day", default=False)
+    }
+
+    violations: list[dict[str, Any]] = []
+
+    def _emit(rule: str, message: str, **fields: Any) -> None:
+        violations.append({"rule": rule, "message": message, **fields})
+
+    # --- Structural rules, checked against the FROZEN baseline occupancy. ---
+    coach_working_days: dict[str, set[int]] = {cid: set() for cid in c_coaches}
+    baseline_days_same_team: set[int] = set()
+
+    for slot in baseline_slots:
+        s_team = str(slot["team_id"])
+        s_venue = str(slot["venue_id"])
+        s_day = int(slot["day"])
+        s_start = int(slot["start"])
+        s_end = int(slot["end"])
+        overlaps = s_day == c_day and _intervals_overlap(c_start, c_end, s_start, s_end)
+
+        s_persons_role: dict[str, str] = {}
+        for cid in coach_map.get(s_team, ()):
+            s_persons_role.setdefault(str(cid), "coach")
+        for pid in player_map.get(s_team, ()):
+            s_persons_role[str(pid)] = "player"
+
+        # Rest day: which weekdays each candidate coach already works.
+        if 1 <= s_day <= 5:
+            for cid in c_coaches:
+                if cid in s_persons_role:
+                    coach_working_days[cid].add(s_day)
+
+        # One session per day: same team already busy that day.
+        if s_team == c_team and s_day == c_day:
+            baseline_days_same_team.add(s_day)
+
+        if s_team == c_team and overlaps:
+            _emit(
+                "team_no_overlap",
+                f"{_team(c_team)} a déjà une séance qui chevauche ce créneau le {_day_label(c_day)}.",
+                team_id=c_team,
+                day_of_week=c_day,
+                start_time=c_start_text,
+            )
+
+        if not overlaps:
+            continue
+
+        # Coach / coach-player double-booking — venue-aware (D-14): the SAME gym is
+        # allowed, a DIFFERENT gym is physically impossible.
+        if s_venue != c_venue:
+            shared = set(c_persons_role) & set(s_persons_role)
+            for person_id in shared:
+                is_coach_pair = c_persons_role[person_id] == "coach" and s_persons_role[person_id] == "coach"
+                if is_coach_pair:
+                    _emit(
+                        "coach_no_overlap",
+                        f"{_coach(person_id)} a déjà {_team(s_team)} le {_day_label(c_day)} à "
+                        f"{c_start_text} dans un autre gymnase : un entraîneur ne peut pas être à deux endroits.",
+                        coach_id=person_id,
+                        team_id=c_team,
+                        conflicting_team_id=s_team,
+                        day_of_week=c_day,
+                        start_time=c_start_text,
+                    )
+                else:
+                    _emit(
+                        "coach_player_no_overlap",
+                        f"{_coach(person_id)} est déjà pris par {_team(s_team)} le {_day_label(c_day)} à "
+                        f"{c_start_text} dans un autre gymnase (impossible de coacher et jouer en même temps).",
+                        coach_id=person_id,
+                        team_id=c_team,
+                        conflicting_team_id=s_team,
+                        day_of_week=c_day,
+                        start_time=c_start_text,
+                    )
+
+    # Venue capacity: mirror add_room_at_most_one (grouped by venue + exact slot start).
+    same_slot_occupants = sum(
+        1
+        for slot in baseline_slots
+        if str(slot["venue_id"]) == c_venue
+        and int(slot["day"]) == c_day
+        and str(slot.get("start_time")) == c_start_text
+    )
+    capacity = int(caps.get((c_venue, c_day, c_start_text), 1))
+    if same_slot_occupants + 1 > capacity:
+        _emit(
+            "venue_capacity",
+            f"{_venue(c_venue)} le {_day_label(c_day)} à {c_start_text} est déjà à sa capacité "
+            f"({capacity}) : aucune place pour {_team(c_team)}.",
+            team_id=c_team,
+            venue_id=c_venue,
+            day_of_week=c_day,
+            start_time=c_start_text,
+        )
+
+    # Coach rest day: mirror add_coach_rest_day — at most 4 working days Mon-Fri,
+    # for every coach present in the payload (no override exemption since P4-51).
+    if 1 <= c_day <= 5:
+        for cid in c_coaches:
+            if cid not in coach_ids_in_payload:
+                continue
+            worked = coach_working_days[cid] | {c_day}
+            if len(worked) >= 5:
+                _emit(
+                    "coach_no_rest_day",
+                    f"placer {_team(c_team)} ici priverait {_coach(cid)} de son unique jour de "
+                    "repos (il travaillerait du lundi au vendredi).",
+                    coach_id=cid,
+                    team_id=c_team,
+                    day_of_week=c_day,
+                    start_time=c_start_text,
+                )
+
+    # One session per day: mirror add_one_session_per_day (per-day cap unless allowed).
+    if c_team not in multi_allowed and c_day in baseline_days_same_team:
+        _emit(
+            "one_session_per_day",
+            f"{_team(c_team)} s'entraîne déjà le {_day_label(c_day)} : une seule séance par jour.",
+            team_id=c_team,
+            day_of_week=c_day,
+            start_time=c_start_text,
+        )
+
+    # --- Entered constraints (the manager's own rules). ---
+    for cid in c_coaches:
+        for iv_day, iv_from, iv_to in unavailability.get(cid) or ():
+            if int(iv_day) == c_day and int(iv_from) <= c_start < int(iv_to):
+                _emit(
+                    "coach_unavailable",
+                    f"{_coach(cid)} est indisponible le {_day_label(c_day)} à {c_start_text}.",
+                    coach_id=cid,
+                    team_id=c_team,
+                    day_of_week=c_day,
+                    start_time=c_start_text,
+                )
+
+    for constraint in windows:
+        target = str(constraint.get("scope_target_id") or constraint.get("scopeTargetId") or "")
+        if target != c_team or not _is_enforced_window(constraint):
+            continue
+        if str(constraint.get("family") or "").upper() == "DAY":
+            continue
+        config = constraint.get("config") or {}
+        min_start = config.get("minStartTime")
+        max_start = config.get("maxStartTime")
+        max_end = config.get("maxEndTime")
+        if (
+            (min_start is not None and c_start < _time_to_minutes(min_start))
+            or (max_start is not None and c_start > _time_to_minutes(max_start))
+            or (max_end is not None and c_end > _time_to_minutes(max_end))
+        ):
+            _emit(
+                "time_window",
+                f"{_team(c_team)} placé à {c_start_text} sort de sa fenêtre horaire autorisée.",
+                team_id=c_team,
+                day_of_week=c_day,
+                start_time=c_start_text,
+            )
+
+    day_union = _day_rules_union(windows).get(c_team)
+    if day_union is not None:
+        day_rules, _sources = day_union
+        allowed = day_rules["allowed"]
+        if c_day in day_rules["forbidden"] or (allowed and c_day not in allowed):
+            _emit(
+                "day_rule",
+                f"{_team(c_team)} ne peut pas s'entraîner le {_day_label(c_day)} d'après ses règles de jours.",
+                team_id=c_team,
+                day_of_week=c_day,
+                start_time=c_start_text,
+            )
+
+    forced = forced_venues.get(c_team)
+    if forced is not None and str(forced) != c_venue:
+        _emit(
+            "forced_venue",
+            f"{_team(c_team)} est forcée dans {_venue(str(forced))} : {_venue(c_venue)} lui est interdit.",
+            team_id=c_team,
+            venue_id=c_venue,
+            day_of_week=c_day,
+            start_time=c_start_text,
+        )
+
+    for item in forbidden:
+        if not isinstance(item, dict):
+            continue
+        tid = item.get("scope_target_id") or item.get("team_id")
+        vid = item.get("venue_id") or item.get("room_id")
+        if tid is not None and vid is not None and str(tid) == c_team and str(vid) == c_venue:
+            _emit(
+                "forbidden_venue",
+                f"{_venue(c_venue)} est interdit à {_team(c_team)}.",
+                team_id=c_team,
+                venue_id=c_venue,
+                day_of_week=c_day,
+                start_time=c_start_text,
+            )
+
+    return violations
+
+
 def _constraint_of_coach(coach_id: str, label: str) -> dict[str, Any]:
     """The COACH_AVAILABILITY constraint behind a blocked interval, for naming.
 

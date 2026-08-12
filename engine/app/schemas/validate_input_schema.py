@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+from datetime import time
+
+from pydantic import Field
+
+from app.schemas.input_schema import (
+    CoachSchema,
+    ConstraintV2Schema,
+    PriorityTierSchema,
+    ScheduleSlotTemplateSchema,
+    SerializableModel,
+    TeamSchema,
+    VenueSchema,
+)
+
+# P2-2 F2a — verdict moteur sur UN candidat de deplacement (mono-candidat, pas de
+# batch : la decision fondateur exige un candidat par appel). Le vocabulaire est
+# celui de /generate — on ne reinvente pas un dialecte : venues/teams/coaches/
+# constraints/priorityTiers arrivent tels quels, et `slotTemplates` porte le
+# planning courant a FIGER (baseline). Le candidat est la seule chose libre.
+MAX_VENUES = 50
+MAX_TEAMS = 200
+MAX_COACHES = 200
+MAX_SLOT_TEMPLATES = 2000
+MAX_PRIORITY_TIERS = 20
+# Budget de temps volontairement COURT (cible UX 2-3 s cote gestionnaire) : la
+# baseline est entierement figee, le solveur ne cherche qu'a placer UN candidat
+# deja epingle — un budget long ne masquerait qu'un defaut de modelisation.
+MAX_TIMEOUT_SECONDS = 10
+
+
+class CandidateAssignmentSchema(SerializableModel):
+    """Le candidat a valider : une equipe vers un creneau vide cible.
+
+    Le coach n'est pas porte ici — il est derive de l'equipe via les contraintes
+    TEAM_COACH (meme source que /generate). La duree vient du creneau cible.
+    """
+
+    team_id: str = Field(alias="teamId")
+    venue_id: str = Field(alias="venueId")
+    day_of_week: int = Field(alias="dayOfWeek", ge=1, le=7)
+    start_time: time = Field(alias="startTime")
+    duration_minutes: int = Field(alias="durationMinutes", ge=1)
+
+
+class ValidateAssignmentsInputSchema(SerializableModel):
+    version: str = "2.4"
+    club_id: str = Field(alias="clubId")
+    season_id: str = Field(alias="seasonId")
+    solver_seed: int = Field(default=42, alias="solverSeed")
+    solver_timeout_seconds: int = Field(default=2, alias="solverTimeoutSeconds", ge=1, le=MAX_TIMEOUT_SECONDS)
+    venues: list[VenueSchema] = Field(default_factory=list, max_length=MAX_VENUES)
+    teams: list[TeamSchema] = Field(default_factory=list, max_length=MAX_TEAMS)
+    coaches: list[CoachSchema] = Field(default_factory=list, max_length=MAX_COACHES)
+    constraints: list[ConstraintV2Schema] = Field(default_factory=list)
+    # Le planning COURANT (HARD + non-HARD) : les verrous HARD restent pre-places
+    # hors solveur (comme /generate), le reste est FIGE via add_fixed_slots.
+    slot_templates: list[ScheduleSlotTemplateSchema] = Field(
+        default_factory=list, alias="slotTemplates", max_length=MAX_SLOT_TEMPLATES
+    )
+    priority_tiers: list[PriorityTierSchema] = Field(
+        default_factory=list, alias="priorityTiers", max_length=MAX_PRIORITY_TIERS
+    )
+    candidate: CandidateAssignmentSchema
