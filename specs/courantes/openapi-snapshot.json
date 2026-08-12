@@ -7747,6 +7747,113 @@
                 }
             }
         },
+        "/api/schedule-slots/{id}/move": {
+            "post": {
+                "operationId": "postScheduleSlotMove",
+                "tags": [
+                    "ManualEdit"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Move accepted by the solver and written; the schedule is flagged manually edited (its score is now stale)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "valid": {
+                                            "type": "boolean",
+                                            "enum": [
+                                                true
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Missing or invalid field (dayOfWeek, startTime or venueId)"
+                    },
+                    "404": {
+                        "description": "Slot not found"
+                    },
+                    "409": {
+                        "description": "Schedule is validated (read-only), or a generation is running for the club (body carries code=generation_in_progress)"
+                    },
+                    "422": {
+                        "description": "The solver refused the move: it is NOT written; the broken rules are named for display",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "valid": {
+                                            "type": "boolean",
+                                            "enum": [
+                                                false
+                                            ]
+                                        },
+                                        "violations": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "rule": {
+                                                        "type": "string",
+                                                        "description": "Machine code of the broken rule (UI branches on it)"
+                                                    },
+                                                    "message": {
+                                                        "type": "string",
+                                                        "description": "Human sentence naming the coach/venue/time in conflict"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Engine unreachable \u2014 nothing was written, retry"
+                    }
+                },
+                "summary": "Move a slot (day / time / venue) under the solver verdict: written only if the engine accepts it, otherwise refused with the named broken rules",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "dayOfWeek",
+                                    "startTime",
+                                    "venueId"
+                                ],
+                                "properties": {
+                                    "dayOfWeek": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "maximum": 7
+                                    },
+                                    "startTime": {
+                                        "type": "string",
+                                        "example": "20:00"
+                                    },
+                                    "venueId": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
         "/api/ffbb/engagements": {
             "get": {
                 "operationId": "listFfbbEngagements",
@@ -20925,6 +21032,11 @@
                             "null"
                         ]
                     },
+                    "manuallyEditedSinceGeneration": {
+                        "description": "Ce planning a-t-il \u00e9t\u00e9 retouch\u00e9 \u00e0 la main (d\u00e9placement de cr\u00e9neau) depuis sa\ng\u00e9n\u00e9ration ? Vrai \u21d2 le score ci-dessus est P\u00c9RIM\u00c9 (le placement a chang\u00e9, pas le\nscore). L'\u00e9cran l'affiche pour ne pas laisser lire un nombre qui ne d\u00e9crit plus\nle planning. Remis \u00e0 faux par une (re)g\u00e9n\u00e9ration.",
+                        "default": false,
+                        "type": "boolean"
+                    },
                     "solverSeed": {
                         "default": 0,
                         "type": "integer"
@@ -21141,6 +21253,11 @@
                             "null"
                         ]
                     },
+                    "manuallyEditedSinceGeneration": {
+                        "description": "Ce planning a-t-il \u00e9t\u00e9 retouch\u00e9 \u00e0 la main (d\u00e9placement de cr\u00e9neau) depuis sa\ng\u00e9n\u00e9ration ? Vrai \u21d2 le score ci-dessus est P\u00c9RIM\u00c9 (le placement a chang\u00e9, pas le\nscore). L'\u00e9cran l'affiche pour ne pas laisser lire un nombre qui ne d\u00e9crit plus\nle planning. Remis \u00e0 faux par une (re)g\u00e9n\u00e9ration.",
+                        "default": false,
+                        "type": "boolean"
+                    },
                     "solverSeed": {
                         "default": 0,
                         "type": "integer"
@@ -21315,6 +21432,11 @@
                                     "integer",
                                     "null"
                                 ]
+                            },
+                            "manuallyEditedSinceGeneration": {
+                                "description": "Ce planning a-t-il \u00e9t\u00e9 retouch\u00e9 \u00e0 la main (d\u00e9placement de cr\u00e9neau) depuis sa\ng\u00e9n\u00e9ration ? Vrai \u21d2 le score ci-dessus est P\u00c9RIM\u00c9 (le placement a chang\u00e9, pas le\nscore). L'\u00e9cran l'affiche pour ne pas laisser lire un nombre qui ne d\u00e9crit plus\nle planning. Remis \u00e0 faux par une (re)g\u00e9n\u00e9ration.",
+                                "default": false,
+                                "type": "boolean"
                             },
                             "solverSeed": {
                                 "default": 0,

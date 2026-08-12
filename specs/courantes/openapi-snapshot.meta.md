@@ -1,6 +1,14 @@
-Last verified @ 2026-08-12 (JSON **régénéré** depuis le backend vivant — ajout de la propriété LECTURE `lockOrigin` au schéma `ScheduleSlotTemplate` (F1 : origine du verrou, RESERVATION|MANUAL|UNKNOWN, nullable) ; server-authoritative, ABSENTE du `ScheduleSlotTemplateInput` ; aucun path/opération touché)
+Last verified @ 2026-08-12 (JSON **régénéré** depuis le backend vivant — F2b : nouveau path `POST /api/schedule-slots/{id}/move` (déplacement sous le verdict moteur) + propriété LECTURE `manuallyEditedSinceGeneration` au schéma `Schedule`)
 
 Changements récents :
+- **F2b — déplacement de créneau sous le verdict du moteur (2026-08-12)** : nouveau path
+  `POST /api/schedule-slots/{id}/move`. Le déplacement (jour/heure/gymnase) ne s'écrit QUE si
+  le moteur l'accepte (200 + marqueur), sinon il est refusé avec les règles violées NOMMÉES
+  (422 `{valid:false, violations:[{rule, message}]}`), et 409 si une génération tourne
+  (`code=generation_in_progress`) ou si le planning est validé (lecture seule) ; 502 si le
+  moteur ne répond pas. Le schéma de LECTURE `Schedule` gagne `manuallyEditedSinceGeneration`
+  (bool, vrai ⇒ score périmé après un déplacement manuel ; remis à faux par une (re)génération).
+  Le rail `manual-edit/one-time` reste, mais le front ne l'appelle plus pour ce geste.
 - **F1 — origine d'un verrou de créneau (2026-08-12)** : `ScheduleSlotTemplate` (schéma de
   lecture) gagne `lockOrigin` (enum PHP `LockOrigin` : RESERVATION | MANUAL | UNKNOWN,
   nullable — NULL quand le créneau n'est pas verrouillé). En LECTURE seule : le champ est

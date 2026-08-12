@@ -320,6 +320,13 @@ jobs:
       - name: CoachDoubleBookingTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/CoachDoubleBookingTest.php --group phase1'
 
+      # P2-2 F2b (axes planning lifecycle + constraint semantics) : un déplacement de créneau
+      # ne s'écrit QUE si le moteur l'accepte — un verdict « non » ne modifie pas le planning,
+      # la source est retirée de la baseline, et une génération en cours refuse (409). Le moteur
+      # est moqué : on garde que le BACKEND honore le verdict (le contrat cross-stack garde le reste).
+      - name: SlotMoveVerdictTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SlotMoveVerdictTest.php --group phase1'
+
       # P2-9ter — le fichier portait déjà #[Group('phase1')] sans qu'AUCUN step de CE job
       # ne le lance : il tournait bien, mais dans `unit-tests` (qui exécute `phpunit
       # tests/`) — c'est-à-dire APRÈS `blocking-tests` et sans gater `build-docker`. Il ne
