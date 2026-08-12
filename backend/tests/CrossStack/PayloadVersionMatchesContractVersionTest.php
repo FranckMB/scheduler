@@ -7,6 +7,7 @@ namespace App\Tests\CrossStack;
 use App\Service\MatchPlacementPayloadBuilder;
 use App\Service\MoveSlotService;
 use App\Service\ScheduleConstraintBuilder;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -56,7 +57,7 @@ final class PayloadVersionMatchesContractVersionTest extends TestCase
 
     #[Group('phase1')]
     #[Group('contract')]
-    #[\PHPUnit\Framework\Attributes\DataProvider('payloadVersionConstants')]
+    #[DataProvider('payloadVersionConstants')]
     public function testPayloadVersionEqualsTheContractFile(string $class, string $constant): void
     {
         $expected = $this->contractVersionFromDisk();

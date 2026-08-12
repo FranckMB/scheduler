@@ -44,7 +44,6 @@ final class ScheduleConstraintBuilder
      * sans quoi le récap annonce applicable ce que le solveur ne recevra pas.
      */
     public const VENUE_CONFIG_KEYS = ['forcedVenueId', 'preferredVenueId', 'minAtVenueId', 'forbiddenVenueId', 'setVenueId'];
-    private const CACHE_TTL_SECONDS = 14_400;
     /**
      * Version du CONTRAT backend⇄engine que ce payload s'attribue. Ce n'est pas
      * une version « de schéma » indépendante : c'est la MÊME chose que
@@ -53,6 +52,7 @@ final class ScheduleConstraintBuilder
      * `PayloadVersionMatchesContractVersionTest`.
      */
     public const string CONTRACT_VERSION = '2.4';
+    private const CACHE_TTL_SECONDS = 14_400;
     private const DEFAULT_SOLVER_SEED = 42;
     /**
      * Upper bound on the solve budget (seconds), aligned with the engine input
