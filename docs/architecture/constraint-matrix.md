@@ -134,7 +134,7 @@ passer » est refusé.
 | Un coach n'est jamais dans deux gymnases à la fois | `add_coach_at_most_one:311` | **venue-aware** : le MÊME gymnase est AUTORISÉ (D-14, arbitrage fondateur 2026-08-09) |
 | Une personne ne peut pas encadrer et jouer en même temps | `add_coach_player_non_overlap:374` | coach-joueur, les deux rôles |
 | Une équipe n'a jamais deux séances en même temps | `add_team_no_overlap:745` | — |
-| Au plus une séance par jour et par équipe | `add_one_session_per_day_constraints:1590` | ⚠ l'exception `allowMultipleSessionsPerDay` est **inatteignable** (voir ci-dessous) |
+| Au plus une séance par jour et par équipe | `add_one_session_per_day_constraints` | **sans exception** depuis le retrait du levier mort (P4-79, voir ci-dessous) |
 | Chaque coach garde un jour de repos | `add_coach_rest_day_constraints:452` | lundi→vendredi ; le week-end ne compte pas |
 
 **Trois sont TUES, délibérément** (décision fondateur 2026-08-11) : `add_age_ascending_constraints`
@@ -143,11 +143,11 @@ un salarié chaque jour ouvré) et `add_max_consecutive_sessions_constraints` (p
 consécutifs pour un coach). Détails d'implémentation ou règles de confort : les énoncer coûterait
 plus de confusion qu'il n'apporte.
 
-⚠ **`allowMultipleSessionsPerDay` est un levier MORT** : le moteur le lit (`:1590`, `:1642`) et le
-backend le sérialise (`ScheduleConstraintBuilder.php:680`), mais le champ est **absent de
-`TeamInput`** — aucune route, aucun écran ne l'écrit ; seule la bascule de saison en recopie la
-valeur. Il vaut donc `false` partout. L'encart n'annonce **pas** l'exception, qui enverrait le
-gestionnaire chercher un réglage inexistant. Tracé en **P4-79**.
+✦ **Le levier `allowMultipleSessionsPerDay` a été RETIRÉ de bout en bout le 2026-08-12 (P4-79)** :
+il valait `false` partout (aucune route, aucun écran ne l'écrivait), la branche d'exemption du
+moteur était morte. Le schéma REFUSE désormais le champ (`extra_forbidden`) — la porte est fermée,
+pas seulement inutilisée. Si le terrain demande un jour le double-entraînement le même jour, il se
+reconstruira proprement (champ d'API, case sur la fiche équipe, encart des règles implicites).
 
 ⚠ **Le docstring d'`add_level_1_hard_constraints` a menti longtemps** : il décrivait un
 « two-pass fallback » abandonnant repos-coach et distribution-salariés sur INFEASIBLE. Ce chemin
