@@ -79,6 +79,11 @@ export function useCoaches() {
   return useQuery({ queryKey: ["coaches"], queryFn: planningApi.getCoaches, staleTime: 300_000 });
 }
 
+/** Club constraints — the slot wrap (F1) composes the applicable ones client-side. */
+export function useConstraints() {
+  return useQuery({ queryKey: ["constraints"], queryFn: planningApi.getConstraints, staleTime: 300_000 });
+}
+
 export function useCategories() {
   return useQuery({ queryKey: ["categories"], queryFn: planningApi.getCategories, staleTime: 300_000 });
 }

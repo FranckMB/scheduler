@@ -26,7 +26,7 @@ import { GenerationWaiting } from "./GenerationWaiting";
 import { computeEmptySlots } from "./lib/emptySlots";
 import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail } from "./SlotDetail";
 
@@ -157,6 +157,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       startTime: r.startTime,
       durationMinutes: r.durationMinutes,
       lockLevel: "HARD" as const,
+      // Ces pseudo-créneaux SONT des réservations — l'origine du verrou est explicite.
+      lockOrigin: "RESERVATION" as const,
       temporaryLock: false,
     })),
     [isFailed, reservationsQuery.data, validScheduleId, disabledVenueIds],
@@ -181,6 +183,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const { data: categories = [] } = useCategories();
   const { data: teamCoaches = [] } = useTeamCoaches();
   const { data: coachPlayers = [] } = useCoachPlayers();
+  const { data: constraints = [] } = useConstraints();
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -654,6 +657,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           slot={selectedSlot}
                           venues={venues}
                           categoryLabel={categoryLabel}
+                          constraints={constraints}
                           busy={busy}
                           // Un pseudo-créneau de réservation (planning FAILED) n'existe pas
                           // côté serveur : déplacer/verrouiller le viserait dans le vide.

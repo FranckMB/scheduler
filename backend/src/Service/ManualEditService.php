@@ -10,6 +10,7 @@ use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
+use App\Enum\LockOrigin;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
@@ -53,6 +54,9 @@ final class ManualEditService
     public function applyLock(ScheduleSlotTemplate $slot, LockLevel $lockLevel): void
     {
         $slot->setLockLevel($lockLevel);
+        // Le gestionnaire épingle (ou déverrouille) à la main : origine MANUAL tant qu'il
+        // y a un verrou, NULL quand il le retire (NONE = pas de verrou, pas d'origine).
+        $slot->setLockOrigin(LockLevel::NONE === $lockLevel ? null : LockOrigin::MANUAL);
         $this->entityManager->flush();
     }
 

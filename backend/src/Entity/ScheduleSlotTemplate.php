@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Entity;
 
 use App\Enum\LockLevel;
+use App\Enum\LockOrigin;
 use App\Repository\ScheduleSlotTemplateRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
@@ -62,6 +63,13 @@ class ScheduleSlotTemplate implements TenantOwnedInterface
 
     #[ORM\Column(type: 'string', length: 10, enumType: LockLevel::class)]
     private LockLevel $lockLevel = LockLevel::NONE;
+
+    /**
+     * L'origine du verrou — pourquoi ce créneau est bloqué. NULL quand lockLevel = NONE
+     * (pas de verrou, donc pas d'origine). Server-authoritative : jamais posé par l'API.
+     */
+    #[ORM\Column(type: 'string', length: 20, nullable: true, enumType: LockOrigin::class)]
+    private ?LockOrigin $lockOrigin = null;
 
     #[ORM\Column(type: 'boolean')]
     private bool $temporaryLock = false;
@@ -247,6 +255,18 @@ class ScheduleSlotTemplate implements TenantOwnedInterface
     public function setLockLevel(LockLevel $lockLevel): self
     {
         $this->lockLevel = $lockLevel;
+
+        return $this;
+    }
+
+    public function getLockOrigin(): ?LockOrigin
+    {
+        return $this->lockOrigin;
+    }
+
+    public function setLockOrigin(?LockOrigin $lockOrigin): self
+    {
+        $this->lockOrigin = $lockOrigin;
 
         return $this;
     }

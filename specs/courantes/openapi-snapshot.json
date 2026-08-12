@@ -22057,6 +22057,19 @@
                             "HARD"
                         ]
                     },
+                    "lockOrigin": {
+                        "description": "Pourquoi le verrou : r\u00e9servation de gymnase, \u00e9pinglage manuel, ou origine inconnue. NULL si non verrouill\u00e9.",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "RESERVATION",
+                            "MANUAL",
+                            "UNKNOWN",
+                            null
+                        ]
+                    },
                     "temporaryLock": {
                         "default": false,
                         "type": "boolean"
@@ -22240,6 +22253,19 @@
                             "HARD"
                         ]
                     },
+                    "lockOrigin": {
+                        "description": "Pourquoi le verrou : r\u00e9servation de gymnase, \u00e9pinglage manuel, ou origine inconnue. NULL si non verrouill\u00e9.",
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "enum": [
+                            "RESERVATION",
+                            "MANUAL",
+                            "UNKNOWN",
+                            null
+                        ]
+                    },
                     "temporaryLock": {
                         "default": false,
                         "type": "boolean"
@@ -22331,6 +22357,19 @@
                                     "NONE",
                                     "SOFT",
                                     "HARD"
+                                ]
+                            },
+                            "lockOrigin": {
+                                "description": "Pourquoi le verrou : r\u00e9servation de gymnase, \u00e9pinglage manuel, ou origine inconnue. NULL si non verrouill\u00e9.",
+                                "type": [
+                                    "string",
+                                    "null"
+                                ],
+                                "enum": [
+                                    "RESERVATION",
+                                    "MANUAL",
+                                    "UNKNOWN",
+                                    null
                                 ]
                             },
                             "temporaryLock": {

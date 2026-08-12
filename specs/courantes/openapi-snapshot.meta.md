@@ -1,4 +1,11 @@
-Last verified @ 2026-08-11 (JSON **régénéré** depuis le backend vivant — purge des identifiants INTERNES de suivi (Pn-x, SEC-n, ENG-n, ADR-nnnn, SAn…) de tout texte AFFICHÉ du contrat : 45 `summary`/`description` (paths, réponses, propriétés de schéma, tags) perdent leur référence, la substance reste ; aucun path/schéma/opération touché — 146 paths)
+Last verified @ 2026-08-12 (JSON **régénéré** depuis le backend vivant — ajout de la propriété LECTURE `lockOrigin` au schéma `ScheduleSlotTemplate` (F1 : origine du verrou, RESERVATION|MANUAL|UNKNOWN, nullable) ; server-authoritative, ABSENTE du `ScheduleSlotTemplateInput` ; aucun path/opération touché)
+
+Changements récents :
+- **F1 — origine d'un verrou de créneau (2026-08-12)** : `ScheduleSlotTemplate` (schéma de
+  lecture) gagne `lockOrigin` (enum PHP `LockOrigin` : RESERVATION | MANUAL | UNKNOWN,
+  nullable — NULL quand le créneau n'est pas verrouillé). En LECTURE seule : le champ est
+  server-authoritative (posé à la source / par backfill), donc absent de
+  `ScheduleSlotTemplateInput`. Aucun path ni opération ajouté.
 
 Snapshot régénéré depuis le backend vivant le 2026-08-07 : `php bin/console api:openapi:export`.
 En phase avec les ressources de `backend/src/ApiResource/` (chacune est représentée, aucun

@@ -61,6 +61,14 @@ export const STATUS_LABELS: Record<ScheduleStatus, string> = {
  * cette union sans lire cette raison : on casserait soit le message d'erreur, soit l'écran.
  */
 export type LockLevel = "NONE" | "HARD";
+/**
+ * Pourquoi un créneau est verrouillé (F1) — la réponse que `lockLevel` seul ne donne pas.
+ * `RESERVATION` = né d'une réservation de gymnase (on n'y touche pas) ; `MANUAL` = épinglé
+ * à la main (on peut le retirer) ; `UNKNOWN` = verrouillé, origine indécidable (une
+ * ignorance, PAS une absence de verrou). `null` sur l'API quand le créneau n'est pas
+ * verrouillé. Jumelle de l'enum PHP `LockOrigin` (gardée par `TsUnionsMatchPhpEnumsTest`).
+ */
+export type LockOrigin = "RESERVATION" | "MANUAL" | "UNKNOWN";
 export type DiagnosticSeverity = "ERROR" | "WARNING" | "INFO" | "SUCCESS";
 /** ADR-0002: a plan's type — SEASON is the socle, CLOSURE/HOLIDAY are period overlays. */
 export type SchedulePlanType = "SEASON" | "CLOSURE" | "HOLIDAY";
@@ -151,6 +159,8 @@ export interface Slot {
   startTime: string;
   durationMinutes: number;
   lockLevel: LockLevel;
+  /** Pourquoi ce créneau est verrouillé (F1). `null` quand il ne l'est pas. */
+  lockOrigin: LockOrigin | null;
   temporaryLock: boolean;
 }
 
@@ -222,6 +232,22 @@ export interface SlotMovePatch {
   dayOfWeek?: number;
   startTime?: string;
   venueId?: string;
+}
+
+/**
+ * Une contrainte du club, lue telle quelle depuis `GET /api/constraints`. Le wrap de créneau
+ * (F1) COMPOSE côté client celles qui s'appliquent à un créneau donné (par scope + cible) —
+ * aucun champ calculé serveur. `scope`/`ruleType`/`family` restent des chaînes (mêmes enums
+ * que le wizard) : le wrap n'affiche que `name` et le niveau (dur/souple).
+ */
+export interface Constraint {
+  id: string;
+  name: string;
+  scope: string;
+  scopeTargetId: string | null;
+  family: string;
+  ruleType: string;
+  isActive: boolean;
 }
 
 /** Lock (HARD) or unlock (NONE) a placed slot so the next solve keeps/frees it. */
@@ -337,3 +363,6 @@ export const getCoaches = (): Promise<Coach[]> => collectionAll<Coach>("coaches"
 export const getCategories = (): Promise<Category[]> => collectionAll<Category>("sport_categories");
 export const getTeamCoaches = (): Promise<TeamCoach[]> => collectionAll<TeamCoach>("team_coaches");
 export const getCoachPlayers = (): Promise<CoachPlayerMembership[]> => collectionAll<CoachPlayerMembership>("coach_player_memberships");
+/** Toutes les contraintes du club — le wrap de créneau (F1) filtre côté client celles qui
+ *  s'appliquent au créneau sélectionné (composition, pas de calcul serveur). */
+export const getConstraints = (): Promise<Constraint[]> => collectionAll<Constraint>("constraints");

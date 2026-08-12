@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
+use App\Enum\LockOrigin;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
@@ -35,6 +37,8 @@ final class ScheduleResultImporter
             $existingByPlacement[$this->placementKey($slot->getTeamId(), $slot->getVenueId(), $slot->getDayOfWeek(), $slot->getStartTime()->format('H:i'))] = $slot;
         }
 
+        $reservationPlacements = $this->reservationPlacements($schedule);
+
         $solverSlots = $this->deduplicateNoneSlots($solverOutput['slots'] ?? []);
         $keptPlacements = [];
         foreach ($solverSlots as $slotData) {
@@ -57,7 +61,7 @@ final class ScheduleResultImporter
             }
 
             $slot = $existingSlot ?? (new ScheduleSlotTemplate)->setId(SlotIdScoper::scope($schedule->getId(), (string) $engineId));
-            $this->hydrateSlot($slot, $schedule, $slotData);
+            $this->hydrateSlot($slot, $schedule, $slotData, $reservationPlacements);
 
             if (null === $existingSlot) {
                 $this->entityManager->persist($slot);
@@ -113,9 +117,13 @@ final class ScheduleResultImporter
         return $slots;
     }
 
-    /** @param array<string, mixed> $slotData */
-    private function hydrateSlot(ScheduleSlotTemplate $slot, Schedule $schedule, array $slotData): void
+    /**
+     * @param array<string, mixed> $slotData
+     * @param array<string, true>  $reservationPlacements placement keys of this plan's durable pins
+     */
+    private function hydrateSlot(ScheduleSlotTemplate $slot, Schedule $schedule, array $slotData, array $reservationPlacements): void
     {
+        $lockLevel = LockLevel::tryFrom(strtoupper((string) ($slotData['lockLevel'] ?? 'NONE'))) ?? LockLevel::NONE;
         $slot
             ->setClubId($schedule->getClubId())
             ->setSeasonId($schedule->getSeasonId())
@@ -126,7 +134,54 @@ final class ScheduleResultImporter
             ->setDayOfWeek((int) $slotData['dayOfWeek'])
             ->setStartTime($this->parseStartTime((string) $slotData['startTime']))
             ->setDurationMinutes((int) $slotData['durationMinutes'])
-            ->setLockLevel(LockLevel::tryFrom(strtoupper((string) ($slotData['lockLevel'] ?? 'NONE'))) ?? LockLevel::NONE);
+            ->setLockLevel($lockLevel)
+            ->setLockOrigin($this->originForImportedLock($lockLevel, $slot, $reservationPlacements));
+    }
+
+    /**
+     * L'origine d'un verrou fraîchement importé du solveur. Un verrou HARD ici ne peut naître
+     * que d'une `Reservation` : les verrous manuels préexistants sont préservés INTACTS par
+     * `import()` (leur ligne HARD est sautée, jamais réhydratée), donc un slot HARD réhydraté
+     * a forcément été alimenté au moteur comme pin durable. On VÉRIFIE tout de même
+     * l'appariement à une réservation ; sans appariement → UNKNOWN (indécidable, jamais deviné).
+     *
+     * @param array<string, true> $reservationPlacements
+     */
+    private function originForImportedLock(LockLevel $lockLevel, ScheduleSlotTemplate $slot, array $reservationPlacements): ?LockOrigin
+    {
+        if (LockLevel::NONE === $lockLevel) {
+            return null;
+        }
+
+        $placement = $this->placementKey($slot->getTeamId(), $slot->getVenueId(), $slot->getDayOfWeek(), $slot->getStartTime()->format('H:i'));
+
+        return isset($reservationPlacements[$placement]) ? LockOrigin::RESERVATION : LockOrigin::UNKNOWN;
+    }
+
+    /**
+     * Placement keys of the durable Reservation pins that feed THIS schedule's plan — the
+     * only source of a HARD lock in a solver result. Loaded once per import.
+     *
+     * @return array<string, true>
+     */
+    private function reservationPlacements(Schedule $schedule): array
+    {
+        $reservations = $this->entityManager->getRepository(Reservation::class)->findBy([
+            'clubId' => $schedule->getClubId(),
+            'seasonId' => $schedule->getSeasonId(),
+        ]);
+
+        $placements = [];
+        foreach ($reservations as $reservation) {
+            $placements[$this->placementKey(
+                $reservation->getTeamId(),
+                $reservation->getVenueId(),
+                $reservation->getDayOfWeek(),
+                $reservation->getStartTime()->format('H:i'),
+            )] = true;
+        }
+
+        return $placements;
     }
 
     private function parseStartTime(string $startTime): DateTimeImmutable

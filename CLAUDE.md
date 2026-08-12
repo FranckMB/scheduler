@@ -89,7 +89,8 @@ Ce qu'il faut retenir en toute session :
 `Security/PlanEntitlementsTest` (crédits Découverte + caps payants) ·
 `Security/MemberRoleTest` (rôles Gestionnaire/Membre, dernier gestionnaire) ·
 `Security/ScheduleCapabilityParityTest` (capacité affichée == verdict) ·
-`Security/TeamTagScopeTest` (portée d'un tag = ce que le solveur applique).
+`Security/TeamTagScopeTest` (portée d'un tag = ce que le solveur applique) ·
+`Integration/Service/LockOriginProvenanceTest` (origine d'un verrou VRAIE : réservation → RESERVATION, épinglage → MANUAL, indécidable → UNKNOWN, jamais deviné).
 Detail: `docs/testing/testing-strategy.md`.
 
 ## 5. Conventions (core — détail par zone dans `.claude/rules/`)
