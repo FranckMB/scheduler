@@ -10,7 +10,7 @@ import { useWizardStore } from "@/features/wizard/store";
 import { usePriorityTiers } from "@/features/matches/queries";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { useSchedulePlans } from "@/features/cockpit/queries";
-import { useReservations, useVenuePeriodOverrides } from "@/features/wizard/queries";
+import { useReservations, useVenuePeriodOverrides, useWizardTeamTagAssignments, useWizardTeamTags } from "@/features/wizard/queries";
 import { readFailed, readLoading } from "@/shared/lib/readState";
 import { useCredits } from "@/shared/credits/useCredits";
 import { Button } from "@/shared/components/ui/button";
@@ -23,6 +23,7 @@ import { GenerationInProgressError, MoveRejectedError, OverlaysExistError, type 
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
+import { buildTagTeamIds } from "./lib/applicableConstraints";
 import { computeEmptySlots } from "./lib/emptySlots";
 import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
@@ -185,6 +186,13 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const { data: teamCoaches = [] } = useTeamCoaches();
   const { data: coachPlayers = [] } = useCoachPlayers();
   const { data: constraints = [] } = useConstraints();
+  // Résolution tag→équipes (saison courante) : le wrap n'affiche une contrainte CLUB ciblant
+  // un tag QUE sur les équipes taguées — miroir de l'éclatement `CLUB+targetTag` du backend
+  // (ScheduleConstraintBuilder). Mêmes hooks que le wizard (ConstraintsStep), pas un second
+  // chemin de données ; les assignations sont déjà filtrées à la saison côté serveur.
+  const { data: teamTags = [] } = useWizardTeamTags();
+  const { data: teamTagAssignments = [] } = useWizardTeamTagAssignments();
+  const tagTeamIds = useMemo(() => buildTagTeamIds(teamTags, teamTagAssignments), [teamTags, teamTagAssignments]);
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -657,12 +665,19 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             // grid takes the full width; closing the panel returns to full width.
             (() => {
               const showDetail = null !== selectedCell && null !== selectedSlot;
+              // Sélectionner un créneau MASQUE les diagnostics (fondateur : « de facto ça
+              // retire le diagnostic sinon l'écran est illisible ») — SAUF s'il reste des
+              // ERROR : un avertissement grave ne doit pas disparaître parce qu'on a cliqué
+              // ailleurs (le prochain défaut de confiance). Masquer n'est PAS supprimer :
+              // c'est un état DÉRIVÉ, fermer le créneau (selectedSlotId=null → showDetail
+              // faux) les fait revenir tels quels, rien n'est perdu.
+              const hasErrorDiagnostics = diagnostics.some((d) => "ERROR" === d.severity);
               // The diagnostics aside only claims grid width when it has content
               // to show: a selected slot's detail, or the (expanded) diagnostics.
               // ⚠ « Déplié » est un état de l'ASIDE, pas une promesse de contenu : c'est
               // l'amorce ci-dessus qui replie l'aside sur une version sans diagnostic. Le
               // rouvrir à la main reste possible et respecté, y compris à vide.
-              const showDiagnostics = !isReadOnly && !diagnosticsCollapsed;
+              const showDiagnostics = !isReadOnly && !diagnosticsCollapsed && (!showDetail || hasErrorDiagnostics);
               const showAside = showDetail || showDiagnostics;
               const height = embedded ? "lg:h-[max(calc(100vh-24rem),26rem)]" : "lg:h-[calc(100vh-16rem)]";
               return (
@@ -698,6 +713,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           venues={venues}
                           categoryLabel={categoryLabel}
                           constraints={constraints}
+                          tagTeamIds={tagTeamIds}
                           busy={busy}
                           moveState={moveState}
                           // Un pseudo-créneau de réservation (planning FAILED) n'existe pas

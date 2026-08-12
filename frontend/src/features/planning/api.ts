@@ -253,6 +253,10 @@ export interface SlotMovePatch {
  * (F1) COMPOSE côté client celles qui s'appliquent à un créneau donné (par scope + cible) —
  * aucun champ calculé serveur. `scope`/`ruleType`/`family` restent des chaînes (mêmes enums
  * que le wizard) : le wrap n'affiche que `name` et le niveau (dur/souple).
+ *
+ * `config` porte le brut (dont `targetTag` d'une CLUB ciblant un groupe) : le wrap l'utilise
+ * pour n'afficher une CLUB+tag que sur les équipes taguées — miroir de l'éclatement backend
+ * (cf. lib/applicableConstraints).
  */
 export interface Constraint {
   id: string;
@@ -261,6 +265,7 @@ export interface Constraint {
   scopeTargetId: string | null;
   family: string;
   ruleType: string;
+  config: Record<string, unknown>;
   isActive: boolean;
 }
 
