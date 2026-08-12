@@ -75,6 +75,16 @@ class Schedule implements TenantOwnedInterface
     #[ORM\Column(type: 'integer', nullable: true)]
     private ?int $score = null;
 
+    /**
+     * Ce planning a-t-il été retouché À LA MAIN (déplacement de créneau) depuis sa
+     * génération ? Vrai après un déplacement accepté ; remis à faux par un import de
+     * résultat solveur (le score redevient fidèle au placement). Sert à l'écran : un
+     * score affiché sur un planning modifié à la main est PÉRIMÉ — il faut le dire,
+     * sinon le gestionnaire lit un nombre qui ne décrit plus son planning.
+     */
+    #[ORM\Column(type: 'boolean')]
+    private bool $manuallyEditedSinceGeneration = false;
+
     #[ORM\Column(type: 'integer')]
     private int $solverSeed = 42;
 
@@ -253,6 +263,18 @@ class Schedule implements TenantOwnedInterface
     public function setScore(?int $score): self
     {
         $this->score = $score;
+
+        return $this;
+    }
+
+    public function isManuallyEditedSinceGeneration(): bool
+    {
+        return $this->manuallyEditedSinceGeneration;
+    }
+
+    public function setManuallyEditedSinceGeneration(bool $manuallyEditedSinceGeneration): self
+    {
+        $this->manuallyEditedSinceGeneration = $manuallyEditedSinceGeneration;
 
         return $this;
     }

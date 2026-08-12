@@ -29,8 +29,26 @@ vi.mock("./api", () => {
       this.overlays = overlays;
     }
   }
+  // F2b : mêmes classes réelles pour que `error instanceof …` branche depuis un moveSlot moqué.
+  class MoveRejectedError extends Error {
+    public violations: { rule: string; message: string }[];
+
+    constructor(violations: { rule: string; message: string }[]) {
+      super("move_rejected");
+      this.name = "MoveRejectedError";
+      this.violations = violations;
+    }
+  }
+  class GenerationInProgressError extends Error {
+    constructor() {
+      super("generation_in_progress");
+      this.name = "GenerationInProgressError";
+    }
+  }
   return {
   OverlaysExistError,
+  MoveRejectedError,
+  GenerationInProgressError,
   reopenSchedule: vi.fn(),
   listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }])),
   getSlots: vi.fn(() =>

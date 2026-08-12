@@ -91,7 +91,8 @@ Ce qu'il faut retenir en toute session :
 `Security/MemberRoleTest` (rôles Gestionnaire/Membre, dernier gestionnaire) ·
 `Security/ScheduleCapabilityParityTest` (capacité affichée == verdict) ·
 `Security/TeamTagScopeTest` (portée d'un tag = ce que le solveur applique) ·
-`Integration/Service/LockOriginProvenanceTest` (origine d'un verrou VRAIE : réservation → RESERVATION, épinglage → MANUAL, indécidable → UNKNOWN, jamais deviné).
+`Integration/Service/LockOriginProvenanceTest` (origine d'un verrou VRAIE : réservation → RESERVATION, épinglage → MANUAL, indécidable → UNKNOWN, jamais deviné) ·
+`Security/SlotMoveVerdictTest` (déplacer un créneau passe sous le verdict moteur : refus = planning intact, source hors baseline, 409 pendant une génération).
 Detail: `docs/testing/testing-strategy.md`.
 
 ## 5. Conventions (core — détail par zone dans `.claude/rules/`)

@@ -91,6 +91,15 @@ class ScheduleResource
     #[Groups(['read'])]
     public ?int $score = null;
 
+    /**
+     * Ce planning a-t-il été retouché à la main (déplacement de créneau) depuis sa
+     * génération ? Vrai ⇒ le score ci-dessus est PÉRIMÉ (le placement a changé, pas le
+     * score). L'écran l'affiche pour ne pas laisser lire un nombre qui ne décrit plus
+     * le planning. Remis à faux par une (re)génération.
+     */
+    #[Groups(['read'])]
+    public bool $manuallyEditedSinceGeneration = false;
+
     #[Groups(['read'])]
     public int $solverSeed = 0;
 
@@ -189,6 +198,7 @@ class ScheduleResource
         $dto->schedulePlanId = $entity->getSchedulePlanId();
         $dto->versionNumber = $entity->getVersionNumber();
         $dto->score = $entity->getScore();
+        $dto->manuallyEditedSinceGeneration = $entity->isManuallyEditedSinceGeneration();
         $dto->solverSeed = $entity->getSolverSeed();
         $dto->snapshotHash = $entity->getSnapshotHash();
         $dto->solverVersion = $entity->getSolverVersion();

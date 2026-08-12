@@ -1860,6 +1860,43 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     'properties' => ['startTime' => ['type' => 'string', 'example' => '18:30']],
                 ]),
             )),
+            '/api/schedule-slots/{id}/move' => new PathItem(post: new Operation(
+                operationId: 'postScheduleSlotMove',
+                tags: ['ManualEdit'],
+                responses: [
+                    '200' => $this->jsonResponse('Move accepted by the solver and written; the schedule is flagged manually edited (its score is now stale)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'message' => ['type' => 'string'],
+                            'valid' => ['type' => 'boolean', 'enum' => [true]],
+                        ],
+                    ]),
+                    '400' => new Response('Missing or invalid field (dayOfWeek, startTime or venueId)'),
+                    '404' => new Response('Slot not found'),
+                    '409' => new Response('Schedule is validated (read-only), or a generation is running for the club (body carries code=generation_in_progress)'),
+                    '422' => $this->jsonResponse('The solver refused the move: it is NOT written; the broken rules are named for display', [
+                        'type' => 'object',
+                        'properties' => [
+                            'valid' => ['type' => 'boolean', 'enum' => [false]],
+                            'violations' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'rule' => ['type' => 'string', 'description' => 'Machine code of the broken rule (UI branches on it)'],
+                                'message' => ['type' => 'string', 'description' => 'Human sentence naming the coach/venue/time in conflict'],
+                            ]]],
+                        ],
+                    ]),
+                    '502' => new Response('Engine unreachable — nothing was written, retry'),
+                ],
+                summary: 'Move a slot (day / time / venue) under the solver verdict: written only if the engine accepts it, otherwise refused with the named broken rules',
+                requestBody: $this->jsonBody([
+                    'type' => 'object',
+                    'required' => ['dayOfWeek', 'startTime', 'venueId'],
+                    'properties' => [
+                        'dayOfWeek' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 7],
+                        'startTime' => ['type' => 'string', 'example' => '20:00'],
+                        'venueId' => ['type' => 'string'],
+                    ],
+                ]),
+            )),
         ];
     }
 

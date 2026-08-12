@@ -7,8 +7,10 @@ namespace App\Controller;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
+use App\Exception\ScheduleGenerationInProgressException;
 use App\Service\ManagementAccessGuard;
 use App\Service\ManualEditService;
+use App\Service\MoveSlotService;
 use App\Service\SchedulePlanProvisioner;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -20,6 +22,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Throwable;
 
 final class ManualEditController extends AbstractController implements SeasonScopedWriteInterface
@@ -30,6 +33,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly LoggerInterface $logger,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly MoveSlotService $moveSlotService,
     ) {}
 
     #[Route('/api/schedule-slots/{id}/manual-edit/constraint', name: 'api_manual_edit_constraint', methods: ['POST'])]
@@ -171,6 +175,78 @@ final class ManualEditController extends AbstractController implements SeasonSco
         }
 
         return $this->json(['message' => 'One-time update applied.'], Response::HTTP_OK);
+    }
+
+    /**
+     * Déplacer un créneau (jour / heure / gymnase) SOUS LE VERDICT DU MOTEUR (F2b).
+     *
+     * Remplace le rail `one-time` pour ce geste : celui-ci n'inspectait que les
+     * chevauchements bruts. Ici le déplacement ne s'écrit QUE si le moteur l'accepte ;
+     * sinon les règles violées reviennent nommées et le planning ne bouge pas.
+     */
+    #[Route('/api/schedule-slots/{id}/move', name: 'api_schedule_slot_move', methods: ['POST'])]
+    public function move(string $id, Request $request): JsonResponse
+    {
+        $this->managementAccessGuard->assertManager(); // SEC-07
+        $slot = $this->findSlot($id);
+
+        if (!$slot instanceof ScheduleSlotTemplate) {
+            return $this->json(['error' => 'Slot not found.'], Response::HTTP_NOT_FOUND);
+        }
+
+        if ($this->scheduleIsLocked($slot)) {
+            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before editing.'], Response::HTTP_CONFLICT);
+        }
+
+        $data = json_decode($request->getContent(), true);
+
+        if (!\is_array($data)) {
+            return $this->json(['error' => 'Invalid JSON body.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $dayOfWeek = isset($data['dayOfWeek']) ? (int) $data['dayOfWeek'] : 0;
+        if ($dayOfWeek < 1 || $dayOfWeek > 7) {
+            return $this->json(['error' => 'Missing or invalid field: dayOfWeek.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $venueId = isset($data['venueId']) && \is_string($data['venueId']) ? $data['venueId'] : '';
+        if ('' === $venueId) {
+            return $this->json(['error' => 'Missing required field: venueId.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $startTime = null;
+        if (isset($data['startTime']) && \is_string($data['startTime'])) {
+            $startTime = DateTimeImmutable::createFromFormat('!H:i', $data['startTime'])
+                ?: DateTimeImmutable::createFromFormat('!H:i:s', $data['startTime'])
+                ?: null;
+        }
+        if (!$startTime instanceof DateTimeImmutable) {
+            return $this->json(['error' => 'Missing or invalid field: startTime.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        try {
+            $result = $this->moveSlotService->move($slot, $dayOfWeek, $startTime, $venueId);
+        } catch (ScheduleGenerationInProgressException) {
+            // Déplacer pendant qu'une génération réécrit le planning écraserait son résultat.
+            return $this->json(['code' => 'generation_in_progress'], Response::HTTP_CONFLICT);
+        } catch (TransportExceptionInterface $e) {
+            // Le moteur n'a pas répondu — RIEN n'est écrit, le gestionnaire réessaie.
+            $this->logger->error('Move validation could not reach the engine.', ['exception' => $e]);
+
+            return $this->json(['error' => 'The engine did not respond — please retry.'], Response::HTTP_BAD_GATEWAY);
+        } catch (Throwable $e) {
+            // SEC-08 : on journalise le détail, jamais getMessage() au client.
+            $this->logger->error('Slot move failed.', ['exception' => $e]);
+
+            return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if (false === $result['valid']) {
+            // Le moteur refuse : 422 + les règles violées, nommées pour l'UI.
+            return $this->json(['valid' => false, 'violations' => $result['violations']], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return $this->json(['message' => 'Slot moved.', 'valid' => true], Response::HTTP_OK);
     }
 
     private function findSlot(string $id): ?ScheduleSlotTemplate

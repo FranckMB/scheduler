@@ -100,6 +100,13 @@ export interface Schedule {
   name: string;
   status: ScheduleStatus;
   score: number | null;
+  /**
+   * F2b : ce planning a-t-il été retouché à la main (déplacement de créneau) depuis sa
+   * génération ? Vrai ⇒ le `score` ci-dessus est PÉRIMÉ (le placement a changé, pas le
+   * score) — l'écran le dit. Remis à faux par une (re)génération. Absent (undefined) sur
+   * une réponse d'écriture nue, traité comme faux.
+   */
+  manuallyEditedSinceGeneration?: boolean;
   createdAt: string;
   updatedAt: string;
   /**
@@ -254,9 +261,58 @@ export interface Constraint {
 export const lockSlot = (id: string, lockLevel: LockLevel): Promise<unknown> =>
   api.post(`schedule-slots/${id}/manual-edit/lock`, { json: { lockLevel } }).json();
 
-/** Move a slot in place (day / time / venue) via the one-time edit endpoint. */
-export const moveSlot = (id: string, patch: SlotMovePatch): Promise<unknown> =>
-  api.post(`schedule-slots/${id}/manual-edit/one-time`, { json: patch }).json();
+/** Une règle HARD cassée par un déplacement refusé : un code machine (pour brancher) + un
+ *  message déjà humain (le moteur y nomme coach/gymnase/heure). */
+export interface MoveViolation {
+  rule: string;
+  message: string;
+}
+
+/** Le moteur a REFUSÉ le déplacement (422) : il n'a pas eu lieu, voici les règles violées. */
+export class MoveRejectedError extends Error {
+  readonly violations: MoveViolation[];
+
+  constructor(violations: MoveViolation[]) {
+    super("move_rejected");
+    this.name = "MoveRejectedError";
+    this.violations = violations;
+  }
+}
+
+/** Une génération tourne pour le club (409) : déplacer maintenant écraserait son résultat. */
+export class GenerationInProgressError extends Error {
+  constructor() {
+    super("generation_in_progress");
+    this.name = "GenerationInProgressError";
+  }
+}
+
+/**
+ * Déplacer un créneau (jour / heure / gymnase) SOUS LE VERDICT DU MOTEUR (F2b).
+ *
+ * Remplace l'ancien rail `manual-edit/one-time` (chevauchements bruts, ni capacité ni
+ * fenêtres ni repos) : le déplacement ne s'écrit QUE si le moteur l'accepte. Un refus
+ * (422) devient un {@link MoveRejectedError} portant les règles violées nommées ; une
+ * génération en cours (409 `generation_in_progress`) un {@link GenerationInProgressError}.
+ * Les trois champs sont obligatoires côté serveur (l'UI les envoie toujours ensemble).
+ */
+export async function moveSlot(id: string, patch: SlotMovePatch): Promise<unknown> {
+  try {
+    return await api.post(`schedule-slots/${id}/move`, { json: patch }).json();
+  } catch (error) {
+    if (error instanceof HTTPError) {
+      // ky 2.x parse le corps d'erreur sur error.data (re-lire la réponse throw).
+      const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; violations?: MoveViolation[] };
+      if (422 === error.response.status) {
+        throw new MoveRejectedError(body.violations ?? []);
+      }
+      if (409 === error.response.status && "generation_in_progress" === body.code) {
+        throw new GenerationInProgressError();
+      }
+    }
+    throw error;
+  }
+}
 
 /** Queue a (re)generation of the schedule (202). Locked slots survive; the rest reshuffles. */
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();

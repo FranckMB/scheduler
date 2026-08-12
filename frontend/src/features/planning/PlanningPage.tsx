@@ -19,7 +19,7 @@ import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import { OverlaysExistError, type Slot } from "./api";
+import { GenerationInProgressError, MoveRejectedError, OverlaysExistError, type Slot } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
@@ -28,7 +28,7 @@ import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
 import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
-import { SlotDetail } from "./SlotDetail";
+import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
 import { isSeasonPlanType } from "./lib/versions";
@@ -325,6 +325,26 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
 
   const selectedSlot = slots.find((s) => s.id === selectedSlotId) ?? null;
 
+  // F2b — le retour du dernier déplacement, dérivé de la mutation (verdict moteur). Un refus
+  // (422) arrive en MoveRejectedError avec ses motifs ; une génération en cours en
+  // GenerationInProgressError ; toute autre erreur (moteur injoignable) → « error ».
+  const moveReset = moveMutation.reset;
+  const moveState: MoveFeedback = moveMutation.isPending
+    ? { status: "pending" }
+    : moveMutation.error instanceof MoveRejectedError
+      ? { status: "rejected", violations: moveMutation.error.violations }
+      : moveMutation.error instanceof GenerationInProgressError
+        ? { status: "blocked" }
+        : null !== moveMutation.error && undefined !== moveMutation.error
+          ? { status: "error" }
+          : { status: "idle" };
+
+  // Changer de créneau sélectionné efface le verdict du précédent — sinon un refus resterait
+  // affiché sous un autre créneau.
+  useEffect(() => {
+    moveReset();
+  }, [selectedSlotId, moveReset]);
+
   const lookups: Lookups = useMemo(() => {
     // teamId → main coachId (the engine leaves slot.coachId empty).
     const teamCoach = new Map<string, string>();
@@ -525,6 +545,14 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         </p>
       ) : null}
 
+      {/* F2b : un déplacement manuel a changé le placement sans recalculer le score — le
+          dire, sinon le gestionnaire lit un score qui ne décrit plus son planning. */}
+      {!isGenerating && true === selectedSchedule?.manuallyEditedSinceGeneration ? (
+        <p className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          Ce planning a été modifié à la main depuis sa génération — le score affiché est périmé. Régénérez pour un score à jour.
+        </p>
+      ) : null}
+
 
       {0 === schedules.length ? (
         <EmptyState title="Aucun planning" description="Passez par l'assistant pour saisir vos données et générer un premier planning." />
@@ -659,6 +687,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           categoryLabel={categoryLabel}
                           constraints={constraints}
                           busy={busy}
+                          moveState={moveState}
                           // Un pseudo-créneau de réservation (planning FAILED) n'existe pas
                           // côté serveur : déplacer/verrouiller le viserait dans le vide.
                           readOnly={isReadOnly || isFailed}

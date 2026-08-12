@@ -1,13 +1,25 @@
-import { Lock, LockOpen, X } from "lucide-react";
+import { AlertTriangle, Loader2, Lock, LockOpen, X } from "lucide-react";
 import { VenueSelect } from "@/shared/components/ui/venue-select";
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
-import type { Constraint, LockOrigin, Slot, SlotMovePatch, Venue } from "./api";
+import type { Constraint, LockOrigin, MoveViolation, Slot, SlotMovePatch, Venue } from "./api";
 import { applicableConstraints } from "./lib/applicableConstraints";
 import { DAYS, type GridCell, toHourMinute } from "./lib/grid";
+
+/**
+ * L'état du dernier déplacement demandé, pour l'écran (F2b). `pending` = le moteur
+ * délibère (~500 ms) ; `rejected` = refusé, avec les règles violées NOMMÉES ; `blocked` =
+ * une génération tourne (réessayer ensuite) ; `error` = le moteur n'a pas répondu.
+ */
+export type MoveFeedback =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "rejected"; violations: MoveViolation[] }
+  | { status: "blocked" }
+  | { status: "error" };
 
 interface SlotDetailProps {
   cell: GridCell;
@@ -17,6 +29,8 @@ interface SlotDetailProps {
   /** All club constraints — the applicable ones are composed here (F1). */
   constraints: Constraint[];
   busy: boolean;
+  /** F2b : le retour du dernier déplacement (verdict moteur). Défaut = idle. */
+  moveState?: MoveFeedback;
   /** VALIDATED schedule → the slot is read-only (no move/lock). */
   readOnly?: boolean;
   onClose: () => void;
@@ -44,7 +58,7 @@ const LOCK_ORIGIN: Record<LockOrigin, { label: string; hint: string }> = {
   UNKNOWN: { label: "Verrouillé — origine inconnue", hint: "Ce créneau est bien verrouillé, mais on ne sait pas pourquoi. Vérifiez avant d'y toucher." },
 };
 
-export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, busy, readOnly = false, onClose, onToggleLock, onMove }: SlotDetailProps) {
+export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, busy, moveState = { status: "idle" }, readOnly = false, onClose, onToggleLock, onMove }: SlotDetailProps) {
   const [day, setDay] = useState(slot.dayOfWeek);
   const [time, setTime] = useState(toHourMinute(slot.startTime));
   const [venueId, setVenueId] = useState(slot.venueId);
@@ -120,13 +134,48 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, bus
 
           <div className="flex gap-2">
             <Button size="sm" variant="outline" className="flex-1" disabled={!dirty || busy} onClick={() => onMove({ dayOfWeek: day, startTime: time, venueId })}>
-              Déplacer
+              {"pending" === moveState.status ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  Vérification…
+                </>
+              ) : (
+                "Déplacer"
+              )}
             </Button>
             <Button size="sm" variant={cell.locked ? "default" : "outline"} className="flex-1" disabled={busy} onClick={onToggleLock}>
               {cell.locked ? <LockOpen className="size-4" /> : <Lock className="size-4" />}
               {cell.locked ? "Déverrouiller" : "Verrouiller"}
             </Button>
           </div>
+
+          {/* Le déplacement passe sous le verdict du moteur (F2b) : ici le résultat du dernier
+              essai. On ne le montre que hors « pending » (le bouton porte déjà l'attente). */}
+          {"rejected" === moveState.status ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-sm" role="alert">
+              <div className="flex items-center gap-2 font-medium text-destructive">
+                <AlertTriangle className="size-4" aria-hidden="true" />
+                <span>Déplacement refusé — le créneau n’a pas bougé.</span>
+              </div>
+              <ul className="mt-1 flex list-disc flex-col gap-1 pl-6 text-muted-foreground">
+                {moveState.violations.map((v, i) => (
+                  <li key={`${v.rule}-${i}`}>{v.message}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {"blocked" === moveState.status ? (
+            <p className="rounded-md border border-warning/40 bg-warning/10 p-2 text-sm text-muted-foreground" role="alert">
+              Une génération est en cours pour ce club — réessayez le déplacement une fois qu’elle est terminée.
+            </p>
+          ) : null}
+
+          {"error" === moveState.status ? (
+            <p className="rounded-md border border-warning/40 bg-warning/10 p-2 text-sm text-muted-foreground" role="alert">
+              Le moteur n’a pas répondu — rien n’a été modifié, réessayez.
+            </p>
+          ) : null}
         </div>
         )}
       </CardContent>

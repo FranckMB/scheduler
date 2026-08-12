@@ -28,6 +28,11 @@ final class ScheduleResultImporter
         // (SlotIdScoper) lets sibling versions hold the same placement side by side.
         // This is transition-safe: a legacy row keyed on the old global id is still
         // matched by its placement, so no data migration is required.
+        // Un import de résultat solveur RÉALIGNE le placement sur le score : le marqueur
+        // « retouché à la main depuis la génération » retombe donc à false (le score
+        // affiché redevient fidèle au planning). F2b l'a posé sur un déplacement manuel.
+        $schedule->setManuallyEditedSinceGeneration(false);
+
         $existingSlots = $this->entityManager
             ->getRepository(ScheduleSlotTemplate::class)
             ->findBy(['scheduleId' => $schedule->getId()]);
