@@ -151,15 +151,27 @@ class SpreadsheetGenerator
             return; // mono-gymnase en portée : la matrice n'apporte rien que la feuille Planning ne dise mieux.
         }
 
+        // "Rang" cell built PAR ÉQUIPE : a sortable key whose ALPHABETICAL order reproduces the
+        // PDF's rank order (S→A→B→C→D = ascending tierRank). A naive sort on the raw labels
+        // « S, A, B, C, D » would give A, B, C, D, S — wrong — so the value leads with the
+        // zero-padded numeric tierRank, whose string order IS the tierRank order (and stays right
+        // past 9 tiers). A team with no rank gets an EMPTY cell : never an invented value, and
+        // Excel always sorts blanks to the END, coherent with the PDF's PHP_INT_MAX default.
+        $rankCell = static function (string $teamId) use ($data): string {
+            $rank = $data->teamRanks[$teamId] ?? ['label' => '', 'name' => '', 'tierRank' => \PHP_INT_MAX, 'tierOrder' => \PHP_INT_MAX];
+
+            return '' === $rank['label'] ? '' : \sprintf('%02d · %s', $rank['tierRank'], $rank['label']);
+        };
+
         // Rows = EVERY team of the season : a team with no session is a hole in the planning, the
         // first thing a manager must see — it keeps its row with empty cells, it is never hidden.
         // No misleading empty row can leak in from a reduced scope : a venue-scoped export has a
         // single distinct venue and returns above, so the matrix only ever renders on a full
         // multi-venue club export, where "all season teams" is exactly the right set.
-        /** @var array<string, array{name: string, category: string}> $teams */
+        /** @var array<string, array{name: string, category: string, rank: string}> $teams */
         $teams = [];
         foreach ($data->teamNames as $teamId => $name) {
-            $teams[$teamId] = ['name' => $name, 'category' => $data->teamCategories[$teamId] ?? ''];
+            $teams[$teamId] = ['name' => $name, 'category' => $data->teamCategories[$teamId] ?? '', 'rank' => $rankCell($teamId)];
         }
 
         // Model indexed by (team, day), built from the placements.
@@ -176,7 +188,7 @@ class SpreadsheetGenerator
         // Defence : a placement whose team is absent from teamNames (an anomaly) still keeps a
         // row — a slot never vanishes in silence.
         foreach (array_keys($matrix) as $teamId) {
-            $teams[$teamId] ??= ['name' => $data->teamNames[$teamId] ?? '', 'category' => $data->teamCategories[$teamId] ?? ''];
+            $teams[$teamId] ??= ['name' => $data->teamNames[$teamId] ?? '', 'category' => $data->teamCategories[$teamId] ?? '', 'rank' => $rankCell($teamId)];
         }
 
         // Columns = only the days actually used, kept in DAY_LABELS order (a training week is
@@ -191,11 +203,13 @@ class SpreadsheetGenerator
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('Équipes × jours');
 
-        // Header : two fixed columns then one per day. Kept as a name-indexed list so the day
-        // header and the cells beneath it are projected from the SAME `$dayColumns` order.
+        // Header : three fixed columns (Équipe, Catégorie, Rang) then one per day. Kept as a
+        // name-indexed list so the day header and the cells beneath it are projected from the
+        // SAME `$dayColumns` order.
         $sheet->setCellValue([1, 1], 'Équipe');
         $sheet->setCellValue([2, 1], 'Catégorie');
-        $firstDayCol = 3;
+        $sheet->setCellValue([3, 1], 'Rang');
+        $firstDayCol = 4;
         foreach ($dayColumns as $offset => $day) {
             $sheet->setCellValue([$firstDayCol + $offset, 1], ScheduleExportData::DAY_LABELS[$day]);
         }
@@ -205,6 +219,7 @@ class SpreadsheetGenerator
         foreach ($teams as $teamId => $meta) {
             $sheet->setCellValue([1, $row], $meta['name']);
             $sheet->setCellValue([2, $row], $meta['category']);
+            $sheet->setCellValue([3, $row], $meta['rank']);
             foreach ($dayColumns as $offset => $day) {
                 // Projection PAR (équipe, jour) : la cellule sous « Mardi » lit toujours le mardi
                 // de CETTE équipe — jamais l'écriture positionnelle qui produirait un décalage muet.
@@ -226,8 +241,9 @@ class SpreadsheetGenerator
         foreach (range(1, $lastCol) as $col) {
             $sheet->getColumnDimensionByColumn($col)->setAutoSize(true);
         }
-        // Freeze the header row and the two identity columns so a wide week stays readable.
-        $sheet->freezePane('C2');
+        // Freeze the header row and the three identity columns (Équipe, Catégorie, Rang) so a
+        // wide week stays readable.
+        $sheet->freezePane('D2');
     }
 
     private function toBinary(Spreadsheet $spreadsheet): string
