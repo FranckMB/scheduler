@@ -28,6 +28,19 @@ class ClubGenerationLock
         return $acquired ? $token : null;
     }
 
+    /**
+     * Sonde de lecture (P2-2 F2a) : ce club a-t-il une génération en cours ?
+     *
+     * Ne touche PAS au verrou — ni `acquire` (qui poserait la clé) ni `release`
+     * (qui la retirerait) : un simple `EXISTS`. Sert au 409 de F2b (valider un
+     * déplacement pendant qu'une génération réécrit le planning n'a pas de sens),
+     * et à tout ce qui doit CONSTATER l'état sans le modifier.
+     */
+    public function isGenerating(string $clubId): bool
+    {
+        return (bool) $this->connect()->exists(self::KEY_PREFIX . $clubId);
+    }
+
     public function release(string $clubId, string $token): void
     {
         $redis = $this->connect();

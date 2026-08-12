@@ -71,6 +71,7 @@ Ce qu'il faut retenir en toute session :
 `Security/TenantCacheIsolationTest` (cache scopé club) ·
 `Queue/ConcurrentGenerationTest` (verrou de génération) ·
 `CrossStack/ContractSchemaTest` (contrat backend⇄engine) ·
+`CrossStack/ValidateAssignmentsContractSchemaTest` (contrat du verdict `/validate-assignments`) ·
 `Security/RlsIsolationTest` (RLS en base) ·
 `Security/ClubAccessTest` + `Security/UserSelfOnlyTest` + `Security/ImportAuthorizationTest` (lockdown API tenant) ·
 `Security/MercureHardeningTest` (Mercure durci) ·
@@ -125,8 +126,9 @@ Detail: `docs/testing/testing-strategy.md`.
   **copie** prise à la naissance du plan — jamais d'union avec la saison ; overrides sparse ;
   pin orphelin → 422 (`OrphanPinGuard`).
 - **Contrat backend⇄engine** : schemas Pydantic ⇄ payload, version `engine/CONTRACT_VERSION`
-  (**2.2**, un seul contrat pour les 2 endpoints), **sync manuelle, pas de codegen** — gardé par
-  `ContractSchemaTest` + `MatchPlacementContractSchemaTest`.
+  (**2.4**, un seul contrat pour les 3 endpoints `/generate` · `/place-matches` · `/validate-assignments`),
+  **sync manuelle, pas de codegen** — gardé par `ContractSchemaTest` +
+  `MatchPlacementContractSchemaTest` + `ValidateAssignmentsContractSchemaTest`.
 - **FFBB outbound** : hosts hard-codés (SSRF-safe), best-effort, le frontend n'appelle jamais FFBB.
   → `backend/docs/ffbb-api.md`.
 - **Solveur** : single-pass, **aucun fallback de relaxation**, budget adaptatif 60/180/600 s,

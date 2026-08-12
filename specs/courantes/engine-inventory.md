@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 2026-08-09 (CONTRACT_VERSION **2.3** = retrait de `maxDaysOverrideConfirmed`, P4-51 ; 2.2 = second problème `/place-matches`, P1-4 PR D · 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156 · P2-9 volet 1 : diagnostics de verrou, #317)
+Last verified @ 2026-08-12 (CONTRACT_VERSION **2.4** = troisième endpoint `/validate-assignments`, verdict moteur sur un candidat, P2-2 F2a — bump recalé ici et dans les docs gardés ; 2.3 = retrait de `maxDaysOverrideConfirmed`, P4-51 ; 2.2 = second problème `/place-matches`, P1-4 PR D · 2.1 = fenêtres horaires coach #195 · bornes payload A10 #156 · P2-9 volet 1 : diagnostics de verrou, #317)
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
@@ -14,7 +14,7 @@ Last verified @ 2026-08-09 (CONTRACT_VERSION **2.3** = retrait de `maxDaysOverri
 - **Solver** : Google OR-Tools CP-SAT (`from ortools.sat.python import cp_model`).
 - **Validation** : Pydantic v2 (`BaseModel`, `ConfigDict`, `Field`, `populate_by_name=True`).
 - **Settings** : `pydantic-settings` (`engine/app/core/config.py`), prefix env `ENGINE_`, `.env` lu. Defaults : `app_name="engine"`, `app_version="1.0"`, `contract_version="2.0"`, `environment="dev"`, `log_level="info"`.
-- **Contract version** : lu depuis `engine/CONTRACT_VERSION` (**fichier = `2.3`** — source de vérité, `main.py:104-108`), fallback `settings.contract_version` (default `2.0`) si le fichier manque. Trois bumps depuis 2.0 : **2.1** = fenêtres horaires d'indisponibilité coach (lot C, #195) ; **2.2** = second problème `/place-matches` (P1-4 PR D, ADR-0003) ; **2.3** = retrait de `maxDaysOverrideConfirmed` (P4-51 : un drapeau que rien ne lisait, schéma `forbid` donc rupture de recevabilité) — **UN SEUL contrat pour les DEUX endpoints**, les deux vérifient le même MAJOR.
+- **Contract version** : lu depuis `engine/CONTRACT_VERSION` (**fichier = `2.4`** — source de vérité, `main.py:104-108`), fallback `settings.contract_version` (default `2.0`) si le fichier manque. Quatre bumps depuis 2.0 : **2.1** = fenêtres horaires d'indisponibilité coach (lot C, #195) ; **2.2** = second problème `/place-matches` (P1-4 PR D, ADR-0003) ; **2.3** = retrait de `maxDaysOverrideConfirmed` (P4-51 : un drapeau que rien ne lisait, schéma `forbid` donc rupture de recevabilité) ; **2.4** = troisième endpoint `/validate-assignments` (P2-2 F2a : verdict moteur sur un candidat, baseline figée via `add_fixed_slots`) — **UN SEUL contrat pour les TROIS endpoints**, tous vérifient le même MAJOR.
 - **Structure interne** :
   - `app/main.py` — endpoints FastAPI + pipeline solver.
   - `app/core/config.py` — settings.
@@ -41,6 +41,7 @@ Last verified @ 2026-08-09 (CONTRACT_VERSION **2.3** = retrait de `maxDaysOverri
 | `/health` | GET | Health simple | `{"status":"ok"}` |
 | `/generate` | POST | **Principal** — résout un planning hebdomadaire | `ScheduleOutputSchema` |
 | `/place-matches` | POST | **Second problème** — place des matchs DATÉS (P1-4 PR D, ADR-0003) | `MatchPlacementOutputSchema` |
+| `/validate-assignments` | POST | **Verdict sur UN candidat** (P2-2 F2a) — « puis-je mettre cette équipe sur ce créneau ? ». Baseline **entièrement figée** via `add_fixed_slots`, candidat épinglé à part : le solve ne fait qu'un test de faisabilité. ⚠ **Le gel EST le verdict** — baseline non figée, le solveur déplace la séance en conflit et rend `valid=True` (falsifié). Mono-candidat ⇒ 1 worker ⇒ déterministe. Budget 2 s par défaut, plafond 10 s ; mesuré **~500 ms** sur 49 équipes (le build du modèle domine, pas le solve). Un « non » **nomme les règles cassées** (`diagnose_candidate_conflicts`) ; `baseline_infeasible` distingue une baseline déjà invalide d'un conflit non nommé | `ValidateAssignmentOutputSchema` |
 | `/implicit-constraints` | POST | Sync règles implicites backend↔engine | `JSONResponse` (200 synchronized / 409 desynchronized) |
 
 ### POST /place-matches
@@ -91,7 +92,7 @@ Le **second problème CP-SAT**, distinct du solve hebdomadaire (ADR-0003 ; compo
 
 ### ScheduleInputSchema (`engine/app/schemas/input_schema.py`)
 
-Version contrat active : **`"2.3"`** (fichier `CONTRACT_VERSION`, source de vérité). ⚠ Le default Pydantic du champ `version` vaut **`"2.0"`** (`input_schema.py:149`) et n'a jamais suivi les bumps : c'est un repli pour un payload qui n'annonce rien, pas la version parlée. `ConfigDict(extra="forbid", populate_by_name=True)`.
+Version contrat active : **`"2.4"`** (fichier `CONTRACT_VERSION`, source de vérité). ⚠ Le default Pydantic du champ `version` vaut **`"2.0"`** (`input_schema.py:149`) et n'a jamais suivi les bumps : c'est un repli pour un payload qui n'annonce rien, pas la version parlée. `ConfigDict(extra="forbid", populate_by_name=True)`.
 
 **Bornes A10** (#156, anti-bombe de génération) : la plupart des listes portent un `max_length` (rejet **422** avant CP-SAT) — `teams` ≤200 · `venues` ≤50 · `coaches` ≤200 · `slot_templates` ≤2000 · `priority_tiers` ≤20 · `trainingSlots` ≤1000/gymnase ; plus un `model_validator` bornant le **total** des créneaux à ≤3000 (empêche 50×1000). **`constraints` n'a PAS de cap engine** (ENG-23 corrigé) : le backend éclate 1 règle CLUB en N rangées/équipe, donc la taille étendue = brut(≤500)×équipes(≤200) — aucun nombre fixe ne peut à la fois borner une bombe et ne jamais faux-bloquer un club légitime ; les vraies bornes sont le cap **brut** backend (≤500) + la limite de body nginx (20 m) + le timeout solveur. Le backend (`GenerationComplexityGuard`) pré-vérifie teams/venues/coaches/contraintes permanentes/total créneaux (=3000) **plus** `teams×venues` ≤2000, **avant dispatch**. ⚠ Ce durcissement de validation (#156) n'a **pas** bumpé `CONTRACT_VERSION` : politique — un `max_length` resserre l'enveloppe acceptée sans changer forme/type ni MAJOR ; un bump n'est requis que pour un changement de forme/sémantique (champ/type/alias). Les bumps depuis 2.0 : **2.1** (#195, fenêtres horaires coach — nouveaux champs), **2.2** (P1-4 PR D, second endpoint `/place-matches` — nouveaux schémas) et **2.3** (P4-51, retrait de `maxDaysOverrideConfirmed` — un champ que rien ne lisait ; schéma `forbid`, donc sa présence dans un vieux payload devient un 422 : rupture de recevabilité, bump requis).
 

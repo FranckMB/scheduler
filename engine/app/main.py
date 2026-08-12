@@ -15,6 +15,8 @@ from app.schemas.input_schema import ScheduleInputSchema
 from app.schemas.match_input_schema import MatchPlacementInputSchema
 from app.schemas.match_output_schema import MatchPlacementOutputSchema
 from app.schemas.output_schema import ScheduleOutputSchema
+from app.schemas.validate_input_schema import ValidateAssignmentsInputSchema
+from app.schemas.validate_output_schema import ValidateAssignmentsOutputSchema
 from app.solver.constraints import (
     add_level_1_hard_constraints,
     add_time_window_constraints,
@@ -35,6 +37,7 @@ from app.solver.objective import (
     is_team_satisfied_by_hard_locks,
 )
 from app.solver.result_builder import build_result
+from app.solver.validate_assignments import validate_assignment
 
 ENGINE_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_VERSION_PATH = ENGINE_ROOT / "CONTRACT_VERSION"
@@ -550,6 +553,29 @@ async def place_matches(input_data: MatchPlacementInputSchema) -> MatchPlacement
         logger.info("match placement start club=%s matches=%d", input_data.club_id, len(input_data.matches))
         result = await asyncio.to_thread(solve_match_placement, input_data)
     return MatchPlacementOutputSchema.model_validate(result)
+
+
+@app.post("/validate-assignments", response_model=ValidateAssignmentsOutputSchema)
+async def validate_assignments(input_data: ValidateAssignmentsInputSchema) -> ValidateAssignmentsOutputSchema:
+    """P2-2 F2a — verdict moteur sur UN candidat de déplacement (mono-candidat).
+
+    Le reste du planning est FIGÉ via ``add_fixed_slots`` ; on épingle le candidat
+    et on demande au solveur si le modèle HARD reste faisable. Réponse booléenne du
+    MOTEUR + règles cassées NOMMÉES pour l'UI. Même garde de version MAJOR-only que
+    les deux autres endpoints (un seul contrat). Le verrou club est préfixé pour ne
+    jamais s'asseoir derrière un solve hebdomadaire, et le sémaphore de placement
+    borne la concurrence (l'appel est court : baseline figée, un seul candidat)."""
+    contract_version = read_contract_version()
+    if input_data.version.split(".")[0] != contract_version.split(".")[0]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unsupported contract version {input_data.version!r}; engine speaks {contract_version}.",
+        )
+
+    lock = await get_club_lock(f"validate:{input_data.club_id}")
+    async with lock, _placement_semaphore:
+        result = await asyncio.to_thread(validate_assignment, input_data, contract_version=contract_version)
+    return ValidateAssignmentsOutputSchema.model_validate(result)
 
 
 @app.post("/implicit-constraints")
