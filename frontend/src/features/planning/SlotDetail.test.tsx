@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { buildTagTeamIds } from "./lib/applicableConstraints";
 import type { Constraint, LockOrigin, Slot } from "./api";
 import type { GridCell } from "./lib/grid";
 import { SlotDetail, type MoveFeedback } from "./SlotDetail";
@@ -48,11 +50,12 @@ const constraint = (over: Partial<Constraint>): Constraint => ({
   scopeTargetId: null,
   family: "TIME",
   ruleType: "HARD",
+  config: {},
   isActive: true,
   ...over,
 });
 
-function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[]; moveState?: MoveFeedback } = {}) {
+function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[]; tagTeamIds?: ReadonlyMap<string, ReadonlySet<string>>; moveState?: MoveFeedback } = {}) {
   const s = slot(over.slot);
   render(
     <SlotDetail
@@ -61,6 +64,7 @@ function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[]; 
       venues={[]}
       categoryLabel="U11"
       constraints={over.constraints ?? []}
+      tagTeamIds={over.tagTeamIds}
       busy={false}
       moveState={over.moveState}
       onClose={vi.fn()}
@@ -69,6 +73,9 @@ function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[]; 
     />,
   );
 }
+
+/** Le panneau des contraintes est REPLIÉ par défaut — on l'ouvre pour lire son contenu. */
+const openConstraints = () => userEvent.click(screen.getByRole("button", { name: /Contraintes applicables/ }));
 
 describe("SlotDetail — origine du verrou (F1)", () => {
   it.each<[LockOrigin, string]>([
@@ -100,20 +107,72 @@ describe("SlotDetail — origine du verrou (F1)", () => {
 });
 
 describe("SlotDetail — contraintes applicables (F1)", () => {
-  it("liste les contraintes qui s'appliquent au créneau, pas les autres", () => {
+  it("liste les contraintes qui s'appliquent au créneau, pas les autres", async () => {
     renderDetail({
       constraints: [
         constraint({ id: "mine", name: "Pas le lundi", scope: "TEAM", scopeTargetId: "team-A" }),
         constraint({ id: "other", name: "Autre équipe", scope: "TEAM", scopeTargetId: "team-B" }),
       ],
     });
+    await openConstraints();
     expect(screen.getByText("Pas le lundi")).toBeInTheDocument();
     expect(screen.queryByText("Autre équipe")).not.toBeInTheDocument();
   });
 
-  it("le dit franchement quand aucune contrainte ne s'applique", () => {
+  it("le dit franchement quand aucune contrainte ne s'applique", async () => {
     renderDetail({ constraints: [] });
+    await openConstraints();
     expect(screen.getByText(/Aucune contrainte spécifique/i)).toBeInTheDocument();
+  });
+
+  it("est REPLIÉ par défaut, avec le NOMBRE de contraintes visible sans ouvrir", () => {
+    renderDetail({
+      constraints: [
+        constraint({ id: "a", name: "Pas le lundi", scope: "TEAM", scopeTargetId: "team-A" }),
+        constraint({ id: "b", name: "Toute la saison", scope: "CLUB", config: {} }),
+      ],
+    });
+    // Le compte est là replié…
+    expect(screen.getByRole("button", { name: /Contraintes applicables \(2\)/ })).toBeInTheDocument();
+    // …mais le détail n'est PAS rendu tant qu'on n'ouvre pas (n'agrandit pas l'aside).
+    expect(screen.queryByText("Pas le lundi")).not.toBeInTheDocument();
+  });
+
+  it("sépare « Cette équipe » de « Tout le club » une fois déplié", async () => {
+    renderDetail({
+      constraints: [
+        constraint({ id: "team", name: "Pas le lundi", scope: "TEAM", scopeTargetId: "team-A" }),
+        constraint({ id: "club", name: "Toute la saison", scope: "CLUB", config: {} }),
+      ],
+    });
+    await openConstraints();
+    expect(screen.getByText("Cette équipe")).toBeInTheDocument();
+    expect(screen.getByText("Tout le club")).toBeInTheDocument();
+    expect(screen.getByText("Pas le lundi")).toBeInTheDocument();
+    expect(screen.getByText("Toute la saison")).toBeInTheDocument();
+  });
+
+  it("une contrainte CLUB ciblant un tag ne s'affiche que sur une équipe TAGUÉE, côté « Cette équipe »", async () => {
+    // team-A porte REGIONAL, pas team-B. Miroir de l'éclatement CLUB+targetTag du backend.
+    const tagTeamIds = buildTagTeamIds([{ id: "t", name: "REGIONAL" }], [{ teamId: "team-A", tagId: "t" }]);
+    const reg = constraint({ id: "reg", name: "Préfèrent Matéo", scope: "CLUB", config: { targetTag: "REGIONAL" } });
+
+    renderDetail({ slot: { teamId: "team-A" }, constraints: [reg], tagTeamIds });
+    await openConstraints();
+    expect(screen.getByText("Préfèrent Matéo")).toBeInTheDocument();
+    // Elle vise une équipe précise → jamais dans « Tout le club ».
+    expect(screen.queryByText("Tout le club")).not.toBeInTheDocument();
+    expect(screen.getByText("Cette équipe")).toBeInTheDocument();
+  });
+
+  it("la même contrainte CLUB+tag est ABSENTE sur une équipe non taguée", () => {
+    const tagTeamIds = buildTagTeamIds([{ id: "t", name: "REGIONAL" }], [{ teamId: "team-A", tagId: "t" }]);
+    const reg = constraint({ id: "reg", name: "Préfèrent Matéo", scope: "CLUB", config: { targetTag: "REGIONAL" } });
+
+    renderDetail({ slot: { teamId: "team-B" }, constraints: [reg], tagTeamIds });
+    // Rien à ouvrir : le compte est 0, et le nom n'apparaît nulle part.
+    expect(screen.getByRole("button", { name: /Contraintes applicables \(0\)/ })).toBeInTheDocument();
+    expect(screen.queryByText("Préfèrent Matéo")).not.toBeInTheDocument();
   });
 });
 

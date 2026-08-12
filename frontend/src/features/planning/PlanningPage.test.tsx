@@ -105,6 +105,10 @@ vi.mock("@/features/wizard/queries", async (orig) => ({
   ...(await orig<typeof import("@/features/wizard/queries")>()),
   useVenuePeriodOverrides: () => ({ data: venueOverridesState.rows, isError: venueOverridesState.isError }),
   useReservations: () => ({ data: reservationsState.rows }),
+  // Le wrap de créneau résout CLUB+tag via ces hooks (mêmes que le wizard) : mockés vides
+  // ici, la résolution tag→équipes est gardée par applicableConstraints/SlotDetail.
+  useWizardTeamTags: () => ({ data: [] }),
+  useWizardTeamTagAssignments: () => ({ data: [] }),
 }));
 
 // Partiel : seul `useSchedulePlans` est simulé (l'en-tête y lit le nom du plan
@@ -151,6 +155,14 @@ beforeEach(() => {
   // Default: an editable work version. Re-armed per test so a case that swaps in
   // an in-force version (read-only → panels hidden) cannot leak into the next.
   vi.mocked(listSchedules).mockResolvedValue(workVersion);
+  // Ré-armement explicite : le cas « masque les diagnostics (aucune ERREUR) » réécrit
+  // getDiagnostics en WARNING-only ; `mockResolvedValue` SURVIT au test suivant (même
+  // piège que ci-dessus). Sans ce reset, « groups diagnostics » et le cas ERREUR
+  // perdraient leur « Conflit de gymnase » (ERROR) et rougiraient sans rapport.
+  vi.mocked(getDiagnostics).mockResolvedValue([
+    { id: "diag-1", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, message: "Conflit de gymnase.", suggestions: [] },
+    { id: "diag-unused-slot-venue-1-2-19:00", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, message: "Créneau disponible non utilisé : Gymnase Alpha (mardi de 19:00 à 20:30).", suggestions: [] },
+  ]);
   navigate.mockClear();
   usePlanningStore.setState({ viewMode: "gymnase", selectedScheduleId: null, selectedSlotId: null, resourceFilter: [] });
 });
@@ -445,6 +457,44 @@ describe("PlanningPage (integration)", () => {
 
     expect(await screen.findByText("Catégorie")).toBeInTheDocument();
     expect(screen.getByText("90 min")).toBeInTheDocument();
+  });
+
+  // Retour fondateur : « quand je clique sur un créneau ça retire le diagnostic, sinon
+  // l'écran est illisible ». Masquer n'est PAS supprimer : le panneau REVIENT à la fermeture.
+  it("masque les diagnostics quand un créneau est sélectionné (aucune ERREUR), et les rend à la fermeture", async () => {
+    const user = userEvent.setup();
+    // Que des ALERTES : le cas ERREUR est traité par le test suivant.
+    vi.mocked(getDiagnostics).mockResolvedValue([
+      { id: "w1", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, message: "Créneau libre.", suggestions: [] },
+    ]);
+    renderWithProviders(<PlanningPage />);
+    await screen.findByText("U11");
+    // Déplier les diagnostics (repliés par défaut en boucle de travail).
+    await user.click(screen.getByRole("button", { name: /Diagnostics du système/ }));
+    expect(await screen.findByRole("heading", { name: "Diagnostics du système" })).toBeInTheDocument();
+
+    // Sélection d'un créneau → le panneau disparaît, le détail du créneau prend la place.
+    await user.click(screen.getByText("U11"));
+    expect(await screen.findByText("Catégorie")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Diagnostics du système" })).not.toBeInTheDocument();
+
+    // Fermeture du créneau → le diagnostic REVIENT (état dérivé, rien perdu).
+    await user.click(screen.getByRole("button", { name: /Fermer/ }));
+    expect(await screen.findByRole("heading", { name: "Diagnostics du système" })).toBeInTheDocument();
+  });
+
+  it("NE masque PAS les diagnostics ERREUR quand un créneau est sélectionné (jamais enterrer une erreur grave)", async () => {
+    const user = userEvent.setup();
+    // La fixture par défaut porte une ERREUR (« Conflit de gymnase »).
+    renderWithProviders(<PlanningPage />);
+    await screen.findByText("U11");
+    await user.click(screen.getByRole("button", { name: /Diagnostics du système/ }));
+    expect(await screen.findByRole("heading", { name: "Diagnostics du système" })).toBeInTheDocument();
+
+    await user.click(screen.getByText("U11"));
+    expect(await screen.findByText("Catégorie")).toBeInTheDocument();
+    // Le panneau RESTE : un ERROR ne doit pas disparaître parce qu'on a cliqué ailleurs.
+    expect(screen.getByRole("heading", { name: "Diagnostics du système" })).toBeInTheDocument();
   });
 
   it("groups diagnostics by severity", async () => {

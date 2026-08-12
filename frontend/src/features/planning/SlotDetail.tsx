@@ -1,4 +1,4 @@
-import { AlertTriangle, Loader2, Lock, LockOpen, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Lock, LockOpen, X } from "lucide-react";
 import { VenueSelect } from "@/shared/components/ui/venue-select";
 import { useState } from "react";
 
@@ -6,8 +6,11 @@ import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 
 import type { Constraint, LockOrigin, MoveViolation, Slot, SlotMovePatch, Venue } from "./api";
-import { applicableConstraints } from "./lib/applicableConstraints";
+import { applicableConstraints, isClubWide } from "./lib/applicableConstraints";
 import { DAYS, type GridCell, toHourMinute } from "./lib/grid";
+
+/** Map vide partagée : une CLUB+tag ne s'affiche nulle part tant que la résolution n'est pas fournie. */
+const NO_TAGS: ReadonlyMap<string, ReadonlySet<string>> = new Map();
 
 /**
  * L'état du dernier déplacement demandé, pour l'écran (F2b). `pending` = le moteur
@@ -28,6 +31,9 @@ interface SlotDetailProps {
   categoryLabel: string;
   /** All club constraints — the applicable ones are composed here (F1). */
   constraints: Constraint[];
+  /** tag NAME → équipes taguées (saison courante) : une CLUB+tag ne s'affiche que sur les
+   *  équipes du tag, miroir de l'éclatement backend (cf. lib/applicableConstraints). */
+  tagTeamIds?: ReadonlyMap<string, ReadonlySet<string>>;
   busy: boolean;
   /** F2b : le retour du dernier déplacement (verdict moteur). Défaut = idle. */
   moveState?: MoveFeedback;
@@ -58,15 +64,39 @@ const LOCK_ORIGIN: Record<LockOrigin, { label: string; hint: string }> = {
   UNKNOWN: { label: "Verrouillé — origine inconnue", hint: "Ce créneau est bien verrouillé, mais on ne sait pas pourquoi. Vérifiez avant d'y toucher." },
 };
 
-export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, busy, moveState = { status: "idle" }, readOnly = false, onClose, onToggleLock, onMove }: SlotDetailProps) {
+function ConstraintList({ label, items }: { label: string; items: Constraint[] }) {
+  return (
+    <div className="mt-2 first:mt-0">
+      <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground/80">{label}</p>
+      <ul className="mt-1 flex flex-col gap-1">
+        {items.map((c) => (
+          <li key={c.id} className="flex items-center justify-between gap-2 text-sm">
+            <span>{c.name}</span>
+            <span className="shrink-0 rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{"HARD" === c.ruleType ? "obligatoire" : "préférence"}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tagTeamIds = NO_TAGS, busy, moveState = { status: "idle" }, readOnly = false, onClose, onToggleLock, onMove }: SlotDetailProps) {
   const [day, setDay] = useState(slot.dayOfWeek);
   const [time, setTime] = useState(toHourMinute(slot.startTime));
   const [venueId, setVenueId] = useState(slot.venueId);
+  // Repliées par défaut : ouvrir un créneau ne doit pas agrandir l'aside (retour fondateur).
+  // Le compte reste visible replié pour savoir s'il y a quelque chose à ouvrir.
+  const [constraintsOpen, setConstraintsOpen] = useState(false);
 
   const dirty = day !== slot.dayOfWeek || time !== toHourMinute(slot.startTime) || venueId !== slot.venueId;
 
   const origin = null !== slot.lockOrigin ? LOCK_ORIGIN[slot.lockOrigin] : null;
-  const applicable = applicableConstraints(slot, constraints);
+  const applicable = applicableConstraints(slot, constraints, tagTeamIds);
+  // « Tout le club » ne concerne pas l'équipe DIRECTEMENT (fondateur) : on sépare les deux
+  // groupes pour que la distinction se lise sans lire. Une CLUB+tag est côté équipe (elle
+  // vise les équipes taguées, comme l'éclatement backend), pas côté club.
+  const teamConstraints = applicable.filter((c) => !isClubWide(c));
+  const clubConstraints = applicable.filter((c) => isClubWide(c));
 
   return (
     <Card>
@@ -95,19 +125,28 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, bus
         ) : null}
 
         <div className="mt-3 border-t border-border pt-3">
-          <p className="text-xs font-medium text-muted-foreground">Contraintes applicables</p>
-          {applicable.length > 0 ? (
-            <ul className="mt-1 flex flex-col gap-1">
-              {applicable.map((c) => (
-                <li key={c.id} className="flex items-center justify-between gap-2 text-sm">
-                  <span>{c.name}</span>
-                  <span className="shrink-0 rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{"HARD" === c.ruleType ? "obligatoire" : "préférence"}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-1 text-xs text-muted-foreground">Aucune contrainte spécifique à ce créneau.</p>
-          )}
+          <button
+            type="button"
+            aria-expanded={constraintsOpen}
+            onClick={() => setConstraintsOpen((open) => !open)}
+            className="flex w-full items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            {constraintsOpen ? <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" /> : <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />}
+            Contraintes applicables ({applicable.length})
+          </button>
+          {constraintsOpen ? (
+            applicable.length > 0 ? (
+              // max-h + overflow-y-auto : la liste défile en INTERNE au lieu d'agrandir l'aside
+              // (retour fondateur). La hauteur bornée suffit à déclencher le défilement — pas
+              // besoin de min-h-0 ici, le conteneur n'est pas un enfant flex qui doit rétrécir.
+              <div className="mt-2 max-h-56 overflow-y-auto pr-1">
+                {teamConstraints.length > 0 ? <ConstraintList label="Cette équipe" items={teamConstraints} /> : null}
+                {clubConstraints.length > 0 ? <ConstraintList label="Tout le club" items={clubConstraints} /> : null}
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">Aucune contrainte spécifique à ce créneau.</p>
+            )
+          ) : null}
         </div>
 
         {readOnly ? (
