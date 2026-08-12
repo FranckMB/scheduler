@@ -16,6 +16,7 @@ final class EngineClient
 {
     private const ENGINE_URL = 'http://engine:8000/generate';
     private const PLACE_MATCHES_URL = 'http://engine:8000/place-matches';
+    private const VALIDATE_URL = 'http://engine:8000/validate-assignments';
 
     public function __construct(private readonly HttpClientInterface $httpClient) {}
 
@@ -45,6 +46,25 @@ final class EngineClient
     public function placeMatches(array $payload, int $timeoutSeconds): array
     {
         $response = $this->httpClient->request('POST', self::PLACE_MATCHES_URL, [
+            'json' => $payload,
+            'timeout' => $timeoutSeconds,
+        ]);
+
+        return $response->toArray(false);
+    }
+
+    /**
+     * P2-2 F2a — le verdict moteur sur UN candidat de déplacement (contrat 2.4).
+     * Mono-candidat, appel court (baseline figée côté engine). Même propagation
+     * que solve() : les exceptions remontent inchangées, l'appelant décide.
+     *
+     * @param array<string, mixed> $payload
+     *
+     * @return array<string, mixed>
+     */
+    public function validateAssignment(array $payload, int $timeoutSeconds): array
+    {
+        $response = $this->httpClient->request('POST', self::VALIDATE_URL, [
             'json' => $payload,
             'timeout' => $timeoutSeconds,
         ]);

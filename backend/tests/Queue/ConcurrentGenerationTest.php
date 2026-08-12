@@ -83,6 +83,28 @@ final class ConcurrentGenerationTest extends WebTestCase
         $this->lock->release($clubId, $reacquired);
     }
 
+    /**
+     * P2-2 F2a — la sonde `isGenerating` LIT l'état sans le modifier : elle voit un
+     * verrou tenu, ne le pose pas quand il est libre, et un `acquire` reste possible
+     * après elle (elle n'a ni acquis ni relâché). C'est le socle du 409 de F2b.
+     */
+    public function testIsGeneratingReadsTheLockWithoutTouchingIt(): void
+    {
+        $clubId = 'club-' . uniqid();
+
+        self::assertFalse($this->lock->isGenerating($clubId), 'Aucune génération : la sonde dit false');
+        // La sonde ne doit PAS avoir posé le verrou (sinon l'acquire échouerait).
+        $token = $this->lock->acquire($clubId, 60);
+        self::assertNotNull($token, 'La sonde n\'a pas acquis le verrou : acquire reste possible');
+
+        self::assertTrue($this->lock->isGenerating($clubId), 'Verrou tenu : la sonde dit true');
+        // La sonde n'a pas relâché : un second acquire échoue toujours.
+        self::assertNull($this->lock->acquire($clubId, 60), 'La sonde n\'a pas relâché le verrou');
+
+        $this->lock->release($clubId, $token);
+        self::assertFalse($this->lock->isGenerating($clubId), 'Après release : la sonde dit false');
+    }
+
     protected function setUp(): void
     {
         $this->lock = self::getContainer()->get(ClubGenerationLock::class);
