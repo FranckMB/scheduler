@@ -1,6 +1,12 @@
-Last verified @ 2026-08-12 (JSON **régénéré** depuis le backend vivant — F2b : nouveau path `POST /api/schedule-slots/{id}/move` (déplacement sous le verdict moteur) + propriété LECTURE `manuallyEditedSinceGeneration` au schéma `Schedule`)
+Last verified @ 2026-08-12 (JSON **régénéré** depuis le backend vivant — P4-86 : le path `POST /api/schedule-slots/{id}/manual-edit/one-time` est SUPPRIMÉ (146 paths, un seul retiré))
 
 Changements récents :
+- **P4-86 — suppression du path `manual-edit/one-time` (2026-08-12)** : le path
+  `POST /api/schedule-slots/{id}/manual-edit/one-time` quitte le contrat (146 paths, un seul
+  retiré, aucun autre changement). Depuis F2b le déplacement d'un créneau passe par
+  `POST /api/schedule-slots/{id}/move` (verdict moteur) et plus aucun appelant applicatif ne
+  touchait one-time — garder les deux chemins pour un même geste était le danger. Les deux
+  autres actions du contrôleur (`manual-edit/constraint`, `manual-edit/lock`) restent.
 - **F2b — déplacement de créneau sous le verdict du moteur (2026-08-12)** : nouveau path
   `POST /api/schedule-slots/{id}/move`. Le déplacement (jour/heure/gymnase) ne s'écrit QUE si
   le moteur l'accepte (200 + marqueur), sinon il est refusé avec les règles violées NOMMÉES
@@ -8,7 +14,6 @@ Changements récents :
   (`code=generation_in_progress`) ou si le planning est validé (lecture seule) ; 502 si le
   moteur ne répond pas. Le schéma de LECTURE `Schedule` gagne `manuallyEditedSinceGeneration`
   (bool, vrai ⇒ score périmé après un déplacement manuel ; remis à faux par une (re)génération).
-  Le rail `manual-edit/one-time` reste, mais le front ne l'appelle plus pour ce geste.
 - **F1 — origine d'un verrou de créneau (2026-08-12)** : `ScheduleSlotTemplate` (schéma de
   lecture) gagne `lockOrigin` (enum PHP `LockOrigin` : RESERVATION | MANUAL | UNKNOWN,
   nullable — NULL quand le créneau n'est pas verrouillé). En LECTURE seule : le champ est

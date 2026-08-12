@@ -7696,57 +7696,6 @@
                 }
             }
         },
-        "/api/schedule-slots/{id}/manual-edit/one-time": {
-            "post": {
-                "operationId": "postManualEditOneTime",
-                "tags": [
-                    "ManualEdit"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "One-time update applied",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "message": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid body"
-                    },
-                    "404": {
-                        "description": "Slot not found"
-                    },
-                    "409": {
-                        "description": "Conflict (validated schedule or overlapping slot)"
-                    }
-                },
-                "summary": "Apply a one-time (single-occurrence) start-time change to a slot",
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "properties": {
-                                    "startTime": {
-                                        "type": "string",
-                                        "example": "18:30"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "required": false
-                }
-            }
-        },
         "/api/schedule-slots/{id}/move": {
             "post": {
                 "operationId": "postScheduleSlotMove",
