@@ -1845,21 +1845,6 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     'properties' => ['lockLevel' => ['type' => 'string', 'enum' => ['NONE', 'HARD']]],
                 ]),
             )),
-            '/api/schedule-slots/{id}/manual-edit/one-time' => new PathItem(post: new Operation(
-                operationId: 'postManualEditOneTime',
-                tags: ['ManualEdit'],
-                responses: [
-                    '200' => $messageResponse('One-time update applied'),
-                    '400' => new Response('Invalid body'),
-                    '404' => new Response('Slot not found'),
-                    '409' => new Response('Conflict (validated schedule or overlapping slot)'),
-                ],
-                summary: 'Apply a one-time (single-occurrence) start-time change to a slot',
-                requestBody: $this->jsonBody([
-                    'type' => 'object',
-                    'properties' => ['startTime' => ['type' => 'string', 'example' => '18:30']],
-                ]),
-            )),
             '/api/schedule-slots/{id}/move' => new PathItem(post: new Operation(
                 operationId: 'postScheduleSlotMove',
                 tags: ['ManualEdit'],

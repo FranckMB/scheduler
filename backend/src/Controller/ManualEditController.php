@@ -14,8 +14,6 @@ use App\Service\MoveSlotService;
 use App\Service\SchedulePlanProvisioner;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\ORMInvalidArgumentException;
-use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -126,62 +124,10 @@ final class ManualEditController extends AbstractController implements SeasonSco
         return $this->json(['message' => 'Lock applied.'], Response::HTTP_OK);
     }
 
-    #[Route('/api/schedule-slots/{id}/manual-edit/one-time', name: 'api_manual_edit_one_time', methods: ['POST'])]
-    public function applyOneTimeUpdate(string $id, Request $request): JsonResponse
-    {
-        $this->managementAccessGuard->assertManager(); // SEC-07
-        $slot = $this->findSlot($id);
-
-        if (!$slot instanceof ScheduleSlotTemplate) {
-            return $this->json(['error' => 'Slot not found.'], Response::HTTP_NOT_FOUND);
-        }
-
-        if ($this->scheduleIsLocked($slot)) {
-            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before editing.'], Response::HTTP_CONFLICT);
-        }
-
-        $data = json_decode($request->getContent(), true);
-
-        if (!\is_array($data)) {
-            return $this->json(['error' => 'Invalid JSON body.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        if (isset($data['startTime']) && \is_string($data['startTime'])) {
-            $time = DateTimeImmutable::createFromFormat('!H:i', $data['startTime'])
-                ?: DateTimeImmutable::createFromFormat('!H:i:s', $data['startTime']);
-
-            if ($time instanceof DateTimeImmutable) {
-                $data['startTime'] = $time;
-            }
-        }
-
-        try {
-            $this->manualEditService->applyOneTimeUpdate($slot, $data);
-        } catch (InvalidArgumentException $e) {
-            // Doctrine's ORMInvalidArgumentException extends InvalidArgumentException:
-            // only the service's own domain messages may reach the client (SEC-08).
-            if ($e instanceof ORMInvalidArgumentException) {
-                $this->logger->error('Manual edit failed.', ['exception' => $e]);
-
-                return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
-            }
-
-            return $this->json(['error' => $e->getMessage()], Response::HTTP_CONFLICT);
-        } catch (Throwable $e) {
-            // SEC-08: log the internal detail, never surface getMessage() to the client.
-            $this->logger->error('Manual edit failed.', ['exception' => $e]);
-
-            return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        return $this->json(['message' => 'One-time update applied.'], Response::HTTP_OK);
-    }
-
     /**
      * Déplacer un créneau (jour / heure / gymnase) SOUS LE VERDICT DU MOTEUR (F2b).
      *
-     * Remplace le rail `one-time` pour ce geste : celui-ci n'inspectait que les
-     * chevauchements bruts. Ici le déplacement ne s'écrit QUE si le moteur l'accepte ;
+     * Seul rail de déplacement : le geste ne s'écrit QUE si le moteur l'accepte ;
      * sinon les règles violées reviennent nommées et le planning ne bouge pas.
      */
     #[Route('/api/schedule-slots/{id}/move', name: 'api_schedule_slot_move', methods: ['POST'])]

@@ -13,7 +13,6 @@ use App\Enum\LockLevel;
 use App\Enum\LockOrigin;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
-use InvalidArgumentException;
 
 final class ManualEditService
 {
@@ -58,84 +57,6 @@ final class ManualEditService
         // y a un verrou, NULL quand il le retire (NONE = pas de verrou, pas d'origine).
         $slot->setLockOrigin(LockLevel::NONE === $lockLevel ? null : LockOrigin::MANUAL);
         $this->entityManager->flush();
-    }
-
-    /**
-     * @param array<string, mixed> $data
-     */
-    public function applyOneTimeUpdate(ScheduleSlotTemplate $slot, array $data): void
-    {
-        $dayOfWeek = isset($data['dayOfWeek']) ? (int) $data['dayOfWeek'] : $slot->getDayOfWeek();
-        $startTime = isset($data['startTime']) && $data['startTime'] instanceof DateTimeImmutable
-            ? $data['startTime']
-            : $slot->getStartTime();
-        $durationMinutes = isset($data['durationMinutes']) ? (int) $data['durationMinutes'] : $slot->getDurationMinutes();
-        $venueId = isset($data['venueId']) ? (string) $data['venueId'] : $slot->getVenueId();
-        $coachId = \array_key_exists('coachId', $data) ? $data['coachId'] : $slot->getCoachId();
-
-        $conflicts = $this->findConflicts($slot, $dayOfWeek, $startTime, $durationMinutes, $venueId, $coachId);
-
-        if ([] !== $conflicts) {
-            throw new InvalidArgumentException(\sprintf('Conflict detected with slot(s): %s.', implode(', ', array_map(static fn (ScheduleSlotTemplate $s): string => $s->getId(), $conflicts))));
-        }
-
-        $slot
-            ->setDayOfWeek($dayOfWeek)
-            ->setStartTime($startTime)
-            ->setDurationMinutes($durationMinutes)
-            ->setVenueId($venueId)
-            ->setCoachId($coachId);
-
-        $this->entityManager->flush();
-    }
-
-    /**
-     * @return ScheduleSlotTemplate[]
-     */
-    private function findConflicts(
-        ScheduleSlotTemplate $slot,
-        int $dayOfWeek,
-        DateTimeImmutable $startTime,
-        int $durationMinutes,
-        string $venueId,
-        ?string $coachId,
-    ): array {
-        $otherSlots = $this->entityManager
-            ->getRepository(ScheduleSlotTemplate::class)
-            ->findBy(['scheduleId' => $slot->getScheduleId()]);
-
-        $conflicts = [];
-        $newEnd = $this->calculateEndTime($startTime, $durationMinutes);
-
-        foreach ($otherSlots as $other) {
-            if ($other->getId() === $slot->getId()) {
-                continue;
-            }
-
-            if ($other->getDayOfWeek() !== $dayOfWeek) {
-                continue;
-            }
-
-            $otherEnd = $this->calculateEndTime($other->getStartTime(), $other->getDurationMinutes());
-
-            $timeOverlap = $startTime < $otherEnd && $other->getStartTime() < $newEnd;
-
-            if (!$timeOverlap) {
-                continue;
-            }
-
-            if ($other->getVenueId() === $venueId) {
-                $conflicts[] = $other;
-
-                continue;
-            }
-
-            if (null !== $coachId && $other->getCoachId() === $coachId) {
-                $conflicts[] = $other;
-            }
-        }
-
-        return $conflicts;
     }
 
     private function calculateEndTime(DateTimeImmutable $startTime, int $durationMinutes): DateTimeImmutable
