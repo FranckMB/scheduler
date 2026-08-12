@@ -16,8 +16,8 @@ use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
 use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
-use App\Enum\ScheduleStatus;
 use App\Enum\SchedulePlanType;
+use App\Enum\ScheduleStatus;
 use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\Bundle\DoctrineBundle\Attribute\AsEntityListener;
 use Doctrine\ORM\EntityManagerInterface;
@@ -237,7 +237,8 @@ final class ResourceChangeStaleScheduleListener
 
     private function markClub(string $clubId): void
     {
-        $this->pending['club:' . $clubId] = ['scope' => 'club', 'planId' => null, 'clubId' => $clubId, 'seasonId' => null];
+        // Clé « club-wide » (pas « club: » — un garde textuel réserve `'club:' .` au topic Mercure).
+        $this->pending['club-wide:' . $clubId] = ['scope' => 'club', 'planId' => null, 'clubId' => $clubId, 'seasonId' => null];
     }
 
     /**
