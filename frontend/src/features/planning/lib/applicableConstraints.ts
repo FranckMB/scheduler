@@ -1,34 +1,7 @@
 import type { Constraint, Slot } from "../api";
-
-/**
- * tag NAME → les équipes qui le portent dans la saison de travail. Miroir CLIENT de
- * `TeamTagResolver::tagTeamIds` (backend) : on résout un `name` (via `TeamTag`) en la
- * liste des `TeamTagAssignment.teamId`. Les assignations lues par le front sont DÉJÀ
- * filtrées à la saison courante côté serveur (filtre Doctrine de saison — cf. entité
- * `TeamTagAssignment`), exactement comme le suppose `ConstraintsStep`.
- *
- * ⚠ Un tag SANS aucune assignation n'apparaît PAS dans la map (pas de clé) : la résolution
- * est alors « aucune équipe », comme le NO-OP du backend (`ScheduleConstraintBuilder` saute
- * la contrainte quand `resolveTagToTeamIds` rend une liste vide).
- */
-export function buildTagTeamIds(
-  tags: readonly { id: string; name: string }[],
-  assignments: readonly { teamId: string; tagId: string }[],
-): Map<string, Set<string>> {
-  const nameByTagId = new Map(tags.map((t) => [t.id, t.name]));
-  const map = new Map<string, Set<string>>();
-  for (const assignment of assignments) {
-    const name = nameByTagId.get(assignment.tagId);
-    if (undefined === name) {
-      continue;
-    }
-    const set = map.get(name) ?? new Set<string>();
-    set.add(assignment.teamId);
-    map.set(name, set);
-  }
-
-  return map;
-}
+// FOYER UNIQUE de la résolution tag→équipes (P4-88) : partagé avec `wizard/steps/PeriodStructure.tsx`.
+// Ré-exporté ici pour les consommateurs planning (aucun changement d'import chez eux).
+export { buildTagTeamIds } from "@/shared/lib/tagTeamIds";
 
 /**
  * Le tag ciblé par une contrainte CLUB, s'il y en a un — `config.targetTag` non vide.

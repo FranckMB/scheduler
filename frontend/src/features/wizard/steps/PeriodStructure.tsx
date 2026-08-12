@@ -15,6 +15,7 @@ import { VenueSelect } from "@/shared/components/ui/venue-select";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
+import { buildTagTeamIds } from "@/shared/lib/tagTeamIds";
 import { formatDuration } from "@/shared/lib/duration";
 import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
@@ -907,20 +908,10 @@ function PeriodConstraintsPanel({
   const [inflight, setInflight] = useState<Map<string, boolean>>(new Map());
   const deactivatedTeamIds = useMemo(() => new Set(teamOverrides.filter((o) => !o.isActive).map((o) => o.teamId)), [teamOverrides]);
   const activeTeamIds = useMemo(() => new Set(teams.filter((t) => !deactivatedTeamIds.has(t.id)).map((t) => t.id)), [teams, deactivatedTeamIds]);
-  const tagTeamIdsByName = useMemo(() => {
-    const tagNameById = new Map(tags.map((t) => [t.id, t.name]));
-    const byTag = new Map<string, Set<string>>();
-    for (const assignment of tagAssignments) {
-      const tagName = tagNameById.get(assignment.tagId);
-      if (undefined === tagName) {
-        continue;
-      }
-      const teamIds = byTag.get(tagName) ?? new Set<string>();
-      teamIds.add(assignment.teamId);
-      byTag.set(tagName, teamIds);
-    }
-    return byTag;
-  }, [tags, tagAssignments]);
+  // Résolution tag→équipes : FOYER PARTAGÉ avec le panneau planning (P4-88). Le filtre
+  // « équipes actives cette période » ci-dessous est un raffinement d'overlay posé
+  // PAR-DESSUS, pas une seconde résolution.
+  const tagTeamIdsByName = useMemo(() => buildTagTeamIds(tags, tagAssignments), [tags, tagAssignments]);
   const activeTagTeamIdsByName = useMemo(() => {
     const byTag = new Map<string, Set<string>>();
     for (const [tagName, teamIds] of tagTeamIdsByName) {
