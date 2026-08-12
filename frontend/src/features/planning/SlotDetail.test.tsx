@@ -1,6 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+
+import { renderWithProviders } from "@/test/utils";
+
+// P2-25 — SlotDetail porte désormais un lien « Corriger cette contrainte » (WizardStepLink →
+// useMe pour le verrou du mode guidé). Club établi (version finie) → lien actif, pas verrouillé.
+vi.mock("@/features/auth/queries", () => ({
+  useMe: () => ({ data: { seasonPlan: { hasFinishedVersion: true } } }),
+}));
 
 import { buildTagTeamIds } from "./lib/applicableConstraints";
 import type { Constraint, LockOrigin, Slot, Venue } from "./api";
@@ -57,7 +65,7 @@ const constraint = (over: Partial<Constraint>): Constraint => ({
 
 function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[]; tagTeamIds?: ReadonlyMap<string, ReadonlySet<string>>; moveState?: MoveFeedback; venues?: Venue[] } = {}) {
   const s = slot(over.slot);
-  render(
+  renderWithProviders(
     <SlotDetail
       cell={cell(s.lockLevel !== "NONE")}
       slot={s}
@@ -117,6 +125,16 @@ describe("SlotDetail — contraintes applicables (F1)", () => {
     await openConstraints();
     expect(screen.getByText("Pas le lundi")).toBeInTheDocument();
     expect(screen.queryByText("Autre équipe")).not.toBeInTheDocument();
+  });
+
+  it("P2-25 — chaque contrainte applicable offre « Corriger » vers l'éditeur pré-rempli (from=planning)", async () => {
+    renderDetail({ constraints: [constraint({ id: "cX", name: "Pas le lundi", scope: "TEAM", scopeTargetId: "team-A" })] });
+    await openConstraints();
+    const link = screen.getByRole("link", { name: /Corriger cette contrainte/ });
+    const href = link.getAttribute("href") ?? "";
+    expect(href).toContain("step=constraints");
+    expect(href).toContain("edit=cX");
+    expect(href).toContain("from=planning");
   });
 
   it("le dit franchement quand aucune contrainte ne s'applique", async () => {

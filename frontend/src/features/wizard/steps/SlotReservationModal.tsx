@@ -10,6 +10,7 @@ import { conflictingReservation, mainCoachByTeam } from "../lib/coachDoubleBooki
 import { dayLabel, hhmm } from "../lib/days";
 import { assignableTeams, effectiveSlotCapacity, slotKey } from "../lib/reservationSlots";
 import { useCreateReservation, useDeleteReservation } from "../queries";
+import { WizardStepLink } from "../WizardStepLink";
 
 interface Props {
   slot: VenueTrainingSlot;
@@ -264,9 +265,20 @@ export function SlotReservationModal({
           <p className="text-xs text-muted-foreground">Aucune équipe disponible (toutes ont atteint leur nombre de séances ou sont déjà sur ce créneau).</p>
         )
       ) : (
-        <p className="text-xs text-muted-foreground">
-          Créneau complet ({occupied}/{capacity}).
-        </p>
+        <div className="text-xs text-muted-foreground">
+          <p>Créneau complet ({occupied}/{capacity}).</p>
+          {/* P2-25 lien A — c'est l'instant où l'on comprend qu'il faut plus de place. Plutôt
+              que subir, on va RÉGLER ce créneau là où il vit (étape Gymnases), positionné
+              dessus. Retour nommé « ← Retour à la réservation ». */}
+          <WizardStepLink
+            step="venues"
+            params={{ slot: slot.id }}
+            from="reservation"
+            className="mt-1 inline-flex items-center gap-1 font-medium text-accent underline underline-offset-2 hover:text-accent/80"
+          >
+            Régler ce créneau dans « Gymnases »
+          </WizardStepLink>
+        </div>
       )}
 
       {null !== error || null !== submitError ? (
