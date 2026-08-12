@@ -1,0 +1,278 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\EventListener;
+
+use App\Entity\CalendarEntry;
+use App\Entity\Coach;
+use App\Entity\Reservation;
+use App\Entity\Schedule;
+use App\Entity\SchedulePlan;
+use App\Entity\Team;
+use App\Entity\TeamPeriodOverride;
+use App\Entity\TeamTag;
+use App\Entity\TeamTagAssignment;
+use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueTrainingSlot;
+use App\Enum\ScheduleStatus;
+use App\Enum\SchedulePlanType;
+use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
+use Doctrine\Bundle\DoctrineBundle\Attribute\AsEntityListener;
+use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Event\PostFlushEventArgs;
+use Doctrine\ORM\Events;
+
+/**
+ * UNE DONNÉE DU CLUB (autre qu'une contrainte) QUI CHANGE PÉRIME LES PLANNINGS — et il faut le DIRE.
+ *
+ * Une contrainte n'est pas la seule entrée du solveur : gymnases, coachs, créneaux et grilles
+ * de période, réservations, overrides de période, tags d'équipe, entrées de calendrier nourrissent
+ * tout autant le placement. Modifier l'un d'eux APRÈS génération rend le planning PÉRIMÉ — il
+ * décrit un état antérieur des DONNÉES, sans que rien ne le dise. Troisième jumeau de
+ * `ConstraintChangeStaleScheduleListener` (dont ceci reprend le patron exact) et du marqueur
+ * « retouché à la main » : même colonne unique, même bannière, même remise à zéro à l'import.
+ *
+ * ⚠ **Listener d'entité, PAS marquage par appelant.** Ces entités s'écrivent depuis des
+ * dizaines d'endroits (API, imports FFBB, transition de saison, commandes, `EntityManager` nu).
+ * Marquer chaque appelant garantirait d'en oublier un — et un oubli ici, c'est le bug de
+ * confiance qui revient en silence. Le listener attrape TOUT writer.
+ *
+ * ⚠ **UN SEUL marqueur (`resourcesChangedSinceGeneration`) pour toutes ces sources**, pas un
+ * booléen par source : une ferme de colonnes que la bannière ne saurait plus lire. La cause
+ * affichée reste à granularité utile (« les données du club ont changé »).
+ *
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ * PÉRIMÈTRE PAR SOURCE — dérivé MÉCANIQUEMENT de la colonne, JAMAIS de la sémantique.
+ * La subtilité ADR-0002 est au cœur du lot : la grille d'une période est une COPIE ; modifier la
+ * grille SAISON ne périme PAS un plan de période, et inversement. C'est la colonne
+ * `schedule_plan_id` de la ligne modifiée qui DIT le plan — pas une devinette sur « quelle
+ * contrainte touche quel plan » (là c'était fragile ; ICI la colonne est explicite).
+ *
+ *   Source (table)              | Colonne portée              | Périmètre marqué
+ *   ----------------------------|-----------------------------|-------------------------------------
+ *   venue_training_slot         | schedule_plan_id (nullable) | plan si non-NULL, sinon plan SEASON
+ *   reservation                 | schedule_plan_id (nullable) | plan si non-NULL, sinon plan SEASON
+ *   venue_period_override       | schedule_plan_id (NOT NULL) | ce plan (toujours une période)
+ *   team_period_override        | schedule_plan_id (NOT NULL) | ce plan (toujours une période)
+ *   venue                       | club_id + season_id         | club + saison
+ *   coach                       | club_id + season_id         | club + saison
+ *   team                        | club_id + season_id         | club + saison  (cf. structureDiverged)
+ *   team_tag_assignment         | club_id + season_id         | club + saison
+ *   calendar_entry              | club_id + season_id (*)     | club + saison  (repli, cf. (*))
+ *   team_tag                    | club_id (pas de saison) (*) | club entier    (repli, cf. (*))
+ *
+ * (*) REPLIS où la dérivation plan-scopée n'est PAS mécanique, assumés et documentés :
+ *   - `calendar_entry` : la table ne porte PAS de `schedule_plan_id` ni de FK de période — une
+ *     entrée de calendrier (vacances, fermeture, fenêtre) façonne le calendrier de TOUTE la
+ *     saison, pas d'un plan isolé. On retombe donc sur club+saison, large et honnête, plutôt
+ *     qu'une dérivation fragile via `SchedulePlan.calendarEntryId`.
+ *   - `team_tag` : la table ne porte PAS de `season_id` (un tag est club-level, partagé entre
+ *     saisons). On ne peut donc pas mécaniquement le scoper à une saison : on marque le club
+ *     entier. `team_tag_assignment`, elle, porte la saison → club+saison.
+ *
+ * `structureDiverged` (Team) : le marquage ci-dessus RECOUVRE la bannière `structureDiverged`
+ * (qui compare `generatedTeamCount` aux équipes du jour). Les deux coexistent volontairement :
+ * l'une est un INSTANTANÉ comparé (attrape aussi les écarts ANTÉRIEURS au marqueur), l'autre un
+ * ÉVÉNEMENT (attrape la modification, même sans écart de compte — renommer une équipe, changer
+ * son niveau). L'écran les affiche dans la MÊME bannière unifiée (cf. `staleness.ts`).
+ *
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ * CE QUI NE MARQUE PAS (liste fermée — un marquage trop large use la bannière jusqu'à ce que le
+ * gestionnaire l'ignore) :
+ *   - le PIPELINE lui-même : import de résultat solveur (`ScheduleResultImporter`, qui au
+ *     contraire DÉMARQUE), déplacement de créneau (`MoveSlotService`, couvert par son propre
+ *     marqueur `manuallyEditedSinceGeneration`) ;
+ *   - les entités de RÉSULTAT : `schedule_slot_template`, `schedule_diagnostic`,
+ *     `schedule_structure_snapshot`, et `schedule` elle-même ;
+ *   - les DOLÉANCES : `coach_wish*` — des SOUHAITS de coach, pas des données que le solveur
+ *     consomme (ils sont dérivés en contraintes AVANT, et c'est la contrainte qui marque) ;
+ *   - `priority_tier` : table de RÉFÉRENCE GLOBALE (pas de club/saison, PK entière, API en
+ *     lecture seule — « seeded via fixtures », cf. `PriorityTierResource`). Immuable au runtime :
+ *     un listener n'y déclencherait qu'au SEED, sans club à scoper, et marquerait globalement —
+ *     exactement la sur-notification qu'on refuse. On ne l'écoute donc pas ;
+ *   - l'audit, les tables admin, les entités de facturation/abonnement.
+ *
+ * ══════════════════════════════════════════════════════════════════════════════════════════
+ * SEULS les plannings COMPLETED sont marqués (un DRAFT/PENDING/… ne porte aucun résultat à
+ * périmer), TOUTES versions confondues (le gestionnaire consulte aussi les antérieures).
+ * Le WHERE explicite EST la frontière ; RLS la double côté base. Coût du `postFlush` : borné par
+ * le nombre de PÉRIMÈTRES DISTINCTS (déduplication `$pending`), pas par le nombre de lignes
+ * écrites — un seed qui écrit des centaines de créneaux d'un même plan ne fait QU'UN bulk UPDATE.
+ */
+#[AsEntityListener(event: Events::postPersist, method: 'venueTrainingSlotTouched', entity: VenueTrainingSlot::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'venueTrainingSlotTouched', entity: VenueTrainingSlot::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'venueTrainingSlotTouched', entity: VenueTrainingSlot::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'reservationTouched', entity: Reservation::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'reservationTouched', entity: Reservation::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'reservationTouched', entity: Reservation::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'venuePeriodOverrideTouched', entity: VenuePeriodOverride::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'venuePeriodOverrideTouched', entity: VenuePeriodOverride::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'venuePeriodOverrideTouched', entity: VenuePeriodOverride::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'teamPeriodOverrideTouched', entity: TeamPeriodOverride::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'teamPeriodOverrideTouched', entity: TeamPeriodOverride::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'teamPeriodOverrideTouched', entity: TeamPeriodOverride::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'venueTouched', entity: Venue::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'venueTouched', entity: Venue::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'venueTouched', entity: Venue::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'coachTouched', entity: Coach::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'coachTouched', entity: Coach::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'coachTouched', entity: Coach::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'teamTouched', entity: Team::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'teamTouched', entity: Team::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'teamTouched', entity: Team::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'teamTagAssignmentTouched', entity: TeamTagAssignment::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'teamTagAssignmentTouched', entity: TeamTagAssignment::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'teamTagAssignmentTouched', entity: TeamTagAssignment::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'calendarEntryTouched', entity: CalendarEntry::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'calendarEntryTouched', entity: CalendarEntry::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'calendarEntryTouched', entity: CalendarEntry::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'teamTagTouched', entity: TeamTag::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'teamTagTouched', entity: TeamTag::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'teamTagTouched', entity: TeamTag::class)]
+#[AsDoctrineListener(event: Events::postFlush)]
+final class ResourceChangeStaleScheduleListener
+{
+    private const string SET_STALE = 'UPDATE ' . Schedule::class . ' s SET s.resourcesChangedSinceGeneration = true';
+
+    /** @var array<string, array{scope: string, planId: ?string, clubId: ?string, seasonId: ?string}> périmètres à marquer, dédupliqués par clé */
+    private array $pending = [];
+
+    public function venueTrainingSlotTouched(VenueTrainingSlot $entity): void
+    {
+        $this->markPlanScoped($entity->getSchedulePlanId(), $entity->getClubId(), $entity->getSeasonId());
+    }
+
+    public function reservationTouched(Reservation $entity): void
+    {
+        $this->markPlanScoped($entity->getSchedulePlanId(), $entity->getClubId(), $entity->getSeasonId());
+    }
+
+    public function venuePeriodOverrideTouched(VenuePeriodOverride $entity): void
+    {
+        // schedule_plan_id NOT NULL : un override appartient toujours à un plan de période.
+        $this->markPlan($entity->getSchedulePlanId());
+    }
+
+    public function teamPeriodOverrideTouched(TeamPeriodOverride $entity): void
+    {
+        $this->markPlan($entity->getSchedulePlanId());
+    }
+
+    public function venueTouched(Venue $entity): void
+    {
+        $this->markClubSeason($entity->getClubId(), $entity->getSeasonId());
+    }
+
+    public function coachTouched(Coach $entity): void
+    {
+        $this->markClubSeason($entity->getClubId(), $entity->getSeasonId());
+    }
+
+    public function teamTouched(Team $entity): void
+    {
+        $this->markClubSeason($entity->getClubId(), $entity->getSeasonId());
+    }
+
+    public function teamTagAssignmentTouched(TeamTagAssignment $entity): void
+    {
+        $this->markClubSeason($entity->getClubId(), $entity->getSeasonId());
+    }
+
+    public function calendarEntryTouched(CalendarEntry $entity): void
+    {
+        $this->markClubSeason($entity->getClubId(), $entity->getSeasonId());
+    }
+
+    public function teamTagTouched(TeamTag $entity): void
+    {
+        $this->markClub($entity->getClubId());
+    }
+
+    public function postFlush(PostFlushEventArgs $args): void
+    {
+        $pending = $this->pending;
+        // Vidé AVANT toute écriture : bulk UPDATE via execute() ne redéclenche pas postFlush
+        // (pas de récursion), mais on vide en tête pour rester robuste si un autre listener
+        // flushe derrière nous. Jumeau exact de ConstraintChangeStaleScheduleListener.
+        $this->pending = [];
+
+        if ([] === $pending) {
+            return;
+        }
+
+        $manager = $args->getObjectManager();
+        foreach ($pending as $mark) {
+            $this->apply($manager, $mark);
+        }
+    }
+
+    private function markPlan(string $planId): void
+    {
+        $this->pending['plan:' . $planId] = ['scope' => 'plan', 'planId' => $planId, 'clubId' => null, 'seasonId' => null];
+    }
+
+    private function markPlanScoped(?string $planId, string $clubId, string $seasonId): void
+    {
+        if (null !== $planId) {
+            $this->markPlan($planId);
+
+            return;
+        }
+
+        // schedule_plan_id NULL = ligne de la grille SAISON. Le périmètre est le plan SEASON du
+        // club+saison, JAMAIS les plans de période (leurs grilles sont des COPIES, ADR-0002).
+        $this->pending['seasonPlan:' . $clubId . ':' . $seasonId] = ['scope' => 'seasonPlan', 'planId' => null, 'clubId' => $clubId, 'seasonId' => $seasonId];
+    }
+
+    private function markClubSeason(?string $clubId, string $seasonId): void
+    {
+        if (null === $clubId) {
+            return;
+        }
+
+        $this->pending['clubSeason:' . $clubId . ':' . $seasonId] = ['scope' => 'clubSeason', 'planId' => null, 'clubId' => $clubId, 'seasonId' => $seasonId];
+    }
+
+    private function markClub(string $clubId): void
+    {
+        $this->pending['club:' . $clubId] = ['scope' => 'club', 'planId' => null, 'clubId' => $clubId, 'seasonId' => null];
+    }
+
+    /**
+     * @param array{scope: string, planId: ?string, clubId: ?string, seasonId: ?string} $mark
+     */
+    private function apply(EntityManagerInterface $manager, array $mark): void
+    {
+        // Bulk UPDATE : on ne charge pas les plannings (ils peuvent être nombreux), on pose le
+        // drapeau en une requête. Le WHERE explicite EST la frontière ; RLS la double.
+        $query = match ($mark['scope']) {
+            'plan' => $manager->createQuery(self::SET_STALE . ' WHERE s.schedulePlanId = :planId AND s.status = :status')
+                ->setParameter('planId', $mark['planId'])
+                ->setParameter('status', ScheduleStatus::COMPLETED),
+            // ADR-0002 : le plan SEASON du club+saison SEULEMENT — la grille saison ne touche
+            // pas les COPIES de période. Sous-requête sur le type de plan (une seule vérité).
+            'seasonPlan' => $manager->createQuery(
+                self::SET_STALE
+                . ' WHERE s.status = :status AND s.schedulePlanId IN ('
+                . 'SELECT p.id FROM ' . SchedulePlan::class . ' p'
+                . ' WHERE p.clubId = :clubId AND p.seasonId = :seasonId AND p.type = :seasonType)',
+            )
+                ->setParameter('status', ScheduleStatus::COMPLETED)
+                ->setParameter('clubId', $mark['clubId'])
+                ->setParameter('seasonId', $mark['seasonId'])
+                ->setParameter('seasonType', SchedulePlanType::SEASON),
+            'clubSeason' => $manager->createQuery(self::SET_STALE . ' WHERE s.clubId = :clubId AND s.seasonId = :seasonId AND s.status = :status')
+                ->setParameter('clubId', $mark['clubId'])
+                ->setParameter('seasonId', $mark['seasonId'])
+                ->setParameter('status', ScheduleStatus::COMPLETED),
+            'club' => $manager->createQuery(self::SET_STALE . ' WHERE s.clubId = :clubId AND s.status = :status')
+                ->setParameter('clubId', $mark['clubId'])
+                ->setParameter('status', ScheduleStatus::COMPLETED),
+            default => null,
+        };
+
+        $query?->execute();
+    }
+}

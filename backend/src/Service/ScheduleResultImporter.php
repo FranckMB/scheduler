@@ -34,8 +34,12 @@ final class ScheduleResultImporter
         $schedule->setManuallyEditedSinceGeneration(false);
         // Idem pour « une contrainte a changé depuis la génération » : ce résultat a été
         // résolu contre les règles COURANTES, il n'est donc plus périmé. Un seul point de
-        // vérité pour la remise à zéro des deux marqueurs de péremption.
+        // vérité pour la remise à zéro des marqueurs de péremption.
         $schedule->setConstraintsChangedSinceGeneration(false);
+        // Idem pour « une ressource du club a changé » (gymnase/coach/créneau/période/tag/
+        // calendrier) : ce résultat a été résolu contre les données COURANTES. Troisième
+        // marqueur, même foyer de remise à zéro.
+        $schedule->setResourcesChangedSinceGeneration(false);
 
         $existingSlots = $this->entityManager
             ->getRepository(ScheduleSlotTemplate::class)
