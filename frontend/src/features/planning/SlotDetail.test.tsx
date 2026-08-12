@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Constraint, LockOrigin, Slot } from "./api";
 import type { GridCell } from "./lib/grid";
-import { SlotDetail } from "./SlotDetail";
+import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
 const slot = (over: Partial<Slot> = {}): Slot => ({
   id: "s1",
@@ -52,7 +52,7 @@ const constraint = (over: Partial<Constraint>): Constraint => ({
   ...over,
 });
 
-function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[] } = {}) {
+function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[]; moveState?: MoveFeedback } = {}) {
   const s = slot(over.slot);
   render(
     <SlotDetail
@@ -62,6 +62,7 @@ function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[] }
       categoryLabel="U11"
       constraints={over.constraints ?? []}
       busy={false}
+      moveState={over.moveState}
       onClose={vi.fn()}
       onToggleLock={vi.fn()}
       onMove={vi.fn()}
@@ -113,5 +114,32 @@ describe("SlotDetail — contraintes applicables (F1)", () => {
   it("le dit franchement quand aucune contrainte ne s'applique", () => {
     renderDetail({ constraints: [] });
     expect(screen.getByText(/Aucune contrainte spécifique/i)).toBeInTheDocument();
+  });
+});
+
+describe("SlotDetail — verdict du déplacement (F2b)", () => {
+  it("affiche le refus AVEC ses motifs nommés, sans code de règle brut", () => {
+    renderDetail({
+      slot: { lockLevel: "NONE", lockOrigin: null },
+      moveState: { status: "rejected", violations: [{ rule: "coach_double_booking", message: "le coach Dupont a déjà les U15 à 20h dans un autre gymnase." }] },
+    });
+    expect(screen.getByText(/coach Dupont a déjà les U15/i)).toBeInTheDocument();
+    // Jamais le code machine de la règle à l'écran.
+    expect(screen.queryByText("coach_double_booking")).not.toBeInTheDocument();
+  });
+
+  it("dit qu'une vérification est en cours pendant l'appel au moteur", () => {
+    renderDetail({ slot: { lockLevel: "NONE", lockOrigin: null }, moveState: { status: "pending" } });
+    expect(screen.getByText(/Vérification/i)).toBeInTheDocument();
+  });
+
+  it("explique qu'une génération en cours empêche le déplacement", () => {
+    renderDetail({ slot: { lockLevel: "NONE", lockOrigin: null }, moveState: { status: "blocked" } });
+    expect(screen.getByText(/génération/i)).toBeInTheDocument();
+  });
+
+  it("invite à réessayer quand le moteur n'a pas répondu", () => {
+    renderDetail({ slot: { lockLevel: "NONE", lockOrigin: null }, moveState: { status: "error" } });
+    expect(screen.getByText(/réessay/i)).toBeInTheDocument();
   });
 });

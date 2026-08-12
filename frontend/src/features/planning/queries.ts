@@ -110,7 +110,13 @@ export function useMoveSlot() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: SlotMovePatch }) => planningApi.moveSlot(id, patch),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["slots"] }),
+    // Un déplacement accepté change le placement (slots) ET pose le marqueur « score
+    // périmé » sur le planning (schedules) — on rafraîchit les deux. Un refus throw :
+    // onSuccess ne part pas, rien n'est réinvalidé (rien n'a bougé).
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["slots"] });
+      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+    },
   });
 }
 
