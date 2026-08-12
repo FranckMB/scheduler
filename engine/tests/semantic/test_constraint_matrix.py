@@ -24,13 +24,14 @@ from typing import Any
 
 import pytest
 
-from tests.semantic.constraint_matrix import MATRIX, Expectation, MatrixCell
+from tests.semantic.constraint_matrix import MATRIX, Expectation, LockSilence, MatrixCell
 from tests.support import make_payload, make_venue, solve_payload, team_coach
 
 GOOD_VENUE = "venue-good"
 BAD_VENUE = "venue-bad"
 GOOD_DAY = 1
 BAD_DAY = 3
+_FR_DAYS = {1: "lundi", 2: "mardi", 3: "mercredi", 4: "jeudi", 5: "vendredi", 6: "samedi", 7: "dimanche"}
 
 
 def _team(team_id: str = "t", sessions: int = 1) -> dict[str, Any]:
@@ -197,6 +198,123 @@ def test_not_offered_cells_are_locked_by_the_ui_test(cell: MatrixCell) -> None:
     """Documented as not offered — the wizard Vitest test freezes the UI offer;
     nothing to assert engine-side."""
     assert not cell.offered_by_ui
+
+
+# --- Lock-silence dimension: a HARD lock that bypasses a DIAGNOSED rule speaks --
+#
+# A HARD lock is pre-placed OUTSIDE the solver (the locked slot has no variable
+# to force to 0), so it can annul a rule the solver would otherwise enforce.
+# `forced_venues` fell exactly through that hole — placed elsewhere, `completed`,
+# not a word. This axis pins, per cell, what the engine PROMISES then:
+#   DIAGNOSED    → the bypass must emit a constraint_not_honored naming the rule;
+#   UNBYPASSABLE → cannot drift in silence (reason on the cell);
+#   SOFT         → soft family, promises nothing.
+# The DIAGNOSED test below solves a real lock-vs-rule scenario per cell — so a
+# family wrongly tagged DIAGNOSED (e.g. venue_minimums, which emits only an ERROR)
+# turns the suite red instead of passing on the label alone.
+
+DIAGNOSED = [c for c in MATRIX if c.lock_silence is LockSilence.DIAGNOSED]
+
+
+def _violating_lock(cell: MatrixCell) -> tuple[str, int, str]:
+    """(venue, day, start) for a HARD lock that VIOLATES the cell's rule — DERIVED
+    from the cell's own config so editing a cell can never desync it."""
+    config = _fill(cell.config)
+    key = cell.config_key
+    venue, day, start = GOOD_VENUE, GOOD_DAY, "18:00"
+    if key == "minStartTime":
+        start = "17:00"  # before the 19:00 floor
+    elif key == "maxEndTime":
+        start = "20:00"  # 20:00 + 90 min = 21:30, past the 18:30 bound
+    elif key in ("forbiddenDays", "unavailableDays"):
+        day = int(config[key][0])  # lock ON the forbidden/unavailable day
+    elif key in ("allowedDays", "availableDays", "forcedDays"):
+        day = BAD_DAY  # a day outside the whitelist / off the forced day
+    elif key == "forbiddenVenueId":
+        venue = config["forbiddenVenueId"]  # lock AT the banned venue
+    elif key in ("preferredVenueId", "forcedVenueId"):
+        venue = BAD_VENUE  # lock at a venue that is NOT the imposed one
+    else:
+        raise AssertionError(f"no violating-lock recipe for {key}")
+    return venue, day, start
+
+
+def _lock_vs_rule_payload(cell: MatrixCell) -> dict[str, Any]:
+    config = _fill(cell.config)
+    constraints = [_constraint(cell, config)]
+    if cell.scope == "COACH":
+        constraints.append(team_coach("tc", "t", "coach-1"))
+    venue, day, start = _violating_lock(cell)
+    # Both venues must exist so venue_names resolve; the lock itself needs no
+    # matching trainingSlot (it is pre-placed) — its single session satisfies the
+    # team, so the free solver adds nothing that could honor the rule instead.
+    venues = [make_venue(GOOD_VENUE, [(GOOD_DAY, "18:00")]), make_venue(BAD_VENUE, [(BAD_DAY, "18:00")])]
+    lock = {
+        "id": f"lock-{cell.case_id}",
+        "teamId": "t",
+        "venueId": venue,
+        "dayOfWeek": day,
+        "startTime": start,
+        "durationMinutes": 90,
+        "lockLevel": "HARD",
+    }
+    return make_payload(teams=[_team()], venues=venues, constraints=constraints, slot_templates=[lock])
+
+
+def _rule_fingerprint(cell: MatrixCell) -> str:
+    """A token the lock diagnostic MUST carry so the manager can find the rule —
+    proving the announcement NAMES it, not merely that some diagnostic fired."""
+    config = _fill(cell.config)
+    key = cell.config_key
+    if cell.family == "COACH_AVAILABILITY":
+        return "coach-1"  # the coach is named
+    if key == "forbiddenVenueId":
+        return config["forbiddenVenueId"]  # the banned venue is named
+    if key in ("preferredVenueId", "forcedVenueId"):
+        return config[key]  # the imposed venue is named
+    if key == "forcedDays":
+        return _FR_DAYS[int(config["forcedDays"][0])]  # the forced day is named
+    return cell.case_id  # TIME/DAY windows carry the REAL constraint name
+
+
+@pytest.mark.parametrize("cell", DIAGNOSED, ids=lambda c: c.case_id)
+def test_a_lock_bypassing_a_diagnosed_rule_is_announced(cell: MatrixCell) -> None:
+    """The lock stays sovereign (ALIGN-07) but the silence ends: every DIAGNOSED
+    family emits a constraint_not_honored INFO that names the bypassed rule.
+
+    Sovereignty is asserted on the PLACEMENT (the pinned slot is kept), not on the
+    status: a forced-day lock legitimately fails the solve (the forced session
+    becomes infeasible) yet is still kept and still announced — the diagnostic is
+    precisely what explains that INFEASIBLE."""
+    result = solve_payload(_lock_vs_rule_payload(cell))
+
+    venue, day, start = _violating_lock(cell)
+    assert any(
+        s["venueId"] == venue and int(s["dayOfWeek"]) == day and str(s["startTime"])[:5] == start
+        for s in _slots(result)
+    ), f"{cell.case_id}: the sovereign lock must be kept where it was pinned"
+
+    entries = [d for d in result.get("diagnostics", []) if d.get("type") == "constraint_not_honored"]
+    assert entries, f"{cell.case_id}: a lock bypassing a diagnosed rule must NOT be silent"
+    assert all(d.get("severity") == "INFO" for d in entries), f"{cell.case_id}: lock warnings are INFO, never errors"
+
+    fingerprint = _rule_fingerprint(cell)
+    assert any(fingerprint in str(d.get("message", "")) for d in entries), (
+        f"{cell.case_id}: the diagnostic must NAME the rule ({fingerprint!r}), not fire hollow"
+    )
+
+
+def test_every_cell_declares_a_lock_silence_and_reasons_where_required() -> None:
+    """The dimension is MANDATORY — a cell without ``lock_silence`` fails at
+    construction (keyword-only, no default), so MATRIX would not even import.
+    Here we additionally require an UNBYPASSABLE cell to STATE why it cannot drift,
+    and forbid a stray reason elsewhere (the reason lives where it earns its keep)."""
+    for cell in MATRIX:
+        assert isinstance(cell.lock_silence, LockSilence), cell.case_id
+        needs_reason = cell.lock_silence is LockSilence.UNBYPASSABLE
+        assert bool(cell.lock_silence_reason.strip()) == needs_reason, (
+            f"{cell.case_id}: only UNBYPASSABLE carries a reason, and it MUST ({cell.lock_silence})"
+        )
 
 
 # --- ENG-13 (dedicated): multiple coach constraints are UNIONed ----------------

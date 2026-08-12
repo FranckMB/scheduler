@@ -18,6 +18,21 @@ Expectations:
                   ``constraint_not_honored`` diagnostics entry.
 - NOT_OFFERED   — the UI does not offer the combination (locked by the wizard
                   Vitest test); the engine may still normalize legacy rows.
+
+Lock-silence dimension (``lock_silence``, MANDATORY — no default):
+A HARD lock is pre-placed OUTSIDE the solver, so it can bypass a rule the solver
+would otherwise enforce (the locked slot has no variable to force to 0). This
+axis records what the engine promises when that happens — the exact hole
+``forced_venues`` fell through:
+- DIAGNOSED    — a lock CAN bypass the rule, and the bypass MUST emit a
+                 ``constraint_not_honored`` diagnostic that names the rule
+                 (``diagnose_locked_slot_violations``). Every DIAGNOSED cell is
+                 backed by a lock-vs-rule scenario in the generated test.
+- UNBYPASSABLE — the family cannot be bypassed IN SILENCE; ``lock_silence_reason``
+                 says why (e.g. applied hard with only honored/failed/ERROR
+                 outcomes, or already surfaced at parse time).
+- SOFT         — a soft family: it steers the objective and promises nothing, so
+                 "a lock bypassed it" is meaningless.
 """
 
 from __future__ import annotations
@@ -32,6 +47,12 @@ class Expectation(Enum):
     HONORED_SOFT = "honored_soft"
     WARNING = "warning"
     NOT_OFFERED = "not_offered"
+
+
+class LockSilence(Enum):
+    DIAGNOSED = "diagnosed"
+    UNBYPASSABLE = "unbypassable"
+    SOFT = "soft"
 
 
 @dataclass(frozen=True)
@@ -51,6 +72,13 @@ class MatrixCell:
     # Sample config the wizard would emit for this cell; "{good}"/"{bad}"
     # placeholders are filled by the test scenario builder.
     config: dict[str, Any] = field(default_factory=dict)
+    # Lock-silence classification (see module docstring) — MANDATORY, keyword-only
+    # with NO default so a new cell that forgets it fails at construction rather
+    # than defaulting silently into a passing bucket.
+    lock_silence: LockSilence = field(kw_only=True)
+    # Required (non-empty) iff lock_silence is UNBYPASSABLE — enforced by the
+    # generated structural test.
+    lock_silence_reason: str = field(default="", kw_only=True)
 
     @property
     def case_id(self) -> str:
@@ -62,7 +90,14 @@ class MatrixCell:
 MATRIX: tuple[MatrixCell, ...] = (
     # --- TIME minStartTime/maxStartTime ---------------------------------------
     MatrixCell(
-        "TIME", "HARD", "minStartTime", "TEAM", Expectation.HONORED_HARD, True, config={"minStartTime": "19:00"}
+        "TIME",
+        "HARD",
+        "minStartTime",
+        "TEAM",
+        Expectation.HONORED_HARD,
+        True,
+        config={"minStartTime": "19:00"},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     MatrixCell(
         "TIME",
@@ -73,9 +108,17 @@ MATRIX: tuple[MatrixCell, ...] = (
         True,
         note="LOCK on a time rule = fixed window, enforced like HARD",
         config={"minStartTime": "19:00"},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     MatrixCell(
-        "TIME", "PREFERRED", "minStartTime", "TEAM", Expectation.HONORED_SOFT, True, config={"minStartTime": "19:00"}
+        "TIME",
+        "PREFERRED",
+        "minStartTime",
+        "TEAM",
+        Expectation.HONORED_SOFT,
+        True,
+        config={"minStartTime": "19:00"},
+        lock_silence=LockSilence.SOFT,
     ),
     # --- TIME maxEndTime (ALIGN-04, "finir avant") -----------------------------
     # HARD-only offer: the soft time path (add_preferred_time_bonus) reads only
@@ -91,10 +134,29 @@ MATRIX: tuple[MatrixCell, ...] = (
         True,
         note="wizard 'Fini avant' = session END must fall by the bound, always hard",
         config={"maxEndTime": "18:30"},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     # --- DAY forbiddenDays ------------------------------------------------------
-    MatrixCell("DAY", "HARD", "forbiddenDays", "TEAM", Expectation.HONORED_HARD, True, config={"forbiddenDays": [3]}),
-    MatrixCell("DAY", "LOCK", "forbiddenDays", "TEAM", Expectation.HONORED_HARD, True, config={"forbiddenDays": [3]}),
+    MatrixCell(
+        "DAY",
+        "HARD",
+        "forbiddenDays",
+        "TEAM",
+        Expectation.HONORED_HARD,
+        True,
+        config={"forbiddenDays": [3]},
+        lock_silence=LockSilence.DIAGNOSED,
+    ),
+    MatrixCell(
+        "DAY",
+        "LOCK",
+        "forbiddenDays",
+        "TEAM",
+        Expectation.HONORED_HARD,
+        True,
+        config={"forbiddenDays": [3]},
+        lock_silence=LockSilence.DIAGNOSED,
+    ),
     MatrixCell(
         "DAY",
         "PREFERRED",
@@ -104,6 +166,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         True,
         note="ENG-10 fix: soft 'avoid these days' (was a silent placebo)",
         config={"forbiddenDays": [3]},
+        lock_silence=LockSilence.SOFT,
     ),
     # --- FACILITY preferredVenueId ---------------------------------------------
     MatrixCell(
@@ -115,6 +178,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         True,
         note="HARD 'preferred' = forced venue",
         config={"preferredVenueId": "{good_venue}"},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     MatrixCell(
         "FACILITY",
@@ -125,6 +189,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         True,
         note="ENG-12 fix: LOCK venue = fixed venue (was dead)",
         config={"preferredVenueId": "{good_venue}"},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     MatrixCell(
         "FACILITY",
@@ -134,6 +199,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         Expectation.HONORED_SOFT,
         True,
         config={"preferredVenueId": "{good_venue}"},
+        lock_silence=LockSilence.SOFT,
     ),
     # --- FACILITY forbiddenVenueId ---------------------------------------------
     MatrixCell(
@@ -144,6 +210,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         Expectation.HONORED_HARD,
         True,
         config={"forbiddenVenueId": "{bad_venue}"},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     MatrixCell(
         "FACILITY",
@@ -153,6 +220,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         Expectation.HONORED_HARD,
         True,
         config={"forbiddenVenueId": "{bad_venue}"},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     MatrixCell(
         "FACILITY",
@@ -163,6 +231,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         True,
         note="ENG-11 fix: soft 'avoid this venue' (was escalated to a hard ban)",
         config={"forbiddenVenueId": "{bad_venue}"},
+        lock_silence=LockSilence.SOFT,
     ),
     # --- COACH_AVAILABILITY (UI forces HARD) -----------------------------------
     MatrixCell(
@@ -174,6 +243,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         True,
         note="ENG-13 fix: multiple constraints on one coach are UNIONed",
         config={"unavailableDays": [3]},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     MatrixCell(
         "COACH_AVAILABILITY",
@@ -184,6 +254,11 @@ MATRIX: tuple[MatrixCell, ...] = (
         False,
         note="UI forces HARD; a legacy soft row is enforced hard + INFO diagnostic",
         config={"unavailableDays": [3]},
+        lock_silence=LockSilence.UNBYPASSABLE,
+        lock_silence_reason=(
+            "coach availability is enforced HARD whatever the ruleType, and a legacy soft row is "
+            "ALREADY flagged at parse time (constraint_not_honored) — never silently applied"
+        ),
     ),
     MatrixCell(
         "COACH_AVAILABILITY",
@@ -194,6 +269,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         True,
         note="wizard 'coach disponible uniquement' = whitelist (INTERSECTION per coach)",
         config={"availableDays": [1]},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     # --- Legacy / guard cells ---------------------------------------------------
     MatrixCell(
@@ -205,6 +281,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         False,
         note="ENG-12: BONUS removed from the UI; legacy rows normalize to PREFERRED",
         config={"forbiddenDays": [3]},
+        lock_silence=LockSilence.SOFT,
     ),
     MatrixCell(
         "FACILITY",
@@ -215,6 +292,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         False,
         note="legacy BONUS → PREFERRED (soft avoid)",
         config={"forbiddenVenueId": "{bad_venue}"},
+        lock_silence=LockSilence.SOFT,
     ),
     MatrixCell(
         "DAY",
@@ -225,6 +303,11 @@ MATRIX: tuple[MatrixCell, ...] = (
         False,
         note="target-less scope: backend expands CLUB→teams; a stray one warns",
         config={"forbiddenDays": [3]},
+        lock_silence=LockSilence.UNBYPASSABLE,
+        lock_silence_reason=(
+            "target-less scope: never bound to a team, so there is no per-team enforcement for a "
+            "lock to bypass — a stray row is surfaced at parse time (constraint_not_honored)"
+        ),
     ),
     MatrixCell(
         "FACILITY",
@@ -235,6 +318,11 @@ MATRIX: tuple[MatrixCell, ...] = (
         False,
         note="target-less facility rule cannot be applied — explicit warning",
         config={"preferredVenueId": "{good_venue}"},
+        lock_silence=LockSilence.UNBYPASSABLE,
+        lock_silence_reason=(
+            "target-less scope: never bound to a team, so there is no per-team enforcement for a "
+            "lock to bypass — surfaced at parse time (constraint_not_honored)"
+        ),
     ),
     # --- FACILITY forcedVenueId / DAY allowedDays (wizard "impose"/"uniquement") --
     # The wizard edit form offers these as always-hard modes so seeded "must play
@@ -249,6 +337,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         True,
         note="wizard 'impose' = forced venue (must play here), always hard",
         config={"forcedVenueId": "{good_venue}"},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     # ALIGN-05: wizard "au moins N" = a FLOOR count at a venue (minAtVenueId +
     # minAtVenueCount), always hard. For a 1-session team it coincides with
@@ -264,6 +353,12 @@ MATRIX: tuple[MatrixCell, ...] = (
         note="wizard 'au moins N' = min sessions at venue (floor count), always hard",
         config={"minAtVenueId": "{good_venue}", "minAtVenueCount": 1},
         hard_only_bad_unplaced=False,
+        lock_silence=LockSilence.UNBYPASSABLE,
+        lock_silence_reason=(
+            "applied hard with only three outcomes — honored, INFEASIBLE→failed, or unreachable→"
+            "venue_minimum_unreachable ERROR diagnostic; it can never drift in silence, so listing "
+            "it in the lock diagnostic would be the very lie diagnose_locked_slot_violations forbids"
+        ),
     ),
     # ENG-16: the wizard "uniquement" maps to allowedDays (a WHITELIST: the engine
     # forbids every non-listed day) — NOT forcedDays, which only means "at least one
@@ -278,6 +373,7 @@ MATRIX: tuple[MatrixCell, ...] = (
         True,
         note="wizard 'uniquement' = whitelist, only these days allowed, always hard",
         config={"allowedDays": [1]},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     # --- Understood by the engine but never emitted by the wizard ---------------
     MatrixCell(
@@ -288,6 +384,11 @@ MATRIX: tuple[MatrixCell, ...] = (
         Expectation.NOT_OFFERED,
         False,
         note="engine-only: 'at least one session on these days' (≠ 'only'); the wizard emits allowedDays",
+        # Not offered by the UI, but the engine enforces it hard and diagnoses a lock that
+        # leaves the forced day unserved (section 2bis of diagnose_locked_slot_violations) —
+        # so the honest lock-silence label is DIAGNOSED, with a config the lock test can drive.
+        config={"forcedDays": [1]},
+        lock_silence=LockSilence.DIAGNOSED,
     ),
     MatrixCell(
         "DAY",
@@ -297,5 +398,6 @@ MATRIX: tuple[MatrixCell, ...] = (
         Expectation.NOT_OFFERED,
         False,
         note="objective reads it, wizard never emits it (ENG-10 root)",
+        lock_silence=LockSilence.SOFT,
     ),
 )
