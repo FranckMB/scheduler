@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import date, time, timedelta
 from typing import Any
 
+from app.main import read_contract_version
 from app.schemas.match_input_schema import MatchPlacementInputSchema
 from app.schemas.match_output_schema import MatchPlacementOutputSchema
 from app.solver.match_placement import AFTER_KICKOFF_MIN, BEFORE_KICKOFF_MIN, solve_match_placement
@@ -72,7 +73,8 @@ def wire_payload() -> dict[str, Any]:
     shape): 4 home matches to place, 1 manual anchor, 1 away, habits, a link,
     a MAIN-coach training, an unavailability and a league envelope."""
     return {
-        "version": "2.2",
+        # Version DÉRIVÉE de la source de vérité (engine/CONTRACT_VERSION).
+        "version": read_contract_version(),
         "clubId": "club-bccl",
         "seasonId": "season-2026",
         "solverSeed": 42,

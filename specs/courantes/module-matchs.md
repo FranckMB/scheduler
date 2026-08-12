@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-08-08 (statut posé ce jour ; fenêtres d'accès match visibles sur la grille des gymnases, 2026-08-04 ; P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle · PR E2 diagnostic gradué · PR F1 appariement FFBB · PR F2 garde-fou poule + complétude — **lot P1-4 SOLDÉ**)
+Last verified @ 2026-08-12 (P4-85 : les mentions « contrat 2.2 » / « payload 2.2 » recalées — le placement partage le MÊME contrat backend⇄engine que le solve hebdo, un seul `CONTRACT_VERSION` (2.4), plus de MINOR décoratif ici ; précédemment 2026-08-08 : statut posé ; fenêtres d'accès match visibles sur la grille des gymnases, 2026-08-04 ; P1-4 PR A import réel · PR B capacité · PR C habitudes+passerelles · PR D solveur de placement · PR E1 boucle manuelle · PR E2 diagnostic gradué · PR F1 appariement FFBB · PR F2 garde-fou poule + complétude — **lot P1-4 SOLDÉ**)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés
@@ -10,7 +10,7 @@ Last verified @ 2026-08-08 (statut posé ce jour ; fenêtres d'accès match visi
 > solveur + boucle manuelle). Ici = ce qui **existe** aujourd'hui. Module **fonctionnellement autonome** : ses entités, son moteur de conflits et sa
 > grille week-end ne dépendent pas du solveur d'entraînement, et rien de ce module n'entre dans le payload
 > du solve hebdo. Depuis la PR D il a **son propre solve** (`POST /place-matches`, second problème engine,
-> contrat 2.2 — § Solveur de placement).
+> **même contrat backend⇄engine** que le solve hebdo — un seul `CONTRACT_VERSION`, cf. § Solveur de placement).
 
 > ⚠ **Le module est autonome dans ses DONNÉES, pas dans son OUVERTURE.** Décision fondateur du
 > 2026-07-31 (arbitrage DOC-1) : le couplage livré fait foi, la spec d'évolution a été alignée
@@ -422,7 +422,7 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   SUBMITTED lecture seule), `FixtureFormDialog.test` +2 (édition pré-remplie équipe figée, warning
   bascule extérieur), `MatchesPage.test` +1 (clic grille → panneau boucle manuelle). E2e : verrou
   aller-retour + dé-placer sur la vraie stack.
-- Placement (PR D) : `MatchPlacementContractSchemaTest` (**phase1** : forme du payload 2.2 ; groupe
+- Placement (PR D) : `MatchPlacementContractSchemaTest` (**phase1** : forme du payload au contrat backend⇄engine ; groupe
   `contract` : POST au VRAI engine, kickoff rendu DANS la fenêtre — sémantique, pas un 200),
   `PlaceMatchesControllerTest` (gardes 403/409, samedi placé dans [14:30,16:15] + dimanche
   `no_access_window`, **ancre manuelle jamais réécrite**, 502 si engine down sans écriture),

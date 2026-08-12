@@ -146,7 +146,9 @@ final class ContractSchemaTest extends TestCase
 
     private function assertPayloadShape(array $payload): void
     {
-        self::assertSame('2.2', $payload['version']);
+        // Version DÉRIVÉE de la source (le builder l'attribue depuis sa constante) ;
+        // l'égalité constante⇄fichier est gardée par PayloadVersionMatchesContractVersionTest.
+        self::assertSame(ScheduleConstraintBuilder::CONTRACT_VERSION, $payload['version']);
         self::assertSame(self::CLUB_ID, $payload['clubId']);
         self::assertSame(self::SEASON_ID, $payload['seasonId']);
         self::assertIsInt($payload['solverSeed']);

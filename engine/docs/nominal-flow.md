@@ -156,7 +156,7 @@ Avant de lancer le solveur, le moteur acquiert un verrou asyncio specifique au `
 
 ### Verification de version
 
-Le moteur verifie que le **MAJOR** de `version` correspond au MAJOR de son contrat (`2` pour le contrat `2.2`) : `"2.0"` comme `"2.2"` sont acceptes — le MINOR est ignore, ce qui est precisement pourquoi une constante PHP restee a une ancienne valeur ne produit aucune erreur. Si le MAJOR differe, il retourne une erreur indiquant la version attendue et la version recue.
+Le moteur verifie que le **MAJOR** de `version` correspond au MAJOR de son contrat (`2` pour le contrat `2.4`) : `"2.0"` comme `"2.4"` sont acceptes — le MINOR est ignore. C'est pourquoi la version que le PAYLOAD s'attribue (constante PHP du builder) DOIT valoir exactement `engine/CONTRACT_VERSION` et non « un `2.x` quelconque » : sinon un changement de forme du payload sans bump de MAJOR passerait inapercu des deux cotes. Cette egalite stricte est gardee par `PayloadVersionMatchesContractVersionTest`. Si le MAJOR differe, le moteur retourne une erreur indiquant la version attendue et la version recue.
 
 ---
 

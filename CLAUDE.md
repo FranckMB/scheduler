@@ -71,6 +71,7 @@ Ce qu'il faut retenir en toute session :
 `Security/TenantCacheIsolationTest` (cache scopé club) ·
 `Queue/ConcurrentGenerationTest` (verrou de génération) ·
 `CrossStack/ContractSchemaTest` (contrat backend⇄engine) ·
+`CrossStack/PayloadVersionMatchesContractVersionTest` (la version que le payload s'attribue == `engine/CONTRACT_VERSION`, égalité STRICTE — la dérive avait vécu deux bumps en silence) ·
 `CrossStack/ValidateAssignmentsContractSchemaTest` (contrat du verdict `/validate-assignments`) ·
 `Security/RlsIsolationTest` (RLS en base) ·
 `Security/ClubAccessTest` + `Security/UserSelfOnlyTest` + `Security/ImportAuthorizationTest` (lockdown API tenant) ·

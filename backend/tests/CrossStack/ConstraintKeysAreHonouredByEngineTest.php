@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\CrossStack;
 
 use App\Service\ConstraintConfigValidator;
+use App\Service\ScheduleConstraintBuilder;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -262,7 +263,7 @@ final class ConstraintKeysAreHonouredByEngineTest extends TestCase
         }
 
         return [
-            'version' => '2.2',
+            'version' => ScheduleConstraintBuilder::CONTRACT_VERSION,
             'clubId' => 'club-proof',
             'seasonId' => 'season-proof',
             'solverSeed' => 42,
