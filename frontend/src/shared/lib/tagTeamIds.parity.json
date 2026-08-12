@@ -1,0 +1,35 @@
+{
+  "_comment": "P4-88 — cas de PARITÉ MÉCANIQUE du groupement « nom de tag → équipes ». Consommé par tagTeamIds.parity.test.ts (front, shared/lib/tagTeamIds.ts::buildTagTeamIds) ET par TagTeamIdsMirrorParityTest.php (backend, TeamTagResolver::teamIdsByTagName). `expected` est le verdict des deux implémentations (name → teamIds triés). Les assignations sont supposées DÉJÀ filtrées à la saison, comme les reçoit le front.",
+  "cases": [
+    {
+      "name": "un tag, deux équipes",
+      "tags": [{ "id": "t-reg", "name": "REGIONAL" }],
+      "assignments": [{ "teamId": "team-A", "tagId": "t-reg" }, { "teamId": "team-B", "tagId": "t-reg" }],
+      "expected": { "REGIONAL": ["team-A", "team-B"] }
+    },
+    {
+      "name": "deux tags — chacun ses équipes",
+      "tags": [{ "id": "t-reg", "name": "REGIONAL" }, { "id": "t-dep", "name": "DEPARTEMENTAL" }],
+      "assignments": [{ "teamId": "team-A", "tagId": "t-reg" }, { "teamId": "team-B", "tagId": "t-dep" }],
+      "expected": { "REGIONAL": ["team-A"], "DEPARTEMENTAL": ["team-B"] }
+    },
+    {
+      "name": "assignation vers un tagId INCONNU — ignorée (aucune clé)",
+      "tags": [{ "id": "t-reg", "name": "REGIONAL" }],
+      "assignments": [{ "teamId": "team-A", "tagId": "t-reg" }, { "teamId": "team-Z", "tagId": "t-fantome" }],
+      "expected": { "REGIONAL": ["team-A"] }
+    },
+    {
+      "name": "tag SANS aucune assignation — absent de la map (pas de clé)",
+      "tags": [{ "id": "t-reg", "name": "REGIONAL" }, { "id": "t-vide", "name": "VIDE" }],
+      "assignments": [{ "teamId": "team-A", "tagId": "t-reg" }],
+      "expected": { "REGIONAL": ["team-A"] }
+    },
+    {
+      "name": "aucune assignation du tout — map vide",
+      "tags": [{ "id": "t-reg", "name": "REGIONAL" }],
+      "assignments": [],
+      "expected": {}
+    }
+  ]
+}

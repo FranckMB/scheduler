@@ -32,6 +32,47 @@ final class TeamTagResolver implements ResetInterface
         private readonly LoggerInterface $logger,
     ) {}
 
+    /**
+     * LA règle de groupement « nom de tag → équipes qui le portent » sous forme PURE — le
+     * foyer côté serveur du calcul que `tagTeamIds()` fait par tag (résoudre une assignation
+     * vers le nom de son tag, collecter les teamId, ignorer un tagId inconnu).
+     *
+     * Extrait pour la parité MÉCANIQUE avec le foyer FRONT `shared/lib/tagTeamIds.ts::buildTagTeamIds`
+     * (le miroir client, utilisé par `applicableConstraints` ET `PeriodStructure`, P4-88) :
+     * cas partagés `tagTeamIds.parity.json`, gardés par `TagTeamIdsMirrorParityTest`. Les
+     * assignations sont supposées DÉJÀ filtrées à la saison (comme les reçoit le front) — la
+     * saison n'entre pas dans le groupement, seulement dans la requête de `tagTeamIds()`.
+     *
+     * @param list<array{id: string, name: string}>      $tags
+     * @param list<array{teamId: string, tagId: string}> $assignments
+     *
+     * @return array<string, list<string>> nom de tag => teamIds triés
+     */
+    public static function teamIdsByTagName(array $tags, array $assignments): array
+    {
+        $nameByTagId = [];
+        foreach ($tags as $tag) {
+            $nameByTagId[$tag['id']] = $tag['name'];
+        }
+
+        $byName = [];
+        foreach ($assignments as $assignment) {
+            $name = $nameByTagId[$assignment['tagId']] ?? null;
+            if (null === $name) {
+                continue; // tagId inconnu : aucune équipe, comme le NO-OP du backend
+            }
+            $byName[$name][] = $assignment['teamId'];
+        }
+
+        foreach ($byName as $name => $teamIds) {
+            $unique = array_values(array_unique($teamIds));
+            sort($unique);
+            $byName[$name] = $unique;
+        }
+
+        return $byName;
+    }
+
     public function reset(): void
     {
         $this->memo = [];

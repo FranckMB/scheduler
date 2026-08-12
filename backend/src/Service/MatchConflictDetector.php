@@ -84,6 +84,31 @@ final class MatchConflictDetector
     ) {}
 
     /**
+     * LE prédicat pur d'accès match — le coup d'envoi (H:i) tombe-t-il dans une fenêtre de
+     * (gymnase, jour) ? Intervalle DEMI-OUVERT `[start, end[`. Extrait pour la parité
+     * MÉCANIQUE avec le front (`matches/lib/matchAccess.ts::kickoffInsideWindow`, cas
+     * partagés `matchAccess.parity.json`, gardés par `MatchAccessMirrorParityTest`) : le
+     * front l'utilise pour BLOQUER la pose, le backend pour DIAGNOSTIQUER (ACCESS_WINDOW_LOST).
+     * L'enveloppe diverge (déclaré côté front), cette algèbre-ci ne doit pas.
+     *
+     * @param list<array{venueId: string, dayOfWeek: int, startTime: string, endTime: string}> $windows
+     */
+    public static function kickoffInsideWindow(string $venueId, int $day, string $kickoff, array $windows): bool
+    {
+        foreach ($windows as $window) {
+            if ($window['venueId'] === $venueId
+                && $window['dayOfWeek'] === $day
+                && $kickoff >= $window['startTime']
+                && $kickoff < $window['endTime']
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * @param list<Fixture>                                                                          $fixtures         season fixtures (already club+season scoped)
      * @param list<TeamCoach>                                                                        $teamCoachRows    coach↔team links (scoped)
      * @param string|null                                                                            $seasonScheduleId the season's calendar (the version its plan points at), or null
@@ -327,18 +352,13 @@ final class MatchConflictDetector
             }
             $day = (int) $fixture->getMatchDate()->format('N');
             $kickoff = $kickoffTime->format('H:i');
-            $inside = false;
-            foreach ($matchWindows as $window) {
-                if ($window->getVenueId() === $venueId
-                    && $window->getDayOfWeek() === $day
-                    && $kickoff >= $window->getStartTime()->format('H:i')
-                    && $kickoff < $window->getEndTime()->format('H:i')
-                ) {
-                    $inside = true;
-                    break;
-                }
-            }
-            if ($inside) {
+            $windowArrays = array_map(static fn (VenueMatchWindow $w): array => [
+                'venueId' => $w->getVenueId(),
+                'dayOfWeek' => $w->getDayOfWeek(),
+                'startTime' => $w->getStartTime()->format('H:i'),
+                'endTime' => $w->getEndTime()->format('H:i'),
+            ], $matchWindows);
+            if (self::kickoffInsideWindow($venueId, $day, $kickoff, $windowArrays)) {
                 continue;
             }
             $conflicts[] = [

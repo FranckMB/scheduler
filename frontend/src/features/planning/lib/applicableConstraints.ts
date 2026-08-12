@@ -33,6 +33,14 @@ export function isClubWide(constraint: Constraint): boolean {
  * `tagTeamIds` = la résolution tag→équipes (cf. `buildTagTeamIds`). Absente ou incomplète
  * (données pas encore lues, tag introuvable, tag sans équipe) → une CLUB+tag ne s'affiche
  * NULLE PART : sur-afficher serait re-mentir sur ce que le solveur applique.
+ *
+ * ⚠️ MIROIR DÉCLARÉ (régime 2, P4-88) — le `switch (scope)` d'`applies` reflète l'expansion
+ * du payload par `App\Service\ScheduleConstraintBuilder` (une CLUB+targetTag est ÉCLATÉE en N
+ * contraintes TEAM par équipe taguée ; TEAM→son équipe, FACILITY→son gymnase, COACH→son coach).
+ * C'est la redérivation qui a ouvert P4-88 (le `case "CLUB": return true` d'origine ignorait
+ * `targetTag`). La résolution tag→équipes est pinnée mécaniquement par `TagTeamIdsMirrorParityTest`
+ * (foyer partagé) ; la portée d'un tag l'est par `TeamTagScopeTest` (blocking). Ce module figure
+ * au registre `FrontRederivationRegistryTest`.
  */
 export function applicableConstraints(
   slot: Slot,

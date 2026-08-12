@@ -30,14 +30,15 @@ use UnitEnum;
 #[Group('contract')]
 final class TsUnionsMatchPhpEnumsTest extends TestCase
 {
-    private const string FRONT = __DIR__ . '/../../../frontend/src/features';
-
     /**
      * enum PHP => fichier TS qui porte l'union jumelle (nom d'union = nom de l'enum).
      *
+     * Publique : `FrontRederivationRegistryTest` réutilise cette liste (P4-88, la maison
+     * unique des enums métier franchissant la frontière) plutôt que d'en tenir une seconde.
+     *
      * @var array<string, string>
      */
-    private const array MIRRORED = [
+    public const array MIRRORED = [
         'ScheduleStatus' => 'planning/api.ts',
         'ScheduleDiagnosticSeverity' => 'planning/api.ts',
         'SchedulePlanType' => 'planning/api.ts',
@@ -56,6 +57,7 @@ final class TsUnionsMatchPhpEnumsTest extends TestCase
         'FixtureStatus' => 'matches/api.ts',
         'TeamLinkType' => 'matches/api.ts',
     ];
+    private const string FRONT = __DIR__ . '/../../../frontend/src/features';
 
     /**
      * Le nom de l'union TS quand il diffère de celui de l'enum PHP.

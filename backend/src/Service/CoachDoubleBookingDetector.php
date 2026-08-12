@@ -63,6 +63,30 @@ final class CoachDoubleBookingDetector
     ) {}
 
     /**
+     * LA règle pure de dédoublement de coach — le seul foyer, extrait pour être testable
+     * en parité MÉCANIQUE avec le front (`wizard/lib/coachDoubleBooking.ts::bookingsCollide`,
+     * cas partagés `coachDoubleBooking.parity.json`, gardé par `CoachDoubleBookingMirrorParityTest`).
+     * Les trois règles (fondateur 2026-07-31) :
+     *  3. même coach MAIN des deux côtés, équipes DIFFÉRENTES (la même équipe deux fois est
+     *     une double-réservation d'équipe, autre sujet) ;
+     *  2. gymnases DIFFÉRENTS (même gymnase = mutualisation `canSplit` voulue) ;
+     *  1. intervalles réels, demi-ouverts `[début, début+durée[` — deux créneaux qui se
+     *     touchent ne se chevauchent PAS.
+     *
+     * @param array{coachId: string, teamId: string, venueId: string, dayOfWeek: int, startMinutes: int, durationMinutes: int} $a
+     * @param array{coachId: string, teamId: string, venueId: string, dayOfWeek: int, startMinutes: int, durationMinutes: int} $b
+     */
+    public static function bookingsCollide(array $a, array $b): bool
+    {
+        return $a['coachId'] === $b['coachId']
+            && $a['teamId'] !== $b['teamId']
+            && $a['venueId'] !== $b['venueId']
+            && $a['dayOfWeek'] === $b['dayOfWeek']
+            && $a['startMinutes'] < $b['startMinutes'] + $b['durationMinutes']
+            && $b['startMinutes'] < $a['startMinutes'] + $a['durationMinutes'];
+    }
+
+    /**
      * @param list<Reservation> $reservations le périmètre EXACT qui partira au solveur
      *                                        (socle : `schedulePlanId IS NULL` ; période :
      *                                        son plan, gymnases désactivés déjà retirés)
@@ -281,31 +305,27 @@ final class CoachDoubleBookingDetector
      */
     private function collide(Reservation $first, Reservation $second, array $mainCoachByTeam): bool
     {
-        // Règle 3 : même coach MAIN des deux côtés, sinon aucun dédoublement.
-        if ($mainCoachByTeam[$first->getTeamId()] !== $mainCoachByTeam[$second->getTeamId()]) {
-            return false;
-        }
-        // La même équipe deux fois n'est pas un dédoublement de COACH (c'est une
-        // double-réservation d'équipe — autre sujet, hors P2-9 PR B).
-        if ($first->getTeamId() === $second->getTeamId()) {
-            return false;
-        }
-        // Règle 2 : même gymnase = mutualisation possible (canSplit + capacité), jamais
-        // une impossibilité physique. Le coach y est présent une seule fois.
-        if ($first->getVenueId() === $second->getVenueId()) {
-            return false;
-        }
-        if ($first->getDayOfWeek() !== $second->getDayOfWeek()) {
-            return false;
-        }
+        return self::bookingsCollide(
+            $this->bookingOf($first, $mainCoachByTeam),
+            $this->bookingOf($second, $mainCoachByTeam),
+        );
+    }
 
-        // Règle 1 : intervalles réels, demi-ouverts — deux créneaux qui se touchent
-        // (fin de l'un = début de l'autre) ne se chevauchent PAS.
-        $startA = (int) $first->getStartTime()->format('H') * 60 + (int) $first->getStartTime()->format('i');
-        $startB = (int) $second->getStartTime()->format('H') * 60 + (int) $second->getStartTime()->format('i');
-
-        return $startA < $startB + $second->getDurationMinutes()
-            && $startB < $startA + $first->getDurationMinutes();
+    /**
+     * @param array<string, string> $mainCoachByTeam
+     *
+     * @return array{coachId: string, teamId: string, venueId: string, dayOfWeek: int, startMinutes: int, durationMinutes: int}
+     */
+    private function bookingOf(Reservation $reservation, array $mainCoachByTeam): array
+    {
+        return [
+            'coachId' => $mainCoachByTeam[$reservation->getTeamId()] ?? '',
+            'teamId' => $reservation->getTeamId(),
+            'venueId' => $reservation->getVenueId(),
+            'dayOfWeek' => $reservation->getDayOfWeek(),
+            'startMinutes' => (int) $reservation->getStartTime()->format('H') * 60 + (int) $reservation->getStartTime()->format('i'),
+            'durationMinutes' => $reservation->getDurationMinutes(),
+        ];
     }
 
     /**

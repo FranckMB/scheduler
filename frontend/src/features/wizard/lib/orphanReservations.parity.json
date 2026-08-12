@@ -1,0 +1,36 @@
+{
+  "_comment": "P4-88 — cas de PARITÉ MÉCANIQUE du PRÉDICAT ÉTROIT « réservation orpheline par triplet (gymnase, jour, heure) ∉ grille ». Consommé par orphanReservations.parity.test.ts (front, wizard/lib/orphanReservations.ts::orphanReservationIds) ET par OrphanReservationsMirrorParityTest.php (backend, OrphanPinGuard::orphanTripletIds). `orphanIds` est le verdict que les DEUX implémentations du prédicat étroit doivent rendre. Le bloqueur COMPLET OrphanPinGuard::firstOrphanMessage est un SUR-ENSEMBLE (gymnases désactivés, jours de fermeture, verrous HARD) — les cas marqués `divergence` le montrent : le prédicat étroit dit `orphanIds: []` (front: non), le bloqueur complet refuserait (backend: oui). Cette divergence est VOULUE et gardée par les tests d'OrphanPinGuard, pas ici.",
+  "cases": [
+    {
+      "name": "la réservation retombe sur son créneau — pas orpheline",
+      "slots": [{ "venueId": "v1", "dayOfWeek": 2, "startTime": "18:00" }],
+      "reservations": [{ "id": "r1", "venueId": "v1", "dayOfWeek": 2, "startTime": "18:00" }],
+      "orphanIds": []
+    },
+    {
+      "name": "créneau DÉPLACÉ (18:00 → 18:30) : l'horaire n'existe plus — orpheline",
+      "slots": [{ "venueId": "v1", "dayOfWeek": 2, "startTime": "18:30" }],
+      "reservations": [{ "id": "r1", "venueId": "v1", "dayOfWeek": 2, "startTime": "18:00" }],
+      "orphanIds": ["r1"]
+    },
+    {
+      "name": "changement de JOUR et de GYMNASE — chaque triplet manquant est orphelin",
+      "slots": [{ "venueId": "v1", "dayOfWeek": 3, "startTime": "18:00" }, { "venueId": "v2", "dayOfWeek": 2, "startTime": "18:00" }],
+      "reservations": [{ "id": "jour", "venueId": "v1", "dayOfWeek": 2, "startTime": "18:00" }, { "id": "gym", "venueId": "v1", "dayOfWeek": 3, "startTime": "18:00" }],
+      "orphanIds": ["jour"]
+    },
+    {
+      "name": "heures NORMALISÉES : « 18:00:00 » (grille) et « 18:00 » (réservation) = même créneau",
+      "slots": [{ "venueId": "v1", "dayOfWeek": 2, "startTime": "18:00:00" }],
+      "reservations": [{ "id": "r1", "venueId": "v1", "dayOfWeek": 2, "startTime": "18:00" }],
+      "orphanIds": []
+    },
+    {
+      "divergence": "gymnase DÉSACTIVÉ mais réservation SUR la grille — prédicat étroit: NON-orpheline (front: non). Le bloqueur COMPLET OrphanPinGuard refuse (backend: oui, le gymnase désactivé sort du payload). Divergence ASSUMÉE : le front n'essaie pas d'être le bloqueur.",
+      "name": "sur-la-grille dans un gymnase désactivé — le prédicat étroit ne flagge PAS",
+      "slots": [{ "venueId": "v1", "dayOfWeek": 2, "startTime": "18:00" }],
+      "reservations": [{ "id": "r1", "venueId": "v1", "dayOfWeek": 2, "startTime": "18:00" }],
+      "orphanIds": []
+    }
+  ]
+}

@@ -15,6 +15,11 @@
  * commentée « mirrored server-side » sans garde. Deux copies du même calcul = la dérive
  * garantie ; elle ne vit plus qu'ici. `PeriodStructure` compose PAR-DESSUS un filtre
  * « équipes actives cette période » — un raffinement d'overlay, pas une seconde résolution.
+ *
+ * ⚠️ MIROIR DÉCLARÉ (régime 2) — parité MÉCANIQUE avec `App\Service\TeamTagResolver::teamIdsByTagName`
+ * (le foyer serveur du groupement), cas partagés `tagTeamIds.parity.json`, gardée par
+ * `TagTeamIdsMirrorParityTest`. Ce foyer, et les modules qui le consomment (applicableConstraints,
+ * PeriodStructure), figurent au registre `FrontRederivationRegistryTest`.
  */
 export function buildTagTeamIds(
   tags: readonly { id: string; name: string }[],

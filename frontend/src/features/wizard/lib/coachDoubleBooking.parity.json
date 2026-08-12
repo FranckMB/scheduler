@@ -1,0 +1,47 @@
+{
+  "_comment": "P4-88 — cas de PARITÉ MÉCANIQUE de la règle de dédoublement de coach. Consommé par coachDoubleBooking.parity.test.ts (front, wizard/lib/coachDoubleBooking.ts::bookingsCollide) ET par CoachDoubleBookingMirrorParityTest.php (backend, CoachDoubleBookingDetector::bookingsCollide). Chaque `collide` est LE verdict attendu des deux implémentations : changer une règle d'un seul côté rougit le côté qui dérive. Ne pas éditer une seule des deux implémentations sans porter le cas ici.",
+  "cases": [
+    {
+      "name": "deux gymnases, chevauchement réel sans même début — dédouble (règle 1)",
+      "a": { "coachId": "c1", "teamId": "tA", "venueId": "v1", "dayOfWeek": 2, "startMinutes": 1020, "durationMinutes": 90 },
+      "b": { "coachId": "c1", "teamId": "tB", "venueId": "v2", "dayOfWeek": 2, "startMinutes": 1050, "durationMinutes": 90 },
+      "collide": true
+    },
+    {
+      "name": "créneaux qui se touchent (fin = début) — intervalle demi-ouvert, PAS de dédoublement",
+      "a": { "coachId": "c1", "teamId": "tA", "venueId": "v1", "dayOfWeek": 2, "startMinutes": 1020, "durationMinutes": 90 },
+      "b": { "coachId": "c1", "teamId": "tB", "venueId": "v2", "dayOfWeek": 2, "startMinutes": 1110, "durationMinutes": 90 },
+      "collide": false
+    },
+    {
+      "name": "coachs DIFFÉRENTS — jamais de dédoublement (règle 3)",
+      "a": { "coachId": "c1", "teamId": "tA", "venueId": "v1", "dayOfWeek": 2, "startMinutes": 1020, "durationMinutes": 90 },
+      "b": { "coachId": "c2", "teamId": "tB", "venueId": "v2", "dayOfWeek": 2, "startMinutes": 1020, "durationMinutes": 90 },
+      "collide": false
+    },
+    {
+      "name": "MÊME gymnase — mutualisation voulue, pas un dédoublement (règle 2)",
+      "a": { "coachId": "c1", "teamId": "tA", "venueId": "v1", "dayOfWeek": 2, "startMinutes": 1020, "durationMinutes": 90 },
+      "b": { "coachId": "c1", "teamId": "tB", "venueId": "v1", "dayOfWeek": 2, "startMinutes": 1020, "durationMinutes": 90 },
+      "collide": false
+    },
+    {
+      "name": "MÊME équipe deux fois — double-réservation d'équipe, autre sujet (pas coach)",
+      "a": { "coachId": "c1", "teamId": "tA", "venueId": "v1", "dayOfWeek": 2, "startMinutes": 1020, "durationMinutes": 90 },
+      "b": { "coachId": "c1", "teamId": "tA", "venueId": "v2", "dayOfWeek": 2, "startMinutes": 1020, "durationMinutes": 90 },
+      "collide": false
+    },
+    {
+      "name": "jours différents — aucun chevauchement possible",
+      "a": { "coachId": "c1", "teamId": "tA", "venueId": "v1", "dayOfWeek": 2, "startMinutes": 1020, "durationMinutes": 90 },
+      "b": { "coachId": "c1", "teamId": "tB", "venueId": "v2", "dayOfWeek": 3, "startMinutes": 1020, "durationMinutes": 90 },
+      "collide": false
+    },
+    {
+      "name": "même début exact, deux gymnases — dédouble",
+      "a": { "coachId": "c1", "teamId": "tA", "venueId": "v1", "dayOfWeek": 5, "startMinutes": 1080, "durationMinutes": 60 },
+      "b": { "coachId": "c1", "teamId": "tB", "venueId": "v2", "dayOfWeek": 5, "startMinutes": 1080, "durationMinutes": 120 },
+      "collide": true
+    }
+  ]
+}

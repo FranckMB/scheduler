@@ -921,7 +921,13 @@ function PeriodConstraintsPanel({
   }, [activeTeamIds, tagTeamIdsByName]);
   const needsTagResolution = constraints.some((c) => "string" === typeof c.config?.targetTag && "" !== c.config.targetTag);
   const tagResolutionReady = !needsTagResolution || (!tagsLoading && !tagAssignmentsLoading && !tagsError && !tagAssignmentsError);
-  // Smart default, mirrored server-side (ScheduleConstraintBuilder::inheritedPermanents, reprise predicate).
+  // ⚠️ MIROIR DÉCLARÉ (régime 2, P4-88). Deux branchements sur les valeurs d'un enum de
+  // contrainte, reflétant le serveur :
+  //  - `defaultKept` (scope) reflète `ScheduleConstraintBuilder::inheritedPermanents` (prédicat
+  //    reprise) — FACILITY tombe, TEAM garde si l'équipe reprend, CLUB/COACH gardés ;
+  //  - `hidden` (CLUB + targetTag sans équipe active) reflète l'expansion du payload.
+  // La résolution tag→équipes (`buildTagTeamIds`, foyer partagé) est pinnée mécaniquement par
+  // `TagTeamIdsMirrorParityTest`. Ce module figure au registre `FrontRederivationRegistryTest`.
   const defaultKept = (c: Constraint): boolean => {
     if (isClosure) {
       return true; // fermeture: everything kept by default (B3+F2 unchanged)
