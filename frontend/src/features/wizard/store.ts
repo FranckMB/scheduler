@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { DeepLinkOrigin } from "./lib/deepLink";
 import { WIZARD_STEPS, type WizardStepId } from "./lib/steps";
 
 /** "season" = base plan (onboarding/libre); "period" = overlay of a CalendarEntry (palier B). */
@@ -25,6 +26,14 @@ interface WizardState {
   startPeriodMode: (calendarEntryId: string) => void;
   /** Back to base-plan mode. */
   exitPeriodMode: () => void;
+  /**
+   * P2-25 — origine du RETOUR NOMMÉ quand on est arrivé par un deep-link (règle C fondateur) :
+   * ÉPHÉMÈRE (jamais persisté, cf. partialize) et effacé dès qu'on agit ou qu'on repart, sinon
+   * il mentirait sur la provenance ou traînerait un contexte périmé.
+   */
+  deepLinkOrigin: DeepLinkOrigin | null;
+  setDeepLinkOrigin: (origin: DeepLinkOrigin | null) => void;
+  clearDeepLinkOrigin: () => void;
 }
 
 const indexOf = (id: WizardStepId): number => WIZARD_STEPS.findIndex((s) => s.id === id);
@@ -50,10 +59,16 @@ export const useWizardStore = create<WizardState>()(
         }),
       startPeriodMode: (calendarEntryId) => set({ mode: "period", calendarEntryId, stepId: "constraints", maxIndex: WIZARD_STEPS.length - 1 }),
       exitPeriodMode: () => set({ mode: "season", calendarEntryId: null, stepId: "teams" }),
+      deepLinkOrigin: null,
+      setDeepLinkOrigin: (deepLinkOrigin) => set({ deepLinkOrigin }),
+      clearDeepLinkOrigin: () => set({ deepLinkOrigin: null }),
     }),
     {
       name: "cs-wizard",
       version: 4,
+      // Le retour nommé est un état de session, jamais du localStorage : le rehydrater
+      // ferait réapparaître « ← Retour à … » sur une simple ouverture du wizard, sans lien.
+      partialize: (state) => ({ stepId: state.stepId, maxIndex: state.maxIndex, mode: state.mode, calendarEntryId: state.calendarEntryId }),
       migrate: (persistedState) => {
         // v4 dropped the client `reservations` slice (moved server-side).
         const prev = (null !== persistedState && "object" === typeof persistedState ? persistedState : {}) as Partial<WizardState>;

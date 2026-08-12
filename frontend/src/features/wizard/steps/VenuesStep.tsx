@@ -1,5 +1,6 @@
 import { Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
@@ -282,6 +283,28 @@ function VenuesEditor() {
     const persisted = new Set(venues.map((v) => v.color?.toLowerCase()).filter((c): c is string => undefined !== c && null !== c));
     pendingColorsRef.current = pendingColorsRef.current.filter((c) => !persisted.has(c.toLowerCase()));
   }, [venues]);
+
+  // P2-25 — deep-link `?step=venues&slot=X` : on POSITIONNE sur CE créneau (on sélectionne son
+  // gymnase ET on ouvre son éditeur), pas seulement sur l'écran — arriver sur l'étape sans être
+  // sur l'objet ne corrige pas la douleur du fondateur. Un slot introuvable (encore en
+  // chargement, ou supprimé) → no-op : atterrissage propre sur l'étape, jamais un écran cassé.
+  const [searchParams] = useSearchParams();
+  const clearDeepLinkOrigin = useWizardStore((s) => s.clearDeepLinkOrigin);
+  const slotTarget = searchParams.get("slot");
+  const consumedSlotRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (null === slotTarget || consumedSlotRef.current === slotTarget) {
+      return;
+    }
+    const slot = slots.find((s) => s.id === slotTarget);
+    if (undefined === slot) {
+      return; // chargement ou id inconnu → on retentera au prochain render (dep sur slots)
+    }
+    consumedSlotRef.current = slotTarget;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot : positionne sur le créneau ciblé (sélection du gymnase + ouverture de son éditeur)
+    setSelectedId(slot.venueId);
+    setEditingSlot(slot);
+  }, [slotTarget, slots]);
   const pendingDeleteSlotCount = pendingDeleteVenue ? slots.filter((s) => s.venueId === pendingDeleteVenue.id).length : 0;
   const pendingDeleteReservationCount = pendingDeleteVenue ? reservations.filter((r) => r.venueId === pendingDeleteVenue.id).length : 0;
 
@@ -618,7 +641,20 @@ function VenuesEditor() {
           />
 
           {null !== editingSlot ? (
-            <SlotEditor key={editingSlot.id} slot={editingSlot} canSplit={selected.canSplit} otherSlots={venueSlots.filter((s) => s.id !== editingSlot.id)} onClose={() => setEditingSlot(null)} />
+            <SlotEditor
+              key={editingSlot.id}
+              slot={editingSlot}
+              canSplit={selected.canSplit}
+              otherSlots={venueSlots.filter((s) => s.id !== editingSlot.id)}
+              onClose={() => {
+                // Fermer l'éditeur du créneau ciblé = « on a agi » → le retour nommé s'efface.
+                const closingId = editingSlot.id;
+                setEditingSlot(null);
+                if (closingId === consumedSlotRef.current) {
+                  clearDeepLinkOrigin();
+                }
+              }}
+            />
           ) : null}
 
           {/* P1-4 PR B — accès MATCH du gymnase : le document qui donne les

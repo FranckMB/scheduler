@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { WizardStepLink } from "@/features/wizard/WizardStepLink";
 
 import type { Constraint, LockOrigin, MoveViolation, Slot, SlotMovePatch, Venue } from "./api";
 import { applicableConstraints, isClubWide } from "./lib/applicableConstraints";
@@ -77,12 +78,25 @@ function ConstraintList({ label, items, describe }: { label: string; items: Cons
           const what = describe(c);
 
           return (
-            <li key={c.id} className="flex items-start justify-between gap-2 text-sm">
-              <span className="min-w-0">
-                <span className="block">{what ?? c.name}</span>
-                {null !== what ? <span className="block truncate text-xs text-muted-foreground">{c.name}</span> : null}
-              </span>
-              <span className="mt-0.5 shrink-0 rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{"HARD" === c.ruleType ? "obligatoire" : "préférence"}</span>
+            <li key={c.id} className="flex flex-col gap-0.5 text-sm">
+              <div className="flex items-start justify-between gap-2">
+                <span className="min-w-0">
+                  <span className="block">{what ?? c.name}</span>
+                  {null !== what ? <span className="block truncate text-xs text-muted-foreground">{c.name}</span> : null}
+                </span>
+                <span className="mt-0.5 shrink-0 rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{"HARD" === c.ruleType ? "obligatoire" : "préférence"}</span>
+              </div>
+              {/* P2-25 lien B — un problème DÉSIGNÉ (la règle qui contraint ce créneau) mène à son
+                  lieu de correction : l'éditeur du wizard, ouvert PRÉ-REMPLI sur elle. Retour nommé
+                  « ← Retour au planning ». */}
+              <WizardStepLink
+                step="constraints"
+                params={{ edit: c.id }}
+                from="planning"
+                className="self-start text-xs font-medium text-accent underline underline-offset-2 hover:text-accent/80"
+              >
+                Corriger cette contrainte
+              </WizardStepLink>
             </li>
           );
         })}

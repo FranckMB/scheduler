@@ -1,7 +1,7 @@
 import { HTTPError } from "ky";
-import { AlertTriangle, CalendarClock, Check, ChevronsDown, ChevronsUp, Lock, MessageSquare, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarClock, Check, ChevronsDown, ChevronsUp, Lock, MessageSquare, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { useBlocker, useNavigate } from "react-router";
+import { useBlocker, useNavigate, useSearchParams } from "react-router";
 
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -19,6 +19,7 @@ import { cn } from "@/shared/lib/utils";
 
 import { toast } from "@/shared/stores/toastStore";
 
+import { parseWizardDeepLink, stepLockReason } from "./lib/deepLink";
 import { WizardFooterContext } from "./lib/footerSlot";
 import { WIZARD_STEPS, type WizardStepId } from "./lib/steps";
 import { useStepValidation } from "./lib/useStepValidation";
@@ -86,7 +87,7 @@ function ScrollJumpButtons({ suppressed }: { suppressed: boolean }) {
 }
 
 export function WizardPage() {
-  const { stepId, maxIndex, mode, calendarEntryId, setStep, jumpTo, next, prev, exitPeriodMode } = useWizardStore();
+  const { stepId, maxIndex, mode, calendarEntryId, setStep, jumpTo, next, prev, exitPeriodMode, deepLinkOrigin, setDeepLinkOrigin, clearDeepLinkOrigin } = useWizardStore();
   const { data: me } = useMe();
   const navigate = useNavigate();
   const periodMode = "period" === mode;
@@ -158,6 +159,45 @@ export function WizardPage() {
   // until reached via "Suivant". Existing clubs edit freely. Period mode is never
   // guided (structure is inherited read-only; nav is open).
   const guided = !periodMode && !me?.seasonPlan?.hasFinishedVersion;
+
+  // ── P2-25 — porte d'entrée : l'URL décide l'étape (adressabilité) ──
+  // On AJOUTE une lecture d'URL, on ne réécrit PAS la navigation interne (jumpTo/maxIndex/
+  // l'atterrissage guidé restent tels quels). Chaque deep-link n'est appliqué qu'UNE fois
+  // (clé = querystring) : ni boucle, ni combat avec la navigation manuelle.
+  const [searchParams] = useSearchParams();
+  const deepLink = useMemo(() => parseWizardDeepLink(searchParams), [searchParams]);
+  const appliedDeepLinkRef = useRef<string | null>(null);
+  // L'étape sur laquelle le deep-link a fait atterrir — sert au retour nommé éphémère.
+  const landedStepRef = useRef<WizardStepId | null>(null);
+  useEffect(() => {
+    // On attend de CONNAÎTRE le statut guidé (me chargé) avant d'appliquer : sans lui, la
+    // vérification de verrou serait fausse. me est en cache app-wide → instantané en pratique.
+    if (null === deepLink.step || undefined === me) {
+      return;
+    }
+    const key = searchParams.toString();
+    if (appliedDeepLinkRef.current === key) {
+      return;
+    }
+    appliedDeepLinkRef.current = key;
+    // Étape verrouillée en mode guidé : on NE saute PAS (atterrissage propre). Le lien SOURCE
+    // est déjà rendu désactivé (WizardStepLink) ; ceci protège une URL tapée/collée à la main.
+    if (null !== stepLockReason(deepLink.step, { guided, maxIndex })) {
+      return;
+    }
+    jumpTo(deepLink.step);
+    landedStepRef.current = deepLink.step;
+    setDeepLinkOrigin(deepLink.origin);
+  }, [deepLink, searchParams, guided, maxIndex, me, jumpTo, setDeepLinkOrigin]);
+
+  // Retour nommé ÉPHÉMÈRE : dès qu'on repart (changement d'étape), il s'efface — sinon il
+  // mentirait sur la provenance. L'« agir » (éditer/enregistrer) est effacé par l'étape elle-même.
+  useEffect(() => {
+    if (null !== deepLinkOrigin && null !== landedStepRef.current && stepId !== landedStepRef.current) {
+      clearDeepLinkOrigin();
+      landedStepRef.current = null;
+    }
+  }, [stepId, deepLinkOrigin, clearDeepLinkOrigin]);
 
   // On first entry of a guided wizard, land on the first incomplete step (no
   // team → Équipes, …); when everything is filled, land on Récap — the last
@@ -317,6 +357,26 @@ export function WizardPage() {
 
   return (
     <WizardFooterContext.Provider value={footerCtx}>
+      {/* P2-25 — retour NOMMÉ, affiché SEULEMENT si on est arrivé par un lien (deepLinkOrigin
+          posé par la porte d'entrée). Il nomme l'origine et s'efface dès qu'on repart/agit.
+          Une flèche nue serait ambiguë avec le retour navigateur : le libellé dit où l'on va. */}
+      {null !== deepLinkOrigin ? (
+        <div className="mb-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const to = deepLinkOrigin.returnTo;
+              clearDeepLinkOrigin();
+              landedStepRef.current = null;
+              navigate(to);
+            }}
+          >
+            <ArrowLeft className="size-4" />
+            {deepLinkOrigin.label}
+          </Button>
+        </div>
+      ) : null}
       {periodMode ? (
         // P4-38 — DEUX lignes plutôt qu'une. La forme d'origine accolait les dates au titre
         // et alignait quatre actions à droite : sur un titre long (« Vacances d'Été —

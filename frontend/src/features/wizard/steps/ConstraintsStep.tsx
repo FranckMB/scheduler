@@ -1,5 +1,6 @@
 import { Check, Lock, Pencil, Plus, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
@@ -80,6 +81,7 @@ export function ConstraintsStep() {
   // « écrivable » — et la réservation partirait sur le SOCLE du club alors que l'écran
   // annonce une période. On exige donc `period` en mode période, jamais `base`.
   const periodMode = useWizardStore((s) => "period" === s.mode);
+  const clearDeepLinkOrigin = useWizardStore((s) => s.clearDeepLinkOrigin);
   // Les RÉSERVATIONS pendent au plan (inv. 5, lot C3) ; les contraintes DATÉES restent
   // ancrées à l'entrée — elles décrivent le FAIT, et le radar les lit par elle.
   //
@@ -308,7 +310,8 @@ export function ConstraintsStep() {
     }
     if (null !== editingId) {
       // Edit: PUT the existing row, keep it active, then clear the whole form.
-      update.mutate({ id: editingId, body: { ...payload, isActive: true } }, { onSuccess: resetForm });
+      // P2-25 — enregistrer la contrainte ciblée = « on a agi » → le retour nommé s'efface.
+      update.mutate({ id: editingId, body: { ...payload, isActive: true } }, { onSuccess: () => (resetForm(), clearDeepLinkOrigin()) });
       return;
     }
     // Create: keep the target/rule for rapid multi-add, clear only the values.
@@ -383,6 +386,37 @@ export function ConstraintsStep() {
     // erreur NON GÉRÉE (4 tests voisins pollués avant ce garde-fou).
     requestAnimationFrame(() => formRef.current?.scrollIntoView?.({ block: "center", behavior: "smooth" }));
   };
+
+  // ── P2-25 — porte d'entrée : l'URL peut ouvrir l'onglet et l'éditeur (une fois chacun) ──
+  const [searchParams] = useSearchParams();
+  const editTarget = searchParams.get("edit");
+  const tabTarget = searchParams.get("tab");
+  const consumedEditRef = useRef<string | null>(null);
+  const consumedTabRef = useRef(false);
+  // `?tab=reserve` (cible du « Retour à la réservation ») → bascule une fois sur l'onglet Réserver.
+  useEffect(() => {
+    if (consumedTabRef.current || "reserve" !== tabTarget) {
+      return;
+    }
+    consumedTabRef.current = true;
+    setMode("reserve");
+  }, [tabTarget]);
+  // `?step=constraints&edit=Y` → ouvre l'éditeur PRÉ-REMPLI sur Y (editConstraint = inverse de
+  // build()). Introuvable (id supprimé, autre couche) → no-op : atterrissage propre, jamais un
+  // écran cassé. `constraints` en dep : quand la liste charge, on retente et on POSITIONNE.
+  useEffect(() => {
+    if (null === editTarget || consumedEditRef.current === editTarget) {
+      return;
+    }
+    const target = constraints.find((c) => c.id === editTarget);
+    if (undefined === target) {
+      return;
+    }
+    consumedEditRef.current = editTarget;
+    // editConstraint (inverse de build()) écrit plusieurs états ; ref consommé = one-shot.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot : positionne l'éditeur PRÉ-REMPLI sur la contrainte ciblée
+    editConstraint(target);
+  }, [editTarget, constraints]);
 
   // Only groups (tags) that ACTUALLY concern a team of the club: the backend
   // always creates the 21 system tags, but a group with no assigned team (e.g.

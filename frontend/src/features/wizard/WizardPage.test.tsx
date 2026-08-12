@@ -166,6 +166,92 @@ describe("Wizard (integration)", () => {
     expect(deleteEntryMutateAsync).not.toHaveBeenCalled();
   });
 
+  // ── P2-25 — le wizard est adressable ; un lien atterrit SUR l'objet, pas sur l'écran ──
+  describe("deep-links (P2-25)", () => {
+    beforeEach(() => {
+      useWizardStore.setState({ maxIndex: 0, deepLinkOrigin: null });
+    });
+
+    it("`?step=venues&slot=X` ouvre le wizard SUR le créneau X (étape Gymnases + éditeur du créneau)", async () => {
+      vi.mocked(api.listVenues).mockResolvedValue([{ id: "v1", name: "Gymnase A", color: "#3498DB", canSplit: true, isActive: true, externalRef: null }]);
+      vi.mocked(api.listVenueSlots).mockResolvedValue([{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }]);
+      renderWithProviders(<WizardPage />, { route: "/wizard?step=venues&slot=s1" });
+
+      // Sur l'ÉCRAN : l'étape Gymnases est rendue…
+      expect(await screen.findByText(/Ajoutez vos gymnases/)).toBeInTheDocument();
+      // …et sur l'OBJET : l'éditeur du créneau s1 est ouvert. C'EST le cœur du lot — sans
+      // positionnement, l'écran serait là mais pas l'objet (falsification).
+      expect(await screen.findByText("Modifier le créneau")).toBeInTheDocument();
+    });
+
+    it("un slot inconnu (id supprimé) → atterrissage propre sur l'étape, sans éditeur ni écran cassé", async () => {
+      vi.mocked(api.listVenues).mockResolvedValue([{ id: "v1", name: "Gymnase A", color: "#3498DB", canSplit: true, isActive: true, externalRef: null }]);
+      vi.mocked(api.listVenueSlots).mockResolvedValue([{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }]);
+      renderWithProviders(<WizardPage />, { route: "/wizard?step=venues&slot=ghost" });
+
+      expect(await screen.findByText(/Ajoutez vos gymnases/)).toBeInTheDocument();
+      expect(screen.queryByText("Modifier le créneau")).not.toBeInTheDocument();
+    });
+
+    it("`?step=constraints&edit=Y` ouvre l'éditeur PRÉ-REMPLI sur la contrainte Y", async () => {
+      vi.mocked(api.listConstraints).mockResolvedValue([
+        { id: "k1", name: "Toutes · pas après 19:50", scope: "CLUB", scopeTargetId: null, family: "TIME", ruleType: "PREFERRED", config: { maxStartTime: "19:50" }, isActive: true },
+      ]);
+      renderWithProviders(<WizardPage />, { route: "/wizard?step=constraints&edit=k1" });
+
+      // Édition en cours (le bouton bascule en « Enregistrer ») ET le champ est PRÉ-REMPLI sur la
+      // valeur de la contrainte — arriver sur l'écran ne suffit pas, il faut être SUR l'objet.
+      expect(await screen.findByRole("button", { name: "Enregistrer la contrainte" })).toBeInTheDocument();
+      expect(await screen.findByLabelText("Pas après")).toHaveValue("19:50");
+    });
+
+    it("un `edit=` inconnu → onglet Contraintes propre, aucun éditeur en cours", async () => {
+      vi.mocked(api.listConstraints).mockResolvedValue([]);
+      renderWithProviders(<WizardPage />, { route: "/wizard?step=constraints&edit=ghost" });
+
+      // L'écran de contraintes est là (bouton « Ajouter »), mais pas en mode édition.
+      expect(await screen.findByRole("button", { name: "Ajouter la contrainte" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Enregistrer la contrainte" })).not.toBeInTheDocument();
+    });
+
+    it("une `step` inconnue → atterrissage propre (l'étape par défaut), pas d'écran cassé", async () => {
+      renderWithProviders(<WizardPage />, { route: "/wizard?step=zzz&slot=s1" });
+      // Reste sur Équipes (l'étape courante), aucun saut.
+      expect(await screen.findByDisplayValue("SF1")).toBeInTheDocument();
+    });
+
+    describe("retour nommé (règle C)", () => {
+      it("apparaît SEULEMENT quand on est arrivé par un lien (from=), et nomme l'origine", async () => {
+        vi.mocked(api.listVenues).mockResolvedValue([{ id: "v1", name: "Gymnase A", color: "#3498DB", canSplit: true, isActive: true, externalRef: null }]);
+        vi.mocked(api.listVenueSlots).mockResolvedValue([{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }]);
+        renderWithProviders(<WizardPage />, { route: "/wizard?step=venues&slot=s1&from=reservation" });
+        expect(await screen.findByRole("button", { name: /Retour à la réservation/ })).toBeInTheDocument();
+      });
+
+      it("ABSENT quand on ouvre l'étape sans lien (aucun from=)", async () => {
+        vi.mocked(api.listVenues).mockResolvedValue([{ id: "v1", name: "Gymnase A", color: "#3498DB", canSplit: true, isActive: true, externalRef: null }]);
+        vi.mocked(api.listVenueSlots).mockResolvedValue([{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }]);
+        renderWithProviders(<WizardPage />, { route: "/wizard?step=venues&slot=s1" });
+        await screen.findByText(/Ajoutez vos gymnases/);
+        expect(screen.queryByRole("button", { name: /Retour à/ })).not.toBeInTheDocument();
+      });
+
+      it("ÉPHÉMÈRE : disparaît dès qu'on repart (changement d'étape)", async () => {
+        const user = userEvent.setup();
+        vi.mocked(api.listVenues).mockResolvedValue([{ id: "v1", name: "Gymnase A", color: "#3498DB", canSplit: true, isActive: true, externalRef: null }]);
+        vi.mocked(api.listVenueSlots).mockResolvedValue([{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 120, capacity: 1 }]);
+        // maxIndex haut → toutes les étapes du rail sont cliquables (club établi de toute façon).
+        useWizardStore.setState({ maxIndex: 5, deepLinkOrigin: null });
+        renderWithProviders(<WizardPage />, { route: "/wizard?step=venues&slot=s1&from=reservation" });
+
+        expect(await screen.findByRole("button", { name: /Retour à la réservation/ })).toBeInTheDocument();
+        // On repart : « Précédent » change d'étape (Gymnases → Équipes) → le retour nommé s'efface.
+        await user.click(screen.getByRole("button", { name: "Précédent" }));
+        await waitFor(() => expect(screen.queryByRole("button", { name: /Retour à la réservation/ })).not.toBeInTheDocument());
+      });
+    });
+  });
+
   it("enters sort mode from the footer « Trier » button and shows the tier drop zones", async () => {
     const user = userEvent.setup();
     renderWithProviders(<WizardPage />, { route: "/wizard" });
