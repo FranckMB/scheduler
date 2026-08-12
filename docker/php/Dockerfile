@@ -35,9 +35,10 @@ RUN apt-get update \
         pdo_pgsql \
         sockets \
         zip \
-    && mkdir -p /usr/src/php/ext/redis \
-    && curl -fsSL https://github.com/phpredis/phpredis/archive/6.3.0.tar.gz | tar xz -C /usr/src/php/ext/redis --strip-components 1 \
-    && docker-php-ext-install redis \
+    # P4-89 — phpredis via PECL (miroir pecl.php.net), pas via codeload GitHub :
+    # trois jobs CI tués le 2026-08-12 par un 503 GitHub sur cette couche.
+    && pecl install redis-6.3.0 \
+    && docker-php-ext-enable redis \
     && echo "memory_limit = 512M" > /usr/local/etc/php/conf.d/zz-memory.ini \
     && echo "max_execution_time = 0" >> /usr/local/etc/php/conf.d/zz-memory.ini \
     && rm -rf /var/lib/apt/lists/*
