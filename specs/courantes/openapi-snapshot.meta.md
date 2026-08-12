@@ -1,6 +1,11 @@
-Last verified @ 2026-08-12 (JSON **régénéré** — P4-79 : `Team.allowMultipleSessionsPerDay` retiré, contrat 2.5, + rattrapage `constraintsChangedSinceGeneration`)
+Last verified @ 2026-08-13 (JSON **régénéré** — P4-87 : `Schedule.resourcesChangedSinceGeneration` exposé en lecture)
 
 Changements récents :
+- **P4-87 — troisième marqueur de péremption (2026-08-13)** : le schéma de LECTURE `Schedule`
+  gagne `resourcesChangedSinceGeneration` (bool, défaut false) — vrai quand une DONNÉE DU CLUB
+  (gymnase, coach, créneau/grille de période, réservation, override, tag, calendrier) a changé
+  depuis la génération. Aucune route ni opération changée (property-only). Le front lit ce
+  marqueur pour la bannière unifiée de péremption (fusionnée avec `structureDiverged`).
 - **P4-78/P4-79 — contrat 2.5 (2026-08-12)** : `Team.allowMultipleSessionsPerDay` **quitte** le
   contrat (levier mort retiré de bout en bout — le schéma engine le REFUSE désormais,
   `extra_forbidden`). ⚑ Rattrapage au passage : `Schedule.constraintsChangedSinceGeneration`

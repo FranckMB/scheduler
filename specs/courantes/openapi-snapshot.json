@@ -20991,6 +20991,11 @@
                         "default": false,
                         "type": "boolean"
                     },
+                    "resourcesChangedSinceGeneration": {
+                        "description": "Une donn\u00e9e du club autre qu'une contrainte (gymnase, coach, cr\u00e9neau, grille de p\u00e9riode,\nr\u00e9servation, override, tag d'\u00e9quipe, calendrier) a-t-elle chang\u00e9 depuis la g\u00e9n\u00e9ration de\nce planning ? Vrai \u21d2 ce planning d\u00e9crit un \u00e9tat ANT\u00c9RIEUR des donn\u00e9es \u2014 pas faux, P\u00c9RIM\u00c9.",
+                        "default": false,
+                        "type": "boolean"
+                    },
                     "solverSeed": {
                         "default": 0,
                         "type": "integer"
@@ -21217,6 +21222,11 @@
                         "default": false,
                         "type": "boolean"
                     },
+                    "resourcesChangedSinceGeneration": {
+                        "description": "Une donn\u00e9e du club autre qu'une contrainte (gymnase, coach, cr\u00e9neau, grille de p\u00e9riode,\nr\u00e9servation, override, tag d'\u00e9quipe, calendrier) a-t-elle chang\u00e9 depuis la g\u00e9n\u00e9ration de\nce planning ? Vrai \u21d2 ce planning d\u00e9crit un \u00e9tat ANT\u00c9RIEUR des donn\u00e9es \u2014 pas faux, P\u00c9RIM\u00c9.",
+                        "default": false,
+                        "type": "boolean"
+                    },
                     "solverSeed": {
                         "default": 0,
                         "type": "integer"
@@ -21399,6 +21409,11 @@
                             },
                             "constraintsChangedSinceGeneration": {
                                 "description": "Une contrainte a-t-elle chang\u00e9 depuis la g\u00e9n\u00e9ration de ce planning ? Vrai \u21d2 ce\nplanning d\u00e9crit un \u00e9tat ANT\u00c9RIEUR des r\u00e8gles \u2014 pas faux, mais P\u00c9RIM\u00c9. L'\u00e9cran l'affiche\n(banni\u00e8re unifi\u00e9e avec \u00ab retouch\u00e9 \u00e0 la main \u00bb) pour que le gestionnaire r\u00e9g\u00e9n\u00e8re afin\nde savoir. Remis \u00e0 faux par une (re)g\u00e9n\u00e9ration.",
+                                "default": false,
+                                "type": "boolean"
+                            },
+                            "resourcesChangedSinceGeneration": {
+                                "description": "Une donn\u00e9e du club autre qu'une contrainte (gymnase, coach, cr\u00e9neau, grille de p\u00e9riode,\nr\u00e9servation, override, tag d'\u00e9quipe, calendrier) a-t-elle chang\u00e9 depuis la g\u00e9n\u00e9ration de\nce planning ? Vrai \u21d2 ce planning d\u00e9crit un \u00e9tat ANT\u00c9RIEUR des donn\u00e9es \u2014 pas faux, P\u00c9RIM\u00c9.",
                                 "default": false,
                                 "type": "boolean"
                             },

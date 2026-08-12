@@ -114,6 +114,14 @@ export interface Schedule {
    * une (re)génération. Absent (undefined) sur une réponse d'écriture nue, traité comme faux.
    */
   constraintsChangedSinceGeneration?: boolean;
+  /**
+   * P4-87 : une DONNÉE DU CLUB autre qu'une contrainte (gymnase, coach, créneau/grille de
+   * période, réservation, override, tag d'équipe, calendrier) a-t-elle changé depuis la
+   * génération ? Vrai ⇒ le planning décrit un état ANTÉRIEUR des données — pas faux, PÉRIMÉ ;
+   * l'écran le dit (même bannière unifiée). Remis à faux par une (re)génération. Absent
+   * (undefined) sur une réponse d'écriture nue, traité comme faux.
+   */
+  resourcesChangedSinceGeneration?: boolean;
   createdAt: string;
   updatedAt: string;
   /**

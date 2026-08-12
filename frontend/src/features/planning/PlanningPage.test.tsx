@@ -421,11 +421,23 @@ describe("PlanningPage (integration)", () => {
     vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", constraintsChangedSinceGeneration: true }]);
     renderWithProviders(<PlanningPage />);
 
-    const banner = await screen.findByText(/Une contrainte a changé depuis la génération/i);
+    const banner = await screen.findByText(/une contrainte a changé/i);
     expect(banner).toBeInTheDocument();
     // Modifiable → « Régénérez » (pas de « Rouvrez »), et le mot est « périmé », jamais « faux ».
     expect(banner).toHaveTextContent(/Régénérez/);
+    expect(banner).toHaveTextContent(/périmé/);
     expect(banner).not.toHaveTextContent(/Rouvrez ce planning/);
+  });
+
+  // P4-87 : une DONNÉE DU CLUB (gymnase, coach, créneau…) a changé depuis la génération →
+  // même bannière unifiée, cause nommée « les données du club ont changé ».
+  it("shows the stale banner when a club resource changed since generation", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", resourcesChangedSinceGeneration: true }]);
+    renderWithProviders(<PlanningPage />);
+
+    const banner = await screen.findByText(/les données du club ont changé/i);
+    expect(banner).toHaveTextContent(/périmé/);
+    expect(banner).toHaveTextContent(/Régénérez/);
   });
 
   // Le cas du planning VALIDÉ : marqué comme les autres, MAIS il est en lecture seule — la
@@ -434,7 +446,7 @@ describe("PlanningPage (integration)", () => {
     vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true, constraintsChangedSinceGeneration: true }]);
     renderWithProviders(<PlanningPage />);
 
-    const banner = await screen.findByText(/Une contrainte a changé depuis la génération/i);
+    const banner = await screen.findByText(/une contrainte a changé/i);
     expect(banner).toHaveTextContent(/Rouvrez ce planning, puis régénérez/);
   });
 

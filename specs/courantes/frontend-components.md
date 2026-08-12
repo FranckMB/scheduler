@@ -1,6 +1,6 @@
 # FORWARD Components Spec — Pages & Shared Components (hors wizard)
 
-Last verified @ 2026-08-12 (recalé ce jour : le champ `allowMultipleSessionsPerDay` quitte Team — levier mort retiré de bout en bout, P4-79 ; précédemment : 2026-08-08 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-01 par les livraisons : grille Gymnases qui montre tout ce qui existe P4-37 · modale « Solliciter les coachs » P3-15 a/b))
+Last verified @ 2026-08-13 (stamp recalé — le commit du contenu du 2026-08-12 a franchi minuit : PR #536 mergée à 00:03 ; contenu inchangé depuis) (recalé ce jour : le champ `allowMultipleSessionsPerDay` quitte Team — levier mort retiré de bout en bout, P4-79 ; précédemment : 2026-08-08 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-01 par les livraisons : grille Gymnases qui montre tout ce qui existe P4-37 · modale « Solliciter les coachs » P3-15 a/b))
 
 > 🛑 **Ce document est SUPERSEDED. Il ne décrit pas le frontend livré.**
 >
