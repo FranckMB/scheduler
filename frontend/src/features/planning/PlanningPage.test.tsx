@@ -459,11 +459,13 @@ describe("PlanningPage (integration)", () => {
     expect(screen.getByText("90 min")).toBeInTheDocument();
   });
 
-  // Retour fondateur : « quand je clique sur un créneau ça retire le diagnostic, sinon
-  // l'écran est illisible ». Masquer n'est PAS supprimer : le panneau REVIENT à la fermeture.
-  it("masque les diagnostics quand un créneau est sélectionné (aucune ERREUR), et les rend à la fermeture", async () => {
+  // Retour fondateur : « quand je sélectionne un créneau, réduire automatiquement le panel de
+  // diagnostique (sinon c'est impossible de le relancer) ». On REPLIE (pas masque) : la barre
+  // repliée garde le compte + la sévérité max visibles, rouvre d'un clic, et se restaure à la
+  // fermeture du créneau. Rien n'est enterré.
+  it("REPLIE les diagnostics à la sélection d'un créneau — la barre garde compte + sévérité — et les RESTAURE à la fermeture", async () => {
     const user = userEvent.setup();
-    // Que des ALERTES : le cas ERREUR est traité par le test suivant.
+    // Que des ALERTES : le cas ERREUR (exception d'hier retirée) est traité par le test suivant.
     vi.mocked(getDiagnostics).mockResolvedValue([
       { id: "w1", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, message: "Créneau libre.", suggestions: [] },
     ]);
@@ -473,17 +475,21 @@ describe("PlanningPage (integration)", () => {
     await user.click(screen.getByRole("button", { name: /Diagnostics du système/ }));
     expect(await screen.findByRole("heading", { name: "Diagnostics du système" })).toBeInTheDocument();
 
-    // Sélection d'un créneau → le panneau disparaît, le détail du créneau prend la place.
+    // Sélection d'un créneau → le PANNEAU se replie (plus de heading), le détail prend la place…
     await user.click(screen.getByText("U11"));
     expect(await screen.findByText("Catégorie")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Diagnostics du système" })).not.toBeInTheDocument();
+    // …mais la BARRE repliée garde l'essentiel VISIBLE : le compte et la sévérité la plus haute.
+    const bar = screen.getByRole("button", { name: /Diagnostics du système/ });
+    expect(bar).toHaveTextContent("(1)");
+    expect(bar).toHaveTextContent("1 alerte");
 
-    // Fermeture du créneau → le diagnostic REVIENT (état dérivé, rien perdu).
+    // Fermeture du créneau → le panneau REVIENT (état d'avant restauré, rien perdu).
     await user.click(screen.getByRole("button", { name: /Fermer/ }));
     expect(await screen.findByRole("heading", { name: "Diagnostics du système" })).toBeInTheDocument();
   });
 
-  it("NE masque PAS les diagnostics ERREUR quand un créneau est sélectionné (jamais enterrer une erreur grave)", async () => {
+  it("REPLIE AUSSI quand il reste une ERREUR — l'exception ERROR d'hier est retirée — mais la barre la signale", async () => {
     const user = userEvent.setup();
     // La fixture par défaut porte une ERREUR (« Conflit de gymnase »).
     renderWithProviders(<PlanningPage />);
@@ -493,8 +499,10 @@ describe("PlanningPage (integration)", () => {
 
     await user.click(screen.getByText("U11"));
     expect(await screen.findByText("Catégorie")).toBeInTheDocument();
-    // Le panneau RESTE : un ERROR ne doit pas disparaître parce qu'on a cliqué ailleurs.
-    expect(screen.getByRole("heading", { name: "Diagnostics du système" })).toBeInTheDocument();
+    // Plus d'exception : le panneau se replie même avec une ERREUR…
+    expect(screen.queryByRole("heading", { name: "Diagnostics du système" })).not.toBeInTheDocument();
+    // …mais l'erreur reste SIGNALÉE dans la barre (rien n'est enterré, elle reste atteignable).
+    expect(screen.getByRole("button", { name: /Diagnostics du système/ })).toHaveTextContent("1 erreur");
   });
 
   it("groups diagnostics by severity", async () => {
