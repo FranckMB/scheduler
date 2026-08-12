@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\CrossStack;
 
 use App\Service\PayloadCapacityMirror;
+use App\Service\ScheduleConstraintBuilder;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpClient\HttpClient;
@@ -198,7 +199,8 @@ final class CapacityMirrorParityTest extends TestCase
     }
 
     /**
-     * Le payload MINIMAL au contrat 2.2 — les clés que le moteur lit vraiment.
+     * Le payload MINIMAL au contrat backend⇄engine — les clés que le moteur lit
+     * vraiment (version DÉRIVÉE de la source, pas d'un littéral qui dériverait).
      * La FORME complète est gardée par ContractSchemaTest ; ici le sujet est
      * l'ALGÈBRE, sur des payloads où elle est décisive.
      *
@@ -212,7 +214,7 @@ final class CapacityMirrorParityTest extends TestCase
     private function basePayload(array $teams, array $venues, array $constraints = [], array $slotTemplates = []): array
     {
         return [
-            'version' => '2.2',
+            'version' => ScheduleConstraintBuilder::CONTRACT_VERSION,
             'clubId' => 'club-parity',
             'seasonId' => 'season-parity',
             'solverSeed' => 42,

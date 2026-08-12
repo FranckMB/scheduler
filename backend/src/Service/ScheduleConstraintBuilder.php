@@ -45,7 +45,14 @@ final class ScheduleConstraintBuilder
      */
     public const VENUE_CONFIG_KEYS = ['forcedVenueId', 'preferredVenueId', 'minAtVenueId', 'forbiddenVenueId', 'setVenueId'];
     private const CACHE_TTL_SECONDS = 14_400;
-    private const SCHEMA_VERSION = '2.2';
+    /**
+     * Version du CONTRAT backend⇄engine que ce payload s'attribue. Ce n'est pas
+     * une version « de schéma » indépendante : c'est la MÊME chose que
+     * `engine/CONTRACT_VERSION`, que l'engine compare au champ `version` reçu.
+     * Elle DOIT valoir exactement la valeur du fichier — gardé par
+     * `PayloadVersionMatchesContractVersionTest`.
+     */
+    public const string CONTRACT_VERSION = '2.4';
     private const DEFAULT_SOLVER_SEED = 42;
     /**
      * Upper bound on the solve budget (seconds), aligned with the engine input
@@ -517,7 +524,7 @@ final class ScheduleConstraintBuilder
         );
 
         return [
-            'version' => self::SCHEMA_VERSION,
+            'version' => self::CONTRACT_VERSION,
             'clubId' => $clubId,
             'seasonId' => $seasonId,
             'solverSeed' => $solverSeed,

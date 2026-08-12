@@ -45,7 +45,14 @@ use Doctrine\ORM\EntityManagerInterface;
  */
 final class MatchPlacementPayloadBuilder
 {
-    public const SCHEMA_VERSION = '2.2';
+    /**
+     * Version du CONTRAT backend⇄engine que ce payload s'attribue. Même contrat
+     * que `/generate` (un seul contrat, 3 endpoints) : c'est la MÊME chose que
+     * `engine/CONTRACT_VERSION`, comparée par l'engine au champ `version` reçu.
+     * Elle DOIT valoir exactement la valeur du fichier — gardé par
+     * `PayloadVersionMatchesContractVersionTest`.
+     */
+    public const string CONTRACT_VERSION = '2.4';
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -168,7 +175,7 @@ final class MatchPlacementPayloadBuilder
 
         return [
             'payload' => [
-                'version' => self::SCHEMA_VERSION,
+                'version' => self::CONTRACT_VERSION,
                 'clubId' => $club->getId(),
                 'seasonId' => $seasonId ?? '',
                 'solverSeed' => 42,

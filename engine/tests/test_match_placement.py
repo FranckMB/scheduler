@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.main import read_contract_version
 from app.schemas.match_input_schema import MatchPlacementInputSchema
 from app.solver.match_placement import solve_match_placement
 
@@ -17,7 +18,9 @@ SUNDAY = "2026-10-04"
 
 def payload(**over: Any) -> MatchPlacementInputSchema:
     base: dict[str, Any] = {
-        "version": "2.2",
+        # Version DÉRIVÉE de la source de vérité (engine/CONTRACT_VERSION), pas
+        # d'un littéral qui redemanderait ce travail au prochain bump.
+        "version": read_contract_version(),
         "clubId": "club-1",
         "seasonId": "season-1",
         "matches": [],

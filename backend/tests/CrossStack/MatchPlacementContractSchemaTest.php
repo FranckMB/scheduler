@@ -28,7 +28,7 @@ use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 
 /**
  * NR de l'axe contrat backend↔engine pour le placement des matchs (P1-4 PR D,
- * contrat 2.2, ADR-0003) : la FORME du payload du builder réel (phase1, sans
+ * ADR-0003) : la FORME du payload du builder réel (phase1, sans
  * engine) et le POST au VRAI engine (groupe contract — même rituel que
  * ContractSchemaTest pour /generate).
  */
@@ -45,8 +45,9 @@ final class MatchPlacementContractSchemaTest extends KernelTestCase
         [$built] = $this->buildFromSeededClub();
         $payload = $built['payload'];
 
-        self::assertSame(MatchPlacementPayloadBuilder::SCHEMA_VERSION, $payload['version']);
-        self::assertSame('2.2', $payload['version']);
+        // Version DÉRIVÉE de la source ; l'égalité constante⇄engine/CONTRACT_VERSION
+        // est gardée par PayloadVersionMatchesContractVersionTest.
+        self::assertSame(MatchPlacementPayloadBuilder::CONTRACT_VERSION, $payload['version']);
         foreach (['clubId', 'seasonId', 'solverSeed', 'solverTimeoutSeconds', 'matches', 'venues', 'teams', 'teamLinks', 'trainingOccupancies'] as $key) {
             self::assertArrayHasKey($key, $payload);
         }

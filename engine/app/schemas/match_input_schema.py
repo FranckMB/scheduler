@@ -134,7 +134,11 @@ class TrainingOccupancySchema(SerializableModel):
 
 
 class MatchPlacementInputSchema(SerializableModel):
-    version: str = "2.2"
+    # Fallback quand le champ est OMIS ; le backend l'envoie TOUJOURS, donc ce
+    # défaut n'est jamais la valeur du fil. On l'aligne néanmoins sur le contrat
+    # courant pour qu'aucun lecteur ne le prenne pour une version concurrente.
+    # L'autorité reste `engine/CONTRACT_VERSION`, comparée au MAJOR à l'entrée.
+    version: str = "2.4"
     club_id: str = Field(alias="clubId")
     season_id: str = Field(alias="seasonId")
     solver_seed: int = Field(default=42, alias="solverSeed")
