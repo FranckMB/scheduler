@@ -64,7 +64,7 @@ final class AdminClubActionTest extends WebTestCase
         $this->client->request('GET', '/api/admin/actions');
         self::assertResponseStatusCodeSame(401);
 
-        $this->client->request('POST', '/api/admin/clubs/' . Uuid::v4()->toRfc4122() . '/actions/reset-generation-quota');
+        $this->client->request('POST', '/api/admin/clubs/' . Uuid::v4()->toRfc4122() . '/actions/reset-credits');
         self::assertResponseStatusCodeSame(401);
     }
 
@@ -82,13 +82,13 @@ final class AdminClubActionTest extends WebTestCase
         self::assertResponseIsSuccessful();
         $items = $this->responseBody()['items'];
         $byKey = array_column($items, null, 'key');
-        self::assertArrayHasKey('reset-generation-quota', $byKey);
-        self::assertFalse($byKey['reset-generation-quota']['dangerous']);
+        self::assertArrayHasKey('reset-credits', $byKey);
+        self::assertFalse($byKey['reset-credits']['dangerous']);
         self::assertTrue($byKey['reset-current-season']['dangerous']);
         self::assertTrue($byKey['purge-old-seasons']['dangerous']);
 
         // Sans CSRF → 403, rien exécuté.
-        $this->client->request('POST', "/api/admin/clubs/{$clubId}/actions/reset-generation-quota");
+        $this->client->request('POST', "/api/admin/clubs/{$clubId}/actions/reset-credits");
         self::assertResponseStatusCodeSame(403);
         self::assertSame([], $executor->calls);
 
@@ -98,17 +98,17 @@ final class AdminClubActionTest extends WebTestCase
         self::assertSame([], $executor->calls);
 
         // Club inexistant → 404 AVANT toute exécution.
-        $this->client->request('POST', '/api/admin/clubs/' . Uuid::v4()->toRfc4122() . '/actions/reset-generation-quota', [], [], ['HTTP_X_CSRF_TOKEN' => $csrfToken]);
+        $this->client->request('POST', '/api/admin/clubs/' . Uuid::v4()->toRfc4122() . '/actions/reset-credits', [], [], ['HTTP_X_CSRF_TOKEN' => $csrfToken]);
         self::assertResponseStatusCodeSame(404);
         self::assertSame([], $executor->calls);
 
         // Chemin nominal : l'action part vers l'exécuteur avec le SEUL argument
         // autorisé (--club, validé) et la clé préfixée du catalogue.
-        $this->client->request('POST', "/api/admin/clubs/{$clubId}/actions/reset-generation-quota", [], [], ['HTTP_X_CSRF_TOKEN' => $csrfToken]);
+        $this->client->request('POST', "/api/admin/clubs/{$clubId}/actions/reset-credits", [], [], ['HTTP_X_CSRF_TOKEN' => $csrfToken]);
         self::assertResponseIsSuccessful();
-        self::assertSame(['key' => 'reset-generation-quota', 'clubId' => $clubId, 'status' => 'succeeded', 'exitCode' => 0], $this->responseBody());
+        self::assertSame(['key' => 'reset-credits', 'clubId' => $clubId, 'status' => 'succeeded', 'exitCode' => 0], $this->responseBody());
         self::assertSame([[
-            'key' => 'action:reset-generation-quota',
+            'key' => 'action:reset-credits',
             'superAdminId' => $this->adminId,
             'arguments' => ['--club' => $clubId],
         ]], $executor->calls);
@@ -131,11 +131,12 @@ final class AdminClubActionTest extends WebTestCase
         $executor = self::getContainer()->get(RecordingAdminJobExecutor::class);
         $executor->reset();
 
-        // Le catalogue est passé de 12 à 7 entrées : une SEULE « Offre » à schéma.
+        // Le catalogue tient 6 entrées : une SEULE « Offre » à schéma (l'entrée
+        // reset-generation-quota, qui « réussissait » à ne rien débloquer, a été retirée).
         $this->client->request('GET', '/api/admin/actions');
         self::assertResponseIsSuccessful();
         $items = $this->responseBody()['items'];
-        self::assertCount(7, $items);
+        self::assertCount(6, $items);
         $byKey = array_column($items, null, 'key');
         self::assertArrayHasKey('set-plan', $byKey);
         self::assertArrayNotHasKey('set-plan-essentiel', $byKey, 'les entrées set-plan-* figées ont disparu');
@@ -190,7 +191,7 @@ final class AdminClubActionTest extends WebTestCase
         // La trace « quelle action, sur QUEL club » : le store écrit les arguments.
         $store = self::getContainer()->get(AdminJobRunStore::class);
         $clubId = Uuid::v4()->toRfc4122();
-        $definition = new AdminJobDefinition('action:reset-generation-quota', 'Reset quota', 'app:clubs:reset-quota', AdminJobSchedule::manual(), ['--club' => $clubId], manualTriggerAllowed: true);
+        $definition = new AdminJobDefinition('action:reset-credits', 'Reset credits', 'app:clubs:reset-credits', AdminJobSchedule::manual(), ['--club' => $clubId], manualTriggerAllowed: true);
 
         self::assertTrue($store->tryAcquire($definition->key));
         try {
@@ -204,19 +205,6 @@ final class AdminClubActionTest extends WebTestCase
         $arguments = $this->admin()->fetchOne('SELECT arguments FROM admin_job_run WHERE id = :id', ['id' => $runId]);
         self::assertIsString($arguments);
         self::assertSame(['--club' => $clubId], json_decode($arguments, true, 512, \JSON_THROW_ON_ERROR));
-    }
-
-    public function testResetQuotaCommandResetsTheCounterAndRejectsUnknownClub(): void
-    {
-        $clubId = $this->seedClub('Club quota SA4', generationCount: 7);
-        $application = new Application(self::$kernel);
-
-        $tester = new CommandTester($application->find('app:clubs:reset-quota'));
-        self::assertSame(Command::SUCCESS, $tester->execute(['--club' => $clubId]));
-        self::assertSame(0, (int) $this->admin()->fetchOne('SELECT generation_count_season FROM club WHERE id = :id', ['id' => $clubId]));
-
-        $unknown = new CommandTester($application->find('app:clubs:reset-quota'));
-        self::assertSame(Command::FAILURE, $unknown->execute(['--club' => Uuid::v4()->toRfc4122()]));
     }
 
     public function testFfbbResyncCommandFailsFrankOnUnknownClubOrInvalidCode(): void

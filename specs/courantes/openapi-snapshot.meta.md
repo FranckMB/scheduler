@@ -1,6 +1,11 @@
-Last verified @ 2026-08-12 (JSON **régénéré** depuis le backend vivant — P4-86 : le path `POST /api/schedule-slots/{id}/manual-edit/one-time` est SUPPRIMÉ (146 paths, un seul retiré))
+Last verified @ 2026-08-12 (JSON **régénéré** — P4-79 : `Team.allowMultipleSessionsPerDay` retiré, contrat 2.5, + rattrapage `constraintsChangedSinceGeneration`)
 
 Changements récents :
+- **P4-78/P4-79 — contrat 2.5 (2026-08-12)** : `Team.allowMultipleSessionsPerDay` **quitte** le
+  contrat (levier mort retiré de bout en bout — le schéma engine le REFUSE désormais,
+  `extra_forbidden`). ⚑ Rattrapage au passage : `Schedule.constraintsChangedSinceGeneration`
+  (vivant depuis le marqueur de péremption) **entre** enfin au snapshot — il n'avait jamais été
+  régénéré après sa livraison, et le garde ne surveille pas la direction « propriété manquante ».
 - **P4-86 — suppression du path `manual-edit/one-time` (2026-08-12)** : le path
   `POST /api/schedule-slots/{id}/manual-edit/one-time` quitte le contrat (146 paths, un seul
   retiré, aucun autre changement). Depuis F2b le déplacement d'un créneau passe par

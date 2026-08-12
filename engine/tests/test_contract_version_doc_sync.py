@@ -40,6 +40,11 @@ DOCS_QUOTING_THE_ACTIVE_VERSION = (
     REPO_ROOT / "engine" / "docs" / "nominal-flow.md",
     REPO_ROOT / "engine" / "docs" / "solver-errors.md",
     REPO_ROOT / "backend" / "docs" / "schedule-generation-guide.md",
+    # Rattrapage 2026-08-12 : ces deux-là ont dérivé DEUX fois (2.2 au bump 2.4, 2.4 au bump
+    # 2.5) — précisément parce qu'ils n'étaient pas dans cette liste. L'index agent et la
+    # règle de zone citent la version : ils la citent juste, ou ils rougissent ici.
+    REPO_ROOT / "CLAUDE.md",
+    REPO_ROOT / ".claude" / "rules" / "engine.md",
 )
 
 

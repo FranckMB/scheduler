@@ -269,7 +269,6 @@ final class SeasonTransitionService
             $copy->setSessionsPerWeek($team->getSessionsPerWeek());
             $copy->setMinSessionsOverride($team->getMinSessionsOverride());
             $copy->setMatchDay($team->getMatchDay());
-            $copy->setAllowMultipleSessionsPerDay($team->getAllowMultipleSessionsPerDay());
             $forcedVenueId = $team->getForcedVenueId();
             $copy->setForcedVenueId(null !== $forcedVenueId ? ($venueMap[$forcedVenueId] ?? null) : null);
             $copy->setIsActive($team->getIsActive());

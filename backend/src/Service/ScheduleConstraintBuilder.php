@@ -51,7 +51,7 @@ final class ScheduleConstraintBuilder
      * Elle DOIT valoir exactement la valeur du fichier — gardé par
      * `PayloadVersionMatchesContractVersionTest`.
      */
-    public const string CONTRACT_VERSION = '2.4';
+    public const string CONTRACT_VERSION = '2.5';
     private const CACHE_TTL_SECONDS = 14_400;
     private const DEFAULT_SOLVER_SEED = 42;
     /**
@@ -684,7 +684,6 @@ final class ScheduleConstraintBuilder
             'sessionsPerWeek' => $this->currentSessionOverrides[$team->getId()] ?? $team->getSessionsPerWeek(),
             'minSessionsOverride' => $team->getMinSessionsOverride(),
             'matchDay' => $team->getMatchDay(),
-            'allowMultipleSessionsPerDay' => $team->getAllowMultipleSessionsPerDay(),
             'forcedVenueId' => $team->getForcedVenueId(),
             'isActive' => $team->getIsActive(),
             'parentTeamId' => $team->getParentTeamId(),

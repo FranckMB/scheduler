@@ -151,11 +151,10 @@ const jobs: AdminJobsResponse = {
   ],
 };
 
-// SA4 — catalogue fermé d'actions support (miroir du backend AdminActionCatalog : 7 items,
+// SA4 — catalogue fermé d'actions support (miroir du backend AdminActionCatalog : 6 items,
 // dont « Offre » à SCHÉMA fermé). Les pickers viennent de ce schéma, jamais d'une liste en dur.
 const actions: AdminActionsResponse = {
   items: [
-    { key: "reset-generation-quota", label: "Réinitialiser le quota de générations", description: "Remet le compteur à zéro.", dangerous: false, arguments: [] },
     { key: "ffbb-resync", label: "Resynchroniser depuis la FFBB", description: "Ré-importe l’identité FFBB du club.", dangerous: false, arguments: [] },
     { key: "mark-next-season-paid", label: "Marquer la saison suivante payée", description: "Enregistre le paiement de la saison suivante.", dangerous: false, arguments: [] },
     {
@@ -222,7 +221,7 @@ describe("AdminDashboardPage", () => {
     mockClubs.mockReset().mockResolvedValue(clubs);
     mockRunJob.mockReset().mockResolvedValue({ key: "import-school-holidays", status: "succeeded", exitCode: 0 });
     mockActions.mockReset().mockResolvedValue(actions);
-    mockRunClubAction.mockReset().mockResolvedValue({ key: "reset-generation-quota", clubId: "club-1", status: "succeeded", exitCode: 0 });
+    mockRunClubAction.mockReset().mockResolvedValue({ key: "reset-credits", clubId: "club-1", status: "succeeded", exitCode: 0 });
     mockFreshness.mockReset().mockResolvedValue(freshness);
     useAdminStore.setState({ identity: { id: "admin-1", email: "ops@example.test" }, csrfToken: "csrf-123" });
   });
@@ -326,11 +325,11 @@ describe("AdminDashboardPage", () => {
     renderWithProviders(<AdminDashboardPage />, { route: "/admin?tab=clubs" });
 
     await user.click(await screen.findByRole("button", { name: "Actions" }));
-    await user.click(await screen.findByRole("button", { name: /Réinitialiser le quota de générations/ }));
+    await user.click(await screen.findByRole("button", { name: /Réinitialiser les crédits de sortie/ }));
     // Non-dangerous : pas de saisie nominative, exécution directe.
     await user.click(screen.getByRole("button", { name: "Exécuter" }));
 
-    await waitFor(() => expect(mockRunClubAction).toHaveBeenCalledWith("club-1", "reset-generation-quota", "csrf-123"));
+    await waitFor(() => expect(mockRunClubAction).toHaveBeenCalledWith("club-1", "reset-credits", "csrf-123"));
   });
 
   it("gates a dangerous support action behind typing the exact club name (SA4)", async () => {
@@ -361,8 +360,8 @@ describe("AdminDashboardPage", () => {
 
     await user.click(await screen.findByRole("button", { name: "Actions" }));
     const dialog = await screen.findByRole("dialog", { name: /Actions support/ });
-    // Le catalogue est FERMÉ : exactement 7 entrées, dont l'unique bouton « Offre » (A3).
-    expect(within(dialog).getAllByRole("listitem")).toHaveLength(7);
+    // Le catalogue est FERMÉ : exactement 6 entrées, dont l'unique bouton « Offre » (A3).
+    expect(within(dialog).getAllByRole("listitem")).toHaveLength(6);
     expect(within(dialog).getByRole("button", { name: /^Offre/ })).toBeInTheDocument();
   });
 

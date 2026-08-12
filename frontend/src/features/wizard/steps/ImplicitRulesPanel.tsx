@@ -26,13 +26,12 @@
  *  - un gymnase accueille « au plus sa CAPACITÉ » d'équipes, pas « une seule »
  *    (`add_room_at_most_one`, la capacité se règle par créneau).
  *
- * ⚠ Et une exception a été RETIRÉE du texte après vérification : « une séance par jour, sauf
- * si vous l'avez autorisée pour cette équipe ». Le moteur lit bien
- * `allowMultipleSessionsPerDay` (`constraints.py:1590`, `:1642`) et le backend le sérialise
- * (`ScheduleConstraintBuilder.php:680`), mais le champ est ABSENT de `TeamInput` : aucune
- * route, aucun écran ne l'écrit, seule la bascule de saison en recopie la valeur. Il vaut
- * donc `false` partout, et l'exception est inatteignable — l'annoncer aurait envoyé le
- * gestionnaire chercher un réglage qui n'existe pas. Le levier mort est tracé en P4-79.
+ * ⚠ « Une séance par jour » n'a AUCUNE exception. Un drapeau `allowMultipleSessionsPerDay`
+ * exemptait jadis une équipe côté moteur, mais il était ABSENT de `TeamInput` : aucune route,
+ * aucun écran ne l'écrivait, il valait `false` partout et la branche d'exemption était morte.
+ * Il a été retiré de bout en bout en P4-79 (moteur, payload backend, entité, schéma Pydantic),
+ * jumeau du drapeau supprimé en P4-51. La règle s'applique donc sans condition — le texte ne
+ * doit renvoyer vers aucun réglage.
  * Deux verrous gardent cet accord : le gel Vitest de ce fichier, et le test sémantique
  * `engine/tests/semantic/test_implicit_rules_are_still_applied.py`, qui vérifie que les six
  * fonctions correspondantes sont TOUJOURS appelées sans condition. Retirer une règle du

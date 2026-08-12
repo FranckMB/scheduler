@@ -70,10 +70,6 @@ class TeamSchema(SerializableModel):
     sessions_per_week: int = Field(alias="sessionsPerWeek")
     min_sessions_override: int | None = Field(default=None, alias="minSessionsOverride")
     match_day: int | None = Field(default=None, alias="matchDay")
-    allow_multiple_sessions_per_day: bool = Field(
-        default=False,
-        alias="allowMultipleSessionsPerDay",
-    )
     forced_venue_id: str | None = Field(default=None, alias="forcedVenueId")
     is_active: bool = Field(default=False, alias="isActive")
     parent_team_id: str | None = Field(default=None, alias="parentTeamId")

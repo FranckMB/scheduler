@@ -889,9 +889,9 @@ describe("ConstraintsStep — période : choisir, nommer, atteindre", () => {
     // ⚠ Ce gel n'est pas de la cosmétique. Chaque ligne AFFIRME un comportement du solveur ;
     // la réécrire à la légère fait mentir le produit. Deux affirmations ont déjà été
     // corrigées en écrivant l'encart : le coach PEUT doubler dans le même gymnase (D-14), et
-    // « une séance par jour » n'a PAS d'exception atteignable (allowMultipleSessionsPerDay
-    // est absent de TeamInput — P4-79). Si vous changez ce tableau, allez d'abord relire
-    // `engine/app/solver/constraints.py`.
+    // « une séance par jour » n'a AUCUNE exception (le drapeau allowMultipleSessionsPerDay,
+    // jamais écrit par aucune route, a été retiré de bout en bout en P4-79). Si vous changez
+    // ce tableau, allez d'abord relire `engine/app/solver/constraints.py`.
     expect(IMPLICIT_RULES.map((r) => r.id)).toEqual(["venue-capacity", "coach-two-venues", "coach-player", "team-overlap", "one-session-per-day", "coach-rest-day"]);
 
     // Le même gymnase est AUTORISÉ — la formulation inverse était affichée avant P4-55.

@@ -246,7 +246,6 @@ def validate_assignment(
             },
             baseline_slots=baseline_slots,
             parsed=parsed,
-            teams=data.get("teams", []),
             coaches=data.get("coaches", []),
             slot_capacities=model.slot_capacities,
             team_names=team_names,
