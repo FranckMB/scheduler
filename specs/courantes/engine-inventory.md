@@ -41,6 +41,7 @@ Last verified @ 2026-08-12 (CONTRACT_VERSION **2.4** = troisième endpoint `/val
 | `/health` | GET | Health simple | `{"status":"ok"}` |
 | `/generate` | POST | **Principal** — résout un planning hebdomadaire | `ScheduleOutputSchema` |
 | `/place-matches` | POST | **Second problème** — place des matchs DATÉS (P1-4 PR D, ADR-0003) | `MatchPlacementOutputSchema` |
+| `/validate-assignments` | POST | **Verdict sur UN candidat** (P2-2 F2a) — « puis-je mettre cette équipe sur ce créneau ? ». Baseline **entièrement figée** via `add_fixed_slots`, candidat épinglé à part : le solve ne fait qu'un test de faisabilité. ⚠ **Le gel EST le verdict** — baseline non figée, le solveur déplace la séance en conflit et rend `valid=True` (falsifié). Mono-candidat ⇒ 1 worker ⇒ déterministe. Budget 2 s par défaut, plafond 10 s ; mesuré **~500 ms** sur 49 équipes (le build du modèle domine, pas le solve). Un « non » **nomme les règles cassées** (`diagnose_candidate_conflicts`) ; `baseline_infeasible` distingue une baseline déjà invalide d'un conflit non nommé | `ValidateAssignmentOutputSchema` |
 | `/implicit-constraints` | POST | Sync règles implicites backend↔engine | `JSONResponse` (200 synchronized / 409 desynchronized) |
 
 ### POST /place-matches
