@@ -6,6 +6,7 @@ import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { cn } from "@/shared/lib/utils";
 
 import type { Diagnostic, DiagnosticSeverity, Slot } from "./api";
+import { SEVERITY_ORDER } from "./lib/diagnosticsSummary";
 import { concernedSlots, type Lookups } from "./lib/grid";
 
 const SEVERITY: Record<DiagnosticSeverity, { icon: typeof Info; className: string; label: string }> = {
@@ -15,7 +16,8 @@ const SEVERITY: Record<DiagnosticSeverity, { icon: typeof Info; className: strin
   SUCCESS: { icon: CheckCircle2, className: "text-success", label: "OK" },
 };
 
-const ORDER: DiagnosticSeverity[] = ["ERROR", "WARNING", "INFO", "SUCCESS"];
+// Ordre des sévérités : foyer unique dans `lib/diagnosticsSummary` (partagé avec la barre repliée).
+const ORDER = SEVERITY_ORDER;
 
 interface DiagnosticsPanelProps {
   diagnostics: Diagnostic[];

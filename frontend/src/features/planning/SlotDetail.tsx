@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui
 
 import type { Constraint, LockOrigin, MoveViolation, Slot, SlotMovePatch, Venue } from "./api";
 import { applicableConstraints, isClubWide } from "./lib/applicableConstraints";
+import { describeConstraint } from "./lib/describeConstraint";
 import { DAYS, type GridCell, toHourMinute } from "./lib/grid";
 
 /** Map vide partagée : une CLUB+tag ne s'affiche nulle part tant que la résolution n'est pas fournie. */
@@ -64,17 +65,27 @@ const LOCK_ORIGIN: Record<LockOrigin, { label: string; hint: string }> = {
   UNKNOWN: { label: "Verrouillé — origine inconnue", hint: "Ce créneau est bien verrouillé, mais on ne sait pas pourquoi. Vérifiez avant d'y toucher." },
 };
 
-function ConstraintList({ label, items }: { label: string; items: Constraint[] }) {
+function ConstraintList({ label, items, describe }: { label: string; items: Constraint[]; describe: (c: Constraint) => string | null }) {
   return (
     <div className="mt-2 first:mt-0">
       <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground/80">{label}</p>
       <ul className="mt-1 flex flex-col gap-1">
-        {items.map((c) => (
-          <li key={c.id} className="flex items-center justify-between gap-2 text-sm">
-            <span>{c.name}</span>
-            <span className="shrink-0 rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{"HARD" === c.ruleType ? "obligatoire" : "préférence"}</span>
-          </li>
-        ))}
+        {items.map((c) => {
+          // Ce que la règle FAIT (dérivé de la config, vérifiable) en tête ; le nom LIBRE du
+          // gestionnaire reste en second — repère utile mais faillible (périmé/copié). Quand on
+          // ne sait pas décrire fidèlement (`null`), le nom redevient la seule ligne.
+          const what = describe(c);
+
+          return (
+            <li key={c.id} className="flex items-start justify-between gap-2 text-sm">
+              <span className="min-w-0">
+                <span className="block">{what ?? c.name}</span>
+                {null !== what ? <span className="block truncate text-xs text-muted-foreground">{c.name}</span> : null}
+              </span>
+              <span className="mt-0.5 shrink-0 rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{"HARD" === c.ruleType ? "obligatoire" : "préférence"}</span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -92,6 +103,10 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
 
   const origin = null !== slot.lockOrigin ? LOCK_ORIGIN[slot.lockOrigin] : null;
   const applicable = applicableConstraints(slot, constraints, tagTeamIds);
+  // Ce que chaque règle FAIT se dérive de sa config ; le gymnase d'une règle FACILITY se nomme
+  // depuis les gymnases connus du panneau (introuvable → on retombe sur le nom, pas d'invention).
+  const venueNameById = new Map(venues.map((v) => [v.id, v.name]));
+  const describe = (c: Constraint): string | null => describeConstraint(c, (id) => venueNameById.get(id));
   // « Tout le club » ne concerne pas l'équipe DIRECTEMENT (fondateur) : on sépare les deux
   // groupes pour que la distinction se lise sans lire. Une CLUB+tag est côté équipe (elle
   // vise les équipes taguées, comme l'éclatement backend), pas côté club.
@@ -99,8 +114,13 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
   const clubConstraints = applicable.filter((c) => isClubWide(c));
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between">
+    // Borné à la hauteur de l'aside (= celle de la grille) et défile en INTERNE au-delà, au lieu
+    // d'étirer la page (retour fondateur : « de la même taille que la grille »). Le contrat
+    // flexbox : `min-h-0` sur le conteneur qui défile (`CardContent`), sinon `overflow-y-auto`
+    // ne défile jamais — un enfant flex refuse de rétrécir sous son contenu. jsdom ne peut pas
+    // l'attester (aucun moteur de layout) : garde de classes ici, effet prouvé en Playwright.
+    <Card className="flex min-h-0 flex-col overflow-hidden">
+      <CardHeader className="shrink-0 flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2">
           {cell.teamLabel}
           {cell.locked ? <Lock className="size-4 text-muted-foreground" /> : null}
@@ -109,7 +129,7 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
           <X className="size-4" />
         </button>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="min-h-0 flex-1 overflow-y-auto pt-0">
         <Row label="Catégorie" value={categoryLabel} />
         <Row label="Coach" value={cell.coachLabel} />
         <Row label="Durée" value={`${slot.durationMinutes} min`} />
@@ -136,12 +156,11 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
           </button>
           {constraintsOpen ? (
             applicable.length > 0 ? (
-              // max-h + overflow-y-auto : la liste défile en INTERNE au lieu d'agrandir l'aside
-              // (retour fondateur). La hauteur bornée suffit à déclencher le défilement — pas
-              // besoin de min-h-0 ici, le conteneur n'est pas un enfant flex qui doit rétrécir.
-              <div className="mt-2 max-h-56 overflow-y-auto pr-1">
-                {teamConstraints.length > 0 ? <ConstraintList label="Cette équipe" items={teamConstraints} /> : null}
-                {clubConstraints.length > 0 ? <ConstraintList label="Tout le club" items={clubConstraints} /> : null}
+              // Plus de `max-h`/`overflow` ici : c'est désormais TOUT le panneau (`CardContent`)
+              // qui est borné et défile (cf. la Card ci-dessus), donc pas de double ascenseur.
+              <div className="mt-2">
+                {teamConstraints.length > 0 ? <ConstraintList label="Cette équipe" items={teamConstraints} describe={describe} /> : null}
+                {clubConstraints.length > 0 ? <ConstraintList label="Tout le club" items={clubConstraints} describe={describe} /> : null}
               </div>
             ) : (
               <p className="mt-1 text-xs text-muted-foreground">Aucune contrainte spécifique à ce créneau.</p>

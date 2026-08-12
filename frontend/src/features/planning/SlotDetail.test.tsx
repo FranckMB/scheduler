@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { buildTagTeamIds } from "./lib/applicableConstraints";
-import type { Constraint, LockOrigin, Slot } from "./api";
+import type { Constraint, LockOrigin, Slot, Venue } from "./api";
 import type { GridCell } from "./lib/grid";
 import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
@@ -55,13 +55,13 @@ const constraint = (over: Partial<Constraint>): Constraint => ({
   ...over,
 });
 
-function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[]; tagTeamIds?: ReadonlyMap<string, ReadonlySet<string>>; moveState?: MoveFeedback } = {}) {
+function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[]; tagTeamIds?: ReadonlyMap<string, ReadonlySet<string>>; moveState?: MoveFeedback; venues?: Venue[] } = {}) {
   const s = slot(over.slot);
   render(
     <SlotDetail
       cell={cell(s.lockLevel !== "NONE")}
       slot={s}
-      venues={[]}
+      venues={over.venues ?? []}
       categoryLabel="U11"
       constraints={over.constraints ?? []}
       tagTeamIds={over.tagTeamIds}
@@ -173,6 +173,46 @@ describe("SlotDetail — contraintes applicables (F1)", () => {
     // Rien à ouvrir : le compte est 0, et le nom n'apparaît nulle part.
     expect(screen.getByRole("button", { name: /Contraintes applicables \(0\)/ })).toBeInTheDocument();
     expect(screen.queryByText("Préfèrent Matéo")).not.toBeInTheDocument();
+  });
+});
+
+describe("SlotDetail — le panneau dit ce que la règle FAIT, pas seulement son nom", () => {
+  const mateo: Venue = { id: "v-mateo", name: "Matéo", color: null };
+
+  it("une DAY forbiddenDays:[6] mal NOMMÉE affiche quand même « samedi » — le cas fondateur", async () => {
+    // Une règle « samedi interdit, tout le club » portant un nom qui décrit autre chose : le
+    // fondateur lisait ce nom sur un créneau U11 et concluait que l'app mentait.
+    renderDetail({
+      constraints: [constraint({ id: "d", name: "SM2 au moins 1 seance a Mateo", scope: "CLUB", family: "DAY", config: { forbiddenDays: [6] } })],
+    });
+    await openConstraints();
+    // Ce que la règle FAIT, dérivé de la config — vérifiable sans confiance.
+    expect(screen.getByText(/samedi/i)).toBeInTheDocument();
+    // Le nom libre reste, en second (repère du gestionnaire).
+    expect(screen.getByText("SM2 au moins 1 seance a Mateo")).toBeInTheDocument();
+  });
+
+  it("nomme le gymnase pour minAtVenueId et preferredVenueId", async () => {
+    renderDetail({
+      slot: { teamId: "team-A" },
+      venues: [mateo],
+      constraints: [
+        constraint({ id: "min", name: "peu importe", scope: "TEAM", scopeTargetId: "team-A", family: "FACILITY", config: { minAtVenueId: "v-mateo", minAtVenueCount: 1 } }),
+        constraint({ id: "pref", name: "peu importe non plus", scope: "CLUB", family: "FACILITY", config: { preferredVenueId: "v-mateo" } }),
+      ],
+    });
+    await openConstraints();
+    expect(screen.getByText("Au moins 1 séance à Matéo")).toBeInTheDocument();
+    expect(screen.getByText("Préfère Matéo")).toBeInTheDocument();
+  });
+
+  it("retombe sur le NOM SEUL pour une combinaison qu'on ne sait pas décrire (pas d'invention)", async () => {
+    renderDetail({
+      constraints: [constraint({ id: "x", name: "Règle exotique", scope: "CLUB", family: "DAY", config: { mysteryKey: [1, 2] } })],
+    });
+    await openConstraints();
+    // Le nom est là, une seule fois (pas de description approximative doublée).
+    expect(screen.getAllByText("Règle exotique")).toHaveLength(1);
   });
 });
 

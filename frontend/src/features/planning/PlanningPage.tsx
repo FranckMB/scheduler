@@ -24,6 +24,7 @@ import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
 import { buildTagTeamIds } from "./lib/applicableConstraints";
+import { topSeveritySummary } from "./lib/diagnosticsSummary";
 import { computeEmptySlots } from "./lib/emptySlots";
 import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
@@ -465,6 +466,37 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   );
 
   const selectedCell = model.cells.find((c) => c.slotId === selectedSlotId) ?? null;
+
+  // Sélectionner un créneau REPLIE les diagnostics (retour fondateur : « réduire
+  // automatiquement le panel de diagnostique, sinon c'est impossible de le relancer »). Repli,
+  // et non masquage : la décision d'hier (masquer sauf s'il restait une ERROR) enterrait la
+  // place ET l'accès au panneau. Replié, la barre garde le compte + la sévérité max VISIBLES et
+  // rouvre d'un clic ; rien n'est enterré, une ERREUR reste signalée — d'où le retrait de
+  // l'exception ERROR (un cas particulier de moins). À la FERMETURE du créneau, on restaure
+  // l'état d'avant la sélection.
+  //
+  // Ajustement en phase de rendu (le lint du dépôt interdit `setState` dans un effet), clé = la
+  // transition de sélection, à l'image de `asideSeededFor` plus haut.
+  const slotSelected = null !== selectedCell && null !== selectedSlot;
+  const activeSlotId = slotSelected ? selectedSlotId : null;
+  const [slotCollapse, setSlotCollapse] = useState<{ slotId: string | null; restoreExpanded: boolean }>({ slotId: null, restoreExpanded: false });
+  if (slotCollapse.slotId !== activeSlotId) {
+    if (null !== activeSlotId && null === slotCollapse.slotId) {
+      // Ouverture d'un créneau (depuis aucun) : mémoriser l'expansion courante, puis replier.
+      setSlotCollapse({ slotId: activeSlotId, restoreExpanded: !diagnosticsCollapsed });
+      setDiagnosticsCollapsed(true);
+    } else if (null === activeSlotId && null !== slotCollapse.slotId) {
+      // Fermeture du créneau : restaurer l'état d'avant (ne ré-ouvrir que si c'était ouvert).
+      if (slotCollapse.restoreExpanded) {
+        setDiagnosticsCollapsed(false);
+      }
+      setSlotCollapse({ slotId: null, restoreExpanded: false });
+    } else {
+      // Passage d'un créneau à un autre : garder le repli, suivre juste l'id.
+      setSlotCollapse((prev) => ({ ...prev, slotId: activeSlotId }));
+    }
+  }
+
   const categoryLabel = useMemo(() => {
     if (null === selectedCell) {
       return "—";
@@ -665,20 +697,18 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             // grid takes the full width; closing the panel returns to full width.
             (() => {
               const showDetail = null !== selectedCell && null !== selectedSlot;
-              // Sélectionner un créneau MASQUE les diagnostics (fondateur : « de facto ça
-              // retire le diagnostic sinon l'écran est illisible ») — SAUF s'il reste des
-              // ERROR : un avertissement grave ne doit pas disparaître parce qu'on a cliqué
-              // ailleurs (le prochain défaut de confiance). Masquer n'est PAS supprimer :
-              // c'est un état DÉRIVÉ, fermer le créneau (selectedSlotId=null → showDetail
-              // faux) les fait revenir tels quels, rien n'est perdu.
-              const hasErrorDiagnostics = diagnostics.some((d) => "ERROR" === d.severity);
               // The diagnostics aside only claims grid width when it has content
               // to show: a selected slot's detail, or the (expanded) diagnostics.
               // ⚠ « Déplié » est un état de l'ASIDE, pas une promesse de contenu : c'est
               // l'amorce ci-dessus qui replie l'aside sur une version sans diagnostic. Le
-              // rouvrir à la main reste possible et respecté, y compris à vide.
-              const showDiagnostics = !isReadOnly && !diagnosticsCollapsed && (!showDetail || hasErrorDiagnostics);
+              // rouvrir à la main reste possible et respecté, y compris à vide. Sélectionner
+              // un créneau replie les diagnostics (cf. `slotCollapse`) : ils cohabitent alors
+              // avec le détail dans l'aside dès qu'on les rouvre — chacun borné à la grille.
+              const showDiagnostics = !isReadOnly && !diagnosticsCollapsed;
               const showAside = showDetail || showDiagnostics;
+              // Barre repliée : le compte TOTAL + la sévérité la plus haute restent lisibles —
+              // replier ne doit rien enterrer (« Diagnostics (6) · 2 erreurs »).
+              const topSummary = topSeveritySummary(diagnostics);
               const height = embedded ? "lg:h-[max(calc(100vh-24rem),26rem)]" : "lg:h-[calc(100vh-16rem)]";
               return (
                 <div className={`${showAside ? "lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:grid-rows-[minmax(0,1fr)] lg:gap-4" : ""} ${height}`}>
@@ -695,8 +725,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                         className="flex shrink-0 items-center gap-2 self-start rounded-md border border-border px-2 py-1 text-sm hover:bg-muted"
                       >
                         <AlertTriangle className={`size-4 ${diagnostics.length > 0 ? "text-warning" : "text-muted-foreground"}`} />
-                        Diagnostics du système
-                        {diagnostics.length > 0 ? <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{diagnostics.length}</span> : null}
+                        <span>Diagnostics du système{diagnostics.length > 0 ? ` (${diagnostics.length})` : ""}</span>
+                        {null !== topSummary ? <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{topSummary}</span> : null}
                       </button>
                     ) : null}
                     <div className="relative min-h-0 min-w-0 flex-1">
