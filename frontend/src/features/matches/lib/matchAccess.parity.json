@@ -1,0 +1,50 @@
+{
+  "_comment": "P4-88 — cas de PARITÉ MÉCANIQUE du prédicat d'appartenance « coup d'envoi dans une fenêtre d'accès match de (gymnase, jour) », intervalle DEMI-OUVERT [start, end[. Consommé par matchAccess.parity.test.ts (front, matches/lib/matchAccess.ts::kickoffInsideWindow) ET par MatchAccessMirrorParityTest.php (backend, MatchConflictDetector::kickoffInsideWindow). `inside` est le verdict des deux implémentations. L'ENVELOPPE (front: refus si aucune fenêtre ce jour + indisponibilité ; backend: HOME posés seulement) diverge par conception — seul CE prédicat est partagé et gardé ici.",
+  "cases": [
+    {
+      "name": "coup d'envoi dans la fenêtre — dedans",
+      "venueId": "v1", "day": 6, "kickoff": "14:30",
+      "windows": [{ "venueId": "v1", "dayOfWeek": 6, "startTime": "14:00", "endTime": "18:00" }],
+      "inside": true
+    },
+    {
+      "name": "borne de début INCLUSE",
+      "venueId": "v1", "day": 6, "kickoff": "14:00",
+      "windows": [{ "venueId": "v1", "dayOfWeek": 6, "startTime": "14:00", "endTime": "18:00" }],
+      "inside": true
+    },
+    {
+      "name": "borne de fin EXCLUE (demi-ouvert)",
+      "venueId": "v1", "day": 6, "kickoff": "18:00",
+      "windows": [{ "venueId": "v1", "dayOfWeek": 6, "startTime": "14:00", "endTime": "18:00" }],
+      "inside": false
+    },
+    {
+      "name": "bon créneau mais autre JOUR — dehors",
+      "venueId": "v1", "day": 7, "kickoff": "14:30",
+      "windows": [{ "venueId": "v1", "dayOfWeek": 6, "startTime": "14:00", "endTime": "18:00" }],
+      "inside": false
+    },
+    {
+      "name": "bonne heure mais autre GYMNASE — dehors",
+      "venueId": "v2", "day": 6, "kickoff": "14:30",
+      "windows": [{ "venueId": "v1", "dayOfWeek": 6, "startTime": "14:00", "endTime": "18:00" }],
+      "inside": false
+    },
+    {
+      "name": "deux fenêtres le même jour — la seconde couvre",
+      "venueId": "v1", "day": 6, "kickoff": "20:15",
+      "windows": [
+        { "venueId": "v1", "dayOfWeek": 6, "startTime": "09:00", "endTime": "12:00" },
+        { "venueId": "v1", "dayOfWeek": 6, "startTime": "20:00", "endTime": "22:00" }
+      ],
+      "inside": true
+    },
+    {
+      "name": "aucune fenêtre — dehors (l'enveloppe front tranche ce cas à part)",
+      "venueId": "v1", "day": 6, "kickoff": "14:30",
+      "windows": [],
+      "inside": false
+    }
+  ]
+}

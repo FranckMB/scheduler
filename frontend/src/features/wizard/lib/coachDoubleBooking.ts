@@ -4,14 +4,15 @@ import { parseTime } from "@/shared/lib/time";
 /**
  * P2-9 PR C — « affecter cette équipe ici mettrait-il son coach à deux endroits ? »
  *
- * ⚠️ PARITÉ OBLIGATOIRE avec le backend : `App\Service\CoachDoubleBookingDetector`
- * (P2-9 PR B) applique EXACTEMENT les mêmes règles pour BLOQUER la génération au récap.
- * Ici on prévient au clic ; là-bas on refuse. Deux implémentations sont inévitables (la
- * modale doit répondre sans aller-retour réseau), donc elles sont tenues alignées par des
- * cas de test IDENTIQUES des deux côtés — `coachDoubleBooking.test.ts` ici,
- * `CoachDoubleBookingTest` là-bas. Toute modification d'une règle doit être portée dans
- * les deux, sinon la modale autorise ce que le récap refusera (ou l'inverse, pire : elle
- * interdit un geste légitime).
+ * ⚠️ MIROIR DÉCLARÉ (régime 2, P4-88) — PARITÉ MÉCANIQUE avec le backend
+ * `App\Service\CoachDoubleBookingDetector::bookingsCollide` (P2-9 PR B), qui applique
+ * EXACTEMENT les mêmes règles pour BLOQUER la génération au récap. Ici on prévient au clic ;
+ * là-bas on refuse. Deux implémentations sont inévitables (la modale doit répondre sans
+ * aller-retour réseau) ; elles ne restaient alignées que par des suites JUMELLES
+ * (`coachDoubleBooking.test.ts` ⇄ `CoachDoubleBookingTest`), ce qui ne garantit rien. La
+ * règle PURE `bookingsCollide` est désormais gardée par la parité MÉCANIQUE
+ * `CoachDoubleBookingMirrorParityTest` : les mêmes cas (`coachDoubleBooking.parity.json`)
+ * traversent les DEUX implémentations. Ce module figure au registre `FrontRederivationRegistryTest`.
  *
  * Les trois règles (fondateur, 2026-07-31) :
  *  1. chevauchement sur INTERVALLES RÉELS `[début, début + durée[` — 17h00-18h30 et
@@ -53,6 +54,36 @@ interface Candidate {
   durationMinutes: number;
 }
 
+/** Une séance pré-résolue (coach MAIN inclus, heure en minutes) — l'entrée de la règle pure. */
+export interface Booking {
+  teamId: string;
+  coachId: string;
+  venueId: string;
+  dayOfWeek: number;
+  startMinutes: number;
+  durationMinutes: number;
+}
+
+/**
+ * LA règle pure de dédoublement de coach — miroir MÉCANIQUE de
+ * `CoachDoubleBookingDetector::bookingsCollide` (PHP). Les MÊMES cas la traversent des
+ * deux côtés (`coachDoubleBooking.parity.json`, gardé par `CoachDoubleBookingMirrorParityTest`) :
+ * changer une règle d'un seul côté rougit la parité. Les trois règles (fondateur 2026-07-31) :
+ *  3. même coach MAIN des deux côtés (sinon rien à dédoubler) et équipes DIFFÉRENTES ;
+ *  2. gymnases DIFFÉRENTS (même gymnase = mutualisation voulue) ;
+ *  1. intervalles réels demi-ouverts `[début, début+durée[`.
+ */
+export function bookingsCollide(a: Booking, b: Booking): boolean {
+  return (
+    a.coachId === b.coachId &&
+    a.teamId !== b.teamId &&
+    a.venueId !== b.venueId &&
+    a.dayOfWeek === b.dayOfWeek &&
+    a.startMinutes < b.startMinutes + b.durationMinutes &&
+    b.startMinutes < a.startMinutes + a.durationMinutes
+  );
+}
+
 /**
  * La réservation DÉJÀ posée qui empêche `candidate`, ou null si le geste est légitime.
  * Rendre la réservation fautive (et non un booléen) permet à l'appelant de nommer
@@ -67,31 +98,17 @@ export function conflictingReservation(candidate: Candidate, reservations: Reser
   if (null === start) {
     return null; // heure illisible : on ne peut rien affirmer, le récap tranchera (PR B)
   }
+  const here: Booking = { ...candidate, coachId, startMinutes: start };
 
   return (
     reservations.find((other) => {
-      // Même équipe : ce n'est pas un dédoublement de COACH (autre sujet).
-      if (other.teamId === candidate.teamId) {
-        return false;
-      }
-      if (coachByTeam.get(other.teamId) !== coachId) {
-        return false;
-      }
-      // Règle 2 : même gymnase = mutualisation possible, le coach n'y est qu'une fois.
-      if (other.venueId === candidate.venueId) {
-        return false;
-      }
-      if (other.dayOfWeek !== candidate.dayOfWeek) {
-        return false;
-      }
-      // Règle 1 : intervalles demi-ouverts — deux créneaux qui se touchent (fin de l'un =
-      // début de l'autre) ne se chevauchent pas.
+      const otherCoach = coachByTeam.get(other.teamId);
       const otherStart = minutes(other.startTime);
-      if (null === otherStart) {
+      if (undefined === otherCoach || null === otherStart) {
         return false;
       }
 
-      return start < otherStart + other.durationMinutes && otherStart < start + candidate.durationMinutes;
+      return bookingsCollide(here, { ...other, coachId: otherCoach, startMinutes: otherStart });
     }) ?? null
   );
 }

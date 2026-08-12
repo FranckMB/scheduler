@@ -39,6 +39,47 @@ final class OrphanPinGuard
     ) {}
 
     /**
+     * LE prédicat ÉTROIT « réservation dont le triplet (gymnase, jour, heure) ne retombe
+     * sur AUCUN créneau de la grille » — extrait pour la parité MÉCANIQUE avec le front
+     * (`wizard/lib/orphanReservations.ts::orphanReservationIds`, cas partagés
+     * `orphanReservations.parity.json`, gardé par `OrphanReservationsMirrorParityTest`).
+     *
+     * ⚠ SOUS-ENSEMBLE ASSUMÉ de `firstOrphanMessage` : le bloqueur complet retire EN PLUS
+     * les gymnases désactivés et les jours de fermeture, et couvre les verrous HARD. Le
+     * front LISTE (pour supprimer au récap), le backend REFUSE la génération. La parité ne
+     * porte QUE sur ce prédicat étroit — les cas « le bloqueur complet refuse en plus »
+     * sont documentés dans le fichier de cas comme divergence voulue, gardés par les tests
+     * d'`OrphanPinGuard` eux-mêmes.
+     *
+     * @param list<array{id: string, venueId: string, dayOfWeek: int, startTime: string}> $reservations
+     * @param list<array{venueId: string, dayOfWeek: int, startTime: string}>             $slots
+     *
+     * @return list<string> ids des réservations orphelines-par-triplet, ordre d'entrée
+     */
+    public static function orphanTripletIds(array $reservations, array $slots): array
+    {
+        $grid = [];
+        foreach ($slots as $slot) {
+            $grid[self::tripletKey($slot['venueId'], $slot['dayOfWeek'], $slot['startTime'])] = true;
+        }
+
+        $orphans = [];
+        foreach ($reservations as $reservation) {
+            if (!isset($grid[self::tripletKey($reservation['venueId'], $reservation['dayOfWeek'], $reservation['startTime'])])) {
+                $orphans[] = $reservation['id'];
+            }
+        }
+
+        return $orphans;
+    }
+
+    /** Heure NORMALISÉE à H:i (comme `hhmm` côté front) — la grille peut porter les secondes. */
+    private static function tripletKey(string $venueId, int $dayOfWeek, string $startTime): string
+    {
+        return $venueId . '|' . $dayOfWeek . '|' . substr($startTime, 0, 5);
+    }
+
+    /**
      * Le message à afficher, ou null si tout épinglage retombe sur un créneau existant.
      */
     public function firstOrphanMessage(Schedule $schedule): ?string
