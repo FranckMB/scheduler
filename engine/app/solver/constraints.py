@@ -2220,19 +2220,25 @@ def diagnose_locked_slot_violations(
     pin overrode, so he can decide. Hence INFO warnings, never errors.
 
     Scope is deliberately the constraints the manager ENTERED (coach
-    availability, team time/day windows, forbidden venues). The structural rules
-    a lock also bypasses — one coach in two gyms at once — are a different
-    animal: they describe physical impossibility rather than a preference, so
-    they block generation instead of warning, and land in their own change.
+    availability, team time/day windows, forbidden AND forced venues). The
+    structural rules a lock also bypasses — one coach in two gyms at once — are a
+    different animal: they describe physical impossibility rather than a
+    preference, so they block generation instead of warning, and land in their
+    own change. ``venue_minimums`` is deliberately EXCLUDED: it is applied hard
+    with only three outcomes (honored · INFEASIBLE→failed · unreachable→ERROR
+    diagnostic), so it can never drift in silence — claiming to watch it here
+    would be the very lie this docstring forbids.
 
     Mirrors the enforcement rules exactly (start-based interval match for
-    coaches, min/max start for windows, team+venue pair for forbidden venues);
-    any drift between the two would make this lie about what the solver did.
+    coaches, min/max start for windows, team+venue pair for forbidden venues,
+    team→imposed-venue mismatch for forced venues); any drift between the two
+    would make this lie about what the solver did.
     """
     rules: Mapping[Any, Any] = parsed.get("coach_unavailability") or {}
     coach_map: Mapping[str, Any] = parsed.get("team_coach_map") or {}
     windows = parsed.get("time_windows") or ()
     forbidden = parsed.get("forbidden_assignments") or ()
+    forced_venues: Mapping[str, Any] = parsed.get("forced_venues") or {}
 
     def _team(team_id: str) -> str:
         return (team_names or {}).get(team_id) or team_id
@@ -2387,6 +2393,23 @@ def diagnose_locked_slot_violations(
                     lock_id,
                     f"Réservation maintenue pour {_team(team_id)} ({where}) dans un gymnase qui lui est interdit.",
                 )
+
+        # 4. Forced venue — le miroir du gymnase interdit. `parse_v2_constraints`
+        # aplatit la règle HARD/LOCK « impose ce gymnase » en team→gymnase unique
+        # (`forced_venues`), sans `id` ni `name` : on nomme donc une contrainte
+        # synthétique portant le gymnase imposé, comme pour les paires interdites.
+        # Le créneau verrouillé n'ayant PAS de variable (`model.py`), le forçage
+        # `var == 0` des autres gymnases ne peut pas l'atteindre : le verrou plaçait
+        # hors du gymnase imposé, `completed`, sans un mot.
+        target_venue = forced_venues.get(team_id)
+        if target_venue is not None and venue_id and str(target_venue) != venue_id:
+            _emit(
+                {"id": f"forced-venue-{team_id}", "name": f"gymnase imposé ({_venue(str(target_venue))})"},
+                team_id,
+                lock_id,
+                f"Réservation maintenue pour {_team(team_id)} ({where}) hors du gymnase imposé "
+                f"{_venue(str(target_venue))} : le verrou prime, la contrainte est ignorée.",
+            )
 
     return warnings
 

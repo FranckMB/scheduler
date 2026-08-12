@@ -392,6 +392,70 @@ def test_a_forced_day_left_unserved_by_a_lock_is_reported() -> None:
     assert "mardi" in messages[0], "le jour imposé doit être nommé"
 
 
+def _forced_venue(team_id: str, venue_id: str, *, rule_type: str = "HARD") -> dict[str, Any]:
+    return {
+        "id": f"force-{team_id}-{venue_id}",
+        "isActive": True,
+        "family": "FACILITY",
+        "ruleType": rule_type,
+        "scope": "TEAM",
+        "scopeTargetId": team_id,
+        "name": "SM1 doit jouer à GYMA",
+        "config": {"forcedVenueId": venue_id},
+    }
+
+
+def test_a_lock_outside_the_forced_venue_is_kept_but_announced() -> None:
+    """LE CAS forced_venues — le second angle mort du silence (fix ce lot).
+
+    `add_forced_venue_constraints` force à 0 la variable de tout gymnase ≠ imposé.
+    Le créneau verrouillé n'ayant PAS de variable (`model.py`), ce forçage ne peut
+    pas l'atteindre : mesuré, l'équipe atterrissait à GYMB alors qu'une règle HARD
+    l'impose à GYMA, `completed`, `diagnostics` vide. Le verrou reste souverain
+    (ALIGN-07) ; ce qui change, c'est le silence.
+    """
+    payload = make_payload(
+        teams=[make_team("SM1", sessions_per_week=1)],
+        venues=[make_venue("GYMA", [(TUESDAY, "18:00")]), make_venue("GYMB", [(TUESDAY, "18:00")])],
+        constraints=[_forced_venue("SM1", "GYMA")],
+        slot_templates=[_hard_lock("SM1", "GYMB", TUESDAY, "18:00")],
+    )
+
+    result = solve_payload(payload)
+
+    # 1. Souveraineté : le placement du gestionnaire (GYMB) est respecté.
+    assert [s["venueId"] for s in result["slots"] if s["teamId"] == "SM1"] == ["GYMB"], "le verrou reste souverain"
+
+    # 2. Fin du silence : un INFO qui NOMME l'équipe, le gymnase imposé ET le gymnase utilisé.
+    messages = _violation_messages(result)
+    assert len(messages) == 1, f"une violation attendue, obtenu : {messages}"
+    phrase = messages[0].split("(contrainte")[0]
+    for expected, why in (
+        ("SM1", "l'équipe"),
+        ("GYMA", "le gymnase imposé"),
+        ("GYMB", "le gymnase réellement utilisé"),
+    ):
+        assert expected in phrase, f"{why} doit être nommé dans la phrase : {phrase!r}"
+
+    severities = {d.get("severity") for d in result["diagnostics"] if d.get("type") == "constraint_not_honored"}
+    assert severities == {"INFO"}, "un avertissement, jamais une erreur : le gestionnaire tranche"
+
+
+def test_a_lock_inside_the_forced_venue_stays_quiet() -> None:
+    """L'autre bord : le verrou pose l'équipe DANS le gymnase imposé — rien à signaler."""
+    payload = make_payload(
+        teams=[make_team("SM1", sessions_per_week=1)],
+        venues=[make_venue("GYMA", [(TUESDAY, "18:00")]), make_venue("GYMB", [(TUESDAY, "18:00")])],
+        constraints=[_forced_venue("SM1", "GYMA")],
+        slot_templates=[_hard_lock("SM1", "GYMA", TUESDAY, "18:00")],
+    )
+
+    result = solve_payload(payload)
+
+    assert [s["venueId"] for s in result["slots"] if s["teamId"] == "SM1"] == ["GYMA"]
+    assert _violation_messages(result) == [], "le verrou honore le gymnase imposé — l'accuser serait un faux positif"
+
+
 def test_the_day_warning_names_the_REAL_constraint_not_a_synthetic_one() -> None:
     """Revue #317 round 3 — l'union avait fait perdre la contrainte fautive.
 

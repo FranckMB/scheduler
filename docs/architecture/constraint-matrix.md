@@ -72,12 +72,20 @@ statut `completed`. Le produit affirmait avoir respecté une contrainte qu'il av
 - **Ce qui a changé** : le silence. `diagnose_locked_slot_violations`
   (`engine/app/solver/constraints.py`, appelée depuis `main.py`) croise les verrous avec les
   contraintes **SAISIES par le gestionnaire** — indisponibilité coach, fenêtres horaires, règles de
-  jours (unies par équipe), gymnase interdit — et émet un `constraint_not_honored` **INFO** qui nomme
-  la contrainte, l'équipe, le coach, le gymnase, le jour et l'heure. INFO et jamais ERROR : le
-  gestionnaire a le droit d'épingler, il a le droit de savoir ce que son épingle a écrasé. La
-  détection **réplique exactement** les règles d'application (intervalle coach comparé au début de
-  créneau, min/max start des fenêtres, paire équipe+gymnase des interdits) — toute dérive entre les
-  deux ferait mentir le diagnostic sur ce que le solveur a réellement fait.
+  jours (unies par équipe), gymnase interdit **et gymnase imposé** — et émet un `constraint_not_honored`
+  **INFO** qui nomme la contrainte, l'équipe, le coach, le gymnase (imposé **et** réellement utilisé),
+  le jour et l'heure. INFO et jamais ERROR : le gestionnaire a le droit d'épingler, il a le droit de
+  savoir ce que son épingle a écrasé. La détection **réplique exactement** les règles d'application
+  (intervalle coach comparé au début de créneau, min/max start des fenêtres, paire équipe+gymnase des
+  interdits, écart équipe→gymnase imposé des forçages) — toute dérive entre les deux ferait mentir le
+  diagnostic sur ce que le solveur a réellement fait.
+- **`forced_venues` était le second angle mort** (fix `fix/forced-venues-lock-silence`) : une équipe
+  forcée « toutes séances à GYMA » (`add_forced_venue_constraints`) qu'un verrou HARD pose à GYMB
+  atterrissait à GYMB, `completed`, **zéro diagnostic** — le miroir exact du gymnase interdit, oublié.
+  `venue_minimums` (`minAtVenueId`), lui, est **délibérément EXCLU** du diagnostic de verrou : il est
+  appliqué en dur avec trois seules issues (honoré · INFEASIBLE→`failed` · inatteignable→ERROR
+  `venue_minimum_unreachable`), donc il ne peut jamais dériver en silence — prétendre le surveiller
+  serait précisément le mensonge que le docstring interdit.
 - **Périmètre volontaire** : uniquement le SAISI. Les règles **structurelles** qu'un verrou contourne
   aussi (un coach dans deux gymnases à la même heure) décrivent une impossibilité physique, pas une
   préférence : elles bloqueront la génération au lieu d'avertir, dans un lot dédié.
@@ -86,8 +94,17 @@ statut `completed`. Le produit affirmait avoir respecté une contrainte qu'il av
   les N équipes. Détail : `backend/docs/constraint-coverage.md`.
 
 Verrous de non-régression : `engine/tests/semantic/test_hard_lock_announces_violations.py` (avec un
-TÉMOIN explicite — sans lui, constater que SM1 joue le samedi n'accuserait pas le verrou) et
-`engine/tests/semantic/test_hard_lock_divisible_slot.py`.
+TÉMOIN explicite — sans lui, constater que SM1 joue le samedi n'accuserait pas le verrou ; couvre
+désormais le gymnase imposé) et `engine/tests/semantic/test_hard_lock_divisible_slot.py`.
+
+**La matrice machine porte une dimension `lock_silence`** (`constraint_matrix.py`, **obligatoire, sans
+défaut** : une cellule qui l'oublie échoue à la construction, donc la suite entière rougit) qui classe
+chaque cellule face à un verrou : **DIAGNOSED** (le contournement DOIT produire un `constraint_not_honored`
+qui nomme la règle — coach, fenêtres, jours, gymnase interdit, gymnase imposé), **UNBYPASSABLE** (ne peut
+pas dériver en silence, `venue_minimums` en tête, avec la RAISON portée par la cellule), **SOFT** (famille
+soft, ne promet rien). Le test généré ne vérifie pas l'étiquette mais le **comportement** : pour chaque
+cellule DIAGNOSED il rejoue un scénario verrou-contre-règle et exige un diagnostic qui nomme la règle —
+marquer une famille non-diagnostiquée (ex. `venue_minimums`) DIAGNOSED fait rougir la CI.
 
 ⚠ **La souveraineté du verrou vaut aussi contre les INVARIANTS, et il a fallu le leur apprendre**
 (P4-81, 2026-08-11). `test_no_venue_double_booking` affirmait `len(team_ids) <= 1` en dur : il
