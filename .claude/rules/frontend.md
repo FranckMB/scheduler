@@ -10,6 +10,20 @@ paths:
 > su, rend un test VERT à tort** — parce que ces règles-là doivent être en contexte sans que
 > personne ait à penser à les chercher.
 
+- 🔴 **Le front n'invente JAMAIS une règle métier — il AFFICHE celle que le backend a calculée.**
+  Toute logique qui répond « qu'est-ce qui s'applique / que fait le solveur / ce geste est-il
+  permis » n'existe **qu'une fois**. Trois régimes, un seul interdit : **(1) le backend dit** —
+  supprimer la redérivation, afficher la réponse (le défaut) ; **(2) miroir déclaré** — la
+  duplication est assumée (réactivité sans aller-retour réseau), **déclarée en tête de fichier**
+  ET gardée par un **test de parité** (patron : `CoachDoubleBookingDetector` ⇄
+  `wizard/lib/coachDoubleBooking.ts` ; côté cross-stack `PayloadCapacityMirror` +
+  `CapacityMirrorParityTest`) ; **(3) redérivation silencieuse** — ❌ interdite. Signe d'alerte :
+  un `switch`/chaîne de conditions sur les valeurs d'un **enum métier partagé** (`scope`,
+  `ruleType`, `family`, `lockLevel`, `status`…) pour **décider d'un comportement** (pas pour
+  choisir un libellé — ça, c'est de la présentation, cf. `matches/lib/diagnostic.ts`). Cas fondateur
+  du **2026-08-12** : `applicableConstraints` faisait `case "CLUB": return true` alors que
+  `ScheduleConstraintBuilder.php:846-870` éclate une `CLUB+targetTag` en N contraintes TEAM — le
+  wrap affichait une règle sur une équipe à qui le solveur ne l'applique jamais.
 - 🔴 **L'image tooling COPIE le code — la rebâtir AVANT tout test**, sinon la suite valide une
   version périmée et passe : `docker compose --profile tools build frontend-tooling`
   (`make -C frontend install` le fait). **Deux faux verts dans la même session le 2026-08-11.**
