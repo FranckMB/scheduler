@@ -189,6 +189,154 @@ final class SpreadsheetTeamDayMatrixTest extends TestCase
         }
     }
 
+    public function testRangHeaderSitsInColumnThreeAndDaysStartAtColumnFour(): void
+    {
+        $data = new ScheduleExportData(
+            slots: [
+                $this->slot('t-u13', 'v-a', 1, '18:30'),
+                $this->slot('t-u15', 'v-b', 3, '20:00'),
+            ],
+            teamNames: ['t-u13' => 'U13 F', 't-u15' => 'U15 M'],
+            teamCategories: ['t-u13' => 'U13', 't-u15' => 'U15'],
+            venues: ['v-a' => ['name' => 'Gymnase Municipal', 'color' => null], 'v-b' => ['name' => 'Salle B', 'color' => null]],
+            coachNames: [],
+        );
+
+        $header = $this->matrixHeader($this->renderAndReadBack($data));
+
+        // « Rang » s'insère entre Catégorie et les jours ; décaler $firstDayCol d'un cran (jours en 3
+        // au lieu de 4, ou Rang ailleurs qu'en 3) fait rougir ces assertions de position.
+        self::assertSame('Équipe', $header[0] ?? null);
+        self::assertSame('Catégorie', $header[1] ?? null);
+        self::assertSame('Rang', $header[2] ?? null, '« Rang » doit être la 3ᵉ colonne');
+        self::assertSame('Lundi', $header[3] ?? null, 'les jours commencent en colonne 4, juste après Rang');
+    }
+
+    public function testKnownTeamCarriesItsRankValue(): void
+    {
+        $data = new ScheduleExportData(
+            slots: [
+                $this->slot('t-sen', 'v-a', 1, '18:30'),
+                $this->slot('t-u15', 'v-b', 3, '20:00'),
+            ],
+            teamNames: ['t-sen' => 'Séniors M1', 't-u15' => 'U15 F1'],
+            teamCategories: ['t-sen' => 'Séniors', 't-u15' => 'U15'],
+            venues: ['v-a' => ['name' => 'Gymnase Municipal', 'color' => null], 'v-b' => ['name' => 'Salle B', 'color' => null]],
+            coachNames: [],
+            teamRanks: ['t-sen' => $this->rank('S', 'Elite', 1), 't-u15' => $this->rank('A', 'Régional+', 2)],
+        );
+
+        $book = $this->renderAndReadBack($data);
+
+        // Valeur triable = préfixe numérique zéro-paddé + libellé court : "01 · S", jamais le brut « S ».
+        self::assertSame('01 · S', $this->rankOf($book, 'Séniors M1'));
+        self::assertSame('02 · A', $this->rankOf($book, 'U15 F1'));
+    }
+
+    /**
+     * LE test du lot. On construit S/A/B/C/D dans le désordre, on relit la colonne « Rang », on la
+     * trie comme Excel (comparaison de chaînes, vides toujours en fin) et on assert que l'ordre
+     * obtenu est EXACTEMENT l'ordre par tierRank croissant du PDF : S → A → B → C → D.
+     *
+     * ⚑ Falsification : écrire le label brut (« S », « A »…) au lieu de la valeur préfixée fait
+     * rougir ce test en rendant A, B, C, D, S — l'ordre alphabétique naïf, pas l'ordre du PDF.
+     */
+    public function testSortingRangColumnReproducesPdfRankOrder(): void
+    {
+        // Désordre volontaire dans teamNames/teamRanks ; deux gymnases pour que la matrice s'affiche.
+        $data = new ScheduleExportData(
+            slots: [
+                $this->slot('t-b', 'v-a', 1, '18:30'),
+                $this->slot('t-c', 'v-b', 3, '20:00'),
+            ],
+            teamNames: ['t-b' => 'U13 M1', 't-s' => 'Séniors M1', 't-d' => 'Loisir 1', 't-a' => 'U15 F1', 't-c' => 'Séniors M2'],
+            teamCategories: ['t-b' => 'U13', 't-s' => 'Séniors', 't-d' => 'Loisir', 't-a' => 'U15', 't-c' => 'Séniors'],
+            venues: ['v-a' => ['name' => 'Gymnase Municipal', 'color' => null], 'v-b' => ['name' => 'Salle B', 'color' => null]],
+            coachNames: [],
+            teamRanks: [
+                't-b' => $this->rank('B', 'Régional', 3),
+                't-s' => $this->rank('S', 'Elite', 1),
+                't-d' => $this->rank('D', 'Loisir', 5),
+                't-a' => $this->rank('A', 'Régional+', 2),
+                't-c' => $this->rank('C', 'Départemental', 4),
+            ],
+        );
+
+        $rows = $this->rankRows($this->renderAndReadBack($data)); // [ [name, rangValue], ... ]
+
+        // Tri « à la Excel » sur la colonne Rang : vides en fin, sinon comparaison de chaînes.
+        usort($rows, static function (array $a, array $b): int {
+            if ('' === $a[1] || '' === $b[1]) {
+                return ('' === $a[1] ? 1 : 0) <=> ('' === $b[1] ? 1 : 0);
+            }
+
+            return strcmp($a[1], $b[1]);
+        });
+
+        $orderedTeams = array_column($rows, 0);
+        self::assertSame(
+            ['Séniors M1', 'U15 F1', 'U13 M1', 'Séniors M2', 'Loisir 1'],
+            $orderedTeams,
+            'trier la colonne Rang doit reproduire l’ordre du PDF S→A→B→C→D',
+        );
+    }
+
+    public function testTeamWithoutRankHasEmptyCellAndSortsLast(): void
+    {
+        $data = new ScheduleExportData(
+            slots: [
+                $this->slot('t-s', 'v-a', 1, '18:30'),
+                $this->slot('t-a', 'v-b', 3, '20:00'),
+            ],
+            teamNames: ['t-s' => 'Séniors M1', 't-a' => 'U15 F1', 't-x' => 'Équipe sans rang'],
+            teamCategories: ['t-s' => 'Séniors', 't-a' => 'U15', 't-x' => 'U11'],
+            venues: ['v-a' => ['name' => 'Gymnase Municipal', 'color' => null], 'v-b' => ['name' => 'Salle B', 'color' => null]],
+            coachNames: [],
+            // t-x absent de teamRanks : aucune valeur inventée, cellule vide.
+            teamRanks: ['t-s' => $this->rank('S', 'Elite', 1), 't-a' => $this->rank('A', 'Régional+', 2)],
+        );
+
+        $book = $this->renderAndReadBack($data);
+
+        self::assertSame('', $this->rankOf($book, 'Équipe sans rang'), 'une équipe sans rang → cellule Rang vide, jamais une valeur inventée');
+
+        // ...et elle atterrit en FIN de tri (Excel place toujours les vides après), comme le
+        // PHP_INT_MAX du PDF.
+        $rows = $this->rankRows($book);
+        usort($rows, static function (array $a, array $b): int {
+            if ('' === $a[1] || '' === $b[1]) {
+                return ('' === $a[1] ? 1 : 0) <=> ('' === $b[1] ? 1 : 0);
+            }
+
+            return strcmp($a[1], $b[1]);
+        });
+        self::assertSame('Équipe sans rang', array_column($rows, 0)[array_key_last($rows)], 'la ligne sans rang se retrouve en fin de tri');
+    }
+
+    public function testDefaultRowOrderStaysCategoryThenNameNotRank(): void
+    {
+        // Ordre par défaut inchangé : catégorie puis nom — surtout PAS le rang. On choisit des
+        // données où l'ordre par rang (S avant D) contredit l'ordre par catégorie (U11 avant U13).
+        $data = new ScheduleExportData(
+            slots: [
+                $this->slot('t-hi', 'v-a', 1, '18:30'),
+                $this->slot('t-lo', 'v-b', 3, '20:00'),
+            ],
+            teamNames: ['t-hi' => 'Zoulou', 't-lo' => 'Alpha'],
+            teamCategories: ['t-hi' => 'U13', 't-lo' => 'U11'],
+            venues: ['v-a' => ['name' => 'Gymnase Municipal', 'color' => null], 'v-b' => ['name' => 'Salle B', 'color' => null]],
+            coachNames: [],
+            // Zoulou est rang S (1), Alpha rang D (5) : par rang Zoulou serait premier — l'inverse
+            // de l'ordre par catégorie, qui doit rester en vigueur par défaut.
+            teamRanks: ['t-hi' => $this->rank('S', 'Elite', 1), 't-lo' => $this->rank('D', 'Loisir', 5)],
+        );
+
+        $teamColumn = array_column($this->rankRows($this->renderAndReadBack($data)), 0);
+
+        // U11/Alpha avant U13/Zoulou : l'ordre des lignes reste catégorie puis nom.
+        self::assertSame(['Alpha', 'Zoulou'], $teamColumn);
+    }
+
     private function slot(string $teamId, string $venueId, int $day, string $time, ?string $coachId = null): ScheduleSlotTemplate
     {
         return new ScheduleSlotTemplate()
@@ -256,5 +404,61 @@ final class SpreadsheetTeamDayMatrixTest extends TestCase
             }
         }
         self::fail(\sprintf('ligne de l’équipe « %s » introuvable', $teamName));
+    }
+
+    /** @return array{label: string, name: string, tierRank: int, tierOrder: int} */
+    private function rank(string $label, string $name, int $tierRank, int $tierOrder = 0): array
+    {
+        return ['label' => $label, 'name' => $name, 'tierRank' => $tierRank, 'tierOrder' => $tierOrder];
+    }
+
+    /** @return list<string> l'en-tête de la feuille matrice, tel qu'ouvert. */
+    private function matrixHeader(Spreadsheet $book): array
+    {
+        $sheet = $book->getSheetByName(self::MATRIX_SHEET);
+        self::assertNotNull($sheet, 'la feuille matrice doit exister');
+
+        return array_map(static fn (mixed $v): string => (string) $v, $sheet->toArray()[0]);
+    }
+
+    /** Valeur de la colonne « Rang » pour une équipe, localisée PAR NOM. */
+    private function rankOf(Spreadsheet $book, string $teamName): string
+    {
+        $sheet = $book->getSheetByName(self::MATRIX_SHEET);
+        self::assertNotNull($sheet, 'la feuille matrice doit exister');
+        $grid = $sheet->toArray();
+
+        $colIndex = array_search('Rang', $grid[0], true);
+        self::assertIsInt($colIndex, 'colonne « Rang » absente de l’en-tête');
+
+        foreach ($grid as $line) {
+            if (($line[0] ?? null) === $teamName) {
+                return (string) ($line[$colIndex] ?? '');
+            }
+        }
+        self::fail(\sprintf('ligne de l’équipe « %s » introuvable', $teamName));
+    }
+
+    /**
+     * Les lignes de données de la matrice réduites à [nom d'équipe, valeur de Rang], dans l'ordre
+     * par défaut du fichier — matière première des tests de tri.
+     *
+     * @return list<array{0: string, 1: string}>
+     */
+    private function rankRows(Spreadsheet $book): array
+    {
+        $sheet = $book->getSheetByName(self::MATRIX_SHEET);
+        self::assertNotNull($sheet, 'la feuille matrice doit exister');
+        $grid = $sheet->toArray();
+
+        $colIndex = array_search('Rang', $grid[0], true);
+        self::assertIsInt($colIndex, 'colonne « Rang » absente de l’en-tête');
+
+        $rows = [];
+        foreach (\array_slice($grid, 1) as $line) {
+            $rows[] = [(string) ($line[0] ?? ''), (string) ($line[$colIndex] ?? '')];
+        }
+
+        return $rows;
     }
 }
