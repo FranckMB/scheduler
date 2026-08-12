@@ -381,6 +381,15 @@ jobs:
       - name: LockOriginProvenanceTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Integration/Service/LockOriginProvenanceTest.php --group phase1'
 
+      # F2c (axe planning lifecycle) : une contrainte modifiée APRÈS génération marque les
+      # plannings COMPLETED du club+saison comme PÉRIMÉS (état en base), et un import de
+      # résultat solveur les démarque. Le marquage passe par un listener d'entité (tout writer,
+      # même hors API) et respecte la frontière saison. Sans ce gate, l'application remettrait à
+      # afficher un planning comme courant alors qu'une règle a changé sous lui — le bug de
+      # confiance qui a fait perdre foi dans le produit.
+      - name: ConstraintChangeStaleScheduleTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Integration/Service/ConstraintChangeStaleScheduleTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest

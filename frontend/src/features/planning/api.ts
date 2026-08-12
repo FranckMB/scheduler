@@ -107,6 +107,13 @@ export interface Schedule {
    * une réponse d'écriture nue, traité comme faux.
    */
   manuallyEditedSinceGeneration?: boolean;
+  /**
+   * F2c : une contrainte a-t-elle changé (créée, modifiée, supprimée) depuis la génération de
+   * ce planning ? Vrai ⇒ le planning décrit un état ANTÉRIEUR des règles — pas faux, mais
+   * PÉRIMÉ ; l'écran le dit (bannière unifiée avec « retouché à la main »). Remis à faux par
+   * une (re)génération. Absent (undefined) sur une réponse d'écriture nue, traité comme faux.
+   */
+  constraintsChangedSinceGeneration?: boolean;
   createdAt: string;
   updatedAt: string;
   /**

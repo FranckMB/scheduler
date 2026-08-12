@@ -31,6 +31,7 @@ import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
+import { stalenessMessage } from "./lib/staleness";
 import { isSeasonPlanType } from "./lib/versions";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
@@ -545,13 +546,24 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         </p>
       ) : null}
 
-      {/* F2b : un déplacement manuel a changé le placement sans recalculer le score — le
-          dire, sinon le gestionnaire lit un score qui ne décrit plus son planning. */}
-      {!isGenerating && true === selectedSchedule?.manuallyEditedSinceGeneration ? (
-        <p className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
-          Ce planning a été modifié à la main depuis sa génération — le score affiché est périmé. Régénérez pour un score à jour.
-        </p>
-      ) : null}
+      {/* Planning PÉRIMÉ (pas faux) : retouché à la main (F2b) et/ou une contrainte a changé
+          depuis la génération (F2c). UNE seule bannière qui nomme sa/ses cause(s) ; sur un
+          planning validé (lecture seule) elle propose « rouvrir puis régénérer », jamais un
+          geste qui finirait en 409. Voir lib/staleness. */}
+      {(() => {
+        const stale = isGenerating || null === selectedSchedule
+          ? null
+          : stalenessMessage({
+            manuallyEdited: true === selectedSchedule.manuallyEditedSinceGeneration,
+            constraintsChanged: true === selectedSchedule.constraintsChangedSinceGeneration,
+            readOnly: isReadOnly,
+          });
+        return null === stale ? null : (
+          <p className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+            {stale}
+          </p>
+        );
+      })()}
 
 
       {0 === schedules.length ? (
