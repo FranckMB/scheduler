@@ -18,7 +18,8 @@ import { groupTagsByAxis, tagLabel } from "../lib/tagLabels";
 import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
-import { DAYS, dayLabel } from "../lib/days";
+import { DAYS } from "../lib/days";
+import { dayLabelLong } from "@/shared/lib/days";
 import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useActiveTeams, useActiveVenues, useWizardVenues, useReservations } from "../queries";
 import { usePeriodAnchor } from "@/features/cockpit/queries";
 import { useWizardStore } from "../store";
@@ -203,7 +204,9 @@ export function ConstraintsStep() {
   const effectiveVenueMode = "min" === venueMode && !minAllowed ? "preferred" : venueMode;
   const who = "" !== teamTargetId ? (teamName.get(teamTargetId) ?? "?") : isTag ? `Groupe ${tagName}` : "Toutes les équipes";
   const toggleDay = (n: number) => setDays((prev) => (prev.has(n) ? new Set([...prev].filter((x) => x !== n)) : new Set([...prev, n])));
-  const dayNames = (set: Set<number>) => [...set].sort((a, b) => a - b).map(dayLabel).join(", ");
+  // Le NOM auto-généré écrit les jours EN TOUTES LETTRES (« jeudi », pas « Jeu ») — le
+  // court reste réservé aux colonnes de la grille. Forme longue au foyer unique (D-22).
+  const dayNames = (set: Set<number>) => [...set].sort((a, b) => a - b).map(dayLabelLong).join(", ");
 
   function build(): ConstraintPayload | null {
     if ("TIME" === family) {

@@ -265,6 +265,20 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     expect(h.createMut.mock.calls[0][0].config).not.toHaveProperty("coachId");
   });
 
+  it("names generated constraints with full day words (« jeudi », not « Jeu ») — founder 2026-08-12", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    // A coach indispo on Thursday: the day toggle stays short (« Jeu »), but the
+    // auto-generated NAME must spell the day out.
+    await user.click(screen.getByRole("button", { name: "Dispo coach" }));
+    await user.selectOptions(screen.getByLabelText("Coach"), "co1");
+    await user.click(screen.getByRole("button", { name: "Jeu" }));
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    expect(h.createMut.mock.calls[0][0].name).toBe("Jean Dupont · indispo jeudi");
+  });
+
   it("groups the coach picker (a non-employee non-player coach lands under « Bénévoles »)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ConstraintsStep />);

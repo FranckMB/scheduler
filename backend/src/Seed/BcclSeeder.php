@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Seed;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Coach;
@@ -21,6 +22,9 @@ use App\Entity\TeamCoach;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\CalendarEntryStatus;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -356,8 +360,9 @@ final class BcclSeeder
             ['vMateo', 2, '20:30', 120, 1],
             // Matéo — Wed
             ['vMateo', 3, '09:30', 75, 1],
-            ['vMateo', 3, '16:00', 90, 1],
-            ['vMateo', 3, '17:30', 90, 1],
+            // Mer 16:00 partagé U11F2/U9M1, 17:30 partagé U11F1/U11M2 (ex-CEC, Matéo divisible en 2).
+            ['vMateo', 3, '16:00', 90, 2],
+            ['vMateo', 3, '17:30', 90, 2],
             ['vMateo', 3, '19:00', 90, 1],
             ['vMateo', 3, '20:30', 120, 1],
             // Matéo — Thu
@@ -452,7 +457,8 @@ final class BcclSeeder
             // Annexe — Fri
             ['vDebarrosAnnexe', 5, '19:00', 90, 1],
             // ADN — Wed
-            ['vAdn', 3, '17:30', 90, 1],
+            // Mer 17:30 partagé U9F1/U9F2/U9M2 (ex-CEC, ADN divisible en 3, en travers).
+            ['vAdn', 3, '17:30', 90, 3],
             ['vAdn', 3, '19:00', 90, 1],
             ['vAdn', 3, '20:30', 120, 1],
         ];
@@ -495,19 +501,19 @@ final class BcclSeeder
             ['name' => 'U15F1', 'sportCategory' => $u15, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 3, 'priorityTierId' => 2, 'gender' => Gender::F],
             ['name' => 'U15F2', 'sportCategory' => $u15, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::F],
             ['name' => 'U15F3', 'sportCategory' => $u15, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::F],
-            ['name' => 'U13F1', 'sportCategory' => $u13, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 2, 'gender' => Gender::F],
+            ['name' => 'U13F1', 'sportCategory' => $u13, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 3, 'priorityTierId' => 2, 'gender' => Gender::F],
             ['name' => 'U13F2', 'sportCategory' => $u13, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::F],
             ['name' => 'U13F3', 'sportCategory' => $u13, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::F],
-            ['name' => 'U13M1', 'sportCategory' => $u13, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 2, 'gender' => Gender::M],
-            ['name' => 'U13M2', 'sportCategory' => $u13, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::M],
-            ['name' => 'U11M1', 'sportCategory' => $u11, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::M],
-            ['name' => 'U11M2', 'sportCategory' => $u11, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::M],
-            ['name' => 'U11F1', 'sportCategory' => $u11, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::F],
-            ['name' => 'U11F2', 'sportCategory' => $u11, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::F],
-            ['name' => 'U9F1', 'sportCategory' => $u9, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::F],
-            ['name' => 'U9F2', 'sportCategory' => $u9, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::F],
-            ['name' => 'U9M1', 'sportCategory' => $u9, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 3, 'gender' => Gender::M],
-            ['name' => 'U9M2', 'sportCategory' => $u9, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 1, 'priorityTierId' => 4, 'gender' => Gender::M],
+            ['name' => 'U13M1', 'sportCategory' => $u13, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 3, 'priorityTierId' => 2, 'gender' => Gender::M],
+            ['name' => 'U13M2', 'sportCategory' => $u13, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::M],
+            ['name' => 'U11M1', 'sportCategory' => $u11, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::M],
+            ['name' => 'U11M2', 'sportCategory' => $u11, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::M],
+            ['name' => 'U11F1', 'sportCategory' => $u11, 'level' => TeamLevel::REGIONAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::F],
+            ['name' => 'U11F2', 'sportCategory' => $u11, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::F],
+            ['name' => 'U9F1', 'sportCategory' => $u9, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::F],
+            ['name' => 'U9F2', 'sportCategory' => $u9, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::F],
+            ['name' => 'U9M1', 'sportCategory' => $u9, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 3, 'gender' => Gender::M],
+            ['name' => 'U9M2', 'sportCategory' => $u9, 'level' => TeamLevel::DEPARTEMENTAL, 'sessionsPerWeek' => 2, 'priorityTierId' => 4, 'gender' => Gender::M],
             // --- Loisir / Baby / Academie teams ---
             ['name' => 'Baby 1', 'sportCategory' => $u7, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
             ['name' => 'Baby 2', 'sportCategory' => $u7, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
@@ -527,21 +533,38 @@ final class BcclSeeder
             ['name' => 'Section J.Macé', 'sportCategory' => $u15, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 3, 'priorityTierId' => 5, 'gender' => null],
             ['name' => 'U18M Fays', 'sportCategory' => $u18, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::M],
             ['name' => 'U18F Fays', 'sportCategory' => $u18, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::F],
-            // --- CEC Groups (joint training sessions — youth teams without individual EMB teams) ---
-            // CEC Groupe 1 = joint training for U9F1 + U9F2 + U9M2 players (no individual teams exist)
-            ['name' => 'CEC Groupe 1 (U9F1/U9F2/U9M2)', 'sportCategory' => $u9, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
-            // CEC Groupe 2 = joint training for U11F2 + U9M1 players
-            ['name' => 'CEC Groupe 2 (U11F2/U9M1)', 'sportCategory' => $u11, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
-            // CEC Groupe 3 = joint training for U11F1 + U11M2 players
-            ['name' => 'CEC Groupe 3 (U11F1/U11M2)', 'sportCategory' => $u11, 'level' => TeamLevel::LOISIR_JEUNE, 'sessionsPerWeek' => 1, 'priorityTierId' => 5, 'gender' => Gender::MIXTE],
+        ];
+
+        // Rang interne d'une équipe DANS son tier (0-based) — l'état réel du club au
+        // 2026-08-12. Le seed n'en posait aucun (tout à 0) ; le rang global se dérive
+        // de (ordre du tier, tierOrder). Les trous du rang D (7→9) sont RÉELS et
+        // reproduits tels quels (des équipes intercalées puis retirées à la main).
+        $tierOrderByName = [
+            // Rang S
+            'SM1' => 0, 'SF1' => 1,
+            // Rang A
+            'SM2' => 0, 'SF2' => 1, 'U21M1' => 2, 'U18M1' => 3, 'U18F1' => 4, 'U15M1' => 5, 'U15F1' => 6, 'U13M1' => 7, 'U13F1' => 8,
+            // Rang B
+            'SM3' => 0, 'U18M2' => 1, 'U18F2' => 2, 'U15M2' => 3, 'U15F2' => 4, 'U13F2' => 5, 'U13M2' => 6, 'U11M1' => 7, 'U11F1' => 8, 'U9M1' => 9, 'U9F1' => 10,
+            // Rang C
+            'SM4' => 0, 'SF3' => 1, 'U21M2' => 2, 'U18F3' => 3, 'U15F3' => 4, 'U13F3' => 5, 'U11M2' => 6, 'U11F2' => 7, 'U9F2' => 8, 'U9M2' => 9,
+            // Rang D (trous 7-9 réels)
+            '3x3' => 0, 'Academie U13-U15' => 1, 'Academie U18' => 2, 'Academie U9-U11' => 3, 'Baby 1' => 4, 'Baby 2' => 5, 'Basket Santé' => 6,
+            'Loisir 1' => 10, 'Loisir 2' => 11, 'Loisir 3' => 12, 'Loisir Feminine' => 13, 'Mercredi Shark U9-U11' => 14, 'Micro Basket' => 15,
+            'Section J.Macé' => 16, 'Training Individuel' => 17, 'U18F Fays' => 18, 'U18M Fays' => 19, 'Veterans' => 20,
         ];
 
         foreach ($newTeamsData as $teamData) {
+            // Clé garantie exhaustive : PHPStan échoue si une équipe n'a pas de rang.
+            $tierOrder = $tierOrderByName[$teamData['name']];
             $existing = $manager->getRepository(Team::class)->findOneBy([
                 'clubId' => $club->getId(),
                 'name' => $teamData['name'],
             ]);
             if ($existing instanceof Team) {
+                // Reseed d'un club déjà seedé (mode append) : recaler le rang, qui
+                // valait 0 avant cet alignement — comme le lastName des coachs plus bas.
+                $existing->setTierOrder($tierOrder);
                 $teams[$teamData['name']] = $existing;
             } else {
                 $team = new Team;
@@ -553,6 +576,7 @@ final class BcclSeeder
                 $team->setLevel($teamData['level']);
                 $team->setGender($teamData['gender']);
                 $team->setSessionsPerWeek($teamData['sessionsPerWeek']);
+                $team->setTierOrder($tierOrder);
                 $team->setIsActive(true);
                 $manager->persist($team);
                 $teams[$teamData['name']] = $team;
@@ -590,9 +614,6 @@ final class BcclSeeder
         $loisirFeminine = $teams['Loisir Feminine'];
         $team3x3 = $teams['3x3'];
         $trainigIndiv = $teams['Training Individuel'];
-        $cecGroupe1 = $teams['CEC Groupe 1 (U9F1/U9F2/U9M2)'];
-        $cecGroupe2 = $teams['CEC Groupe 2 (U11F2/U9M1)'];
-        $cecGroupe3 = $teams['CEC Groupe 3 (U11F1/U11M2)'];
 
         // ============================================================
         // SECTION 5 — NEW COACHES
@@ -743,21 +764,13 @@ final class BcclSeeder
             ['coach' => $coachEthan, 'team' => $teams['U13F3'], 'role' => TeamCoachRole::MAIN],
             //            ['coach' => $coachEnzo, 'team' => $teams['U11M1'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachAnna, 'team' => $teams['U11M2'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachAnna, 'team' => $cecGroupe3, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachPierreChauvin, 'team' => $teams['U11F1'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachPierreChauvin, 'team' => $cecGroupe3, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachMaeleen, 'team' => $teams['U11F2'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachMaeleen, 'team' => $cecGroupe2, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachJordan, 'team' => $teams['U9M1'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachJordan, 'team' => $cecGroupe2, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachAmbrine, 'team' => $teams['U9M2'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachAmbrine, 'team' => $cecGroupe1, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachAela, 'team' => $teams['U9F1'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachAela, 'team' => $cecGroupe1, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachJulia, 'team' => $teams['U9F2'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachJulia, 'team' => $cecGroupe1, 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachCharlie, 'team' => $teams['U9F2'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachCharlie, 'team' => $cecGroupe1, 'role' => TeamCoachRole::MAIN],
         ];
 
         // Purge existing team-coach links (club/season) before recreating, so an
@@ -872,7 +885,7 @@ final class BcclSeeder
         // constant (utile en mode append ; un rechargement complet truncate d'abord).
         // Sans ça, le helper name-keyed conserverait l'ancienne config (ex. EMB 18h00
         // au lieu de 17h30, Camus/SM4 en preferred/venueId au lieu de forcedVenueId).
-        foreach ([
+        $staleNames = [
             'Jeunes - Fin entraînement 19h30',
             'Jeunes - Début maximum 20h15',
             'EMB - Début maximum 19h50',
@@ -883,7 +896,29 @@ final class BcclSeeder
             'Camus - Réservé Loisir 1 exclusivement',
             'Camus - Réservé Loisir 2 exclusivement',
             'Camus - Réservé Loisir 3 exclusivement',
-        ] as $retiredName) {
+            // Alignement 2026-08-12 : renommées ou retirées de la base réelle.
+            'SM2 - Évite le vendredi',            // → « SM2 · pas Ven », et devient HARD
+            'Matéo - Préféré équipes régionales', // retirée (la base ne l'a plus)
+            'U18F2 - Matéo préféré',              // U18F2/U18M2 ne préfèrent plus qu'Armand
+            'U18M2 - Matéo préféré',
+        ];
+        // Ancienne indispo coach du jeudi retirée de la base (Nico Patin) — nom dérivé
+        // de l'entité pour suivre l'anonymisation du profil démo.
+        $staleNames[] = \sprintf('%s - Indisponible le jeudi', $coachNicoPatin->getFirstName());
+        // « <équipe> - Pas d'entraînement le mercredi » : la base réelle n'en a aucune
+        // (le CEC du mercredi a disparu, les jeunes s'entraînent ce jour-là).
+        foreach (['U11F1', 'U11F2', 'U11M2', 'U9M1', 'U9M2', 'U9F1', 'U9F2'] as $teamName) {
+            $staleNames[] = $teamName . ' - Pas d\'entraînement le mercredi';
+        }
+        // « Veterans - Interdit <venueId> » renommées « Veterans · évite <gymnase> ».
+        foreach (['vCamus', 'vJdr', 'vJeanVilar', 'vTonkin', 'vAdn'] as $venueVar) {
+            $staleNames[] = 'Veterans - Interdit ' . $venues[$venueVar]->getId();
+        }
+        // « Jean Vilar préféré » n'existe plus que pour les équipes départementales -2.
+        foreach ([$u15m1, $u18m1, $u21m1] as $droppedTeam) {
+            $staleNames[] = $droppedTeam->getName() . ' - Jean Vilar préféré';
+        }
+        foreach ($staleNames as $retiredName) {
             $stale = $manager->getRepository(Constraint::class)->findOneBy(['clubId' => $club->getId(), 'name' => $retiredName]);
             if ($stale instanceof Constraint) {
                 $manager->remove($stale);
@@ -905,11 +940,14 @@ final class BcclSeeder
         // « uniquement » = allowedDays (whitelist : seul le vendredi permis). forcedDays
         // ne veut dire QUE « au moins une séance ce jour-là » côté engine (audit ENG-16).
         $addConstraint('Veterans - Vendredi uniquement', ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['allowedDays' => [5]]);
-        $addConstraint('SM2 - Évite le vendredi', ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::PREFERRED, ['forbiddenDays' => [5]]);
-        // Jeunes U9/U11 : pas d'entraînement le mercredi (ils ont déjà le CEC ce jour-là).
-        foreach (['U11F1', 'U11F2', 'U11M2', 'U9M1', 'U9M2', 'U9F1', 'U9F2'] as $teamName) {
-            $addConstraint($teamName . ' - Pas d\'entraînement le mercredi', ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [3]]);
-        }
+        // SM2 / SF2 : pas de séance le vendredi (nom auto-généré par le wizard « … · pas Ven »).
+        $addConstraint('SM2 · pas Ven', ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
+        $addConstraint('SF2 · pas Ven', ConstraintScope::TEAM, $teams['SF2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
+        // Aucune séance le week-end pour tout le club (samedi ET dimanche) — décision
+        // fondateur 2026-08-12, qui remplace un premier essai mal nommé n'interdisant que
+        // le samedi. Le builder éclate cette règle CLUB en une contrainte par équipe ;
+        // les réservations HARD du samedi (académies, Baby) restent posées (pré-placées).
+        $addConstraint('Toutes les équipes · pas samedi, dimanche', ConstraintScope::CLUB, null, ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [6, 7]]);
 
         // --- FACILITY (gymnases imposés / interdits / préférés) ---
         $addConstraint('Jean Vilar - Pas équipes féminines', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venues['vJeanVilar']->getId(), 'targetTag' => 'FEMININE']);
@@ -917,36 +955,69 @@ final class BcclSeeder
         // via forcedVenueId (ou preferredVenueId en HARD), jamais via un `venueId` —
         // clé qu'aucune branche du parseur ne lit (sinon contrainte silencieuse).
         $addConstraint('SM4 - Jean Vilar obligatoire', ConstraintScope::TEAM, $sm4->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forcedVenueId' => $venues['vJeanVilar']->getId()]);
+        // SM2 : au moins une séance à Matéo (compte plancher minAtVenueId, toujours dur).
+        $addConstraint('SM2 · au moins 1 à Matéo', ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['minAtVenueId' => $venues['vMateo']->getId(), 'minAtVenueCount' => 1]);
         // Camus réservé EXCLUSIVEMENT aux Loisir 1/2/3 (HARD forcedVenueId, pas un simple nudge).
         foreach (['Loisir 1', 'Loisir 2', 'Loisir 3'] as $loisirName) {
             $addConstraint('Camus - Réservé ' . $loisirName . ' exclusivement', ConstraintScope::TEAM, $teams[$loisirName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forcedVenueId' => $venues['vCamus']->getId()]);
         }
-        // Veterans interdits sur Camus/JDR/Jean Vilar/Tonkin/ADN.
+        // Veterans interdits sur Camus/JDR/Jean Vilar/Tonkin/ADN (nom auto « Veterans · évite <gymnase> »).
         foreach (['vCamus', 'vJdr', 'vJeanVilar', 'vTonkin', 'vAdn'] as $venueVar) {
-            $venueId = $venues[$venueVar]->getId();
-            $addConstraint('Veterans - Interdit ' . $venueId, ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venueId]);
+            $venue = $venues[$venueVar];
+            $addConstraint('Veterans · évite ' . $venue->getName(), ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venue->getId()]);
         }
         // Préférences de gymnase par niveau (portée club).
-        $addConstraint('Matéo - Préféré équipes régionales', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vMateo']->getId(), 'targetTag' => 'REGIONAL']);
+        $addConstraint('Groupe DEPARTEMENTAL · préfère Tonkin', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['targetTag' => 'DEPARTEMENTAL', 'preferredVenueId' => $venues['vTonkin']->getId()]);
         $addConstraint('De Barros Annexe - Préféré équipes départementales', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => 'DEPARTEMENTAL']);
         foreach ([TeamLevel::LOISIR_ADULTE, TeamLevel::LOISIR_JEUNE] as $loisirLevel) {
             $addConstraint('De Barros Annexe - Préféré ' . $loisirLevel->value, ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => $loisirLevel->value]);
         }
-        // Jean Vilar préféré pour les garçons U15/U18/U21.
-        foreach ([$u15m1, $u15m2, $u18m1, $u18m2, $u21m1, $u21m2] as $targetTeam) {
+        // Jean Vilar préféré pour les équipes départementales -2 (U15M2/U18M2/U21M2).
+        foreach ([$u15m2, $u18m2, $u21m2] as $targetTeam) {
             $addConstraint($targetTeam->getName() . ' - Jean Vilar préféré', ConstraintScope::TEAM, $targetTeam->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vJeanVilar']->getId()]);
         }
-        // U18F2 / U18M2 : au moins une séance à Armand ou Matéo (préférence). preferredVenueId
-        // ne cible qu'un gymnase → une contrainte par gymnase ; une séance dans l'un OU l'autre décroche le bonus.
+        // U18F2 / U18M2 : Armand préféré (une contrainte par équipe).
         foreach (['U18F2', 'U18M2'] as $teamName) {
-            foreach (['vArmand' => 'Armand', 'vMateo' => 'Matéo'] as $venueVar => $venueLabel) {
-                $addConstraint(\sprintf('%s - %s préféré', $teamName, $venueLabel), ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues[$venueVar]->getId()]);
+            $addConstraint($teamName . ' - Armand préféré', ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vArmand']->getId()]);
+        }
+        // Fermeture datée du gymnase De Barros (fête du livre) : une contrainte FACILITY
+        // « venue_closed » (ce que LIT le solveur, VenueClosureDays) DOUBLÉE d'une entrée
+        // de calendrier (ce que voit le radar/UI), reliées par calendarEntryId. Idempotent
+        // par le nom de la contrainte (aucun doublon d'entrée de calendrier au second passage).
+        $closureName = 'Debarros — fete du livre';
+        if (!$manager->getRepository(Constraint::class)->findOneBy(['clubId' => $club->getId(), 'name' => $closureName]) instanceof Constraint) {
+            $entry = $manager->getRepository(CalendarEntry::class)->findOneBy(['clubId' => $club->getId(), 'seasonId' => $season->getId(), 'title' => $closureName]);
+            if (!$entry instanceof CalendarEntry) {
+                $entry = new CalendarEntry;
+                $entry->setClubId($club->getId());
+                $entry->setSeasonId($season->getId());
+                $entry->setKind(CalendarEntryKind::PERIOD);
+                $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+                $entry->setStatus(CalendarEntryStatus::ACTIVE);
+                $entry->setTitle($closureName);
+                $entry->setStartDate(new DateTimeImmutable('2026-09-16'));
+                $entry->setEndDate(new DateTimeImmutable('2026-09-23'));
+                $entry->setIsDisruptive(false);
+                $manager->persist($entry);
+                $manager->flush();
             }
+            $closure = new Constraint;
+            $closure->setClubId($club->getId());
+            $closure->setSeasonId($season->getId());
+            $closure->setScope(ConstraintScope::FACILITY);
+            $closure->setScopeTargetId($venues['vDebarros']->getId());
+            $closure->setFamily(ConstraintFamily::FACILITY);
+            $closure->setRuleType(ConstraintRuleType::HARD);
+            $closure->setName($closureName);
+            $closure->setConfig(['type' => 'venue_closed', 'startDate' => '2026-09-16', 'endDate' => '2026-09-23']);
+            $closure->setCalendarEntryId($entry->getId());
+            $closure->setIsActive(true);
+            $manager->persist($closure);
         }
 
         // --- COACH_AVAILABILITY (indisponibilités ; 5 = vendredi, 4 = jeudi) ---
         // Variables coach déjà résolues (l.618+) : un coach manquant lève une erreur PHP au lieu de disparaître en silence.
-        foreach ([[$coachLionel, 5], [$coachThomas, 5], [$coachEnzo, 5], [$coachJordan, 5], [$coachNicoPatin, 4], [$coachEmerick, 4]] as [$coach, $day]) {
+        foreach ([[$coachLionel, 5], [$coachThomas, 5], [$coachEnzo, 5], [$coachJordan, 5], [$coachEmerick, 4], [$coachNicolasBarilleau, 4]] as [$coach, $day]) {
             $label = 5 === $day ? 'le vendredi' : 'le jeudi';
             // SEC-13 : la cible du coach est le SCOPE (3e argument), plus une clé du config —
             // `coachId` en doublon est refusé depuis la validation stricte, et un club seedé
@@ -988,12 +1059,16 @@ final class BcclSeeder
             ['team' => $microBasket, 'venue' => 'vMateo', 'day' => 6, 'startTime' => '09:00', 'duration' => 45, 'lock' => LockLevel::HARD],
             ['team' => $baby1, 'venue' => 'vMateo', 'day' => 6, 'startTime' => '09:45', 'duration' => 60, 'lock' => LockLevel::HARD],
             ['team' => $baby2, 'venue' => 'vMateo', 'day' => 6, 'startTime' => '10:45', 'duration' => 60, 'lock' => LockLevel::HARD],
-            // CEC Groupe 1 — ADN Wednesday 17:30 (ADN can be split into 3 courts)
-            ['team' => $cecGroupe1, 'venue' => 'vAdn', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            // CEC Groupe 1 — Mateo Wednesday 16:00
-            ['team' => $cecGroupe2, 'venue' => 'vMateo', 'day' => 3, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            // CEC Groupe 1 — Mateo Wednesday 17:30
-            ['team' => $cecGroupe3, 'venue' => 'vMateo', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            // Mercredi jeunes (ex-CEC, désormais des séances d'équipe individuelles sur
+            // des courts partagés) — ADN 17:30 en 3 (U9F1/U9F2/U9M2), Matéo 16:00 en 2
+            // (U11F2/U9M1) et Matéo 17:30 en 2 (U11F1/U11M2), d'où les capacités 3/2/2.
+            ['team' => $teams['U9F1'], 'venue' => 'vAdn', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U9F2'], 'venue' => 'vAdn', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U9M2'], 'venue' => 'vAdn', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U11F2'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U9M1'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U11F1'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U11M2'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
             // --- Réservations posées sur le terrain (état 2026-08-05) ---
             ['team' => $teams['Basket Santé'], 'venue' => 'vDebarrosAnnexe', 'day' => 3, 'startTime' => '10:45', 'duration' => 75, 'lock' => LockLevel::HARD],
             ['team' => $teams['Section J.Macé'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
