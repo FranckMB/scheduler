@@ -85,6 +85,18 @@ class Schedule implements TenantOwnedInterface
     #[ORM\Column(type: 'boolean')]
     private bool $manuallyEditedSinceGeneration = false;
 
+    /**
+     * Une contrainte du club a-t-elle changé (créée, modifiée, supprimée) DEPUIS la
+     * génération de ce planning ? Vrai ⇒ ce planning décrit un état ANTÉRIEUR des règles :
+     * il n'est pas faux, il est PÉRIMÉ, et rien d'autre ne le dit. Posé par
+     * `ConstraintChangeStaleScheduleListener` (listener d'entité sur `Constraint`, il attrape
+     * TOUS les chemins d'écriture, pas un appelant nommé) ; remis à faux par un import de
+     * résultat solveur (le planning redevient fidèle aux données). Jumeau du marqueur
+     * « retouché à la main » ci-dessus, avec un autre déclencheur — l'écran les affiche unifiés.
+     */
+    #[ORM\Column(type: 'boolean')]
+    private bool $constraintsChangedSinceGeneration = false;
+
     #[ORM\Column(type: 'integer')]
     private int $solverSeed = 42;
 
@@ -275,6 +287,18 @@ class Schedule implements TenantOwnedInterface
     public function setManuallyEditedSinceGeneration(bool $manuallyEditedSinceGeneration): self
     {
         $this->manuallyEditedSinceGeneration = $manuallyEditedSinceGeneration;
+
+        return $this;
+    }
+
+    public function isConstraintsChangedSinceGeneration(): bool
+    {
+        return $this->constraintsChangedSinceGeneration;
+    }
+
+    public function setConstraintsChangedSinceGeneration(bool $constraintsChangedSinceGeneration): self
+    {
+        $this->constraintsChangedSinceGeneration = $constraintsChangedSinceGeneration;
 
         return $this;
     }

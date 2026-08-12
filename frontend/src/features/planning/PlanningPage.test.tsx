@@ -403,6 +403,29 @@ describe("PlanningPage (integration)", () => {
     expect(screen.getByRole("button", { name: /rouvrir/i })).toBeInTheDocument();
   });
 
+  // F2c : une contrainte a changé depuis la génération → planning PÉRIMÉ (pas faux). Une seule
+  // bannière, qui nomme la cause et propose de régénérer pour SAVOIR.
+  it("shows the stale banner when a constraint changed since generation, on an editable plan", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", constraintsChangedSinceGeneration: true }]);
+    renderWithProviders(<PlanningPage />);
+
+    const banner = await screen.findByText(/Une contrainte a changé depuis la génération/i);
+    expect(banner).toBeInTheDocument();
+    // Modifiable → « Régénérez » (pas de « Rouvrez »), et le mot est « périmé », jamais « faux ».
+    expect(banner).toHaveTextContent(/Régénérez/);
+    expect(banner).not.toHaveTextContent(/Rouvrez ce planning/);
+  });
+
+  // Le cas du planning VALIDÉ : marqué comme les autres, MAIS il est en lecture seule — la
+  // bannière doit proposer rouvrir PUIS régénérer, jamais un « Régénérer » qui finit en 409.
+  it("on a validated (in-force) plan, the stale banner offers reopen-then-regenerate", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true, constraintsChangedSinceGeneration: true }]);
+    renderWithProviders(<PlanningPage />);
+
+    const banner = await screen.findByText(/Une contrainte a changé depuis la génération/i);
+    expect(banner).toHaveTextContent(/Rouvrez ce planning, puis régénérez/);
+  });
+
   it("switches to the coach view (coach resolved from the team)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<PlanningPage />);
