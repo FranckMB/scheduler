@@ -24,6 +24,10 @@ paths:
   du **2026-08-12** : `applicableConstraints` faisait `case "CLUB": return true` alors que
   `ScheduleConstraintBuilder.php:846-870` éclate une `CLUB+targetTag` en N contraintes TEAM — le
   wrap affichait une règle sur une équipe à qui le solveur ne l'applique jamais.
+  **Gardé depuis le 2026-08-12 par `FrontRederivationRegistryTest`** (CrossStack, groupe
+  `contract`) : registre des miroirs déclarés (entrée sans parité → rouge) + détecteur des
+  `switch` décideurs sur les enums de CONTRAINTE (module non déclaré → rouge, nommé). La largeur
+  du détecteur est un CHOIX documenté (`POLICED_ENUMS`) ; le registre, lui, tient tous les miroirs.
 - 🔴 **L'image tooling COPIE le code — la rebâtir AVANT tout test**, sinon la suite valide une
   version périmée et passe : `docker compose --profile tools build frontend-tooling`
   (`make -C frontend install` le fait). **Deux faux verts dans la même session le 2026-08-11.**
