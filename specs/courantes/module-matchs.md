@@ -10,7 +10,7 @@ Last verified @ 2026-08-08 (statut posé ce jour ; fenêtres d'accès match visi
 > solveur + boucle manuelle). Ici = ce qui **existe** aujourd'hui. Module **fonctionnellement autonome** : ses entités, son moteur de conflits et sa
 > grille week-end ne dépendent pas du solveur d'entraînement, et rien de ce module n'entre dans le payload
 > du solve hebdo. Depuis la PR D il a **son propre solve** (`POST /place-matches`, second problème engine,
-> contrat 2.2 — § Solveur de placement).
+> **même contrat backend⇄engine** que le solve hebdo — un seul `CONTRACT_VERSION`, cf. § Solveur de placement).
 
 > ⚠ **Le module est autonome dans ses DONNÉES, pas dans son OUVERTURE.** Décision fondateur du
 > 2026-07-31 (arbitrage DOC-1) : le couplage livré fait foi, la spec d'évolution a été alignée
@@ -422,7 +422,7 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   SUBMITTED lecture seule), `FixtureFormDialog.test` +2 (édition pré-remplie équipe figée, warning
   bascule extérieur), `MatchesPage.test` +1 (clic grille → panneau boucle manuelle). E2e : verrou
   aller-retour + dé-placer sur la vraie stack.
-- Placement (PR D) : `MatchPlacementContractSchemaTest` (**phase1** : forme du payload 2.2 ; groupe
+- Placement (PR D) : `MatchPlacementContractSchemaTest` (**phase1** : forme du payload au contrat backend⇄engine ; groupe
   `contract` : POST au VRAI engine, kickoff rendu DANS la fenêtre — sémantique, pas un 200),
   `PlaceMatchesControllerTest` (gardes 403/409, samedi placé dans [14:30,16:15] + dimanche
   `no_access_window`, **ancre manuelle jamais réécrite**, 502 si engine down sans écriture),
