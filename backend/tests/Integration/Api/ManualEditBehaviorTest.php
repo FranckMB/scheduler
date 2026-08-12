@@ -24,10 +24,11 @@ use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 
 /**
- * BCK-08: behavioural coverage of the 3 manual-edit routes (planning-lifecycle
+ * BCK-08: behavioural coverage of the manual-edit routes (planning-lifecycle
  * structuring axis). Beyond the SEC-07 role gate (ManagementRoleTest), this
- * proves each route actually DOES its job: creates the permanent constraint,
- * sets the lock, moves the slot, and refuses a move that would collide.
+ * proves each route actually DOES its job: creates the permanent constraint and
+ * sets the lock. Moving a slot lives on its own rail (/move) under the engine
+ * verdict — covered by SlotMoveVerdictTest.
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -101,40 +102,6 @@ final class ManualEditBehaviorTest extends WebTestCase
         $this->scopeGucToClub($season->getClubId());
         $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
         self::assertNotSame(LockLevel::SOFT, $reloaded?->getLockLevel(), 'the SOFT lock must not persist');
-    }
-
-    public function testOneTimeUpdateMovesTheSlot(): void
-    {
-        [$user, , $season] = $this->seed('MED3');
-        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
-        $slot = $this->createSlot($schedule, dayOfWeek: 2, startHm: '18:00');
-
-        $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedule-slots/{$slot->getId()}/manual-edit/one-time", [], [], [
-            'CONTENT_TYPE' => 'application/json',
-        ], json_encode(['startTime' => '20:00'], \JSON_THROW_ON_ERROR));
-
-        self::assertResponseIsSuccessful();
-        $this->em->clear();
-        $this->scopeGucToClub($season->getClubId());
-        $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
-        self::assertSame('20:00', $reloaded?->getStartTime()->format('H:i'));
-    }
-
-    public function testOneTimeUpdateRefusesAConflictingMove(): void
-    {
-        [$user, , $season] = $this->seed('MED4');
-        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
-        // Two slots, same venue, same day; moving A onto B's time overlaps.
-        $slotA = $this->createSlot($schedule, dayOfWeek: 3, startHm: '18:00', venueId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-        $this->createSlot($schedule, dayOfWeek: 3, startHm: '19:00', venueId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-
-        $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedule-slots/{$slotA->getId()}/manual-edit/one-time", [], [], [
-            'CONTENT_TYPE' => 'application/json',
-        ], json_encode(['startTime' => '19:15'], \JSON_THROW_ON_ERROR));
-
-        self::assertResponseStatusCodeSame(409, 'a move overlapping another slot in the same venue must 409');
     }
 
     public function testTheChosenVersionIsReadOnly(): void

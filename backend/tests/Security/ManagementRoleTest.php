@@ -53,10 +53,9 @@ final class ManagementRoleTest extends WebTestCase
             ['POST', '/api/club/ffbb-import'],
             // SEC-12: the pre-solve constraint check is part of the cockpit flow.
             ['POST', '/api/constraints/validate'],
-            // Each manual-edit action carries its own guard call — pin all three.
+            // Each manual-edit action carries its own guard call — pin both.
             ['POST', '/api/schedule-slots/' . self::DUMMY_ID . '/manual-edit/constraint'],
             ['POST', '/api/schedule-slots/' . self::DUMMY_ID . '/manual-edit/lock'],
-            ['POST', '/api/schedule-slots/' . self::DUMMY_ID . '/manual-edit/one-time'],
             // Club branding writes (same surface as /club/appearance).
             ['POST', '/api/club/logo'],
             ['DELETE', '/api/club/logo'],
