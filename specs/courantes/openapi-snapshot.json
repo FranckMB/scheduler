@@ -20986,6 +20986,11 @@
                         "default": false,
                         "type": "boolean"
                     },
+                    "constraintsChangedSinceGeneration": {
+                        "description": "Une contrainte a-t-elle chang\u00e9 depuis la g\u00e9n\u00e9ration de ce planning ? Vrai \u21d2 ce\nplanning d\u00e9crit un \u00e9tat ANT\u00c9RIEUR des r\u00e8gles \u2014 pas faux, mais P\u00c9RIM\u00c9. L'\u00e9cran l'affiche\n(banni\u00e8re unifi\u00e9e avec \u00ab retouch\u00e9 \u00e0 la main \u00bb) pour que le gestionnaire r\u00e9g\u00e9n\u00e8re afin\nde savoir. Remis \u00e0 faux par une (re)g\u00e9n\u00e9ration.",
+                        "default": false,
+                        "type": "boolean"
+                    },
                     "solverSeed": {
                         "default": 0,
                         "type": "integer"
@@ -21207,6 +21212,11 @@
                         "default": false,
                         "type": "boolean"
                     },
+                    "constraintsChangedSinceGeneration": {
+                        "description": "Une contrainte a-t-elle chang\u00e9 depuis la g\u00e9n\u00e9ration de ce planning ? Vrai \u21d2 ce\nplanning d\u00e9crit un \u00e9tat ANT\u00c9RIEUR des r\u00e8gles \u2014 pas faux, mais P\u00c9RIM\u00c9. L'\u00e9cran l'affiche\n(banni\u00e8re unifi\u00e9e avec \u00ab retouch\u00e9 \u00e0 la main \u00bb) pour que le gestionnaire r\u00e9g\u00e9n\u00e8re afin\nde savoir. Remis \u00e0 faux par une (re)g\u00e9n\u00e9ration.",
+                        "default": false,
+                        "type": "boolean"
+                    },
                     "solverSeed": {
                         "default": 0,
                         "type": "integer"
@@ -21384,6 +21394,11 @@
                             },
                             "manuallyEditedSinceGeneration": {
                                 "description": "Ce planning a-t-il \u00e9t\u00e9 retouch\u00e9 \u00e0 la main (d\u00e9placement de cr\u00e9neau) depuis sa\ng\u00e9n\u00e9ration ? Vrai \u21d2 le score ci-dessus est P\u00c9RIM\u00c9 (le placement a chang\u00e9, pas le\nscore). L'\u00e9cran l'affiche pour ne pas laisser lire un nombre qui ne d\u00e9crit plus\nle planning. Remis \u00e0 faux par une (re)g\u00e9n\u00e9ration.",
+                                "default": false,
+                                "type": "boolean"
+                            },
+                            "constraintsChangedSinceGeneration": {
+                                "description": "Une contrainte a-t-elle chang\u00e9 depuis la g\u00e9n\u00e9ration de ce planning ? Vrai \u21d2 ce\nplanning d\u00e9crit un \u00e9tat ANT\u00c9RIEUR des r\u00e8gles \u2014 pas faux, mais P\u00c9RIM\u00c9. L'\u00e9cran l'affiche\n(banni\u00e8re unifi\u00e9e avec \u00ab retouch\u00e9 \u00e0 la main \u00bb) pour que le gestionnaire r\u00e9g\u00e9n\u00e8re afin\nde savoir. Remis \u00e0 faux par une (re)g\u00e9n\u00e9ration.",
                                 "default": false,
                                 "type": "boolean"
                             },
@@ -23246,10 +23261,6 @@
                             "null"
                         ]
                     },
-                    "allowMultipleSessionsPerDay": {
-                        "default": false,
-                        "type": "boolean"
-                    },
                     "forcedVenueId": {
                         "type": [
                             "string",
@@ -23465,10 +23476,6 @@
                             "null"
                         ]
                     },
-                    "allowMultipleSessionsPerDay": {
-                        "default": false,
-                        "type": "boolean"
-                    },
                     "forcedVenueId": {
                         "type": [
                             "string",
@@ -23577,10 +23584,6 @@
                                     "integer",
                                     "null"
                                 ]
-                            },
-                            "allowMultipleSessionsPerDay": {
-                                "default": false,
-                                "type": "boolean"
                             },
                             "forcedVenueId": {
                                 "type": [

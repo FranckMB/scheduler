@@ -1593,21 +1593,7 @@ def add_one_session_per_day_constraints(
     *,
     teams: Iterable[Any] = (),
 ) -> int:
-    """Implicit rule 11: a team can have at most one training session per day,
-    unless allowMultipleSessionsPerDay is True for that team.
-    """
-
-    multi_allowed: set[str] = set()
-    for team in teams:
-        tid = _scalar_id(_get(team, "id", "team_id", "teamId", default=None))
-        allow = _get(
-            team,
-            "allowMultipleSessionsPerDay",
-            "allow_multiple_sessions_per_day",
-            default=False,
-        )
-        if tid is not None and allow:
-            multi_allowed.add(str(tid))
+    """Implicit rule 11: a team can have at most one training session per day."""
 
     groups: dict[tuple[str, str], list[BoolVarLike]] = defaultdict(list)
     for assignment in assignments:
@@ -1645,9 +1631,7 @@ def add_one_session_per_day_constraints(
         cast(Any, model).Add(sum(day_active_vars) <= spw)
         added += 1
 
-    for (team_id, _day), vars_list in groups.items():
-        if team_id in multi_allowed:
-            continue
+    for (_team_id, _day), vars_list in groups.items():
         deduped = _dedupe_variables(vars_list)
         if len(deduped) > 1:
             cast(Any, model).Add(sum(deduped) <= 1)
@@ -2419,7 +2403,6 @@ def diagnose_candidate_conflicts(
     candidate: Mapping[str, Any],
     baseline_slots: Sequence[Mapping[str, Any]],
     parsed: Mapping[str, Any],
-    teams: Sequence[Mapping[str, Any]] = (),
     coaches: Sequence[Mapping[str, Any]] = (),
     slot_capacities: Mapping[tuple[str, int, str], int] | None = None,
     team_names: Mapping[str, str] | None = None,
@@ -2477,11 +2460,6 @@ def diagnose_candidate_conflicts(
         str(_scalar_id(_get(coach, "id", "coach_id", default=None)))
         for coach in coaches
         if _get(coach, "id", "coach_id", default=None) is not None
-    }
-    multi_allowed = {
-        str(_scalar_id(_get(team, "id", "team_id", "teamId", default=None)))
-        for team in teams
-        if _get(team, "allowMultipleSessionsPerDay", "allow_multiple_sessions_per_day", default=False)
     }
 
     violations: list[dict[str, Any]] = []
@@ -2596,8 +2574,8 @@ def diagnose_candidate_conflicts(
                     start_time=c_start_text,
                 )
 
-    # One session per day: mirror add_one_session_per_day (per-day cap unless allowed).
-    if c_team not in multi_allowed and c_day in baseline_days_same_team:
+    # One session per day: mirror add_one_session_per_day (at most one per day).
+    if c_day in baseline_days_same_team:
         _emit(
             "one_session_per_day",
             f"{_team(c_team)} s'entraîne déjà le {_day_label(c_day)} : une seule séance par jour.",
