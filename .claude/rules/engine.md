@@ -13,8 +13,9 @@ paths:
   invariants post-solve (`tests/invariants/`) + hypothesis ; `pytest-timeout` contre les solves
   fous. Les golden dépendent du **worker unique déterministe** (≤200 de complexité) — ne pas
   toucher `_adaptive_workers` sans les re-jouer.
-- Le contrat backend⇄engine est **synchronisé À LA MAIN** (`engine/CONTRACT_VERSION`, 2.2, un seul
-  contrat pour `/generate` ET `/place-matches`) : toute modif des schemas Pydantic doit garder
-  verts `ContractSchemaTest` + `MatchPlacementContractSchemaTest` côté backend.
+- Le contrat backend⇄engine est **synchronisé À LA MAIN** (`engine/CONTRACT_VERSION`, 2.4, un seul
+  contrat pour `/generate`, `/place-matches` ET `/validate-assignments`) : toute modif des schemas
+  Pydantic doit garder verts `ContractSchemaTest` + `MatchPlacementContractSchemaTest` +
+  `ValidateAssignmentsContractSchemaTest` côté backend.
 - L'engine tourne en uvicorn **sans reload** : après une modif de code, `docker compose restart
   engine` avant tout test end-to-end.
