@@ -1,9 +1,13 @@
 /**
  * Un planning « périmé » : le message UNIFIÉ de sa (ses) cause(s).
  *
- * Deux déclencheurs distincts rendent un planning obsolète sans le rendre FAUX :
+ * Plusieurs déclencheurs distincts rendent un planning obsolète sans le rendre FAUX :
  *  - il a été retouché à la main depuis sa génération (le score ne décrit plus le placement) ;
- *  - une contrainte a changé depuis sa génération (il décrit un état antérieur des règles).
+ *  - une contrainte a changé depuis sa génération (il décrit un état antérieur des règles) ;
+ *  - une DONNÉE DU CLUB a changé (gymnase, coach, créneau, grille de période, réservation, tag,
+ *    calendrier — P4-87) : il décrit un état antérieur des données ;
+ *  - des équipes ont été ajoutées ou retirées depuis (structureDiverged — comparaison
+ *    d'instantané, cf. PlanningPage ; fusionnée ICI plutôt qu'empilée en bandeau séparé).
  *
  * ⚠ Une SEULE bannière, jamais deux empilées : le gestionnaire finirait par les ignorer
  * toutes. Elle NOMME sa ou ses causes, et l'action proposée dépend de l'état du planning :
@@ -20,20 +24,35 @@
 export function stalenessMessage(opts: {
   manuallyEdited: boolean;
   constraintsChanged: boolean;
+  resourcesChanged: boolean;
+  structureDiverged: boolean;
   readOnly: boolean;
 }): string | null {
-  const { manuallyEdited, constraintsChanged, readOnly } = opts;
-  if (!manuallyEdited && !constraintsChanged) {
+  const causes: string[] = [];
+  if (opts.manuallyEdited) {
+    causes.push("il a été modifié à la main");
+  }
+  if (opts.constraintsChanged) {
+    causes.push("une contrainte a changé");
+  }
+  if (opts.resourcesChanged) {
+    causes.push("les données du club ont changé (gymnases, coachs, créneaux…)");
+  }
+  if (opts.structureDiverged) {
+    causes.push("des équipes ont été ajoutées ou retirées");
+  }
+  if (0 === causes.length) {
     return null;
   }
 
-  const action = readOnly ? "Rouvrez ce planning, puis régénérez" : "Régénérez";
+  const action = opts.readOnly ? "Rouvrez ce planning, puis régénérez" : "Régénérez";
+  return `Depuis la génération de ce planning, ${joinCauses(causes)} : il est périmé — pas forcément faux, mais il décrit un état antérieur de vos données. ${action} pour savoir s'il tient encore.`;
+}
 
-  if (manuallyEdited && constraintsChanged) {
-    return `Ce planning a été modifié à la main et une contrainte a changé depuis sa génération : il est périmé. ${action} pour le remettre à jour.`;
+/** « A », « A et B », « A, B et C » — l'énumération française des causes. */
+function joinCauses(causes: string[]): string {
+  if (1 === causes.length) {
+    return causes[0];
   }
-  if (constraintsChanged) {
-    return `Une contrainte a changé depuis la génération de ce planning : il décrit un état antérieur de vos règles — pas forcément faux, mais périmé. ${action} pour savoir s'il les respecte encore.`;
-  }
-  return `Ce planning a été modifié à la main depuis sa génération : le score affiché est périmé. ${action} pour un score à jour.`;
+  return `${causes.slice(0, -1).join(", ")} et ${causes[causes.length - 1]}`;
 }

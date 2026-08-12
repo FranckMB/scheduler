@@ -580,22 +580,19 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         )}
       </div>
 
-      {structureDiverged && "number" === typeof selectedSchedule?.generatedTeamCount ? (
-        <p className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
-          Cette version a été générée le {new Date(selectedSchedule.createdAt).toLocaleDateString("fr-FR")} avec {selectedSchedule.generatedTeamCount} équipe{selectedSchedule.generatedTeamCount > 1 ? "s" : ""} — la structure du club a changé depuis ({teams.length} aujourd'hui).
-        </p>
-      ) : null}
-
-      {/* Planning PÉRIMÉ (pas faux) : retouché à la main (F2b) et/ou une contrainte a changé
-          depuis la génération (F2c). UNE seule bannière qui nomme sa/ses cause(s) ; sur un
-          planning validé (lecture seule) elle propose « rouvrir puis régénérer », jamais un
-          geste qui finirait en 409. Voir lib/staleness. */}
+      {/* Planning PÉRIMÉ (pas faux) : retouché à la main (F2b), une contrainte a changé (F2c),
+          une DONNÉE DU CLUB a changé (P4-87), ou des équipes ont été ajoutées/retirées
+          (structureDiverged, fusionné ICI plutôt qu'en bandeau séparé). UNE seule bannière qui
+          nomme sa/ses cause(s) ; sur un planning validé (lecture seule) elle propose « rouvrir
+          puis régénérer », jamais un geste qui finirait en 409. Voir lib/staleness. */}
       {(() => {
         const stale = isGenerating || null === selectedSchedule
           ? null
           : stalenessMessage({
             manuallyEdited: true === selectedSchedule.manuallyEditedSinceGeneration,
             constraintsChanged: true === selectedSchedule.constraintsChangedSinceGeneration,
+            resourcesChanged: true === selectedSchedule.resourcesChangedSinceGeneration,
+            structureDiverged,
             readOnly: isReadOnly,
           });
         return null === stale ? null : (

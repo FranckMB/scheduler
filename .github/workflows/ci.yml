@@ -390,6 +390,16 @@ jobs:
       - name: ConstraintChangeStaleScheduleTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Integration/Service/ConstraintChangeStaleScheduleTest.php --group phase1'
 
+      # P4-87 (axe planning lifecycle) : une contrainte n'est pas la seule entrée du solveur.
+      # Un gymnase, un coach, un créneau/grille de période, une réservation, un override, un tag
+      # ou une entrée de calendrier modifiés APRÈS génération marquent les plannings COMPLETED
+      # comme PÉRIMÉS (état en base), un import démarque. Le CŒUR est ADR-0002 : le périmètre se
+      # dérive MÉCANIQUEMENT de schedule_plan_id — la grille SAISON ne périme pas les COPIES de
+      # période, et inversement. Sans ce gate, un planning serait périmé sans le dire pour toutes
+      # ces raisons — le défaut de confiance qu'on a réparé pour les contraintes, resté ouvert.
+      - name: ResourceChangeStaleScheduleTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Integration/Service/ResourceChangeStaleScheduleTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
