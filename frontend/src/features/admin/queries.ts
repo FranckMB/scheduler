@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { activateAdminMembership, createAdminReleaseNote, decideAdminClubRequest, deleteAdminReleaseNote, getAdminActions, getAdminAuditLog, getAdminCapacity, getAdminClubRequests, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminMessengerFailed, getAdminOverview, getAdminPendingMemberships, getAdminReleaseNotes, getAdminSession, getAdminSystemErrors, publishAdminReleaseNote, type ReleaseNoteWritePayload, runAdminClubAction, runAdminJob } from "./api";
+import { activateAdminMembership, type AdminFeedbackStatus, createAdminReleaseNote, decideAdminClubRequest, deleteAdminReleaseNote, getAdminActions, getAdminAuditLog, getAdminCapacity, getAdminClubRequests, getAdminClubs, getAdminFeedback, getAdminFeedbackDetail, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminMessengerFailed, getAdminOverview, getAdminPendingMemberships, getAdminReleaseNotes, getAdminSession, getAdminSystemErrors, publishAdminReleaseNote, type ReleaseNoteWritePayload, runAdminClubAction, runAdminJob, treatAdminFeedback, untreatAdminFeedback } from "./api";
 import { useAdminStore } from "./store";
 
 /** Lit le jeton CSRF de la session admin, ou rejette — patron des mutations admin. */
@@ -257,5 +257,62 @@ export function useDeleteAdminReleaseNote() {
       return deleteAdminReleaseNote(id, csrfToken);
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ["admin-release-notes"] }),
+  });
+}
+
+// P5-6 — inbox des signalements. La QoS voyage AVEC la liste (agrégat global renvoyé
+// quel que soit le filtre) ; on la lit donc de la réponse courante, sans requête à part.
+export function useAdminFeedback(status?: AdminFeedbackStatus) {
+  return useQuery({
+    queryKey: ["admin-feedback", status ?? "all"],
+    queryFn: () => getAdminFeedback(status ? { status } : {}),
+    placeholderData: (previous) => previous,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useAdminFeedbackDetail(id: string | null) {
+  return useQuery({
+    queryKey: ["admin-feedback-detail", id],
+    queryFn: () => getAdminFeedbackDetail(id as string),
+    enabled: null !== id,
+  });
+}
+
+export function useTreatAdminFeedback() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => {
+      const csrfToken = requireCsrf();
+      if (!csrfToken) {
+        return Promise.reject(new Error("Missing super-admin CSRF token."));
+      }
+
+      return treatAdminFeedback(id, csrfToken);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin-feedback"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-feedback-detail"] });
+    },
+  });
+}
+
+export function useUntreatAdminFeedback() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => {
+      const csrfToken = requireCsrf();
+      if (!csrfToken) {
+        return Promise.reject(new Error("Missing super-admin CSRF token."));
+      }
+
+      return untreatAdminFeedback(id, csrfToken);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin-feedback"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin-feedback-detail"] });
+    },
   });
 }

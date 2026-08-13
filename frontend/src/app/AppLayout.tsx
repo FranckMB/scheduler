@@ -1,7 +1,9 @@
-import { CalendarCheck2, LogOut, Menu as MenuIcon, Moon, Settings, Sparkles, Sun, User, ShieldCheck } from "lucide-react";
+import { CalendarCheck2, Flag, LogOut, Menu as MenuIcon, Moon, Settings, Sparkles, Sun, User, ShieldCheck } from "lucide-react";
+import { useState } from "react";
 import { NavLink, Outlet, useNavigation } from "react-router";
 
 import { useLogout, useMe } from "@/features/auth/queries";
+import { FeedbackDialog } from "@/features/feedback/FeedbackDialog";
 import { WhatsNewModal } from "@/features/release-notes/WhatsNewModal";
 import { Button } from "@/shared/components/ui/button";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
@@ -40,6 +42,7 @@ export function AppLayout() {
   useApplyDemoClock();
   const mode = useThemeStore((state) => state.mode);
   const toggleMode = useThemeStore((state) => state.toggleMode);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -93,6 +96,9 @@ export function AppLayout() {
               <MenuItem to="/nouveautes" icon={<Sparkles />}>
                 Nouveautés
               </MenuItem>
+              <MenuItem icon={<Flag />} onSelect={() => setFeedbackOpen(true)}>
+                Signaler un bug
+              </MenuItem>
               <MenuItem to="/confidentialite" icon={<ShieldCheck />}>
                 Confidentialité
               </MenuItem>
@@ -112,6 +118,8 @@ export function AppLayout() {
       {/* P5-12 — la modale « quoi de neuf » se décide elle-même (rien si pas de
           note fraîche) ; montée une fois pour tout l'espace authentifié. */}
       <WhatsNewModal />
+      {/* P5-6 — porte libre du canal de signalement (topic au choix, contexte léger). */}
+      {feedbackOpen ? <FeedbackDialog variant="free" onClose={() => setFeedbackOpen(false)} /> : null}
     </div>
   );
 }

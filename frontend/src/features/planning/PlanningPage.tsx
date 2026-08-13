@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useMe, useRenamePlanning, useWorkingSeason } from "@/features/auth/queries";
+import { FeedbackButton } from "@/features/feedback/FeedbackButton";
 import { useWizardStore } from "@/features/wizard/store";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
 import { usePriorityTiers } from "@/features/matches/queries";
@@ -578,6 +579,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             ) : null}
           </>
         )}
+        {/* P5-6 — porte contextuelle : joint le planning affiché au signalement. */}
+        <FeedbackButton className="ml-auto" screen="/planning" scheduleId={validScheduleId} />
       </div>
 
       {/* Planning PÉRIMÉ (pas faux) : retouché à la main (F2b), une contrainte a changé (F2c),

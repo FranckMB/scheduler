@@ -363,6 +363,59 @@ export interface ReleaseNoteWritePayload {
   noteDate: string;
 }
 
+// P5-6 — l'inbox des signalements (rail SA mergé) : liste + QoS + détail + verdicts.
+
+export type AdminFeedbackTopic = "bug" | "missing_constraint" | "idea";
+export type AdminFeedbackStatus = "untreated" | "treated";
+
+export interface AdminFeedbackItem {
+  id: string;
+  clubId: string;
+  clubName: string | null;
+  topic: AdminFeedbackTopic;
+  message: string;
+  createdAt: string;
+  status: AdminFeedbackStatus;
+  treatedAt: string | null;
+  hasHeavyContext: boolean;
+}
+
+/** Panneau qualité de service (§3ter) — agrégats GLOBAUX, calculés côté serveur. */
+export interface AdminFeedbackQos {
+  treatDelayByMonth: { month: string; avgHours: number | null; p95Hours: number | null }[];
+  volumeByTopicMonth: { month: string; topic: AdminFeedbackTopic; count: number }[];
+  treatedShare: number;
+  oldestUntreatedAgeHours: number | null;
+}
+
+export interface AdminFeedbackResponse {
+  items: AdminFeedbackItem[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+  qos: AdminFeedbackQos;
+}
+
+/**
+ * Contexte du détail — les 4 champs légers envoyés par le client + le lourd enrichi
+ * par le serveur (snapshot/diagnostics opaques). Rendu en TEXTE PUR ; le snapshot n'est
+ * jamais déplié dans le DOM (métadonnées + « copier le JSON » seulement).
+ */
+export interface AdminFeedbackContext {
+  screen?: string;
+  url?: string;
+  requestId?: string;
+  userAgent?: string;
+  scheduleId?: string;
+  seasonId?: string;
+  scheduleStatus?: string;
+  snapshot?: unknown;
+  diagnostics?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface AdminFeedbackDetail extends AdminFeedbackItem {
+  context: AdminFeedbackContext | null;
+}
+
 /** Session-cookie client for /api/admin. It deliberately never reads the club JWT store. */
 export const adminApi = ky.create({
   prefix: "/api/admin",
@@ -472,4 +525,26 @@ export function publishAdminReleaseNote(id: string, csrfToken: string): Promise<
 
 export function deleteAdminReleaseNote(id: string, csrfToken: string): Promise<void> {
   return adminApi.delete(`release-notes/${encodeURIComponent(id)}`, { headers: { "X-CSRF-Token": csrfToken } }).then(() => undefined);
+}
+
+// P5-6 — signalements (lecture + verdicts CSRF-protégés).
+
+export function getAdminFeedback(params: { page?: number; limit?: number; status?: AdminFeedbackStatus }): Promise<AdminFeedbackResponse> {
+  const searchParams: Record<string, string | number> = {};
+  if (params.page) searchParams.page = params.page;
+  if (params.limit) searchParams.limit = params.limit;
+  if (params.status) searchParams.status = params.status;
+  return adminApi.get("feedback", { searchParams }).json();
+}
+
+export function getAdminFeedbackDetail(id: string): Promise<AdminFeedbackDetail> {
+  return adminApi.get(`feedback/${encodeURIComponent(id)}`).json();
+}
+
+export function treatAdminFeedback(id: string, csrfToken: string): Promise<AdminFeedbackItem> {
+  return adminApi.post(`feedback/${encodeURIComponent(id)}/treat`, { headers: { "X-CSRF-Token": csrfToken } }).json();
+}
+
+export function untreatAdminFeedback(id: string, csrfToken: string): Promise<AdminFeedbackItem> {
+  return adminApi.post(`feedback/${encodeURIComponent(id)}/untreat`, { headers: { "X-CSRF-Token": csrfToken } }).json();
 }
