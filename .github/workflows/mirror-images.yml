@@ -13,6 +13,10 @@
 name: Mirror third-party images
 on:
   workflow_dispatch:
+  # TEMPORAIRE (seed initial) : dispatch impossible tant que le workflow n'est
+  # pas sur main — ce déclencheur de branche sera retiré avant merge.
+  push:
+    branches: [ci/p4-92-hermetic-third-parties]
 
 permissions:
   packages: write
