@@ -26,6 +26,15 @@
 --     USING (club_id = current_setting('app.club_id')::UUID)
 --     WITH CHECK (club_id = current_setting('app.club_id')::UUID);
 
+-- Under FORCE RLS the owner (clubscheduler) is ALSO subject to policies. On a
+-- managed provider the owner is not a superuser, so without an explicit policy
+-- every FORCE table default-DENIES the admin supervision connection. Always add
+-- the admin door alongside tenant_isolation:
+
+-- CREATE POLICY admin_all ON public.<table_name>
+--     FOR ALL TO clubscheduler
+--     USING (true) WITH CHECK (true);
+
 -- ---------------------------------------------------------------------------
 -- C. BATCH-ENABLE RLS ON ALL EXISTING TABLES THAT HAVE club_id
 -- ---------------------------------------------------------------------------
@@ -45,6 +54,9 @@
 --     FOR ALL
 --     USING (club_id = current_setting('app.club_id')::UUID)
 --     WITH CHECK (club_id = current_setting('app.club_id')::UUID);
+-- CREATE POLICY admin_all ON public.event
+--     FOR ALL TO clubscheduler
+--     USING (true) WITH CHECK (true);
 
 -- ---------------------------------------------------------------------------
 -- E. TABLES THAT MUST NEVER HAVE RLS ENABLED

@@ -8,6 +8,7 @@ use App\Repository\ClubUserRepository;
 use App\Service\TenantConnectionContext;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\DriverException;
+use Doctrine\Persistence\ManagerRegistry;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
@@ -149,7 +150,7 @@ final class RlsIsolationTest extends KernelTestCase
         // (constante partagée), jointe à pg_policies.
         /** @var list<array<string, mixed>> $rows */
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT c.relname AS table_name, p.policyname, p.cmd, p.qual, p.with_check, p.permissive '
+            'SELECT c.relname AS table_name, p.policyname, p.cmd, p.qual, p.with_check, p.permissive, p.roles '
             . 'FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace '
             . 'JOIN pg_policies p ON p.schemaname = \'public\' AND p.tablename = c.relname '
             . 'WHERE ' . self::CLUB_ID_TABLE_PREDICATE
@@ -159,6 +160,9 @@ final class RlsIsolationTest extends KernelTestCase
 
         $consumedAllowlist = [];
         $consumedOverrides = [];
+        // Portes admin comptabilisées PAR TABLE (une seule attendue par table
+        // FORCE — vérifié après la boucle contre l'énumération des tables FORCE).
+        $adminDoorCounts = [];
 
         foreach ($rows as $row) {
             $table = (string) $row['table_name'];
@@ -177,6 +181,25 @@ final class RlsIsolationTest extends KernelTestCase
 
             $key = $table . '.' . $policy . '.' . $cmd;
             $where = \sprintf('%s.%s (%s)', $table, $policy, $cmd);
+
+            // Porte admin sous FORCE RLS. Sur un provider managé le rôle
+            // propriétaire (clubscheduler) n'est PAS superuser → FORCE lui
+            // s'applique, et sans policy chaque table FORCE le DENY par défaut :
+            // la porte de supervision se referme. La policy admin_all (FOR ALL,
+            // USING/WITH CHECK true) TO clubscheduler la rouvre. Jugée sur SA clé
+            // — le rôle — AVANT le canon tenant : une policy admin_all destinée à
+            // TOUT AUTRE rôle (app_user, PUBLIC) ne prend PAS cette branche et
+            // tombe dans le fail hors-canon plus bas (elle ouvrirait la table au
+            // runtime). Le rôle DOIT être exactement {clubscheduler}.
+            if ('{clubscheduler}' === (string) $row['roles']) {
+                self::assertSame('admin_all', $policy, \sprintf('%s : policy TO clubscheduler mais nommée %s — la porte admin doit s\'appeler admin_all.', $where, $policy));
+                self::assertSame('ALL', $cmd, \sprintf('%s : porte admin admin_all mais cmd=%s — attendu FOR ALL.', $where, $cmd));
+                self::assertSame('true', $qual, \sprintf('%s : porte admin admin_all mais USING=%s — attendu true (accès total du superviseur).', $where, '' === $qual ? '<none>' : $qual));
+                self::assertSame('true', $withCheck, \sprintf('%s : porte admin admin_all mais WITH CHECK=%s — attendu true.', $where, '' === $withCheck ? '<none>' : $withCheck));
+                $adminDoorCounts[$table] = ($adminDoorCounts[$table] ?? 0) + 1;
+
+                continue;
+            }
 
             // Tenant-scopée contre le canon → correct, rien de plus à vérifier. On
             // JUGE CHAQUE policy séparément : PostgreSQL fait un OU entre policies
@@ -265,6 +288,26 @@ final class RlsIsolationTest extends KernelTestCase
                 $key,
                 $consumedOverrides,
                 \sprintf('dérogation périmée : aucune policy INSERT hors-canon pour \'%s\' — retirer l\'entrée de $insertPredicateOverrides.', $key),
+            );
+        }
+
+        // PRÉSENCE de la porte admin : énumération dynamique des tables FORCE
+        // (pas seulement les tables club_id — la porte admin doit exister sur
+        // TOUTE table FORCE), chacune doit avoir consommé EXACTEMENT une policy
+        // admin_all dans la boucle. Une migration future qui ajoute une table
+        // FORCE sans sa porte admin (ou en pose deux) rougit ici en la nommant :
+        // sur un provider managé cette table refermerait la porte de supervision.
+        /** @var list<string> $forceTables */
+        $forceTables = $this->connection->fetchFirstColumn(
+            'SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace '
+            . 'WHERE n.nspname = \'public\' AND c.relforcerowsecurity AND c.relkind IN (\'r\', \'p\') ORDER BY c.relname',
+        );
+        self::assertNotEmpty($forceTables, 'expected FORCE-RLS tables to exist');
+        foreach ($forceTables as $table) {
+            self::assertSame(
+                1,
+                $adminDoorCounts[$table] ?? 0,
+                \sprintf('table %s est sous FORCE RLS mais porte %d policy admin_all (attendu exactement 1) — une migration a ajouté une table FORCE sans sa porte admin_all, ou l\'a dupliquée. Sous un provider managé, le rôle propriétaire non-superuser y serait DENY.', $table, $adminDoorCounts[$table] ?? 0),
             );
         }
     }
@@ -403,11 +446,109 @@ final class RlsIsolationTest extends KernelTestCase
         self::assertSame([self::CLUB_A, self::CLUB_B], $clubIds, 'findActiveClubIds doit rester cross-club même GUC posé');
     }
 
+    public function testAdminDoorLetsOwnerCrossClubsWhileAppUserStaysScoped(): void
+    {
+        // P5-7 — comportement des DEUX rôles sous FORCE RLS, sur la CONNEXION ADMIN.
+        // En dev/test clubscheduler est superuser (bypass total) : on ne peut PAS
+        // prouver la porte admin depuis lui. On crée donc un rôle propriétaire
+        // NON-superuser (membre de clubscheduler, DML hérité, attributs SUPERUSER/
+        // BYPASSRLS non hérités) — la situation exacte d'un provider managé — et on
+        // bascule dessus par SET LOCAL ROLE (LOCAL obligatoire : un SET ROLE nu
+        // survivrait à la connexion statique et empoisonnerait la suite).
+        // Tout le semis vit sur la connexion admin, dans SA transaction : les lignes
+        // semées sur la connexion default (autre transaction DAMA) y sont invisibles.
+        $clubA = '11111111-1111-4111-8111-111111111111';
+        $clubB = '22222222-2222-4222-8222-222222222222';
+
+        $admin = $this->adminConnection();
+
+        // Idempotence : nom fixe, DROP IF EXISTS en tête (pas de paratest ici).
+        $admin->executeStatement('DROP ROLE IF EXISTS rls_admin_probe');
+        $admin->executeStatement('CREATE ROLE rls_admin_probe NOSUPERUSER NOLOGIN IN ROLE clubscheduler');
+
+        $admin->beginTransaction();
+        try {
+            // Semis (comme clubscheduler : superuser bypass en dev/test, porte
+            // admin_all sur un managé). club n'a pas de club_id → pas de RLS.
+            foreach ([$clubA => 'PA', $clubB => 'PB'] as $clubId => $tag) {
+                $admin->executeStatement(
+                    'INSERT INTO club (id, version, created_at, updated_at, name, slug, timezone, locale, onboarding_completed, generation_count_season) VALUES (?, 1, now(), now(), ?, ?, ?, ?, true, 0)',
+                    [$clubId, 'Admin Probe ' . $tag, 'admin-probe-' . strtolower($tag) . '-' . substr(md5($clubId), 0, 6), 'Europe/Paris', 'fr'],
+                );
+                $admin->executeStatement(
+                    'INSERT INTO team_tag (id, version, created_at, updated_at, club_id, name, is_system) VALUES (gen_random_uuid(), 1, now(), now(), ?, ?, false)',
+                    [$clubId, 'Team ' . $tag],
+                );
+            }
+
+            // SENS 1 : le propriétaire non-superuser voit et écrit CROSS-CLUB via admin_all.
+            $admin->executeStatement('SET LOCAL ROLE rls_admin_probe');
+            self::assertFalse(
+                (bool) $admin->fetchOne('SELECT usesuper FROM pg_user WHERE usename = current_user'),
+                'le probe doit être NON-superuser — sinon il bypasse RLS et la porte admin ne prouve rien',
+            );
+            self::assertSame(
+                2,
+                (int) $admin->fetchOne('SELECT count(*) FROM team_tag WHERE club_id IN (?, ?)', [$clubA, $clubB]),
+                'porte admin : le rôle propriétaire non-superuser voit les DEUX clubs sous FORCE RLS',
+            );
+            $admin->executeStatement(
+                'INSERT INTO team_tag (id, version, created_at, updated_at, club_id, name, is_system) VALUES (gen_random_uuid(), 1, now(), now(), ?, ?, false)',
+                [$clubB, 'admin-cross-insert'],
+            );
+            self::assertSame(
+                1,
+                $admin->executeStatement('UPDATE team_tag SET name = ? WHERE club_id = ?', ['admin-cross-update', $clubA]),
+                'porte admin : UPDATE cross-club passe',
+            );
+            self::assertSame(
+                1,
+                $admin->executeStatement('DELETE FROM team_tag WHERE club_id = ? AND name = ?', [$clubB, 'admin-cross-insert']),
+                'porte admin : DELETE cross-club passe',
+            );
+
+            // SENS 2 : app_user reste scopé au GUC — le durcissement admin ne l'ouvre pas.
+            $admin->executeStatement('SET LOCAL ROLE app_user');
+            $admin->executeStatement('SELECT set_config(?, ?, true)', ['app.club_id', $clubA]);
+            /** @var list<string> $visible */
+            $visible = $admin->fetchFirstColumn('SELECT DISTINCT club_id FROM team_tag WHERE club_id IN (?, ?)', [$clubA, $clubB]);
+            self::assertSame([$clubA], $visible, 'app_user posé sur A ne voit que A — la porte admin n\'a pas ouvert app_user');
+
+            // INSERT cross-club rejeté par WITH CHECK — contenu dans un savepoint pour
+            // que l'abort PostgreSQL ne poison pas la transaction externe (nettoyage).
+            $rejected = false;
+            $admin->beginTransaction();
+            try {
+                $admin->executeStatement(
+                    'INSERT INTO team_tag (id, version, created_at, updated_at, club_id, name, is_system) VALUES (gen_random_uuid(), 1, now(), now(), ?, ?, false)',
+                    [$clubB, 'app-user-smuggle'],
+                );
+                $admin->commit();
+            } catch (DriverException) {
+                $rejected = true;
+                $admin->rollBack();
+            }
+            self::assertTrue($rejected, 'app_user sous GUC=A doit se voir REFUSER un INSERT club B (WITH CHECK tenant_isolation)');
+        } finally {
+            $admin->executeStatement('RESET ROLE');
+            $admin->rollBack();
+            $admin->executeStatement('DROP ROLE IF EXISTS rls_admin_probe');
+        }
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
         $this->connection = self::getContainer()->get(Connection::class);
         $this->guc = self::getContainer()->get(TenantConnectionContext::class);
+    }
+
+    private function adminConnection(): Connection
+    {
+        $connection = self::getContainer()->get(ManagerRegistry::class)->getConnection('admin');
+        self::assertInstanceOf(Connection::class, $connection);
+
+        return $connection;
     }
 
     /**
