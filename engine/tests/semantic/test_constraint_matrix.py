@@ -127,6 +127,13 @@ def _violates(cell: MatrixCell, slot: dict[str, Any]) -> bool:
     if key == "minAtVenueId":
         # 1-session team: the floor of "≥1 at venue" coincides with "is at venue".
         return slot["venueId"] != config["minAtVenueId"]
+    if key in ("fromTime", "untilTime"):
+        # P3-17 — la fenêtre ne vaut QUE sur les jours listés : hors d'eux, rien n'est
+        # bloqué. `fromTime` bloque [from, 24:00), `untilTime` bloque [00:00, until).
+        if int(slot["dayOfWeek"]) not in set(config["unavailableDays"]):
+            return False
+        start = str(slot["startTime"])[:5]
+        return start >= str(config["fromTime"]) if key == "fromTime" else start < str(config["untilTime"])
     if key in ("forbiddenDays", "unavailableDays"):
         return int(slot["dayOfWeek"]) in set(config[key])
     if key == "availableDays":
@@ -234,6 +241,13 @@ def _violating_lock(cell: MatrixCell) -> tuple[str, int, str]:
         venue = config["forbiddenVenueId"]  # lock AT the banned venue
     elif key in ("preferredVenueId", "forcedVenueId"):
         venue = BAD_VENUE  # lock at a venue that is NOT the imposed one
+    elif key in ("fromTime", "untilTime"):
+        # Lock on the blocked day, 18:00 — inside BOTH sample windows
+        # ([17:00, 24:00) for fromTime="17:00" and [00:00, 19:00) for
+        # untilTime="19:00") : a genuinely violating lock. The window
+        # SEMANTICS (in refused / out taken) live in test_coach_window.py —
+        # here we only pin the DIAGNOSED promise on the bypass.
+        day = int(config["unavailableDays"][0])
     else:
         raise AssertionError(f"no violating-lock recipe for {key}")
     return venue, day, start

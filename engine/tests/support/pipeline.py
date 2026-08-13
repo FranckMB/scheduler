@@ -110,6 +110,8 @@ def coach_availability(
     *,
     unavailable_days: list[int] | None = None,
     available_days: list[int] | None = None,
+    from_time: str | None = None,
+    until_time: str | None = None,
 ) -> dict[str, Any]:
     """A COACH_AVAILABILITY constraint scoped to a coach.
 
@@ -122,12 +124,20 @@ def coach_availability(
     Zéro effet sur le solveur — il n'a jamais lu que ``scopeTargetId`` pour cette famille.
     C'est une dérive de FIDÉLITÉ : un harnais qui ment sur le contrat fait passer des tests
     pour une preuve qu'ils ne sont pas.
+
+    ``from_time``/``until_time`` = la FENÊTRE horaire : absente, la règle vaut
+    pour la journée entière (comportement d'origine).
     """
     config: dict[str, Any] = {}
+
     if unavailable_days is not None:
         config["unavailableDays"] = unavailable_days
     if available_days is not None:
         config["availableDays"] = available_days
+    if from_time is not None:
+        config["fromTime"] = from_time
+    if until_time is not None:
+        config["untilTime"] = until_time
     return {
         "id": constraint_id,
         "scope": "COACH",
