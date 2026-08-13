@@ -19,6 +19,7 @@ use App\Repository\Basketball\FfbbLeagueRepository;
 use App\Repository\ClubRepository;
 use App\Repository\ClubUserRepository;
 use App\Security\JwtCookieFactory;
+use App\Security\TurnstileVerifier;
 use App\Service\AuditTrail;
 use App\Service\ClubApprovalService;
 use App\Service\ClubProvisioner;
@@ -79,6 +80,8 @@ final class AuthController extends AbstractController
         private readonly ClubProvisioner $clubProvisioner,
         private readonly ClubApprovalService $clubApprovalService,
         private readonly PlanEntitlements $planEntitlements,
+        private readonly TurnstileVerifier $turnstileVerifier,
+        private readonly string $turnstileSiteKey,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -123,6 +126,19 @@ final class AuthController extends AbstractController
         // validation payload-only, donc toujours enumeration-safe (A3).
         if (!$consent) {
             return $this->json(['error' => 'Vous devez accepter les CGU et la politique de confidentialité.'], 400);
+        }
+
+        // P5-3b — Turnstile (preuve d'humanité). INERTE tant qu'aucun secret n'est
+        // configuré (dev/test) : le token est alors ignoré et le register reste
+        // byte-intact. Placé APRÈS les validations payload-only et AVANT tout lookup
+        // (ARA :129, e-mail :143) : le 403 ne dépend JAMAIS de l'existence d'un
+        // compte, donc il ne rouvre pas l'oracle d'énumération A3 que le reste de ce
+        // contrôleur ferme (message identique email frais vs email connu).
+        if ($this->turnstileVerifier->isEnabled()) {
+            $turnstileToken = isset($data['turnstileToken']) && \is_string($data['turnstileToken']) ? $data['turnstileToken'] : '';
+            if (!$this->turnstileVerifier->verify($turnstileToken, $request->getClientIp())) {
+                return $this->json(['error' => 'La vérification anti-robot a échoué. Veuillez réessayer.'], 403);
+            }
         }
 
         $email = strtolower($email);
@@ -184,6 +200,19 @@ final class AuthController extends AbstractController
         $this->sendVerificationEmail($request, $email, $rawToken);
 
         return $this->verificationPendingResponse();
+    }
+
+    /**
+     * P5-3b — la config publique dont le widget Turnstile de la page d'inscription
+     * a besoin : la sitekey (publique par nature). `null` quand Turnstile est
+     * inactif (aucune sitekey configurée) → le front rend strictement l'écran
+     * actuel, sans widget ni script tiers. Publique par le préfixe ^/api/register
+     * de security.yaml.
+     */
+    #[Route('/api/register/config', name: 'api_register_config', methods: ['GET'])]
+    public function registerConfig(): JsonResponse
+    {
+        return $this->json(['turnstileSiteKey' => '' !== $this->turnstileSiteKey ? $this->turnstileSiteKey : null]);
     }
 
     #[Route('/api/register/verify', name: 'api_register_verify', methods: ['POST'])]

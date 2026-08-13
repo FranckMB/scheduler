@@ -30,7 +30,7 @@ final class EnvHygieneTest extends TestCase
         // embed credentials too). Non-secret prod flags stay allowed.
         foreach ($lines as $line) {
             self::assertDoesNotMatchRegularExpression(
-                '/^(APP_SECRET|JWT_PASSPHRASE|MERCURE_JWT_SECRET|POSTGRES_PASSWORD|DATABASE_URL|DATABASE_ADMIN_URL|CORS_ALLOW_ORIGIN|MAILER_DSN)=/',
+                '/^(APP_SECRET|JWT_PASSPHRASE|MERCURE_JWT_SECRET|POSTGRES_PASSWORD|DATABASE_URL|DATABASE_ADMIN_URL|CORS_ALLOW_ORIGIN|MAILER_DSN|TURNSTILE_SECRET)=/',
                 $line,
                 \sprintf('backend/.env.prod must not commit a secret value; found: %s', $line),
             );
