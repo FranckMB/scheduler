@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { activateAdminMembership, decideAdminClubRequest, getAdminActions, getAdminAuditLog, getAdminClubRequests, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminMessengerFailed, getAdminOverview, getAdminPendingMemberships, getAdminSession, getAdminSystemErrors, runAdminClubAction, runAdminJob } from "./api";
+import { activateAdminMembership, decideAdminClubRequest, getAdminActions, getAdminAuditLog, getAdminCapacity, getAdminClubRequests, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminMessengerFailed, getAdminOverview, getAdminPendingMemberships, getAdminSession, getAdminSystemErrors, runAdminClubAction, runAdminJob } from "./api";
 import { useAdminStore } from "./store";
 
 export function useAdminSession() {
@@ -29,6 +29,15 @@ export function useAdminHealth() {
     queryKey: ["admin-health"],
     queryFn: getAdminHealth,
     refetchInterval: 30_000,
+  });
+}
+
+/** Capacité (P5-10) — la fenêtre est de 90 j : les agrégats bougent lentement, refetch 5 min. */
+export function useAdminCapacity() {
+  return useQuery({
+    queryKey: ["admin-capacity"],
+    queryFn: getAdminCapacity,
+    refetchInterval: 5 * 60_000,
   });
 }
 

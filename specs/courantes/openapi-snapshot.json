@@ -713,6 +713,177 @@
                 ]
             }
         },
+        "/api/admin/capacity": {
+            "get": {
+                "operationId": "getAdminCapacity",
+                "tags": [
+                    "AdminMonitoring"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Cross-tenant 90-day capacity aggregates from solver telemetry",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "windowDays": {
+                                            "type": "integer",
+                                            "enum": [
+                                                90
+                                            ]
+                                        },
+                                        "totalSolves": {
+                                            "type": "integer"
+                                        },
+                                        "volume": {
+                                            "type": "object",
+                                            "properties": {
+                                                "perDay": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "p50": {
+                                                            "type": "integer",
+                                                            "nullable": true
+                                                        },
+                                                        "max": {
+                                                            "type": "integer",
+                                                            "nullable": true
+                                                        },
+                                                        "maxDate": {
+                                                            "type": "string",
+                                                            "format": "date",
+                                                            "nullable": true
+                                                        }
+                                                    }
+                                                },
+                                                "hourly": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "hour": {
+                                                                "type": "integer"
+                                                            },
+                                                            "solves": {
+                                                                "type": "integer"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "wait": {
+                                            "type": "object",
+                                            "properties": {
+                                                "queueP50Ms": {
+                                                    "type": "integer",
+                                                    "nullable": true
+                                                },
+                                                "queueP95Ms": {
+                                                    "type": "integer",
+                                                    "nullable": true
+                                                },
+                                                "queueMaxMs": {
+                                                    "type": "integer",
+                                                    "nullable": true
+                                                },
+                                                "engineWaitP95Ms": {
+                                                    "type": "integer",
+                                                    "nullable": true
+                                                }
+                                            }
+                                        },
+                                        "bySize": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "bucket": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "small",
+                                                            "medium",
+                                                            "large"
+                                                        ]
+                                                    },
+                                                    "solves": {
+                                                        "type": "integer"
+                                                    },
+                                                    "p50WallTimeMs": {
+                                                        "type": "integer",
+                                                        "nullable": true
+                                                    },
+                                                    "p95WallTimeMs": {
+                                                        "type": "integer",
+                                                        "nullable": true
+                                                    },
+                                                    "p95BudgetRatio": {
+                                                        "type": "number",
+                                                        "nullable": true
+                                                    },
+                                                    "unclosedProofRate": {
+                                                        "type": "number"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "memory": {
+                                            "type": "object",
+                                            "properties": {
+                                                "peakP50Mb": {
+                                                    "type": "number",
+                                                    "nullable": true
+                                                },
+                                                "peakP95Mb": {
+                                                    "type": "number",
+                                                    "nullable": true
+                                                },
+                                                "peakMaxMb": {
+                                                    "type": "number",
+                                                    "nullable": true
+                                                },
+                                                "lastBaselineMb": {
+                                                    "type": "number",
+                                                    "nullable": true
+                                                }
+                                            }
+                                        },
+                                        "issues": {
+                                            "type": "object",
+                                            "properties": {
+                                                "byStatus": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "status": {
+                                                                "type": "string"
+                                                            },
+                                                            "solves": {
+                                                                "type": "integer"
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "payloadP95Bytes": {
+                                                    "type": "integer",
+                                                    "nullable": true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "Read the 90-day capacity board (volume, queue wait, durations by problem size, engine memory, issues)"
+            }
+        },
         "/api/admin/clubs": {
             "get": {
                 "operationId": "getAdminClubs",

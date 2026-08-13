@@ -51,6 +51,9 @@ final class SuperAdminAccessTest extends WebTestCase
         $this->client->request('GET', '/api/admin/overview', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertResponseStatusCodeSame(401);
 
+        $this->client->request('GET', '/api/admin/capacity', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
+
         $this->client->request('GET', '/api/admin/health', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertResponseStatusCodeSame(401);
 
@@ -100,6 +103,15 @@ final class SuperAdminAccessTest extends WebTestCase
         self::assertGreaterThanOrEqual(1, $overview['clubs']['total']);
         self::assertGreaterThanOrEqual(2, $overview['solver']['generations']);
         self::assertArrayHasKey('daily', $overview['solver']);
+
+        $this->client->request('GET', '/api/admin/capacity');
+        self::assertResponseIsSuccessful();
+        $capacity = $this->responseBody();
+        self::assertSame(90, $capacity['windowDays']);
+        self::assertGreaterThanOrEqual(2, $capacity['totalSolves']);
+        foreach (['volume', 'wait', 'bySize', 'memory', 'issues'] as $section) {
+            self::assertArrayHasKey($section, $capacity);
+        }
 
         $this->client->request('GET', '/api/admin/clubs?query=' . urlencode($clubName) . '&limit=10');
         self::assertResponseIsSuccessful();
