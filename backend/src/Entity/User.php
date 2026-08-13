@@ -75,6 +75,12 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?DateTimeImmutable $inactivityWarnedAt = null;
 
+    // P5-12 : jusqu'où l'utilisateur a lu le journal de nouveautés — posé par
+    // POST /api/release-notes/seen. La modale « quoi de neuf » ne s'ouvre que sur
+    // une note publiée APRÈS cet instant. Null = jamais marqué (nouvel inscrit).
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $releaseNotesSeenAt = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -239,6 +245,18 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function setInactivityWarnedAt(?DateTimeImmutable $inactivityWarnedAt): self
     {
         $this->inactivityWarnedAt = $inactivityWarnedAt;
+
+        return $this;
+    }
+
+    public function getReleaseNotesSeenAt(): ?DateTimeImmutable
+    {
+        return $this->releaseNotesSeenAt;
+    }
+
+    public function setReleaseNotesSeenAt(?DateTimeImmutable $releaseNotesSeenAt): self
+    {
+        $this->releaseNotesSeenAt = $releaseNotesSeenAt;
 
         return $this;
     }

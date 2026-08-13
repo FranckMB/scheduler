@@ -1,7 +1,8 @@
-import { CalendarCheck2, LogOut, Menu as MenuIcon, Moon, Settings, Sun, User, ShieldCheck } from "lucide-react";
+import { CalendarCheck2, LogOut, Menu as MenuIcon, Moon, Settings, Sparkles, Sun, User, ShieldCheck } from "lucide-react";
 import { NavLink, Outlet, useNavigation } from "react-router";
 
 import { useLogout, useMe } from "@/features/auth/queries";
+import { WhatsNewModal } from "@/features/release-notes/WhatsNewModal";
 import { Button } from "@/shared/components/ui/button";
 import { Menu, MenuItem } from "@/shared/components/ui/menu";
 import { CreditBadge } from "@/shared/credits/CreditBadge";
@@ -89,6 +90,9 @@ export function AppLayout() {
               <MenuItem to="/profile" icon={<User />}>
                 Profil
               </MenuItem>
+              <MenuItem to="/nouveautes" icon={<Sparkles />}>
+                Nouveautés
+              </MenuItem>
               <MenuItem to="/confidentialite" icon={<ShieldCheck />}>
                 Confidentialité
               </MenuItem>
@@ -105,6 +109,9 @@ export function AppLayout() {
         <CreditsBanner />
         <Outlet />
       </main>
+      {/* P5-12 — la modale « quoi de neuf » se décide elle-même (rien si pas de
+          note fraîche) ; montée une fois pour tout l'espace authentifié. */}
+      <WhatsNewModal />
     </div>
   );
 }

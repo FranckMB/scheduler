@@ -1,7 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { activateAdminMembership, decideAdminClubRequest, getAdminActions, getAdminAuditLog, getAdminCapacity, getAdminClubRequests, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminMessengerFailed, getAdminOverview, getAdminPendingMemberships, getAdminSession, getAdminSystemErrors, runAdminClubAction, runAdminJob } from "./api";
+import { activateAdminMembership, createAdminReleaseNote, decideAdminClubRequest, deleteAdminReleaseNote, getAdminActions, getAdminAuditLog, getAdminCapacity, getAdminClubRequests, getAdminClubs, getAdminFreshness, getAdminHealth, getAdminJobs, getAdminMessengerFailed, getAdminOverview, getAdminPendingMemberships, getAdminReleaseNotes, getAdminSession, getAdminSystemErrors, publishAdminReleaseNote, type ReleaseNoteWritePayload, runAdminClubAction, runAdminJob } from "./api";
 import { useAdminStore } from "./store";
+
+/** Lit le jeton CSRF de la session admin, ou rejette — patron des mutations admin. */
+function requireCsrf(): string | null {
+  return useAdminStore.getState().csrfToken;
+}
 
 export function useAdminSession() {
   return useQuery({
@@ -196,5 +201,61 @@ export function useActivateAdminMembership() {
       return activateAdminMembership(id, csrfToken);
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ["admin-pending-memberships"] }),
+  });
+}
+
+/** P5-12 — le journal de nouveautés, brouillons inclus (atelier superadmin). */
+export function useAdminReleaseNotes() {
+  return useQuery({
+    queryKey: ["admin-release-notes"],
+    queryFn: getAdminReleaseNotes,
+  });
+}
+
+export function useCreateAdminReleaseNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (body: ReleaseNoteWritePayload) => {
+      const csrfToken = requireCsrf();
+      if (!csrfToken) {
+        return Promise.reject(new Error("Missing super-admin CSRF token."));
+      }
+
+      return createAdminReleaseNote(body, csrfToken);
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["admin-release-notes"] }),
+  });
+}
+
+export function usePublishAdminReleaseNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => {
+      const csrfToken = requireCsrf();
+      if (!csrfToken) {
+        return Promise.reject(new Error("Missing super-admin CSRF token."));
+      }
+
+      return publishAdminReleaseNote(id, csrfToken);
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["admin-release-notes"] }),
+  });
+}
+
+export function useDeleteAdminReleaseNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => {
+      const csrfToken = requireCsrf();
+      if (!csrfToken) {
+        return Promise.reject(new Error("Missing super-admin CSRF token."));
+      }
+
+      return deleteAdminReleaseNote(id, csrfToken);
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["admin-release-notes"] }),
   });
 }

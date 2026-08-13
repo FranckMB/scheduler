@@ -1423,6 +1423,386 @@
                 "summary": "Read the global fleet and solver monitoring overview"
             }
         },
+        "/api/admin/release-notes": {
+            "get": {
+                "operationId": "getAdminReleaseNotes",
+                "tags": [
+                    "AdminReleaseNotes"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Every release note, drafts included, newest editorial date first",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "title": {
+                                                        "type": "string"
+                                                    },
+                                                    "body": {
+                                                        "type": "string"
+                                                    },
+                                                    "date": {
+                                                        "type": "string",
+                                                        "format": "date"
+                                                    },
+                                                    "publishedAt": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ],
+                                                        "format": "date-time"
+                                                    },
+                                                    "createdAt": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "List every release note (drafts included)"
+            },
+            "post": {
+                "operationId": "createAdminReleaseNote",
+                "tags": [
+                    "AdminReleaseNotes"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Release note created (as a draft \u2014 publishedAt null)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "title": {
+                                            "type": "string"
+                                        },
+                                        "body": {
+                                            "type": "string"
+                                        },
+                                        "date": {
+                                            "type": "string",
+                                            "format": "date"
+                                        },
+                                        "publishedAt": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        },
+                                        "createdAt": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error (title required \u2264160, body required, invalid date)"
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    }
+                },
+                "summary": "Create a release note (draft)",
+                "parameters": [
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "title",
+                                    "body",
+                                    "noteDate"
+                                ],
+                                "properties": {
+                                    "title": {
+                                        "type": "string",
+                                        "maxLength": 160
+                                    },
+                                    "body": {
+                                        "type": "string"
+                                    },
+                                    "noteDate": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "description": "Editorial date (YYYY-MM-DD), antedatable"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
+        "/api/admin/release-notes/{id}": {
+            "delete": {
+                "operationId": "deleteAdminReleaseNote",
+                "tags": [
+                    "AdminReleaseNotes"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Release note deleted \u2014 no body"
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "404": {
+                        "description": "Note not found"
+                    }
+                },
+                "summary": "Delete a release note",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            },
+            "patch": {
+                "operationId": "updateAdminReleaseNote",
+                "tags": [
+                    "AdminReleaseNotes"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Release note updated",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "title": {
+                                            "type": "string"
+                                        },
+                                        "body": {
+                                            "type": "string"
+                                        },
+                                        "date": {
+                                            "type": "string",
+                                            "format": "date"
+                                        },
+                                        "publishedAt": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        },
+                                        "createdAt": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Validation error"
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "404": {
+                        "description": "Note not found"
+                    }
+                },
+                "summary": "Update a release note (title, body, editorial date)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "title",
+                                    "body",
+                                    "noteDate"
+                                ],
+                                "properties": {
+                                    "title": {
+                                        "type": "string",
+                                        "maxLength": 160
+                                    },
+                                    "body": {
+                                        "type": "string"
+                                    },
+                                    "noteDate": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "description": "Editorial date (YYYY-MM-DD), antedatable"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
+        "/api/admin/release-notes/{id}/publish": {
+            "post": {
+                "operationId": "publishAdminReleaseNote",
+                "tags": [
+                    "AdminReleaseNotes"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Release note published (publishedAt set to now)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "title": {
+                                            "type": "string"
+                                        },
+                                        "body": {
+                                            "type": "string"
+                                        },
+                                        "date": {
+                                            "type": "string",
+                                            "format": "date"
+                                        },
+                                        "publishedAt": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        },
+                                        "createdAt": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "404": {
+                        "description": "Note not found"
+                    },
+                    "409": {
+                        "description": "The note is already published"
+                    }
+                },
+                "summary": "Publish a release note (makes it visible to members)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            }
+        },
         "/api/admin/actions": {
             "get": {
                 "operationId": "getAdminActions",
@@ -9160,6 +9540,81 @@
                     },
                     "required": false
                 }
+            }
+        },
+        "/api/release-notes": {
+            "get": {
+                "operationId": "getReleaseNotes",
+                "tags": [
+                    "ReleaseNotes"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Published release notes (drafts excluded), newest first, plus how far the member has read",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "seenUpTo": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        },
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "date": {
+                                                        "type": "string",
+                                                        "format": "date"
+                                                    },
+                                                    "title": {
+                                                        "type": "string"
+                                                    },
+                                                    "body": {
+                                                        "type": "string"
+                                                    },
+                                                    "publishedAt": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "summary": "Read the published release notes and the member read watermark"
+            }
+        },
+        "/api/release-notes/seen": {
+            "post": {
+                "operationId": "markReleaseNotesSeen",
+                "tags": [
+                    "ReleaseNotes"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Read watermark set to now (self-only) \u2014 no body"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                },
+                "summary": "Mark the release-notes journal read up to now (self-only)"
             }
         },
         "/api/reservations": {

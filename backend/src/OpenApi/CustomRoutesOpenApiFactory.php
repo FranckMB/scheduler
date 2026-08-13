@@ -423,6 +423,14 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             $paths->addPath($path, $pathItem);
         }
 
+        foreach ($this->releaseNotePaths() as $path => $pathItem) {
+            $paths->addPath($path, $pathItem);
+        }
+
+        foreach ($this->adminReleaseNotePaths() as $path => $pathItem) {
+            $paths->addPath($path, $pathItem);
+        }
+
         $paths->addPath('/api/seasons/{id}/transition', new PathItem(post: new Operation(
             operationId: 'transitionSeason',
             tags: ['Season'],
@@ -1955,6 +1963,154 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'venueId' => ['type' => 'string'],
                     ],
                 ]),
+            )),
+        ];
+    }
+
+    /**
+     * P5-12 — le journal de nouveautés côté membre (lecture des notes publiées +
+     * marquage « vu »). `release_note` est GLOBALE ; seule la surface est décrite.
+     *
+     * @return array<string, PathItem>
+     */
+    private function releaseNotePaths(): array
+    {
+        return [
+            '/api/release-notes' => new PathItem(get: new Operation(
+                operationId: 'getReleaseNotes',
+                tags: ['ReleaseNotes'],
+                responses: [
+                    '200' => $this->jsonResponse('Published release notes (drafts excluded), newest first, plus how far the member has read', [
+                        'type' => 'object',
+                        'properties' => [
+                            // ISO instant up to which the member marked the journal read, or null (never marked).
+                            'seenUpTo' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                            'items' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'id' => ['type' => 'string'],
+                                // Editorial date (antedatable) — display only, never the "what's new" gate.
+                                'date' => ['type' => 'string', 'format' => 'date'],
+                                'title' => ['type' => 'string'],
+                                'body' => ['type' => 'string'],
+                                // Publication instant — drives the "what's new" modal (publishedAt > seenUpTo).
+                                'publishedAt' => ['type' => 'string', 'format' => 'date-time'],
+                            ]]],
+                        ],
+                    ]),
+                    '401' => new Response('Unauthorized'),
+                ],
+                summary: 'Read the published release notes and the member read watermark',
+            )),
+            '/api/release-notes/seen' => new PathItem(post: new Operation(
+                operationId: 'markReleaseNotesSeen',
+                tags: ['ReleaseNotes'],
+                responses: [
+                    '204' => new Response('Read watermark set to now (self-only) — no body'),
+                    '401' => new Response('Unauthorized'),
+                ],
+                summary: 'Mark the release-notes journal read up to now (self-only)',
+            )),
+        ];
+    }
+
+    /**
+     * P5-12 — l'atelier superadmin du journal : lister (brouillons inclus), créer,
+     * éditer, publier, supprimer. Écritures protégées par CSRF (X-CSRF-Token).
+     *
+     * @return array<string, PathItem>
+     */
+    private function adminReleaseNotePaths(): array
+    {
+        $csrfHeader = ['name' => 'X-CSRF-Token', 'in' => 'header', 'required' => true, 'schema' => ['type' => 'string']];
+        $noteSchema = [
+            'type' => 'object',
+            'properties' => [
+                'id' => ['type' => 'string', 'format' => 'uuid'],
+                'title' => ['type' => 'string'],
+                'body' => ['type' => 'string'],
+                'date' => ['type' => 'string', 'format' => 'date'],
+                'publishedAt' => ['type' => ['string', 'null'], 'format' => 'date-time'],
+                'createdAt' => ['type' => 'string', 'format' => 'date-time'],
+            ],
+        ];
+        $writeBody = $this->jsonBody([
+            'type' => 'object',
+            'required' => ['title', 'body', 'noteDate'],
+            'properties' => [
+                'title' => ['type' => 'string', 'maxLength' => 160],
+                'body' => ['type' => 'string'],
+                'noteDate' => ['type' => 'string', 'format' => 'date', 'description' => 'Editorial date (YYYY-MM-DD), antedatable'],
+            ],
+        ]);
+        $idParameter = ['name' => 'id', 'in' => 'path', 'required' => true, 'schema' => ['type' => 'string', 'format' => 'uuid']];
+
+        return [
+            '/api/admin/release-notes' => new PathItem(
+                get: new Operation(
+                    operationId: 'getAdminReleaseNotes',
+                    tags: ['AdminReleaseNotes'],
+                    responses: [
+                        '200' => $this->jsonResponse('Every release note, drafts included, newest editorial date first', [
+                            'type' => 'object',
+                            'properties' => ['items' => ['type' => 'array', 'items' => $noteSchema]],
+                        ]),
+                        '401' => new Response('No authenticated super-admin session'),
+                    ],
+                    summary: 'List every release note (drafts included)',
+                ),
+                post: new Operation(
+                    operationId: 'createAdminReleaseNote',
+                    tags: ['AdminReleaseNotes'],
+                    responses: [
+                        '201' => $this->jsonResponse('Release note created (as a draft — publishedAt null)', $noteSchema),
+                        '400' => new Response('Validation error (title required ≤160, body required, invalid date)'),
+                        '401' => new Response('No authenticated super-admin session'),
+                        '403' => new Response('Invalid CSRF token'),
+                    ],
+                    summary: 'Create a release note (draft)',
+                    parameters: [$csrfHeader],
+                    requestBody: $writeBody,
+                ),
+            ),
+            '/api/admin/release-notes/{id}' => new PathItem(
+                delete: new Operation(
+                    operationId: 'deleteAdminReleaseNote',
+                    tags: ['AdminReleaseNotes'],
+                    responses: [
+                        '204' => new Response('Release note deleted — no body'),
+                        '401' => new Response('No authenticated super-admin session'),
+                        '403' => new Response('Invalid CSRF token'),
+                        '404' => new Response('Note not found'),
+                    ],
+                    summary: 'Delete a release note',
+                    parameters: [$idParameter, $csrfHeader],
+                ),
+                patch: new Operation(
+                    operationId: 'updateAdminReleaseNote',
+                    tags: ['AdminReleaseNotes'],
+                    responses: [
+                        '200' => $this->jsonResponse('Release note updated', $noteSchema),
+                        '400' => new Response('Validation error'),
+                        '401' => new Response('No authenticated super-admin session'),
+                        '403' => new Response('Invalid CSRF token'),
+                        '404' => new Response('Note not found'),
+                    ],
+                    summary: 'Update a release note (title, body, editorial date)',
+                    parameters: [$idParameter, $csrfHeader],
+                    requestBody: $writeBody,
+                ),
+            ),
+            '/api/admin/release-notes/{id}/publish' => new PathItem(post: new Operation(
+                operationId: 'publishAdminReleaseNote',
+                tags: ['AdminReleaseNotes'],
+                responses: [
+                    '200' => $this->jsonResponse('Release note published (publishedAt set to now)', $noteSchema),
+                    '401' => new Response('No authenticated super-admin session'),
+                    '403' => new Response('Invalid CSRF token'),
+                    '404' => new Response('Note not found'),
+                    '409' => new Response('The note is already published'),
+                ],
+                summary: 'Publish a release note (makes it visible to members)',
+                parameters: [$idParameter, $csrfHeader],
             )),
         ];
     }

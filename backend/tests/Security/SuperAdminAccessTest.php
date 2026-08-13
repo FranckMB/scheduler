@@ -7,6 +7,7 @@ namespace App\Tests\Security;
 use App\Entity\SuperAdmin;
 use App\Security\TotpService;
 use App\Tests\Double\RecordingAdminJobExecutor;
+use App\Tests\StartsFreshBrowserSession;
 use App\Tests\VerifiesRegistration;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Connection;
@@ -25,6 +26,7 @@ use Symfony\Component\Uid\Uuid;
 #[Group('integration')]
 final class SuperAdminAccessTest extends WebTestCase
 {
+    use StartsFreshBrowserSession;
     use VerifiesRegistration;
 
     private KernelBrowser $client;
@@ -64,6 +66,19 @@ final class SuperAdminAccessTest extends WebTestCase
         self::assertResponseStatusCodeSame(401);
 
         $this->client->request('POST', '/api/admin/jobs/import-school-holidays/run', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
+
+        // P5-12 — l'atelier du journal de nouveautés est une surface admin : un JWT
+        // club ne franchit pas le firewall, en lecture comme en écriture.
+        $this->client->request('GET', '/api/admin/release-notes', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
+
+        $this->client->request('POST', '/api/admin/release-notes', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
+
+        // Anonyme (aucune identité) : même refus.
+        $this->startFreshBrowserSession($this->client);
+        $this->client->request('GET', '/api/admin/release-notes');
         self::assertResponseStatusCodeSame(401);
     }
 
