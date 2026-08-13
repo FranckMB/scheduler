@@ -26,8 +26,25 @@
 ### 1.1 Profil de charge réel — trois faits qui dimensionnent (relevé 2026-07-17)
 
 - **La charge est saisonnière, pas moyenne.** Les clubs génèrent **tous dans la même fenêtre** (août/septembre, avant la reprise), et le work-loop est itératif (ajuster → régénérer), pas one-shot. Dimensionner sur une moyenne annuelle ou sur « 2-3 utilisateurs simultanés » est un contresens : **le pic de septembre est la seule unité pertinente**. Le profil exact (générations par club, fenêtre, tolérance à l'attente) est une **inconnue à collecter auprès des clubs**, pas à benchmarker.
-- **Le débit global de génération est aujourd'hui de 1 à la fois** — non pas à cause du `ClubGenerationLock` (qui, lui, est *par club*), mais parce qu'il n'existe **qu'un seul conteneur `messenger-worker`** exécutant un unique `messenger:consume`. Au pic, la file sérialise tous les clubs : *N* générations en attente × jusqu'à 600 s. **Le premier levier de débit n'est donc pas un serveur plus gros : c'est un nombre de conteneurs worker** — à condition d'avoir les cœurs réels pour les servir (8 workers CP-SAT par solve sur le tier haut).
+- **Le débit global de génération est aujourd'hui de 1 à la fois — pour DEUX raisons, pas une** *(corrigé 2026-08-13, mesure P5-4)* : (a) il n'existe **qu'un seul conteneur `messenger-worker`** exécutant un unique `messenger:consume` ; (b) **l'engine porte son propre sémaphore GLOBAL `max_concurrent_solves = 1`, tous clubs confondus** (`engine/app/core/config.py:26`, AUD-ENG-30) — distinct du verrou asyncio par club. Au pic, la file sérialise tous les clubs : *N* générations en attente × jusqu'à 600 s. **Ajouter des conteneurs worker SEUL buterait sur le second mur** : le levier de débit est le COUPLE (workers × `ENGINE_MAX_CONCURRENT_SOLVES`), à condition d'avoir les cœurs réels (8 workers CP-SAT par solve sur le tier haut).
 - **Le worst-case, pas le p50.** Le budget adaptatif du tier des gros clubs (complexité `n_teams × n_venues` > 200 — p. ex. 40 équipes × 9 gymnases = 360) est de **600 s à 8 workers**. Une génération « en moins de 30 s » observée en dev ne dimensionne rien.
+
+## Mesures (harness `docs/ops/load-test.md`)
+
+**Run local du 2026-08-13** — 5 clubs taille BCCL en rafale, **limites mémoire de PROD
+appliquées** (cgroup actif), machine dev WSL2 — INDICATIF (le VPS dimensionnera) :
+
+- **5/5 COMPLETED**, lot entier en **11 s**, débit observé ~1 636 générations/h — mais chaque
+  solve n'a pris que **0,2 s de wall solveur** sur cette machine : le débit ne se transpose PAS
+  au pic réel (worst-case 600 s/solve → le même couple de sérialiseurs donnerait ~6 gén./h).
+- **Attente en file = le comportement nominal mesuré** : 5,8 s → 10,8 s selon la position
+  (bout-en-bout − wall), linéaire — les deux sérialiseurs font exactement ce qu'ils annoncent.
+- **Murs mémoire : AUCUN à cette taille** — pics vs limites prod : engine **190/512 MiB**,
+  php-fpm 67/1024, worker 54/384, postgres 29/512 ; zéro OOMKilled. ⚠ Le pic engine d'un solve
+  DENSE de 600 s reste à mesurer sur VPS — un solve de 0,2 s ne stresse pas la mémoire comme
+  600 s de branch-and-bound.
+- File Redis : pic à 5 (attendu). Reste ouvert : re-run sur le VPS (roadmap, périmètre résiduel
+  de la mesure).
 
 > **Ne pas re-benchmarker `num_search_workers`** : le choix est déjà le résultat d'une mesure (ADR-0001, amendé 2026-07-07 — 1 worker stalle 612 s sur BCCL là où le portefeuille 8 workers prouve l'optimum en ~2 s). Les tiers actuels (`_adaptive_workers` : ≤200 → 1, sinon 8) sont **contractuels pour les golden fixtures**, qui dépendent du déterminisme à 1 worker.
 
