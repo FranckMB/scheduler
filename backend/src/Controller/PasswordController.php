@@ -33,6 +33,7 @@ final class PasswordController extends AbstractController
         private readonly MailerInterface $mailer,
         private readonly RateLimiterFactory $authPasswordForgotLimiter,
         private readonly RateLimiterFactory $authPasswordResetLimiter,
+        private readonly string $frontendBaseUrl,
         private readonly PasswordPolicy $passwordPolicy,
     ) {}
 
@@ -51,7 +52,13 @@ final class PasswordController extends AbstractController
         if (null !== $user) {
             try {
                 $resetToken = $this->resetPasswordHelper->generateResetToken($user);
-                $link = $request->getSchemeAndHttpHost() . '/reset-password/' . $resetToken->getToken();
+                // Le lien se construit depuis FRONTEND_BASE_URL, jamais depuis le
+                // header Host entrant : un forgot forgé avec un Host menteur ferait
+                // sinon livrer à la victime un lien de reset vers le domaine de
+                // l'attaquant (password reset poisoning). Même patron de repli
+                // qu'AuthController quand la variable est vide (dev nu).
+                $base = '' !== $this->frontendBaseUrl ? rtrim($this->frontendBaseUrl, '/') : $request->getSchemeAndHttpHost();
+                $link = $base . '/reset-password/' . $resetToken->getToken();
                 $this->mailer->send(
                     (new Email)
                         ->from('no-reply@clubscheduler.app')

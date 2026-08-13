@@ -14,6 +14,7 @@ use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Transport\InMemory\InMemoryTransport;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Yaml\Yaml;
 
@@ -87,6 +88,33 @@ final class PasswordResetEnumerationTest extends WebTestCase
         // dans la requête, il a été enfilé.
         $queued = $this->queuedEmails();
         self::assertCount(1, $queued, 'le forgot d\'un compte connu enfile exactement un mail sur le bus');
+    }
+
+    /**
+     * Password reset poisoning : le lien du mail se construit depuis
+     * FRONTEND_BASE_URL, jamais depuis le header Host entrant — un forgot forgé
+     * avec un Host menteur livrerait sinon à la victime un lien de reset vers le
+     * domaine de l'attaquant, et le clic donnerait le token.
+     */
+    public function testResetLinkIgnoresTheForgedHostHeader(): void
+    {
+        $this->registerVerifiedUser('poison@enum.fr', 'ENUMR9');
+
+        $this->client->request('POST', '/api/password/forgot', [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'REMOTE_ADDR' => $this->nextIp(),
+            'HTTP_HOST' => 'attacker.example',
+        ], json_encode(['email' => 'poison@enum.fr'], \JSON_THROW_ON_ERROR));
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+
+        $queued = $this->queuedEmails();
+        self::assertCount(1, $queued);
+        $email = $queued[0]->getMessage();
+        \assert($email instanceof Email);
+        $body = (string) $email->getTextBody();
+
+        self::assertStringNotContainsString('attacker.example', $body, 'le lien de reset ne doit JAMAIS suivre le header Host entrant');
+        self::assertStringContainsString('http://localhost:5173/reset-password/', $body, 'le lien se construit depuis FRONTEND_BASE_URL (.env.test)');
     }
 
     public function testProdRoutesTheMailerMessageAsync(): void
