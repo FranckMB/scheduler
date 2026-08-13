@@ -1,0 +1,43 @@
+# P4-90 — pré-construit l'image php UNE fois avec le cache GitHub Actions, puis la
+# charge dans le démon local sous les trois noms que docker compose attend
+# (scheduler-php-fpm / -messenger-worker / -cron-runner : même Dockerfile, même
+# étage `base`). `docker compose up -d --wait …` trouve alors les images déjà
+# présentes et NE REBUILDE PAS : la couche chère (apt + 8 extensions + pecl
+# redis) survit d'un run à l'autre au lieu d'être recompilée ~7 fois par run.
+#
+# ⚠ Les build-args UID/GID doivent matcher ceux que compose résout depuis .env
+# (les jobs y écrivent USER_ID/GROUP_ID = id du runner) — sinon compose verrait
+# une image « différente » de celle qu'il aurait construite, et surtout le
+# usermod du Dockerfile poserait le mauvais propriétaire sur les bind-mounts.
+#
+# ⚠ Le job build-docker n'utilise PAS cette action, à dessein : son rôle est de
+# prouver que les VRAIS builds (dev + prod targets) passent de zéro — le mettre
+# en cache rendrait sa garantie creuse.
+name: Build php image (GHA cache)
+description: Pre-build docker/php/Dockerfile with type=gha cache and load it under the compose image names.
+runs:
+  using: composite
+  steps:
+    - name: Resolve runner uid/gid (must match compose's .env USER_ID/GROUP_ID)
+      id: ids
+      shell: bash
+      run: |
+        echo "uid=$(id -u)" >> "$GITHUB_OUTPUT"
+        echo "gid=$(id -g)" >> "$GITHUB_OUTPUT"
+
+    - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+    - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+      with:
+        context: .
+        file: docker/php/Dockerfile
+        load: true
+        build-args: |
+          UID=${{ steps.ids.outputs.uid }}
+          GID=${{ steps.ids.outputs.gid }}
+        tags: |
+          scheduler-php-fpm:latest
+          scheduler-messenger-worker:latest
+          scheduler-cron-runner:latest
+        cache-from: type=gha,scope=ci-php
+        cache-to: type=gha,scope=ci-php,mode=max
