@@ -45,6 +45,14 @@ appliquées** (cgroup actif), machine dev WSL2 — INDICATIF (le VPS dimensionne
   600 s de branch-and-bound.
 - File Redis : pic à 5 (attendu). Reste ouvert : re-run sur le VPS (roadmap, périmètre résiduel
   de la mesure).
+- ⚠ **Recadrage fondateur (2026-08-13) qui change la lecture des budgets** : les tiers
+  60/180/600 s ont été posés **arbitrairement, sans cas réel vérifié**. Or BCCL (49 équipes)
+  est un **TOP-30 français** et se résout en ~2 s à 8 workers (ADR-0001) — le coût réel d'un
+  solve pour l'immense majorité des clubs est de l'ordre de secondes, pas de minutes. **Le
+  critère de dimensionnement est « ça passe avec BCCL » — et ça passe, avec une marge de
+  300×.** Le p95 réel par taille de club sortira de `solver_metrics` en prod (lot métriques de
+  capacité, roadmap) ; les scénarios catastrophe à 6 gén./h supposent des clubs PLUS gros que
+  BCCL au comportement pathologique — ~30 candidats en France, identifiables un à un.
 
 > **Ne pas re-benchmarker `num_search_workers`** : le choix est déjà le résultat d'une mesure (ADR-0001, amendé 2026-07-07 — 1 worker stalle 612 s sur BCCL là où le portefeuille 8 workers prouve l'optimum en ~2 s). Les tiers actuels (`_adaptive_workers` : ≤200 → 1, sinon 8) sont **contractuels pour les golden fixtures**, qui dépendent du déterminisme à 1 worker.
 
