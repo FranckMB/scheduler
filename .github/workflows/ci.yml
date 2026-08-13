@@ -72,9 +72,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+      # P4-92 — image tirée de NOTRE miroir ghcr (GitHub-interne : un 503 Docker
+      # Hub ne rougit plus ce gate — vécu le 2026-08-11). Bump de version =
+      # mettre à jour ICI et dans mirror-images.yml, relancer ce workflow-là.
+      - name: Login to ghcr.io (mirror pull)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Run gitleaks (full history)
         run: >
-          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.0
+          docker run --rm -v "$PWD:/repo" ghcr.io/maratech-fr/mirror-gitleaks:v8.30.0
           git /repo --no-banner -c /repo/.gitleaks.toml
 
   # SEC-14 (2026-08-05) — Semgrep PROMU EN GATE après triage des 69 findings
@@ -787,12 +792,30 @@ jobs:
       # rapport) ; les exceptions vivent dans .trivyignore, datées et justifiées.
       # Le monde bouge même quand l'image ne change pas : le balayage HEBDO des
       # images ghcr publiées vit dans security-weekly.yml.
+      # P4-92 — trois duretés sur ce step, né fragile (base Trivy en 404 le
+      # 2026-08-13) : image tirée de NOTRE miroir ghcr ET ÉPINGLÉE (latest était
+      # un 2ᵉ pull Docker Hub non maîtrisé) ; cache Actions de la base de vulns
+      # (restaurée d'un run à l'autre — pas de téléchargement si fraîche <6 h) ;
+      # chaîne de REPLIS pour la mise à jour (ghcr → ecr → gcr : il faut que les
+      # trois toussent en même temps pour perdre le gate).
+      - name: Login to ghcr.io (mirror pull)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Restore trivy vulnerability DB cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .trivy-cache
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+
       - name: Trivy scan (prod images, CRITICAL gate)
         run: |
           for img in scan/php-prod scan/nginx-prod scan/frontend-prod scan/postgres-prod; do
             echo "--- $img"
             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
               -v "$PWD/.trivyignore:/.trivyignore" \
-              aquasec/trivy:latest image --ignorefile /.trivyignore --severity CRITICAL --ignore-unfixed \
+              -v "$PWD/.trivy-cache:/root/.cache/trivy" \
+              -e TRIVY_DB_REPOSITORY="ghcr.io/aquasecurity/trivy-db:2,public.ecr.aws/aquasecurity/trivy-db:2,mirror.gcr.io/aquasec/trivy-db:2" \
+              ghcr.io/maratech-fr/mirror-trivy:0.69.1 image --ignorefile /.trivyignore --severity CRITICAL --ignore-unfixed \
               --exit-code 1 --scanners vuln "$img"
           done
