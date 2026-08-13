@@ -17,15 +17,22 @@ use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 use SymfonyCasts\Bundle\ResetPassword\Exception\ResetPasswordExceptionInterface;
 use SymfonyCasts\Bundle\ResetPassword\ResetPasswordHelperInterface;
+use Throwable;
 
 final class PasswordController extends AbstractController
 {
+    // Mot de passe jeté, dépensé uniquement pour équilibrer le coût CPU du hash
+    // sur la branche « compte inexistant » du forgot (anti-énumération par timing).
+    // Jamais stocké, jamais comparé — le hasher est keyé par classe, l'instance est jetable.
+    private const string TIMING_EQUALISER_PASSWORD = 'timing-equaliser-not-a-real-secret';
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly ResetPasswordHelperInterface $resetPasswordHelper,
         private readonly UserPasswordHasherInterface $passwordHasher,
         private readonly MailerInterface $mailer,
         private readonly RateLimiterFactory $authPasswordForgotLimiter,
+        private readonly RateLimiterFactory $authPasswordResetLimiter,
         private readonly PasswordPolicy $passwordPolicy,
     ) {}
 
@@ -52,9 +59,21 @@ final class PasswordController extends AbstractController
                         ->subject('Réinitialisation de votre mot de passe ClubScheduler')
                         ->text("Pour réinitialiser votre mot de passe, ouvrez ce lien :\n{$link}\n\nCe lien expire dans 1 heure."),
                 );
-            } catch (ResetPasswordExceptionInterface) {
-                // Throttled or other reset error — swallow to avoid leaking account state.
+            } catch (Throwable) {
+                // Élargi de ResetPasswordExceptionInterface à Throwable : outre le throttle
+                // du helper, un échec de DISPATCH du mail (Redis down au moment d'enfiler le
+                // SendEmailMessage sur le bus) ferait aujourd'hui un 500 — mais seulement sur
+                // CETTE branche « compte existant ». Ce 500 serait un oracle d'énumération par
+                // code d'erreur. On avale donc tout échec sur ce chemin.
             }
+        } else {
+            // Compte INEXISTANT : dépenser un hash factice pour approcher le coût CPU que la
+            // branche existante paie. Le hasher est keyé par CLASSE, pas par instance — un User
+            // jetable convient, le résultat est jeté. Miroir de AuthController::register (branche
+            // compte vérifié). Résidu assumé : l'INSERT reset_password_request et le dispatch du
+            // bus n'existent que sur la branche existante — un profilage temporel fin reste
+            // possible, borné par le limiteur 5/15min ; on ne simule PAS ces écritures.
+            $this->passwordHasher->hashPassword(new User, self::TIMING_EQUALISER_PASSWORD);
         }
 
         // Always 200: never reveal whether an email is registered (no enumeration).
@@ -64,6 +83,10 @@ final class PasswordController extends AbstractController
     #[Route('/api/password/reset', name: 'api_password_reset', methods: ['POST'])]
     public function reset(Request $request): JsonResponse
     {
+        if (!$this->authPasswordResetLimiter->create($request->getClientIp())->consume(1)->isAccepted()) {
+            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+        }
+
         $data = json_decode((string) $request->getContent(), true);
         $token = \is_array($data) && isset($data['token']) && \is_string($data['token']) ? $data['token'] : '';
         $password = \is_array($data) && isset($data['password']) && \is_string($data['password']) ? $data['password'] : '';

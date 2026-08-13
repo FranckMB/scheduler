@@ -27,3 +27,8 @@ framework:
             App\Message\GenerateScheduleMessage: async
             App\Message\ExportPdfMessage: async
             App\Message\Basketball\PopulateClubFromFfbbMessage: async
+            # Les e-mails (vérification, reset, changement d'adresse…) partent par le bus :
+            # le contrôleur enfile un SendEmailMessage, le SMTP se joue chez le worker (échec
+            # retenu par le failure transport). Un envoi synchrone ferait d'un 500 SMTP un
+            # oracle d'énumération sur la seule branche « compte existant » du forgot/register.
+            Symfony\Component\Mailer\Messenger\SendEmailMessage: async

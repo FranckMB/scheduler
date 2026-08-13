@@ -289,6 +289,10 @@ jobs:
       - name: ApiRateLimitTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/ApiRateLimitTest.php --group phase1'
 
+      # P5-3a — parité anti-énumération du rail mot de passe (hash factice, mail par le bus, 429 reset).
+      - name: PasswordResetEnumerationTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/PasswordResetEnumerationTest.php --group phase1'
+
       # P4-45 — le pendant PAR CLUB de SEC-11. Step nommé, donc réellement bloquant :
       # porter `phase1` ne suffit pas (cf. le commentaire P2-9ter plus bas).
       - name: ClubQuotaTest
