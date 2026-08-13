@@ -1,6 +1,11 @@
-Last verified @ 2026-08-13 (JSON **régénéré** — P5-10 : route `GET /api/admin/capacity`)
+Last verified @ 2026-08-13 (JSON **régénéré** — P5-12 : les 5 routes du journal de nouveautés)
 
 Changements récents :
+- **P5-12 — journal de nouveautés (2026-08-13)** : +5 paths — `GET /api/release-notes` (tout
+  membre, publiées seules, `{seenUpTo, items[]}` avec `publishedAt` par item — le garde de la
+  modale se compare dessus), `POST /api/release-notes/seen` (self-only, 204), et le CRUD SA
+  `/api/admin/release-notes` (+ `/{id}/publish`, 409 si déjà publiée). Set-diff : 5 paths
+  ajoutés, 0 retiré. Entrées factory posées AVEC les routes.
 - **P5-10 PR 2 — vue Capacité superadmin (2026-08-13)** : nouveau path `GET /api/admin/capacity`
   (lecture seule, agrégats de `solver_metrics` sur 90 j, firewall admin). Set-diff du regen :
   **1 path ajouté, 0 retiré** — l'entrée factory a été posée AVEC la route cette fois
