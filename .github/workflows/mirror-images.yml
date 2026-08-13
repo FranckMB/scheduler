@@ -1,0 +1,38 @@
+# P4-92 — miroir des images tierces consommées par la CI, dans NOTRE registre.
+#
+# Pourquoi : trois épisodes en trois jours où un required check a rougi parce
+# qu'un serveur TIERS toussait (phpredis/GitHub le 2026-08-12 — réglé par PECL ;
+# gitleaks/Docker Hub 503 le 2026-08-11 ; base Trivy/mirror.gcr.io 404 le
+# 2026-08-13). Un pull depuis ghcr.io/maratech-fr est GitHub-interne : même
+# infra que les runners — un incident Docker Hub ne casse plus la CI.
+#
+# Usage : manuel (workflow_dispatch). À relancer À CHAQUE bump de version d'une
+# image ci-dessous (le bump se fait ici ET dans ci.yml, même PR), puis vérifier
+# que le job consommateur passe. Les packages restent privés : les jobs
+# consommateurs se connectent à ghcr avec le GITHUB_TOKEN (déjà câblé).
+name: Mirror third-party images
+on:
+  workflow_dispatch:
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Mirror gitleaks
+        run: |
+          docker pull zricethezav/gitleaks:v8.30.0
+          docker tag zricethezav/gitleaks:v8.30.0 ghcr.io/maratech-fr/mirror-gitleaks:v8.30.0
+          docker push ghcr.io/maratech-fr/mirror-gitleaks:v8.30.0
+
+      - name: Mirror trivy
+        run: |
+          docker pull aquasec/trivy:0.69.1
+          docker tag aquasec/trivy:0.69.1 ghcr.io/maratech-fr/mirror-trivy:0.69.1
+          docker push ghcr.io/maratech-fr/mirror-trivy:0.69.1
