@@ -136,7 +136,9 @@ final class FeedbackDigestCommand extends Command
                 $lines[] = '';
                 $lines[] = \sprintf('— %s —', $topic);
             }
-            $club = null === $row['club_name'] ? 'club inconnu' : (string) $row['club_name'];
+            // Le nom de club est du contenu géré par le club : même aplatissement
+            // que le message (revue sécurité — cosmétique, le corps est MIME-encodé).
+            $club = null === $row['club_name'] ? 'club inconnu' : $this->excerpt((string) $row['club_name']);
             $lines[] = \sprintf('  [%s] %s', $club, $this->excerpt((string) $row['message']));
         }
 

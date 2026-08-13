@@ -149,10 +149,16 @@ final readonly class AdminFeedbackController
         }
 
         $treatedAt = $this->clock->now();
-        $connection->executeStatement(
-            'UPDATE feedback SET status = :status, treated_at = :treated_at, version = version + 1 WHERE id = :id',
-            ['status' => Feedback::STATUS_TREATED, 'treated_at' => $treatedAt->format(DateTimeImmutable::ATOM), 'id' => $id],
+        // UPDATE conditionné au statut : deux treat concurrents passeraient tous
+        // deux le check lu plus haut et enverraient deux mercis (revue sécurité,
+        // TOCTOU) — le WHERE rend la transition atomique, le perdant ne fait rien.
+        $updated = $connection->executeStatement(
+            'UPDATE feedback SET status = :status, treated_at = :treated_at, version = version + 1 WHERE id = :id AND status = :expected',
+            ['status' => Feedback::STATUS_TREATED, 'treated_at' => $treatedAt->format(DateTimeImmutable::ATOM), 'id' => $id, 'expected' => Feedback::STATUS_UNTREATED],
         );
+        if (0 === $updated) {
+            return new JsonResponse(['error' => 'Ce signalement est déjà traité.'], 409);
+        }
 
         // « Traité + merci » à l'auteur — best-effort. Auteur effacé/introuvable
         // (RGPD) → skip silencieux : le signalement reste traité, aucune erreur.

@@ -1,6 +1,9 @@
-Last verified @ 2026-08-13 (JSON **régénéré** — P5-6 PR 1 : `POST /api/feedback`)
+Last verified @ 2026-08-13 (JSON **régénéré** — P5-6 PR 2 : les 4 routes `/api/admin/feedback`)
 
 Changements récents :
+- **P5-6 PR 2 — rail SA du signalement (2026-08-13)** : +4 paths `/api/admin/feedback` (liste
+  cross-tenant paginée + bloc QoS, détail avec contexte lourd, `treat`/`untreat` — 409 double,
+  CSRF). Set-diff : 4 paths ajoutés, 0 retiré.
 - **P5-6 PR 1 — canal signalement, rail club (2026-08-13)** : +1 path `POST /api/feedback`
   (tout membre authentifié, limiteur dédié, 201 `{id}` ; le contexte lourd est copié côté
   serveur depuis un `scheduleId` — jamais fourni par le client). Set-diff : 1 path ajouté,
