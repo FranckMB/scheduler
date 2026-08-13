@@ -12,7 +12,8 @@ import { cn } from "@/shared/lib/utils";
 import { isPasswordValid } from "@/shared/lib/passwordPolicy";
 
 import { AuthLayout } from "./AuthLayout";
-import { useRegister } from "./queries";
+import { useRegister, useRegisterConfig } from "./queries";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 // Miroir du serveur (AuthController: filter_var FILTER_VALIDATE_EMAIL) pour un
 // retour immédiat au blur ; le serveur reste l'autorité.
@@ -31,6 +32,10 @@ const SPORTS: { id: string; label: string; icon: string; enabled: boolean }[] = 
 
 export function RegisterPage() {
   const register = useRegister();
+  // P5-3b — sitekey Turnstile (serveur). Absente (config null OU fetch en échec)
+  // → Turnstile inactif : l'écran reste strictement l'actuel, sans widget tiers.
+  const { data: registerCfg } = useRegisterConfig();
+  const turnstileSiteKey = registerCfg?.turnstileSiteKey ?? null;
   // Étape 1 = choix du sport (basket présélectionné), étape 2 = les champs du sport.
   // Le sport n'est PAS envoyé au serveur : le seul choix est basket, que createClub
   // pose côté serveur. Au 2e sport, le threader (payload → token → createClub).
@@ -40,6 +45,10 @@ export function RegisterPage() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  // P5-3b — token Turnstile courant + un compteur qui, incrémenté, réarme le widget
+  // (le token est à usage unique : après un refus serveur, il faut en redemander un).
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
 
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) =>
     setForm((prev) => ({ ...prev, [key]: event.target.value }));
@@ -67,10 +76,26 @@ export function RegisterPage() {
       return;
     }
     try {
-      await register.mutateAsync({ firstName: form.firstName, lastName: form.lastName, email: form.email, password: form.password, ara: form.ara.toUpperCase(), club_name: form.club_name, consent });
+      await register.mutateAsync({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        password: form.password,
+        ara: form.ara.toUpperCase(),
+        club_name: form.club_name,
+        consent,
+        // P5-3b — threadé seulement s'il existe (Turnstile inactif → aucun champ).
+        ...(null !== turnstileToken ? { turnstileToken } : {}),
+      });
       setSent(true);
     } catch (err) {
       setError(await apiErrorMessage(err));
+      // Token à usage unique : un refus (dont le 403 anti-robot) le consomme —
+      // on l'oublie et on réarme le widget pour la tentative suivante.
+      if (null !== turnstileSiteKey) {
+        setTurnstileToken(null);
+        setTurnstileReset((nonce) => nonce + 1);
+      }
     }
   }
 
@@ -183,6 +208,16 @@ export function RegisterPage() {
             .
           </span>
         </label>
+        {/* P5-3b — widget Turnstile : rendu UNIQUEMENT quand le serveur fournit une
+            sitekey. Absente → rien ici, aucun script tiers, écran inchangé. */}
+        {null !== turnstileSiteKey ? (
+          <TurnstileWidget
+            siteKey={turnstileSiteKey}
+            onVerify={setTurnstileToken}
+            onExpire={() => setTurnstileToken(null)}
+            resetNonce={turnstileReset}
+          />
+        ) : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={() => setStep("sport")}>

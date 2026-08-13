@@ -146,6 +146,22 @@ export interface RegisterPayload {
   club_name: string;
   /** RGPD : acceptation CGU + politique de confidentialité (obligatoire). */
   consent: boolean;
+  /** P5-3b — jeton Cloudflare Turnstile. Optionnel : ignoré tant que Turnstile est
+   *  inactif côté serveur (aucune sitekey). Absent/invalide quand actif → 403. */
+  turnstileToken?: string;
+}
+
+/**
+ * P5-3b — config publique de la page d'inscription. `turnstileSiteKey` non-null
+ * = Turnstile actif (le front rend le widget) ; null = inactif (écran actuel).
+ */
+export interface RegisterConfig {
+  turnstileSiteKey: string | null;
+}
+
+/** GET /api/register/config — publique (préfixe ^/api/register). */
+export function registerConfig(): Promise<RegisterConfig> {
+  return api.get("register/config").json();
 }
 
 /** Register never authenticates: it returns an identical neutral 202 for a fresh

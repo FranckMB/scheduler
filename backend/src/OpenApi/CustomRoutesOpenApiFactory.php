@@ -60,6 +60,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     ],
                 ]),
                 '400' => new Response('Validation error'),
+                '403' => new Response('Anti-robot verification failed (only when the Turnstile check is enabled)'),
                 '429' => new Response('Too many attempts (rate limited)'),
             ],
             summary: 'Register a user (creates an unverified account; sends an email-verification link)',
@@ -74,8 +75,26 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     'ara' => ['type' => 'string', 'description' => 'FFBB club code — 3-20 uppercase alphanumeric'],
                     'club_name' => ['type' => 'string', 'description' => 'Required only when the ARA creates a new club (snake_case)'],
                     'consent' => ['type' => 'boolean', 'description' => 'RGPD: acceptance of the terms & privacy policy — required (400 without)'],
+                    'turnstileToken' => ['type' => 'string', 'description' => 'Cloudflare Turnstile challenge token — required only when the anti-robot check is enabled (see GET /api/register/config); absent or invalid then → 403'],
                 ],
             ]),
+        )));
+
+        $paths->addPath('/api/register/config', new PathItem(get: new Operation(
+            operationId: 'getApiRegisterConfig',
+            tags: ['Auth'],
+            responses: [
+                '200' => $this->jsonResponse('Public registration configuration', [
+                    'type' => 'object',
+                    'properties' => [
+                        // Null while the anti-robot check is disabled — the frontend only
+                        // renders the Turnstile widget when a sitekey is served (the key is
+                        // public by nature, the matching secret never leaves the backend).
+                        'turnstileSiteKey' => ['type' => 'string', 'nullable' => true],
+                    ],
+                ]),
+            ],
+            summary: 'Public registration configuration (Turnstile sitekey when the anti-robot check is enabled)',
         )));
 
         $paths->addPath('/api/register/verify', new PathItem(post: new Operation(

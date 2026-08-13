@@ -1,6 +1,13 @@
-Last verified @ 2026-08-13 (JSON **régénéré** — P4-87 : `Schedule.resourcesChangedSinceGeneration` exposé en lecture)
+Last verified @ 2026-08-13 (JSON **régénéré** — P5-3b : route `GET /api/register/config` + Turnstile sur `POST /api/register`)
 
 Changements récents :
+- **P5-3b — Turnstile sur le register (2026-08-13)** : nouveau path `GET /api/register/config`
+  (public, rend `turnstileSiteKey` nullable — null tant que l'anti-robot est désactivé) ;
+  `POST /api/register` gagne la propriété optionnelle `turnstileToken` et la réponse `403`
+  (vérification anti-robot échouée, seulement quand Turnstile est actif). Set-diff du regen :
+  **1 path ajouté, 0 retiré** — attrapé par `EveryCustomRouteIsDocumentedTest` en CI (le run
+  local était passé sur métadonnées en cache : le piège `cache:pool:clear` + restart php-fpm
+  documenté ici a encore frappé).
 - **P4-87 — troisième marqueur de péremption (2026-08-13)** : le schéma de LECTURE `Schedule`
   gagne `resourcesChangedSinceGeneration` (bool, défaut false) — vrai quand une DONNÉE DU CLUB
   (gymnase, coach, créneau/grille de période, réservation, override, tag, calendrier) a changé

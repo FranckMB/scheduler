@@ -47,7 +47,9 @@ describe("A17 baseline security headers (docker/frontend/security-headers.conf)"
 describe("A17 CSP (docker/frontend/csp.conf)", () => {
   it("locks default/script/object and blocks framing", () => {
     expect(cspDirective("default-src")).toBe("'self'");
-    expect(cspDirective("script-src")).toBe("'self'");
+    // P5-3b — script-src reste verrouillé à 'self' + LA seule exception d'hôte tiers
+    // posée d'office : le loader Cloudflare Turnstile. Aucun autre hôte n'est admis.
+    expect(cspDirective("script-src")).toBe("'self' https://challenges.cloudflare.com");
     expect(cspDirective("object-src")).toBe("'none'");
     expect(cspDirective("frame-ancestors")).toBe("'none'");
     expect(cspDirective("base-uri")).toBe("'self'");
@@ -57,6 +59,9 @@ describe("A17 CSP (docker/frontend/csp.conf)", () => {
     expect(cspDirective("style-src")).toBe("'self' 'unsafe-inline'"); // React inline styles
     expect(cspDirective("img-src")).toContain("blob:"); // logo cropper preview / palette
     expect(cspDirective("connect-src")).toContain("blob:"); // logo recrop fetch()
+    // P5-3b — l'iframe du challenge Turnstile (script-src pour le loader, frame-src
+    // pour l'iframe) : les deux directives portent le même hôte, et lui seul.
+    expect(cspDirective("frame-src")).toBe("'self' https://challenges.cloudflare.com");
     expect(cspDirective("script-src")).not.toContain("unsafe-inline"); // bundled module only
     expect(cspValue).not.toContain("unsafe-eval");
   });

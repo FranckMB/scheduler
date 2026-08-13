@@ -14,6 +14,12 @@ parameters:
     # in which case FfbbApiClient fetches the public token from the FFBB config
     # endpoint at runtime. Never hard-code a token in the repo.
     env(FFBB_MEILISEARCH_TOKEN): ''
+    # P5-3b — Cloudflare Turnstile sur le register. Vides par défaut → Turnstile
+    # INERTE (le register n'exige aucun token, comportement byte-intact) ; seule
+    # la prod pose ces valeurs. Le secret ne se COMMITE jamais (gardé par
+    # EnvHygieneTest) ; la sitekey est publique (servie au front par /api/register/config).
+    env(TURNSTILE_SECRET): ''
+    env(TURNSTILE_SITEKEY): ''
     # SEC-16 (audit) — le cookie httpOnly qui porte le JWT applicatif. Nom et
     # chemin sont des PARAMÈTRES parce que trois écrivains doivent s'accorder :
     # le handler lexik (`set_cookies`, ci-dessous), `JwtCookieFactory`
@@ -45,6 +51,9 @@ services:
             # Optional FFBB Meilisearch token override (lot C); empty → fetched at runtime.
             $ffbbMeilisearchToken: '%env(FFBB_MEILISEARCH_TOKEN)%'
             $appSecret: '%env(APP_SECRET)%'
+            # P5-3b — Turnstile : secret (verify serveur) + sitekey (publique, front).
+            $turnstileSecret: '%env(TURNSTILE_SECRET)%'
+            $turnstileSiteKey: '%env(TURNSTILE_SITEKEY)%'
 
     # makes classes in src/ available to be used as services
     # this creates a service per class whose id is the fully-qualified class name

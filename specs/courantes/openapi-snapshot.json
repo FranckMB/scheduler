@@ -2299,6 +2299,9 @@
                     "400": {
                         "description": "Validation error"
                     },
+                    "403": {
+                        "description": "Anti-robot verification failed (only when the Turnstile check is enabled)"
+                    },
                     "429": {
                         "description": "Too many attempts (rate limited)"
                     }
@@ -2343,6 +2346,10 @@
                                     "consent": {
                                         "type": "boolean",
                                         "description": "RGPD: acceptance of the terms & privacy policy \u2014 required (400 without)"
+                                    },
+                                    "turnstileToken": {
+                                        "type": "string",
+                                        "description": "Cloudflare Turnstile challenge token \u2014 required only when the anti-robot check is enabled (see GET /api/register/config); absent or invalid then \u2192 403"
                                     }
                                 }
                             }
@@ -2350,6 +2357,33 @@
                     },
                     "required": false
                 }
+            }
+        },
+        "/api/register/config": {
+            "get": {
+                "operationId": "getApiRegisterConfig",
+                "tags": [
+                    "Auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Public registration configuration",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "turnstileSiteKey": {
+                                            "type": "string",
+                                            "nullable": true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Public registration configuration (Turnstile sitekey when the anti-robot check is enabled)"
             }
         },
         "/api/register/verify": {

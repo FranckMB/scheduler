@@ -86,6 +86,21 @@ export function useRegister() {
   return useMutation({ mutationFn: authApi.register });
 }
 
+/**
+ * P5-3b — config publique du register (sitekey Turnstile). Quasi-statique →
+ * staleTime infini ; un fetch en échec laisse `data` indéfini, ce que la page
+ * traite comme « Turnstile inactif » (écran actuel, sans widget). Publique, donc
+ * toujours activée (pas de gate d'auth).
+ */
+export function useRegisterConfig() {
+  return useQuery({
+    queryKey: ["register-config"],
+    queryFn: authApi.registerConfig,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
 export function useVerifyEmail() {
   const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
   const queryClient = useQueryClient();

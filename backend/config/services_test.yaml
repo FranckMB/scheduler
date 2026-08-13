@@ -32,3 +32,17 @@ services:
         decorates: 'security.user_password_hasher'
         arguments:
             $inner: '@.inner'
+
+    # P5-3b — le vérifieur Turnstile roule sur un stub au verdict pilotable : aucun
+    # test d'inscription ne doit appeler Cloudflare. Le reste (secret, logger)
+    # continue d'être autowiré/binder normalement (argument nommé = merge).
+    App\Tests\Double\TurnstileHttpClientStub: ~
+    App\Security\TurnstileVerifier:
+        # autowire pour $logger ; le bind $turnstileSecret de services.yaml ne
+        # retombe pas sur un service redéfini ici → on le REpose explicitement,
+        # sinon le secret resterait au défaut vide et le test ne pourrait pas
+        # activer Turnstile (%env% résolu au runtime, posé par le test avant boot).
+        autowire: true
+        arguments:
+            $httpClient: '@App\Tests\Double\TurnstileHttpClientStub'
+            $turnstileSecret: '%env(TURNSTILE_SECRET)%'

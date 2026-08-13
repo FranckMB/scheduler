@@ -293,6 +293,11 @@ jobs:
       - name: PasswordResetEnumerationTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/PasswordResetEnumerationTest.php --group phase1'
 
+      # P5-3b — Turnstile sur le register (NR d'axe auth) : inerte sans secret, 403 fail-closed
+      # sur verdict, fail-open sur panne transport, 403 identique frais/connu, rate-limit prioritaire.
+      - name: RegisterTurnstileTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/RegisterTurnstileTest.php --group phase1'
+
       # P4-45 — le pendant PAR CLUB de SEC-11. Step nommé, donc réellement bloquant :
       # porter `phase1` ne suffit pas (cf. le commentaire P2-9ter plus bas).
       - name: ClubQuotaTest

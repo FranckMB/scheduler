@@ -96,7 +96,8 @@ Ce qu'il faut retenir en toute session :
 `Security/SlotMoveVerdictTest` (déplacer un créneau passe sous le verdict moteur : refus = planning intact, source hors baseline, 409 pendant une génération) ·
 `Integration/Service/ConstraintChangeStaleScheduleTest` (une contrainte modifiée APRÈS génération marque les plannings COMPLETED du club+saison comme périmés — listener d'entité, tout writer, frontière saison — et un import les démarque) ·
 `Integration/Service/ResourceChangeStaleScheduleTest` (une RESSOURCE du club modifiée — gymnase/coach/créneau/grille/réservation/override/tag/calendrier — marque les plannings périmés ; périmètre dérivé de `schedule_plan_id` : ADR-0002, la grille saison ne périme pas les copies de période et inversement ; un import démarque) ·
-`Security/PasswordResetEnumerationTest` (parité anti-énumération du rail mot de passe : hash factice, mail par le bus, 429 reset).
+`Security/PasswordResetEnumerationTest` (parité anti-énumération du rail mot de passe : hash factice, mail par le bus, 429 reset) ·
+`Security/RegisterTurnstileTest` (Turnstile sur le register : inerte sans secret configuré, 403 fail-closed sur verdict Cloudflare, fail-open sur panne transport, 403 identique email frais vs connu, rate-limit register intact et prioritaire).
 Detail: `docs/testing/testing-strategy.md`.
 
 ## 5. Conventions (core — détail par zone dans `.claude/rules/`)
@@ -225,5 +226,5 @@ maison unique, c'est l'agent qui l'exécute. Tout plan produit doit la remplir l
 `docs/architecture/adr-index.md` · `specs/README.md` · `backend/docs/commands.md` ·
 `backend/docs/ffbb-api.md` · ops : `docs/ops/` (`backup-restore.md` · `prod-stack.md` ·
 `deploy.md`) · sécurité : `docs/security/` (`rls.md` · `mercure.md` · `jwt-cookie.md` · `rgpd.md` ·
-`scanners.md`) · clés `config` d'une contrainte : `backend/docs/constraint-config-keys.md` ·
+`scanners.md` · `turnstile.md`) · clés `config` d'une contrainte : `backend/docs/constraint-config-keys.md` ·
 archives : `docs/archive/`
