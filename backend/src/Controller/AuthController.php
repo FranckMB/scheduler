@@ -729,8 +729,10 @@ final class AuthController extends AbstractController
         $base = '' !== $this->frontendBaseUrl ? rtrim($this->frontendBaseUrl, '/') : $request->getSchemeAndHttpHost();
         $link = $base . '/verify-email/' . $rawToken;
 
-        // Swallow send failures: a 500 on this branch only would itself leak account
-        // state (mirror PasswordController::forgot).
+        // mailer->send only ENQUEUES a SendEmailMessage on the bus now; an SMTP failure
+        // surfaces at the worker, where the failure transport retains it. Only a DISPATCH
+        // failure (Redis down) would land here — swallowed: a 500 on this branch alone
+        // would itself be an account-enumeration oracle (mirror PasswordController::forgot).
         try {
             $this->mailer->send(
                 (new Email)
@@ -763,7 +765,10 @@ final class AuthController extends AbstractController
         $base = '' !== $this->frontendBaseUrl ? rtrim($this->frontendBaseUrl, '/') : $request->getSchemeAndHttpHost();
         $link = $base . '/confirm-email/' . $rawToken;
 
-        // On avale les échecs d'envoi (best-effort, comme la vérification / le reset).
+        // mailer->send ne fait plus qu'ENFILER un SendEmailMessage sur le bus ; un échec
+        // SMTP surgit chez le worker (le failure transport le retient). Seul un échec de
+        // DISPATCH (Redis down) tomberait ici — avalé : un 500 sur cette seule branche
+        // serait un oracle d'énumération (comme la vérification / le reset).
         try {
             $this->mailer->send(
                 (new Email)
@@ -791,6 +796,10 @@ final class AuthController extends AbstractController
             ? "L'adresse e-mail de votre compte ClubScheduler est désormais {$newEmail}.\n\nSi vous n'êtes pas à l'origine de ce changement, contactez-nous immédiatement : votre compte a pu être compromis."
             : "Une demande de changement d'adresse vers {$newEmail} vient d'être faite sur votre compte ClubScheduler.\n\nVotre adresse actuelle reste active tant que la nouvelle n'est pas confirmée.\n\nSi vous n'êtes pas à l'origine de cette demande, changez votre mot de passe : quelqu'un a accès à votre session.";
 
+        // mailer->send ne fait plus qu'ENFILER un SendEmailMessage sur le bus ; un échec
+        // SMTP surgit chez le worker (le failure transport le retient). Seul un échec de
+        // DISPATCH (Redis down) tomberait ici — avalé : un 500 sur cette seule branche
+        // serait un oracle d'énumération.
         try {
             $this->mailer->send(
                 (new Email)
@@ -805,6 +814,10 @@ final class AuthController extends AbstractController
 
     private function sendAccountExistsEmail(string $email): void
     {
+        // mailer->send ne fait plus qu'ENFILER un SendEmailMessage sur le bus ; un échec
+        // SMTP surgit chez le worker (le failure transport le retient). Seul un échec de
+        // DISPATCH (Redis down) tomberait ici — avalé : un 500 sur cette seule branche
+        // serait un oracle d'énumération.
         try {
             $this->mailer->send(
                 (new Email)

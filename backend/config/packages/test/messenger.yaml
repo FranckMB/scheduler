@@ -5,5 +5,11 @@ framework:
             # tests so its dispatch is inspectable (no Redis, no external call). The
             # other messages keep their real async→Redis routing.
             ffbb_in_memory: 'in-memory://'
+            # P5-3a : les e-mails partent en mémoire en test, si bien que
+            # PasswordResetEnumerationTest peut prouver qu'un forgot « compte connu »
+            # ENFILE le mail (au lieu de l'envoyer dans la requête). Ce re-routage masque
+            # le routing prod à l'exécution — le cas structurel lit donc messenger.yaml.
+            mailer_in_memory: 'in-memory://'
         routing:
             App\Message\Basketball\PopulateClubFromFfbbMessage: ffbb_in_memory
+            Symfony\Component\Mailer\Messenger\SendEmailMessage: mailer_in_memory

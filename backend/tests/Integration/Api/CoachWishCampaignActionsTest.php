@@ -67,7 +67,9 @@ final class CoachWishCampaignActionsTest extends WebTestCase
         $body = json_decode((string) $this->client->getResponse()->getContent(), true);
         self::assertSame(1, $body['sent'], 'seul le coach À EMAIL est servi (l\'autre = badge « pas d\'email »)');
 
-        self::assertEmailCount(1);
+        // P5-3a : les e-mails partent désormais par le bus (SendEmailMessage routé en
+        // mémoire en test) — ils sont ENFILÉS, pas envoyés dans la requête.
+        self::assertQueuedEmailCount(1);
         $email = self::getMailerMessage();
         self::assertNotNull($email);
         self::assertEmailHeaderSame($email, 'To', 'maxime@test.com');

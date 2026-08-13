@@ -23,3 +23,12 @@ services:
             $inner: '@clock'
     Psr\Clock\ClockInterface: '@App\Clock\SimulatedClock'
     Symfony\Component\Clock\ClockInterface: '@App\Clock\SimulatedClock'
+
+    # P5-3a — décorateur pass-through du hasher : il compte les appels hashPassword pour
+    # que PasswordResetEnumerationTest prouve que la branche « compte inexistant » du forgot
+    # dépense bien un hash factice (équilibrage temporel anti-énumération). `$inner` est le
+    # hasher réel décoré (patron $inner de SimulatedClock / FfbbHttpClientStub).
+    App\Tests\Double\RecordingPasswordHasher:
+        decorates: 'security.user_password_hasher'
+        arguments:
+            $inner: '@.inner'

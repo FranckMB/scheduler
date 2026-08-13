@@ -14,6 +14,14 @@ framework:
             policy: 'sliding_window'
             limit: 10
             interval: '15 minutes'
+        # P5-3a — consommer un lien de réinitialisation (POST /api/password/reset), PUBLIC,
+        # keyé par IP : même famille « consommation de token secret » que auth_register_verify
+        # (10/15min). Le forgot a déjà sa borne (auth_password_forgot) ; le reset était le seul
+        # endpoint du rail mot de passe sans throttle — un token brute-forçable en boucle.
+        auth_password_reset:
+            policy: 'sliding_window'
+            limit: 10
+            interval: '15 minutes'
         # P4-74 — demander un changement d'e-mail (POST /api/me/email), keyé PAR
         # UTILISATEUR (JWT) : la route envoie un mail vers une adresse tierce, donc
         # une borne dédiée en plus du limiteur `api` global. 5/15min couvre l'usage
