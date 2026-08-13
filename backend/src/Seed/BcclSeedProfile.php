@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Seed;
 
+use InvalidArgumentException;
+
 /**
  * P2-4 PR 2bis — l'IDENTITÉ d'un seed BCCL : le même club réaliste (équipes,
  * gymnases, créneaux, contraintes, réservations — l'état terrain), sous deux
@@ -82,6 +84,39 @@ final readonly class BcclSeedProfile
             seedLogo: true,
             isDemo: false,
             coachNames: null,
+        );
+    }
+
+    /**
+     * Profil de club JETABLE pour le harness de mesure de charge (dev-only) :
+     * N clubs indépendants, chacun l'état terrain complet du BCCL sous une
+     * identité fictive numérotée. Les codes FFBB vivent hors plage réelle
+     * (ARA9999001..ARA9999099) et n'entrent JAMAIS en collision avec dev()
+     * (ARA0069036) ni demo() (ARA9999999). Coachs fictifs (RGPD), pas de logo,
+     * pas de flag démo — ce ne sont pas des clubs de démonstration, juste de la
+     * charge à jeter.
+     *
+     * @param int $index 1..99 — l'ordinal du club dans la rafale
+     */
+    public static function loadTest(int $index): self
+    {
+        if ($index < 1 || $index > 99) {
+            throw new InvalidArgumentException(\sprintf('Load-test club index must be between 1 and 99, got %d.', $index));
+        }
+
+        return new self(
+            clubName: \sprintf('Club Charge %d', $index),
+            clubSlug: \sprintf('club-charge-%d', $index),
+            // ARA9999001..ARA9999099 : préfixe ARA (ligue/zone se résolvent) mais
+            // numéro hors plage réelle, distinct du ARA9999999 de demo().
+            ffbbCode: \sprintf('ARA99990%02d', $index),
+            managerEmail: \sprintf('charge-%d@clubscheduler.local', $index),
+            managerFirstName: 'Charge',
+            managerLastName: \sprintf('Manager %d', $index),
+            managerPassword: 'charge-load-test-pwd',
+            seedLogo: false,
+            isDemo: false,
+            coachNames: self::FICTIONAL_COACHES,
         );
     }
 

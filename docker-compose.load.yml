@@ -1,0 +1,35 @@
+# ClubScheduler — LOAD-TEST overlay. Applied ON TOP of docker-compose.yml to put
+# the PROD memory limits on the dev stack, so the multi-club load harness measures
+# behaviour under the caps the production VM actually enforces.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.load.yml up -d
+#
+# Every mem_limit below is COPIED from docker-compose.prod.yml (values cited with
+# their source line). NO cpus: prod sets none, so neither do we — matching prod is
+# the whole point. Tear down with a plain `up -d` (no overlay) to drop the caps.
+#
+# ⚠ cgroup memory limits need the host kernel's memory cgroup controller. On some
+# WSL2 setups it is absent and Docker silently ignores mem_limit — the harness
+# detects this (docker info) and records it in the report.
+
+services:
+  php-fpm:
+    mem_limit: 1g       # docker-compose.prod.yml:90
+
+  postgres:
+    mem_limit: 512m     # docker-compose.prod.yml:141
+
+  redis:
+    mem_limit: 256m     # docker-compose.prod.yml:161
+
+  messenger-worker:
+    mem_limit: 384m     # docker-compose.prod.yml:201
+
+  engine:
+    mem_limit: 512m     # docker-compose.prod.yml:276
+
+  pdf-worker:
+    mem_limit: 512m     # docker-compose.prod.yml:311
+
+  mercure:
+    mem_limit: 128m     # docker-compose.prod.yml:336

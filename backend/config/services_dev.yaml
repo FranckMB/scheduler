@@ -3,6 +3,12 @@ services:
         autowire: true
         autoconfigure: true
 
+    # Dev-only: throwaway load-test club seeding for the measurement harness.
+    # Excluded from autoregistration in services.yaml so it can't reach prod/test.
+    App\Command\LoadTestSeedClubsCommand:
+        autowire: true
+        autoconfigure: true
+
     # Dev-only clock override: consumers of ClockInterface get the simulated
     # clock (pinned instant from Redis, else real time). `$inner` is bound to the
     # native `clock` service explicitly so the alias below can't recurse.

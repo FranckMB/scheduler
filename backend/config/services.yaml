@@ -62,6 +62,9 @@ services:
         exclude:
             - '../src/Service/DevScheduleReportWriter.php'
             - '../src/Export/ScheduleExportData.php'
+            # Dev-only load-test harness command — registered in services_dev.yaml
+            # so it never reaches the prod/test container (nor `bin/console list`).
+            - '../src/Command/LoadTestSeedClubsCommand.php'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
