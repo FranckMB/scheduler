@@ -802,6 +802,61 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ],
                 summary: 'Read the global fleet and solver monitoring overview',
             )),
+            '/api/admin/capacity' => new PathItem(get: new Operation(
+                operationId: 'getAdminCapacity',
+                tags: ['AdminMonitoring'],
+                responses: [
+                    // Toutes les valeurs sont nullable : l'historique d'avant les colonnes de
+                    // capacité et les chemins terminaux (échec, timeout) les laissent vides.
+                    '200' => $this->jsonResponse('Cross-tenant 90-day capacity aggregates from solver telemetry', [
+                        'type' => 'object',
+                        'properties' => [
+                            'windowDays' => ['type' => 'integer', 'enum' => [90]],
+                            'totalSolves' => ['type' => 'integer'],
+                            'volume' => ['type' => 'object', 'properties' => [
+                                'perDay' => ['type' => 'object', 'properties' => [
+                                    'p50' => ['type' => 'integer', 'nullable' => true],
+                                    'max' => ['type' => 'integer', 'nullable' => true],
+                                    'maxDate' => ['type' => 'string', 'format' => 'date', 'nullable' => true],
+                                ]],
+                                'hourly' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                    'hour' => ['type' => 'integer'],
+                                    'solves' => ['type' => 'integer'],
+                                ]]],
+                            ]],
+                            'wait' => ['type' => 'object', 'properties' => [
+                                'queueP50Ms' => ['type' => 'integer', 'nullable' => true],
+                                'queueP95Ms' => ['type' => 'integer', 'nullable' => true],
+                                'queueMaxMs' => ['type' => 'integer', 'nullable' => true],
+                                'engineWaitP95Ms' => ['type' => 'integer', 'nullable' => true],
+                            ]],
+                            'bySize' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'bucket' => ['type' => 'string', 'enum' => ['small', 'medium', 'large']],
+                                'solves' => ['type' => 'integer'],
+                                'p50WallTimeMs' => ['type' => 'integer', 'nullable' => true],
+                                'p95WallTimeMs' => ['type' => 'integer', 'nullable' => true],
+                                'p95BudgetRatio' => ['type' => 'number', 'nullable' => true],
+                                'unclosedProofRate' => ['type' => 'number'],
+                            ]]],
+                            'memory' => ['type' => 'object', 'properties' => [
+                                'peakP50Mb' => ['type' => 'number', 'nullable' => true],
+                                'peakP95Mb' => ['type' => 'number', 'nullable' => true],
+                                'peakMaxMb' => ['type' => 'number', 'nullable' => true],
+                                'lastBaselineMb' => ['type' => 'number', 'nullable' => true],
+                            ]],
+                            'issues' => ['type' => 'object', 'properties' => [
+                                'byStatus' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                    'status' => ['type' => 'string'],
+                                    'solves' => ['type' => 'integer'],
+                                ]]],
+                                'payloadP95Bytes' => ['type' => 'integer', 'nullable' => true],
+                            ]],
+                        ],
+                    ]),
+                    '401' => new Response('No authenticated super-admin session'),
+                ],
+                summary: 'Read the 90-day capacity board (volume, queue wait, durations by problem size, engine memory, issues)',
+            )),
             '/api/admin/clubs' => new PathItem(get: new Operation(
                 operationId: 'getAdminClubs',
                 tags: ['AdminMonitoring'],

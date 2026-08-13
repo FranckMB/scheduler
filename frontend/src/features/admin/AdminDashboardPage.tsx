@@ -30,6 +30,7 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { AdminAction, AdminActionArgumentSpec, AdminClub, AdminFreshnessResponse, AdminHealthResponse, AdminJob, AdminJobStatus, AdminJobsResponse, AdminOverviewResponse } from "./api";
 import { useAdminActions, useAdminClubs, useAdminFreshness, useAdminHealth, useAdminJobs, useAdminOverview, useRunAdminClubAction, useRunAdminJob } from "./queries";
+import { CapacitySection } from "./sections/CapacitySection";
 import { ClubRequestsSection } from "./sections/ClubRequestsSection";
 import { ContainersSection } from "./sections/ContainersSection";
 import { ExternalDepsSection } from "./sections/ExternalDepsSection";
@@ -146,6 +147,7 @@ export function AdminDashboardPage() {
         <HealthSection data={health.data} loading={health.isPending} error={health.isError} retry={() => void health.refetch()} />
         <ContainersSection />
         <ExternalDepsSection />
+        <CapacitySection />
       </TabPanel>
 
       <TabPanel variant="console" tabId="jobs" idPrefix="admin" active={activeTab === "jobs"} className="space-y-8 pt-6">

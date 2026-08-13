@@ -57,6 +57,50 @@ export interface AdminOverviewResponse {
   };
 }
 
+/**
+ * P5-10 — agrégats de CAPACITÉ lus de la télémétrie `solver_metrics` (fenêtre 90 j).
+ * Tout est nullable côté valeurs : l'historique pré-2.6 et les chemins terminaux
+ * (échec/timeout) laissent leurs champs vides — l'UI affiche « — », jamais un chiffre inventé.
+ */
+export interface AdminCapacityResponse {
+  windowDays: number;
+  totalSolves: number;
+  volume: {
+    perDay: { p50: number | null; max: number | null; maxDate: string | null };
+    /** Heures LOCALES (Europe/Paris) peuplées seulement — le backend omet les heures vides. */
+    hourly: Array<{ hour: number; solves: number }>;
+  };
+  wait: {
+    queueP50Ms: number | null;
+    queueP95Ms: number | null;
+    queueMaxMs: number | null;
+    /** Attente côté engine (sémaphore par club), p95. */
+    engineWaitP95Ms: number | null;
+  };
+  /** Une ligne par tranche de taille de problème PRÉSENTE (bucket vide = pas de ligne). */
+  bySize: Array<{
+    bucket: string;
+    solves: number;
+    p50WallTimeMs: number | null;
+    p95WallTimeMs: number | null;
+    /** Fraction du budget consommée au p95 (0.65 = 65 %). */
+    p95BudgetRatio: number | null;
+    /** Fraction des solves FEASIBLE (trouvé, pas prouvé optimal) parmi ceux à détail. */
+    unclosedProofRate: number;
+  }>;
+  memory: {
+    peakP50Mb: number | null;
+    peakP95Mb: number | null;
+    peakMaxMb: number | null;
+    /** RSS du process avant solve, dernière valeur connue (« à vide, le worker pèse déjà »). */
+    lastBaselineMb: number | null;
+  };
+  issues: {
+    byStatus: Array<{ status: string; solves: number }>;
+    payloadP95Bytes: number | null;
+  };
+}
+
 type HealthStatus = "up" | "down" | "unknown";
 
 export interface AdminHealthContainer {
@@ -319,6 +363,10 @@ export function getAdminOverview(): Promise<AdminOverviewResponse> {
 
 export function getAdminHealth(): Promise<AdminHealthResponse> {
   return adminApi.get("health").json();
+}
+
+export function getAdminCapacity(): Promise<AdminCapacityResponse> {
+  return adminApi.get("capacity").json();
 }
 
 export function getAdminClubs(page: number, limit: number, query: string): Promise<AdminClubsResponse> {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\AdminJob\AdminJobMonitoringService;
+use App\Service\AdminCapacityService;
 use App\Service\AdminDataFreshnessService;
 use App\Service\AdminHealthService;
 use App\Service\AdminMonitoringService;
@@ -20,6 +21,7 @@ final readonly class AdminMonitoringController
         private AdminHealthService $health,
         private AdminJobMonitoringService $jobs,
         private AdminDataFreshnessService $freshness,
+        private AdminCapacityService $capacity,
     ) {}
 
     #[Route('/health', methods: ['GET'])]
@@ -39,6 +41,13 @@ final readonly class AdminMonitoringController
     public function overview(): JsonResponse
     {
         return new JsonResponse($this->monitoring->overview());
+    }
+
+    /** Capacity board : tenue du système sous charge, lue de la télémétrie (lecture seule). */
+    #[Route('/capacity', methods: ['GET'])]
+    public function capacity(): JsonResponse
+    {
+        return new JsonResponse($this->capacity->capacity());
     }
 
     #[Route('/jobs', methods: ['GET'])]

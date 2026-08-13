@@ -1,6 +1,10 @@
-Last verified @ 2026-08-13 (JSON **régénéré** — P5-3b : route `GET /api/register/config` + Turnstile sur `POST /api/register`)
+Last verified @ 2026-08-13 (JSON **régénéré** — P5-10 : route `GET /api/admin/capacity`)
 
 Changements récents :
+- **P5-10 PR 2 — vue Capacité superadmin (2026-08-13)** : nouveau path `GET /api/admin/capacity`
+  (lecture seule, agrégats de `solver_metrics` sur 90 j, firewall admin). Set-diff du regen :
+  **1 path ajouté, 0 retiré** — l'entrée factory a été posée AVEC la route cette fois
+  (la leçon du garde `EveryCustomRouteIsDocumentedTest` sur `register/config` a servi).
 - **P5-3b — Turnstile sur le register (2026-08-13)** : nouveau path `GET /api/register/config`
   (public, rend `turnstileSiteKey` nullable — null tant que l'anti-robot est désactivé) ;
   `POST /api/register` gagne la propriété optionnelle `turnstileToken` et la réponse `403`
