@@ -30,7 +30,11 @@ final readonly class RequestIdMiddleware implements MiddlewareInterface
     {
         if ($envelope->last(ReceivedStamp::class) instanceof StampInterface) {
             $stamp = $envelope->last(RequestIdStamp::class);
-            if ($stamp instanceof RequestIdStamp) {
+            // Re-validation à la réception : au dispatch la valeur vient du
+            // contexte (déjà validée), mais l'enveloppe a traversé Redis — un
+            // stamp forgé ne doit pas entrer dans les logs/headers (revue
+            // sécurité du lot ; défense en profondeur, Redis est interne).
+            if ($stamp instanceof RequestIdStamp && $this->isUuid($stamp->requestId)) {
                 $this->requestIdContext->set($stamp->requestId);
                 $this->tagSentry($stamp->requestId);
             }
@@ -58,5 +62,11 @@ final readonly class RequestIdMiddleware implements MiddlewareInterface
         \Sentry\configureScope(static function (Scope $scope) use ($requestId): void {
             $scope->setTag('request_id', $requestId);
         });
+    }
+
+    /** Même forme que RequestIdListener::isUuid — modificateur D compris (\n final refusé). */
+    private function isUuid(string $value): bool
+    {
+        return 1 === preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iD', $value);
     }
 }

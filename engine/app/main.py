@@ -87,7 +87,9 @@ async def _request_id_middleware(
     JSON logs (the solve thread inherits it via to_thread) and echoes it on the
     response so the caller — and its own logs — share the SAME id."""
     incoming = request.headers.get("X-Request-Id")
-    request_id = incoming if incoming is not None and _REQUEST_ID_RE.match(incoming) else str(uuid.uuid4())
+    # fullmatch : `$` seul matche aussi avant un \n final — un « uuid\n »
+    # passerait (revue sécurité du lot).
+    request_id = incoming if incoming is not None and _REQUEST_ID_RE.fullmatch(incoming) else str(uuid.uuid4())
     token = request_id_var.set(request_id)
     if settings.sentry_dsn:
         import sentry_sdk

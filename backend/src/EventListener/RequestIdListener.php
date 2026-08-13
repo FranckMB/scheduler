@@ -67,7 +67,9 @@ final readonly class RequestIdListener implements EventSubscriberInterface
 
     private function isUuid(string $value): bool
     {
-        return 1 === preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value);
+        // Modificateur D : sans lui, `$` matche aussi avant un \n final — un
+        // « uuid\n » passerait la validation (revue sécurité du lot).
+        return 1 === preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iD', $value);
     }
 
     /**
