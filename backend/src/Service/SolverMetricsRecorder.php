@@ -21,8 +21,14 @@ final class SolverMetricsRecorder
 {
     public function __construct(private readonly EntityManagerInterface $entityManager) {}
 
-    /** @param array<string, mixed>|null $result */
-    public function record(Schedule $schedule, ?array $result = null): void
+    /**
+     * @param array<string, mixed>|null $result
+     * @param ?int                      $payloadBytes taille du JSON envoyé à l'engine (déjà sérialisé
+     *                                                pour le hash côté handler — coût nul). Null sur les
+     *                                                chemins sans payload (échec précoce, commande de
+     *                                                réconciliation).
+     */
+    public function record(Schedule $schedule, ?array $result = null, ?int $payloadBytes = null): void
     {
         $metric = $result['metrics'] ?? $result['solver_metrics'] ?? [];
         $metric = \is_array($metric) ? $metric : [];
@@ -43,6 +49,17 @@ final class SolverMetricsRecorder
             planType: $this->planType($schedule),
             nbTeams: $this->activeCount(Team::class, $schedule),
             nbVenues: $this->activeCount(Venue::class, $schedule),
+            queuedAt: $schedule->getQueuedAt(),
+            solveStartedAt: $schedule->getSolveStartedAt(),
+            payloadBytes: $payloadBytes,
+            totalWallTimeMs: $this->intMetric($metric, 'total_wall_time_ms', 'totalWallTimeMs'),
+            cpuTimeMs: $this->intMetric($metric, 'cpu_time_ms', 'cpuTimeMs'),
+            workers: $this->intMetric($metric, 'workers', 'workers'),
+            budgetSeconds: $this->intMetric($metric, 'budget_seconds', 'budgetSeconds'),
+            solverStatusDetail: $this->stringMetric($metric, 'solver_status_detail', 'solverStatusDetail'),
+            peakRssMb: $this->floatMetric($metric, 'peak_rss_mb', 'peakRssMb'),
+            rssBeforeMb: $this->floatMetric($metric, 'rss_before_mb', 'rssBeforeMb'),
+            engineWaitMs: $this->intMetric($metric, 'engine_wait_ms', 'engineWaitMs'),
         ));
     }
 
@@ -92,5 +109,13 @@ final class SolverMetricsRecorder
         $value = $metrics[$snake] ?? $metrics[$camel] ?? null;
 
         return \is_string($value) && '' !== $value ? $value : null;
+    }
+
+    /** @param array<string, mixed> $metrics */
+    private function floatMetric(array $metrics, string $snake, string $camel): ?float
+    {
+        $value = $metrics[$snake] ?? $metrics[$camel] ?? null;
+
+        return is_numeric($value) ? (float) $value : null;
     }
 }

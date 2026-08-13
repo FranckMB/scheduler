@@ -11,6 +11,7 @@ use App\Service\GenerationComplexityGuard;
 use App\Service\ManagementAccessGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SocleGuard;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -118,6 +119,8 @@ final class RegenerateController extends AbstractController implements SeasonSco
             ->setSeasonId($source->getSeasonId())
             ->setName($this->schedulePlanProvisioner->versionNameFor($source->getSchedulePlanId()))
             ->setStatus(ScheduleStatus::PENDING)
+            // P5-10 — instant de mise en file (attente queue → generating mesurable).
+            ->setQueuedAt(new DateTimeImmutable)
             // ADR-0002 C4 : la nouvelle version rejoint LE MÊME plan que la source
             // (régénérer = une V+1 du même plan) ; linkSchedule ne fait que la numéroter.
             ->setSchedulePlanId($source->getSchedulePlanId());

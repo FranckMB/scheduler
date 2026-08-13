@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import resource
+import time
 from pathlib import Path
 from typing import Any, cast
 
@@ -199,9 +202,81 @@ async def get_club_lock(club_id: str) -> asyncio.Lock:
         return lock
 
 
-async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchema:
+# P5-10 — map a CP-SAT status int to the name the backend persists as
+# solver_status_detail. A small explicit table (rather than solver.StatusName)
+# keeps the value deterministic and mypy-clean; unknown ints degrade to UNKNOWN.
+_STATUS_NAMES: dict[cp_model.CpSolverStatus, str] = {
+    cp_model.OPTIMAL: "OPTIMAL",
+    cp_model.FEASIBLE: "FEASIBLE",
+    cp_model.INFEASIBLE: "INFEASIBLE",
+    cp_model.MODEL_INVALID: "MODEL_INVALID",
+    cp_model.UNKNOWN: "UNKNOWN",
+}
+
+
+def _read_vmrss_mb() -> float | None:
+    """Process resident set size (MB) from /proc/self/status, or None off Linux.
+
+    A module function (not inlined) so the RSS-sampler test can monkeypatch it and
+    stay deterministic — no real memory has to grow on cue. Reading a fixed proc
+    path is not a security-sensitive operation (no user input, no shell)."""
+    try:
+        with open("/proc/self/status", encoding="utf-8") as status_file:
+            for line in status_file:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024  # kB → MB
+    except OSError:
+        return None
+    return None
+
+
+class _RssSampler:
+    """Poll VmRSS while the solve runs in a worker thread — the event loop is free.
+
+    Assumed limits (documented decisions, not defects):
+      1. A memory spike SHORTER than the sampling period can be missed. A long
+         solve is a plateau, not a spike, so the peak we care about is well sampled.
+      2. It is the WHOLE process RSS (FastAPI baseline included), not the solve's
+         marginal cost — DELIBERATE: that is exactly what the container cgroup caps.
+      3. A concurrent /place-matches shares the process and can inflate it a little.
+
+    Future avenue, rejected: /sys/fs/cgroup/memory.peak is cumulative in practice
+    (never reset between solves) — the same defect as ru_maxrss — so it is not used.
+    """
+
+    def __init__(self, interval_seconds: float = 0.25) -> None:
+        self._interval = interval_seconds
+        self.first_mb: float | None = None
+        self.peak_mb: float | None = None
+
+    async def run(self) -> None:
+        # Sample IMMEDIATELY, then on cadence: even a sub-interval solve yields a
+        # first (baseline) sample, so rss_before_mb is never left unset.
+        while True:
+            self._sample()
+            await asyncio.sleep(self._interval)
+
+    def _sample(self) -> None:
+        rss = _read_vmrss_mb()
+        if rss is None:
+            return
+        if self.first_mb is None:
+            self.first_mb = rss
+        self.peak_mb = rss if self.peak_mb is None else max(self.peak_mb, rss)
+
+
+async def build_schedule(
+    input_data: ScheduleInputSchema,
+    received_at: float | None = None,
+) -> ScheduleOutputSchema:
     # Convert Pydantic input to a plain dict for the solver pipeline.
     data: dict[str, Any] = input_data.model_dump(by_alias=True)
+
+    # received_at = perf_counter() at request reception (endpoint entry). It lets
+    # us charge engine_wait_ms = queue/lock/semaphore wait BEFORE the solve. Direct
+    # callers (tests) omit it → wait ≈ 0, measured from here.
+    if received_at is None:
+        received_at = time.perf_counter()
 
     # Single pass with all HARD constraints (including coach rest day + salarie
     # distribution).  If the solver returns INFEASIBLE, build_result produces
@@ -214,7 +289,25 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     # thread-safe. A global semaphore bounds how many solves run at once.
     async with _solve_semaphore:
         logger.info("solve start club=%s teams=%d", input_data.club_id, len(input_data.teams))
-        solver_status, solver, model, conflicts = await asyncio.to_thread(_solve, data, input_data)
+        # Metrics AROUND the solve: total wall clock (both phases — see the schema
+        # note), process CPU delta (honest because max_concurrent_solves=1), and an
+        # RSS sampler running on the free event loop while _solve holds the thread.
+        solve_start = time.perf_counter()
+        engine_wait_ms = round((solve_start - received_at) * 1000)
+        rusage_before = resource.getrusage(resource.RUSAGE_SELF)
+        sampler = _RssSampler()
+        sampler_task = asyncio.create_task(sampler.run())
+        try:
+            solver_status, solver, model, conflicts, solve_stats = await asyncio.to_thread(_solve, data, input_data)
+        finally:
+            sampler_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await sampler_task
+        total_wall_time_ms = round((time.perf_counter() - solve_start) * 1000)
+        rusage_after = resource.getrusage(resource.RUSAGE_SELF)
+        cpu_time_ms = round(
+            ((rusage_after.ru_utime + rusage_after.ru_stime) - (rusage_before.ru_utime + rusage_before.ru_stime)) * 1000
+        )
 
     result_dict = build_result(
         data,
@@ -226,6 +319,20 @@ async def build_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchem
     )
     if conflicts:
         result_dict.setdefault("diagnostics", []).extend(conflicts)
+
+    # Merge the capacity metrics into the metrics dict before schema validation
+    # (all optional fields; snake_case keys validate via populate_by_name). solve_stats
+    # carries workers/budget_seconds/solver_status_detail/nb_conflicts from _solve.
+    result_dict["metrics"].update(
+        {
+            "total_wall_time_ms": total_wall_time_ms,
+            "cpu_time_ms": cpu_time_ms,
+            "engine_wait_ms": engine_wait_ms,
+            "peak_rss_mb": sampler.peak_mb,
+            "rss_before_mb": sampler.first_mb,
+            **solve_stats,
+        }
+    )
 
     logger.info(
         "solve done club=%s status=%s slots=%d",
@@ -287,12 +394,14 @@ def _adaptive_workers(n_teams: int, n_venues: int) -> int:
 def _solve(
     data: dict[str, Any],
     input_data: ScheduleInputSchema,
-) -> tuple[int, cp_model.CpSolver, ScheduleCpModel, list[dict[str, Any]]]:
+) -> tuple[int, cp_model.CpSolver, ScheduleCpModel, list[dict[str, Any]], dict[str, Any]]:
     """Run the solver pipeline: build model, add constraints, solve.
 
-    Returns (status, solver, model, conflicts).  All HARD constraints are
-    active — no fallback pass that silently drops rest-day or distribution
-    constraints.  Uses the full ``solver_timeout_seconds``.
+    Returns (status, solver, model, conflicts, solve_stats).  All HARD constraints
+    are active — no fallback pass that silently drops rest-day or distribution
+    constraints.  Uses the full ``solver_timeout_seconds``. ``solve_stats`` carries
+    the P5-10 capacity metrics known here: the workers/budget actually posted, and
+    the PHASE-1 (real solve) status + conflict count.
     """
     model: ScheduleCpModel = build_model(data)
 
@@ -488,6 +597,16 @@ def _solve(
     solver.parameters.num_search_workers = workers
     status = solver.Solve(model)
 
+    # P5-10 — snapshot the PHASE-1 diagnostics NOW, before phase 2 chaining may
+    # reassign solver/status: nb_conflicts and the status detail must describe the
+    # real placement solve, not the tiny back-to-back polish (which caps at 10 s).
+    solve_stats: dict[str, Any] = {
+        "workers": workers,
+        "budget_seconds": timeout_seconds,
+        "solver_status_detail": _STATUS_NAMES.get(status, "UNKNOWN"),
+        "nb_conflicts": int(solver.NumConflicts()),
+    }
+
     # --- Phase 2: lock the placement quality, then optimise the chaining bonus
     # under a hard time cap. Proving chaining-optimality can be slow, so we bound
     # it and keep the best-effort result — placement stays optimal either way. ---
@@ -509,7 +628,7 @@ def _solve(
         if phase2_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             solver, status = phase2_solver, phase2_status
 
-    return status, solver, model, conflicts
+    return status, solver, model, conflicts, solve_stats
 
 
 @app.get("/health")
@@ -519,6 +638,9 @@ async def health() -> dict[str, str]:
 
 @app.post("/generate", response_model=ScheduleOutputSchema)
 async def generate_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSchema:
+    # P5-10 — stamp reception NOW so engine_wait_ms captures the club-lock +
+    # semaphore wait that follows (queued-behind-a-600 s-solve is the case we want).
+    received_at = time.perf_counter()
     # ENG-14: reject a payload whose contract MAJOR the engine does not speak,
     # instead of silently solving against a schema it may misread. The contract
     # is manually synced (no codegen), so a major bump on one side must fail
@@ -532,7 +654,7 @@ async def generate_schedule(input_data: ScheduleInputSchema) -> ScheduleOutputSc
 
     lock = await get_club_lock(input_data.club_id)
     async with lock:
-        return await build_schedule(input_data)
+        return await build_schedule(input_data, received_at)
 
 
 @app.post("/place-matches", response_model=MatchPlacementOutputSchema)

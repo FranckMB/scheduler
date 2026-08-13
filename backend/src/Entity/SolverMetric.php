@@ -73,6 +73,51 @@ class SolverMetric implements TenantOwnedInterface
     #[ORM\Column(type: 'integer', nullable: true)]
     private ?int $nbVenues;
 
+    /**
+     * P5-10 — métriques de capacité de la tentative. Toutes nullable (ADD COLUMN
+     * additif) : l'historique d'avant la colonne, et les chemins terminaux où
+     * l'engine n'a rien renvoyé (échec/timeout), les laissent null.
+     *
+     * `queuedAt`/`solveStartedAt` copiés du Schedule à la capture (l'attente en file
+     * et l'instant de solve survivent à la mort de la version, comme le reste ici).
+     * `payloadBytes` = taille du payload envoyé à l'engine. `totalWallTimeMs` = le
+     * solve ENTIER (pas seulement la dernière phase). `solverStatusDetail` =
+     * OPTIMAL/FEASIBLE/INFEASIBLE/UNKNOWN de la phase 1. `peakRssMb`/`rssBeforeMb` =
+     * échantillonnage RSS côté engine.
+     */
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $queuedAt;
+
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $solveStartedAt;
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $payloadBytes;
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $totalWallTimeMs;
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $cpuTimeMs;
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $workers;
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $budgetSeconds;
+
+    #[ORM\Column(type: 'string', length: 20, nullable: true)]
+    private ?string $solverStatusDetail;
+
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $peakRssMb;
+
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $rssBeforeMb;
+
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $engineWaitMs;
+
     #[ORM\Column(type: 'datetimetz_immutable')]
     private DateTimeImmutable $createdAt;
 
@@ -90,6 +135,17 @@ class SolverMetric implements TenantOwnedInterface
         ?string $planType = null,
         ?int $nbTeams = null,
         ?int $nbVenues = null,
+        ?DateTimeImmutable $queuedAt = null,
+        ?DateTimeImmutable $solveStartedAt = null,
+        ?int $payloadBytes = null,
+        ?int $totalWallTimeMs = null,
+        ?int $cpuTimeMs = null,
+        ?int $workers = null,
+        ?int $budgetSeconds = null,
+        ?string $solverStatusDetail = null,
+        ?float $peakRssMb = null,
+        ?float $rssBeforeMb = null,
+        ?int $engineWaitMs = null,
     ) {
         $this->id = $this->newUuid();
         $this->scheduleId = $scheduleId;
@@ -105,6 +161,17 @@ class SolverMetric implements TenantOwnedInterface
         $this->planType = $planType;
         $this->nbTeams = $nbTeams;
         $this->nbVenues = $nbVenues;
+        $this->queuedAt = $queuedAt;
+        $this->solveStartedAt = $solveStartedAt;
+        $this->payloadBytes = $payloadBytes;
+        $this->totalWallTimeMs = $totalWallTimeMs;
+        $this->cpuTimeMs = $cpuTimeMs;
+        $this->workers = $workers;
+        $this->budgetSeconds = $budgetSeconds;
+        $this->solverStatusDetail = $solverStatusDetail;
+        $this->peakRssMb = $peakRssMb;
+        $this->rssBeforeMb = $rssBeforeMb;
+        $this->engineWaitMs = $engineWaitMs;
     }
 
     public function getId(): string
@@ -182,6 +249,61 @@ class SolverMetric implements TenantOwnedInterface
     public function getNbVenues(): ?int
     {
         return $this->nbVenues;
+    }
+
+    public function getQueuedAt(): ?DateTimeImmutable
+    {
+        return $this->queuedAt;
+    }
+
+    public function getSolveStartedAt(): ?DateTimeImmutable
+    {
+        return $this->solveStartedAt;
+    }
+
+    public function getPayloadBytes(): ?int
+    {
+        return $this->payloadBytes;
+    }
+
+    public function getTotalWallTimeMs(): ?int
+    {
+        return $this->totalWallTimeMs;
+    }
+
+    public function getCpuTimeMs(): ?int
+    {
+        return $this->cpuTimeMs;
+    }
+
+    public function getWorkers(): ?int
+    {
+        return $this->workers;
+    }
+
+    public function getBudgetSeconds(): ?int
+    {
+        return $this->budgetSeconds;
+    }
+
+    public function getSolverStatusDetail(): ?string
+    {
+        return $this->solverStatusDetail;
+    }
+
+    public function getPeakRssMb(): ?float
+    {
+        return $this->peakRssMb;
+    }
+
+    public function getRssBeforeMb(): ?float
+    {
+        return $this->rssBeforeMb;
+    }
+
+    public function getEngineWaitMs(): ?int
+    {
+        return $this->engineWaitMs;
     }
 
     private function newUuid(): string

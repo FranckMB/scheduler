@@ -50,6 +50,21 @@ class TestGenerateContract:
         revalidated = ScheduleOutputSchema.model_validate(dumped)
         assert revalidated.status == result.status
 
+        # P5-10 — the capacity metrics measured around the solve are present and typed
+        # on the /generate path (build_schedule). They are optional in the SHARED schema
+        # (absent for /place-matches, /validate-assignments) but populated here.
+        metrics = result.metrics
+        assert isinstance(metrics.total_wall_time_ms, int) and metrics.total_wall_time_ms >= 0
+        assert isinstance(metrics.cpu_time_ms, int) and metrics.cpu_time_ms >= 0
+        assert isinstance(metrics.engine_wait_ms, int) and metrics.engine_wait_ms >= 0
+        assert metrics.workers in (1, 8)
+        assert isinstance(metrics.budget_seconds, int) and metrics.budget_seconds > 0
+        assert metrics.solver_status_detail in ("OPTIMAL", "FEASIBLE")
+        assert isinstance(metrics.nb_conflicts, int) and metrics.nb_conflicts >= 0
+        # RSS sampler ran at least its immediate baseline sample (Linux/Docker).
+        assert metrics.rss_before_mb is not None and metrics.rss_before_mb > 0
+        assert metrics.peak_rss_mb is not None and metrics.peak_rss_mb >= metrics.rss_before_mb
+
     def test_build_schedule_with_teams_and_no_venues_generates_unplaced(self) -> None:
         """Teams without venue availability should appear in unplaced + diagnostics."""
         input_data = ScheduleInputSchema.model_validate(

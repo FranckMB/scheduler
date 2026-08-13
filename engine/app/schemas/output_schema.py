@@ -75,6 +75,23 @@ class SolverMetricsSchema(SerializableModel):
     # against. Optional so older payloads still validate.
     score_formula_version: str | None = Field(default=None, alias="scoreFormulaVersion")
     constraint_version: str | None = Field(default=None, alias="constraintVersion")
+    # P5-10 — capacity metrics measured AROUND the solve (main.py), merged into the
+    # metrics dict before schema validation. ALL optional so the SHARED schema stays
+    # valid for /place-matches and /validate-assignments, which don't measure them.
+    # total_wall_time_ms is the WHOLE solve (both phases): wall_time_ms above is only
+    # the LAST phase's WallTime() — when phase-2 chaining (cap 10 s) wins, a 600 s
+    # phase-1 solve otherwise reports ~10 s. nb_conflicts finally leaves the engine
+    # (the backend column + the ContractSchemaTest mock already announced it, but
+    # extra=forbid meant it was never actually sent).
+    total_wall_time_ms: int | None = Field(default=None, alias="totalWallTimeMs")
+    cpu_time_ms: int | None = Field(default=None, alias="cpuTimeMs")
+    workers: int | None = None
+    budget_seconds: int | None = Field(default=None, alias="budgetSeconds")
+    solver_status_detail: str | None = Field(default=None, alias="solverStatusDetail")
+    nb_conflicts: int | None = Field(default=None, alias="nbConflicts")
+    peak_rss_mb: float | None = Field(default=None, alias="peakRssMb")
+    rss_before_mb: float | None = Field(default=None, alias="rssBeforeMb")
+    engine_wait_ms: int | None = Field(default=None, alias="engineWaitMs")
 
 
 class ScheduleOutputSchema(SerializableModel):

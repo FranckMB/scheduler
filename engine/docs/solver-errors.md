@@ -17,7 +17,7 @@ Ces erreurs sont retournees directement par l'API FastAPI, avant meme que le sol
 - `sessionsPerWeek: "trois"` au lieu d'un entier
 - Champ `sportCategoryId` manquant sur une equipe (requis)
 - Cle inconnue dans le payload (les schemas sont `extra=forbid`)
-- `version: "1.0"` alors que le moteur parle le **MAJOR 2** du contrat `2.5` (`"2.0"` comme `"2.1"` passent)
+- `version: "1.0"` alors que le moteur parle le **MAJOR 2** du contrat `2.6` (`"2.0"` comme `"2.1"` passent)
 
 **Attention — deux pieges qui ne provoquent PAS de 422** : `lockLevel` est une **chaine libre**, pas un enum (un `"FORT"` est accepte et simplement traite comme non-`HARD`), et `dayOfWeek` est un entier **sans borne** (un `8` passe la validation).
 

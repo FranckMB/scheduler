@@ -23,6 +23,7 @@ use App\Service\SolverMetricsMapper;
 use App\Service\SolverMetricsRecorder;
 use App\Service\StructureSnapshotter;
 use App\Service\TenantConnectionContext;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Messenger\Attribute\AsMessageHandler;
@@ -203,11 +204,17 @@ final class GenerateScheduleHandler
         $scheduleInput = $overlayEntry instanceof CalendarEntry
             ? $this->constraintBuilder->buildForOverlay($schedule, $overlayEntry)
             : $this->buildFrozenSnapshot($schedule);
+        // P5-10 — sérialiser UNE fois : le hash de snapshot ET la taille du payload
+        // (métrique de capacité) sortent du même JSON — coût nul vs le hash existant.
+        $encodedSnapshot = json_encode($scheduleInput, \JSON_THROW_ON_ERROR);
+        $payloadBytes = \strlen($encodedSnapshot);
         $schedule
             ->setStatus(ScheduleStatus::GENERATING)
+            // Dernier passage gagne (retries de verrou) : sémantique voulue.
+            ->setSolveStartedAt(new DateTimeImmutable)
             ->setSolverTimeoutSeconds($message->getTimeoutSeconds())
             ->setSnapshotData($scheduleInput)
-            ->setSnapshotHash($this->hashSnapshot($scheduleInput));
+            ->setSnapshotHash(hash('sha256', $encodedSnapshot));
 
         $this->diagnosticsRecorder->purgePrevious($schedule);
         $this->entityManager->flush();
@@ -244,7 +251,7 @@ final class GenerateScheduleHandler
         } catch (TransportExceptionInterface) {
             $schedule->setStatus(ScheduleStatus::FAILED);
             $this->diagnosticsRecorder->recordSingle($schedule, 'engine_timeout', ScheduleDiagnosticSeverity::ERROR, 'Schedule generation timed out.');
-            $this->metricsRecorder?->record($schedule);
+            $this->metricsRecorder?->record($schedule, null, $payloadBytes);
             $this->entityManager->flush();
             $this->progressPublisher->publishSafely($schedule, ['warnings' => ['Schedule generation timed out.']]);
             $this->writeResultFilesIfEnabled($schedule, $lotDir);
@@ -252,7 +259,7 @@ final class GenerateScheduleHandler
             return;
         } catch (Throwable $exception) {
             $this->failSchedule($schedule, 'engine_error', $exception->getMessage());
-            $this->metricsRecorder?->record($schedule);
+            $this->metricsRecorder?->record($schedule, null, $payloadBytes);
             $this->entityManager->flush();
             $this->progressPublisher->publishSafely($schedule, ['warnings' => [$exception->getMessage()]]);
             $this->writeResultFilesIfEnabled($schedule, $lotDir);
@@ -265,7 +272,7 @@ final class GenerateScheduleHandler
         // « socle ? » est déjà connu ici (null === overlayEntry) — on le passe pour
         // éviter de re-lire le plan à la complétion (C4 / code-review).
         $this->applyEngineResult($schedule, $result, !$overlayEntry instanceof CalendarEntry);
-        $this->metricsRecorder?->record($schedule, $result);
+        $this->metricsRecorder?->record($schedule, $result, $payloadBytes);
         $this->entityManager->flush();
 
         // planning-versions D2 (phase 2/2): store the photo ONLY on a COMPLETED
@@ -388,11 +395,5 @@ final class GenerateScheduleHandler
     {
         $schedule->setStatus(ScheduleStatus::FAILED);
         $this->diagnosticsRecorder->recordSingle($schedule, $type, ScheduleDiagnosticSeverity::ERROR, $message);
-    }
-
-    /** @param array<string, mixed> $snapshot */
-    private function hashSnapshot(array $snapshot): string
-    {
-        return hash('sha256', json_encode($snapshot, \JSON_THROW_ON_ERROR));
     }
 }

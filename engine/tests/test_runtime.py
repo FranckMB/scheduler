@@ -47,7 +47,14 @@ def test_solve_runs_off_the_event_loop(monkeypatch: Any) -> None:
     def fake_solve(data: dict[str, Any], input_data: Any) -> tuple[Any, ...]:
         solve_thread["name"] = threading.current_thread().name
         time.sleep(0.3)
-        return (0, None, None, [])
+        # P5-10 — _solve now also returns the capacity solve_stats (5th element).
+        return (
+            0,
+            None,
+            None,
+            [],
+            {"workers": 1, "budget_seconds": 60, "solver_status_detail": "UNKNOWN", "nb_conflicts": 0},
+        )
 
     monkeypatch.setattr(main, "_solve", fake_solve)
     monkeypatch.setattr(main, "build_result", lambda *a, **k: dict(_MINIMAL_OUTPUT))

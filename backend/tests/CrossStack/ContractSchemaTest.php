@@ -55,7 +55,11 @@ final class ContractSchemaTest extends TestCase
             self::assertIsString($options['body']);
             $capturedPayload = json_decode($options['body'], true, 512, \JSON_THROW_ON_ERROR);
 
-            return new MockResponse('{"status":"completed","score":0,"slots":[],"diagnostics":[],"metrics":{"solver_version":"test","nb_variables":0,"nb_constraints":0,"nb_conflicts":0,"wall_time_ms":0}}', [
+            // Mock aligné sur la VRAIE forme 2.6 : nb_conflicts est désormais réellement
+            // émis par l'engine (extra=forbid l'interdisait avant P5-10), et les métriques
+            // de capacité (total_wall_time_ms, cpu_time_ms, workers, budget_seconds,
+            // solver_status_detail, peak_rss_mb, rss_before_mb, engine_wait_ms) l'accompagnent.
+            return new MockResponse('{"status":"completed","score":0,"slots":[],"diagnostics":[],"metrics":{"solver_version":"test","nb_variables":0,"nb_constraints":0,"nb_conflicts":0,"wall_time_ms":0,"total_wall_time_ms":0,"cpu_time_ms":0,"workers":1,"budget_seconds":60,"solver_status_detail":"OPTIMAL","peak_rss_mb":128.0,"rss_before_mb":96.0,"engine_wait_ms":0}}', [
                 'http_code' => 200,
             ]);
         });
