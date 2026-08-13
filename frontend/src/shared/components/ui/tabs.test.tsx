@@ -80,13 +80,14 @@ describe("Tabs", () => {
     localStorage.clear();
   });
 
-  it("renders 6 tab buttons with correct ARIA roles", () => {
+  it("renders 7 tab buttons with correct ARIA roles", () => {
     renderHarness();
     const tablist = screen.getByRole("tablist", { name: "Sections admin" });
     expect(tablist).toBeInTheDocument();
     const tabs = screen.getAllByRole("tab");
-    expect(tabs).toHaveLength(6);
+    expect(tabs).toHaveLength(7);
     expect(screen.getByRole("tab", { name: /Vue d'ensemble/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Signalements/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Journaux/ })).toBeInTheDocument();
   });
 

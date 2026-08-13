@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/react";
 import ky from "ky";
 
+import { recordIncident } from "@/shared/api/lastIncidentStore";
 import { useAuthStore } from "@/shared/stores/authStore";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 
@@ -48,6 +49,18 @@ export const api = ky.create({
           const requestId = state.response.headers.get("X-Request-Id");
           if (requestId) {
             Sentry.setTag("request_id", requestId);
+          }
+        }
+      },
+      (state) => {
+        // P5-6 — retenir le dernier incident serveur (request_id ré-émis) pour le
+        // proposer à un signalement contextuel ouvert dans la foulée. Indépendant
+        // de Sentry (le canal de signalement vit sans DSN) ; hook distinct des deux
+        // autres pour ne rien changer à leur comportement.
+        if (state.response.status >= 500) {
+          const requestId = state.response.headers.get("X-Request-Id");
+          if (requestId) {
+            recordIncident(requestId);
           }
         }
       },

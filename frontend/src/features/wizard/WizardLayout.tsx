@@ -11,6 +11,7 @@ import { frDateNumeric } from "@/features/cockpit/lib/date";
 import { CoachWishesModal } from "@/features/coach-wishes/CoachWishesModal";
 import { canOpenWishes, wishesMotherId, wishesWeekFilter } from "@/features/coach-wishes/wishesTarget";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
+import { FeedbackButton } from "@/features/feedback/FeedbackButton";
 import { listSchedules } from "@/features/planning/api";
 import { useSchedules } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
@@ -500,15 +501,19 @@ export function WizardPage() {
             </span>
             {currentStep?.label}
           </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setNavCollapsed((c) => !c)}
-            aria-label={navCollapsed ? "Afficher les étapes" : "Masquer les étapes"}
-          >
-            {navCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
-            {navCollapsed ? "Étapes" : "Plein écran"}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* P5-6 — porte contextuelle : l'étape courante voyage dans le contexte. */}
+            <FeedbackButton screen={`wizard/${stepId}`} />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setNavCollapsed((c) => !c)}
+              aria-label={navCollapsed ? "Afficher les étapes" : "Masquer les étapes"}
+            >
+              {navCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+              {navCollapsed ? "Étapes" : "Plein écran"}
+            </Button>
+          </div>
         </div>
 
         <StepContent stepId={stepId} />

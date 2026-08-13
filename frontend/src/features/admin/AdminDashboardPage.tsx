@@ -34,6 +34,7 @@ import { CapacitySection } from "./sections/CapacitySection";
 import { ClubRequestsSection } from "./sections/ClubRequestsSection";
 import { ContainersSection } from "./sections/ContainersSection";
 import { ExternalDepsSection } from "./sections/ExternalDepsSection";
+import { FeedbackSection } from "./sections/FeedbackSection";
 import { ReleaseNotesSection } from "./sections/ReleaseNotesSection";
 import { AuditSubtab } from "./Journaux/AuditSubtab";
 import { MessengerFailedSubtab } from "./Journaux/MessengerFailedSubtab";
@@ -201,6 +202,10 @@ export function AdminDashboardPage() {
             />
           ) : null}
         </section>
+      </TabPanel>
+
+      <TabPanel variant="console" tabId="signalements" idPrefix="admin" active={activeTab === "signalements"} className="space-y-8 pt-6">
+        <FeedbackSection />
       </TabPanel>
 
       <TabPanel variant="console" tabId="journaux" idPrefix="admin" active={activeTab === "journaux"} className="space-y-6 pt-6">

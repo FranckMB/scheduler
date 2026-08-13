@@ -1,6 +1,7 @@
 import { CalendarRange, ChevronLeft, ChevronRight, DoorOpen, Link2, Lock, Plus, Repeat, Upload, Wand2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { FeedbackButton } from "@/features/feedback/FeedbackButton";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { Modal } from "@/shared/components/ui/modal";
@@ -186,6 +187,8 @@ export function MatchesPage() {
       <div className="flex items-center justify-between gap-2">
         <h1 className="border-l-[3px] border-accent pl-3 text-lg font-semibold">Matchs</h1>
         <div className="flex gap-2">
+          {/* P5-6 — porte contextuelle (pas de scheduleId sur cet écran). */}
+          <FeedbackButton screen="/matchs" />
           <Button
             size="sm"
             disabled={placeMatches.isPending || placeCreditsBlocked}

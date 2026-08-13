@@ -1,10 +1,13 @@
-# Canal signalement, support & reproduction — cadrage (P5-6)
+Last verified @ 2026-08-14 (graduation : le lot P5-6 est LIVRÉ en 3 PR — le cadrage devient la spec courante)
 
-> **Statut : CADRAGE — aucune décision prise, aucun code.** Besoin fondateur du 2026-08-09 :
+# Canal signalement, support & reproduction
+
+> **Statut : LIVRÉ (2026-08-13/14, 3 PR).** Ce fichier était le cadrage ; il est désormais la
+> spec courante du canal. Besoin fondateur du 2026-08-09 :
 > un endroit où un gestionnaire signale un bug, une contrainte manquante, une idée — et de quoi
 > **reproduire** ce qu'un utilisateur a rencontré. Base saine d'emblée (pas un `mailto:`
 > jetable), sans sur-ingénierie tickets. Ce doc pose l'état des lieux vérifié, les options et
-> les décisions à trancher. Il graduera en `courantes/` une fois le lot livré.
+> les décisions à trancher. Les décisions D1-D6 + §3bis/§3ter ci-dessous sont IMPLÉMENTÉES.
 
 ## 1. État des lieux (vérifié au code, 2026-08-13)
 
