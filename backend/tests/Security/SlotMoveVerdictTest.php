@@ -19,6 +19,7 @@ use App\Exception\ScheduleGenerationInProgressException;
 use App\Service\ClubGenerationLock;
 use App\Service\EngineClient;
 use App\Service\MoveSlotService;
+use App\Service\RequestIdContext;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\ScheduleProgressPublisher;
@@ -186,7 +187,7 @@ final class SlotMoveVerdictTest extends KernelTestCase
             $container->get(ClubGenerationLock::class),
             $container->get(ScheduleConstraintBuilder::class),
             $container->get(SchedulePlanProvisioner::class),
-            new EngineClient($client),
+            new EngineClient($client, new RequestIdContext),
             new ScheduleProgressPublisher($hub),
             new NullLogger,
         );

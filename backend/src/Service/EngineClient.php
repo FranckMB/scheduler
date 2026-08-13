@@ -18,7 +18,10 @@ final class EngineClient
     private const PLACE_MATCHES_URL = 'http://engine:8000/place-matches';
     private const VALIDATE_URL = 'http://engine:8000/validate-assignments';
 
-    public function __construct(private readonly HttpClientInterface $httpClient) {}
+    public function __construct(
+        private readonly HttpClientInterface $httpClient,
+        private readonly RequestIdContext $requestIdContext,
+    ) {}
 
     /**
      * @param array<string, mixed> $payload
@@ -30,6 +33,7 @@ final class EngineClient
         $response = $this->httpClient->request('POST', self::ENGINE_URL, [
             'json' => $payload,
             'timeout' => $timeoutSeconds,
+            'headers' => $this->correlationHeaders(),
         ]);
 
         return $response->toArray(false);
@@ -48,6 +52,7 @@ final class EngineClient
         $response = $this->httpClient->request('POST', self::PLACE_MATCHES_URL, [
             'json' => $payload,
             'timeout' => $timeoutSeconds,
+            'headers' => $this->correlationHeaders(),
         ]);
 
         return $response->toArray(false);
@@ -67,8 +72,23 @@ final class EngineClient
         $response = $this->httpClient->request('POST', self::VALIDATE_URL, [
             'json' => $payload,
             'timeout' => $timeoutSeconds,
+            'headers' => $this->correlationHeaders(),
         ]);
 
         return $response->toArray(false);
+    }
+
+    /**
+     * P5-11 — propage l'id de corrélation au moteur pour qu'un même request_id
+     * relie la requête HTTP, le worker et les logs du solve. Absent (aucun
+     * contexte) → aucun header, comportement inchangé.
+     *
+     * @return array<string, string>
+     */
+    private function correlationHeaders(): array
+    {
+        $requestId = $this->requestIdContext->get();
+
+        return null !== $requestId ? ['X-Request-Id' => $requestId] : [];
     }
 }

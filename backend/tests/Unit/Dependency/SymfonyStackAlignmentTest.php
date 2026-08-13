@@ -51,7 +51,7 @@ final class SymfonyStackAlignmentTest extends TestCase
      *
      * @var list<string> noms exacts
      */
-    private const EXEMPT_EXACT = ['symfony/flex', 'symfony/mercure', 'symfony/mercure-bundle'];
+    private const EXEMPT_EXACT = ['symfony/flex', 'symfony/mercure', 'symfony/mercure-bundle', 'symfony/monolog-bundle'];
 
     /** @var list<string> préfixes ancrés sur le nom complet */
     private const EXEMPT_PREFIXES = ['symfony/polyfill-'];
@@ -105,7 +105,11 @@ final class SymfonyStackAlignmentTest extends TestCase
     public function testTheExemptionListStaysClosed(): void
     {
         self::assertSame(
-            ['symfony/flex', 'symfony/mercure', 'symfony/mercure-bundle'],
+            // monolog-bundle ajouté au GO fondateur du 2026-08-13 (lot corrélation) :
+            // même cas que mercure-bundle — le bundle wrapper est versionné à part
+            // (4.x), le VRAI pont Symfony (symfony/monolog-bridge) est, lui, sous le
+            // filtre LTS et installé en 7.4.x.
+            ['symfony/flex', 'symfony/mercure', 'symfony/mercure-bundle', 'symfony/monolog-bundle'],
             self::EXEMPT_EXACT,
             'Élargir la liste d’exceptions exempte des paquets du contrôle LTS : à justifier en revue, pas à glisser dans une constante.',
         );
