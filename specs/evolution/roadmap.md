@@ -34,7 +34,7 @@
 > + le besoin qui en découle [`ffbb-appariement-source-de-verite.md`](ffbb-appariement-source-de-verite.md) (**« on accompagne, on ne décide pas »** — P2-18, P1-4, P4-35) ·
 > [`etude-tailles-clubs-ffbb.md`](etude-tailles-clubs-ffbb.md) (**tailles des clubs mesurées sur l'API FFBB** — a nourri le cadrage P1-3, sert la grille tarifaire par taille) ·
 > [`console-superadmin.md`](console-superadmin.md) (P4-54) ·
-> [`canal-signalement.md`](canal-signalement.md) (**cadrage P5-6** — état des lieux, options, décisions D1-D6 à trancher) ·
+> [`canal-signalement.md`](canal-signalement.md) (**cadrage P5-6, décisions D1-D6 TRANCHÉES** — prêt à implémenter) ·
 > [`infrastructure-hebergement.md`](infrastructure-hebergement.md) (étude) ·
 > [`reprise-perimetre-engage.md`](reprise-perimetre-engage.md) (mémoire produit du planning de saison) ·
 > [`duplications-de-verite.md`](duplications-de-verite.md) (**inventaire du motif « une vérité, deux endroits »** —
