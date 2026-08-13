@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Security;
 
 use Psr\Log\LoggerInterface;
+use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Throwable;
 
@@ -26,6 +27,12 @@ final class TurnstileVerifier
 
     private const TIMEOUT = 5.0;
 
+    // Longueur max documentée d'un token Turnstile. Au-delà, l'entrée est
+    // pathologique par construction : on refuse SANS appeler Cloudflare, pour
+    // qu'un token géant ne puisse pas fabriquer une « panne » et emprunter le
+    // fail-open réservé aux vraies pannes (revue sécurité du lot).
+    private const MAX_TOKEN_LENGTH = 2048;
+
     public function __construct(
         private readonly HttpClientInterface $httpClient,
         private readonly LoggerInterface $logger,
@@ -42,9 +49,12 @@ final class TurnstileVerifier
      * Vérifie un token de challenge auprès de Cloudflare. Deux régimes d'échec,
      * opposés À DESSEIN (décision fondateur D3) :
      *
-     *  - VERDICT (`success:false`) → false, fail-CLOSED : Cloudflare a répondu que
-     *    le token est invalide / absent / rejoué. On refuse : c'est le cas nominal.
-     *  - TRANSPORT (Cloudflare injoignable, timeout, corps illisible) → true,
+     *  - VERDICT (`success:false`, token absent/trop long, ou réponse ILLISIBLE
+     *    d'un Cloudflare joignable) → false, fail-CLOSED : quelqu'un a répondu ou
+     *    l'entrée est pathologique — on refuse, c'est le cas nominal. Le corps
+     *    illisible est classé ici et non en panne : sinon un token forgé pour
+     *    faire dérailler l'échange emprunterait le fail-open à volonté.
+     *  - TRANSPORT (Cloudflare injoignable, timeout) → true,
      *    fail-OPEN : le register EST l'entonnoir d'acquisition commerciale ; le
      *    verrouiller sur la panne d'un tiers ferait perdre des inscriptions réelles
      *    pour rien. Le risque résiduel reste borné par les protections qui, elles,
@@ -55,9 +65,9 @@ final class TurnstileVerifier
      */
     public function verify(string $token, ?string $ip): bool
     {
-        if ('' === $token) {
-            // Aucun token → verdict d'emblée négatif, sans appeler Cloudflare
-            // (fail-closed : il n'y a rien à vérifier, ce n'est pas une panne).
+        if ('' === $token || \strlen($token) > self::MAX_TOKEN_LENGTH) {
+            // Aucun token, ou token pathologique → verdict d'emblée négatif, sans
+            // appeler Cloudflare (fail-closed : rien à vérifier, pas une panne).
             return false;
         }
 
@@ -75,12 +85,19 @@ final class TurnstileVerifier
             ])->toArray(false);
 
             return true === ($data['success'] ?? false);
-        } catch (Throwable $exception) {
-            // Panne TRANSPORT uniquement (le verdict négatif, lui, passe par le
-            // return ci-dessus) — fail-open assumé, voir le docblock.
+        } catch (TransportExceptionInterface $exception) {
+            // Panne TRANSPORT authentique (injoignable, timeout) — fail-open
+            // assumé, voir le docblock.
             $this->logger->warning('Turnstile siteverify unreachable — failing open on register.', ['exception' => $exception]);
 
             return true;
+        } catch (Throwable $exception) {
+            // Cloudflare a RÉPONDU mais illisible (corps non-JSON, statut exotique).
+            // Fail-CLOSED : ce chemin est atteignable par une entrée forgée, il ne
+            // doit pas offrir le fail-open réservé aux pannes (revue sécurité).
+            $this->logger->warning('Turnstile siteverify returned an unreadable response — failing closed.', ['exception' => $exception]);
+
+            return false;
         }
     }
 }

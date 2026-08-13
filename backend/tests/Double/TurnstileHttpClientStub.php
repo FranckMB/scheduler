@@ -22,7 +22,7 @@ use Symfony\Contracts\HttpClient\ResponseStreamInterface;
  */
 final class TurnstileHttpClientStub implements HttpClientInterface
 {
-    /** 'success' | 'failure' | 'transport' — le verdict que le stub rendra. */
+    /** 'success' | 'failure' | 'transport' | 'garbage' — le verdict que le stub rendra. */
     public static string $verdict = 'success';
 
     /** La dernière URL POSTée à siteverify (assert : l'URL est bien celle EN DUR). */
@@ -39,6 +39,12 @@ final class TurnstileHttpClientStub implements HttpClientInterface
                 // Panne réseau simulée : l'info `error` fait jeter une
                 // TransportException à la lecture → verify() tombe en fail-open.
                 return new MockResponse('', ['error' => 'simulated transport failure']);
+            }
+
+            if ('garbage' === self::$verdict) {
+                // Cloudflare JOIGNABLE mais réponse illisible (page HTML d'edge) :
+                // doit tomber en fail-CLOSED, pas emprunter le fail-open des pannes.
+                return new MockResponse('<html>edge error</html>');
             }
 
             return new MockResponse((string) json_encode(['success' => 'success' === self::$verdict]));

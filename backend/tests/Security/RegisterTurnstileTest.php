@@ -124,6 +124,42 @@ final class RegisterTurnstileTest extends WebTestCase
         self::assertSame(1, $this->em()->getRepository(User::class)->count(['email' => 'failopen@turnstile.fr']), 'le compte doit être créé malgré la panne du tiers');
     }
 
+    /**
+     * (f) Un token PATHOLOGIQUE (au-delà des 2048 chars documentés Turnstile) est
+     * refusé SANS appeler Cloudflare : un token géant ne peut pas fabriquer une
+     * « panne » d'edge pour emprunter le fail-open (revue sécurité du lot).
+     */
+    public function testOversizedTokenIsRejectedWithoutCallingCloudflare(): void
+    {
+        $this->setTurnstileSecret('test-secret');
+        $client = self::createClient();
+
+        $this->startFreshBrowserSession($client);
+        [$status] = $this->register($client, ['email' => 'huge@turnstile.fr', 'ara' => 'HUGE01', 'turnstileToken' => str_repeat('a', 2049)]);
+
+        self::assertSame(403, $status, 'un token au-delà de la longueur documentée est pathologique → refus');
+        self::assertNull(TurnstileHttpClientStub::$lastUrl, 'le token pathologique ne doit JAMAIS partir vers siteverify');
+        self::assertSame(0, $this->em()->getRepository(User::class)->count(['email' => 'huge@turnstile.fr']));
+    }
+
+    /**
+     * (g) Cloudflare JOIGNABLE mais réponse illisible (page HTML d'edge) → fail-CLOSED :
+     * ce chemin est atteignable par une entrée forgée, il n'offre pas le fail-open
+     * réservé aux vraies pannes transport (revue sécurité du lot).
+     */
+    public function testUnreadableSiteverifyResponseFailsClosed(): void
+    {
+        $this->setTurnstileSecret('test-secret');
+        $client = self::createClient();
+        TurnstileHttpClientStub::$verdict = 'garbage';
+
+        $this->startFreshBrowserSession($client);
+        [$status] = $this->register($client, ['email' => 'garbage@turnstile.fr', 'ara' => 'GARB01', 'turnstileToken' => 'good']);
+
+        self::assertSame(403, $status, 'une réponse illisible d\'un Cloudflare joignable doit refuser, pas ouvrir');
+        self::assertSame(0, $this->em()->getRepository(User::class)->count(['email' => 'garbage@turnstile.fr']));
+    }
+
     /** (e) Le rate-limit IP du register reste PRIORITAIRE : épuisé → 429 avant Turnstile. */
     public function testRegisterRateLimitStillFiresBeforeTurnstile(): void
     {
