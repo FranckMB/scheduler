@@ -2156,6 +2156,419 @@
                 }
             }
         },
+        "/api/admin/feedback": {
+            "get": {
+                "operationId": "getAdminFeedback",
+                "tags": [
+                    "AdminSupport"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Paginated cross-tenant feedback list (heavy context excluded) with a quality-of-service block",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "items": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "clubId": {
+                                                        "type": "string",
+                                                        "format": "uuid"
+                                                    },
+                                                    "clubName": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ]
+                                                    },
+                                                    "topic": {
+                                                        "type": "string"
+                                                    },
+                                                    "message": {
+                                                        "type": "string"
+                                                    },
+                                                    "createdAt": {
+                                                        "type": "string",
+                                                        "format": "date-time"
+                                                    },
+                                                    "status": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "untreated",
+                                                            "treated"
+                                                        ]
+                                                    },
+                                                    "treatedAt": {
+                                                        "type": [
+                                                            "string",
+                                                            "null"
+                                                        ],
+                                                        "format": "date-time"
+                                                    },
+                                                    "hasHeavyContext": {
+                                                        "type": "boolean"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "pagination": {
+                                            "type": "object",
+                                            "properties": {
+                                                "page": {
+                                                    "type": "integer"
+                                                },
+                                                "limit": {
+                                                    "type": "integer"
+                                                },
+                                                "total": {
+                                                    "type": "integer"
+                                                },
+                                                "pages": {
+                                                    "type": "integer"
+                                                }
+                                            }
+                                        },
+                                        "qos": {
+                                            "type": "object",
+                                            "properties": {
+                                                "treatDelayByMonth": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "month": {
+                                                                "type": "string",
+                                                                "description": "YYYY-MM"
+                                                            },
+                                                            "avgHours": {
+                                                                "type": "number",
+                                                                "nullable": true
+                                                            },
+                                                            "p95Hours": {
+                                                                "type": "number",
+                                                                "nullable": true
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "volumeByTopicMonth": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "month": {
+                                                                "type": "string",
+                                                                "description": "YYYY-MM"
+                                                            },
+                                                            "topic": {
+                                                                "type": "string"
+                                                            },
+                                                            "count": {
+                                                                "type": "integer"
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "treatedShare": {
+                                                    "type": "number",
+                                                    "description": "Treated fraction over all reports (0 when none)"
+                                                },
+                                                "oldestUntreatedAgeHours": {
+                                                    "type": "number",
+                                                    "nullable": true
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid pagination or status filter"
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    }
+                },
+                "summary": "List every club feedback report (newest first) with treatment quality-of-service aggregates",
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 1
+                        }
+                    },
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100,
+                            "default": 25
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "untreated",
+                                "treated"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "/api/admin/feedback/{id}": {
+            "get": {
+                "operationId": "getAdminFeedbackDetail",
+                "tags": [
+                    "AdminSupport"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "One feedback report with its full stored context (schedule snapshot + diagnostics when present)",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "clubId": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "clubName": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ]
+                                        },
+                                        "topic": {
+                                            "type": "string"
+                                        },
+                                        "message": {
+                                            "type": "string"
+                                        },
+                                        "createdAt": {
+                                            "type": "string",
+                                            "format": "date-time"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "untreated",
+                                                "treated"
+                                            ]
+                                        },
+                                        "treatedAt": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        },
+                                        "hasHeavyContext": {
+                                            "type": "boolean"
+                                        },
+                                        "context": {
+                                            "type": [
+                                                "object",
+                                                "null"
+                                            ],
+                                            "description": "Full stored context: light fields + the server-copied schedule snapshot and diagnostics when a schedule was named"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "404": {
+                        "description": "Feedback not found"
+                    }
+                },
+                "summary": "Read one feedback report in full (heavy context included)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ]
+            }
+        },
+        "/api/admin/feedback/{id}/treat": {
+            "post": {
+                "operationId": "treatAdminFeedback",
+                "tags": [
+                    "AdminSupport"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Marked treated (treatedAt set to now); a \"handled + thank you\" email is queued to the author when still reachable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "untreated",
+                                                "treated"
+                                            ]
+                                        },
+                                        "treatedAt": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "404": {
+                        "description": "Feedback not found"
+                    },
+                    "409": {
+                        "description": "The feedback is already treated"
+                    }
+                },
+                "summary": "Mark a feedback report treated (emails the author)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            }
+        },
+        "/api/admin/feedback/{id}/untreat": {
+            "post": {
+                "operationId": "untreatAdminFeedback",
+                "tags": [
+                    "AdminSupport"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Reverted to untreated (treatedAt cleared); no email is sent",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "enum": [
+                                                "untreated",
+                                                "treated"
+                                            ]
+                                        },
+                                        "treatedAt": {
+                                            "type": [
+                                                "string",
+                                                "null"
+                                            ],
+                                            "format": "date-time"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "No authenticated super-admin session"
+                    },
+                    "403": {
+                        "description": "Invalid CSRF token"
+                    },
+                    "404": {
+                        "description": "Feedback not found"
+                    },
+                    "409": {
+                        "description": "The feedback is not treated"
+                    }
+                },
+                "summary": "Revert a feedback report to untreated (no email)",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-CSRF-Token",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            }
+        },
         "/api/admin/pending-memberships": {
             "get": {
                 "operationId": "getAdminPendingMemberships",

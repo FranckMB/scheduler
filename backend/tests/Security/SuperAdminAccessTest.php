@@ -76,9 +76,20 @@ final class SuperAdminAccessTest extends WebTestCase
         $this->client->request('POST', '/api/admin/release-notes', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
         self::assertResponseStatusCodeSame(401);
 
+        // P5-6 — le rail superadmin des signalements est une surface admin : un JWT
+        // club ne le franchit pas, en lecture comme en écriture.
+        $this->client->request('GET', '/api/admin/feedback', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
+
+        $this->client->request('POST', '/api/admin/feedback/' . Uuid::v4()->toRfc4122() . '/treat', [], [], ['HTTP_AUTHORIZATION' => 'Bearer ' . $token]);
+        self::assertResponseStatusCodeSame(401);
+
         // Anonyme (aucune identité) : même refus.
         $this->startFreshBrowserSession($this->client);
         $this->client->request('GET', '/api/admin/release-notes');
+        self::assertResponseStatusCodeSame(401);
+
+        $this->client->request('GET', '/api/admin/feedback');
         self::assertResponseStatusCodeSame(401);
     }
 
@@ -139,6 +150,15 @@ final class SuperAdminAccessTest extends WebTestCase
 
         $this->client->request('GET', '/api/admin/clubs?limit=101');
         self::assertResponseStatusCodeSame(400);
+
+        // P5-6 — le rail des signalements est lisible par le SA authentifié (liste
+        // paginée + bloc QoS), même quand rien n'est en attente.
+        $this->client->request('GET', '/api/admin/feedback');
+        self::assertResponseIsSuccessful();
+        $feedback = $this->responseBody();
+        self::assertArrayHasKey('items', $feedback);
+        self::assertArrayHasKey('pagination', $feedback);
+        self::assertArrayHasKey('qos', $feedback);
     }
 
     public function testAuthenticatedAdminCanReadBoundedInfrastructureHealthWithoutInternalErrors(): void
@@ -190,9 +210,11 @@ final class SuperAdminAccessTest extends WebTestCase
         $this->client->request('GET', '/api/admin/jobs');
         self::assertResponseIsSuccessful();
         $jobs = $this->responseBody()['items'];
-        self::assertCount(15, $jobs); // +coach-wish-digest (#10 C3) +club-approval-digest (P3-4 PR B) +purge-exports (P4-52)
+        self::assertCount(16, $jobs); // +coach-wish-digest (#10 C3) +club-approval-digest (P3-4 PR B) +purge-exports (P4-52) +feedback-digest (P5-6)
         $jobsByKey = array_column($jobs, null, 'key');
         self::assertSame('daily', $jobsByKey['coach-wish-digest']['cadence']);
+        self::assertSame('daily', $jobsByKey['feedback-digest']['cadence']);
+        self::assertFalse($jobsByKey['feedback-digest']['manualTriggerAllowed']);
         self::assertSame('every_10_minutes', $jobsByKey['reconcile-stuck-schedules']['cadence']);
         self::assertSame('every_10_minutes', $jobsByKey['health-alerts']['cadence']);
         self::assertFalse($jobsByKey['health-alerts']['manualTriggerAllowed']);

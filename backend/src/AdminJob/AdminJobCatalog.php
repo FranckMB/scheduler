@@ -44,6 +44,9 @@ final class AdminJobCatalog
             // réelle des dumps suit l'activité des clubs, pas le calendrier.
             new AdminJobDefinition('db-backup', 'Sauvegarde base de données', 'app:db:backup', AdminJobSchedule::daily(1)),
             new AdminJobDefinition('coach-wish-digest', 'Digest des doléances coachs', 'app:coach-wishes:digest', AdminJobSchedule::daily(7)),
+            // P5-6 — digest quotidien des signalements au support ; créneau libre
+            // entre coach-wish (7:00) et period-reminders (8:00).
+            new AdminJobDefinition('feedback-digest', 'Digest des signalements', 'app:feedback:digest', AdminJobSchedule::daily(7, 30)),
             new AdminJobDefinition('period-reminders', 'Rappels de périodes', 'app:periods:remind', AdminJobSchedule::daily(8)),
             // P3-4 PR B : relances des demandes de création de club (3 j restants +
             // jour J) et expiration à 7 j — la console superadmin garde la main après.
