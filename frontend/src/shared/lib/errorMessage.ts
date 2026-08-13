@@ -62,7 +62,18 @@ export async function errorMessage(error: unknown): Promise<string> {
     if (status === 409) return "Conflit : l'action n'a pas pu être effectuée.";
     if (status === 422) return "Données invalides. Vérifiez votre saisie.";
     if (status === 429) return "Trop de requêtes d'affilée. Patientez quelques instants avant de réessayer.";
-    if (status >= 500) return "Erreur serveur. Réessayez plus tard.";
+    if (status >= 500) {
+      // P5-11 — joindre une référence d'incident (8 premiers caractères du
+      // X-Request-Id ré-émis par le backend) : le gestionnaire la donne au
+      // support, qui la retrouve dans les logs corrélés. Les headers restent
+      // lisibles (seul le corps a été consommé par ky). Absente si le header
+      // manque (rétro-compatible).
+      const requestId = error.response.headers.get("X-Request-Id");
+      if (requestId !== null && requestId.trim() !== "") {
+        return `Erreur serveur. Réessayez plus tard. (réf. incident : ${requestId.slice(0, 8)})`;
+      }
+      return "Erreur serveur. Réessayez plus tard.";
+    }
     return `Une erreur est survenue (${status}).`;
   }
 

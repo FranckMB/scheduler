@@ -1,3 +1,4 @@
+import * as Sentry from "@sentry/react";
 import ky from "ky";
 
 import { useAuthStore } from "@/shared/stores/authStore";
@@ -20,6 +21,12 @@ export const api = ky.create({
   hooks: {
     beforeRequest: [
       (state) => {
+        // P5-11 — id de corrélation unique par requête (front→backend→bus→engine).
+        // Le backend le VALIDE (forme UUID) et le ré-émet ; crypto.randomUUID
+        // produit exactement cette forme. Posé sur chaque requête, jamais réutilisé.
+        state.request.headers.set("X-Request-Id", crypto.randomUUID());
+      },
+      (state) => {
         // Season the manager is working in — absent = server-derived current
         // season (mono-season clubs never send it). A request that already
         // carries the header wins: one-shot cross-season calls (transition
@@ -32,6 +39,18 @@ export const api = ky.create({
       },
     ],
     afterResponse: [
+      (state) => {
+        // P5-11 — sur une erreur serveur, étiqueter la trace Sentry avec le
+        // request_id ré-émis : l'incident remonté par l'utilisateur se retrouve
+        // dans les logs corrélés. Gardé par VITE_SENTRY_DSN (cohérent avec
+        // l'init de main.tsx) — sans DSN le SDK est inerte, on n'appelle rien.
+        if (import.meta.env.VITE_SENTRY_DSN && state.response.status >= 500) {
+          const requestId = state.response.headers.get("X-Request-Id");
+          if (requestId) {
+            Sentry.setTag("request_id", requestId);
+          }
+        }
+      },
       (state) => {
         // 401 on the login endpoint is a normal "bad credentials" — let the caller
         // handle it. Only treat 401 elsewhere as a stale/expired session.

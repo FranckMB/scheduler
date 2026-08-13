@@ -13,6 +13,15 @@ framework:
         # by the handler's catch-all and the stuck-schedule watchdog (BCK-01).
         failure_transport: failed
 
+        # Correlation id (P5-11) : le middleware tamponne le request_id courant
+        # au dispatch et le restaure côté worker. `default_middleware` reste actif
+        # (défaut) — send_message/handle_message et les stamps par défaut sont
+        # préservés ; on ajoute seulement le nôtre au bus par défaut.
+        buses:
+            messenger.bus.default:
+                middleware:
+                    - App\Messenger\RequestIdMiddleware
+
         transports:
             async:
                 dsn: "%env(MESSENGER_TRANSPORT_DSN)%"

@@ -25,6 +25,7 @@ use App\MessageHandler\GenerateScheduleHandler;
 use App\Service\ClubGenerationLock;
 use App\Service\DiagnosticMessageBuilder;
 use App\Service\EngineClient;
+use App\Service\RequestIdContext;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleDiagnosticsRecorder;
 use App\Service\SchedulePlanProvisioner;
@@ -236,7 +237,7 @@ final class OverlayGenerationTest extends KernelTestCase
             $em,
             $container->get(ScheduleConstraintBuilder::class),
             $container->get(ScheduleResultImporter::class),
-            new EngineClient(new MockHttpClient(new MockResponse($engineResult, ['http_code' => 200]))),
+            new EngineClient(new MockHttpClient(new MockResponse($engineResult, ['http_code' => 200])), new RequestIdContext),
             new ScheduleProgressPublisher($hub),
             new ScheduleDiagnosticsRecorder($em, $container->get(DiagnosticMessageBuilder::class)),
             new SolverMetricsMapper,

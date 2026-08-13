@@ -16,6 +16,7 @@ use App\MessageHandler\GenerateScheduleHandler;
 use App\Service\ClubGenerationLock;
 use App\Service\DiagnosticMessageBuilder;
 use App\Service\EngineClient;
+use App\Service\RequestIdContext;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleDiagnosticsRecorder;
 use App\Service\SchedulePlanProvisioner;
@@ -214,7 +215,7 @@ final class GenerateScheduleFailureTest extends KernelTestCase
             $em,
             $container->get(ScheduleConstraintBuilder::class),
             $container->get(ScheduleResultImporter::class),
-            new EngineClient($httpClient),
+            new EngineClient($httpClient, new RequestIdContext),
             new ScheduleProgressPublisher($hub),
             new ScheduleDiagnosticsRecorder($em, $container->get(DiagnosticMessageBuilder::class)),
             new SolverMetricsMapper,

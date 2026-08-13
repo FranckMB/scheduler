@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import { errorMessage } from "./errorMessage";
 
-function httpError(status: number, body?: unknown): HTTPError {
+function httpError(status: number, body?: unknown, requestId?: string): HTTPError {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (requestId !== undefined) {
+    headers["X-Request-Id"] = requestId;
+  }
   const response = new Response(body === undefined ? null : JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers,
   });
   const request = new Request("http://localhost/api/teams");
   const error = new HTTPError(response, request, {} as never);
@@ -62,6 +66,25 @@ describe("errorMessage", () => {
     expect(await errorMessage(httpError(503, { violations: [{ message: "connexion Doctrine perdue" }] }))).toBe("Erreur serveur. Réessayez plus tard.");
     // Contre-épreuve : côté 4xx, le message métier reste affiché tel quel.
     expect(await errorMessage(httpError(409, { error: "Une collecte existe déjà pour cette période." }))).toBe("Une collecte existe déjà pour cette période.");
+  });
+
+  /**
+   * P5-11 — un 5xx joint une référence d'incident (les 8 premiers caractères du
+   * X-Request-Id de la réponse) : le gestionnaire peut la communiquer au support,
+   * qui la retrouve dans les logs corrélés. ABSENTE des 4xx (erreurs métier, pas
+   * d'incident serveur à tracer) et absente si le header manque.
+   */
+  it("joint une référence d'incident sur un 5xx porteur d'un X-Request-Id", async () => {
+    const msg = await errorMessage(httpError(500, undefined, "abcd1234-5678-4abc-8def-000000000000"));
+    expect(msg).toContain("réf. incident : abcd1234");
+    expect(msg).not.toContain("5678"); // 8 premiers caractères seulement
+  });
+
+  it("n'ajoute pas de référence d'incident sur un 4xx ni sans header", async () => {
+    expect(await errorMessage(httpError(409, undefined, "abcd1234-5678-4abc-8def-000000000000"))).not.toContain(
+      "réf. incident",
+    );
+    expect(await errorMessage(httpError(500))).not.toContain("réf. incident");
   });
 
   it("handles timeouts and network errors", async () => {

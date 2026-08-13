@@ -3,17 +3,21 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 import resource
 import time
+import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from ortools.sat.python import cp_model
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.config import get_settings
+from app.core.logging import configure_logging, request_id_var
 from app.schemas.input_schema import ScheduleInputSchema
 from app.schemas.match_input_schema import MatchPlacementInputSchema
 from app.schemas.match_output_schema import MatchPlacementOutputSchema
@@ -47,14 +51,15 @@ CONTRACT_VERSION_PATH = ENGINE_ROOT / "CONTRACT_VERSION"
 IMPLICIT_RULES_PATH = ENGINE_ROOT / "implicit_rules.json"
 
 settings = get_settings()
-# force=True: uvicorn installs root handlers first, which would make a plain
-# basicConfig a silent no-op — force our level/format to actually take effect.
-logging.basicConfig(
-    level=settings.log_level.upper(),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    force=True,
-)
+# Structured JSON logs carrying the correlation id (P5-11). force=True: uvicorn
+# installs root handlers first, which would make a plain config a silent no-op.
+configure_logging(settings.log_level)
 logger = logging.getLogger("engine")
+
+# Correlation id (X-Request-Id) form — same UUID shape the backend validates, so
+# a client header is never echoed/logged verbatim (anti log-injection): a
+# malformed value is replaced by a generated one.
+_REQUEST_ID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 
 # Sentry ERROR capture only (no APM/tracing — solver perf lives in solver_metrics).
 # Empty DSN = disabled no-op init: wired now, activated by setting ENGINE_SENTRY_DSN.
@@ -70,6 +75,30 @@ if settings.sentry_dsn:
         logger.warning("Sentry init failed (engine runs WITHOUT error capture): %s", sentry_error)
 
 app = FastAPI(title=settings.app_name, version=settings.app_version)
+
+
+@app.middleware("http")
+async def _request_id_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    """P5-11 — correlation id across the stack. Reads X-Request-Id (validated),
+    generates one when absent/malformed, exposes it on the contextvar for the
+    JSON logs (the solve thread inherits it via to_thread) and echoes it on the
+    response so the caller — and its own logs — share the SAME id."""
+    incoming = request.headers.get("X-Request-Id")
+    request_id = incoming if incoming is not None and _REQUEST_ID_RE.match(incoming) else str(uuid.uuid4())
+    token = request_id_var.set(request_id)
+    if settings.sentry_dsn:
+        import sentry_sdk
+
+        sentry_sdk.set_tag("request_id", request_id)
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_var.reset(token)
+    response.headers["X-Request-Id"] = request_id
+    return response
 
 
 @app.exception_handler(Exception)
