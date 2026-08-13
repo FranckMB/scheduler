@@ -87,6 +87,19 @@ Le workflow vécu par le club AAAA qui déclare un bug :
    dans la v1.4 ») — c'est le système de tickets exclu par l'anti-scope ; la boucle personnelle
    est fermée par l'email (2), le journal donne la visibilité publique.
 
+## 3ter. Indicateurs qualité de service du support (ajout fondateur, 2026-08-13 — « pour que l'on s'améliore »)
+
+L'entité signalement porte déjà tout ce qu'il faut (horodatages dépôt/traitement, topic,
+statut) — les indicateurs en découlent en SQL pur, AUCUNE collecte supplémentaire :
+- **Délai dépôt → traité** (moyenne + p95, par mois) — LA mesure de l'amélioration ;
+- **Volume par topic et par période** — où l'app fait mal, et si ça se résorbe ;
+- **Part traitée / en attente** (et l'âge du plus vieux non traité — l'oubli visible).
+
+Surface : un petit panneau en tête de la vue console SA (D6), dans CE lot. Pas de dashboard
+dédié, pas d'outil externe. Le reste de la qualité de service (taux de réussite des
+générations, erreurs techniques, délais de solve) est couvert ailleurs : `solver_metrics` +
+monitoring SA existant + Sentry (P5-1) + métriques de capacité (P5-10).
+
 ## 4. Ce que ce lot ne sera PAS
 Un système de tickets (statuts multiples, assignation, SLA), un chat, un forum, une base de
 connaissances, ni le remplaçant de Sentry (les erreurs techniques remontent par P5-1). Pas de
