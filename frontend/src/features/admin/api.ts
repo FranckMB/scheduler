@@ -339,6 +339,30 @@ export interface AdminSystemErrorsResponse {
   pagination: { page: number; limit: number; total: number; pages: number };
 }
 
+/**
+ * P5-12 — une note du journal, vue de l'atelier superadmin (brouillons inclus).
+ * `publishedAt` null = brouillon (invisible des membres). `date` est éditoriale.
+ */
+export interface AdminReleaseNote {
+  id: string;
+  title: string;
+  body: string;
+  date: string;
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminReleaseNotesResponse {
+  items: AdminReleaseNote[];
+}
+
+/** Corps d'écriture d'une note (création + édition). */
+export interface ReleaseNoteWritePayload {
+  title: string;
+  body: string;
+  noteDate: string;
+}
+
 /** Session-cookie client for /api/admin. It deliberately never reads the club JWT store. */
 export const adminApi = ky.create({
   prefix: "/api/admin",
@@ -430,4 +454,22 @@ export function getAdminPendingMemberships(): Promise<AdminPendingMembershipsRes
 
 export function activateAdminMembership(id: string, csrfToken: string): Promise<{ status: string }> {
   return adminApi.post(`pending-memberships/${encodeURIComponent(id)}/activate`, { headers: { "X-CSRF-Token": csrfToken } }).json();
+}
+
+// P5-12 — l'atelier du journal de nouveautés (écritures CSRF-protégées).
+
+export function getAdminReleaseNotes(): Promise<AdminReleaseNotesResponse> {
+  return adminApi.get("release-notes").json();
+}
+
+export function createAdminReleaseNote(body: ReleaseNoteWritePayload, csrfToken: string): Promise<AdminReleaseNote> {
+  return adminApi.post("release-notes", { json: body, headers: { "X-CSRF-Token": csrfToken } }).json();
+}
+
+export function publishAdminReleaseNote(id: string, csrfToken: string): Promise<AdminReleaseNote> {
+  return adminApi.post(`release-notes/${encodeURIComponent(id)}/publish`, { headers: { "X-CSRF-Token": csrfToken } }).json();
+}
+
+export function deleteAdminReleaseNote(id: string, csrfToken: string): Promise<void> {
+  return adminApi.delete(`release-notes/${encodeURIComponent(id)}`, { headers: { "X-CSRF-Token": csrfToken } }).then(() => undefined);
 }

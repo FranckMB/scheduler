@@ -34,6 +34,7 @@ import { CapacitySection } from "./sections/CapacitySection";
 import { ClubRequestsSection } from "./sections/ClubRequestsSection";
 import { ContainersSection } from "./sections/ContainersSection";
 import { ExternalDepsSection } from "./sections/ExternalDepsSection";
+import { ReleaseNotesSection } from "./sections/ReleaseNotesSection";
 import { AuditSubtab } from "./Journaux/AuditSubtab";
 import { MessengerFailedSubtab } from "./Journaux/MessengerFailedSubtab";
 import { SystemErrorsSubtab } from "./Journaux/SystemErrorsSubtab";
@@ -156,6 +157,7 @@ export function AdminDashboardPage() {
 
       <TabPanel variant="console" tabId="referentiels" idPrefix="admin" active={activeTab === "referentiels"} className="space-y-8 pt-6">
         <FreshnessSection data={freshness.data} loading={freshness.isPending} error={freshness.isError} retry={() => void freshness.refetch()} />
+        <ReleaseNotesSection />
       </TabPanel>
 
       <TabPanel variant="console" tabId="clubs" idPrefix="admin" active={activeTab === "clubs"} className="space-y-8 pt-6">

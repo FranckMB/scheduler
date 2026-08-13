@@ -149,6 +149,10 @@ export const routes: RouteObject[] = [
             path: "/profile",
             lazy: async () => ({ Component: (await import("@/features/profile/ProfilePage")).ProfilePage }),
           },
+          {
+            path: "/nouveautes",
+            lazy: async () => ({ Component: (await import("@/features/release-notes/ReleaseNotesPage")).ReleaseNotesPage }),
+          },
           // Unknown authed URL (e.g. the removed /pending-members) → home, not the raw error boundary.
           { path: "*", element: <Navigate to="/" replace /> },
         ],
