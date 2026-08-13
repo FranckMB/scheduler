@@ -9,6 +9,7 @@ use App\Entity\SolverMetric;
 use App\Entity\Team;
 use App\Enum\ScheduleStatus;
 use App\Service\SolverMetricsRecorder;
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\EntityRepository;
@@ -55,6 +56,84 @@ final class SolverMetricsRecorderTest extends TestCase
             'nb_conflicts' => 3,
             'solver_version' => 'solver-1',
         ]]);
+    }
+
+    public function testCapturesCapacityMetricsAndScheduleTimestamps(): void
+    {
+        // P5-10 — les métriques de capacité de l'engine + les instants de cycle de vie
+        // (copiés du Schedule) + la taille du payload (paramètre) sont capturés.
+        $queuedAt = new DateTimeImmutable('2026-08-13 10:00:00');
+        $solveStartedAt = new DateTimeImmutable('2026-08-13 10:00:05');
+        $schedule = (new Schedule)
+            ->setClubId('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+            ->setSeasonId('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+            ->setSchedulePlanId('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
+            ->setName('capacity')
+            ->setStatus(ScheduleStatus::COMPLETED)
+            ->setScore(500)
+            ->setQueuedAt($queuedAt)
+            ->setSolveStartedAt($solveStartedAt);
+        $entityManager = $this->em(planType: 'SEASON', teamCount: 20, venueCount: 4);
+        $entityManager->expects(self::once())->method('persist')->with(self::callback(
+            static function (SolverMetric $metric) use ($queuedAt, $solveStartedAt): bool {
+                self::assertSame($queuedAt, $metric->getQueuedAt());
+                self::assertSame($solveStartedAt, $metric->getSolveStartedAt());
+                self::assertSame(48123, $metric->getPayloadBytes());
+                self::assertSame(600123, $metric->getTotalWallTimeMs());
+                self::assertSame(1200000, $metric->getCpuTimeMs());
+                self::assertSame(8, $metric->getWorkers());
+                self::assertSame(600, $metric->getBudgetSeconds());
+                self::assertSame('OPTIMAL', $metric->getSolverStatusDetail());
+                self::assertSame(512.5, $metric->getPeakRssMb());
+                self::assertSame(128.25, $metric->getRssBeforeMb());
+                self::assertSame(900, $metric->getEngineWaitMs());
+
+                return true;
+            },
+        ));
+
+        new SolverMetricsRecorder($entityManager)->record($schedule, ['metrics' => [
+            'total_wall_time_ms' => 600123,
+            'cpu_time_ms' => 1200000,
+            'workers' => 8,
+            'budget_seconds' => 600,
+            'solver_status_detail' => 'OPTIMAL',
+            'peak_rss_mb' => 512.5,
+            'rss_before_mb' => 128.25,
+            'engine_wait_ms' => 900,
+        ]], payloadBytes: 48123);
+    }
+
+    public function testCapacityMetricsAreNullWhenEngineSentNone(): void
+    {
+        // Chemin terminal d'échec : pas de metrics engine, pas de payloadBytes → tout null,
+        // la ligne s'écrit quand même (les anciens chemins terminaux continuent de marcher).
+        $schedule = (new Schedule)
+            ->setClubId('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+            ->setSeasonId('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+            ->setSchedulePlanId('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
+            ->setName('failed no metrics')
+            ->setStatus(ScheduleStatus::FAILED);
+        $entityManager = $this->em(planType: 'SEASON', teamCount: 0, venueCount: 0);
+        $entityManager->expects(self::once())->method('persist')->with(self::callback(
+            static function (SolverMetric $metric): bool {
+                self::assertNull($metric->getQueuedAt());
+                self::assertNull($metric->getSolveStartedAt());
+                self::assertNull($metric->getPayloadBytes());
+                self::assertNull($metric->getTotalWallTimeMs());
+                self::assertNull($metric->getCpuTimeMs());
+                self::assertNull($metric->getWorkers());
+                self::assertNull($metric->getBudgetSeconds());
+                self::assertNull($metric->getSolverStatusDetail());
+                self::assertNull($metric->getPeakRssMb());
+                self::assertNull($metric->getRssBeforeMb());
+                self::assertNull($metric->getEngineWaitMs());
+
+                return true;
+            },
+        ));
+
+        new SolverMetricsRecorder($entityManager)->record($schedule);
     }
 
     public function testPreservesInfeasibleEngineOutcomeInMetricsHistory(): void

@@ -121,6 +121,8 @@ final class GenerateScheduleController extends AbstractController implements Sea
                 $this->socleGuard->assertSeasonPlanNotChosen($seasonId);
             }
             $schedule->setStatus(ScheduleStatus::PENDING);
+            // P5-10 — instant de mise en file (attente queue → generating mesurable).
+            $schedule->setQueuedAt(DateTimeImmutable::createFromInterface($this->clock->now()));
             if ($club instanceof Club) {
                 $club->setLastActivityAt(DateTimeImmutable::createFromInterface($this->clock->now()));
                 if (!$club->getOnboardingCompleted()) {

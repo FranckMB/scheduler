@@ -146,6 +146,19 @@ class Schedule implements TenantOwnedInterface
     #[ORM\Column(type: 'integer', nullable: true)]
     private ?int $solverWallTimeMs = null;
 
+    /**
+     * P5-10 — instants du cycle de vie de la génération, pour mesurer l'attente en
+     * file (queued → generating) et le temps réel de solve côté produit. Nullable :
+     * l'historique d'avant la colonne, et les chemins qui n'arment pas la mesure.
+     * `queuedAt` posé au passage en PENDING (dispatch) ; `solveStartedAt` au flush
+     * GENERATING (le dernier passage gagne — retries de verrou : sémantique voulue).
+     */
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $queuedAt = null;
+
+    #[ORM\Column(type: 'datetimetz_immutable', nullable: true)]
+    private ?DateTimeImmutable $solveStartedAt = null;
+
     #[ORM\Column(type: 'string', length: 30, nullable: true)]
     private ?string $pdfExportStatus = null;
 
@@ -460,6 +473,30 @@ class Schedule implements TenantOwnedInterface
     public function setSolverWallTimeMs(?int $solverWallTimeMs): self
     {
         $this->solverWallTimeMs = $solverWallTimeMs;
+
+        return $this;
+    }
+
+    public function getQueuedAt(): ?DateTimeImmutable
+    {
+        return $this->queuedAt;
+    }
+
+    public function setQueuedAt(?DateTimeImmutable $queuedAt): self
+    {
+        $this->queuedAt = $queuedAt;
+
+        return $this;
+    }
+
+    public function getSolveStartedAt(): ?DateTimeImmutable
+    {
+        return $this->solveStartedAt;
+    }
+
+    public function setSolveStartedAt(?DateTimeImmutable $solveStartedAt): self
+    {
+        $this->solveStartedAt = $solveStartedAt;
 
         return $this;
     }

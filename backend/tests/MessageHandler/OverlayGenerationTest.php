@@ -107,6 +107,8 @@ final class OverlayGenerationTest extends KernelTestCase
         $reloaded = $em->getRepository(Schedule::class)->find($scheduleId);
         self::assertInstanceOf(Schedule::class, $reloaded);
         self::assertSame(ScheduleStatus::COMPLETED, $reloaded->getStatus());
+        // P5-10 — le handler pose solveStartedAt au flush GENERATING, chemin overlay compris.
+        self::assertNotNull($reloaded->getSolveStartedAt(), 'the GENERATING flush stamps solveStartedAt on an overlay too');
 
         // 5b : le snapshot gelé ne porte plus de forbiddenVenueId (mécanisme supprimé)…
         $snapshot = $reloaded->getSnapshotData();

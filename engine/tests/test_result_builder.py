@@ -72,6 +72,37 @@ class ResultBuilderTest(unittest.TestCase):
         self.assertEqual(validated.metrics.score_formula_version, SCORE_FORMULA_VERSION)
         self.assertEqual(validated.metrics.constraint_version, "2.0")
 
+    def test_metrics_schema_accepts_the_capacity_fields(self):
+        # P5-10 — build_result stays lean; the capacity metrics are merged by
+        # build_schedule (main.py). Here we only pin that the SHARED schema accepts
+        # and round-trips the new optional fields (extra=forbid would reject a typo).
+        from app.schemas.output_schema import SolverMetricsSchema
+
+        metrics = SolverMetricsSchema.model_validate(
+            {
+                "solver_version": "test",
+                "nb_variables": 3,
+                "nb_constraints": 5,
+                "wall_time_ms": 12,
+                "total_wall_time_ms": 600123,
+                "cpu_time_ms": 1200000,
+                "workers": 8,
+                "budget_seconds": 600,
+                "solver_status_detail": "OPTIMAL",
+                "nb_conflicts": 42,
+                "peak_rss_mb": 512.5,
+                "rss_before_mb": 128.25,
+                "engine_wait_ms": 900,
+            }
+        )
+        self.assertEqual(metrics.total_wall_time_ms, 600123)
+        self.assertEqual(metrics.workers, 8)
+        self.assertEqual(metrics.solver_status_detail, "OPTIMAL")
+        self.assertEqual(metrics.nb_conflicts, 42)
+        self.assertEqual(metrics.peak_rss_mb, 512.5)
+        # camelCase aliases round-trip (the backend reads snake_case; both must work).
+        self.assertEqual(metrics.model_dump(by_alias=True)["totalWallTimeMs"], 600123)
+
     def test_infeasible_solution_returns_failed_status_and_diagnostics(self):
         data = self._minimal_data()
         model = build_model(data)

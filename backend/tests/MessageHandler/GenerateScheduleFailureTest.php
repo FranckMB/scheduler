@@ -81,6 +81,16 @@ final class GenerateScheduleFailureTest extends KernelTestCase
             'a persisted COMPLETED solve must survive a best-effort Mercure publish failure',
         );
         self::assertSame(1, $em->getRepository(SolverMetric::class)->count(['scheduleId' => $scheduleId]));
+
+        // P5-10 — the handler stamped solveStartedAt at the GENERATING flush, and the
+        // recorder copied both lifecycle instants + the payload size onto the metric row.
+        self::assertNotNull($reloaded->getSolveStartedAt(), 'the handler stamps solveStartedAt at the GENERATING flush');
+        $metric = $em->getRepository(SolverMetric::class)->findOneBy(['scheduleId' => $scheduleId]);
+        self::assertInstanceOf(SolverMetric::class, $metric);
+        self::assertNotNull($metric->getQueuedAt(), 'queuedAt copied from the schedule onto the metric');
+        self::assertNotNull($metric->getSolveStartedAt(), 'solveStartedAt copied onto the metric');
+        self::assertNotNull($metric->getPayloadBytes());
+        self::assertGreaterThan(0, $metric->getPayloadBytes(), 'payload_bytes = strlen of the serialized snapshot');
     }
 
     /**
@@ -171,6 +181,9 @@ final class GenerateScheduleFailureTest extends KernelTestCase
         $schedule->setSeasonId($season->getId());
         $schedule->setName('BCK01 schedule');
         $schedule->setStatus(ScheduleStatus::PENDING);
+        // P5-10 — le dispatch (contrôleur) pose queuedAt ; on le simule ici pour prouver
+        // qu'il est recopié sur la métrique. solveStartedAt, lui, est posé PAR le handler.
+        $schedule->setQueuedAt(new DateTimeImmutable('2026-08-13 09:00:00'));
         // Prod links every version at creation (POST → linkSchedule) ; sans plan, le site
         // « socle ? » du handler lèverait dès le build (periodEntryIdOf) et transformerait ce
         // COMPLETED en FAILED. C4 : linkSchedule numérote — la version porte d'abord son plan.
