@@ -19,6 +19,7 @@ use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\Mailer\MailerInterface;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Uid\Uuid;
 use Throwable;
 
 /**
@@ -107,6 +108,11 @@ final class FeedbackController extends AbstractController
         // ENTIER (404) — le client n'en envoie un que s'il affiche ce planning.
         $scheduleId = \is_string($inputContext['scheduleId'] ?? null) ? $inputContext['scheduleId'] : null;
         if (null !== $scheduleId && '' !== $scheduleId) {
+            // Forme validée avant le find() : un id non-UUID ferait lever le driver
+            // (500) au lieu du 404 uniforme promis par le contrat (revue sécurité).
+            if (!Uuid::isValid($scheduleId)) {
+                return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+            }
             $schedule = $this->entityManager->getRepository(Schedule::class)->find($scheduleId);
             if (!$schedule instanceof Schedule || $schedule->getClubId() !== $clubId) {
                 return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);

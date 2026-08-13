@@ -1,6 +1,10 @@
-Last verified @ 2026-08-13 (JSON **régénéré** — P5-12 : les 5 routes du journal de nouveautés)
+Last verified @ 2026-08-13 (JSON **régénéré** — P5-6 PR 1 : `POST /api/feedback`)
 
 Changements récents :
+- **P5-6 PR 1 — canal signalement, rail club (2026-08-13)** : +1 path `POST /api/feedback`
+  (tout membre authentifié, limiteur dédié, 201 `{id}` ; le contexte lourd est copié côté
+  serveur depuis un `scheduleId` — jamais fourni par le client). Set-diff : 1 path ajouté,
+  0 retiré. Les routes SA `/api/admin/feedback` arriveront avec la PR 2.
 - **P5-12 — journal de nouveautés (2026-08-13)** : +5 paths — `GET /api/release-notes` (tout
   membre, publiées seules, `{seenUpTo, items[]}` avec `publishedAt` par item — le garde de la
   modale se compare dessus), `POST /api/release-notes/seen` (self-only, 204), et le CRUD SA
