@@ -427,6 +427,10 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             $paths->addPath($path, $pathItem);
         }
 
+        foreach ($this->feedbackPaths() as $path => $pathItem) {
+            $paths->addPath($path, $pathItem);
+        }
+
         foreach ($this->adminReleaseNotePaths() as $path => $pathItem) {
             $paths->addPath($path, $pathItem);
         }
@@ -2008,6 +2012,52 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     '401' => new Response('Unauthorized'),
                 ],
                 summary: 'Mark the release-notes journal read up to now (self-only)',
+            )),
+        ];
+    }
+
+    /**
+     * Member feedback channel: any authenticated member reports a bug, a missing
+     * constraint or an idea. Heavy context (a named schedule's snapshot +
+     * diagnostics) is copied server-side under the tenant filter.
+     *
+     * @return array<string, PathItem>
+     */
+    private function feedbackPaths(): array
+    {
+        return [
+            '/api/feedback' => new PathItem(post: new Operation(
+                operationId: 'submitFeedback',
+                tags: ['Feedback'],
+                responses: [
+                    '201' => $this->jsonResponse('Feedback stored; an acknowledgement email is queued to the author', [
+                        'type' => 'object',
+                        'properties' => ['id' => ['type' => 'string', 'format' => 'uuid']],
+                    ]),
+                    '401' => new Response('Unauthorized'),
+                    '404' => new Response('No club in context, or the referenced schedule is unknown/foreign (nothing is stored)'),
+                    '422' => new Response('Invalid topic, empty message, or message too long'),
+                    '429' => new Response('Too many feedback submissions (per-user rate limit)'),
+                ],
+                summary: 'Submit a member feedback report (bug, missing constraint or idea)',
+                requestBody: $this->jsonBody([
+                    'type' => 'object',
+                    'required' => ['topic', 'message'],
+                    'properties' => [
+                        'topic' => ['type' => 'string', 'enum' => ['bug', 'missing_constraint', 'idea']],
+                        'message' => ['type' => 'string', 'maxLength' => 5000],
+                        // Optional light context. When `scheduleId` names a schedule of
+                        // the current club, the server copies its snapshot + diagnostics
+                        // into the stored context; a foreign/unknown id is a 404.
+                        'context' => ['type' => 'object', 'properties' => [
+                            'screen' => ['type' => 'string'],
+                            'url' => ['type' => 'string'],
+                            'scheduleId' => ['type' => 'string', 'format' => 'uuid'],
+                            'requestId' => ['type' => 'string'],
+                            'userAgent' => ['type' => 'string'],
+                        ]],
+                    ],
+                ]),
             )),
         ];
     }

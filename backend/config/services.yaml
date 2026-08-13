@@ -50,6 +50,9 @@ services:
             $frontendBaseUrl: '%env(FRONTEND_BASE_URL)%'
             # Optional FFBB Meilisearch token override (lot C); empty → fetched at runtime.
             $ffbbMeilisearchToken: '%env(FFBB_MEILISEARCH_TOKEN)%'
+            # P5-6 — destination du digest de signalements (rail superadmin). Vide par
+            # défaut ; posée par environnement. Née ici avec sa var .env.
+            $supportEmail: '%env(SUPPORT_EMAIL)%'
             $appSecret: '%env(APP_SECRET)%'
             # P5-3b — Turnstile : secret (verify serveur) + sitekey (publique, front).
             $turnstileSecret: '%env(TURNSTILE_SECRET)%'

@@ -7,6 +7,7 @@ namespace App\Tests\Security;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Coach;
+use App\Entity\Feedback;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Tests\TenantGucTrait;
@@ -206,6 +207,8 @@ final class AccountErasureTest extends WebTestCase
         $seasonB = $this->currentSeasonId($clubB);
         $this->insertCoach($clubA, $seasonA, 'CoachA');
         $this->insertCoach($clubB, $seasonB, 'CoachB');
+        // RGPD (P5-6) : un signalement du club A doit être emporté par la purge.
+        $this->insertFeedback($clubA, $userA);
 
         $club = $em->getRepository(Club::class)->find($clubA);
         self::assertInstanceOf(Club::class, $club);
@@ -226,6 +229,7 @@ final class AccountErasureTest extends WebTestCase
         $em->clear();
         // Workspace A vidé (coach + saison), identité FFBB épargnée.
         self::assertSame(0, $this->countRows(Coach::class, $clubA), 'coachs du club A purgés');
+        self::assertSame(0, $this->countRows(Feedback::class, $clubA), 'signalements du club A purgés (RGPD)');
         self::assertSame([], $em->getRepository(Season::class)->findBy(['clubId' => $clubA]), 'saisons du club A purgées');
         $survivor = $em->getRepository(Club::class)->find($clubA);
         self::assertInstanceOf(Club::class, $survivor, 'la fiche club survit');
@@ -344,6 +348,16 @@ final class AccountErasureTest extends WebTestCase
         $em->persist($membership);
         $em->flush();
         $this->clearGuc();
+    }
+
+    private function insertFeedback(string $clubId, string $userId): void
+    {
+        // RLS : l'INSERT direct exige le GUC du club (WITH CHECK policy).
+        $this->scopeGucToClub($clubId);
+        $em = $this->em();
+        $em->persist(new Feedback($clubId, $userId, 'bug', 'un souci quelconque'));
+        $em->flush();
+        $em->clear();
     }
 
     private function insertCoach(string $clubId, string $seasonId, string $name): void

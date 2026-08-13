@@ -6,6 +6,7 @@ namespace App\Service;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Feedback;
 use App\Entity\Season;
 use App\Entity\SolverMetric;
 use App\Entity\SportCategory;
@@ -63,6 +64,9 @@ final class ErasedClubPurger
             // sortie — « seule l'identité FFBB survit » doit être vrai à la lettre, et la
             // suppression par clubId emporte tout l'historique, rattaché ou orphelin.
             SolverMetric::class,
+            // RGPD : un club effacé ne garde pas ses signalements (P5-6). Delete par
+            // clubId, comme les autres tables club-scoped sans saison.
+            Feedback::class,
             TeamTag::class, SportCategory::class, ClubUser::class,
         ] as $entityClass) {
             $deleted += (int) $this->entityManager->createQueryBuilder()
