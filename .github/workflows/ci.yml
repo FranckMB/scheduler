@@ -158,6 +158,10 @@ jobs:
           cp .env.dist .env
           printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
+      # P4-90 — la couche chère de l'image php vient du cache GHA (voir l'action).
+      - name: Pre-build php image (GHA cache)
+        uses: ./.github/actions/build-php-cached
+
       - name: Start services
         run: docker compose up -d --wait php-fpm postgres redis
 
@@ -194,6 +198,10 @@ jobs:
           cp .env.dist .env
           printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
+      # P4-90 — la couche chère de l'image php vient du cache GHA (voir l'action).
+      - name: Pre-build php image (GHA cache)
+        uses: ./.github/actions/build-php-cached
+
       - name: Start services
         run: docker compose up -d --wait php-fpm postgres redis
 
@@ -217,6 +225,10 @@ jobs:
         run: |
           cp .env.dist .env
           printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
+      # P4-90 — la couche chère de l'image php vient du cache GHA (voir l'action).
+      - name: Pre-build php image (GHA cache)
+        uses: ./.github/actions/build-php-cached
 
       - name: Start services
         run: docker compose up -d --wait php-fpm engine
@@ -426,6 +438,10 @@ jobs:
           cp .env.dist .env
           printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
+      # P4-90 — la couche chère de l'image php vient du cache GHA (voir l'action).
+      - name: Pre-build php image (GHA cache)
+        uses: ./.github/actions/build-php-cached
+
       - name: Start services
         run: docker compose up -d --wait php-fpm engine
 
@@ -508,6 +524,10 @@ jobs:
         run: |
           cp .env.dist .env
           printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
+      # P4-90 — la couche chère de l'image php vient du cache GHA (voir l'action).
+      - name: Pre-build php image (GHA cache)
+        uses: ./.github/actions/build-php-cached
 
       # The journey drives the real stack: nginx (/api), engine (solve),
       # mercure, redis, postgres. messenger-worker starts AFTER composer
@@ -647,6 +667,10 @@ jobs:
           cp .env.dist .env
           printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
 
+      # P4-90 — la couche chère de l'image php vient du cache GHA (voir l'action).
+      - name: Pre-build php image (GHA cache)
+        uses: ./.github/actions/build-php-cached
+
       # php-fpm pour exécuter phpunit, engine pour lui répondre. Pas de base :
       # ces tests POSTent des payloads construits à la main, ils ne lisent rien.
       - name: Start services
@@ -683,6 +707,10 @@ jobs:
         run: |
           cp .env.dist .env
           printf 'USER_ID=%s\nGROUP_ID=%s\n' "$(id -u)" "$(id -g)" >> .env
+
+      # P4-90 — la couche chère de l'image php vient du cache GHA (voir l'action).
+      - name: Pre-build php image (GHA cache)
+        uses: ./.github/actions/build-php-cached
 
       # mailpit rides along (php-fpm depends_on it) — the onboarding smoke pulls
       # its verification link from it.
