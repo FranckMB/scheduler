@@ -56,16 +56,20 @@ un email vers `support@` à chaque dépôt (le mail part par le bus, rail déjà
   aucune structure. Peut vivre en COMPLÉMENT (l'alias existe de toute façon), pas en canal
   principal.
 
-## 3. Décisions à trancher (fondateur)
+## 3. Décisions — TRANCHÉES par le fondateur le 2026-08-13
 
-| # | Question | Options | Pressenti |
-|---|---|---|---|
-| D1 | Canal principal | A / B / C | **A** — le contexte auto est la moitié de la valeur |
-| D2 | Contexte auto-joint | minimal (écran+club+schedule) vs riche (+ derniers diagnostics, + payload rejouable copié) | minimal — le `scheduleId` suffit, le snapshot est déjà en base |
-| D3 | Anonymat/RGPD | signalement signé (user) vs anonyme | signé (c'est un outil de support, pas une boîte à délation) ; purge alignée sur la rétention club |
-| D4 | Notification | email `support@` par dépôt vs digest quotidien | email par dépôt (volume bêta ≈ faible) |
-| D5 | Corrélation technique (request-id, Monolog) | dans CE lot vs lot séparé | **lot séparé** — utile à Sentry/P5-1 et au debug général, pas spécifique au signalement ; ne pas gonfler le canal |
-| D6 | Écran de consultation | console SA (liste+statut) vs rien (email seul) | console SA — le statut « traité » évite de perdre des signalements |
+| # | Décision |
+|---|---|
+| D1 | **In-app, DEUX portes** : (a) un « Signaler » **contextuel sur la page** (planning/wizard) — contexte auto-joint + champ descriptif du bug ; (b) un « Signaler un bug » **dans le burger** — zone libre : choix d'un topic (bug / contrainte manquante / idée) + commentaire libre. La porte (b) existe partout, la (a) là où il y a un contexte à capturer |
+| D2 | **Contexte MAXIMAL, redondance assumée** : « je préfère être redondant et pouvoir reproduire plutôt que devoir redemander » — écran, club, saison, `scheduleId` ET **copie** des diagnostics + du payload rejouable dans le signalement lui-même. Justification technique de la redondance : le planning référencé peut être supprimé/régénéré après coup — la copie rend le signalement **impérissable** |
+| D3 | **Signé, et TOUT LE MONDE peut signaler** (Gestionnaires ET Membres) |
+| D4 | **Digest quotidien** vers `support@` (pas un email par dépôt) — la console SA reste la vue temps réel |
+| D5 | **Lot séparé, mais VOULU** (pas un différé poli) : la corrélation request-id/logs structurés a sa propre ligne roadmap (P5-11) |
+| D6 | **Console superadmin : liste des signalements en cours + statut traité/non traité** — « pour ne pas oublier » |
+
+Niveau plan (à trancher à l'implémentation, validés avec le plan) : pages exactes de la porte
+contextuelle, heure du digest, rétention/purge (pressenti : alignée sur la rétention club),
+taille max du commentaire.
 
 ## 4. Ce que ce lot ne sera PAS
 Un système de tickets (statuts multiples, assignation, SLA), un chat, un forum, une base de
