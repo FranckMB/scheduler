@@ -241,6 +241,13 @@ def _violating_lock(cell: MatrixCell) -> tuple[str, int, str]:
         venue = config["forbiddenVenueId"]  # lock AT the banned venue
     elif key in ("preferredVenueId", "forcedVenueId"):
         venue = BAD_VENUE  # lock at a venue that is NOT the imposed one
+    elif key in ("fromTime", "untilTime"):
+        # Lock on the blocked day, 18:00 — inside BOTH sample windows
+        # ([17:00, 24:00) for fromTime="17:00" and [00:00, 19:00) for
+        # untilTime="19:00") : a genuinely violating lock. The window
+        # SEMANTICS (in refused / out taken) live in test_coach_window.py —
+        # here we only pin the DIAGNOSED promise on the bypass.
+        day = int(config["unavailableDays"][0])
     else:
         raise AssertionError(f"no violating-lock recipe for {key}")
     return venue, day, start
