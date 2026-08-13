@@ -41,6 +41,17 @@ framework:
             policy: 'sliding_window'
             limit: 5
             interval: '15 minutes'
+        # P5-6 — envoyer un signalement depuis l'app (POST /api/feedback), keyé PAR
+        # UTILISATEUR (JWT) : la route persiste ET envoie un mail d'accusé, donc une
+        # borne dédiée en plus du limiteur `api` global. 10/h couvre l'usage réel (on
+        # signale un souci de temps en temps) et borne un envoi en boucle. NON assoupli
+        # en test À DESSEIN — la borne étant PAR UTILISATEUR, seul un test qui poste 11
+        # fois avec la même identité la tripe (aucun autre n'en fait autant sur un même
+        # user), et FeedbackTest doit pouvoir prouver le 429 (patron auth_password_reset).
+        feedback:
+            policy: 'sliding_window'
+            limit: 10
+            interval: '1 hour'
         # #10 C2 : la page publique de collecte des doléances (GET pré-remplissage +
         # POST soumission), par IP. 20/15min — large pour un coach (quelques soumissions),
         # borne réelle contre l'énumération de tokens.

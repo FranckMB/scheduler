@@ -195,7 +195,7 @@
 | **Notifications coach** (push + lien de consultation sans login — v3 §1.4 · FF#17) | 🟡 | Le rail tokenisé sans login existe déjà pour les doléances |
 | **Stats & analytics club** (taux de remplissage, heures-coach/semaine — v3 §1.4 · FF#16) | 🟡 | Peu coûteux une fois les occurrences là (P3-3) ; demande d'AG |
 | **Dashboard multi-clubs** (au-delà de la console superadmin — v3 §14.3 · FF#15) | 🔴 | V2 |
-| **Multi-sport** (handball, gym, volley — v3 §1.4 · FF#18) | 🔴 | **Attendre une vraie demande.** Conséquence assumée : P4-18 (DA basket) part du mono-sport et ne le prépare pas |
+| **Multi-sport** (handball, gym, volley — v3 §1.4 · FF#18) | 🔴 | **Attendre une vraie demande** — mais la STRATÉGIE est posée (fondateur 2026-08-13) : **un socle GÉNÉRIQUE full-manuel + une branche PAR SPORT au fur et à mesure qu'on apprend le métier** (« je maîtrise le basket, pas les autres ; le volley a d'autres formats de match, d'autres terrains, sa propre API »). ⚑ Le socle générique est PLUS PROCHE qu'il n'y paraît : la saisie est DÉJÀ manuelle (le populate FFBB n'est qu'une assistance best-effort), le cœur solveur (équipes × gymnases × créneaux) est sport-agnostique, et le sport-spécifique est déjà ISOLÉ en couches débrayables — `FfbbApiClient` (seule intégration fédérale, confinée), le module matchs (formats FFBB), les règles de tags d'âge (EMB/BABY). Une « branche sport » = son API fédérale + ses formats de match + sa sémantique de catégories, PAS une refonte. Conséquence assumée inchangée : P4-18 (DA basket) part du mono-sport et ne le prépare pas |
 
 ---
 

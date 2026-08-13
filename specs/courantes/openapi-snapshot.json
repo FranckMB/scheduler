@@ -7272,6 +7272,94 @@
                 "summary": "Advisory gate \u2014 never writes, and does NOT run on generate/regenerate"
             }
         },
+        "/api/feedback": {
+            "post": {
+                "operationId": "submitFeedback",
+                "tags": [
+                    "Feedback"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Feedback stored; an acknowledgement email is queued to the author",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "format": "uuid"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "404": {
+                        "description": "No club in context, or the referenced schedule is unknown/foreign (nothing is stored)"
+                    },
+                    "422": {
+                        "description": "Invalid topic, empty message, or message too long"
+                    },
+                    "429": {
+                        "description": "Too many feedback submissions (per-user rate limit)"
+                    }
+                },
+                "summary": "Submit a member feedback report (bug, missing constraint or idea)",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": [
+                                    "topic",
+                                    "message"
+                                ],
+                                "properties": {
+                                    "topic": {
+                                        "type": "string",
+                                        "enum": [
+                                            "bug",
+                                            "missing_constraint",
+                                            "idea"
+                                        ]
+                                    },
+                                    "message": {
+                                        "type": "string",
+                                        "maxLength": 5000
+                                    },
+                                    "context": {
+                                        "type": "object",
+                                        "properties": {
+                                            "screen": {
+                                                "type": "string"
+                                            },
+                                            "url": {
+                                                "type": "string"
+                                            },
+                                            "scheduleId": {
+                                                "type": "string",
+                                                "format": "uuid"
+                                            },
+                                            "requestId": {
+                                                "type": "string"
+                                            },
+                                            "userAgent": {
+                                                "type": "string"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": false
+                }
+            }
+        },
         "/api/ffbb-logos/{scope}/{code}": {
             "get": {
                 "operationId": "getFfbbLogo",
