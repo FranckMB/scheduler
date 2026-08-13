@@ -111,7 +111,8 @@ Detail: `docs/testing/testing-strategy.md`.
 
 - **Multi-tenant, 3 couches** : Doctrine `TenantFilter` + listener **priority 7, APRÈS le firewall
   (ne jamais le remonter — fuite historique)** ; **PostgreSQL RLS ACTIVE** (`app_user`, GUC
-  `app.club_id`, 2 tables hybrides `club_user`/`coach_wish_token`) ; Club/User scopés dans leurs
+  `app.club_id`, 2 tables hybrides `club_user`/`coach_wish_token` ; porte admin = policies
+  `admin_all` par rôle, survit au PG managé sans `BYPASSRLS`) ; Club/User scopés dans leurs
   providers. Le listener retourne immédiatement sur `/api/admin/**`. → `backend/docs/TENANT.md` +
   `docs/security/rls.md`.
 - **JWT applicatif en cookie httpOnly** (`BEARER`, `path=/api`, `SameSite=Strict`, `Secure` piloté

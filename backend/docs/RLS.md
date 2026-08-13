@@ -11,7 +11,7 @@ ClubScheduler is designed to use **PostgreSQL Row-Level Security (RLS)** to enfo
 | User | Purpose | DDL Rights | RLS Bypass |
 |------|---------|------------|------------|
 | `app_user` | Symfony runtime (API requests) | **None** | **No** — policies apply |
-| `clubscheduler` | **migrations / ops / superadmin door** (Doctrine `admin` connection, `DATABASE_ADMIN_URL`) | all (owner/superuser) | **Yes** — superuser bypasses every policy (see CLAUDE.md §6) |
+| `clubscheduler` | **migrations / ops / superadmin door** (Doctrine `admin` connection, `DATABASE_ADMIN_URL`) | all (owner; superuser **locally only**) | **Locally yes** (superuser). On managed PG (no `BYPASSRLS` ever): non-superuser owner, crosses via the `admin_all` policies (`Version20260813130000`, one per FORCE-RLS table) |
 
 > **Security rule:** `app_user` is **not** a `SUPERUSER` and does **not** hold `CREATEDB` or `CREATEROLE`.
 
@@ -49,9 +49,15 @@ CREATE POLICY tenant_isolation ON public.<table_name>
     FOR ALL
     USING (club_id = current_setting('app.club_id')::UUID)
     WITH CHECK (club_id = current_setting('app.club_id')::UUID);
+
+-- 3. Admin door (required — a FORCE-RLS table without it locks the admin
+--    connection out on managed PostgreSQL, where no role has BYPASSRLS)
+CREATE POLICY admin_all ON public.<table_name>
+    FOR ALL TO clubscheduler
+    USING (true) WITH CHECK (true);
 ```
 
-`RlsIsolationTest` (blocking, `--group phase1`) guards that every `club_id` table is covered.
+`RlsIsolationTest` (blocking, `--group phase1`) guards that every `club_id` table is covered — including that every FORCE-RLS table carries **exactly one** `admin_all` (a migration that forgets it goes red naming the table).
 
 > **Do NOT enable RLS on tables without `club_id`** (e.g. `doctrine_migration_versions`, `messenger_messages`, `sessions`).
 
@@ -83,7 +89,7 @@ Migrations and ops run on the **`admin` Doctrine connection** (`clubscheduler`, 
 DATABASE_ADMIN_URL="postgresql://clubscheduler:...@postgres:5432/clubscheduler?serverVersion=16&charset=utf8"
 ```
 
-⚠ `migration_user` **no longer exists** (dropped 2026-07-31, migration `Version20260731090000`). It was created by the init SQL with schema-wide `GRANT ALL` and used by **no** connection — a dormant service account with broad privileges. It could not be wired up either: `NOSUPERUSER` without `BYPASSRLS` means default-deny under `FORCE`, so migrations and fixtures would break. Migrations run on the `admin` connection (`clubscheduler`).
+⚠ `migration_user` **no longer exists** (dropped 2026-07-31, migration `Version20260731090000`). It was created by the init SQL with schema-wide `GRANT ALL` and used by **no** connection — a dormant service account with broad privileges. It could not be wired up either: at the time, `NOSUPERUSER` without `BYPASSRLS` meant default-deny under `FORCE`, so migrations and fixtures would break. Migrations run on the `admin` connection (`clubscheduler`). *(That wall is lifted since P5-7: a `NOSUPERUSER` role that is `clubscheduler` or a member of it passes through the `admin_all` policies — this is exactly the managed-PG regime.)*
 
 ### 2. Setting the Tenant Context
 
