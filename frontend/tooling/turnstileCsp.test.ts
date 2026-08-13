@@ -21,8 +21,17 @@ const CSP_PATH = "docker/frontend/csp.conf";
 
 const cspContent = readFileSync(resolve(process.cwd(), "..", CSP_PATH), "utf8");
 const cspValue = /Content-Security-Policy\s+"([^"]+)"/.exec(cspContent)?.[1] ?? "";
-const directive = (name: string): string =>
-  new RegExp(`(?:^|;)\\s*${name}\\s+([^;]*)`).exec(cspValue)?.[1]?.trim() ?? "";
+// Découpe par ";" plutôt qu'une RegExp construite : le gate semgrep refuse les
+// RegExp non littérales (detect-non-literal-regexp), et une CSP se parse très
+// bien sans.
+const directive = (name: string): string => {
+  const segment = cspValue
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part === name || part.startsWith(`${name} `));
+
+  return segment?.slice(name.length).trim() ?? "";
+};
 
 describe("garde CSP ↔ Turnstile", () => {
   it("autorise l'hôte Turnstile dans script-src (le loader du widget)", () => {
