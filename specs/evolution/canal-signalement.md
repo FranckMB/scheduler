@@ -71,6 +71,22 @@ Niveau plan (à trancher à l'implémentation, validés avec le plan) : pages ex
 contextuelle, heure du digest, rétention/purge (pressenti : alignée sur la rétention club),
 taille max du commentaire.
 
+## 3bis. La boucle complète du déclarant (ajout fondateur, 2026-08-13)
+
+Le workflow vécu par le club AAAA qui déclare un bug :
+1. **Dépôt** → toast in-app + **email « bien reçu »** au déclarant (« votre signalement est
+   enregistré et sera traité ») — DANS ce lot, part par le bus comme les autres emails.
+2. **Traitement** → quand le fondateur passe le signalement en « traité » dans la console SA
+   (le statut D6 devient le déclencheur), **email « traité + merci d'avoir contribué à
+   l'amélioration »** au déclarant — DANS ce lot, zéro machinerie nouvelle.
+3. **Visibilité à la release** → l'email « traité » peut pointer vers le **journal de mise à
+   jour** — LOT SÉPARÉ (roadmap P5-12) : entrées datées curées AU RYTHME DU FONDATEUR (pas à
+   chaque merge — 80 % des PR sont de la plomberie invisible), page dans le burger, modale
+   « quoi de neuf » une fois par nouveauté non vue, crédit anonyme possible (« signalé par un
+   club — corrigé »). ⚠ Garde-fou : PAS de lien automatique bug→release (« votre bug #12 est
+   dans la v1.4 ») — c'est le système de tickets exclu par l'anti-scope ; la boucle personnelle
+   est fermée par l'email (2), le journal donne la visibilité publique.
+
 ## 4. Ce que ce lot ne sera PAS
 Un système de tickets (statuts multiples, assignation, SLA), un chat, un forum, une base de
 connaissances, ni le remplaçant de Sentry (les erreurs techniques remontent par P5-1). Pas de
