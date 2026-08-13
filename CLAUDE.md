@@ -226,5 +226,5 @@ maison unique, c'est l'agent qui l'exécute. Tout plan produit doit la remplir l
 `docs/architecture/adr-index.md` · `specs/README.md` · `backend/docs/commands.md` ·
 `backend/docs/ffbb-api.md` · ops : `docs/ops/` (`backup-restore.md` · `prod-stack.md` ·
 `deploy.md`) · sécurité : `docs/security/` (`rls.md` · `mercure.md` · `jwt-cookie.md` · `rgpd.md` ·
-`scanners.md`) · clés `config` d'une contrainte : `backend/docs/constraint-config-keys.md` ·
+`scanners.md` · `turnstile.md`) · clés `config` d'une contrainte : `backend/docs/constraint-config-keys.md` ·
 archives : `docs/archive/`
