@@ -16,7 +16,7 @@ fi
 SCHEDULE_ID=""
 CLUB_ID_ARG=""
 POLL_INTERVAL=5
-TIMEOUT_SECONDS=650
+TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-650}"
 # Watchdog: how long the schedule may stay PENDING (never reaching GENERATING)
 # before we bail with a targeted diagnostic. A stuck PENDING almost always means
 # the messenger-worker is not consuming the queue (dead / crash-looping on a
