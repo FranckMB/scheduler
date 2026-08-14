@@ -1,6 +1,6 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-08 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-06 par les livraisons elles-mêmes : radar borné à l'avenir actionnable P3-13/15c/11 · bandeau de période et diagnostics contextuels P4-38/39 · gymnase désactivé qui ne bloque plus la génération, 2026-08-06)
+Last verified @ 2026-08-14 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-14 par les livraisons elles-mêmes : `GET /api/calendar-entries/{id}/conflicts` sert désormais `closures` — P2-22 PR 1, §6 ; précédemment recalé jusqu'au 2026-08-06 : radar borné à l'avenir actionnable P3-13/15c/11 · bandeau de période et diagnostics contextuels P4-38/39 · gymnase désactivé qui ne bloque plus la génération, 2026-08-06)
 
 > **Statut** : **approche arrêtée** (décisions tranchées §9) — **livrée** ; cf. [`etat-des-lieux.md`](etat-des-lieux.md) §1.2.
 > **Pas un plan** — pas de tâches, pas d'effort chiffré ; l'exécution se planifiera palier par palier (§8).
@@ -464,6 +464,17 @@ et le **radar** propose **[ Adapter ]**. **Rien ne bouge tout seul** : c'est un 
 visible non résolu**, pas une erreur silencieuse. L'adaptation (palier B) le résout en
 générant l'overlay. → C'est **ça**, « une indispo sans plan secondaire » : un souci **posé et
 signalé**, en attente d'être adapté.
+
+> **La forme de la réponse `/conflicts` (P2-22 PR 1, 2026-08-14).**
+> `GET /api/calendar-entries/{id}/conflicts` rend `{ entryId, venueIds, conflicts, closures,
+> seasonPlanChosen }`. `closures` liste chaque fermeture recoupant la fenêtre de l'entrée —
+> `{ constraintId, venueId, title, startDate, endDate, weekdays }`, `weekdays` = jours ISO
+> fermés ∩ fenêtre — servie sur **toutes** les sorties, y compris `seasonPlanChosen=false` :
+> une fermeture est un fait déclaré, indépendant de l'existence d'un calendrier à comparer,
+> contrairement à `conflicts` (séances à replacer) qui, lui, dépend du plan choisi. Cette PR
+> livre la **donnée** côté serveur ; le **surfaçage** dans les trois écrans concernés (structure
+> de période, réserver, récap — le choix bande vs créneau barré, encore ouvert) reste à la
+> PR 2, roadmap [P2-22](../evolution/roadmap.md).
 
 ---
 
