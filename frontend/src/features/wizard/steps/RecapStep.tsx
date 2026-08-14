@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
-import { anchorIsWritable, usePeriodAnchor } from "@/features/cockpit/queries";
+import { anchorIsWritable, useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
+import { frDateShort } from "@/features/cockpit/lib/date";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { cn } from "@/shared/lib/utils";
@@ -100,7 +101,12 @@ export function RecapStep() {
   const { data: allTeams = [] } = useWizardTeams();
   const { data: allVenues = [] } = useWizardVenues();
   const { data: slots = [] } = useGridSlots(layerPlanId);
-  const { data: constraints = [] } = useWizardConstraints(periodEntryId);
+  // D5 (P2-22) — miroir de `CalendarEntry::datedConstraintSourceId()` : les datées d'une
+  // semaine ENFANT pendent à sa MÈRE (`parentEntryId ?? id`). Lire par l'enfant en rendrait
+  // la liste vide au récap.
+  const { data: recapEntry } = useCalendarEntry(periodEntryId);
+  const sourceEntryId = null !== periodEntryId ? (recapEntry?.parentEntryId ?? periodEntryId) : null;
+  const { data: constraints = [] } = useWizardConstraints(sourceEntryId);
   // Les réservations pendent au PLAN (inv. 5, lot C3) — les contraintes, elles, restent
   // lues par l'entrée (elles décrivent le FAIT).
   // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
@@ -299,9 +305,18 @@ export function RecapStep() {
                   {group.sections.map((section) => (
                     <div key={section.key} className="mb-1 last:mb-0">
                       <p className="px-2 text-xs font-medium text-muted-foreground">{section.label}</p>
-                      {section.items.map((c) => (
-                        <SummaryRow key={c.id} label={c.name} meta={c.ruleType} />
-                      ))}
+                      {section.items.map((c) => {
+                        // P2-22 D4 — une fermeture (venue_closed) : le nom porte déjà le titre,
+                        // la meta porte les DATES (format fr) plutôt que l'enum de règle.
+                        const cfg = c.config;
+                        const start = cfg.startDate;
+                        const end = cfg.endDate;
+                        const meta =
+                          "venue_closed" === cfg.type && "string" === typeof start && "string" === typeof end
+                            ? `du ${frDateShort(start)} au ${frDateShort(end)}`
+                            : c.ruleType;
+                        return <SummaryRow key={c.id} label={c.name} meta={meta} />;
+                      })}
                     </div>
                   ))}
                 </div>
