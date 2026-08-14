@@ -155,12 +155,105 @@ final class CapacityMirrorParityTest extends TestCase
         self::assertContains('18:00:00', $emitted, 'la séance sort à l\'horaire MORT : la porte fermée que le bloqueur backend (P4-44) existe pour empêcher');
     }
 
+    /**
+     * P4-97 — un plancher « au moins N à V » SATISFAIT PAR LES VERROUS de l'équipe :
+     * le crédit doit exister DES DEUX CÔTÉS, falsifiable dans les deux sens.
+     *
+     * t1 exige 2 séances à V1 et y est épinglée 2 JOURS DISTINCTS (lun + mer) : les
+     * réservations saturent déjà le plancher. Le miroir doit rendre `[]` (aucun bloqueur)
+     * ET le moteur doit rendre `completed` SANS diagnostic `venue_minimum_unreachable`.
+     *
+     * Les deux assertions sur le MÊME payload font le garde bidirectionnel :
+     * - crédit retiré CÔTÉ PHP → la demande retombe à 2 > 1 place libre (jour 3) →
+     *   `venueMinimumSaturation` rend une saturation → ROUGE ;
+     * - crédit retiré CÔTÉ MOTEUR → `effective_min` redevient 2 sur le seul jour libre
+     *   restant → `venue_minimum_unreachable` reparaît dans les diagnostics → ROUGE.
+     *
+     * TÉMOIN : épinglée UNE seule fois (plancher non saturé), les deux côtés basculent
+     * ensemble — le miroir signale et le moteur émet l'ERROR.
+     */
+    public function testMinimumSatisfiedByOwnLocksBlocksNothingOnEitherSide(): void
+    {
+        // Grille V1 réduite au SEUL lundi : c'est ce qui rend le témoin décisif — retirer un
+        // pin ne libère aucun jour de grille, donc le plancher redevient inatteignable des
+        // deux côtés. Le second pin (mercredi) est hors grille, comme une réservation.
+        $venues = [[
+            'id' => 'v1', 'name' => 'V1', 'isActive' => true,
+            'trainingSlots' => [
+                ['dayOfWeek' => 1, 'startTime' => '18:00', 'durationMinutes' => 90, 'capacity' => 1],
+            ],
+        ]];
+        $team = [[
+            'id' => 't1', 'name' => 'T1', 'sportCategoryId' => 'cat-1',
+            'priorityTierId' => 3, 'sessionsPerWeek' => 2, 'isActive' => true,
+        ]];
+        $minTwo = [$this->minAtVenue('t1', 'v1', count: 2)];
+
+        // Deux pins HARD de t1 à V1, DEUX jours distincts → plancher (2) saturé par les verrous.
+        $satisfiedPayload = $this->basePayload(
+            teams: $team,
+            venues: $venues,
+            constraints: $minTwo,
+            slotTemplates: [$this->pin('t1', 'v1', 1, '18:00'), $this->pin('t1', 'v1', 3, '18:00')],
+        );
+
+        self::assertSame(
+            [],
+            $this->mirror->venueMinimumSaturation($satisfiedPayload),
+            'PARITÉ ROMPUE (PHP) : une équipe déjà servie par ses verrous ne doit RIEN saturer — '
+            . 'le crédit des jours verrouillés manque dans App\Service\PayloadCapacityMirror.',
+        );
+        $satisfied = $this->solve($satisfiedPayload);
+        self::assertSame('completed', $satisfied['status']);
+        self::assertNotContains(
+            'venue_minimum_unreachable',
+            array_column($satisfied['diagnostics'] ?? [], 'type'),
+            'PARITÉ ROMPUE (moteur) : effective_min doit créditer les jours verrouillés — '
+            . 'sinon add_venue_minimum_constraints ré-émet un faux venue_minimum_unreachable.',
+        );
+
+        // TÉMOIN — un seul pin : le plancher (2) n'est plus saturé, les DEUX côtés le disent.
+        $witnessPayload = $this->basePayload(
+            teams: $team,
+            venues: $venues,
+            constraints: $minTwo,
+            slotTemplates: [$this->pin('t1', 'v1', 1, '18:00')],
+        );
+        self::assertCount(
+            1,
+            $this->mirror->venueMinimumSaturation($witnessPayload),
+            'témoin : avec un seul pin, demande=1 restante pour 0 place libre (le lundi est verrouillé) → saturé',
+        );
+        self::assertContains(
+            'venue_minimum_unreachable',
+            array_column($this->solve($witnessPayload)['diagnostics'] ?? [], 'type'),
+            'témoin : le moteur doit à son tour signaler l\'inatteignabilité avec un seul pin',
+        );
+    }
+
     protected function setUp(): void
     {
         $this->mirror = new PayloadCapacityMirror;
     }
 
-    /** @return array<string, mixed> statut + slots du VRAI moteur (skip si indisponible) */
+    /**
+     * @return array<string, mixed> un pin HARD minimal au contrat
+     */
+    private function pin(string $teamId, string $venueId, int $day, string $startTime): array
+    {
+        return [
+            'id' => \sprintf('pin-%s-%s-%d', $teamId, $venueId, $day), 'teamId' => $teamId, 'venueId' => $venueId,
+            'coachId' => null, 'dayOfWeek' => $day, 'startTime' => $startTime, 'durationMinutes' => 90,
+            'lockLevel' => 'HARD', 'temporaryLock' => false, 'temporaryLockFor' => null,
+            'temporaryMinSessionsOverride' => null, 'pendingConstraintSuggestion' => null,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     *
+     * @return array<string, mixed> statut + slots du VRAI moteur (skip si indisponible)
+     */
     private function solve(array $payload): array
     {
         $client = HttpClient::create(['timeout' => 30]);
@@ -189,12 +282,12 @@ final class CapacityMirrorParityTest extends TestCase
     }
 
     /** @return array<string, mixed> */
-    private function minAtVenue(string $teamId, string $venueId): array
+    private function minAtVenue(string $teamId, string $venueId, int $count = 1): array
     {
         return [
             'id' => 'min-' . $teamId, 'scope' => 'TEAM', 'scopeTargetId' => $teamId,
-            'family' => 'FACILITY', 'ruleType' => 'HARD', 'name' => 'au moins 1 à ' . $venueId,
-            'config' => ['minAtVenueId' => $venueId, 'minAtVenueCount' => 1], 'sortOrder' => 0, 'isActive' => true,
+            'family' => 'FACILITY', 'ruleType' => 'HARD', 'name' => \sprintf('au moins %d à %s', $count, $venueId),
+            'config' => ['minAtVenueId' => $venueId, 'minAtVenueCount' => $count], 'sortOrder' => 0, 'isActive' => true,
         ];
     }
 
