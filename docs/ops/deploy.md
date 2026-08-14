@@ -12,10 +12,14 @@
   pousse sur **ghcr.io** (le registre d'images de GitHub, lié au repo, gratuit).
 - La VM ne contient QUE : `docker-compose.prod.yml`, `.env.prod` (les secrets),
   le dossier `jwt/`, et les volumes de données. **Jamais le code source.**
+- **La source de vérité des secrets est le repo, chiffrée** : `.env.prod.gpg`
+  (GPG symétrique, `make env-encode@prod` / `make env-decode@prod` — voir
+  [§ Secrets chiffrés](#secrets-chiffrés-envprodgpg)). Le deploy le décode sur
+  le runner et pousse `.env.prod` sur la VM.
 - Déployer = la VM télécharge les images taguées `vX.Y.Z` et redémarre dessus.
-  Le deploy **ré-envoie aussi `docker-compose.prod.yml` + le script** sur la VM
-  à chaque passage — ne les édite jamais directement sur la VM (écrasés au
-  prochain deploy) ; seul `.env.prod` appartient à la VM.
+  Le deploy **ré-envoie aussi `docker-compose.prod.yml` + le script + le
+  `.env.prod` décodé** sur la VM à chaque passage — n'édite aucun de ces
+  fichiers directement sur la VM (écrasés au prochain deploy).
 - Revenir en arrière = redéployer le tag précédent : le workflow détecte que
   ses images existent déjà sur ghcr et les **réutilise telles quelles** (jamais
   de rebuild qui écraserait l'artefact d'origine).
@@ -56,10 +60,14 @@ cd /srv/clubscheduler
 ```
 
 ⬜ Copier depuis le repo (scp ou copier-coller) :
-- `docker-compose.prod.yml` (racine du repo) ;
-- `.env.prod.dist` → renommé **`.env.prod`**, puis `chmod 600 .env.prod`.
+- `docker-compose.prod.yml` (racine du repo).
 
-⬜ Remplir **chaque CHANGEME** de `.env.prod` (le fichier se commente lui-même).
+⬜ **En LOCAL** (pas sur la VM) : `.env.prod.dist` → copié en `.env.prod`,
+remplir **chaque CHANGEME** (le fichier se commente lui-même), puis
+`make env-encode@prod` et **commiter `.env.prod.gpg`** — le premier deploy
+(§1.7) poussera le fichier décodé sur la VM, en 600. (Poser un `.env.prod` à la
+main sur la VM reste possible en dépannage, mais il sera écrasé au prochain
+deploy dès qu'un `.env.prod.gpg` existe dans le repo.)
 ⬜ Vérifier que `.env.prod` **ne pose PAS `JWT_COOKIE_SECURE=false`** (SEC-16 — le JWT
    applicatif voyage en cookie httpOnly). Le laisser ABSENT est sûr : le `backend/.env.prod`
    committé le met à `true`, et le défaut du conteneur aussi. En revanche une vraie variable
@@ -126,6 +134,7 @@ localhost uniquement.)
 | Secret | `DEPLOY_HOST` | IP (ou domaine) de la VM |
 | Secret | `DEPLOY_USER` | l'utilisateur SSH (ex. `root` ou ton user) |
 | Secret | `DEPLOY_SSH_KEY` | une clé privée SSH dédiée au deploy (générer : `ssh-keygen -t ed25519 -f deploy_key`, mettre `deploy_key.pub` dans `~/.ssh/authorized_keys` de la VM, coller `deploy_key` ici) |
+| Secret | `ENV_GPG_PASSPHRASE` | la passphrase du `.env.prod.gpg` (celle du gestionnaire de mots de passe — voir § Secrets chiffrés) |
 | Variable | `DEPLOY_ENABLED` | `true` |
 | Variable | `DEPLOY_PATH` | `/srv/clubscheduler` (optionnelle, c'est le défaut) |
 
@@ -211,11 +220,50 @@ supprimer).
 
 ### Changer un secret / une variable d'env
 
-1. Éditer `.env.prod` sur la VM ;
-2. `docker compose -f docker-compose.prod.yml --env-file .env.prod up -d`
-   (sans nom de service — recrée tous les conteneurs dont l'env a changé) ;
-3. cas particuliers : rotation du `JWT_PASSPHRASE` = régénérer aussi le keypair
+1. En local : `make env-decode@prod` (rafraîchit `.env.prod` depuis le `.gpg`) ;
+2. éditer `.env.prod`, puis `make env-encode@prod` ;
+3. commiter `.env.prod.gpg` (et la ligne CHANGEME dans `.env.prod.dist` si la
+   variable est nouvelle) → **déployer** (tag ou `make deploy`) : le workflow
+   pousse le fichier et `remote-deploy.sh` recrée les conteneurs ;
+4. cas particuliers : rotation du `JWT_PASSPHRASE` = régénérer aussi le keypair
    (§1.3) ; rotation DB = `ALTER USER` côté postgres d'abord.
+
+Urgence sans release : éditer `.env.prod` sur la VM +
+`docker compose -f docker-compose.prod.yml --env-file .env.prod up -d`, **puis
+reporter le changement dans le `.gpg` du repo** — sinon le prochain deploy
+restaure l'ancienne valeur.
+
+### Secrets chiffrés (`.env.prod.gpg`)
+
+Modèle à trois fichiers (racine du repo) :
+
+| Fichier | Rôle | Git |
+|---|---|---|
+| `.env.prod.dist` | template commenté = la liste lisible des variables | commité en clair (zéro secret) |
+| `.env.prod` | rempli, secrets réels | jamais commité (gitignoré, chmod 600) |
+| `.env.prod.gpg` | le `.env.prod` chiffré (GPG symétrique AES256) | **commité — la vérité** |
+
+- `make env-encode@prod` chiffre, `make env-decode@prod` déchiffre (écrase la
+  copie locale : le `.gpg` du repo fait foi, typiquement après un `git pull`).
+  En local gpg prompte la passphrase ; en CI elle arrive par la variable
+  d'environnement `ENV_GPG_PASSPHRASE` (stdin gpg, jamais en argument).
+  ⚠ gpg tourne sur l'**hôte** (exception assumée au « tout dans Docker » —
+  standard partout, y compris `ubuntu-latest`).
+- **Au deploy** : `.gpg` présent → décodé sur le runner, poussé sur la VM
+  (chmod 600) avant `remote-deploy.sh`. `.gpg` **absent** du ref → warning, la
+  copie VM existante est conservée (indispensable au rollback : un ancien tag
+  n'a pas le fichier). `.gpg` présent mais passphrase absente/fausse → **deploy
+  avorté avant toute mutation de la VM**.
+- **La ligne `VERSION=` du `.gpg` n'est pas significative** : le step de deploy
+  préserve le pin `VERSION` courant de la VM (posé par `remote-deploy.sh` en
+  fin de deploy réussi) — un `up -d` manuel entre deux deploys continue de
+  tirer la version qui tourne.
+- **Passphrase** : générée une fois (`openssl rand -base64 32`), stockée dans
+  le gestionnaire de mots de passe du fondateur + le secret Actions
+  `ENV_GPG_PASSPHRASE` (§1.6). Rotation : `env-decode` → `env-encode` avec la
+  nouvelle passphrase → commit + mise à jour du secret Actions. Perte de la
+  passphrase SANS copie claire : repartir du `.env.prod` de la VM (ou du
+  `.dist`) et ré-encoder.
 
 ### Restaurer un backup
 

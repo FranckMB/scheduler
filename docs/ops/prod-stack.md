@@ -12,7 +12,7 @@ pulled par tag depuis ghcr.io, **zéro bind-mount de code**, pas de services dev
 
 ```
 docker-compose.prod.yml     # ce fichier
-.env.prod                   # secrets remplis depuis .env.prod.dist (chmod 600)
+.env.prod                   # secrets (chmod 600) — poussé par le deploy depuis .env.prod.gpg (repo)
 jwt/                        # keypair JWT généré sur place (private.pem + public.pem)
 ```
 
@@ -22,6 +22,9 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
 
 `.env.prod` nourrit à la fois l'interpolation compose et l'env runtime des
 conteneurs PHP (`env_file`). Template exhaustif : `.env.prod.dist` (racine).
+Sa source de vérité est le **`.env.prod.gpg` commité** (GPG symétrique,
+`make env-encode@prod` / `env-decode@prod`) que le job deploy décode et pousse
+sur la VM — détail : [`deploy.md`](deploy.md) § Secrets chiffrés.
 
 ## Images (self-contained — dev les obtient par bind-mount, prod par COPY)
 

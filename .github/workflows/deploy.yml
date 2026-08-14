@@ -213,6 +213,57 @@ jobs:
           ref: ${{ (inputs.version != '' && !startsWith(inputs.version, 'sha-')) && inputs.version || '' }}
           fetch-depth: 0
 
+      # Secrets rail: the repo's .env.prod.gpg (GPG symmetric — `make
+      # env-encode@prod`) is the source of truth for the VM's .env.prod.
+      # Decoded on the RUNNER so the passphrase never leaves Actions; the
+      # cleartext travels only over scp (SSH) and lands where it already
+      # lives today, chmod 600.
+      # Missing .gpg = warning + keep the VM's copy: a rollback re-checkouts
+      # an old tag that predates the rail — failing closed would break
+      # rollback (docs/ops/deploy.md §Rollback). Present .gpg with a missing
+      # or wrong passphrase = hard fail BEFORE any VM mutation.
+      - name: Decode and push .env.prod
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/srv/clubscheduler' }}
+          ENV_GPG_PASSPHRASE: ${{ secrets.ENV_GPG_PASSPHRASE }}
+        run: |
+          if [ ! -f .env.prod.gpg ]; then
+            echo "WARNING: no .env.prod.gpg at this ref — keeping the VM's existing .env.prod" >&2
+            exit 0
+          fi
+          if [ -z "$ENV_GPG_PASSPHRASE" ]; then
+            echo "FATAL: .env.prod.gpg is present but the ENV_GPG_PASSPHRASE secret is not set" >&2
+            exit 1
+          fi
+          # Same strict validation discipline as the SSH deploy step below.
+          if ! printf '%s' "$DEPLOY_PATH" | grep -Eq '^/[A-Za-z0-9._/-]+$'; then
+            echo "FATAL: invalid DEPLOY_PATH '$DEPLOY_PATH'" >&2
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$ENV_GPG_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
+            --passphrase-fd 0 -o "$RUNNER_TEMP/.env.prod" --decrypt .env.prod.gpg
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          SSH=(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST")
+          SCP=(scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new)
+          # remote-deploy.sh pins VERSION= into the VM's .env.prod after every
+          # successful deploy; the VERSION line inside the .gpg is stale by
+          # design. Preserve the VM's current pin so a manual `up -d` between
+          # deploys keeps pulling the running version.
+          current_pin=$("${SSH[@]}" "grep '^VERSION=' '$DEPLOY_PATH/.env.prod' 2>/dev/null || true")
+          if [ -n "$current_pin" ]; then
+            sed -i '/^VERSION=/d' "$RUNNER_TEMP/.env.prod"
+            printf '%s\n' "$current_pin" >> "$RUNNER_TEMP/.env.prod"
+          fi
+          "${SCP[@]}" "$RUNNER_TEMP/.env.prod" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/.env.prod"
+          "${SSH[@]}" "chmod 600 '$DEPLOY_PATH/.env.prod'"
+          rm -f "$RUNNER_TEMP/.env.prod"
+
       - name: SSH deploy
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}

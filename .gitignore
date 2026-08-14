@@ -79,6 +79,7 @@ pnpm-debug.log*
 /backend/.codegraph
 /backend/.omo/
 
-# Prod runtime files (VM-side; only the .dist template is tracked)
+# Prod runtime files — the .dist template and the ENCRYPTED .env.prod.gpg are
+# tracked; the filled cleartext .env.prod never is (make env-encode@prod)
 /.env.prod
 /jwt/
