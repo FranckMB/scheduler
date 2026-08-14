@@ -36,6 +36,10 @@ interface SlotDetailProps {
   /** tag NAME → équipes taguées (saison courante) : une CLUB+tag ne s'affiche que sur les
    *  équipes du tag, miroir de l'éclatement backend (cf. lib/applicableConstraints). */
   tagTeamIds?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Résolveurs de NOM de la cible d'une contrainte (équipe / coach) — venant des lookups du
+   *  planning. Absents (défaut) → la description rend le prédicat SEUL, jamais « ? · … ». */
+  teamName?: (teamId: string) => string | undefined;
+  coachName?: (coachId: string) => string | undefined;
   busy: boolean;
   /** F2b : le retour du dernier déplacement (verdict moteur). Défaut = idle. */
   moveState?: MoveFeedback;
@@ -105,7 +109,9 @@ function ConstraintList({ label, items, describe }: { label: string; items: Cons
   );
 }
 
-export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tagTeamIds = NO_TAGS, busy, moveState = { status: "idle" }, readOnly = false, onClose, onToggleLock, onMove }: SlotDetailProps) {
+const noName = (): string | undefined => undefined;
+
+export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tagTeamIds = NO_TAGS, teamName = noName, coachName = noName, busy, moveState = { status: "idle" }, readOnly = false, onClose, onToggleLock, onMove }: SlotDetailProps) {
   const [day, setDay] = useState(slot.dayOfWeek);
   const [time, setTime] = useState(toHourMinute(slot.startTime));
   const [venueId, setVenueId] = useState(slot.venueId);
@@ -120,7 +126,10 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
   // Ce que chaque règle FAIT se dérive de sa config ; le gymnase d'une règle FACILITY se nomme
   // depuis les gymnases connus du panneau (introuvable → on retombe sur le nom, pas d'invention).
   const venueNameById = new Map(venues.map((v) => [v.id, v.name]));
-  const describe = (c: Constraint): string | null => describeConstraint(c, (id) => venueNameById.get(id));
+  // La description NOMME sa cible en tête (« <équipe/coach/Groupe X/Toutes les équipes> ·
+  // <prédicat> »), pour que la boucle de correction pointe le bon objet ; le nom libre reste
+  // en 2e ligne. Cible introuvable (résolveur absent) → prédicat seul.
+  const describe = (c: Constraint): string | null => describeConstraint(c, { venueName: (id) => venueNameById.get(id), teamName, coachName });
   // « Tout le club » ne concerne pas l'équipe DIRECTEMENT (fondateur) : on sépare les deux
   // groupes pour que la distinction se lise sans lire. Une CLUB+tag est côté équipe (elle
   // vise les équipes taguées, comme l'éclatement backend), pas côté club.

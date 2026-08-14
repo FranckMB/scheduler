@@ -427,6 +427,11 @@ export function ConstraintsStep() {
     // editConstraint (inverse de build()) écrit plusieurs états ; ref consommé = one-shot.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot : positionne l'éditeur PRÉ-REMPLI sur la contrainte ciblée
     editConstraint(target);
+    // P4-95 — DEEP-LINK SEULEMENT : on amène aussi la LIGNE ciblée à l'écran (centrée). Le stylo
+    // MANUEL, lui, garde son seul scroll-formulaire (P4-66). rAF planifié APRÈS `editConstraint`
+    // (qui a déjà programmé le scroll du formulaire) → il gagne, la ligne finit centrée. Appel de
+    // méthode optionnel : `scrollIntoView` n'existe pas en jsdom (même garde que P4-66).
+    requestAnimationFrame(() => document.querySelector(`[data-constraint-id="${editTarget}"]`)?.scrollIntoView?.({ block: "center", behavior: "smooth" }));
   }, [editTarget, constraints]);
 
   // Only groups (tags) that ACTUALLY concern a team of the club: the backend
@@ -728,7 +733,7 @@ export function ConstraintsStep() {
               <p data-testid="constraint-section" className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{section.label}</p>
               <ul className="flex flex-col gap-1">
                 {section.items.map((c: Constraint) => (
-                  <li key={c.id} className={cn("flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm", editingId === c.id ? "border-accent ring-1 ring-accent" : "border-border")}>
+                  <li key={c.id} data-constraint-id={c.id} className={cn("flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm", editingId === c.id ? "border-accent ring-1 ring-accent" : "border-border")}>
                     <span className="flex-1">{c.name}</span>
                     <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
                     <button type="button" aria-label="Modifier" className="rounded p-1 text-muted-foreground hover:text-foreground" onClick={() => editConstraint(c)}>

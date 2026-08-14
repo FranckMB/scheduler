@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Diagnostic, DiagnosticSeverity } from "./api";
+import type { Diagnostic, DiagnosticSeverity, Slot } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import type { Lookups } from "./lib/grid";
 
@@ -95,6 +95,75 @@ describe("DiagnosticsPanel — ouverture contextuelle", () => {
     render(panel({ diagnostics: [diag("ERROR", "erreur lisible")] }));
 
     expect(screen.queryByText("erreur lisible")).not.toBeInTheDocument();
+  });
+});
+
+describe("DiagnosticsPanel — un conflict OUVRE le créneau fautif (P4-95)", () => {
+  const slot = (over: Partial<Slot>): Slot => ({
+    id: "id",
+    scheduleId: "s",
+    teamId: "t1",
+    venueId: "v1",
+    coachId: null,
+    dayOfWeek: 6,
+    startTime: "10:00:00",
+    durationMinutes: 90,
+    lockLevel: "NONE",
+    lockOrigin: null,
+    temporaryLock: false,
+    ...over,
+  });
+
+  const conflict = (over: Partial<Diagnostic> = {}): Diagnostic =>
+    ({ id: "cf", scheduleId: "s", type: "conflict", severity: "ERROR", teamId: null, coachId: null, venueId: "v1", dayOfWeek: 6, startTime: "10:00", message: "conflit gymnase", suggestions: null, ...over }) as Diagnostic;
+
+  const slots = [
+    slot({ id: "a", teamId: "t1", venueId: "v1", dayOfWeek: 6, startTime: "10:00:00" }),
+    slot({ id: "b", teamId: "t2", venueId: "v1", dayOfWeek: 6, startTime: "10:00:00" }),
+    slot({ id: "c", teamId: "t1", venueId: "v1", dayOfWeek: 6, startTime: "18:00:00" }),
+  ];
+
+  const lastSet = (fn: ReturnType<typeof vi.fn>): string[] => [...(fn.mock.calls.at(-1)?.[0] as Set<string>)].sort();
+
+  it("clic sur un conflict complet → onOpenSlot(LE créneau) + surlignage resserré", async () => {
+    const user = userEvent.setup();
+    const onOpenSlot = vi.fn();
+    const onHighlight = vi.fn();
+    render(panel({ diagnostics: [conflict()], slots, onOpenSlot, onHighlight, openMostSevere: true, seedToken: "v1" }));
+
+    await user.click(screen.getByText("conflit gymnase"));
+
+    // Resserré sur les deux séances de (v1, samedi, 10:00) — pas la séance de 18:00.
+    expect(lastSet(onHighlight)).toEqual(["a", "b"]);
+    // Ouvre LE premier (ordre jour+heure de concernedSlots).
+    expect(onOpenSlot).toHaveBeenCalledWith("a");
+  });
+
+  it("un conflict SANS jour/heure n'ouvre rien (dégradation douce), garde le surlignage large", async () => {
+    const user = userEvent.setup();
+    const onOpenSlot = vi.fn();
+    const onHighlight = vi.fn();
+    render(panel({ diagnostics: [conflict({ dayOfWeek: null, startTime: null })], slots, onOpenSlot, onHighlight, openMostSevere: true, seedToken: "v1" }));
+
+    await user.click(screen.getByText("conflit gymnase"));
+
+    expect(onOpenSlot).not.toHaveBeenCalled();
+    // Correspondance gymnase large : les trois séances de v1.
+    expect(lastSet(onHighlight)).toEqual(["a", "b", "c"]);
+  });
+
+  it("re-cliquer DÉSÉLECTIONNE (vide le surlignage), sans ré-ouvrir", async () => {
+    const user = userEvent.setup();
+    const onOpenSlot = vi.fn();
+    const onHighlight = vi.fn();
+    render(panel({ diagnostics: [conflict()], slots, onOpenSlot, onHighlight, openMostSevere: true, seedToken: "v1" }));
+
+    await user.click(screen.getByText("conflit gymnase"));
+    onOpenSlot.mockClear();
+    await user.click(screen.getByText("conflit gymnase"));
+
+    expect(lastSet(onHighlight)).toEqual([]);
+    expect(onOpenSlot).not.toHaveBeenCalled();
   });
 });
 

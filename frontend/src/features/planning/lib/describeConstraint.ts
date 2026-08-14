@@ -15,18 +15,32 @@ import type { Constraint } from "../api";
  *
  * ⚠ Le vocabulaire est le MÊME que celui de l'auto-nommage du wizard
  * (`features/wizard/steps/ConstraintsStep.tsx` `build()`) — verbes gymnase (préfère/évite/impose),
- * « au moins N », « uniquement », bornes horaires — et les jours viennent du foyer unique
- * `@/shared/lib/days`. Deux vocabulaires divergents seraient une nouvelle duplication de vérité.
- * Le wizard compose « qui · prédicat » (jour court, « pas Sam ») à la SAISIE ; ici on rend le
- * prédicat seul, en clair (jour long, « samedi interdit »), le « qui » étant porté par le groupe
- * du panneau (« Cette équipe » / « Tout le club »).
+ * « au moins N », « uniquement », bornes horaires, et le « qui » (équipe / coach / `Groupe X` /
+ * « Toutes les équipes »). Les jours viennent du foyer unique `@/shared/lib/days`. Deux
+ * vocabulaires divergents seraient une nouvelle duplication de vérité.
  *
- * PORTÉE : on ne décrit QUE ce qu'on sait rendre FIDÈLEMENT. Toute combinaison non couverte (clé
- * inconnue, gymnase introuvable, `forcedDays` LEGACY au sens ambigu — ENG-16) rend `null` :
- * l'appelant retombe alors sur le `name`. Une description approximative serait le même mensonge
- * sous une autre forme.
+ * Le wizard compose « qui · prédicat » (jour court, « pas Sam ») à la SAISIE. Ici on rend la
+ * MÊME forme « <cible> · <prédicat> » (jour long, « samedi interdit ») : la cible NOMME l'objet
+ * corrigeable (l'équipe / le coach visé) au lieu de le reléguer au nom libre en seconde ligne —
+ * c'est ce qui rend la boucle de correction cliquable jusqu'au bon objet.
+ *
+ * 🔴 Le branchement sur `scope` (CLUB / TEAM / COACH) ci-dessous CHOISIT un LIBELLÉ de cible,
+ * il ne DÉCIDE PAS si la règle s'applique (ça, c'est `applicableConstraints`, miroir déclaré).
+ * De la présentation, donc — exempté à ce titre dans le garde de redérivation front (`.claude/rules/frontend.md`).
+ *
+ * PORTÉE : on ne décrit QUE ce qu'on sait rendre FIDÈLEMENT. Cible introuvable (équipe/coach
+ * supprimé) → on rend le prédicat SEUL, jamais « ? · … ». Prédicat non couvert (clé inconnue,
+ * gymnase introuvable, `forcedDays` LEGACY au sens ambigu — ENG-16) → `null` : l'appelant retombe
+ * alors sur le `name`. Une description approximative serait le même mensonge sous une autre forme.
  */
 type VenueNameFn = (venueId: string) => string | undefined;
+
+/** Résolveurs de NOM pour la cible (`scopeTargetId`) — venant des lookups du planning. */
+export interface ConstraintTargetLookups {
+  venueName: VenueNameFn;
+  teamName: (teamId: string) => string | undefined;
+  coachName: (coachId: string) => string | undefined;
+}
 
 const capitalize = (s: string): string => ("" === s ? s : s.charAt(0).toUpperCase() + s.slice(1));
 
@@ -40,10 +54,36 @@ const asDayNums = (v: unknown): number[] =>
 
 const daysPhrase = (nums: number[]): string => nums.map(dayLabelLong).filter((label) => "" !== label).join(", ");
 
-export function describeConstraint(constraint: Constraint, venueName: VenueNameFn): string | null {
-  const predicate = buildPredicate(constraint, venueName);
+export function describeConstraint(constraint: Constraint, lookups: ConstraintTargetLookups): string | null {
+  const predicate = buildPredicate(constraint, lookups.venueName);
+  if (null === predicate) {
+    return null;
+  }
+  const target = resolveTarget(constraint, lookups);
 
-  return null === predicate ? null : capitalize(predicate);
+  // Cible connue → « <cible> · <prédicat> » (prédicat en clair, minuscule, comme le wizard).
+  // Cible introuvable (équipe/coach supprimé) → prédicat SEUL, capitalisé — jamais « ? · … ».
+  return null === target ? capitalize(predicate) : `${target} · ${predicate}`;
+}
+
+/**
+ * Le « qui » d'une contrainte, vocabulaire du wizard (`ConstraintsStep.build()`) : équipe → son
+ * nom ; coach → son nom ; CLUB+`targetTag` → `Groupe <tag>` ; CLUB nu → « Toutes les équipes ».
+ * Équipe/coach dont le nom ne se résout pas (cible supprimée) → `null` : le prédicat ira seul.
+ */
+function resolveTarget(constraint: Constraint, lookups: ConstraintTargetLookups): string | null {
+  if ("COACH" === constraint.scope) {
+    return null !== constraint.scopeTargetId ? (lookups.coachName(constraint.scopeTargetId) ?? null) : null;
+  }
+  if ("TEAM" === constraint.scope) {
+    return null !== constraint.scopeTargetId ? (lookups.teamName(constraint.scopeTargetId) ?? null) : null;
+  }
+  // CLUB : un groupe (tag) OU tout le club. `targetTag` porte le nom brut, comme le wizard.
+  const tag = constraint.config?.targetTag;
+  if ("string" === typeof tag && "" !== tag) {
+    return `Groupe ${tag}`;
+  }
+  return "Toutes les équipes";
 }
 
 function buildPredicate(constraint: Constraint, venueName: VenueNameFn): string | null {

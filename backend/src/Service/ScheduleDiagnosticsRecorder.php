@@ -96,6 +96,15 @@ final class ScheduleDiagnosticsRecorder
             if (isset($diagnostic['venue_id']) || isset($diagnostic['venueId'])) {
                 $entity->setVenueId((string) ($diagnostic['venue_id'] ?? $diagnostic['venueId']));
             }
+            // Slot pinpoint (conflict only): day + start time so the UI can open THAT
+            // grid cell. Dual-casing like the ids above (engine sends camelCase, a raw
+            // payload may use snake_case).
+            if (isset($diagnostic['day_of_week']) || isset($diagnostic['dayOfWeek'])) {
+                $entity->setDayOfWeek((int) ($diagnostic['day_of_week'] ?? $diagnostic['dayOfWeek']));
+            }
+            if (isset($diagnostic['start_time']) || isset($diagnostic['startTime'])) {
+                $entity->setStartTime((string) ($diagnostic['start_time'] ?? $diagnostic['startTime']));
+            }
 
             $this->entityManager->persist($entity);
         }

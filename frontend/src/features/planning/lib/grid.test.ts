@@ -341,6 +341,29 @@ describe("concernedSlots", () => {
     expect(result.map((r) => r.slotId)).toEqual(["x", "y"]);
     expect(result[0]).toMatchObject({ dayLabel: "Lun", timeLabel: "18:00", teamLabel: "U11", venueLabel: "Alpha" });
   });
+
+  it("un conflict PORTANT (venue, jour, heure) resserre sur CE créneau — pas tout le gymnase", () => {
+    const slots = [
+      slot({ id: "a", venueId: "v1", teamId: "t1", dayOfWeek: 6, startTime: "10:00:00" }),
+      slot({ id: "b", venueId: "v1", teamId: "t2", dayOfWeek: 6, startTime: "10:00:00" }),
+      // Même gymnase, autre heure/jour : NE doit PAS être retenu.
+      slot({ id: "c", venueId: "v1", teamId: "t1", dayOfWeek: 6, startTime: "18:00:00" }),
+      slot({ id: "d", venueId: "v1", teamId: "t1", dayOfWeek: 3, startTime: "10:00:00" }),
+    ];
+    // L'engine émet « HH:MM » ; les slots sont en « HH:MM:SS » → comparaison à la minute.
+    const result = concernedSlots({ teamId: null, venueId: "v1", coachId: null, dayOfWeek: 6, startTime: "10:00" }, slots, lookups);
+    expect(result.map((r) => r.slotId)).toEqual(["a", "b"]);
+  });
+
+  it("sans jour/heure, garde le comportement large (venue/team/coach)", () => {
+    const slots = [
+      slot({ id: "a", venueId: "v1", dayOfWeek: 6, startTime: "10:00:00" }),
+      slot({ id: "c", venueId: "v1", dayOfWeek: 6, startTime: "18:00:00" }),
+    ];
+    // dayOfWeek/startTime null → on retombe sur la correspondance gymnase (les DEUX créneaux).
+    const result = concernedSlots({ teamId: null, venueId: "v1", coachId: null, dayOfWeek: null, startTime: null }, slots, lookups);
+    expect(result.map((r) => r.slotId).sort()).toEqual(["a", "c"]);
+  });
 });
 
 describe("le dimanche dans la boucle de travail (revue P4-37)", () => {
