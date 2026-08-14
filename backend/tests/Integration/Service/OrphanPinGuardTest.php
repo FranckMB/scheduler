@@ -7,6 +7,7 @@ namespace App\Tests\Integration\Service;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Constraint;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
@@ -17,6 +18,9 @@ use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
@@ -70,6 +74,8 @@ final class OrphanPinGuardTest extends WebTestCase
 
     private string $planId;
 
+    private string $entryId;
+
     /** La version de période : c'est ELLE qu'on cherche à générer. */
     private Schedule $overlay;
 
@@ -93,6 +99,34 @@ final class OrphanPinGuardTest extends WebTestCase
         $message = $this->guard->firstOrphanMessage($this->overlay);
         self::assertIsString($message);
         self::assertStringContainsString('vendredi', $message);
+        self::assertStringContainsString($this->venue->getName(), $message);
+    }
+
+    /**
+     * Quand la cause de l'orphelin est une FERMETURE (le gymnase ne sert pas ce jour-là),
+     * le message le DIT — bornes et titre de la fermeture — au lieu du générique « redéfinissez
+     * vos créneaux » : ici le gestionnaire n'a rien à redéfinir, c'est la fermeture qu'il gère.
+     */
+    public function testAnOrphanFallingOnAClosedDayNamesTheClosureCause(): void
+    {
+        // Gymnase fermé le mardi 2025-10-21 de la période ; la réservation du mardi 18:00
+        // (un créneau qui EXISTE dans la grille) devient orpheline par cette fermeture.
+        $constraint = (new Constraint)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setName('Gymnase réquisitionné')
+            ->setScope(ConstraintScope::FACILITY)->setScopeTargetId($this->venue->getId())
+            ->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)
+            ->setCalendarEntryId($this->entryId);
+        $constraint->setConfig(['type' => 'venue_closed', 'startDate' => '2025-10-21', 'endDate' => '2025-10-21']);
+        $this->em->persist($constraint);
+        $this->em->persist($this->reservation(2, '18:00')); // mardi 18:00 : le créneau de la période, mais fermé
+        $this->em->flush();
+
+        $message = $this->guard->firstOrphanMessage($this->overlay);
+        self::assertIsString($message);
+        self::assertStringContainsString('fermé', $message, 'la cause fermeture est nommée');
+        self::assertStringContainsString('21/10', $message, 'les bornes de la fermeture');
+        self::assertStringContainsString('Gymnase réquisitionné', $message, 'le titre de la fermeture');
         self::assertStringContainsString($this->venue->getName(), $message);
     }
 
@@ -259,6 +293,7 @@ final class OrphanPinGuardTest extends WebTestCase
             ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Toussaint')
             ->setStartDate(new DateTimeImmutable('2025-10-20'))->setEndDate(new DateTimeImmutable('2025-10-26'));
         $this->em->persist($entry);
+        $this->entryId = $entry->getId();
         $this->planId = $this->planIdOf($entry);
 
         $this->overlay = (new Schedule)->setClubId($this->club->getId())->setSeasonId($this->season->getId())

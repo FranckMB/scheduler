@@ -14,6 +14,7 @@ use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\LockLevel;
 use App\Enum\VenuePeriodMode;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -95,7 +96,17 @@ final class OrphanPinGuard
         // lui, un verrou posé un jour où le gymnase est déclaré fermé passerait le
         // garde-fou et la séance serait perdue en silence — ce que ce garde existe pour
         // empêcher (revue #8).
-        $closedWeekdaysByVenue = $this->closedWeekdaysOf($schedule);
+        // Résumés des fermetures de la période : on en tire d'une part les jours ISO fermés
+        // par gymnase (pour retirer les créneaux fermés, comme buildForOverlay), d'autre
+        // part de quoi NOMMER la cause quand un épinglage tombe justement sur un jour fermé.
+        $closureByVenueDay = [];
+        $closedWeekdaysByVenue = [];
+        foreach ($this->closureSummariesOf($schedule) as $summary) {
+            foreach ($summary['weekdays'] as $weekday) {
+                $closedWeekdaysByVenue[$summary['venueId']][$weekday] = true;
+                $closureByVenueDay[$summary['venueId']][$weekday] ??= $summary;
+            }
+        }
         // Un gymnase DÉSACTIVÉ ne sert pas : ses créneaux existent encore en base (le mode
         // conserve la grille) mais buildForOverlay les retire du payload, avec les
         // épinglages qui s'y trouvent. Les compter comme disponibles ici laissait donc
@@ -139,7 +150,7 @@ final class OrphanPinGuard
                 continue;
             }
             if (!isset($available[$this->key($lock->getVenueId(), $lock->getDayOfWeek(), $lock->getStartTime()->format('H:i'))])) {
-                return $this->message($lock->getVenueId(), $lock->getDayOfWeek());
+                return $this->message($lock->getVenueId(), $lock->getDayOfWeek(), $closureByVenueDay[$lock->getVenueId()][$lock->getDayOfWeek()] ?? null);
             }
         }
 
@@ -148,7 +159,7 @@ final class OrphanPinGuard
                 continue;
             }
             if (!isset($available[$this->key($reservation->getVenueId(), $reservation->getDayOfWeek(), $reservation->getStartTime()->format('H:i'))])) {
-                return $this->message($reservation->getVenueId(), $reservation->getDayOfWeek());
+                return $this->message($reservation->getVenueId(), $reservation->getDayOfWeek(), $closureByVenueDay[$reservation->getVenueId()][$reservation->getDayOfWeek()] ?? null);
             }
         }
 
@@ -156,12 +167,12 @@ final class OrphanPinGuard
     }
 
     /**
-     * Les jours de fermeture effectifs de la période — même source que buildForOverlay
+     * Les fermetures effectives de la période — même source que buildForOverlay
      * (contraintes datées de l'entrée, ou de sa mère pour une semaine enfant).
      *
-     * @return array<string, array<int, true>>
+     * @return list<array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}>
      */
-    private function closedWeekdaysOf(Schedule $schedule): array
+    private function closureSummariesOf(Schedule $schedule): array
     {
         $entry = $this->entityManager->getRepository(CalendarEntry::class)
             ->findOneBy(['id' => $this->schedulePlanProvisioner->periodEntryIdOf($schedule) ?? '']);
@@ -171,7 +182,7 @@ final class OrphanPinGuard
         $dated = $this->entityManager->getRepository(Constraint::class)
             ->findBy(['calendarEntryId' => $entry->datedConstraintSourceId()]);
 
-        return VenueClosureDays::closedWeekdaysByVenue($dated, $entry->getStartDate(), $entry->getEndDate());
+        return VenueClosureDays::closureSummaries($dated, $entry->getStartDate(), $entry->getEndDate());
     }
 
     private function key(string $venueId, int $dayOfWeek, string $startTime): string
@@ -179,15 +190,39 @@ final class OrphanPinGuard
         return $venueId . '|' . $dayOfWeek . '|' . $startTime;
     }
 
-    private function message(string $venueId, int $dayOfWeek): string
+    /**
+     * @param array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}|null $closure la fermeture qui cause l'orphelin, si c'en est une
+     */
+    private function message(string $venueId, int $dayOfWeek, ?array $closure = null): string
     {
         $venue = $this->entityManager->getRepository(Venue::class)->find($venueId);
+        $venueName = $venue?->getName() ?? 'ce gymnase';
         $days = [1 => 'lundi', 2 => 'mardi', 3 => 'mercredi', 4 => 'jeudi', 5 => 'vendredi', 6 => 'samedi', 7 => 'dimanche'];
+        $dayLabel = $days[$dayOfWeek] ?? 'jour ' . $dayOfWeek;
+
+        // Cause FERMETURE : la nommer, avec bornes et titre. Le gestionnaire n'a rien à
+        // redéfinir — c'est la fermeture qu'il gère, ou l'épinglage qu'il retire.
+        if (null !== $closure) {
+            return \sprintf(
+                'Le gymnase %s est fermé du %s au %s — %s : une séance du %s y est épinglée sans créneau disponible. Retirez l’épinglage, ou ajustez la fermeture.',
+                $venueName,
+                $this->humanDate($closure['startDate']),
+                $this->humanDate($closure['endDate']),
+                $closure['title'],
+                $dayLabel,
+            );
+        }
 
         return \sprintf(
             'Les créneaux du %s à %s ne sont plus disponibles en l’état : une séance y est épinglée sans créneau correspondant. Redéfinissez les créneaux de ce gymnase pour la période, ou retirez l’épinglage.',
-            $days[$dayOfWeek] ?? 'jour ' . $dayOfWeek,
-            $venue?->getName() ?? 'ce gymnase',
+            $dayLabel,
+            $venueName,
         );
+    }
+
+    /** Date `Y-m-d` en `j/n` humain (« 1/5 »), sans zéro de tête. */
+    private function humanDate(string $isoDate): string
+    {
+        return new DateTimeImmutable($isoDate)->format('j/n');
     }
 }
