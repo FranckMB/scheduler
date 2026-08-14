@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { PriorityTier, Reservation, Team, VenueTrainingSlot } from "../api";
-import { assignableTeams, effectiveSlotCapacity, reservedTeamsBySlot, sharedSlotStatuses, teamReservationCount } from "./reservationSlots";
+import { assignableTeams, effectiveSlotCapacity, reservedTeamsBySlot, sharedSlotStatuses, splitCascadePreview, teamReservationCount } from "./reservationSlots";
 
 const slot = (id: string, venueId: string, dayOfWeek: number, startTime: string, capacity = 1): VenueTrainingSlot =>
   ({ id, venueId, dayOfWeek, startTime, durationMinutes: 90, capacity }) as VenueTrainingSlot;
@@ -25,6 +25,23 @@ describe("effectiveSlotCapacity", () => {
     expect(effectiveSlotCapacity(slot("s", "v1", 2, "18:00", 2), NON_SPLIT)).toBe(1);
     expect(effectiveSlotCapacity(slot("s", "v1", 2, "18:00", 2), SPLIT)).toBe(2);
     expect(effectiveSlotCapacity(slot("s", "v1", 2, "18:00", 2), new Map())).toBe(2); // venue not loaded
+  });
+});
+
+describe("splitCascadePreview (v2 — décocher terrain divisible)", () => {
+  it("liste les créneaux à capacité ≥ 2 du gymnase et compte leurs réservations", () => {
+    const slots = [slot("a", "v1", 1, "17:30", 2), slot("b", "v1", 3, "20:00", 2), slot("c", "v1", 2, "18:00", 1), slot("d", "v2", 1, "17:30", 2)];
+    const reservations = [resa("t1", "v1", 1, "17:30"), resa("t2", "v1", 1, "17:30"), resa("t3", "v1", 3, "20:00"), resa("t4", "v1", 2, "18:00")];
+    const preview = splitCascadePreview(slots, reservations, "v1");
+    expect(preview.slots.map((s) => s.id)).toEqual(["a", "b"]); // ni le créneau à 1 (c), ni l'autre gymnase (d)
+    expect(preview.reservationCount).toBe(3); // deux sur a, une sur b ; celle du créneau à 1 (c) ne compte pas
+  });
+
+  it("est vide quand aucun créneau du gymnase n'accueille 2 équipes (pas de modale)", () => {
+    const slots = [slot("c", "v1", 2, "18:00", 1)];
+    const preview = splitCascadePreview(slots, [resa("t1", "v1", 2, "18:00")], "v1");
+    expect(preview.slots).toEqual([]);
+    expect(preview.reservationCount).toBe(0);
   });
 });
 

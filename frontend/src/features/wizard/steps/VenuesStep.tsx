@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
@@ -32,6 +33,7 @@ import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 import { CapacitySelect, GroupLabelField, SharedSlotHint } from "./slotFields";
 import { WEEK } from "../lib/weekGrid";
 import { venuesWithoutSlot } from "../lib/useStepValidation";
+import { splitCascadePreview, type SplitCascadePreview } from "../lib/reservationSlots";
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -272,6 +274,10 @@ function VenuesEditor() {
   // Capture the venue at click time — the dropdown selection may change before
   // the user confirms, and we must delete the venue the dialog is about.
   const [pendingDeleteVenue, setPendingDeleteVenue] = useState<Venue | null>(null);
+  // v2 cohérence canSplit — décocher « terrain divisible » sur un gymnase dont des créneaux
+  // accueillent 2 équipes ou plus est une cascade destructive (créneaux ramenés à 1, réservations
+  // vidées). On CONFIRME avant. Le venue est capturé au clic (la sélection peut changer avant l'OK).
+  const [pendingSplitOff, setPendingSplitOff] = useState<{ venue: Venue; preview: SplitCascadePreview } | null>(null);
   // Colours assigned to gyms created faster than the venues query refetches, so
   // rapid successive adds don't all pick VENUE_PALETTE[0] off the stale list.
   // Pruned once a colour actually lands in the venue list.
@@ -590,7 +596,20 @@ function VenuesEditor() {
                 <input
                   type="checkbox"
                   checked={selected.canSplit}
-                  onChange={(e) => update.mutate({ id: selected.id, body: { name: selected.name, color: selected.color, canSplit: e.target.checked } })}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    // Décocher : si des créneaux du gymnase accueillent encore 2 équipes ou plus,
+                    // on CONFIRME (cascade destructive) au lieu de muter directement. Cocher
+                    // (false→true) n'a jamais de conséquence destructive → aucune modale.
+                    if (!next) {
+                      const preview = splitCascadePreview(venueSlots, reservations, selected.id);
+                      if (preview.slots.length > 0) {
+                        setPendingSplitOff({ venue: selected, preview });
+                        return;
+                      }
+                    }
+                    update.mutate({ id: selected.id, body: { name: selected.name, color: selected.color, canSplit: next } });
+                  }}
                 />
                 Terrain divisible
               </label>
@@ -694,6 +713,45 @@ function VenuesEditor() {
             delVenue.mutate(pendingDeleteVenue.id);
           }
           setPendingDeleteVenue(null);
+        }}
+      />
+
+      {/* v2 cohérence canSplit — confirmation avant de rendre un gymnase indivisible alors que des
+          créneaux y accueillent 2 équipes ou plus. Confirmer → mutation avec confirmSplitCascade.
+          Le 422 backend reste le filet si cette modale est contournée. */}
+      <ConfirmDialog
+        open={pendingSplitOff !== null}
+        title={pendingSplitOff ? `Rendre « ${pendingSplitOff.venue.name} » indivisible ?` : ""}
+        confirmLabel="Rendre indivisible"
+        description={
+          pendingSplitOff ? (
+            <>
+              Ces créneaux repasseront à 1 équipe et leurs réservations seront vidées — vous devrez re-réserver&nbsp;:
+              <ul className="mt-2 list-disc space-y-0.5 pl-5">
+                {pendingSplitOff.preview.slots.map((s) => (
+                  <li key={s.id}>
+                    {DAYS.find((d) => d.n === s.dayOfWeek)?.label ?? ""} {hhmm(s.startTime)}
+                  </li>
+                ))}
+              </ul>
+              {pendingSplitOff.preview.reservationCount > 0 ? (
+                <p className="mt-3 font-medium text-foreground">
+                  {pendingSplitOff.preview.reservationCount}{" "}
+                  {pendingSplitOff.preview.reservationCount > 1 ? "réservations seront vidées" : "réservation sera vidée"}.
+                </p>
+              ) : null}
+            </>
+          ) : undefined
+        }
+        onCancel={() => setPendingSplitOff(null)}
+        onConfirm={() => {
+          if (pendingSplitOff) {
+            update.mutate({
+              id: pendingSplitOff.venue.id,
+              body: { name: pendingSplitOff.venue.name, color: pendingSplitOff.venue.color, canSplit: false, confirmSplitCascade: true },
+            });
+          }
+          setPendingSplitOff(null);
         }}
       />
     </div>
