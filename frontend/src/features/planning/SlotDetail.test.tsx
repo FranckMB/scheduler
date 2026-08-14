@@ -65,7 +65,17 @@ const constraint = (over: Partial<Constraint>): Constraint => ({
   ...over,
 });
 
-function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[]; tagTeamIds?: ReadonlyMap<string, ReadonlySet<string>>; moveState?: MoveFeedback; venues?: Venue[] } = {}) {
+function renderDetail(
+  over: {
+    slot?: Partial<Slot>;
+    constraints?: Constraint[];
+    tagTeamIds?: ReadonlyMap<string, ReadonlySet<string>>;
+    moveState?: MoveFeedback;
+    venues?: Venue[];
+    teamName?: (id: string) => string | undefined;
+    coachName?: (id: string) => string | undefined;
+  } = {},
+) {
   const s = slot(over.slot);
   renderWithProviders(
     <SlotDetail
@@ -75,6 +85,8 @@ function renderDetail(over: { slot?: Partial<Slot>; constraints?: Constraint[]; 
       categoryLabel="U11"
       constraints={over.constraints ?? []}
       tagTeamIds={over.tagTeamIds}
+      teamName={over.teamName}
+      coachName={over.coachName}
       busy={false}
       moveState={over.moveState}
       onClose={vi.fn()}
@@ -222,8 +234,26 @@ describe("SlotDetail — le panneau dit ce que la règle FAIT, pas seulement son
       ],
     });
     await openConstraints();
+    // La règle « min » vise team-A mais aucun résolveur d'équipe n'est fourni ici → prédicat seul.
     expect(screen.getByText("Au moins 1 séance à Matéo")).toBeInTheDocument();
-    expect(screen.getByText("Préfère Matéo")).toBeInTheDocument();
+    // La règle « pref » est CLUB nu → cible « Toutes les équipes · … ».
+    expect(screen.getByText("Toutes les équipes · préfère Matéo")).toBeInTheDocument();
+  });
+
+  it("P4-94 — la 1re ligne NOMME la cible (équipe résolue) ; le nom libre reste en 2e ligne", async () => {
+    renderDetail({
+      slot: { teamId: "team-A" },
+      venues: [mateo],
+      teamName: (id) => (id === "team-A" ? "U11 A" : undefined),
+      constraints: [
+        constraint({ id: "min", name: "SM2 au moins 1 seance a Mateo", scope: "TEAM", scopeTargetId: "team-A", family: "FACILITY", config: { minAtVenueId: "v-mateo", minAtVenueCount: 1 } }),
+      ],
+    });
+    await openConstraints();
+    // Dérivé, cible en tête (le bon objet corrigeable).
+    expect(screen.getByText("U11 A · au moins 1 séance à Matéo")).toBeInTheDocument();
+    // Le nom LIBRE reste, inchangé, en seconde ligne (repère faillible du gestionnaire).
+    expect(screen.getByText("SM2 au moins 1 seance a Mateo")).toBeInTheDocument();
   });
 
   it("retombe sur le NOM SEUL pour une combinaison qu'on ne sait pas décrire (pas d'invention)", async () => {

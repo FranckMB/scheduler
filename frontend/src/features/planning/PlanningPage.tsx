@@ -12,6 +12,7 @@ import { usePriorityTiers } from "@/features/matches/queries";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { useSchedulePlans } from "@/features/cockpit/queries";
 import { useReservations, useVenuePeriodOverrides, useWizardTeamTagAssignments, useWizardTeamTags } from "@/features/wizard/queries";
+import { coachFullName } from "@/shared/lib/coachName";
 import { readFailed, readLoading } from "@/shared/lib/readState";
 import { useCredits } from "@/shared/credits/useCredits";
 import { Button } from "@/shared/components/ui/button";
@@ -476,6 +477,17 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     [setViewMode, clearResourceFilter, toggleResource],
   );
 
+  // Cliquer un diagnostic `conflict` ouvre LE créneau fautif (SlotDetail) et l'amène à l'écran.
+  // rAF + appels optionnels (précédent ConstraintsStep) : on laisse React peindre le créneau
+  // sélectionné avant de scroller, et `scrollIntoView` n'existe pas en jsdom.
+  const openSlot = useCallback(
+    (slotId: string) => {
+      setSelectedSlotId(slotId);
+      requestAnimationFrame(() => document.querySelector(`[data-slot-id="${slotId}"]`)?.scrollIntoView?.({ block: "center", inline: "center", behavior: "smooth" }));
+    },
+    [setSelectedSlotId],
+  );
+
   const selectedCell = model.cells.find((c) => c.slotId === selectedSlotId) ?? null;
 
   // Sélectionner un créneau REPLIE les diagnostics (retour fondateur : « réduire
@@ -754,6 +766,13 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           categoryLabel={categoryLabel}
                           constraints={constraints}
                           tagTeamIds={tagTeamIds}
+                          // La description d'une contrainte NOMME sa cible : on passe les
+                          // résolveurs de nom équipe/coach depuis les lookups déjà en main.
+                          teamName={(id) => lookups.teams.get(id)?.name}
+                          coachName={(id) => {
+                            const c = lookups.coaches.get(id);
+                            return undefined === c ? undefined : coachFullName(c);
+                          }}
                           busy={busy}
                           moveState={moveState}
                           // Un pseudo-créneau de réservation (planning FAILED) n'existe pas
@@ -766,7 +785,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                       ) : null}
                       {showDiagnostics ? (
                         <div className="min-h-[12rem] flex-1">
-                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} onCollapse={() => setDiagnosticsCollapsed(true)} openMostSevere={embedded} seedToken={validScheduleId} pending={diagnosticsPending} />
+                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} onOpenSlot={openSlot} onCollapse={() => setDiagnosticsCollapsed(true)} openMostSevere={embedded} seedToken={validScheduleId} pending={diagnosticsPending} />
                         </div>
                       ) : null}
                     </div>

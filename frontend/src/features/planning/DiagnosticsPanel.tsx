@@ -28,6 +28,9 @@ interface DiagnosticsPanelProps {
   onHighlight: (slotIds: Set<string>) => void;
   /** "unused_slot" warning: bring the concerned venue's column on screen. */
   onFocusVenue?: (venueId: string) => void;
+  /** `conflict` portant (venue, jour, heure) : ouvre LE créneau fautif (le premier de
+   *  `concernedSlots`) sur la grille. Absent → pas d'ouverture (dégradation douce). */
+  onOpenSlot?: (slotId: string) => void;
   /** Collapse the panel back to the compact bar (frees grid width). */
   onCollapse?: () => void;
   /** Ouvre d'emblée le groupe le PLUS SÉVÈRE présent (P4-40, contexte wizard).
@@ -42,7 +45,7 @@ interface DiagnosticsPanelProps {
   pending?: boolean;
 }
 
-export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups, onHighlight, onFocusVenue, onCollapse, openMostSevere = false, seedToken = null, pending = false }: DiagnosticsPanelProps) {
+export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups, onHighlight, onFocusVenue, onOpenSlot, onCollapse, openMostSevere = false, seedToken = null, pending = false }: DiagnosticsPanelProps) {
   const [openSeverity, setOpenSeverity] = useState<DiagnosticSeverity | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -101,6 +104,17 @@ export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups,
     if ("unused_slot" === diagnostic.type && null !== diagnostic.venueId) {
       onHighlight(new Set(emptySlots.filter((s) => s.venueId === diagnostic.venueId).map((s) => s.id)));
       onFocusVenue?.(diagnostic.venueId);
+      return;
+    }
+    // Un `conflict` PORTE (venue, jour, heure) : `concernedSlots` resserre sur LE créneau fautif ;
+    // on le surligne ET on l'OUVRE (le premier, dans l'ordre jour+heure de concernedSlots).
+    if ("conflict" === diagnostic.type && null !== diagnostic.venueId && null !== diagnostic.dayOfWeek && null !== diagnostic.startTime) {
+      const concerned = concernedSlots(diagnostic, slots, lookups);
+      onHighlight(new Set(concerned.map((c) => c.slotId)));
+      const first = concerned[0]?.slotId;
+      if (undefined !== first) {
+        onOpenSlot?.(first);
+      }
       return;
     }
     onHighlight(new Set(concernedSlots(diagnostic, slots, lookups).map((c) => c.slotId)));

@@ -164,6 +164,7 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                     <button
                       key={member.slotId}
                       type="button"
+                      data-slot-id={member.slotId}
                       onClick={() => onSelectSlot(member.slotId)}
                       title={`${member.teamLabel} · ${cell.groupLabel} · ${cell.venueLabel} · ${member.coachLabel} · ${cell.startLabel}–${cell.endLabel}`}
                       className={cn(
@@ -184,6 +185,7 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
             <button
               key={cell.key}
               type="button"
+              data-slot-id={cell.slotId}
               onClick={() => onSelectSlot(cell.slotId)}
               title={`${cell.teamLabel} · ${cell.venueLabel} · ${cell.coachLabel} · ${cell.startLabel}–${cell.endLabel}`}
               className={cn(

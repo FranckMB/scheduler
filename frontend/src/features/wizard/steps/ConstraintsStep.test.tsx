@@ -539,6 +539,75 @@ describe("ConstraintsStep — edit an existing constraint", () => {
 });
 
 /**
+ * P4-95 — la boucle de correction depuis le planning atterrit SUR la contrainte : sa ligne est
+ * surlignée ET amenée à l'écran. Le surlignage vaut aussi pour le stylo manuel ; le scroll de la
+ * LIGNE n'a lieu QUE sur consommation du deep-link (le stylo garde son seul scroll-formulaire P4-66).
+ */
+describe("ConstraintsStep — P4-95 : la ligne ciblée est surlignée et amenée à l'écran", () => {
+  const timeRule: Constraint = { id: "c-time", name: "Toutes les équipes · pas après 21:00", scope: "CLUB", scopeTargetId: null, family: "TIME", ruleType: "PREFERRED", config: { maxStartTime: "21:00" }, isActive: true };
+
+  let scrolled: Element[];
+  let originalScroll: typeof Element.prototype.scrollIntoView;
+
+  beforeEach(() => {
+    useWizardStore.getState().exitPeriodMode();
+    h.list = [timeRule];
+    scrolled = [];
+    originalScroll = Element.prototype.scrollIntoView;
+    // On capture le `this` de chaque scroll pour distinguer la LIGNE (data-constraint-id) du
+    // FORMULAIRE. jsdom n'implémente pas scrollIntoView.
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+  });
+
+  afterEach(() => {
+    Element.prototype.scrollIntoView = originalScroll;
+    useWizardStore.getState().exitPeriodMode();
+  });
+
+  const runRafImmediately = () => vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => (cb(0), 0));
+
+  it("deep-link ?edit= → la ligne cible est surlignée ET scrollée (block center)", async () => {
+    const raf = runRafImmediately();
+    renderWithProviders(<ConstraintsStep />, { route: "/wizard?step=constraints&edit=c-time&from=planning" });
+
+    // La ligne cible existe et porte la marque d'édition (surlignage accent).
+    const row = await screen.findByText("Toutes les équipes · pas après 21:00");
+    const li = row.closest("[data-constraint-id]");
+    expect(li).not.toBeNull();
+    expect(li?.className).toContain("ring-accent");
+    // Et la LIGNE elle-même a été amenée à l'écran (pas seulement le formulaire).
+    expect(scrolled).toContain(li);
+    raf.mockRestore();
+  });
+
+  it("stylo MANUEL : la ligne se surligne aussi, mais SEUL le formulaire est scrollé (pas la ligne)", async () => {
+    const user = userEvent.setup();
+    const raf = runRafImmediately();
+    const { container } = renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Modifier" }));
+
+    const li = container.querySelector('[data-constraint-id="c-time"]');
+    expect(li?.className).toContain("ring-accent");
+    // Le formulaire (P4-66) a bien été ramené…
+    expect(scrolled.length).toBeGreaterThan(0);
+    // …mais la LIGNE, elle, n'est PAS scrollée par le stylo manuel (deep-link uniquement).
+    expect(scrolled).not.toContain(li);
+    raf.mockRestore();
+  });
+
+  it("edit= introuvable → atterrissage propre : aucune ligne surlignée, aucun crash", async () => {
+    const { container } = renderWithProviders(<ConstraintsStep />, { route: "/wizard?step=constraints&edit=inconnue&from=planning" });
+
+    // La contrainte s'affiche, mais AUCUNE ligne n'est en édition.
+    expect(await screen.findByText("Toutes les équipes · pas après 21:00")).toBeInTheDocument();
+    expect(container.querySelector('[data-constraint-id="c-time"]')?.className).not.toContain("ring-accent");
+  });
+});
+
+/**
  * Réserver tab is now a per-venue slot grid: click a slot → modal to pin/remove
  * teams (server-backed Reservation entity, base/overlay). The rank-sorted summary
  * moved to the Récap step. These lock the grid+modal interaction + the team-cap.

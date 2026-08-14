@@ -32,7 +32,7 @@ describe("WeekGrid", () => {
   it("renders day headers, resource and slot; fires selection on click", () => {
     const onSelect = vi.fn();
     const model = buildGrid([slot], "gymnase", lookups);
-    render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={onSelect} />);
+    const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={onSelect} />);
 
     expect(screen.getByText("Lun")).toBeInTheDocument();
     // Only Monday has a slot → only its used gymnase column is rendered (empty columns hidden).
@@ -41,6 +41,9 @@ describe("WeekGrid", () => {
     const cell = screen.getByText("U11");
     cell.click();
     expect(onSelect).toHaveBeenCalledWith("a");
+    // P4-95 — la cellule porte son `data-slot-id` pour que « ouvrir le créneau fautif » puisse
+    // le retrouver et le scroller à l'écran.
+    expect(container.querySelector('[data-slot-id="a"]')).not.toBeNull();
   });
 
   it("fusionne un créneau mutualisé sous son libellé, chaque équipe restant cliquable (P2-17 D4)", async () => {
@@ -68,6 +71,9 @@ describe("WeekGrid", () => {
     // Chaque équipe est un bouton propre → clic = sélection de SA séance.
     screen.getByRole("button", { name: /U13/ }).click();
     expect(onSelect).toHaveBeenCalledWith("s2");
+    // P4-95 — chaque membre d'une carte fusionnée porte AUSSI son `data-slot-id`.
+    expect(container.querySelector('[data-slot-id="s1"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot-id="s2"]')).not.toBeNull();
     expect(await axe(container)).toHaveNoViolations();
   });
 

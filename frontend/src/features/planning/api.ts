@@ -194,6 +194,11 @@ export interface Diagnostic {
   teamId: string | null;
   coachId: string | null;
   venueId: string | null;
+  /** Jour (ISO 1-7) + heure « HH:MM » de la séance fautive : renseignés SEULEMENT par un
+   *  `conflict` (l'engine les porte, cf. schéma 2.6), null sur les 10 autres types. Avec
+   *  venueId, ils identifient LE créneau à ouvrir sur la grille. */
+  dayOfWeek: number | null;
+  startTime: string | null;
   message: string;
   suggestions: unknown;
 }
