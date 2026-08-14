@@ -1,6 +1,18 @@
-Last verified @ 2026-08-14 (JSON **régénéré** — P2-22 PR 1 : summary/description de `/api/calendar-entries/{id}/conflicts`)
+Last verified @ 2026-08-14 (JSON **régénéré** — P4-95 : `ScheduleDiagnosticResource` gagne le pointage jour+heure d'un `conflict`)
 
 Changements récents :
+- **P4-95 — le créneau fautif d'un `conflict` (2026-08-14)** : `ScheduleDiagnosticResource` gagne
+  `dayOfWeek` (int|null) et `startTime` (string|null) — renseignés **seulement** par le type
+  `conflict` (les 10 autres restent `null`), pour que le front ouvre le créneau exact au lieu du
+  seul rapprochement équipe/gymnase/coach. Contrat backend⇄engine INCHANGÉ (le schéma 2.6 portait
+  déjà ces champs côté engine, seul l'import backend les perdait jusqu'ici). Property-only sur les
+  3 endpoints qui exposent la ressource (`/api/schedule_diagnostics{,/{id}}`, embarqué dans les
+  réponses de génération) : 0 path ajouté/retiré.
+- ⚑ **Drift corrigé au passage, hors scope de cette PR** : `Venue.VenueInput` gagne
+  `confirmSplitCascade` (bool, défaut `false`) — livré par #564 (« rendre un gymnase indivisible »,
+  2026-08-14, *avant* la présente PR) sans régénération du snapshot à l'époque. Capturé ici en
+  même temps par nécessité (une régénération rend l'état RÉEL du schéma, pas un diff ciblé) —
+  aucune ligne de trace/roadmap n'est due à cette PR pour ce champ, la PR #564 est déjà livrée.
 - **P2-22 PR 1 — visibilité des fermetures (2026-08-14)** : le path
   `GET /api/calendar-entries/{id}/conflicts` corrige son `summary`/`description` (l'ancien
   « Overlaps of a calendar period » était faux) — la route rend désormais un bloc `closures`

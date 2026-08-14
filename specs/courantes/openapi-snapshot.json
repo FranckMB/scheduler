@@ -22804,6 +22804,18 @@
                             "null"
                         ]
                     },
+                    "dayOfWeek": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "startTime": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "message": {
                         "default": "",
                         "type": "string"
@@ -22943,6 +22955,18 @@
                             "null"
                         ]
                     },
+                    "dayOfWeek": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "startTime": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "message": {
                         "default": "",
                         "type": "string"
@@ -23012,6 +23036,18 @@
                                 ]
                             },
                             "venueId": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "dayOfWeek": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "startTime": {
                                 "type": [
                                     "string",
                                     "null"
@@ -25984,6 +26020,11 @@
                             "boolean",
                             "null"
                         ]
+                    },
+                    "confirmSplitCascade": {
+                        "description": "v2 coh\u00e9rence canSplit \u2014 confirmation EXPLICITE d'une transition \u00ab terrain divisible \u00bb\ntrue\u2192false alors que des cr\u00e9neaux du gymnase accueillent encore 2 \u00e9quipes ou plus.",
+                        "default": false,
+                        "type": "boolean"
                     }
                 }
             },
