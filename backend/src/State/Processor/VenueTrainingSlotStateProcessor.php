@@ -99,9 +99,14 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
         if (null !== $input->capacity) {
             $entity->setCapacity($input->capacity);
         }
+        // Posé inconditionnellement (contrairement aux autres champs en « null = ne pas toucher ») :
+        // l'ABSENCE de libellé EST un état voulu — « ce créneau n'est plus un groupe ». Le triplet
+        // du PUT décrit l'état final. Normalisé (trim, chaîne vide → null) une seule fois ici.
+        $entity->setGroupLabel($this->normalizeGroupLabel($input->groupLabel));
 
         $this->validateEndsWithinDay($entity);
         $this->validateCapacityForVenue($entity);
+        $this->validateGroupLabel($entity);
         $this->validateNoOverlap($entity);
 
         return $entity;
@@ -128,9 +133,13 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
         if (null !== $input->capacity) {
             $entity->setCapacity($input->capacity);
         }
+        // Voir createEntityFromInput : posé inconditionnellement, l'absence de libellé est un
+        // état voulu. Normalisation (trim, vide → null) au même endroit.
+        $entity->setGroupLabel($this->normalizeGroupLabel($input->groupLabel));
 
         $this->validateEndsWithinDay($entity);
         $this->validateCapacityForVenue($entity);
+        $this->validateGroupLabel($entity);
         $this->validateNoOverlap($entity);
     }
 
@@ -182,6 +191,31 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
         if ($venue instanceof Venue && false === $venue->getCanSplit()) {
             throw new ValidationException('Cannot set capacity > 1 on a venue that cannot split.');
         }
+    }
+
+    /**
+     * Un libellé de groupe (« CEC3 ») NOMME une mutualisation : deux équipes sur le même créneau.
+     * Le poser sur un créneau qui n'accueille qu'une équipe (capacité < 2) n'a pas de sens —
+     * il n'y a personne avec qui fusionner. On refuse plutôt que d'accepter un état incohérent.
+     * Même patron que validateCapacityForVenue (garde métier, 422 au processeur).
+     */
+    private function validateGroupLabel(VenueTrainingSlot $entity): void
+    {
+        if (null !== $entity->getGroupLabel() && $entity->getCapacity() < 2) {
+            throw new ValidationException('Un libellé de groupe suppose au moins deux équipes sur le créneau : augmentez la capacité à 2 ou retirez le libellé.');
+        }
+    }
+
+    /** Trim, et la chaîne vide (ou blanche) devient null : « pas de libellé » a une seule forme en base. */
+    private function normalizeGroupLabel(?string $label): ?string
+    {
+        if (null === $label) {
+            return null;
+        }
+
+        $trimmed = trim($label);
+
+        return '' === $trimmed ? null : $trimmed;
     }
 
     /**

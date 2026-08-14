@@ -1,6 +1,9 @@
-Last verified @ 2026-08-13 (JSON **régénéré** — P5-6 PR 2 : les 4 routes `/api/admin/feedback`)
+Last verified @ 2026-08-14 (JSON **régénéré** — P2-17 PR 1 : `groupLabel` sur `VenueTrainingSlot`)
 
 Changements récents :
+- **P2-17 PR 1 — libellé de groupe (2026-08-14)** : la ressource `VenueTrainingSlot` gagne
+  `groupLabel` (string ≤40 nullable, read+write — posé = affichage fusionné demandé, vide =
+  cartes séparées ; 422 sur capacité < 2). Property-only : aucun path ajouté/retiré.
 - **P5-6 PR 2 — rail SA du signalement (2026-08-13)** : +4 paths `/api/admin/feedback` (liste
   cross-tenant paginée + bloc QoS, détail avec contexte lourd, `treat`/`untreat` — 409 double,
   CSRF). Set-diff : 4 paths ajoutés, 0 retiré.

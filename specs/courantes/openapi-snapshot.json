@@ -26499,6 +26499,13 @@
                         "default": 1,
                         "type": "integer"
                     },
+                    "groupLabel": {
+                        "description": "Libell\u00e9 d'un cr\u00e9neau mutualis\u00e9 (\u00ab CEC3 \u00bb), null quand le cr\u00e9neau n'en porte pas. Esth\u00e9tique.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "schedulePlanId": {
                         "description": "Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive).",
                         "type": [
@@ -26561,6 +26568,14 @@
                             "null"
                         ]
                     },
+                    "groupLabel": {
+                        "maxLength": 40,
+                        "description": "Libell\u00e9 d'un cr\u00e9neau mutualis\u00e9 (\u00ab CEC3 \u00bb) \u2014 optionnel, \u2264 40. Le processeur le trim et\nnormalise la cha\u00eene vide en null ; pos\u00e9 sur un cr\u00e9neau non partageable (capacit\u00e9 < 2), il\nest refus\u00e9 (422). Esth\u00e9tique : ne rejoint jamais le payload solveur.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "schedulePlanId": {
                         "format": "uuid",
                         "description": "Period-editable structure: null = seasonal slot; a period id scopes the slot to that period (additive).",
@@ -26612,6 +26627,13 @@
                     "capacity": {
                         "default": 1,
                         "type": "integer"
+                    },
+                    "groupLabel": {
+                        "description": "Libell\u00e9 d'un cr\u00e9neau mutualis\u00e9 (\u00ab CEC3 \u00bb), null quand le cr\u00e9neau n'en porte pas. Esth\u00e9tique.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     },
                     "schedulePlanId": {
                         "description": "Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive).",
@@ -26665,6 +26687,13 @@
                             "capacity": {
                                 "default": 1,
                                 "type": "integer"
+                            },
+                            "groupLabel": {
+                                "description": "Libell\u00e9 d'un cr\u00e9neau mutualis\u00e9 (\u00ab CEC3 \u00bb), null quand le cr\u00e9neau n'en porte pas. Esth\u00e9tique.",
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
                             },
                             "schedulePlanId": {
                                 "description": "Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive).",

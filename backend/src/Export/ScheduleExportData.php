@@ -28,6 +28,10 @@ final readonly class ScheduleExportData
      * @param list<ExportEmptyWindow>     $emptySlots     defined-but-unfilled venue windows
      * @param array<string, TeamRankInfo> $teamRanks      teamId → its priority tier, for the PDF
      *                                                    "team × day" matrix grouped by rank
+     * @param array<string, string>       $groupLabels    "venueId|day|H:i" → group label ("CEC3"),
+     *                                                    only for the windows that carry one — the
+     *                                                    slot layer of THIS export (venue+day+start
+     *                                                    is the window's identity across layers)
      */
     public function __construct(
         public array $slots,
@@ -37,5 +41,6 @@ final readonly class ScheduleExportData
         public array $coachNames,
         public array $emptySlots = [],
         public array $teamRanks = [],
+        public array $groupLabels = [],
     ) {}
 }

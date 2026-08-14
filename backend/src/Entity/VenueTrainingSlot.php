@@ -50,6 +50,15 @@ class VenueTrainingSlot implements TenantOwnedInterface
     private int $capacity = 1;
 
     /**
+     * Libellé libre d'un créneau MUTUALISÉ (« CEC3 ») — deux équipes s'entraînent ensemble et on
+     * le NOMME. Esthétique pur : le solveur ne le consomme pas, il n'apparaît qu'à l'écran et
+     * dans les exports. Posé ⟺ fusion (pas de booléen séparé) ; n'a de sens qu'avec capacity ≥ 2
+     * (garde côté processeur). null = créneau ordinaire sans libellé.
+     */
+    #[ORM\Column(type: 'string', length: 40, nullable: true)]
+    private ?string $groupLabel = null;
+
+    /**
      * ADR-0002 inv. 5 (lot C3) — le créneau PRÊTÉ s'accroche au PLAN : « la mairie me prête
      * ce gymnase POUR CET AJUSTEMENT » est une réponse, pas un fait. null = le créneau
      * saisonnier permanent (structure PARTAGÉE, inv. 6 — surtout pas rattaché au plan
@@ -193,6 +202,18 @@ class VenueTrainingSlot implements TenantOwnedInterface
     public function setCapacity(int $capacity): self
     {
         $this->capacity = $capacity;
+
+        return $this;
+    }
+
+    public function getGroupLabel(): ?string
+    {
+        return $this->groupLabel;
+    }
+
+    public function setGroupLabel(?string $groupLabel): self
+    {
+        $this->groupLabel = $groupLabel;
 
         return $this;
     }

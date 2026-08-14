@@ -97,14 +97,22 @@ final class ScheduleExportDataProvider
             $trainingCriteria['venueId'] = $venueId;
         }
         $emptySlots = [];
+        // "venue|day|H:i" → group label ("CEC3"), read from the SAME layer's windows. A window's
+        // identity (that key) is what a placement shares with its window, so the export can title a
+        // filled cell OR tag an empty one by looking the label up. Only labelled windows are kept.
+        $groupLabels = [];
         foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy($trainingCriteria) as $window) {
             $key = $window->getVenueId() . '|' . $window->getDayOfWeek() . '|' . $window->getStartTime()->format('H:i');
+            $label = $window->getGroupLabel();
+            if (null !== $label && '' !== $label) {
+                $groupLabels[$key] = $label;
+            }
             if (!isset($filled[$key])) {
                 $emptySlots[] = new ExportEmptyWindow($window->getVenueId(), $window->getDayOfWeek(), $window->getStartTime(), $window->getDurationMinutes());
             }
         }
 
-        return new ScheduleExportData($slots, $teamNames, $teamCategories, $venues, $coachNames, $emptySlots, $teamRanks);
+        return new ScheduleExportData($slots, $teamNames, $teamCategories, $venues, $coachNames, $emptySlots, $teamRanks, $groupLabels);
     }
 
     /**
