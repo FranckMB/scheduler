@@ -6434,7 +6434,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Periods overlapping this entry window"
+                        "description": "Venue closures declared over this period (venue, title, dates, closed weekdays) plus the baseline sessions that fall on a closed venue during the window; sessions require a chosen season plan, closures do not"
                     },
                     "401": {
                         "description": "Unauthorized"
@@ -6443,7 +6443,7 @@
                         "description": "Resource not found"
                     }
                 },
-                "summary": "Overlaps of a calendar period"
+                "summary": "Venue closures and clashing baseline sessions for a period"
             }
         },
         "/api/competitions": {

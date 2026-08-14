@@ -1705,11 +1705,11 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 operationId: 'getApiCalendarEntryConflicts',
                 tags: ['Cockpit'],
                 responses: [
-                    '200' => new Response('Periods overlapping this entry window'),
+                    '200' => new Response('Venue closures declared over this period (venue, title, dates, closed weekdays) plus the baseline sessions that fall on a closed venue during the window; sessions require a chosen season plan, closures do not'),
                     '401' => $unauthorized,
                     '404' => $notFound,
                 ],
-                summary: 'Overlaps of a calendar period',
+                summary: 'Venue closures and clashing baseline sessions for a period',
             )),
             '/api/reset-season' => new PathItem(post: new Operation(
                 operationId: 'postApiResetSeason',
