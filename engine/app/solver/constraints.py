@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, TypedDict, cast
 
@@ -105,6 +105,85 @@ class AssignmentVariable:
 AssignmentInput = AssignmentVariable | Mapping[str, Any]
 
 
+# Nom de poids d'objectif du littéral de violation de chaque règle implicite passée PREFERRED
+# (la clé de contrat de la règle == alias camelCase du schéma d'entrée, réutilisée telle quelle
+# comme ``ruleKey`` de diagnostic côté result_builder).
+COACH_REST_VIOLATION_WEIGHT = "coach_rest_violation"
+SALARIE_VIOLATION_WEIGHT = "salarie_violation"
+CHAIN_VIOLATION_WEIGHT = "chain_violation"
+AGE_VIOLATION_WEIGHT = "age_violation"
+
+HARD = "HARD"
+PREFERRED = "PREFERRED"
+
+
+@dataclass(frozen=True)
+class ResolvedImplicitRules:
+    """Réglage EFFECTIF des 4 règles implicites, seuils inclus, défauts appliqués.
+
+    Construit par ``resolve_implicit_rules`` depuis le bloc ``implicitRules`` du payload
+    (ou depuis ``None`` = tout HARD, seuils historiques). Ce type est l'unique vocabulaire
+    partagé par la pose (``add_level_1_hard_constraints``) et le diagnostic post-solve
+    (``result_builder``) : le même réglage décide de la contrainte ET du texte du warning.
+    """
+
+    coach_rest_day_intensity: str = HARD
+    min_rest_days: int = 1
+    salarie_distribution_intensity: str = HARD
+    max_consecutive_sessions_intensity: str = HARD
+    max_consecutive: int = 3
+    age_ascending_intensity: str = HARD
+
+
+def _rule_block(raw: Mapping[str, Any], *names: str) -> Mapping[str, Any] | None:
+    for name in names:
+        block = raw.get(name)
+        if isinstance(block, Mapping):
+            return block
+    return None
+
+
+def _intensity(block: Mapping[str, Any] | None) -> str:
+    if block is None:
+        return HARD
+    value = str(block.get("intensity") or HARD).upper()
+    return PREFERRED if value == PREFERRED else HARD
+
+
+def resolve_implicit_rules(raw: Mapping[str, Any] | None) -> ResolvedImplicitRules:
+    """Normalise le bloc ``implicitRules`` (aliases camelCase du dump ``by_alias``, ou
+    snake_case défensif) en réglage effectif. ``None`` ou bloc vide = défauts historiques.
+    Les bornes sont déjà validées par Pydantic ; ici on se contente de lire avec repli."""
+    if not isinstance(raw, Mapping):
+        return ResolvedImplicitRules()
+
+    rest = _rule_block(raw, "coachRestDay", "coach_rest_day")
+    salarie = _rule_block(raw, "salarieDistribution", "salarie_distribution")
+    chain = _rule_block(raw, "maxConsecutiveSessions", "max_consecutive_sessions")
+    age = _rule_block(raw, "ageAscending", "age_ascending")
+
+    def _int(block: Mapping[str, Any] | None, default: int, *names: str) -> int:
+        if block is None:
+            return default
+        for name in names:
+            value = block.get(name)
+            if value is not None:
+                try:
+                    return int(value)
+                except (TypeError, ValueError):
+                    return default
+        return default
+
+    return ResolvedImplicitRules(
+        coach_rest_day_intensity=_intensity(rest),
+        min_rest_days=_int(rest, 1, "minRestDays", "min_rest_days"),
+        salarie_distribution_intensity=_intensity(salarie),
+        max_consecutive_sessions_intensity=_intensity(chain),
+        max_consecutive=_int(chain, 3, "maxConsecutive", "max_consecutive"),
+        age_ascending_intensity=_intensity(age),
+    )
+
+
 @dataclass
 class HardConstraintStats:
     """Counts of level-1 hard constraints added to the CP-SAT model."""
@@ -125,6 +204,10 @@ class HardConstraintStats:
     coach_rest_day: int = 0
     salarie_distribution: int = 0
     max_consecutive_sessions: int = 0
+    # Littéraux de violation AGRÉGÉS des règles implicites passées en PREFERRED, prêts pour
+    # l'objectif : ``(literal, weight_name)``. Vide quand tout est HARD (défaut). Hors du
+    # total : ce sont des termes d'objectif, pas des contraintes dures.
+    implicit_soft_terms: list[tuple[BoolVarLike, str]] = field(default_factory=list)
 
     @property
     def total_constraints_added(self) -> int:
@@ -161,7 +244,7 @@ def add_level_1_hard_constraints(
     coach_unavailability: RuleCollection = (),
     forced_venues: Mapping[Any, Any] | None = None,
     priority_tiers: Mapping[int, int] | None = None,
-    skip_rest_day_and_distribution: bool = False,
+    implicit_rules: ResolvedImplicitRules | None = None,
     team_coach_map: dict[str, list[str]] | None = None,
     team_player_map: dict[str, list[str]] | None = None,
 ) -> HardConstraintStats:
@@ -185,17 +268,14 @@ def add_level_1_hard_constraints(
      10. one_session_per_day  — at most one session per day per team
      11. age_ascending        — younger teams train earlier than older teams (same venue+day)
 
-    ``skip_rest_day_and_distribution=True`` skips 3b (coach_rest_day) and 3c
-    (salarie_distribution).
-
-    ⚠ This flag has NO applicative caller. The docstring used to present it as "the
-    two-pass fallback: pass 1 runs all constraints; if INFEASIBLE, pass 2 drops these
-    two". That fallback does not exist — ADR-0001 settled on a single pass with **no
-    relaxation**: INFEASIBLE yields ``status="failed"`` plus diagnostics, never a
-    quietly relaxed plan. Left in the signature for tests that exercise the branch;
-    flipping the DEFAULT would silently weaken the model, and (since P4-55) would also
-    make the wizard lie — its read-only panel announces the coach rest day with no
-    caveat, and ``tests/semantic/test_implicit_rules_are_still_applied.py`` guards that.
+    ``implicit_rules`` règle par club les 4 règles « bien-être » (3b repos coach, 3c
+    distribution salariés, 3d dos-à-dos, 12 âge croissant). ``None`` = tout HARD, seuils
+    historiques : la pose est alors byte-identique à l'ancien modèle. Un cran PREFERRED
+    RETIRE la contrainte dure de la règle et pose à la place des littéraux de violation
+    AGRÉGÉS, collectés dans ``stats.implicit_soft_terms`` pour que l'objectif les pénalise
+    (poids −6). ADR-0001 pose un solve single-pass SANS relaxation ; PREFERRED n'est pas
+    une relaxation de secours mais un réglage explicite du gestionnaire, toujours
+    diagnostiqué post-solve quel que soit le cran.
     """
 
     if assignments is None:
@@ -203,6 +283,8 @@ def add_level_1_hard_constraints(
 
     assignment_list = _normalise_assignments(assignments)
     stats = HardConstraintStats()
+    rules = implicit_rules if implicit_rules is not None else ResolvedImplicitRules()
+    soft_terms: list[tuple[BoolVarLike, str]] = stats.implicit_soft_terms
 
     # 1. One venue hosts at most one team at a time.
     stats.room_at_most_one = add_room_at_most_one(model, assignment_list)
@@ -215,33 +297,39 @@ def add_level_1_hard_constraints(
         model, assignment_list, team_coach_map=team_coach_map, team_player_map=team_player_map
     )
 
-    # 3b. Every coach must have at least one rest day from Monday to Friday.
-    if not skip_rest_day_and_distribution:
-        stats.coach_rest_day = add_coach_rest_day_constraints(
-            model,
-            assignment_list,
-            coaches=coaches,
-            team_coach_map=team_coach_map,
-            team_player_map=team_player_map,
-        )
+    # 3b. Every coach must keep at least ``min_rest_days`` rest days from Monday to Friday.
+    stats.coach_rest_day = add_coach_rest_day_constraints(
+        model,
+        assignment_list,
+        coaches=coaches,
+        team_coach_map=team_coach_map,
+        team_player_map=team_player_map,
+        intensity=rules.coach_rest_day_intensity,
+        min_rest_days=rules.min_rest_days,
+        soft_terms_out=soft_terms,
+    )
 
     # 3c. At least one salarié coach must be present each Mon-Fri day.
-    if not skip_rest_day_and_distribution:
-        stats.salarie_distribution = add_salarie_distribution_constraints(
-            model,
-            assignment_list,
-            coaches=coaches,
-            team_coach_map=team_coach_map,
-            team_player_map=team_player_map,
-        )
+    stats.salarie_distribution = add_salarie_distribution_constraints(
+        model,
+        assignment_list,
+        coaches=coaches,
+        team_coach_map=team_coach_map,
+        team_player_map=team_player_map,
+        intensity=rules.salarie_distribution_intensity,
+        soft_terms_out=soft_terms,
+    )
 
-    # 3d. A coach may not be in all 3 slots of a consecutive triple.
+    # 3d. A person may not be in ``max_consecutive`` back-to-back slots.
     stats.max_consecutive_sessions = add_max_consecutive_sessions_constraints(
         model,
         assignment_list,
         coaches=coaches,
         team_coach_map=team_coach_map,
         team_player_map=team_player_map,
+        intensity=rules.max_consecutive_sessions_intensity,
+        max_consecutive=rules.max_consecutive,
+        soft_terms_out=soft_terms,
     )
 
     # 4. A team cannot have two sessions at the same time slot.
@@ -276,7 +364,13 @@ def add_level_1_hard_constraints(
     stats.one_session_per_day = add_one_session_per_day_constraints(model, assignment_list, teams=teams)
 
     # 12. Younger teams train earlier than older teams in the same venue+day.
-    stats.age_ascending = add_age_ascending_constraints(model, assignment_list, teams=teams)
+    stats.age_ascending = add_age_ascending_constraints(
+        model,
+        assignment_list,
+        teams=teams,
+        intensity=rules.age_ascending_intensity,
+        soft_terms_out=soft_terms,
+    )
 
     return stats
 
@@ -456,18 +550,24 @@ def add_coach_rest_day_constraints(
     coaches: Iterable[Any] = (),
     team_coach_map: dict[str, list[str]] | None = None,
     team_player_map: dict[str, list[str]] | None = None,
+    intensity: str = HARD,
+    min_rest_days: int = 1,
+    soft_terms_out: list[tuple[BoolVarLike, str]] | None = None,
 ) -> int:
-    """Constraint 3b: every coach must have at least one rest day from Monday to Friday.
+    """Constraint 3b: every coach must keep at least ``min_rest_days`` rest days Mon-Fri.
 
     For each coach, creates ``is_working[coach, day]`` BoolVars for days 1-5
-    using reification, then enforces ``sum(is_working) <= 4`` (at most 4 working
-    days among Mon-Fri, guaranteeing at least 1 rest day).
+    using reification, then (``intensity=HARD``) enforces
+    ``sum(is_working) <= 5 - min_rest_days`` (at most ``5 - min_rest_days`` working
+    days among Mon-Fri). The historical bound of 4 is exactly ``min_rest_days=1``.
+
+    When ``intensity=PREFERRED`` the hard bound is NOT posted; instead ONE aggregated
+    violation literal per coach — reifying ``sum(is_working) > 5 - min_rest_days`` — is
+    appended to ``soft_terms_out`` for the objective to penalise.
 
     Both coaching assignments (via ``team_coach_map``) and coach-player playing
     assignments (via ``team_player_map``) count as working days. Falls back to
     assignment attributes when maps are not provided or team is not found.
-    Coaches whose ``max_days_override`` is 4 or less are skipped because their
-    rest day is already guaranteed by that cap.
     """
 
     # Build coach_id -> max_days_override map
@@ -549,8 +649,17 @@ def add_coach_rest_day_constraints(
                 cast(Any, model).Add(day_sum >= 1).OnlyEnforceIf(is_working)
                 cast(Any, model).Add(day_sum == 0).OnlyEnforceIf(is_working.Not())
 
-        # Enforce: at most 4 working days among Mon-Fri (at least 1 rest day)
-        cast(Any, model).Add(sum(is_working_vars) <= 4)
+        working_cap = 5 - min_rest_days
+        if intensity == PREFERRED:
+            # Un littéral de violation AGRÉGÉ par coach : « travaille plus que le plafond ».
+            over = cast(Any, model).NewBoolVar(f"coach_rest_over_{coach_id_str}")
+            cast(Any, model).Add(sum(is_working_vars) >= working_cap + 1).OnlyEnforceIf(over)
+            cast(Any, model).Add(sum(is_working_vars) <= working_cap).OnlyEnforceIf(over.Not())
+            if soft_terms_out is not None:
+                soft_terms_out.append((over, COACH_REST_VIOLATION_WEIGHT))
+        else:
+            # HARD : au plus ``5 - min_rest_days`` jours travaillés lun-ven.
+            cast(Any, model).Add(sum(is_working_vars) <= working_cap)
         added += 1
 
     return added
@@ -563,14 +672,20 @@ def add_salarie_distribution_constraints(
     coaches: Iterable[Any] = (),
     team_coach_map: dict[str, list[str]] | None = None,
     team_player_map: dict[str, list[str]] | None = None,
+    intensity: str = HARD,
+    soft_terms_out: list[tuple[BoolVarLike, str]] | None = None,
 ) -> int:
     """Constraint 3c: at least one salarié coach must be present each Mon-Fri day.
 
     A salarié is a coach with ``isEmployee=True``. For each day 1-5 (Mon-Fri),
-    creates a ``day_has_salarie[d]`` BoolVar with reification and enforces
-    ``day_has_salarie[d] == 1``. Both coaching assignments (via ``team_coach_map``)
-    and coach-player playing assignments (via ``team_player_map``) count as being
-    present. Falls back to assignment attributes when maps are not provided.
+    creates a ``day_has_salarie[d]`` BoolVar with reification and (``intensity=HARD``)
+    enforces ``day_has_salarie[d] == 1``. When ``intensity=PREFERRED`` the ``== 1`` is
+    NOT posted; instead ONE aggregated violation literal per working day (Mon-Fri) —
+    ``day_has_salarie[d] == 0`` — is appended to ``soft_terms_out`` for the objective.
+
+    Both coaching assignments (via ``team_coach_map``) and coach-player playing
+    assignments (via ``team_player_map``) count as being present. Falls back to
+    assignment attributes when maps are not provided.
 
     Skipped if there are fewer than 2 salarié coaches.
     """
@@ -634,7 +749,12 @@ def add_salarie_distribution_constraints(
             cast(Any, model).Add(day_sum >= 1).OnlyEnforceIf(day_has_salarie)
             cast(Any, model).Add(day_sum == 0).OnlyEnforceIf(day_has_salarie.Not())
 
-        cast(Any, model).Add(day_has_salarie == 1)
+        if intensity == PREFERRED:
+            # Un littéral de violation par jour ouvré : « aucun salarié ce jour-là ».
+            if soft_terms_out is not None:
+                soft_terms_out.append((day_has_salarie.Not(), SALARIE_VIOLATION_WEIGHT))
+        else:
+            cast(Any, model).Add(day_has_salarie == 1)
         added += 1
 
     return added
@@ -647,15 +767,24 @@ def add_max_consecutive_sessions_constraints(
     coaches: Iterable[Any] = (),
     team_coach_map: dict[str, list[str]] | None = None,
     team_player_map: dict[str, list[str]] | None = None,
+    intensity: str = HARD,
+    max_consecutive: int = 3,
+    soft_terms_out: list[tuple[BoolVarLike, str]] | None = None,
 ) -> int:
-    """Constraint 3d: a person may not be in all 3 slots of a consecutive triple.
+    """Constraint 3d: a person may not be in ``max_consecutive`` back-to-back slots.
 
     Uses a single **cross-venue** grouping strategy: for each
     ``(person_id, day)``, collects all assignments across all venues where
     the person appears (coach via ``team_coach_map`` or player via
-    ``team_player_map``).  Detects back-to-back chains A->B->C (where
-    A.end == B.start and B.end == C.start) and adds
-    ``sum(varA + varB + varC) <= 2`` for each triple.
+    ``team_player_map``).  Detects back-to-back chains of length ``max_consecutive``
+    (each slot's end == the next slot's start) and (``intensity=HARD``) adds
+    ``sum(chain) <= max_consecutive - 1`` for each chain. The default ``max_consecutive=3``
+    reproduces the historical rule (« jamais 3 dos-à-dos », ``sum(triple) <= 2``); a
+    value of 4 permits the triple but forbids the quadruple.
+
+    When ``intensity=PREFERRED`` the hard bound is NOT posted; instead ONE aggregated
+    violation literal per ``(person, day)`` — the OR of that day's forbidden chains being
+    fully selected — is appended to ``soft_terms_out`` for the objective.
 
     Cross-venue grouping is sufficient on its own: a same-venue triple is
     just a cross-venue triple where all three slots happen to share a
@@ -731,13 +860,33 @@ def add_max_consecutive_sessions_constraints(
     added = 0
 
     # --- Cross-venue grouping by (person_id, day) — BUG-3 fix ---
-    for entries_dict in person_day_entries.values():
+    for (person_id, day), entries_dict in person_day_entries.items():
         slot_entries = list(entries_dict.values())
-        for a, b, c in _find_consecutive_triples(slot_entries):
-            deduped = _dedupe_variables([a[2].var, b[2].var, c[2].var])
-            if len(deduped) >= 3:
-                cast(Any, model).Add(sum(deduped) <= 2)
+        chain_active_literals: list[BoolVarLike] = []
+        for chain in _find_consecutive_chains(slot_entries, max_consecutive):
+            deduped = _dedupe_variables([entry[2].var for entry in chain])
+            if len(deduped) < max_consecutive:
+                continue
+            if intensity == PREFERRED:
+                # Réifie « toute la chaîne est sélectionnée » ; l'OR des chaînes du jour
+                # devient le littéral de violation agrégé (person, day).
+                active = cast(Any, model).NewBoolVar(f"chain_active_{person_id}_{day}_{len(chain_active_literals)}")
+                cast(Any, model).Add(sum(deduped) >= max_consecutive).OnlyEnforceIf(active)
+                cast(Any, model).Add(sum(deduped) <= max_consecutive - 1).OnlyEnforceIf(active.Not())
+                chain_active_literals.append(active)
+            else:
+                cast(Any, model).Add(sum(deduped) <= max_consecutive - 1)
                 added += 1
+
+        if intensity == PREFERRED and chain_active_literals:
+            day_violated = cast(Any, model).NewBoolVar(f"chain_violated_{person_id}_{day}")
+            # OR : le jour est en violation dès qu'une chaîne interdite est complète.
+            for active in chain_active_literals:
+                cast(Any, model).Add(day_violated >= active)
+            cast(Any, model).Add(day_violated <= sum(chain_active_literals))
+            if soft_terms_out is not None:
+                soft_terms_out.append((day_violated, CHAIN_VIOLATION_WEIGHT))
+            added += 1
 
     return added
 
@@ -1462,36 +1611,38 @@ def _add_interval_at_most_one(
     return added
 
 
-def _find_consecutive_triples(
+def _find_consecutive_chains(
     entries: list[tuple[int, int, AssignmentVariable]],
-) -> list[
-    tuple[tuple[int, int, AssignmentVariable], tuple[int, int, AssignmentVariable], tuple[int, int, AssignmentVariable]]
-]:
-    """Find consecutive triples A->B->C where A.end == B.start and B.end == C.start.
+    length: int,
+) -> list[tuple[tuple[int, int, AssignmentVariable], ...]]:
+    """Find back-to-back chains of exactly ``length`` slots where each slot's end
+    equals the next slot's start (A.end == B.start == …).
 
     Uses a start-time index so that multiple entries sharing the same start
     (e.g. the same slot at different venues) are all considered as candidates.
+    ``length=3`` reproduces the historical triple search. ``length<2`` yields nothing
+    meaningful, so a floor of 2 is applied.
     """
+    length = max(2, length)
     by_start: dict[int, list[tuple[int, int, AssignmentVariable]]] = defaultdict(list)
     for entry in entries:
         by_start[entry[0]].append(entry)
 
-    triples: list[
-        tuple[
-            tuple[int, int, AssignmentVariable],
-            tuple[int, int, AssignmentVariable],
-            tuple[int, int, AssignmentVariable],
-        ]
-    ] = []
-    for a in entries:
-        for b in by_start.get(a[1], []):
-            if b is a:
+    chains: list[tuple[tuple[int, int, AssignmentVariable], ...]] = []
+
+    def _extend(chain: tuple[tuple[int, int, AssignmentVariable], ...]) -> None:
+        if len(chain) == length:
+            chains.append(chain)
+            return
+        last = chain[-1]
+        for nxt in by_start.get(last[1], []):
+            if any(nxt is member for member in chain):
                 continue
-            for c in by_start.get(b[1], []):
-                if c is a or c is b:
-                    continue
-                triples.append((a, b, c))
-    return triples
+            _extend((*chain, nxt))
+
+    for start in entries:
+        _extend((start,))
+    return chains
 
 
 def _bool_field(obj: AssignmentInput, *names: str) -> bool:
@@ -1645,14 +1796,20 @@ def add_age_ascending_constraints(
     assignments: Sequence[AssignmentVariable],
     *,
     teams: Iterable[Any] = (),
+    intensity: str = HARD,
+    soft_terms_out: list[tuple[BoolVarLike, str]] | None = None,
 ) -> int:
     """Implicit rule 12: younger teams train earlier than older teams
     in the same venue on the same day.
 
     For each pair (A, B) where A.ageMin < B.ageMin (both not None, neither
     HARD-locked), and for each venue+day, if slot_A starts later than slot_B,
-    prevent both from being selected simultaneously:
+    (``intensity=HARD``) prevent both from being selected simultaneously:
     ``x[A, venue, day, slot_A] + x[B, venue, day, slot_B] <= 1``.
+
+    When ``intensity=PREFERRED`` the hard bound is NOT posted; instead ONE aggregated
+    violation literal per ``(venue, day)`` — the OR of that venue-day's inverted pairs
+    being both selected — is appended to ``soft_terms_out`` for the objective.
 
     Teams with ``ageMin=None`` (Loisir, Baby) and HARD-locked teams are exempt.
     No constraint is added between teams sharing the same ``ageMin``.
@@ -1701,7 +1858,7 @@ def add_age_ascending_constraints(
         groups[(str(venue_id), day)].append((team_id_str, start_minutes, assignment.var))
 
     added = 0
-    for _entries in groups.values():
+    for (venue_id_str, day), _entries in groups.items():
         by_team: dict[str, list[tuple[int, BoolVarLike]]] = defaultdict(list)
         for team_id_str, start_minutes, var in _entries:
             by_team[team_id_str].append((start_minutes, var))
@@ -1709,6 +1866,7 @@ def add_age_ascending_constraints(
         team_ids_here = [t for t in by_team if t in team_age_min]
         team_ids_here.sort(key=lambda t: team_age_min[t])
 
+        pair_active_literals: list[BoolVarLike] = []
         for i in range(len(team_ids_here)):
             for j in range(i + 1, len(team_ids_here)):
                 team_a = team_ids_here[i]
@@ -1718,8 +1876,25 @@ def add_age_ascending_constraints(
                 for start_a, var_a in by_team[team_a]:
                     for start_b, var_b in by_team[team_b]:
                         if start_a > start_b:
-                            model.Add(var_a + var_b <= 1)
-                            added += 1
+                            if intensity == PREFERRED:
+                                active = cast(Any, model).NewBoolVar(
+                                    f"age_pair_{venue_id_str}_{day}_{len(pair_active_literals)}"
+                                )
+                                cast(Any, model).Add(var_a + var_b >= 2).OnlyEnforceIf(active)
+                                cast(Any, model).Add(var_a + var_b <= 1).OnlyEnforceIf(active.Not())
+                                pair_active_literals.append(active)
+                            else:
+                                model.Add(var_a + var_b <= 1)
+                                added += 1
+
+        if intensity == PREFERRED and pair_active_literals:
+            gv_violated = cast(Any, model).NewBoolVar(f"age_violated_{venue_id_str}_{day}")
+            for active in pair_active_literals:
+                cast(Any, model).Add(gv_violated >= active)
+            cast(Any, model).Add(gv_violated <= sum(pair_active_literals))
+            if soft_terms_out is not None:
+                soft_terms_out.append((gv_violated, AGE_VIOLATION_WEIGHT))
+            added += 1
 
     return added
 

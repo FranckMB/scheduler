@@ -12,6 +12,7 @@ from app.solver.constraints import (
     add_time_window_constraints,
     diagnose_candidate_conflicts,
     parse_v2_constraints,
+    resolve_implicit_rules,
 )
 from app.solver.model import (
     DEFAULT_SESSION_MINUTES,
@@ -74,7 +75,11 @@ def _apply_hard(
     team_player_map: dict[str, list[str]],
 ) -> None:
     """The generation model's HARD layer, minus objective and session caps —
-    ``add_fixed_slots`` (inside) freezes the baseline; nothing here relaxes."""
+    ``add_fixed_slots`` (inside) freezes the baseline; nothing here relaxes.
+
+    Parité génération ⇄ verdict : le même réglage ``implicitRules`` s'applique. Un cran
+    HARD bloque le déplacement qui le casse ; un cran PREFERRED ne bloque pas (ses
+    littéraux de violation sont posés mais sans objectif ici — feasibility check seul)."""
     min_by_team: dict[str, int] = {str(t.get("id")): 0 for t in data.get("teams", []) if t.get("id")}
     add_level_1_hard_constraints(
         model,
@@ -86,6 +91,7 @@ def _apply_hard(
         forced_venues=parsed["forced_venues"],
         priority_tiers=parsed.get("priority_tiers", {}),
         min_sessions_by_team=min_by_team or None,
+        implicit_rules=resolve_implicit_rules(data.get("implicitRules")),
         team_coach_map=team_coach_map,
         team_player_map=team_player_map,
     )

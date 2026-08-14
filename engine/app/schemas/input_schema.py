@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import time
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -119,6 +120,44 @@ class ConstraintV2Schema(BaseModel):
     metadata: dict[str, object] = Field(default_factory=dict)
 
 
+class CoachRestDayRuleSchema(SerializableModel):
+    """Implicit rule 3b — chaque coach garde au moins ``minRestDays`` jours de repos
+    (lun-ven). ``intensity=HARD`` la pose en contrainte dure (défaut, comportement
+    historique) ; ``PREFERRED`` la retire du dur et la pénalise dans l'objectif. La
+    violation est TOUJOURS diagnostiquée post-solve, quel que soit le cran."""
+
+    intensity: Literal["HARD", "PREFERRED"] = "HARD"
+    min_rest_days: int = Field(default=1, ge=1, le=4, alias="minRestDays")
+
+
+class IntensityRuleSchema(SerializableModel):
+    """Une règle implicite à cran seul (pas de seuil réglable) : 3c distribution
+    salariés, 12 âge croissant."""
+
+    intensity: Literal["HARD", "PREFERRED"] = "HARD"
+
+
+class MaxConsecutiveSessionsRuleSchema(SerializableModel):
+    """Implicit rule 3d — une personne n'enchaîne pas ``maxConsecutive`` créneaux
+    dos-à-dos. Défaut 3 = comportement historique (« jamais 3 dos-à-dos »)."""
+
+    intensity: Literal["HARD", "PREFERRED"] = "HARD"
+    max_consecutive: int = Field(default=3, ge=2, le=6, alias="maxConsecutive")
+
+
+class ImplicitRulesSchema(SerializableModel):
+    """Réglage par club des 4 règles implicites « bien-être ». Chaque champ est
+    optionnel : absent = défaut (HARD, seuils historiques). L'ABSENCE TOTALE du bloc
+    (``implicit_rules=None``) = défauts partout, donc payload historique byte-identique."""
+
+    coach_rest_day: CoachRestDayRuleSchema | None = Field(default=None, alias="coachRestDay")
+    salarie_distribution: IntensityRuleSchema | None = Field(default=None, alias="salarieDistribution")
+    max_consecutive_sessions: MaxConsecutiveSessionsRuleSchema | None = Field(
+        default=None, alias="maxConsecutiveSessions"
+    )
+    age_ascending: IntensityRuleSchema | None = Field(default=None, alias="ageAscending")
+
+
 class ScheduleSlotTemplateSchema(SerializableModel):
     id: str
     team_id: str = Field(alias="teamId")
@@ -160,6 +199,9 @@ class ScheduleInputSchema(SerializableModel):
     priority_tiers: list[PriorityTierSchema] = Field(
         default_factory=list, alias="priorityTiers", max_length=MAX_PRIORITY_TIERS
     )
+    # Réglage par club des 4 règles implicites (bien-être). None = tout HARD, seuils
+    # historiques — un payload sans ce bloc est byte-identique à l'ancien contrat.
+    implicit_rules: ImplicitRulesSchema | None = Field(default=None, alias="implicitRules")
 
     @model_validator(mode="after")
     def _bound_total_slots(self) -> ScheduleInputSchema:

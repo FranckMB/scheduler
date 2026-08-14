@@ -29,6 +29,12 @@ class ScheduleCpModel(cp_model.CpModel):
         # des séances GÉNÉRÉES (mêmes données que celles modélisées : exclusivité
         # coach, bonus de chaînage). Même idiome que `locked_slots` ci-dessus.
         self.team_coach_map: dict[str, list[str]] = {}
+        # Idem team_coach_map : équipe → joueurs (dont coach-joueurs), posée par `_solve`.
+        # Le builder de résultat diagnostique les règles implicites au MÊME grain que la pose.
+        self.team_player_map: dict[str, list[str]] = {}
+        # Réglage effectif des règles implicites (``ResolvedImplicitRules``), posé par `_solve`.
+        # Typé ``Any`` ici pour éviter un cycle d'import avec ``constraints`` (qui importe model).
+        self.implicit_rules: Any = None
         self.slot_capacities: dict[VenueSlotKey, int] = {}
 
     def NumVariables(self) -> int:

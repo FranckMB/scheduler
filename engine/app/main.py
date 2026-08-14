@@ -30,6 +30,7 @@ from app.solver.constraints import (
     add_venue_minimum_constraints,
     diagnose_locked_slot_violations,
     parse_v2_constraints,
+    resolve_implicit_rules,
 )
 from app.solver.match_placement import solve_match_placement
 from app.solver.model import DEFAULT_SESSION_MINUTES, ScheduleCpModel, _time_to_minutes, build_model
@@ -345,7 +346,6 @@ async def build_schedule(
         solver,
         model,
         status=solver_status,
-        fallback_used=False,
         constraint_version=read_contract_version(),
     )
     if conflicts:
@@ -443,6 +443,12 @@ def _solve(
     # plutôt que de re-parser les contraintes une seconde fois.
     model.team_coach_map = team_coach_map
     team_player_map: dict[str, list[str]] = parsed.get("team_player_map", {})
+    # ENG-17 idiome : le builder de résultat lit ces cartes ET le réglage implicite depuis
+    # le MODÈLE pour diagnostiquer au MÊME grain que la pose (coachs/joueurs des contraintes,
+    # jamais slot.coachId). Résoudre ici = source unique du réglage pose ⇄ diagnostic.
+    model.team_player_map = team_player_map
+    resolved_implicit_rules = resolve_implicit_rules(data.get("implicitRules"))
+    model.implicit_rules = resolved_implicit_rules
 
     # (La famille FACILITY_CAPACITY rabotait ici la capacité d'un gymnase entier
     # à `maxTeams`. RETIRÉE le 2026-08-08 : aucun chemin UI ne la créait, zéro
@@ -523,7 +529,7 @@ def _solve(
             }
         )
 
-    add_level_1_hard_constraints(
+    hard_stats = add_level_1_hard_constraints(
         model,
         assignments,
         teams=data.get("teams", []),
@@ -533,6 +539,7 @@ def _solve(
         forced_venues=parsed["forced_venues"],
         priority_tiers=parsed.get("priority_tiers", {}),
         min_sessions_by_team=adjusted_min_by_team or None,
+        implicit_rules=resolved_implicit_rules,
         team_coach_map=team_coach_map,
         team_player_map=team_player_map,
     )
@@ -602,6 +609,9 @@ def _solve(
     soft_terms.extend(
         add_coach_day_cap_penalty(model, model.x, data.get("coaches", []), team_coach_map, LEVEL_2_OBJECTIVE_WEIGHTS)
     )
+    # Littéraux de violation des règles implicites passées PREFERRED (poids −6). Vide quand
+    # tout est HARD (défaut) : objectif byte-identique à l'ancien contrat dans ce cas.
+    soft_terms.extend(hard_stats.implicit_soft_terms)
 
     # Phase 1 installs the PLACEMENT objective only; the chaining terms are built
     # into the model but kept out of the objective (apply_chaining=False) so their
