@@ -21,7 +21,7 @@ import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleTyp
 import { DAYS } from "../lib/days";
 import { dayLabelLong } from "@/shared/lib/days";
 import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useActiveTeams, useActiveVenues, useWizardVenues, useReservations } from "../queries";
-import { usePeriodAnchor } from "@/features/cockpit/queries";
+import { useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
 import { useWizardStore } from "../store";
 import { PeriodConstraints } from "./PeriodStructure";
 import { ReservationPanel } from "./ReservationPanel";
@@ -89,7 +89,13 @@ export function ConstraintsStep() {
   // `usePeriodAnchor` porte le pourquoi : `null` est une ancre LÉGITIME (= base), donc un
   // `?? null` nu poserait la réservation sur le socle pendant le chargement du plan.
   const anchor = usePeriodAnchor(periodEntryId);
-  const { data: constraints = [] } = useWizardConstraints(periodEntryId);
+  // D5 (P2-22) — MIROIR de `CalendarEntry::datedConstraintSourceId()` (backend) : les
+  // contraintes DATÉES d'une semaine ENFANT pendent à sa MÈRE (`parentEntryId ?? id`). Lister
+  // ET créer par l'id de l'enfant les rendrait invisibles à `PeriodConstraintSelector`. Les
+  // FERMETURES, elles, sont déjà résolues serveur (on interroge l'enfant pour les conflits).
+  const { data: currentEntry } = useCalendarEntry(periodEntryId);
+  const sourceEntryId = null !== periodEntryId ? (currentEntry?.parentEntryId ?? periodEntryId) : null;
+  const { data: constraints = [] } = useWizardConstraints(sourceEntryId);
   const { data: allTeams = [] } = useWizardTeams();
   const { data: tiers = [] } = usePriorityTiers();
   const { data: tags = [] } = useWizardTeamTags();
@@ -318,8 +324,10 @@ export function ConstraintsStep() {
       return;
     }
     // Create: keep the target/rule for rapid multi-add, clear only the values.
-    // In period mode, attach the constraint to the entry → dated (excluded from base).
-    create.mutate(periodEntryId ? { ...payload, calendarEntryId: periodEntryId } : payload, { onSuccess: clearInputs });
+    // In period mode, attach the constraint to the entry → dated (excluded from base). D5 :
+    // une datée créée depuis une semaine ENFANT porte l'id de la MÈRE (`sourceEntryId`), sinon
+    // `PeriodConstraintSelector` (qui lit `datedConstraintSourceId`) ne la voit jamais.
+    create.mutate(null !== sourceEntryId ? { ...payload, calendarEntryId: sourceEntryId } : payload, { onSuccess: clearInputs });
   };
 
   // Load an existing constraint into the shared form (reverse of build()): resolve
@@ -569,10 +577,10 @@ export function ConstraintsStep() {
             loadingLabel="Chargement du planning de la période…"
             errorLabel="Impossible de charger le planning de la période."
           >
-            {(schedulePlanId) => <ReservationPanel teams={allTeams} pausedTeamIds={pausedIds} tiers={tiers} venues={reservationVenues} disabledVenueIds={disabledIds} schedulePlanId={schedulePlanId} />}
+            {(schedulePlanId) => <ReservationPanel teams={allTeams} pausedTeamIds={pausedIds} tiers={tiers} venues={reservationVenues} disabledVenueIds={disabledIds} schedulePlanId={schedulePlanId} entryId={periodEntryId} />}
           </PeriodAnchorGate>
         ) : (
-          <ReservationPanel teams={allTeams} pausedTeamIds={pausedIds} tiers={tiers} venues={reservationVenues} disabledVenueIds={disabledIds} schedulePlanId={null} />
+          <ReservationPanel teams={allTeams} pausedTeamIds={pausedIds} tiers={tiers} venues={reservationVenues} disabledVenueIds={disabledIds} schedulePlanId={null} entryId={periodEntryId} />
         )
       ) : (
         <>

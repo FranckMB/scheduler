@@ -1,6 +1,6 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-14 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-14 par les livraisons elles-mêmes : `GET /api/calendar-entries/{id}/conflicts` sert désormais `closures` — P2-22 PR 1, §6 ; précédemment recalé jusqu'au 2026-08-06 : radar borné à l'avenir actionnable P3-13/15c/11 · bandeau de période et diagnostics contextuels P4-38/39 · gymnase désactivé qui ne bloque plus la génération, 2026-08-06)
+Last verified @ 2026-08-14 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-14 par les livraisons elles-mêmes : `GET /api/calendar-entries/{id}/conflicts` sert `closures` depuis P2-22 PR 1 (§6) et le surfaçage écran de la PR 2 (détail : `frontend-wizard.md`) est intégralement livré — le lot P2-22 est clos ; précédemment recalé jusqu'au 2026-08-06 : radar borné à l'avenir actionnable P3-13/15c/11 · bandeau de période et diagnostics contextuels P4-38/39 · gymnase désactivé qui ne bloque plus la génération, 2026-08-06)
 
 > **Statut** : **approche arrêtée** (décisions tranchées §9) — **livrée** ; cf. [`etat-des-lieux.md`](etat-des-lieux.md) §1.2.
 > **Pas un plan** — pas de tâches, pas d'effort chiffré ; l'exécution se planifiera palier par palier (§8).
@@ -465,16 +465,16 @@ visible non résolu**, pas une erreur silencieuse. L'adaptation (palier B) le r�
 générant l'overlay. → C'est **ça**, « une indispo sans plan secondaire » : un souci **posé et
 signalé**, en attente d'être adapté.
 
-> **La forme de la réponse `/conflicts` (P2-22 PR 1, 2026-08-14).**
+> **La forme de la réponse `/conflicts` (P2-22, lot clos 2026-08-14).**
 > `GET /api/calendar-entries/{id}/conflicts` rend `{ entryId, venueIds, conflicts, closures,
 > seasonPlanChosen }`. `closures` liste chaque fermeture recoupant la fenêtre de l'entrée —
 > `{ constraintId, venueId, title, startDate, endDate, weekdays }`, `weekdays` = jours ISO
 > fermés ∩ fenêtre — servie sur **toutes** les sorties, y compris `seasonPlanChosen=false` :
 > une fermeture est un fait déclaré, indépendant de l'existence d'un calendrier à comparer,
-> contrairement à `conflicts` (séances à replacer) qui, lui, dépend du plan choisi. Cette PR
-> livre la **donnée** côté serveur ; le **surfaçage** dans les trois écrans concernés (structure
-> de période, réserver, récap — le choix bande vs créneau barré, encore ouvert) reste à la
-> PR 2, roadmap [P2-22](../evolution/roadmap.md).
+> contrairement à `conflicts` (séances à replacer) qui, lui, dépend du plan choisi. La **donnée**
+> (PR 1) est reprise par le **surfaçage** (PR 2) dans les trois écrans concernés — créneau BARRÉ
+> + libellé « Indispo du X au Y — titre » au grain JOUR (pas de bande de remplacement), sur les
+> grilles Gymnases/Réserver, `PeriodStructure` et le récap. Détail : [`frontend-wizard.md`](frontend-wizard.md).
 
 ---
 
@@ -495,7 +495,7 @@ différents** :
 | Étape wizard | En mode période |
 |---|---|
 | Équipes | Roster **hérité** (non ré-éditable), mais **activable/désactivable** pour la période + **séances** surchargeables (champ 1–7, toggle = 0 séance). **Défaut conscient du type de période** (E3, 2026-07-19) : **reprise** (`holiday`) = **Fanion + importantes** (les 2 premiers rangs, S+A) pré-cochées, avec repli sur le meilleur rang réellement présent si le club n'a ni S ni A — la reprise n'est jamais vide ; **fermeture** (`closure`) = **tout le club actif** (structure verrouillée, les équipes loisir se décochent à la main). |
-| Gymnases | **La période possède SA grille** (#8, 2026-07-24) : les créneaux de saison y sont **copiés** à la naissance du plan, puis modifiables sans jamais toucher au planning principal. Plus rien d'additif — le socle et la période ne sont **jamais** unis. Fermetures datées marquées **« fermé cette période »**. À l'écran, un **sélecteur de gymnase** (une grille à la fois, comme l'éditeur de saison) montre la grille servie à la période, éditable créneau par créneau (clic = poser, clic sur un créneau = modale jour/heure/durée/capacité + suppression confirmée). Par gymnase : un **état** actif/désactivé qui ne touche jamais la grille — désactiver n'a donc aucun coût, réactiver la rend telle quelle — et deux **actions** destructives atomiques, « reprendre la grille du planning principal » et « vider », chacune confirmée en annonçant les réservations emportées. Un gymnase désactivé a sa grille **gelée** dans un `<fieldset disabled>` (inerte souris ET clavier) : la table ne stocke qu'un mode par gymnase, donc vider écraserait l'état désactivé. Sous le capot, réglage épars `VenuePeriodOverride` — pas de ligne = hériter, le défaut. Un épinglage qui ne retombe sur aucun créneau **bloque la génération** en nommant le gymnase et le jour. |
+| Gymnases | **La période possède SA grille** (#8, 2026-07-24) : les créneaux de saison y sont **copiés** à la naissance du plan, puis modifiables sans jamais toucher au planning principal. Plus rien d'additif — le socle et la période ne sont **jamais** unis. Fermetures datées marquées au **grain JOUR** (« Indispo ven–dim du X au Y — titre », P2-22 PR 2, `frontend-wizard.md` pour le détail). À l'écran, un **sélecteur de gymnase** (une grille à la fois, comme l'éditeur de saison) montre la grille servie à la période, éditable créneau par créneau (clic = poser, clic sur un créneau = modale jour/heure/durée/capacité + suppression confirmée). Par gymnase : un **état** actif/désactivé qui ne touche jamais la grille — désactiver n'a donc aucun coût, réactiver la rend telle quelle — et deux **actions** destructives atomiques, « reprendre la grille du planning principal » et « vider », chacune confirmée en annonçant les réservations emportées. Un gymnase désactivé a sa grille **gelée** dans un `<fieldset disabled>` (inerte souris ET clavier) : la table ne stocke qu'un mode par gymnase, donc vider écraserait l'état désactivé. Sous le capot, réglage épars `VenuePeriodOverride` — pas de ligne = hériter, le défaut. Un épinglage qui ne retombe sur aucun créneau **bloque la génération** en nommant le gymnase et le jour. |
 | Coachs | **Hérités, lecture seule** (lien équipe↔coach préservé) |
 | **Contraintes** | **Active.** Pré-remplie avec **l'exception** (ex. De Barros indispo sur la fenêtre) ; le gestionnaire **ajoute les contraintes propres à la période** (« du coup U13 passe le mercredi ») et **hérite les contraintes permanentes du socle**, chacune **cochable/décochable** pour la fenêtre. DIFF `ConstraintPeriodOverride` épars : une ligne n'existe que pour une **déviation** du défaut (le socle et le `isActive` propre de la contrainte ne sont **jamais** touchés). **Défaut selon le type de période :** <br>• **Fermeture** (closure) → **tout gardé** (on décoche ce qui gêne). <br>• **Reprise** (holiday) → défaut **intelligent qui suit les équipes** : contrainte **club/coach** gardée, contrainte **d'équipe** gardée seulement si l'équipe reprend (décochée si l'équipe est en pause), contrainte **de gymnase** décochée (pas de créneaux socle en reprise). Calculé (pas de seed persisté), miroir back/front. |
 | Récap | Résumé de la **période** (fenêtre + exceptions + contraintes) |

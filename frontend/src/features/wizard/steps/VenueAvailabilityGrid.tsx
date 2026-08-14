@@ -1,9 +1,11 @@
+import type { Closure } from "@/features/cockpit/api";
 import type { VenueMatchWindow } from "@/features/matches/api";
 import { formatDuration } from "@/shared/lib/duration";
 import { cn } from "@/shared/lib/utils";
 
 import type { Venue, VenueTrainingSlot } from "../api";
 import { fmtMinutes as fmt, hhmm, toMinutes as startMinutes } from "../lib/days";
+import { closureForSlot, closureLabel } from "../lib/venueClosures";
 import { END_MIN, gridTemplateColumns, ROW_H, START_MIN, STEP, WEEK } from "../lib/weekGrid";
 
 interface Props {
@@ -19,9 +21,15 @@ interface Props {
    * passe pas — il n'a rien à montrer dont il puisse répondre.
    */
   matchWindows?: VenueMatchWindow[];
+  /**
+   * Fermetures de gymnase (P2-22, D1) — venue-scoped. Un créneau tombant un jour fermé est
+   * rendu barré + libellé d'indispo (grain JOUR strict). Vide par défaut : la grille de la
+   * SAISON (VenuesStep) n'a pas de fermeture datée à montrer.
+   */
+  closures?: Closure[];
 }
 
-export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onSelect, matchWindows = [] }: Props) {
+export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onSelect, matchWindows = [], closures = [] }: Props) {
   const color = venue.color ?? "var(--accent)";
 
   // La plage verticale est l'UNION de la plage de saisie (08h→23h) et de ce que les
@@ -149,6 +157,10 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
           const startRow = 2 + Math.round((startMinutes(slot.startTime) - gridStart) / STEP);
           const span = Math.max(1, Math.round(slot.durationMinutes / STEP));
           const visibleLabel = `${hhmm(slot.startTime)}${slot.capacity > 1 ? ` ·${slot.capacity}` : ""}`;
+          // P2-22 D1 — le créneau tombe-t-il un jour fermé ? Barré + libellé d'indispo, jamais
+          // une bande de remplacement (grain JOUR strict, lu de `weekdays`).
+          const closedBy = closureForSlot(slot, closures);
+          const closedText = closedBy ? closureLabel(closedBy) : "";
           return (
             <button
               key={slot.id}
@@ -159,19 +171,21 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
               // durée n'était lisible qu'à la souris. ⚠ Le nom accessible doit CONTENIR le
               // texte visible (WCAG 2.5.3) — sans quoi une commande vocale prononçant ce
               // qui est écrit à l'écran n'atteint plus le bouton. D'où le texte visible en
-              // tête, mot pour mot, complété ensuite.
-              aria-label={`${visibleLabel} · ${WEEK[di]?.label ?? ""} ${formatDuration(slot.durationMinutes)} · capacité ${slot.capacity} — modifier`}
+              // tête, mot pour mot, complété ensuite (le libellé d'indispo compris).
+              aria-label={`${visibleLabel} · ${WEEK[di]?.label ?? ""} ${formatDuration(slot.durationMinutes)} · capacité ${slot.capacity}${closedBy ? ` · ${closedText}` : ""} — modifier`}
               className={cn(
                 // Full border + OPAQUE fill so a slot is always clearly bounded —
                 // the old semi-transparent var(--muted) fill was identical to the
                 // empty cells' hover:bg-muted, so hovering the grid made slots
                 // "vanish" into the highlighted cells (reliability bug).
-                "z-10 m-px flex items-start overflow-hidden rounded border border-border border-l-4 px-1 text-left text-[10px] font-medium leading-tight hover:ring-1 hover:ring-accent",
+                "z-10 m-px flex flex-col items-start overflow-hidden rounded border border-border border-l-4 px-1 text-left text-[10px] font-medium leading-tight hover:ring-1 hover:ring-accent",
                 slot.id === selectedSlotId ? "ring-2 ring-accent" : "",
+                closedBy ? "line-through opacity-60" : "",
               )}
               style={{ gridColumn: 2 + di, gridRow: `${startRow} / span ${span}`, borderLeftColor: color, backgroundColor: `color-mix(in oklch, ${color} 30%, var(--card))` }}
             >
-              {visibleLabel}
+              <span>{visibleLabel}</span>
+              {closedBy ? <span className="w-full truncate">{closedText}</span> : null}
             </button>
           );
         })}

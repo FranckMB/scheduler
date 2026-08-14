@@ -10,9 +10,14 @@ type TeamRow = { id: string; name: string; sportCategoryId: string; priorityTier
 const team = (id: string, name: string, tier: number): TeamRow => ({ id, name, sportCategoryId: "c", priorityTierId: tier, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true });
 
 // P2-15 : la COUCHE que le récap décrit — période (équipes/gymnases actifs) ou socle.
-const { recapLayer, anchorState, storeState } = vi.hoisted(() => ({
+const { recapLayer, anchorState, storeState, constraintsState, constraintsArg, calendarEntryState } = vi.hoisted(() => ({
   anchorState: { value: { state: "period", planId: "plan-1" } as { state: string; planId: string | null } },
   storeState: { value: { mode: "season", calendarEntryId: null } as { mode: string; calendarEntryId: string | null } },
+  // P2-22 — les contraintes affichées (D4) + l'id que le récap passe à useWizardConstraints,
+  // qui doit être la MÈRE pour une semaine enfant (D5).
+  constraintsState: { data: [] as Array<Record<string, unknown>> },
+  constraintsArg: { value: undefined as string | null | undefined },
+  calendarEntryState: { data: { parentEntryId: null } as { parentEntryId: string | null } | undefined },
   recapLayer: {
     teams: [] as unknown[],
     pausedIds: [] as string[],
@@ -28,6 +33,7 @@ vi.mock("@/features/cockpit/queries", () => ({
   useSchedulePlanForEntry: () => ({ data: { id: "plan-1" }, isLoading: false }),
   usePeriodAnchor: () => anchorState.value,
   anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
+  useCalendarEntry: () => ({ data: calendarEntryState.data }),
 }));
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({
@@ -45,7 +51,10 @@ vi.mock("../queries", () => ({
   useWizardCoaches: () => ({ data: [] }),
   useWizardCoachPlayers: () => ({ data: [] }),
   useWizardTeamCoaches: () => ({ data: [] }),
-  useWizardConstraints: () => ({ data: [] }),
+  useWizardConstraints: (entryId?: string | null) => {
+    constraintsArg.value = entryId;
+    return { data: constraintsState.data };
+  },
   useWizardTeamTags: () => ({ data: [] }),
   // P4-44 — le récap peut retirer une réservation orpheline (seul écran capable de la montrer).
   useDeleteReservation: () => ({ mutate: vi.fn(), isPending: false }),
@@ -247,5 +256,43 @@ describe("RecapStep — créneaux partagés", () => {
     ];
     renderWithProviders(<RecapStep />);
     expect(screen.queryByText(/créneau partagé|ne complétera pas/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * D4/D5 (P2-22) — une fermeture de gymnase (venue_closed) se range sous SON gymnase et
+ * affiche ses dates ; et une semaine enfant lit ses datées par la MÈRE.
+ */
+describe("RecapStep — fermetures de gymnase et semaine enfant", () => {
+  beforeEach(() => {
+    h.reservations = [];
+    recapLayer.teams = [team("t1", "SM1", 3), team("t2", "Fanion", 1)];
+    recapLayer.pausedIds = [];
+    recapLayer.venues = [{ id: "v1", name: "Gymnase A", color: null, isActive: true }];
+    recapLayer.slots = [];
+    recapLayer.teamsRead = "ready";
+    recapLayer.venuesRead = "ready";
+    anchorState.value = { state: "period", planId: "plan-1" };
+    storeState.value = { mode: "season", calendarEntryId: null };
+    constraintsState.data = [];
+    calendarEntryState.data = { parentEntryId: null };
+  });
+
+  it("range une fermeture sous son gymnase et affiche ses dates en meta (D4)", async () => {
+    constraintsState.data = [{ id: "cc", name: "Gymnase A fermé", scope: "FACILITY", scopeTargetId: "v1", family: "FACILITY", ruleType: "HARD", config: { type: "venue_closed", startDate: "2026-05-01", endDate: "2026-05-10" }, isActive: true }];
+    const user = userEvent.setup();
+    renderWithProviders(<RecapStep />);
+
+    await user.click(screen.getByRole("button", { name: /Contraintes/ }));
+    expect(screen.getByText("Gymnase A fermé")).toBeInTheDocument();
+    // Le nom porte déjà le titre ; la meta porte les dates (format fr), pas l'enum de règle.
+    expect(screen.getByText(/du 1 mai 2026 au 10 mai 2026/)).toBeInTheDocument();
+  });
+
+  it("lit les datées par la MÈRE depuis une semaine enfant (D5)", () => {
+    storeState.value = { mode: "period", calendarEntryId: "child-week" };
+    calendarEntryState.data = { parentEntryId: "mother-1" };
+    renderWithProviders(<RecapStep />);
+    expect(constraintsArg.value).toBe("mother-1");
   });
 });

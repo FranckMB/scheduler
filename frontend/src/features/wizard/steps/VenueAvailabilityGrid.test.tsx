@@ -2,12 +2,15 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import type { Closure } from "@/features/cockpit/api";
 import type { VenueMatchWindow } from "@/features/matches/api";
 
 import type { Venue, VenueTrainingSlot } from "../api";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 
 const venue: Venue = { id: "v1", name: "Gymnase A", color: "#00aa00", canSplit: false, isActive: true } as Venue;
+
+const closure = (over: Partial<Closure> = {}): Closure => ({ constraintId: "c1", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [5, 6, 7], ...over });
 
 const slot = (over: Partial<VenueTrainingSlot>): VenueTrainingSlot =>
   ({ id: "s1", venueId: "v1", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, capacity: 1, ...over }) as VenueTrainingSlot;
@@ -123,5 +126,28 @@ describe("VenueAvailabilityGrid — les fenêtres d'accès match", () => {
     render(<VenueAvailabilityGrid venue={venue} slots={[slot({})]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} />);
 
     expect(document.querySelector('[aria-hidden="true"][style*="grid-row"]')).toBeNull();
+  });
+});
+
+/**
+ * D1 (P2-22) — une fermeture de gymnase barre les créneaux de ses JOURS fermés (grain jour
+ * strict), avec le libellé d'indispo, sans jamais une bande de remplacement.
+ */
+describe("VenueAvailabilityGrid — fermetures de gymnase", () => {
+  it("barre un créneau d'un jour fermé et affiche « Indispo du X au Y — titre »", () => {
+    render(<VenueAvailabilityGrid venue={venue} slots={[slot({ dayOfWeek: 5, startTime: "18:00:00" })]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} closures={[closure()]} />);
+
+    // Le nom accessible CONTIENT le texte visible (WCAG 2.5.3).
+    const btn = screen.getByRole("button", { name: /Indispo du 1\/5 au 10\/5 — Travaux/ });
+    expect(btn).toHaveClass("line-through");
+    expect(screen.getByText("Indispo du 1/5 au 10/5 — Travaux")).toBeInTheDocument();
+  });
+
+  it("laisse intact un créneau d'un jour ouvert (grain JOUR : lun–jeu normaux quand ven–dim fermé)", () => {
+    render(<VenueAvailabilityGrid venue={venue} slots={[slot({ dayOfWeek: 1, startTime: "18:00:00" })]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} closures={[closure({ weekdays: [5, 6, 7] })]} />);
+
+    const btn = screen.getByTitle(/18:00 .* cliquer pour modifier/);
+    expect(btn).not.toHaveClass("line-through");
+    expect(screen.queryByText(/Indispo/)).toBeNull();
   });
 });

@@ -37,6 +37,12 @@ function constraintVenueId(c: Constraint): string | null {
       return cfg[k] as string;
     }
   }
+  // P2-22 D4 — une fermeture (venue_closed) porte son gymnase dans `scopeTargetId` (scope
+  // FACILITY), pas dans config. Repli APRÈS les clés config pour la ranger sous SON gymnase ;
+  // les contraintes config-based (préfère/impose…) ont déjà répondu au-dessus.
+  if ("FACILITY" === c.family && "string" === typeof c.scopeTargetId) {
+    return c.scopeTargetId;
+  }
   return null;
 }
 

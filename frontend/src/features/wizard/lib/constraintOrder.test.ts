@@ -72,6 +72,28 @@ describe("groupConstraints", () => {
     expect(sections).toEqual(["Camus", "Matéo"]);
   });
 
+  // D4 (P2-22) — une fermeture (venue_closed) porte son gymnase dans scopeTargetId (scope
+  // FACILITY), PAS dans config : sans le repli elle atterrissait dans « Autres ».
+  it("FACILITY → une fermeture se range sous SON gymnase via scopeTargetId", () => {
+    const sections = groupConstraints(
+      [c({ family: "FACILITY", scope: "FACILITY", scopeTargetId: "v-camus", config: { type: "venue_closed", startDate: "2026-05-01", endDate: "2026-05-10" } })],
+      "FACILITY",
+      ctx,
+    ).map((s) => s.label);
+    expect(sections).toEqual(["Camus"]);
+  });
+
+  // …et le repli n'est QU'UN repli : une contrainte de gymnase config-based reste rangée par
+  // sa clé config (la cible d'une contrainte TEAM·préfère est une équipe, pas un gymnase).
+  it("FACILITY → une contrainte config-based reste rangée par sa clé config, pas scopeTargetId", () => {
+    const sections = groupConstraints(
+      [c({ family: "FACILITY", scope: "TEAM", scopeTargetId: "t-b", config: { preferredVenueId: "v-mateo" } })],
+      "FACILITY",
+      ctx,
+    ).map((s) => s.label);
+    expect(sections).toEqual(["Matéo"]);
+  });
+
   it("COACH_AVAILABILITY → groups by staffing (Salariés before Bénévoles)", () => {
     const sections = groupConstraints(
       [

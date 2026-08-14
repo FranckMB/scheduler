@@ -1,7 +1,9 @@
+import type { Closure } from "@/features/cockpit/api";
 import { cn } from "@/shared/lib/utils";
 
 import type { Venue, VenueTrainingSlot } from "../api";
 import { fmtMinutes as fmt, hhmm, toMinutes as startMinutes } from "../lib/days";
+import { closureForSlot, closureLabel } from "../lib/venueClosures";
 import { END_MIN, gridTemplateColumns, ROW_H, START_MIN, STEP, WEEK } from "../lib/weekGrid";
 
 interface Props {
@@ -12,6 +14,12 @@ interface Props {
   slotKeyOf: (slot: VenueTrainingSlot) => string;
   capacityOf: (slot: VenueTrainingSlot) => number;
   onSelectSlot: (slot: VenueTrainingSlot) => void;
+  /**
+   * Fermetures de gymnase (P2-22, D1/D2) — venue-scoped. Un créneau d'un jour fermé est barré ;
+   * SANS réservation il est désactivé (rien à y ajouter), AVEC réservation il reste cliquable
+   * pour le geste correctif (retirer l'épinglage orphelin qui bloque la génération). Vide par défaut.
+   */
+  closures?: Closure[];
 }
 
 /**
@@ -20,7 +28,7 @@ interface Props {
  * not create them), and each slot shows the team(s) reserved on it + its
  * remaining capacity, click → the assign modal.
  */
-export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capacityOf, onSelectSlot }: Props) {
+export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capacityOf, onSelectSlot, closures = [] }: Props) {
   const color = venue.color ?? "var(--accent)";
 
   // Dynamic vertical range: only the hours that actually hold slots for THIS
@@ -74,14 +82,21 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
           // P2-17 — libellé de groupe du créneau mutualisé, affiché discrètement (pas de fusion
           // ici, contrairement à la vue planning). Vide/trim→rien.
           const groupLabel = (slot.groupLabel ?? "").trim();
+          // P2-22 D1/D2 — jour fermé : barré + libellé. Désactivé SANS réservation (rien à
+          // ajouter), cliquable AVEC (geste correctif : retirer l'épinglage orphelin).
+          const closedBy = closureForSlot(slot, closures);
+          const closedText = closedBy ? closureLabel(closedBy) : "";
+          const disabled = null !== closedBy && 0 === teams.length;
           return (
             <button
               key={slot.id}
               type="button"
+              disabled={disabled}
               onClick={() => onSelectSlot(slot)}
-              aria-label={`${dayLabel} ${hhmm(slot.startTime)} · ${venue.name}${"" !== groupLabel ? ` · ${groupLabel}` : ""} · ${teams.length}/${capacity} réservé — cliquer pour gérer`}
+              aria-label={`${dayLabel} ${hhmm(slot.startTime)} · ${venue.name}${"" !== groupLabel ? ` · ${groupLabel}` : ""} · ${teams.length}/${capacity} réservé${closedBy ? ` · ${closedText}` : ""} — cliquer pour gérer`}
               className={cn(
                 "z-10 m-px flex flex-col items-start gap-0.5 overflow-hidden rounded border border-border border-l-4 px-1 py-0.5 text-left text-[10px] leading-tight hover:ring-1 hover:ring-accent",
+                closedBy ? "line-through opacity-60" : "",
               )}
               style={{ gridColumn: 2 + di, gridRow: `${startRow} / span ${span}`, borderLeftColor: color, backgroundColor: `color-mix(in oklch, ${color} 30%, var(--card))` }}
             >
@@ -92,6 +107,7 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
                 </span>
               </span>
               {"" !== groupLabel ? <span className="w-full truncate font-semibold uppercase tracking-wide text-muted-foreground">{groupLabel}</span> : null}
+              {closedBy ? <span className="w-full truncate">{closedText}</span> : null}
               <span className={cn("truncate", 0 === teams.length ? "text-muted-foreground" : "font-medium")}>{label}</span>
             </button>
           );

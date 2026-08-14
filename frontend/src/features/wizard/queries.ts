@@ -555,11 +555,19 @@ export function useWizardTeamTagAssignments() {
   return useQuery({ queryKey: ["wizard", "team_tag_assignments"], queryFn: wizardApi.listTeamTagAssignments, staleTime: 30_000 });
 }
 
+// P2-22 D7 — une contrainte DATÉE (fermeture de gymnase) modifie les `closures` servies par
+// /calendar-entries/{id}/conflicts. La grille de la période lit cet endpoint : sans invalider
+// ["entry-conflicts"], elle reste périmée après la saisie/suppression d'une fermeture.
+function invalidateConstraints(queryClient: ReturnType<typeof useQueryClient>): void {
+  void queryClient.invalidateQueries({ queryKey: ["wizard", "constraints"] });
+  void queryClient.invalidateQueries({ queryKey: ["entry-conflicts"] });
+}
+
 export function useCreateConstraint() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: ConstraintPayload) => wizardApi.createConstraint(body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraints"] }),
+    onSuccess: () => invalidateConstraints(queryClient),
   });
 }
 
@@ -567,7 +575,7 @@ export function useUpdateConstraint() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: ConstraintPayload }) => wizardApi.updateConstraint(id, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraints"] }),
+    onSuccess: () => invalidateConstraints(queryClient),
   });
 }
 
@@ -575,7 +583,7 @@ export function useDeleteConstraint() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => wizardApi.deleteConstraint(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "constraints"] }),
+    onSuccess: () => invalidateConstraints(queryClient),
   });
 }
 
