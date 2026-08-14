@@ -172,6 +172,107 @@ final class CalendarEntryConflictsTest extends WebTestCase
         self::assertSame([], $data['conflicts']);
     }
 
+    public function testClosuresBlockDescribesEachClosedVenueWindow(): void
+    {
+        [$user, $club, $season] = $this->seed('CF6');
+        $schedule = $this->baseline($club, $season);
+        $this->slot($club, $season, $schedule, self::VENUE_X, 5, self::TEAM_THU);
+        $this->em->flush();
+
+        // Fenêtre semaine lun 05-04 → dim 05-10 ; incident ven 05-08 → dim 05-10.
+        $entry = $this->closureWithIncident($club, $season, self::VENUE_X, '2026-05-04', '2026-05-10', '2026-05-08', '2026-05-10');
+
+        $this->client->request('GET', "/api/calendar-entries/{$entry->getId()}/conflicts", [], [], $this->authHeaders($user, $club));
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        self::assertCount(1, $data['closures']);
+        $closure = $data['closures'][0];
+        self::assertSame(self::VENUE_X, $closure['venueId']);
+        self::assertSame('Venue closed', $closure['title']);
+        self::assertSame('2026-05-08', $closure['startDate']);
+        self::assertSame('2026-05-10', $closure['endDate']);
+        self::assertSame([5, 6, 7], $closure['weekdays']);
+        self::assertNotSame('', $closure['constraintId']);
+    }
+
+    public function testChildWeekInheritsMotherClosureWithWeekdaysRecutOnItsOwnWindow(): void
+    {
+        [$user, $club, $season] = $this->seed('CF7');
+        // Mère = bloc de 3 semaines ; fermeture (legacy, tout le bloc) posée sur la mère.
+        $mother = $this->closure($club, $season, self::VENUE_X, '2026-05-04', '2026-05-24');
+        // Enfant = lun 05-11 → mer 05-13, rattachée à la mère (datedConstraintSourceId).
+        $child = new CalendarEntry;
+        $child->setClubId($club->getId());
+        $child->setSeasonId($season->getId());
+        $child->setKind(CalendarEntryKind::PERIOD);
+        $child->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+        $child->setTitle('Semaine enfant');
+        $child->setStartDate(new DateTimeImmutable('2026-05-11'));
+        $child->setEndDate(new DateTimeImmutable('2026-05-13'));
+        $child->setParentEntryId($mother->getId());
+        $this->em->persist($child);
+        $this->em->flush();
+
+        $this->client->request('GET', "/api/calendar-entries/{$child->getId()}/conflicts", [], [], $this->authHeaders($user, $club));
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        self::assertCount(1, $data['closures'], 'la fermeture de la mère est visible sur la semaine enfant');
+        self::assertSame([1, 2, 3], $data['closures'][0]['weekdays'], 'jours recoupés sur la fenêtre de l’enfant (lun-mer)');
+    }
+
+    public function testClosuresAreServedEvenWithoutAChosenSeasonPlan(): void
+    {
+        [$user, $club, $season] = $this->seed('CF8');
+        $schedule = $this->baseline($club, $season);
+        $this->slot($club, $season, $schedule, self::VENUE_X, 1, self::TEAM_MON);
+        $this->em->flush();
+        // Le plan redevient un espace de travail : plus de calendrier à comparer.
+        self::getContainer()->get(SchedulePlanProvisioner::class)->releaseSchedule($schedule->getId());
+
+        $entry = $this->closure($club, $season, self::VENUE_X, '2026-05-04', '2026-05-10');
+
+        $this->client->request('GET', "/api/calendar-entries/{$entry->getId()}/conflicts", [], [], $this->authHeaders($user, $club));
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        self::assertFalse($data['seasonPlanChosen']);
+        self::assertSame([], $data['conflicts'], 'sans plan, aucun conflit à comparer');
+        self::assertCount(1, $data['closures'], 'mais la fermeture, elle, s’affiche quand même');
+        self::assertSame(self::VENUE_X, $data['closures'][0]['venueId']);
+    }
+
+    public function testDisjointClosureIsAbsentFromClosures(): void
+    {
+        [$user, $club, $season] = $this->seed('CF9');
+        // Incident juin, fenêtre mai : entièrement hors fenêtre.
+        $entry = $this->closureWithIncident($club, $season, self::VENUE_X, '2026-05-04', '2026-05-10', '2026-06-01', '2026-06-07');
+
+        $this->client->request('GET', "/api/calendar-entries/{$entry->getId()}/conflicts", [], [], $this->authHeaders($user, $club));
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        self::assertSame([], $data['closures'], 'une fermeture hors fenêtre ne figure pas');
+        self::assertSame([], $data['venueIds']);
+    }
+
+    public function testLegacyClosureWithoutDatesUsesTheEntryWindowAsBounds(): void
+    {
+        [$user, $club, $season] = $this->seed('CFA');
+        // `closure` pose une contrainte SANS config (legacy) → bornes = fenêtre de l'entrée.
+        $entry = $this->closure($club, $season, self::VENUE_X, '2026-05-04', '2026-05-06');
+
+        $this->client->request('GET', "/api/calendar-entries/{$entry->getId()}/conflicts", [], [], $this->authHeaders($user, $club));
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        self::assertCount(1, $data['closures']);
+        self::assertSame('2026-05-04', $data['closures'][0]['startDate']);
+        self::assertSame('2026-05-06', $data['closures'][0]['endDate']);
+        self::assertSame([1, 2, 3], $data['closures'][0]['weekdays']);
+    }
+
     public function testForeignEntryIsForbidden(): void
     {
         [$userA, $clubA] = $this->seed('CF3');

@@ -94,6 +94,64 @@ final class VenueClosureDays
     }
 
     /**
+     * RÉSUMÉ LISIBLE de chaque fermeture recoupant la fenêtre — pour l'affichage (radar,
+     * message de garde) : le gymnase, le titre, les bornes de l'incident brut et les jours
+     * ISO fermés ∩ fenêtre. Une fermeture entièrement hors fenêtre est absente.
+     *
+     * Les `weekdays` se dérivent EXACTEMENT comme {@see closedWeekdaysByVenue} (même
+     * sur-fermeture assumée sur un bloc multi-semaines) ; `startDate`/`endDate` restent les
+     * bornes de l'incident (config), et retombent sur la fenêtre de l'entrée en legacy (config
+     * sans dates valides), comme {@see closedDatesByVenue}. Une entrée par contrainte : deux
+     * fermetures d'un même gymnase donnent deux résumés.
+     *
+     * @param iterable<Constraint> $datedConstraints
+     *
+     * @return list<array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}>
+     */
+    public static function closureSummaries(iterable $datedConstraints, DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd): array
+    {
+        $windowStartDay = $windowStart->format('Y-m-d');
+        $windowEndDay = $windowEnd->format('Y-m-d');
+
+        $summaries = [];
+        foreach ($datedConstraints as $constraint) {
+            if (!self::isVenueClosure($constraint)) {
+                continue;
+            }
+            $config = $constraint->getConfig();
+            $incidentStart = self::isoDate($config['startDate'] ?? null);
+            $incidentEnd = self::isoDate($config['endDate'] ?? null);
+            // Legacy / config nu : bornes = fenêtre de l'entrée (voir closedDatesByVenue).
+            if (null === $incidentStart || null === $incidentEnd) {
+                $incidentStart = $windowStartDay;
+                $incidentEnd = $windowEndDay;
+            }
+            $from = max($incidentStart, $windowStartDay);
+            $to = min($incidentEnd, $windowEndDay);
+            if ($from > $to) {
+                continue; // fermeture entièrement hors fenêtre → absente
+            }
+            // Jours ISO fermés ∩ fenêtre — même dérivation que closedWeekdaysByVenue.
+            $weekdaySet = [];
+            $end = new DateTimeImmutable($to)->modify('+1 day'); // DatePeriod end exclusif
+            foreach (new DatePeriod(new DateTimeImmutable($from), new DateInterval('P1D'), $end) as $day) {
+                $weekdaySet[(int) $day->format('N')] = true;
+            }
+            ksort($weekdaySet);
+            $summaries[] = [
+                'constraintId' => $constraint->getId(),
+                'venueId' => (string) $constraint->getScopeTargetId(),
+                'title' => $constraint->getName(),
+                'startDate' => $incidentStart,
+                'endDate' => $incidentEnd,
+                'weekdays' => array_keys($weekdaySet),
+            ];
+        }
+
+        return $summaries;
+    }
+
+    /**
      * Cette contrainte est-elle une fermeture de gymnase ? FACILITY active à
      * scopeTargetId, ET config.type = venue_closed OU config sans `type` (legacy :
      * jusqu'ici toute datée FACILITY était une fermeture). Exclut un futur

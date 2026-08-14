@@ -105,14 +105,71 @@ final class VenueClosureDaysTest extends TestCase
         self::assertArrayNotHasKey(self::VENUE, $dates);
     }
 
-    private function venueClosed(?string $start, ?string $end): Constraint
+    public function testClosureSummaryDescribesAPartialClosure(): void
+    {
+        // Incident ven 05-08 → dim 05-10 dans la semaine lun 05-04 → dim 05-10.
+        $summaries = VenueClosureDays::closureSummaries(
+            [$this->venueClosed('2026-05-08', '2026-05-10', 'Pont de mai')],
+            new DateTimeImmutable('2026-05-04'),
+            new DateTimeImmutable('2026-05-10'),
+        );
+        self::assertCount(1, $summaries);
+        self::assertSame(self::VENUE, $summaries[0]['venueId']);
+        self::assertSame('Pont de mai', $summaries[0]['title']);
+        self::assertSame('2026-05-08', $summaries[0]['startDate']);
+        self::assertSame('2026-05-10', $summaries[0]['endDate']);
+        self::assertSame([5, 6, 7], $summaries[0]['weekdays'], 'ven, sam, dim');
+        self::assertNotSame('', $summaries[0]['constraintId']);
+    }
+
+    public function testClosureSummaryDisjointFromTheWindowIsAbsent(): void
+    {
+        $summaries = VenueClosureDays::closureSummaries(
+            [$this->venueClosed('2026-06-01', '2026-06-07', 'Travaux')],
+            new DateTimeImmutable('2026-05-04'),
+            new DateTimeImmutable('2026-05-10'),
+        );
+        self::assertSame([], $summaries, 'une fermeture entièrement hors fenêtre ne figure pas');
+    }
+
+    public function testClosureSummaryLegacyWithoutDatesSpansTheWholeWindow(): void
+    {
+        // Config nu (legacy) : bornes = fenêtre de l'entrée, tous les jours fermés.
+        $summaries = VenueClosureDays::closureSummaries(
+            [$this->venueClosed(null, null, 'Fermeture')],
+            new DateTimeImmutable('2026-05-04'),
+            new DateTimeImmutable('2026-05-06'),
+        );
+        self::assertCount(1, $summaries);
+        self::assertSame('2026-05-04', $summaries[0]['startDate']);
+        self::assertSame('2026-05-06', $summaries[0]['endDate']);
+        self::assertSame([1, 2, 3], $summaries[0]['weekdays']);
+    }
+
+    public function testTwoClosuresOnTheSameVenueYieldTwoSummaries(): void
+    {
+        $summaries = VenueClosureDays::closureSummaries(
+            [
+                $this->venueClosed('2026-05-04', '2026-05-04', 'Lundi'),
+                $this->venueClosed('2026-05-06', '2026-05-06', 'Mercredi'),
+            ],
+            new DateTimeImmutable('2026-05-04'),
+            new DateTimeImmutable('2026-05-10'),
+        );
+        self::assertCount(2, $summaries);
+        self::assertSame([1], $summaries[0]['weekdays']);
+        self::assertSame([3], $summaries[1]['weekdays']);
+        self::assertNotSame($summaries[0]['constraintId'], $summaries[1]['constraintId']);
+    }
+
+    private function venueClosed(?string $start, ?string $end, string $name = 'Salle fermée'): Constraint
     {
         $c = new Constraint;
         $c->setFamily(ConstraintFamily::FACILITY);
         $c->setScope(ConstraintScope::FACILITY);
         $c->setScopeTargetId(self::VENUE);
         $c->setRuleType(ConstraintRuleType::HARD);
-        $c->setName('Salle fermée');
+        $c->setName($name);
         $config = ['type' => 'venue_closed'];
         if (null !== $start) {
             $config['startDate'] = $start;

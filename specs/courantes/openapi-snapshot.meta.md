@@ -1,6 +1,11 @@
-Last verified @ 2026-08-14 (JSON **régénéré** — P2-17 PR 1 : `groupLabel` sur `VenueTrainingSlot`)
+Last verified @ 2026-08-14 (JSON **régénéré** — P2-22 PR 1 : summary/description de `/api/calendar-entries/{id}/conflicts`)
 
 Changements récents :
+- **P2-22 PR 1 — visibilité des fermetures (2026-08-14)** : le path
+  `GET /api/calendar-entries/{id}/conflicts` corrige son `summary`/`description` (l'ancien
+  « Overlaps of a calendar period » était faux) — la route rend désormais un bloc `closures`
+  (gymnase, titre, bornes, jours fermés) en plus des `conflicts`, servi même sans plan choisi.
+  Set-diff : 0 path ajouté/retiré, seuls `summary` et la `description` du 200 diffèrent.
 - **P2-17 PR 1 — libellé de groupe (2026-08-14)** : la ressource `VenueTrainingSlot` gagne
   `groupLabel` (string ≤40 nullable, read+write — posé = affichage fusionné demandé, vide =
   cartes séparées ; 422 sur capacité < 2). Property-only : aucun path ajouté/retiré.
