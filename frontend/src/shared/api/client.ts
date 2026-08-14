@@ -16,6 +16,21 @@ import { useSeasonStore } from "@/shared/stores/seasonStore";
  * même origine par les proxys vite/nginx), mais l'écrire évite qu'un futur appel
  * cross-origin parte muet, sans identité et sans erreur parlante.
  */
+/** UUID v4 sans dépendre du contexte sécurisé (cf. commentaire du hook P5-11). */
+function randomUuid(): string {
+  // Pas de narrowing `in` : le type DOM `Crypto` déclare toujours randomUUID, la
+  // branche « absent » serait `never` — or à l'exécution elle existe bel et bien.
+  const c = crypto as Crypto & { randomUUID?: () => string };
+  if (typeof c.randomUUID === "function") {
+    return c.randomUUID();
+  }
+  const b = c.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
 export const api = ky.create({
   prefix: "/api",
   credentials: "include",
@@ -23,9 +38,13 @@ export const api = ky.create({
     beforeRequest: [
       (state) => {
         // P5-11 — id de corrélation unique par requête (front→backend→bus→engine).
-        // Le backend le VALIDE (forme UUID) et le ré-émet ; crypto.randomUUID
-        // produit exactement cette forme. Posé sur chaque requête, jamais réutilisé.
-        state.request.headers.set("X-Request-Id", crypto.randomUUID());
+        // Le backend le VALIDE (forme UUID) et le ré-émet. ⚠ `crypto.randomUUID`
+        // n'existe QUE dans un contexte sécurisé (https ou localhost) : sur un
+        // accès http hors localhost (e2e dockerisé via frontend-dev, poste du LAN),
+        // l'appeler jetait AVANT le fetch — toute l'app rendait « Une erreur est
+        // survenue » sans qu'aucune requête ne parte. Repli : un UUID v4 dérivé de
+        // `getRandomValues`, disponible dans tous les contextes.
+        state.request.headers.set("X-Request-Id", randomUuid());
       },
       (state) => {
         // Season the manager is working in — absent = server-derived current
