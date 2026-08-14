@@ -29,7 +29,7 @@ import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useFfbbSa
 import { useWizardStore } from "../store";
 import { PeriodVenues } from "./PeriodStructure";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
-import { CapacitySelect, SharedSlotHint } from "./slotFields";
+import { CapacitySelect, GroupLabelField, SharedSlotHint } from "./slotFields";
 import { WEEK } from "../lib/weekGrid";
 import { venuesWithoutSlot } from "../lib/useStepValidation";
 
@@ -107,6 +107,7 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
   const [time, setTime] = useState(hhmm(slot.startTime));
   const [duration, setDuration] = useState(slot.durationMinutes);
   const [capacity, setCapacity] = useState(slot.capacity);
+  const [groupLabel, setGroupLabel] = useState(slot.groupLabel ?? "");
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const reservationCount = reservations.filter((r) => r.venueId === slot.venueId && r.dayOfWeek === slot.dayOfWeek && hhmm(r.startTime) === hhmm(slot.startTime)).length;
@@ -119,12 +120,18 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
       setError(invalid);
       return;
     }
+    const effCapacity = canSplit ? capacity : 1;
     // Close ONLY once the write succeeds. If the backend rejects it (e.g. a stale
     // cache let a now-overlapping edit slip past the client check, caught by the
     // server backstop), keep the modal open so the edit is not silently lost and
     // the user can adjust — the global mutation net surfaces the error toast.
     // Otherwise a rejected edit would look saved (modal already gone).
-    update.mutate({ id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } }, { onSuccess: onClose });
+    // Le libellé ne part QUE sur un créneau partageable (capacité effective ≥ 2) — sinon null,
+    // pour ne pas provoquer le 422 du backend (P2-17).
+    update.mutate(
+      { id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: effCapacity, groupLabel: effCapacity >= 2 ? groupLabel : null } },
+      { onSuccess: onClose },
+    );
   };
 
   return (
@@ -167,6 +174,7 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
       </div>
 
       {canSplit ? <SharedSlotHint capacity={capacity} /> : null}
+      {canSplit ? <GroupLabelField capacity={capacity} value={groupLabel} onChange={setGroupLabel} /> : null}
 
       {null !== error ? (
         <p role="alert" className="mt-3 text-sm text-destructive">

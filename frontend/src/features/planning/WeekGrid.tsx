@@ -104,9 +104,12 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
             a highlight of empty-slot ids left over from the gymnase view would dim
             the ENTIRE coach/equipe grid (their ids never match). */}
         {(() => {
-          const highlighting = null != highlightSlotIds && highlightSlotIds.size > 0 && cells.some((c) => highlightSlotIds.has(c.slotId));
+          // Une carte fusionnée (P2-17 D4) porte PLUSIEURS séances : le surlignage et l'estompe
+          // considèrent tous ses membres, pas le seul `slotId` de tête.
+          const cellIds = (c: (typeof cells)[number]): string[] => (null !== c.groupLabel ? c.members.map((m) => m.slotId) : [c.slotId]);
+          const highlighting = null != highlightSlotIds && highlightSlotIds.size > 0 && cells.some((c) => cellIds(c).some((id) => highlightSlotIds.has(id)));
           return cells.map((cell) => {
-          const dimmed = highlighting && !highlightSlotIds.has(cell.slotId);
+          const dimmed = highlighting && !cellIds(cell).some((id) => highlightSlotIds?.has(id) ?? false);
           // Empty slots = defined venue windows the solver left unfilled. Muted,
           // dashed, labelled "vide", not selectable — but still highlightable so a
           // "créneau vide" warning can draw the eye to them.
@@ -130,6 +133,49 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                 }}
               >
                 vide
+              </div>
+            );
+          }
+          // Carte FUSIONNÉE (vue gymnase, créneau mutualisé libellé — P2-17 D4) : le libellé
+          // titre la carte, chaque équipe reste un bouton cliquable (mêmes interactions par
+          // équipe que sur une carte séparée).
+          if (null !== cell.groupLabel) {
+            return (
+              <div
+                key={cell.key}
+                className={cn(
+                  "z-10 m-px flex flex-col overflow-hidden rounded border-l-4 text-left leading-tight transition",
+                  dimmed ? "opacity-30" : "",
+                )}
+                style={{
+                  gridColumn: cell.gridColumn,
+                  gridRow: `${cell.gridRowStart} / span ${cell.gridRowSpan}`,
+                  justifySelf: "start",
+                  width: `${100 / cell.laneCount}%`,
+                  transform: `translateX(${cell.lane * 100}%)`,
+                  borderLeftColor: cell.venueColor ?? "var(--accent)",
+                  backgroundColor: tint(cell.venueColor) ?? "var(--muted)",
+                }}
+              >
+                <span className="truncate px-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wide">{cell.groupLabel}</span>
+                {cell.members.map((member) => {
+                  const memberSelected = member.slotId === selectedSlotId;
+                  return (
+                    <button
+                      key={member.slotId}
+                      type="button"
+                      onClick={() => onSelectSlot(member.slotId)}
+                      title={`${member.teamLabel} · ${cell.groupLabel} · ${cell.venueLabel} · ${member.coachLabel} · ${cell.startLabel}–${cell.endLabel}`}
+                      className={cn(
+                        "flex w-full items-center gap-1 px-1 py-0.5 text-left font-medium hover:ring-1 hover:ring-accent",
+                        memberSelected ? "ring-1 ring-accent" : "",
+                      )}
+                    >
+                      <span className="truncate">{member.teamLabel}</span>
+                      {member.locked ? <Lock className="ml-auto size-3 shrink-0 text-muted-foreground" /> : null}
+                    </button>
+                  );
+                })}
               </div>
             );
           }

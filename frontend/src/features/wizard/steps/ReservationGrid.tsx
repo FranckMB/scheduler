@@ -71,12 +71,15 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
           const full = teams.length >= capacity;
           const label = 0 === teams.length ? "libre" : teams.join(", ");
           const dayLabel = WEEK[di]?.label ?? "";
+          // P2-17 — libellé de groupe du créneau mutualisé, affiché discrètement (pas de fusion
+          // ici, contrairement à la vue planning). Vide/trim→rien.
+          const groupLabel = (slot.groupLabel ?? "").trim();
           return (
             <button
               key={slot.id}
               type="button"
               onClick={() => onSelectSlot(slot)}
-              aria-label={`${dayLabel} ${hhmm(slot.startTime)} · ${venue.name} · ${teams.length}/${capacity} réservé — cliquer pour gérer`}
+              aria-label={`${dayLabel} ${hhmm(slot.startTime)} · ${venue.name}${"" !== groupLabel ? ` · ${groupLabel}` : ""} · ${teams.length}/${capacity} réservé — cliquer pour gérer`}
               className={cn(
                 "z-10 m-px flex flex-col items-start gap-0.5 overflow-hidden rounded border border-border border-l-4 px-1 py-0.5 text-left text-[10px] leading-tight hover:ring-1 hover:ring-accent",
               )}
@@ -88,6 +91,7 @@ export function ReservationGrid({ venue, slots, reservedTeams, slotKeyOf, capaci
                   {teams.length}/{capacity}
                 </span>
               </span>
+              {"" !== groupLabel ? <span className="w-full truncate font-semibold uppercase tracking-wide text-muted-foreground">{groupLabel}</span> : null}
               <span className={cn("truncate", 0 === teams.length ? "text-muted-foreground" : "font-medium")}>{label}</span>
             </button>
           );

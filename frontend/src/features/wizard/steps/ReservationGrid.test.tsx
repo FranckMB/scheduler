@@ -28,3 +28,20 @@ describe("ReservationGrid — le dimanche", () => {
     expect(cell).toHaveStyle({ gridColumn: `${1 + WEEK.length}` });
   });
 });
+
+describe("ReservationGrid — libellé de groupe (P2-17)", () => {
+  it("affiche le libellé d'un créneau mutualisé, sans fusion (badge)", () => {
+    const labelled: VenueTrainingSlot = { ...sunday, groupLabel: "CEC3" } as VenueTrainingSlot;
+    render(<ReservationGrid venue={venue} slots={[labelled]} reservedTeams={new Map()} slotKeyOf={() => "k"} capacityOf={() => 2} onSelectSlot={vi.fn()} />);
+
+    expect(screen.getByText("CEC3")).toBeInTheDocument();
+    // Et dans le nom accessible du créneau, pour l'AT.
+    expect(screen.getByRole("button", { name: /· CEC3 ·/ })).toBeInTheDocument();
+  });
+
+  it("n'affiche aucun libellé quand le créneau n'en porte pas", () => {
+    render(<ReservationGrid venue={venue} slots={[sunday]} reservedTeams={new Map()} slotKeyOf={() => "k"} capacityOf={() => 2} onSelectSlot={vi.fn()} />);
+
+    expect(screen.queryByText("CEC3")).toBeNull();
+  });
+});

@@ -1,3 +1,4 @@
+import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
 
 const CAP_HINT = "Nombre d'équipes pouvant s'entraîner en même temps sur ce créneau (2 = terrain coupé en deux).";
@@ -42,5 +43,35 @@ export function SharedSlotHint({ capacity }: { capacity: number }) {
       Créneau partagé : choisissez les {capacity} équipes qui l'occuperont en les réservant (étape Contraintes, onglet
       Réserver). Sans réservation, le système associera les équipes lui-même.
     </p>
+  );
+}
+
+/** Longueur maxi du libellé de groupe — porte d'entrée alignée sur `Assert\Length(max:40)` du backend. */
+export const GROUP_LABEL_MAX = 40;
+
+/**
+ * Libellé de groupe (« CEC3 ») d'un créneau MUTUALISÉ (P2-17). Facultatif, ≤ 40. N'apparaît
+ * QUE lorsque la capacité choisie est ≥ 2 : le backend refuse (422) un libellé sur un créneau
+ * non partageable, donc l'écran ne l'offre jamais là — le champ disparaît si l'on redescend à
+ * une seule équipe, et l'éditeur n'envoie alors aucun libellé (voir `save`). Purement
+ * esthétique : titre la carte fusionnée de la vue planning gymnase, ne rejoint jamais le solveur.
+ */
+export function GroupLabelField({ capacity, value, onChange }: { capacity: number; value: string; onChange: (v: string) => void }) {
+  if (capacity < 2) {
+    return null;
+  }
+  return (
+    <label className="mt-3 block text-xs text-muted-foreground">
+      Libellé de groupe (optionnel)
+      <Input
+        aria-label="Libellé de groupe"
+        className="mt-0.5 h-9 w-52"
+        maxLength={GROUP_LABEL_MAX}
+        placeholder="CEC3"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <span className="mt-1 block text-[11px]">Nom affiché sur la carte du planning côté gymnase quand ces équipes partagent le créneau.</span>
+    </label>
   );
 }

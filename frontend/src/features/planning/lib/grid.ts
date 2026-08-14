@@ -53,6 +53,17 @@ export function toHourMinute(time: string): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/**
+ * Clé d'une FENÊTRE de gymnase : `venueId|jour|minute-de-début`. Sert au libellé de
+ * groupe (P2-17) — le libellé vit sur la fenêtre (`VenueTrainingSlot`) et rejoint les
+ * séances placées par cette clé. Même forme que la clé d'appariement des créneaux vides
+ * (`emptySlots.ts`), minute-normalisée pour qu'un « 18:00 » placé colle à une fenêtre
+ * « 18:00:00 ».
+ */
+export function slotGroupKey(venueId: string, dayOfWeek: number, startTime: string): string {
+  return `${venueId}|${dayOfWeek}|${parseTimeToMinutes(startTime)}`;
+}
+
 export interface TimeBounds {
   startMin: number;
   endMin: number;
@@ -82,6 +93,13 @@ export interface Lookups {
   teamCoach: Map<string, string>;
   /** teamId → coachIds that are PLAYERS of the team (a coach can also play elsewhere). */
   teamPlayerCoaches: Map<string, string[]>;
+  /**
+   * P2-17 : `slotGroupKey(venue, jour, début)` → libellé de groupe non vide de la
+   * fenêtre. Purement esthétique (le backend calcule et normalise ce champ ; le front
+   * ne fait que l'AFFICHER). Absent = aucun créneau mutualisé libellé — la fusion de la
+   * vue gymnase (D4) est alors inerte.
+   */
+  groupLabels?: Map<string, string>;
 }
 
 /** The (main) coach of a slot: the slot's own coach if set, else its team's main coach. */
@@ -210,6 +228,18 @@ export interface DayGroup {
   span: number;
 }
 
+/**
+ * Une équipe À L'INTÉRIEUR d'une carte fusionnée (vue gymnase, créneau mutualisé libellé —
+ * P2-17 D4). Chaque membre reste cliquable individuellement : son `slotId` ouvre le même
+ * panneau de détail que sa carte séparée l'aurait fait.
+ */
+export interface GridCellMember {
+  slotId: string;
+  teamLabel: string;
+  coachLabel: string;
+  locked: boolean;
+}
+
 export interface GridCell {
   /** Unique per rendered cell (a slot may appear in several coach columns). */
   key: string;
@@ -233,6 +263,13 @@ export interface GridCell {
   startLabel: string;
   endLabel: string;
   locked: boolean;
+  /**
+   * P2-17 D4 — libellé d'une carte FUSIONNÉE (vue gymnase, ≥ 2 équipes partageant un
+   * créneau mutualisé libellé) ; `null` sur une cellule ordinaire à une seule équipe.
+   */
+  groupLabel: string | null;
+  /** Les équipes d'une carte fusionnée, chacune cliquable ; vide sur une cellule ordinaire. */
+  members: GridCellMember[];
 }
 
 interface Interval {
@@ -308,8 +345,34 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
 
   const columnIndex = new Map(columns.map((c, i) => [c.key, i]));
 
+  // P2-17 D4 — le libellé de groupe d'une séance placée, lu de sa fenêtre (vue gymnase,
+  // séance non vide seulement). Le backend possède la règle (capacité ≥ 2, trim, vide→null) ;
+  // le front l'AFFICHE, il ne la re-dérive pas.
+  const labelOf = (s: Slot): string =>
+    "gymnase" === viewMode && "" !== s.teamId ? (lookups.groupLabels?.get(slotGroupKey(s.venueId, s.dayOfWeek, s.startTime)) ?? "").trim() : "";
+  const mergeKeyOf = (s: Slot, key: string, label: string): string => `${s.dayOfWeek}:${key}:${parseTimeToMinutes(s.startTime)}:${label}`;
+
+  // Une carte fusionnée n'existe qu'à partir de DEUX équipes (« plusieurs partagent » —
+  // décision D4) : on compte d'abord les membres par groupe. Une seule équipe sous un
+  // libellé retombe sur la cellule ordinaire (pas de carte titrée pour une équipe seule).
+  const groupSize = new Map<string, number>();
+  for (const slot of visible) {
+    const label = labelOf(slot);
+    if ("" === label) {
+      continue;
+    }
+    for (const key of keysFor(slot)) {
+      if (undefined === columnIndex.get(`${slot.dayOfWeek}:${key}`)) {
+        continue;
+      }
+      const mk = mergeKeyOf(slot, key, label);
+      groupSize.set(mk, (groupSize.get(mk) ?? 0) + 1);
+    }
+  }
+
   const cells: GridCell[] = [];
   const intervals: Interval[] = [];
+  const merged = new Map<string, { cell: GridCell; interval: Interval }>();
   for (const slot of visible) {
     const start = parseTimeToMinutes(slot.startTime);
     const venue = lookups.venues.get(slot.venueId);
@@ -317,10 +380,58 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
     const venueLabel = venue?.name ?? "Gymnase ?";
     const mainCoachId = slotCoachId(slot, lookups);
     const coachLabel = coachName(lookups.coaches, mainCoachId);
+    const locked = "NONE" !== slot.lockLevel || slot.temporaryLock;
+    const label = labelOf(slot);
 
     for (const key of keysFor(slot)) {
       const idx = columnIndex.get(`${slot.dayOfWeek}:${key}`);
       if (undefined === idx) {
+        continue;
+      }
+
+      // Créneau mutualisé libellé partagé par ≥ 2 équipes → UNE carte fusionnée titrée
+      // par le libellé, chaque équipe restant un membre cliquable (D4).
+      const mk = "" !== label ? mergeKeyOf(slot, key, label) : "";
+      if ("" !== mk && (groupSize.get(mk) ?? 0) >= 2) {
+        const member: GridCellMember = { slotId: slot.id, teamLabel, coachLabel, locked };
+        const existing = merged.get(mk);
+        if (undefined === existing) {
+          const cell: GridCell = {
+            key: `group@${mk}@${idx}`,
+            slotId: slot.id,
+            gridColumn: 2 + idx,
+            gridRowStart: 3 + Math.round((start - bounds.startMin) / stepMin),
+            gridRowSpan: Math.max(1, Math.round(slot.durationMinutes / stepMin)),
+            lane: 0,
+            laneCount: 1,
+            primaryLabel: label,
+            secondaryLabel: "",
+            roleTag: null,
+            teamLabel,
+            venueLabel,
+            venueColor: venue?.color ?? null,
+            coachLabel,
+            day: slot.dayOfWeek,
+            startLabel: formatMinutes(start),
+            endLabel: formatMinutes(start + slot.durationMinutes),
+            locked,
+            groupLabel: label,
+            members: [member],
+          };
+          const interval: Interval = { startMin: start, endMin: start + slot.durationMinutes, cell };
+          merged.set(mk, { cell, interval });
+          cells.push(cell);
+          intervals.push(interval);
+        } else {
+          existing.cell.members.push(member);
+          // Étendre la carte (et son intervalle de placement) à la plus longue séance du groupe.
+          const spanRows = Math.max(1, Math.round(slot.durationMinutes / stepMin));
+          if (spanRows > existing.cell.gridRowSpan) {
+            existing.cell.gridRowSpan = spanRows;
+            existing.cell.endLabel = formatMinutes(start + slot.durationMinutes);
+          }
+          existing.interval.endMin = Math.max(existing.interval.endMin, start + slot.durationMinutes);
+        }
         continue;
       }
 
@@ -355,7 +466,9 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
         day: slot.dayOfWeek,
         startLabel: formatMinutes(start),
         endLabel: formatMinutes(start + slot.durationMinutes),
-        locked: "NONE" !== slot.lockLevel || slot.temporaryLock,
+        locked,
+        groupLabel: null,
+        members: [],
       };
       cells.push(cell);
       intervals.push({ startMin: start, endMin: start + slot.durationMinutes, cell });

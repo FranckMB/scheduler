@@ -546,6 +546,43 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     expect(updateSlot).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ capacity: 2 }) }), expect.anything());
   });
 
+  it("envoie le libellé de groupe sur un créneau partageable (P2-17)", async () => {
+    venueCanSplitState.value = true;
+    periodSlotOverride.value = [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 2, schedulePlanId: "plan-1" }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await user.click(screen.getByTitle(/^20:00 .*modifier$/));
+    await user.type(screen.getByRole("textbox", { name: "Libellé de groupe" }), "CEC3");
+    await user.click(screen.getByRole("button", { name: "Enregistrer" }));
+    expect(updateSlot).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ capacity: 2, groupLabel: "CEC3" }) }), expect.anything());
+  });
+
+  it("n'offre PAS le libellé sur un créneau de capacité 1, et n'en envoie aucun", async () => {
+    venueCanSplitState.value = true;
+    periodSlotOverride.value = [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 1, schedulePlanId: "plan-1" }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await user.click(screen.getByTitle(/^20:00 .*modifier$/));
+    expect(screen.queryByRole("textbox", { name: "Libellé de groupe" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Enregistrer" }));
+    expect(updateSlot).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ groupLabel: null }) }), expect.anything());
+  });
+
+  it("redescendre à une seule équipe efface le libellé — jamais de 422 (P2-17)", async () => {
+    venueCanSplitState.value = true;
+    periodSlotOverride.value = [{ id: "ps1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00", durationMinutes: 90, capacity: 2, groupLabel: "CEC3", schedulePlanId: "plan-1" }];
+    const user = userEvent.setup();
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await user.click(screen.getByTitle(/^20:00 .*modifier$/));
+    // Le libellé existant est présenté dans le champ…
+    expect(screen.getByRole("textbox", { name: "Libellé de groupe" })).toHaveValue("CEC3");
+    // …et redescendre la capacité à 1 le retire de l'écran ET du payload.
+    await user.selectOptions(screen.getByLabelText("Capacité"), "1");
+    expect(screen.queryByRole("textbox", { name: "Libellé de groupe" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Enregistrer" }));
+    expect(updateSlot).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ capacity: 1, groupLabel: null }) }), expect.anything());
+  });
+
   it("déplacer un créneau réservé confirme, puis retire la réservation orpheline", async () => {
     reservationsState.data = [{ id: "r1", venueId: "v1", dayOfWeek: 3, startTime: "20:00:00" }];
     const user = userEvent.setup();

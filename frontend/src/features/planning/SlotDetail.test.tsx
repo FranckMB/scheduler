@@ -49,6 +49,8 @@ const cell = (locked: boolean): GridCell => ({
   startLabel: "18:00",
   endLabel: "19:30",
   locked,
+  groupLabel: null,
+  members: [],
 });
 
 const constraint = (over: Partial<Constraint>): Constraint => ({

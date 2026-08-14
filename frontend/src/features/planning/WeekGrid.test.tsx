@@ -43,6 +43,34 @@ describe("WeekGrid", () => {
     expect(onSelect).toHaveBeenCalledWith("a");
   });
 
+  it("fusionne un créneau mutualisé sous son libellé, chaque équipe restant cliquable (P2-17 D4)", async () => {
+    const mergeLookups: Lookups = {
+      teams: new Map<string, Team>([
+        ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }],
+        ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0 }],
+      ]),
+      venues: new Map<string, Venue>([["v1", { id: "v1", name: "Gymnase Alpha", color: "#00aa00" }]]),
+      coaches: new Map<string, Coach>(),
+      teamCoach: new Map<string, string>(),
+      teamPlayerCoaches: new Map<string, string[]>(),
+      groupLabels: new Map<string, string>([["v1|1|1080", "CEC3"]]),
+    };
+    const slots: Slot[] = [
+      { ...slot, id: "s1", teamId: "t1" },
+      { ...slot, id: "s2", teamId: "t2" },
+    ];
+    const onSelect = vi.fn();
+    const model = buildGrid(slots, "gymnase", mergeLookups);
+    const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={onSelect} />);
+
+    // Le libellé titre la carte ; les deux équipes y sont listées.
+    expect(screen.getByText("CEC3")).toBeInTheDocument();
+    // Chaque équipe est un bouton propre → clic = sélection de SA séance.
+    screen.getByRole("button", { name: /U13/ }).click();
+    expect(onSelect).toHaveBeenCalledWith("s2");
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
   it("names the venue as TEXT in every view, not colour only (A11Y-01, WCAG 1.4.1)", async () => {
     // In the team ('equipe') view the venue is no longer a column header — it must
     // still be readable as text on the cell (not conveyed by the border/tint colour

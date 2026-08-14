@@ -52,7 +52,7 @@ import {
 } from "../queries";
 import { SectionCountTitle } from "./StructureSummary";
 import { WEEK } from "../lib/weekGrid";
-import { CapacitySelect, SharedSlotHint } from "./slotFields";
+import { CapacitySelect, GroupLabelField, SharedSlotHint } from "./slotFields";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
 import { claimPeriodSeed, periodSeedWasClaimed } from "./periodSeed";
 import { PeriodAnchorGate } from "./PeriodAnchorGate";
@@ -687,6 +687,7 @@ function PeriodSlotEditor({
   const [time, setTime] = useState(hhmm(slot.startTime));
   const [duration, setDuration] = useState(slot.durationMinutes);
   const [capacity, setCapacity] = useState(slot.capacity);
+  const [groupLabel, setGroupLabel] = useState(slot.groupLabel ?? "");
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmMove, setConfirmMove] = useState(false);
@@ -695,12 +696,14 @@ function PeriodSlotEditor({
   const reservationCount = reservationsHere.length;
 
   const doSave = () => {
+    const effCapacity = canSplit ? capacity : 1;
     // La période n'est pas plus stricte que la saison : un créneau du soir (22:00–23:30)
     // reste légitime, la seule borne est MINUIT — posée en amont par `slotPlacementError`
     // dans `save`, pas ici. Ne referme qu'au succès : une écriture rejetée garde l'éditeur
     // ouvert plutôt que de disparaître en donnant l'illusion d'être enregistrée.
+    // Libellé de groupe : envoyé seulement sur un créneau partageable (≥ 2), sinon null (P2-17).
     update.mutate(
-      { id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: canSplit ? capacity : 1 } },
+      { id: slot.id, body: { venueId: slot.venueId, dayOfWeek: day, startTime: time, durationMinutes: duration, capacity: effCapacity, groupLabel: effCapacity >= 2 ? groupLabel : null } },
       {
         onSuccess: () => {
           // Le déplacement a orpheliné les réservations de l'ancienne position : on les
@@ -768,6 +771,7 @@ function PeriodSlotEditor({
       </div>
 
       {canSplit ? <SharedSlotHint capacity={capacity} /> : null}
+      {canSplit ? <GroupLabelField capacity={capacity} value={groupLabel} onChange={setGroupLabel} /> : null}
 
       {null !== error ? (
         <p role="alert" className="mt-3 text-sm text-destructive">
