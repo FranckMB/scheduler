@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { Closure } from "@/features/cockpit/api";
+
 import type { Constraint } from "../api";
 
 const createOverride = vi.fn();
@@ -40,7 +42,7 @@ const teamOverridesLoadingState = { value: false };
 const teamOverridesErrorState = { value: false };
 const constraintOverridesLoadingState = { value: false };
 const constraintOverridesErrorState = { value: false };
-const conflictState: { venueIds: string[] } = { venueIds: [] };
+const conflictState: { venueIds: string[]; closures: Closure[] } = { venueIds: [], closures: [] };
 const overridesVenueState: { data: Array<{ id: string; schedulePlanId: string; venueId: string; mode: "DISABLED" | "BLANK" }> } = { data: [] };
 const overridesFetchingState = { value: false };
 const venueCanSplitState = { value: false };
@@ -143,7 +145,7 @@ vi.mock("../queries", () => ({
   useDeletePeriodConstraintOverride: () => ({ mutate: deleteConstraintOverride, isPending: false }),
 }));
 vi.mock("@/features/cockpit/queries", () => ({
-  useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds } }),
+  useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds, closures: conflictState.closures }, isError: false, refetch: vi.fn() }),
   useCalendarEntry: () => ({ data: entryState.data, isLoading: false }),
   useSchedulePlanForEntry: () => ({ data: planState.data, isLoading: false }),
   // Dérivé de planState : un test qui met planState.data à undefined simule le plan pas
@@ -194,6 +196,7 @@ afterEach(() => {
   constraintOverridesLoadingState.value = false;
   constraintOverridesErrorState.value = false;
   conflictState.venueIds = [];
+  conflictState.closures = [];
   overridesVenueState.data = [];
   overridesFetchingState.value = false;
   deletePeriodSlotImpl.value = deleteSlot;
@@ -505,10 +508,31 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     // Revue #8 PR-B round 2 finding #5 : avec un sélecteur (une grille à la fois), le badge
     // par gymnase ne montre que le gymnase choisi ; un gymnase interdit non sélectionné
     // passait inaperçu. Une alerte d'ensemble nomme tous les interdits.
+    // D3 (P2-22) — le libellé est désormais au grain JOUR, plus « INTERDIT cette période ».
     conflictState.venueIds = ["v1"];
+    conflictState.closures = [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [5, 6, 7] }];
     render(<PeriodVenues calendarEntryId="e1" />);
     const alert = screen.getByRole("alert");
-    expect(alert).toHaveTextContent(/INTERDIT cette période.*Gymnase A/);
+    expect(alert).toHaveTextContent(/Gymnase A.*Indispo ven–dim du 1\/5 au 10\/5 — Travaux/);
+  });
+
+  // D3 (P2-22) — une fermeture qui ne couvre QUE ven–dim n'est plus présentée comme un
+  // interdit « toute la période » : le grain est le JOUR, pris de `weekdays` (serveur).
+  it("nomme la fermeture au grain JOUR (« ven–dim »), plus « INTERDIT cette période »", () => {
+    conflictState.venueIds = ["v1"];
+    conflictState.closures = [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [5, 6, 7] }];
+    render(<PeriodVenues calendarEntryId="e1" />);
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Indispo ven–dim du 1/5 au 10/5 — Travaux");
+    expect(alert).not.toHaveTextContent("INTERDIT cette période");
+    expect(screen.queryByText(/toute la période/)).toBeNull();
+  });
+
+  it("dit « toute la période » quand les 7 jours de la fenêtre sont fermés", () => {
+    conflictState.venueIds = ["v1"];
+    conflictState.closures = [{ constraintId: "cc", venueId: "v1", title: "Congés", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [1, 2, 3, 4, 5, 6, 7] }];
+    render(<PeriodVenues calendarEntryId="e1" />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Indispo toute la période du 1/5 au 10/5 — Congés");
   });
 
   it("désactiver un gymnase pose le mode, sans toucher à sa grille", async () => {

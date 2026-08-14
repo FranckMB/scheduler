@@ -20,8 +20,11 @@ import { formatDuration } from "@/shared/lib/duration";
 import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
 
+import type { Closure } from "@/features/cockpit/api";
+
 import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
 import { DAYS, DURATIONS, durationOptions, hhmm } from "../lib/days";
+import { closuresByVenue, closurePeriodLabel } from "../lib/venueClosures";
 import { slotPlacementError } from "../lib/slotOverlap";
 import {
   useCreatePeriodConstraintOverride,
@@ -372,8 +375,8 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
   // écran qui fonctionne. Seul un échec SANS rien à montrer s'affiche.
   if (readLoading(periodSlotsQuery) || readLoading(overridesQuery) || readLoading(conflictsQuery)) {
     // Les conflits font partie du chargement : sans eux, la grille se rend avec ZÉRO
-    // badge « INTERDIT cette période » — tout paraît permis, et le gestionnaire pose
-    // des créneaux dans un gymnase fermé (le vide crédible, version interdits).
+    // fermeture affichée — tout paraît permis, et le gestionnaire pose des créneaux dans un
+    // gymnase fermé (le vide crédible, version fermetures).
     return <p className="text-xs text-muted-foreground">Chargement de la grille de la période…</p>;
   }
   // Les conflits portent l'interdit « ce gymnase est fermé cette période » : les
@@ -405,7 +408,12 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
   const overrides = overridesQuery.data ?? [];
   const selected = (selectedId ? venues.find((v) => v.id === selectedId) : null) ?? venues[0];
   const override = overrides.find((o) => o.venueId === selected.id) ?? null;
+  // D3 (P2-22) — `venueIds` reste l'INDEX des gymnases concernés ; le DÉTAIL (jours fermés,
+  // dates, titre) vient de `closures`, au grain JOUR. Le front ne dérive rien : `weekdays` est
+  // calculé serveur.
   const closed = new Set(conflicts?.venueIds ?? []);
+  const closuresByV = closuresByVenue(conflicts?.closures ?? []);
+  const closureLabelsFor = (venueId: string): string[] => (closuresByV.get(venueId) ?? []).map(closurePeriodLabel);
   const venueSlots = periodSlots.filter((s) => s.venueId === selected.id);
 
   return (
@@ -423,7 +431,7 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
           aria-label="Gymnase"
           className="h-9"
           wrapperClassName="w-60"
-          venues={venues.map((v) => ({ id: v.id, name: v.name + (closed.has(v.id) ? " — INTERDIT cette période" : ""), color: v.color }))}
+          venues={venues.map((v) => ({ id: v.id, name: v.name + (closed.has(v.id) ? " — " + (closureLabelsFor(v.id).join(" · ") || "Indispo cette période") : ""), color: v.color }))}
           value={selected.id}
           onChange={(e) => {
             setSelectedId(e.target.value);
@@ -438,9 +446,15 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
           round 2) — sans quoi il croit un gymnase utilisable et ne comprend pas pourquoi
           aucune équipe n'y est placée. */}
       {venues.some((v) => closed.has(v.id)) ? (
-        <p role="alert" className="mb-3 text-sm text-destructive">
-          INTERDIT cette période : {venues.filter((v) => closed.has(v.id)).map((v) => v.name).join(", ")}.
-        </p>
+        <div role="alert" className="mb-3 space-y-1 text-sm text-destructive">
+          {venues
+            .filter((v) => closed.has(v.id))
+            .map((v) => (
+              <p key={v.id}>
+                <span className="font-medium">{v.name}</span> : {closureLabelsFor(v.id).join(" · ") || "Indispo cette période"}
+              </p>
+            ))}
+        </div>
       ) : null}
 
       <PeriodVenuePanel
@@ -449,7 +463,7 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
         schedulePlanId={schedulePlanId}
         slots={venueSlots}
         override={override}
-        isClosedByConstraint={closed.has(selected.id)}
+        closures={closuresByV.get(selected.id) ?? []}
         syncing={overridesQuery.isFetching}
         editingSlot={editingSlot}
         onEditSlot={setEditingSlot}
@@ -465,7 +479,7 @@ function PeriodVenuePanel({
   schedulePlanId,
   slots,
   override,
-  isClosedByConstraint,
+  closures,
   syncing,
   editingSlot,
   onEditSlot,
@@ -476,7 +490,7 @@ function PeriodVenuePanel({
   schedulePlanId: string;
   slots: VenueTrainingSlot[];
   override: VenuePeriodOverride | null;
-  isClosedByConstraint: boolean;
+  closures: Closure[];
   syncing: boolean;
   editingSlot: VenueTrainingSlot | null;
   onEditSlot: (slot: VenueTrainingSlot | null) => void;
@@ -524,7 +538,11 @@ function PeriodVenuePanel({
       <header className="mb-2 flex flex-wrap items-center gap-2">
         <span className={cn("font-medium", isDisabled && "text-muted-foreground line-through")}>{venue.name}</span>
         {isDisabled ? <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold text-muted-foreground">Désactivé cette période</span> : null}
-        {isClosedByConstraint ? <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive">INTERDIT cette période</span> : null}
+        {closures.map((c) => (
+          <span key={c.constraintId} className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive">
+            {closurePeriodLabel(c)}
+          </span>
+        ))}
         <span className="text-xs text-muted-foreground">
           {slots.length} créneau{slots.length > 1 ? "x" : ""}
         </span>
@@ -567,6 +585,7 @@ function PeriodVenuePanel({
         <VenueAvailabilityGrid
           venue={venue}
           slots={slots}
+          closures={closures}
           selectedSlotId={editingSlot?.id ?? null}
           onAdd={(dayOfWeek, startTime) => {
             // Un créneau peut finir APRÈS la dernière ligne de la grille — un créneau du
