@@ -105,7 +105,11 @@ printf '%s\n' "$out" | tail -8
 
 # 8. Assert
 if printf '%s' "$out" | grep -q 'COMPLETED'; then
-  score=$(printf '%s' "$out" | grep -oE 'Score: [0-9]+' | tail -1)
+  # Un score NÉGATIF est légitime (pénalités PRÉFÉRÉ des règles de bien-être,
+  # P2-28 ; le −30 du seed BCCL = artefact P4-97 documenté). Sans le `-?` et le
+  # `|| true`, grep sortait en échec sur « Score: -30 » et `set -e` tuait le
+  # script APRÈS un COMPLETED pourtant conforme — un faux rouge de CI.
+  score=$(printf '%s' "$out" | grep -oE 'Score: -?[0-9]+' | tail -1 || true)
   ok "solver responded, schedule COMPLETED (${score:-no score}). Diagnostics/warnings are acceptable."
   exit 0
 fi
