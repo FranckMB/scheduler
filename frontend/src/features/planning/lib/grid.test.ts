@@ -227,6 +227,81 @@ describe("buildGrid", () => {
   });
 });
 
+describe("buildGrid — libellé de groupe / fusion (P2-17 D4)", () => {
+  const u15: Team = { id: "t3", name: "U15", sportCategoryId: "cat1", priorityTierId: 3, tierOrder: 0 };
+  const withLabels = (entries: [string, string][], teams?: Map<string, Team>): Lookups => ({
+    ...lookups,
+    teams: teams ?? lookups.teams,
+    groupLabels: new Map(entries),
+  });
+  const shared = [
+    slot({ id: "s1", venueId: "v1", teamId: "t1", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90 }),
+    slot({ id: "s2", venueId: "v1", teamId: "t2", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90 }),
+  ];
+
+  it("fusionne les équipes d'un créneau mutualisé libellé en UNE carte titrée (vue gymnase)", () => {
+    const model = buildGrid(shared, "gymnase", withLabels([["v1|1|1080", "CEC3"]]));
+    const groups = model.cells.filter((c) => null !== c.groupLabel);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].groupLabel).toBe("CEC3");
+    expect(groups[0].laneCount).toBe(1); // pleine largeur, pas en couloirs
+    expect(groups[0].members.map((m) => m.teamLabel).sort()).toEqual(["U11", "U13"]);
+    // Aucune cellule ordinaire résiduelle pour ces séances.
+    expect(model.cells.filter((c) => null === c.groupLabel)).toHaveLength(0);
+  });
+
+  it("garde chaque équipe cliquable — les slotId des membres sont conservés", () => {
+    const model = buildGrid(shared, "gymnase", withLabels([["v1|1|1080", "CEC3"]]));
+    const group = model.cells.find((c) => null !== c.groupLabel)!;
+    expect(group.members.map((m) => m.slotId).sort()).toEqual(["s1", "s2"]);
+  });
+
+  it("fusionne trois équipes d'un terrain divisé en trois", () => {
+    const three = [
+      slot({ id: "a", venueId: "v1", teamId: "t1", dayOfWeek: 1, startTime: "18:00:00" }),
+      slot({ id: "b", venueId: "v1", teamId: "t2", dayOfWeek: 1, startTime: "18:00:00" }),
+      slot({ id: "c", venueId: "v1", teamId: "t3", dayOfWeek: 1, startTime: "18:00:00" }),
+    ];
+    const teams = new Map([...lookups.teams, ["t3", u15] as const]);
+    const model = buildGrid(three, "gymnase", withLabels([["v1|1|1080", "CEC3"]], teams));
+    const groups = model.cells.filter((c) => null !== c.groupLabel);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].members).toHaveLength(3);
+  });
+
+  it("sans libellé, les équipes du même créneau restent des cartes séparées (couloirs)", () => {
+    const model = buildGrid(shared, "gymnase", lookups); // pas de groupLabels
+    expect(model.cells.every((c) => null === c.groupLabel && 0 === c.members.length)).toBe(true);
+    expect(model.cells).toHaveLength(2);
+    expect(model.cells.every((c) => c.laneCount === 2)).toBe(true);
+  });
+
+  it("une seule équipe sous un libellé ne fusionne pas (« plusieurs » requiert ≥ 2)", () => {
+    const solo = [slot({ id: "only", venueId: "v1", teamId: "t1", dayOfWeek: 1, startTime: "18:00:00" })];
+    const model = buildGrid(solo, "gymnase", withLabels([["v1|1|1080", "CEC3"]]));
+    expect(model.cells).toHaveLength(1);
+    expect(model.cells[0].groupLabel).toBeNull();
+  });
+
+  it("ne fusionne jamais hors vue gymnase (équipe)", () => {
+    const model = buildGrid(shared, "equipe", withLabels([["v1|1|1080", "CEC3"]]));
+    expect(model.cells.every((c) => null === c.groupLabel)).toBe(true);
+    expect(model.cells).toHaveLength(2);
+  });
+
+  it("des créneaux libellés différemment ne se fusionnent pas ensemble", () => {
+    // Deux fenêtres distinctes (heures différentes), chacune son libellé : aucune fusion
+    // croisée — la clé de fusion porte gymnase|jour|début|libellé.
+    const twoWindows = [
+      slot({ id: "e", venueId: "v1", teamId: "t1", dayOfWeek: 1, startTime: "18:00:00" }),
+      slot({ id: "l", venueId: "v1", teamId: "t2", dayOfWeek: 1, startTime: "20:00:00" }),
+    ];
+    const model = buildGrid(twoWindows, "gymnase", withLabels([["v1|1|1080", "CEC3"], ["v1|1|1200", "CEC4"]]));
+    expect(model.cells.every((c) => null === c.groupLabel)).toBe(true);
+    expect(model.cells).toHaveLength(2);
+  });
+});
+
 describe("availableResources", () => {
   it("lists distinct resources for the view, sorted", () => {
     const slots = [slot({ venueId: "v2" }), slot({ venueId: "v1" }), slot({ venueId: "v1" })];

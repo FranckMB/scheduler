@@ -27,7 +27,7 @@ import { GenerationWaiting } from "./GenerationWaiting";
 import { buildTagTeamIds } from "./lib/applicableConstraints";
 import { topSeveritySummary } from "./lib/diagnosticsSummary";
 import { computeEmptySlots } from "./lib/emptySlots";
-import { availableResourceGroups, buildGrid, type Lookups } from "./lib/grid";
+import { availableResourceGroups, buildGrid, type Lookups, slotGroupKey } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
 import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
@@ -371,14 +371,24 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         teamPlayerCoaches.set(link.teamId, [...(teamPlayerCoaches.get(link.teamId) ?? []), link.coachId]);
       }
     }
+    // P2-17 — libellé de groupe d'une fenêtre (clé gymnase|jour|minute) : le front AFFICHE
+    // le champ calculé par le backend, il ne le re-dérive pas. Vide/trim→ignoré.
+    const groupLabels = new Map<string, string>();
+    for (const ts of trainingSlots) {
+      const label = (ts.groupLabel ?? "").trim();
+      if ("" !== label) {
+        groupLabels.set(slotGroupKey(ts.venueId, ts.dayOfWeek, ts.startTime), label);
+      }
+    }
     return {
       teams: new Map(teams.map((t) => [t.id, t])),
       venues: new Map(venues.map((v) => [v.id, v])),
       coaches: new Map(coaches.map((c) => [c.id, c])),
       teamCoach,
       teamPlayerCoaches,
+      groupLabels,
     };
-  }, [teams, venues, coaches, teamCoaches, coachPlayers]);
+  }, [teams, venues, coaches, teamCoaches, coachPlayers, trainingSlots]);
 
   // Defined venue windows the solver left unfilled ("créneaux vides"). Injected
   // into the grid in the GYMNASE view only (they have no team/coach) so they

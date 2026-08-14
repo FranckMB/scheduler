@@ -223,6 +223,9 @@ export interface VenueTrainingSlot {
   startTime: string;
   durationMinutes: number;
   capacity: number;
+  /** P2-17 — libellé d'un créneau mutualisé (« CEC3 »), null/absent quand il n'en porte pas.
+   *  Purement esthétique : titre la carte fusionnée de la vue gymnase. */
+  groupLabel?: string | null;
 }
 
 export interface Coach {
