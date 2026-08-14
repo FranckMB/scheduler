@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Seed;
 
-use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Coach;
@@ -22,9 +21,6 @@ use App\Entity\TeamCoach;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
-use App\Enum\CalendarEntryKind;
-use App\Enum\CalendarEntryPeriodType;
-use App\Enum\CalendarEntryStatus;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -980,7 +976,6 @@ final class BcclSeeder
         foreach (['U18F2', 'U18M2'] as $teamName) {
             $addConstraint($teamName . ' - Armand préféré', ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vArmand']->getId()]);
         }
-
 
         // --- COACH_AVAILABILITY (indisponibilités ; 5 = vendredi, 4 = jeudi) ---
         // Variables coach déjà résolues (l.618+) : un coach manquant lève une erreur PHP au lieu de disparaître en silence.
