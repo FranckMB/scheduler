@@ -61,6 +61,12 @@ class ScheduleDiagnosticResource
     public ?string $venueId = null;
 
     #[Groups(['read'])]
+    public ?int $dayOfWeek = null;
+
+    #[Groups(['read'])]
+    public ?string $startTime = null;
+
+    #[Groups(['read'])]
     public string $message = '';
 
     /** @var array<string, mixed> */
@@ -80,6 +86,8 @@ class ScheduleDiagnosticResource
         $dto->teamId = $entity->getTeamId();
         $dto->coachId = $entity->getCoachId();
         $dto->venueId = $entity->getVenueId();
+        $dto->dayOfWeek = $entity->getDayOfWeek();
+        $dto->startTime = $entity->getStartTime();
         $dto->message = $entity->getMessage();
         $dto->suggestions = $entity->getSuggestions();
 

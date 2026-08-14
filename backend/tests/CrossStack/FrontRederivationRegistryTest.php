@@ -113,7 +113,7 @@ final class FrontRederivationRegistryTest extends TestCase
      * @var array<string, string>
      */
     private const array EXEMPTIONS = [
-        'features/planning/lib/describeConstraint.ts' => 'présentation : traduit family/scope en verbes gymnase — contre-exemple sain nommé au brief',
+        'features/planning/lib/describeConstraint.ts' => 'présentation : family → verbes gymnase, scope → LIBELLÉ de cible (équipe/coach/Groupe X/Toutes les équipes) — jamais un verdict d\'applicabilité (ça, c\'est applicableConstraints)',
         'features/wizard/lib/constraintOrder.ts' => 'présentation : ordonne les contraintes pour l\'affichage (tri), aucun verdict solveur',
         'features/wizard/steps/ConstraintsStep.tsx' => 'éditeur de formulaire : quels CHAMPS montrer par famille lors de la saisie — pas ce que le solveur fait',
         'features/wizard/steps/RecapStep.tsx' => 'affichage : compte les contraintes HARD pour un chiffre du récap',

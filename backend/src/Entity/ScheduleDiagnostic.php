@@ -57,6 +57,15 @@ class ScheduleDiagnostic implements TenantOwnedInterface
     #[ORM\Column(type: 'guid', nullable: true)]
     private ?string $venueId = null;
 
+    // Only a `conflict` (of 11 diagnostic types) pinpoints a slot: it carries the
+    // day + start time the offending session sits at, so the UI can open THAT slot
+    // on the grid. Nullable because every other type leaves them absent.
+    #[ORM\Column(type: 'smallint', nullable: true)]
+    private ?int $dayOfWeek = null;
+
+    #[ORM\Column(type: 'string', length: 5, nullable: true)]
+    private ?string $startTime = null;
+
     #[ORM\Column(type: 'text')]
     private string $message;
 
@@ -211,6 +220,30 @@ class ScheduleDiagnostic implements TenantOwnedInterface
     public function setVenueId(?string $venueId): self
     {
         $this->venueId = $venueId;
+
+        return $this;
+    }
+
+    public function getDayOfWeek(): ?int
+    {
+        return $this->dayOfWeek;
+    }
+
+    public function setDayOfWeek(?int $dayOfWeek): self
+    {
+        $this->dayOfWeek = $dayOfWeek;
+
+        return $this;
+    }
+
+    public function getStartTime(): ?string
+    {
+        return $this->startTime;
+    }
+
+    public function setStartTime(?string $startTime): self
+    {
+        $this->startTime = $startTime;
 
         return $this;
     }
