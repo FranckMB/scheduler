@@ -108,9 +108,14 @@ final class ValidateConstraintsTest extends WebTestCase
     /**
      * PR A (2026-08-06) — saturation des « au moins » par gymnase. Deux équipes exigent
      * chacune 1 séance à Matéo (2 places demandées) ; le gymnase a 2 créneaux mais une
-     * réservation en verrouille un (un triplet verrouillé n'a de variable pour PERSONNE,
-     * `model.py:62-63`) : 1 place libre pour 2 demandées → INFEASIBLE certain, BLOQUEUR.
-     * C'est le scénario BCCL du jour, découvert en échec de génération muet.
+     * TROISIÈME équipe (sans minimum) en verrouille un par réservation → 1 place libre
+     * pour 2 demandées → INFEASIBLE certain, BLOQUEUR.
+     *
+     * ⚠ P4-97 — l'occupant DOIT être une équipe SANS minimum : un pin de teamA ou teamB
+     * CRÉDITE désormais le minimum de sa propre équipe (une équipe déjà servie par sa
+     * réservation ne demande plus rien), donc un pin de l'une des deux ne saturerait plus
+     * (cf. `testVenueMinimumSatisfiedByOwnReservationsDoesNotBlock`). C'est l'occupation par
+     * un TIERS non demandeur qui vole la place et rend la saturation réelle.
      */
     public function testVenueMinimumsSaturatedByReservationsBlock(): void
     {
@@ -119,9 +124,10 @@ final class ValidateConstraintsTest extends WebTestCase
         $this->trainingSlot($venueId, dayOfWeek: 2, start: '18:00');
         $teamA = $this->team(sessionsPerWeek: 1);
         $teamB = $this->team(sessionsPerWeek: 1);
+        $occupier = $this->team(sessionsPerWeek: 1); // aucun minimum : il vole une place sans rien satisfaire
         $this->minAtVenue($teamA, $venueId);
         $this->minAtVenue($teamB, $venueId);
-        $this->reservation($teamA, $venueId, dayOfWeek: 1, start: '18:00');
+        $this->reservation($occupier, $venueId, dayOfWeek: 1, start: '18:00');
 
         $this->client->loginUser($this->user);
         $this->client->request('POST', '/api/constraints/validate', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
@@ -132,6 +138,33 @@ final class ValidateConstraintsTest extends WebTestCase
         $blockers = implode(' | ', $data['blockers']);
         self::assertStringContainsString('Matéo', $blockers, 'le bloqueur doit nommer le gymnase saturé');
         self::assertStringContainsString('2 places', $blockers);
+    }
+
+    /**
+     * NR — P4-97 : une équipe DÉJÀ SERVIE par ses PROPRES réservations au gymnase ne
+     * déclenche AUCUN faux bloqueur. Matéo n'a que 2 créneaux, teamA exige 2 séances là
+     * et y est réservée les 2 jours → son minimum est saturé par ses verrous
+     * (effective_min = 2 − 2 = 0). Avant le fix, le miroir comptait demande=2 pour 0 place
+     * libre (les 2 créneaux verrouillés) → faux « 0 place, la génération échouera »,
+     * c'était LE rouge e2e de la PR #569.
+     */
+    public function testVenueMinimumSatisfiedByOwnReservationsDoesNotBlock(): void
+    {
+        $venueId = $this->venue('Matéo');
+        $this->trainingSlot($venueId, dayOfWeek: 1, start: '18:00');
+        $this->trainingSlot($venueId, dayOfWeek: 2, start: '18:00');
+        $teamA = $this->team(sessionsPerWeek: 2);
+        $this->minAtVenue($teamA, $venueId, count: 2);
+        $this->reservation($teamA, $venueId, dayOfWeek: 1, start: '18:00');
+        $this->reservation($teamA, $venueId, dayOfWeek: 2, start: '18:00');
+
+        $this->client->loginUser($this->user);
+        $this->client->request('POST', '/api/constraints/validate', [], [], ['HTTP_X-Club-Id' => $this->club->getId()]);
+
+        self::assertResponseStatusCodeSame(200);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertTrue($data['valid'], 'une équipe servie par ses propres réservations ne doit pas bloquer');
+        self::assertSame([], $data['blockers']);
     }
 
     /** Témoin du cas ci-dessus : sans la réservation, 2 places libres pour 2 demandées — rien ne bloque. */
@@ -554,17 +587,17 @@ final class ValidateConstraintsTest extends WebTestCase
     }
 
     /** « Au moins 1 séance dans ce gymnase » pour l'équipe — la contrainte du scénario BCCL. */
-    private function minAtVenue(string $teamId, string $venueId): void
+    private function minAtVenue(string $teamId, string $venueId, int $count = 1): void
     {
         $constraint = new Constraint;
         $constraint->setClubId($this->club->getId());
         $constraint->setSeasonId($this->season->getId());
-        $constraint->setName('Au moins 1 à Matéo');
+        $constraint->setName(\sprintf('Au moins %d à Matéo', $count));
         $constraint->setScope(ConstraintScope::TEAM);
         $constraint->setScopeTargetId($teamId);
         $constraint->setFamily(ConstraintFamily::FACILITY);
         $constraint->setRuleType(ConstraintRuleType::HARD);
-        $constraint->setConfig(['minAtVenueId' => $venueId, 'minAtVenueCount' => 1]);
+        $constraint->setConfig(['minAtVenueId' => $venueId, 'minAtVenueCount' => $count]);
         $constraint->setIsActive(true);
         $this->em->persist($constraint);
         $this->em->flush();

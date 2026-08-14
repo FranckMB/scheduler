@@ -543,6 +543,53 @@ def add_coach_player_non_overlap(
     return time_key_added + interval_added
 
 
+def _locked_person_day_intervals(
+    model: Any,
+    team_coach_map: dict[str, list[str]] | None,
+    team_player_map: dict[str, list[str]] | None,
+) -> dict[str, dict[int, list[tuple[int, int]]]]:
+    """Map each person (coach or player) to the HARD-locked sessions they own, by weekday.
+
+    P4-97 — a HARD-locked session carries NO model variable (``model.py`` drops the
+    ``x[team, venue, day, start]`` var), so the wellbeing rules 3b/3c/3d never saw it: a
+    coach whose only sessions are locked read as « never working », a day served solely by
+    a locked salarié read as « no salarié present », and a mixed locked+free back-to-back
+    chain was invisible to the POSE. This translates each locked session back to the people
+    it involves via ``team_coach_map`` (MAIN coaches) and ``team_player_map`` (players,
+    coach-players included) — NEVER ``slot.coachId`` — so those rules can pin the matching
+    literals as constants.
+
+    Returns ``person_id -> weekday(int) -> [(start_minute, end_minute), …]``. Days are not
+    filtered to Mon-Fri here; each consumer applies its own day window.
+    """
+    result: dict[str, dict[int, list[tuple[int, int]]]] = defaultdict(lambda: defaultdict(list))
+    coach_map = team_coach_map or {}
+    player_map = team_player_map or {}
+    for locked in getattr(model, "locked_slots", ()) or ():
+        team_id = str(_get(locked, "team_id", "teamId", default="") or "")
+        if not team_id:
+            continue
+        day_raw = _get(locked, "day_of_week", "dayOfWeek", default=None)
+        start_raw = _get(locked, "start_time", "startTime", default=None)
+        if day_raw is None or start_raw is None:
+            continue
+        try:
+            day = int(day_raw)
+        except (TypeError, ValueError):
+            continue
+        start = _time_to_minutes(start_raw)
+        duration = int(_get(locked, "duration_minutes", "durationMinutes", default=DEFAULT_SESSION_MINUTES))
+        end = start + duration
+        persons: set[str] = set()
+        for coach_id in coach_map.get(team_id, ()):
+            persons.add(str(coach_id))
+        for player_id in player_map.get(team_id, ()):
+            persons.add(str(player_id))
+        for person in persons:
+            result[person][day].append((start, end))
+    return result
+
+
 def add_coach_rest_day_constraints(
     model: Any,
     assignments: Sequence[AssignmentVariable],
@@ -568,6 +615,16 @@ def add_coach_rest_day_constraints(
     Both coaching assignments (via ``team_coach_map``) and coach-player playing
     assignments (via ``team_player_map``) count as working days. Falls back to
     assignment attributes when maps are not provided or team is not found.
+
+    P4-97 — a HARD-locked session of the coach's team (coached OR played) makes that day a
+    CONSTANT working day. Locked days leave the reification and CREDIT the bound: HARD caps
+    the FREE days at ``5 - min_rest_days - locked_working_days``. This tightens the bound that
+    used to be too lax (a coach half-locked no longer reads as over-resting) AND the
+    aggregated PREFERRED literal now counts real violations instead of phantoms. ⚑ ALIGN-07 —
+    a lock is sovereign: when the locks ALONE exceed the cap (``free_cap < 0``) the HARD bound
+    is NOT posted, so a fully-locked coach never turns generation INFEASIBLE — the violation is
+    left to the post-solve diagnostic (same discipline as 3c and the fully-locked 3d chain).
+    PREFERRED still lights the literal in that case: the penalty is deserved, not phantom.
     """
 
     # Build coach_id -> max_days_override map
@@ -625,6 +682,8 @@ def add_coach_rest_day_constraints(
                 if player_id_str in coach_max_days:
                     person_day_vars[(player_id_str, day)].append(assignment.var)
 
+    locked_person_days = _locked_person_day_intervals(model, team_coach_map, team_player_map)
+
     added = 0
     for coach_id_str in coach_max_days:
         # P4-51 — le skip « override ≤ 4 ⇒ repos déjà garanti » est MORT. Il reposait sur
@@ -634,13 +693,26 @@ def add_coach_rest_day_constraints(
         # un terme soft de l'objectif (`add_coach_day_cap_penalty`) ; la garantie d'un
         # jour de repos lun-ven, elle, vaut pour TOUS les coachs, sans exemption.
 
-        # Create is_working BoolVars for each day 1-5 using reification
-        is_working_vars: list[BoolVarLike] = []
+        # P4-97 — jours où une séance VERROUILLÉE de ce coach tombe : le coach travaille,
+        # c'est une CONSTANTE. Ces jours sortent de la réification et entrent dans la borne
+        # comme un nombre : la borne sur les jours LIBRES est créditée d'autant, et le compte
+        # PREFERRED inclut les verrous. ⚑ ALIGN-07 (verrou souverain) : si les seuls verrous
+        # dépassent déjà le plafond, on ne pose RIEN en HARD — la génération n'échoue pas, la
+        # violation est laissée au diagnostic post-solve (même discipline que la 3d « chaîne
+        # entièrement verrouillée » et la 3c). PREFERRED, lui, allume le littéral (violation
+        # RÉELLE, pénalité méritée).
+        locked_working_days = len(locked_person_days.get(coach_id_str, {}))
+        locked_days_for_coach = set(locked_person_days.get(coach_id_str, {}))
+
+        # Create is_working BoolVars for the FREE days 1-5 using reification (locked days are
+        # constants, not variables).
+        free_is_working_vars: list[BoolVarLike] = []
         for day in range(1, 6):
+            if day in locked_days_for_coach:
+                continue
             day_vars = _dedupe_variables(person_day_vars.get((coach_id_str, day), []))
             is_working = cast(Any, model).NewBoolVar(f"coach_rest_day_is_working_{coach_id_str}_day{day}")
-            is_working_vars.append(is_working)
-
+            free_is_working_vars.append(is_working)
             if not day_vars:
                 # No assignments on this day => coach is definitely not working
                 cast(Any, model).Add(is_working == 0)
@@ -650,16 +722,19 @@ def add_coach_rest_day_constraints(
                 cast(Any, model).Add(day_sum == 0).OnlyEnforceIf(is_working.Not())
 
         working_cap = 5 - min_rest_days
+        free_cap = working_cap - locked_working_days
         if intensity == PREFERRED:
-            # Un littéral de violation AGRÉGÉ par coach : « travaille plus que le plafond ».
+            # Un littéral de violation AGRÉGÉ par coach : « travaille plus que le plafond »,
+            # verrous inclus. free_cap < 0 ⇒ les verrous seuls dépassent ⇒ over forcé vrai.
             over = cast(Any, model).NewBoolVar(f"coach_rest_over_{coach_id_str}")
-            cast(Any, model).Add(sum(is_working_vars) >= working_cap + 1).OnlyEnforceIf(over)
-            cast(Any, model).Add(sum(is_working_vars) <= working_cap).OnlyEnforceIf(over.Not())
+            cast(Any, model).Add(sum(free_is_working_vars) >= free_cap + 1).OnlyEnforceIf(over)
+            cast(Any, model).Add(sum(free_is_working_vars) <= free_cap).OnlyEnforceIf(over.Not())
             if soft_terms_out is not None:
                 soft_terms_out.append((over, COACH_REST_VIOLATION_WEIGHT))
-        else:
-            # HARD : au plus ``5 - min_rest_days`` jours travaillés lun-ven.
-            cast(Any, model).Add(sum(is_working_vars) <= working_cap)
+        elif free_cap >= 0:
+            # HARD : au plus ``free_cap`` jours LIBRES travaillés (le reste après crédit des
+            # verrous). free_cap < 0 → rien à poser (verrou souverain, cf. commentaire ci-dessus).
+            cast(Any, model).Add(sum(free_is_working_vars) <= free_cap)
         added += 1
 
     return added
@@ -686,6 +761,12 @@ def add_salarie_distribution_constraints(
     Both coaching assignments (via ``team_coach_map``) and coach-player playing
     assignments (via ``team_player_map``) count as being present. Falls back to
     assignment attributes when maps are not provided.
+
+    P4-97 — a day on which a salarié has a HARD-locked session (coached OR played) is a
+    CONSTANT « salarié present » day: ``day_has_salarie[d]`` is forced to 1. In HARD this
+    removes the phantom INFEASIBLE of a schedule whose salarié sessions are all locked; in
+    PREFERRED it removes the phantom violation literals (a day truly without any salarié
+    still lights its literal).
 
     Skipped if there are fewer than 2 salarié coaches.
     """
@@ -737,17 +818,27 @@ def add_salarie_distribution_constraints(
                 if str(player_id) in salarie_ids:
                     day_vars[day].append(assignment.var)
 
+    # P4-97 — jours ouvrés où un salarié a une séance VERROUILLÉE : présence constante.
+    locked_person_days = _locked_person_day_intervals(model, team_coach_map, team_player_map)
+    locked_salarie_days: set[int] = set()
+    for salarie_id in salarie_ids:
+        locked_salarie_days.update(locked_person_days.get(salarie_id, {}))
+
     added = 0
     for day in range(1, 6):
-        day_assignments = _dedupe_variables(day_vars.get(day, []))
         day_has_salarie = cast(Any, model).NewBoolVar(f"day_has_salarie_day{day}")
 
-        if not day_assignments:
-            cast(Any, model).Add(day_has_salarie == 0)
+        if day in locked_salarie_days:
+            # Un salarié encadre/joue ce jour-là par un verrou → présence constante.
+            cast(Any, model).Add(day_has_salarie == 1)
         else:
-            day_sum = sum(cast(Any, v) for v in day_assignments)
-            cast(Any, model).Add(day_sum >= 1).OnlyEnforceIf(day_has_salarie)
-            cast(Any, model).Add(day_sum == 0).OnlyEnforceIf(day_has_salarie.Not())
+            day_assignments = _dedupe_variables(day_vars.get(day, []))
+            if not day_assignments:
+                cast(Any, model).Add(day_has_salarie == 0)
+            else:
+                day_sum = sum(cast(Any, v) for v in day_assignments)
+                cast(Any, model).Add(day_sum >= 1).OnlyEnforceIf(day_has_salarie)
+                cast(Any, model).Add(day_sum == 0).OnlyEnforceIf(day_has_salarie.Not())
 
         if intensity == PREFERRED:
             # Un littéral de violation par jour ouvré : « aucun salarié ce jour-là ».
@@ -796,6 +887,12 @@ def add_max_consecutive_sessions_constraints(
 
     Coaches and players are looked up from ``team_coach_map`` and
     ``team_player_map`` when available, falling back to assignment attributes.
+
+    P4-97 — HARD-locked sessions of the person enter the chain search as CONSTANT
+    intervals (no model variable). A chain of ``max_consecutive`` slots with ``k`` locked
+    and ``N-k`` free yields ``sum(free) <= max_consecutive - 1 - k`` (HARD): dropping one
+    free slot is enough to break it. A fully-locked chain (``k == max_consecutive``) posts
+    nothing — the post-solve detection already diagnoses it.
     """
 
     coach_ids: set[str] = set()
@@ -809,7 +906,8 @@ def add_max_consecutive_sessions_constraints(
 
     # Deduplicate by variable so a person who is both coach and player on the
     # same team does not get duplicate entries that could mask real triples.
-    person_day_entries: dict[tuple[str, str], dict[int, tuple[int, int, AssignmentVariable]]] = defaultdict(dict)
+    # A ``None`` assignment marks a HARD-locked constant slot (no variable, P4-97).
+    person_day_entries: dict[tuple[str, str], dict[Any, tuple[int, int, AssignmentVariable | None]]] = defaultdict(dict)
 
     for assignment in assignments:
         slot_id = assignment.slot_id
@@ -857,6 +955,17 @@ def add_max_consecutive_sessions_constraints(
         for person_id in person_ids:
             person_day_entries[(person_id, day)][var_key] = (start_minutes, end_minutes, assignment)
 
+    # P4-97 — séances VERROUILLÉES en intervalles CONSTANTS (aucune variable) : elles
+    # entrent dans la recherche de chaînes avec ``None`` en 3ᵉ position.
+    locked_person_days = _locked_person_day_intervals(model, team_coach_map, team_player_map)
+    for person_id, day_intervals in locked_person_days.items():
+        if person_id not in coach_ids:
+            continue
+        for day_int, intervals in day_intervals.items():
+            day = str(day_int)
+            for start_m, end_m in intervals:
+                person_day_entries[(person_id, day)][f"locked:{start_m}:{end_m}"] = (start_m, end_m, None)
+
     added = 0
 
     # --- Cross-venue grouping by (person_id, day) — BUG-3 fix ---
@@ -864,18 +973,25 @@ def add_max_consecutive_sessions_constraints(
         slot_entries = list(entries_dict.values())
         chain_active_literals: list[BoolVarLike] = []
         for chain in _find_consecutive_chains(slot_entries, max_consecutive):
-            deduped = _dedupe_variables([entry[2].var for entry in chain])
-            if len(deduped) < max_consecutive:
+            deduped = _dedupe_variables([entry[2].var for entry in chain if entry[2] is not None])
+            locked_count = len(chain) - len(deduped)
+            if len(deduped) + locked_count < max_consecutive:
+                continue
+            if locked_count >= max_consecutive:
+                # Chaîne entièrement verrouillée : rien à décider — la détection post-solve
+                # la diagnostique déjà.
                 continue
             if intensity == PREFERRED:
-                # Réifie « toute la chaîne est sélectionnée » ; l'OR des chaînes du jour
+                # Réifie « tous les créneaux LIBRES de la chaîne sont sélectionnés » (les
+                # verrouillés sont présents par construction) ; l'OR des chaînes du jour
                 # devient le littéral de violation agrégé (person, day).
+                free_count = len(deduped)
                 active = cast(Any, model).NewBoolVar(f"chain_active_{person_id}_{day}_{len(chain_active_literals)}")
-                cast(Any, model).Add(sum(deduped) >= max_consecutive).OnlyEnforceIf(active)
-                cast(Any, model).Add(sum(deduped) <= max_consecutive - 1).OnlyEnforceIf(active.Not())
+                cast(Any, model).Add(sum(deduped) >= free_count).OnlyEnforceIf(active)
+                cast(Any, model).Add(sum(deduped) <= free_count - 1).OnlyEnforceIf(active.Not())
                 chain_active_literals.append(active)
             else:
-                cast(Any, model).Add(sum(deduped) <= max_consecutive - 1)
+                cast(Any, model).Add(sum(deduped) <= max_consecutive - 1 - locked_count)
                 added += 1
 
         if intensity == PREFERRED and chain_active_literals:
@@ -1244,14 +1360,42 @@ def add_venue_minimum_constraints(
 
     A COUNT (sum(team vars at V) >= N), NOT a forced venue. If the team has fewer
     available slots at V than N, it is provably unsatisfiable → emit an explicit
-    diagnostic (never a silent INFEASIBLE)."""
+    diagnostic (never a silent INFEASIBLE).
+
+    P4-97 — HARD-locked sessions of the team at V already count toward N but carry no
+    variable (``model.py``). Each DISTINCT locked day at V credits the minimum:
+    ``effective_min = minimum - locked_days_at_venue`` (floor 0). ``effective_min <= 0``
+    means the reservations already satisfy the floor → no constraint AND no diagnostic
+    (previously a false ``venue_minimum_unreachable`` fired here, e.g. SM2 pinned to
+    Matéo). Otherwise the constraint and the reachability test both run on the free days,
+    excluding the locked ones (a locked day cannot host a second session — one/day cap)."""
     added = 0
     conflicts: list[dict[str, Any]] = []
+
+    # Distinct HARD-locked days per (team, venue) — a locked session guarantees one
+    # session that day at V, so it credits the minimum.
+    locked_days_by_team_venue: dict[tuple[str, str], set[int]] = defaultdict(set)
+    for locked in getattr(model, "locked_slots", ()) or ():
+        locked_team = str(_get(locked, "team_id", "teamId", default="") or "")
+        locked_venue = str(_get(locked, "venue_id", "venueId", default="") or "")
+        locked_day = _get(locked, "day_of_week", "dayOfWeek", default=None)
+        if not locked_team or not locked_venue or locked_day is None:
+            continue
+        try:
+            locked_days_by_team_venue[(locked_team, locked_venue)].add(int(locked_day))
+        except (TypeError, ValueError):
+            continue
 
     for rule in venue_minimums or []:
         team_id = str(rule.get("scope_target_id"))
         venue_id = str(rule.get("venue_id"))
         minimum = int(rule.get("min") or 1)
+
+        locked_days = locked_days_by_team_venue.get((team_id, venue_id), set())
+        effective_min = minimum - len(locked_days)
+        if effective_min <= 0:
+            # Les réservations saturent déjà le plancher : rien à contraindre, rien à signaler.
+            continue
 
         team_venue_vars = [
             var
@@ -1262,9 +1406,10 @@ def add_venue_minimum_constraints(
             and str(slot_key[1]) == venue_id
         ]
 
-        # Reachability is bounded by the number of DISTINCT DAYS available at the
+        # Reachability is bounded by the number of DISTINCT FREE DAYS available at the
         # venue, NOT the raw slot count: a team plays ≤1 session/day (per-day cap),
-        # so two same-day slots still contribute at most ONE session. Counting raw
+        # so two same-day slots still contribute at most ONE session. Locked days are
+        # excluded — they already carry a session and cannot host another. Counting raw
         # vars would let a provably-infeasible minimum slip past → silent INFEASIBLE.
         team_venue_days = {
             slot_key[2]
@@ -1273,9 +1418,9 @@ def add_venue_minimum_constraints(
             and len(slot_key) >= 3
             and str(slot_key[0]) == team_id
             and str(slot_key[1]) == venue_id
-        }
+        } - locked_days
 
-        if len(team_venue_days) < minimum:
+        if len(team_venue_days) < effective_min:
             conflicts.append(
                 {
                     "id": f"venue_minimum_unreachable-{team_id}-{venue_id}",
@@ -1284,7 +1429,8 @@ def add_venue_minimum_constraints(
                     "teamId": team_id,
                     "message": (
                         f"Team {team_id} cannot reach {minimum} session(s) at venue {venue_id}: "
-                        f"only {len(team_venue_days)} distinct day(s) available there (≤1 session/day)."
+                        f"only {len(team_venue_days)} distinct free day(s) available there beyond "
+                        f"{len(locked_days)} locked day(s) (≤1 session/day)."
                     ),
                     "suggestions": ["Lower the minimum, or add availability slots on OTHER days at this venue."],
                     "createdAt": datetime.now(UTC).isoformat(),
@@ -1292,7 +1438,7 @@ def add_venue_minimum_constraints(
             )
             continue
 
-        model.Add(sum(team_venue_vars) >= minimum)
+        model.Add(sum(team_venue_vars) >= effective_min)
         added += 1
 
     return added, conflicts
@@ -1612,9 +1758,9 @@ def _add_interval_at_most_one(
 
 
 def _find_consecutive_chains(
-    entries: list[tuple[int, int, AssignmentVariable]],
+    entries: list[tuple[int, int, AssignmentVariable | None]],
     length: int,
-) -> list[tuple[tuple[int, int, AssignmentVariable], ...]]:
+) -> list[tuple[tuple[int, int, AssignmentVariable | None], ...]]:
     """Find back-to-back chains of exactly ``length`` slots where each slot's end
     equals the next slot's start (A.end == B.start == …).
 
@@ -1622,15 +1768,19 @@ def _find_consecutive_chains(
     (e.g. the same slot at different venues) are all considered as candidates.
     ``length=3`` reproduces the historical triple search. ``length<2`` yields nothing
     meaningful, so a floor of 2 is applied.
+
+    An entry's 3ʳᵈ element is the assignment variable, or ``None`` for a HARD-locked
+    constant slot (P4-97): chain detection cares only about the ``(start, end)`` pair, so
+    locked and free slots chain identically.
     """
     length = max(2, length)
-    by_start: dict[int, list[tuple[int, int, AssignmentVariable]]] = defaultdict(list)
+    by_start: dict[int, list[tuple[int, int, AssignmentVariable | None]]] = defaultdict(list)
     for entry in entries:
         by_start[entry[0]].append(entry)
 
-    chains: list[tuple[tuple[int, int, AssignmentVariable], ...]] = []
+    chains: list[tuple[tuple[int, int, AssignmentVariable | None], ...]] = []
 
-    def _extend(chain: tuple[tuple[int, int, AssignmentVariable], ...]) -> None:
+    def _extend(chain: tuple[tuple[int, int, AssignmentVariable | None], ...]) -> None:
         if len(chain) == length:
             chains.append(chain)
             return

@@ -64,12 +64,17 @@ final class PayloadCapacityMirror
      * Saturation des « au moins N ici » PAR GYMNASE — miroir dans le sens SÛR :
      *
      * - la DEMANDE est le Σ des minimums (par équipe×gymnase, le MAX quand plusieurs
-     *   règles se cumulent — le moteur pose un `>=` par règle, le max domine). Un pin
-     *   n'en soustrait RIEN : le moteur exige ces séances sur les variables du modèle,
-     *   et un créneau verrouillé n'a pas de variable (`model.py:62-63`) ;
+     *   règles se cumulent — le moteur pose un `>=` par règle, le max domine), RÉDUITE
+     *   pour chaque équipe des pins HARD de CETTE équipe à CE gymnase, comptés en JOURS
+     *   DISTINCTS, plancher 0 (P4-97). Un créneau verrouillé n'a pas de variable
+     *   (`model.py`) mais il HONORE le plancher : le moteur crédite désormais
+     *   `effective_min = minimum - jours_verrouillés` (`add_venue_minimum_constraints`).
+     *   L'ancien « un pin n'en soustrait RIEN » documentait le bug : le récap déclarait
+     *   « 0 places libres » sur une équipe déjà servie par ses réservations (SM2 épinglé
+     *   à Matéo) et bloquait la génération pour de faux ;
      * - l'OFFRE LIBRE : capacités dédupliquées, MOINS les
      *   triplets verrouillés par un pin HARD — un triplet bloqué ne porte aucune
-     *   variable, pour personne.
+     *   variable, pour personne. Inchangée.
      *
      * `demande > libre` est un INFEASIBLE certain (épinglé par le test de parité).
      *
@@ -105,13 +110,23 @@ final class PayloadCapacityMirror
             return [];
         }
 
-        // Triplets fermés par un verrou HARD (réservations + slots épinglés).
+        // Triplets fermés par un verrou HARD (réservations + slots épinglés), ET les JOURS
+        // DISTINCTS verrouillés par (gymnase, équipe) — ces derniers créditent la demande
+        // (P4-97 : un pin honore le plancher, comme `effective_min` côté moteur).
         $pinnedKeys = [];
+        /** @var array<string, array<string, array<int|string, true>>> $lockedDaysByVenueTeam venueId => teamId => day => true */
+        $lockedDaysByVenueTeam = [];
         foreach (\is_array($payload['slotTemplates'] ?? null) ? $payload['slotTemplates'] : [] as $pin) {
             if (!\is_array($pin) || 'HARD' !== ($pin['lockLevel'] ?? null)) {
                 continue;
             }
-            $pinnedKeys[$this->key((string) ($pin['venueId'] ?? ''), $pin['dayOfWeek'] ?? '', (string) ($pin['startTime'] ?? ''))] = true;
+            $pinVenueId = (string) ($pin['venueId'] ?? '');
+            $pinnedKeys[$this->key($pinVenueId, $pin['dayOfWeek'] ?? '', (string) ($pin['startTime'] ?? ''))] = true;
+            $pinTeamId = (string) ($pin['teamId'] ?? '');
+            $pinDay = $pin['dayOfWeek'] ?? null;
+            if ('' !== $pinTeamId && null !== $pinDay) {
+                $lockedDaysByVenueTeam[$pinVenueId][$pinTeamId][$pinDay] = true;
+            }
         }
 
         /** @var array<string, array<string, int>> $freeByVenue venueId => triplet => capacité libre */
@@ -141,7 +156,11 @@ final class PayloadCapacityMirror
 
         $saturated = [];
         foreach ($minByVenueTeam as $venueId => $minByTeam) {
-            $demand = array_sum($minByTeam);
+            $demand = 0;
+            foreach ($minByTeam as $teamId => $min) {
+                $lockedDays = \count($lockedDaysByVenueTeam[$venueId][$teamId] ?? []);
+                $demand += max(0, $min - $lockedDays);
+            }
             $free = array_sum($freeByVenue[$venueId] ?? []);
             if ($demand > $free) {
                 $saturated[] = ['venueId' => $venueId, 'venueName' => $venueNames[$venueId] ?? $venueId, 'demand' => $demand, 'free' => $free];

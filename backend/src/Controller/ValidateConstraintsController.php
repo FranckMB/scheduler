@@ -182,8 +182,10 @@ final class ValidateConstraintsController extends AbstractController
         ];
 
         // 2. Saturation des « au moins N ici » par gymnase → BLOQUEUR : le moteur exige
-        //    ces séances sur les créneaux NON verrouillés (un pin n'y compte pas — sa
-        //    variable n'existe pas), donc demande > places libres = INFEASIBLE certain.
+        //    ces séances sur les créneaux NON verrouillés, MAIS crédite le plancher des
+        //    jours déjà verrouillés de l'équipe à ce gymnase (P4-97 : effective_min =
+        //    minimum − jours verrouillés). Le bloqueur ne tombe donc que sur la demande
+        //    RÉELLEMENT restante > places libres = INFEASIBLE certain.
         $saturationBlockers = null !== $capacityPayload ? $this->venueMinimumSaturation($capacityPayload) : [];
 
         // P2-9 PR B — IMPOSSIBILITÉ PHYSIQUE : un verrou qui met un coach à deux endroits
