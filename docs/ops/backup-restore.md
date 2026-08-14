@@ -96,7 +96,9 @@ d'env (pas de fichier de conf rclone à gérer) :
 1. Console Scaleway → *Object Storage* → créer un bucket (ex. `clubscheduler-backups`,
    région `fr-par`, privé).
 2. *IAM → API Keys* → créer une clé dédiée backups (droits Object Storage seulement).
-3. Dans `.env.prod` sur la VM :
+3. Dans `.env.prod` — via le rail chiffré (`make env-decode@prod` → éditer →
+   `env-encode` → commit + deploy, cf. [`deploy.md`](deploy.md) § Secrets
+   chiffrés), ou directement sur la VM en dépannage (puis reporter au `.gpg`) :
 
    ```bash
    BACKUP_SYNC_COMMAND=rclone copyto /app/backend/var/backups :s3:clubscheduler-backups/db --s3-provider=Scaleway --s3-endpoint=s3.fr-par.scw.cloud --s3-region=fr-par
