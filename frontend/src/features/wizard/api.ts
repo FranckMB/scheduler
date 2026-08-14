@@ -94,6 +94,9 @@ export interface VenueTrainingSlot {
   startTime: string;
   durationMinutes: number;
   capacity: number;
+  /** P2-17 — libellé d'un créneau mutualisé (« CEC3 »), ≤ 40 ; null/absent quand il n'en porte pas.
+   *  Le backend le trim, normalise vide→null et le refuse (422) sur une capacité < 2. Esthétique. */
+  groupLabel?: string | null;
   /** null = créneau de SAISON ; set = créneau de la grille que ce plan de période possède (#8). */
   schedulePlanId?: string | null;
 }
@@ -134,6 +137,9 @@ export interface SlotPayload {
   startTime: string;
   durationMinutes: number;
   capacity: number;
+  /** P2-17 — libellé de groupe envoyé tel quel (le backend trim/normalise vide→null) ; null pour
+   *  l'effacer. L'éditeur ne l'envoie non nul que si la capacité effective est ≥ 2 (aligné 422). */
+  groupLabel?: string | null;
   /** Period-editable structure: set to scope the slot to a PLAN (gym lent for the window). */
   schedulePlanId?: string | null;
 }
