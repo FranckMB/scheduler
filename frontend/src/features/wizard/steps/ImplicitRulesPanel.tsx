@@ -76,7 +76,7 @@ export const IMPLICIT_RULES: ImplicitRule[] = [
   {
     id: "coach-rest-day",
     title: "Chaque coach garde un jour de repos",
-    detail: "Au moins un jour sans séance entre le lundi et le vendredi. Les week-ends ne comptent pas dans ce calcul.",
+    detail: "Par défaut, au moins un jour sans séance entre le lundi et le vendredi (les week-ends ne comptent pas dans ce calcul).",
   },
 ];
 
@@ -91,7 +91,7 @@ export function ImplicitRulesPanel() {
     <details className="mb-4 rounded-md border border-border bg-muted/30">
       <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-foreground">Ce que le système applique déjà, sans que vous le saisissiez</summary>
       <div className="border-t border-border px-3 py-2">
-        <p className="mb-2 text-sm text-muted-foreground">Ces règles sont toujours actives et ne se modifient pas. Elles s'ajoutent à celles que vous saisissez ci-dessous.</p>
+        <p className="mb-2 text-sm text-muted-foreground">Ces règles s'appliquent d'office, sans saisie. Elles s'ajoutent à celles que vous saisissez ci-dessous.</p>
         <ul className="flex flex-col gap-2">
           {IMPLICIT_RULES.map((rule) => (
             <li key={rule.id} className="text-sm">

@@ -155,6 +155,11 @@ final class ValidateAssignmentsContractSchemaTest extends TestCase
             constraints: [$constraint],
         );
 
+        // Le bloc `implicitRules` (P2-28) appartient à /generate : le schéma validate ne le
+        // porte pas (extra=forbid). Le vrai chemin de verdict (`MoveSlotService`) le retire du
+        // payload — on fait de même ici pour rester fidèle à ce qui part réellement au moteur.
+        unset($payload['implicitRules']);
+
         // Recalage sur le contrat du nouvel endpoint : version courante, budget
         // COURT (le défaut /generate dépasse le plafond du schéma validate), et le
         // candidat — la seule chose libre.

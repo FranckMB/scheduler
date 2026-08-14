@@ -426,6 +426,16 @@ jobs:
       - name: ResourceChangeStaleScheduleTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Integration/Service/ResourceChangeStaleScheduleTest.php --group phase1'
 
+      # P2-28 PR 2 (axe backend↔engine contract + constraint semantics) : les 4 règles implicites
+      # « bien-être » sont réglables par club/saison (intensité HARD/PREFERRED + seuils). Ce que le
+      # gestionnaire STOCKE doit être EXACTEMENT le bloc `implicitRules` que le payload émet au
+      # solveur — défauts résolus compris, sur le chemin base ET le chemin overlay de période
+      # (season-scopé, ADR-0002). Sans ce gate, un réglage assoupli pourrait être stocké sans jamais
+      # atteindre le solveur (ou l'inverse), en silence — le solveur appliquerait autre chose que ce
+      # que l'écran annonce.
+      - name: ImplicitRulePayloadParityTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/CrossStack/ImplicitRulePayloadParityTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest

@@ -236,6 +236,26 @@ final class ManagementRoleTest extends WebTestCase
         self::assertResponseStatusCodeSame(201, 'un manager écrit toujours dans les familles fermées');
     }
 
+    public function testNonManagementMemberIsForbiddenOnImplicitRuleWrites(): void
+    {
+        // Régler une règle implicite (bien-être) est du management. PUT (upsert) et DELETE
+        // (réinitialiser) par ruleKey : le provider rend le résolu du défaut (pas de 404 sur une
+        // clé valide), donc la requête atteint le processor, qui 403 un membre non-management.
+        [, , $clubA] = $this->register('MGI');
+        $memberToken = $this->addActiveMember($clubA, 'member');
+
+        $this->client->request('PUT', '/api/implicit_rule_settings/coachRestDay', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $memberToken,
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], '{"intensity":"PREFERRED"}');
+        self::assertResponseStatusCodeSame(403, 'régler une règle implicite doit être management-only');
+
+        $this->client->request('DELETE', '/api/implicit_rule_settings/coachRestDay', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $memberToken,
+        ]);
+        self::assertResponseStatusCodeSame(403, 'réinitialiser une règle implicite doit être management-only');
+    }
+
     public function testNonManagementMemberCanEditOwnProfile(): void
     {
         // Opt-out P1-1 : éditer SON profil n'est pas une action de management

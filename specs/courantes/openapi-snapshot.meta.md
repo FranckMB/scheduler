@@ -1,6 +1,12 @@
-Last verified @ 2026-08-14 (JSON **régénéré** — P4-95 : `ScheduleDiagnosticResource` gagne le pointage jour+heure d'un `conflict`)
+Last verified @ 2026-08-14 (JSON **régénéré** — P2-28 PR 2 : nouvelle ressource `ImplicitRuleSetting` (règles implicites bien-être réglables) + `ScheduleDiagnostic` gagne `ruleKey`)
 
 Changements récents :
+- **P2-28 PR 2 — règles implicites « bien-être » réglables (2026-08-14)** : nouvelle ressource
+  `ImplicitRuleSetting` (identifiant = `ruleKey`) avec `GET /api/implicit_rule_settings`
+  (collection RÉSOLUE, toujours 4), `GET/PUT/DELETE /api/implicit_rule_settings/{ruleKey}`
+  (upsert par clé, DELETE = réinitialiser). `ScheduleDiagnosticResource` gagne `ruleKey`
+  (string|null) — renseigné par le diagnostic moteur `implicit_rule_not_honored`. Contrat
+  backend⇄engine 2.7 (bloc `implicitRules` livré en PR 1) : property-only côté diagnostic.
 - **P4-95 — le créneau fautif d'un `conflict` (2026-08-14)** : `ScheduleDiagnosticResource` gagne
   `dayOfWeek` (int|null) et `startTime` (string|null) — renseignés **seulement** par le type
   `conflict` (les 10 autres restent `null`), pour que le front ouvre le créneau exact au lieu du

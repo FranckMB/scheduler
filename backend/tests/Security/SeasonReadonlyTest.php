@@ -90,6 +90,26 @@ final class SeasonReadonlyTest extends WebTestCase
         self::assertResponseStatusCodeSame(409);
     }
 
+    public function testImplicitRuleUpsertAndResetOnAPastSeasonAre409(): void
+    {
+        [$user, , $seasons] = $this->createClubWithThreeSeasons();
+        [$past] = $seasons;
+        $auth = $this->authHeaders($user);
+
+        // Upsert (PUT) sur une saison archivée → refusé (le processor 409 après le 403 management).
+        $this->client->request('PUT', '/api/implicit_rule_settings/coachRestDay', [], [], $auth + [
+            'HTTP_X-Season-Id' => $past->getId(),
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['intensity' => 'PREFERRED'], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(409);
+
+        // Réinitialiser (DELETE) sur une saison archivée → refusé de même.
+        $this->client->request('DELETE', '/api/implicit_rule_settings/coachRestDay', [], [], $auth + [
+            'HTTP_X-Season-Id' => $past->getId(),
+        ]);
+        self::assertResponseStatusCodeSame(409);
+    }
+
     public function testConstraintValidationStaysReadableOnAPastSeason(): void
     {
         [$user, , $seasons] = $this->createClubWithThreeSeasons();

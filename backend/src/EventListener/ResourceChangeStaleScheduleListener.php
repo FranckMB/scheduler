@@ -6,6 +6,7 @@ namespace App\EventListener;
 
 use App\Entity\CalendarEntry;
 use App\Entity\Coach;
+use App\Entity\ImplicitRuleSetting;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
@@ -61,6 +62,7 @@ use Doctrine\ORM\Events;
  *   coach                       | club_id + season_id         | club + saison
  *   team                        | club_id + season_id         | club + saison  (cf. structureDiverged)
  *   team_tag_assignment         | club_id + season_id         | club + saison
+ *   implicit_rule_setting       | club_id + season_id         | club + saison
  *   calendar_entry              | club_id + season_id (*)     | club + saison  (repli, cf. (*))
  *   team_tag                    | club_id (pas de saison) (*) | club entier    (repli, cf. (*))
  *
@@ -126,6 +128,9 @@ use Doctrine\ORM\Events;
 #[AsEntityListener(event: Events::postPersist, method: 'teamTagAssignmentTouched', entity: TeamTagAssignment::class)]
 #[AsEntityListener(event: Events::postUpdate, method: 'teamTagAssignmentTouched', entity: TeamTagAssignment::class)]
 #[AsEntityListener(event: Events::postRemove, method: 'teamTagAssignmentTouched', entity: TeamTagAssignment::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'implicitRuleSettingTouched', entity: ImplicitRuleSetting::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'implicitRuleSettingTouched', entity: ImplicitRuleSetting::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'implicitRuleSettingTouched', entity: ImplicitRuleSetting::class)]
 #[AsEntityListener(event: Events::postPersist, method: 'calendarEntryTouched', entity: CalendarEntry::class)]
 #[AsEntityListener(event: Events::postUpdate, method: 'calendarEntryTouched', entity: CalendarEntry::class)]
 #[AsEntityListener(event: Events::postRemove, method: 'calendarEntryTouched', entity: CalendarEntry::class)]
@@ -208,6 +213,14 @@ final class ResourceChangeStaleScheduleListener
 
     public function teamTagAssignmentTouched(TeamTagAssignment $entity): void
     {
+        $this->markClubSeason($entity->getClubId(), $entity->getSeasonId());
+    }
+
+    public function implicitRuleSettingTouched(ImplicitRuleSetting $entity): void
+    {
+        // Un réglage de règle implicite est season-scopé (ADR-0002 : il vaut pour la base ET
+        // les périodes de la saison). Modifier l'intensité ou un seuil change ce que le
+        // solveur applique → tout planning COMPLETED du club+saison est périmé.
         $this->markClubSeason($entity->getClubId(), $entity->getSeasonId());
     }
 

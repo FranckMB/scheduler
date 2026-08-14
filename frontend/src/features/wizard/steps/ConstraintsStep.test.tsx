@@ -983,6 +983,11 @@ describe("ConstraintsStep — période : choisir, nommer, atteindre", () => {
     // Aucune règle ne doit renvoyer vers un réglage inexistant.
     const perDay = IMPLICIT_RULES.find((r) => "one-session-per-day" === r.id);
     expect(perDay?.detail).not.toMatch(/sauf si|autoris/i);
+
+    // Le repos coach est désormais RÉGLABLE (contrat moteur 2.7, HARD/PREFERRED) : l'encart ne
+    // doit plus l'affirmer comme un absolu — il porte « Par défaut », pas une garantie sèche.
+    const coachRest = IMPLICIT_RULES.find((r) => "coach-rest-day" === r.id);
+    expect(coachRest?.detail).toMatch(/[Pp]ar défaut/);
   });
 });
 
