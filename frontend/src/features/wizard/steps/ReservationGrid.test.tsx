@@ -1,5 +1,8 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+
+import type { Closure } from "@/features/cockpit/api";
 
 import type { Venue, VenueTrainingSlot } from "../api";
 import { WEEK } from "../lib/weekGrid";
@@ -8,6 +11,9 @@ import { ReservationGrid } from "./ReservationGrid";
 const venue: Venue = { id: "v1", name: "Gymnase A", color: "#00aa00", canSplit: false, isActive: true } as Venue;
 
 const sunday: VenueTrainingSlot = { id: "s7", venueId: "v1", dayOfWeek: 7, startTime: "20:00:00", durationMinutes: 90, capacity: 2 } as VenueTrainingSlot;
+const monday: VenueTrainingSlot = { id: "s1", venueId: "v1", dayOfWeek: 1, startTime: "20:00:00", durationMinutes: 90, capacity: 2 } as VenueTrainingSlot;
+
+const closure = (over: Partial<Closure> = {}): Closure => ({ constraintId: "c1", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [5, 6, 7], ...over });
 
 /**
  * P4-37 — LE DIMANCHE A UNE COLONNE, DONC UN CRÉNEAU DU DIMANCHE S'AFFICHE.
@@ -43,5 +49,39 @@ describe("ReservationGrid — libellé de groupe (P2-17)", () => {
     render(<ReservationGrid venue={venue} slots={[sunday]} reservedTeams={new Map()} slotKeyOf={() => "k"} capacityOf={() => 2} onSelectSlot={vi.fn()} />);
 
     expect(screen.queryByText("CEC3")).toBeNull();
+  });
+});
+
+/**
+ * D1/D2 (P2-22) — un créneau d'un jour fermé est barré + libellé ; SANS réservation il est
+ * désactivé (on ne peut plus rien y ajouter), AVEC réservation il reste cliquable pour le
+ * geste correctif (retirer l'épinglage qui bloque la génération).
+ */
+describe("ReservationGrid — fermetures de gymnase", () => {
+  it("barre et DÉSACTIVE un créneau fermé sans réservation", () => {
+    render(<ReservationGrid venue={venue} slots={[sunday]} reservedTeams={new Map()} slotKeyOf={() => "k"} capacityOf={() => 2} onSelectSlot={vi.fn()} closures={[closure()]} />);
+
+    const btn = screen.getByRole("button", { name: /Indispo du 1\/5 au 10\/5 — Travaux/ });
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveClass("line-through");
+  });
+
+  it("garde CLIQUABLE un créneau fermé qui porte une réservation (geste correctif)", async () => {
+    const onSelectSlot = vi.fn();
+    render(<ReservationGrid venue={venue} slots={[sunday]} reservedTeams={new Map([["k", ["SM1"]]])} slotKeyOf={() => "k"} capacityOf={() => 2} onSelectSlot={onSelectSlot} closures={[closure()]} />);
+
+    const btn = screen.getByRole("button", { name: /Indispo du 1\/5 au 10\/5 — Travaux/ });
+    expect(btn).not.toBeDisabled();
+    await userEvent.click(btn);
+    expect(onSelectSlot).toHaveBeenCalledWith(sunday);
+  });
+
+  it("laisse intact un créneau d'un jour ouvert (grain JOUR)", () => {
+    render(<ReservationGrid venue={venue} slots={[monday]} reservedTeams={new Map()} slotKeyOf={() => "k"} capacityOf={() => 2} onSelectSlot={vi.fn()} closures={[closure({ weekdays: [5, 6, 7] })]} />);
+
+    const btn = screen.getByRole("button", { name: /^Lun 20:00 · Gymnase A/ });
+    expect(btn).not.toBeDisabled();
+    expect(btn).not.toHaveClass("line-through");
+    expect(screen.queryByText(/Indispo/)).toBeNull();
   });
 });
