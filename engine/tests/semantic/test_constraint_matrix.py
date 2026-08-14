@@ -24,7 +24,15 @@ from typing import Any
 
 import pytest
 
-from tests.semantic.constraint_matrix import MATRIX, Expectation, LockSilence, MatrixCell
+from tests.semantic import test_implicit_rules_adjustable as impl
+from tests.semantic.constraint_matrix import (
+    IMPLICIT_RULE_MATRIX,
+    MATRIX,
+    Expectation,
+    ImplicitRuleCell,
+    LockSilence,
+    MatrixCell,
+)
 from tests.support import make_payload, make_venue, solve_payload, team_coach
 
 GOOD_VENUE = "venue-good"
@@ -329,6 +337,53 @@ def test_every_cell_declares_a_lock_silence_and_reasons_where_required() -> None
         assert bool(cell.lock_silence_reason.strip()) == needs_reason, (
             f"{cell.case_id}: only UNBYPASSABLE carries a reason, and it MUST ({cell.lock_silence})"
         )
+
+
+# --- Règles implicites réglables : générées depuis IMPLICIT_RULE_MATRIX ---------
+#
+# Chaque cellule = (règle, cran). Le scénario canonique VIOLANT de chaque règle vit dans
+# ``test_implicit_rules_adjustable`` (source unique) ; ici on génère l'assertion du contrat de
+# cran : HARD → honorée (aucun assouplissement) ; PREFERRED → complète + warning nommé.
+
+_IMPLICIT_SCENARIOS = {
+    ("coachRestDay", "HARD"): lambda: impl._rest_day_payload(intensity="HARD", min_rest_days=None),
+    ("coachRestDay", "PREFERRED"): lambda: impl._rest_day_payload(intensity="PREFERRED", min_rest_days=None),
+    ("maxConsecutiveSessions", "HARD"): lambda: impl._chain_payload(intensity="HARD", max_consecutive=None, n_slots=3),
+    ("maxConsecutiveSessions", "PREFERRED"): lambda: impl._chain_payload(
+        intensity="PREFERRED", max_consecutive=None, n_slots=3
+    ),
+    ("salarieDistribution", "HARD"): lambda: impl._salarie_payload(intensity="HARD", friday_salarie=True),
+    ("salarieDistribution", "PREFERRED"): lambda: impl._salarie_payload(intensity="PREFERRED", friday_salarie=False),
+    ("ageAscending", "HARD"): lambda: impl._age_payload(intensity="HARD"),
+    ("ageAscending", "PREFERRED"): lambda: impl._age_payload(intensity="PREFERRED"),
+}
+
+
+def test_every_implicit_cell_has_a_scenario() -> None:
+    """Source de vérité : toute cellule déclarée dans IMPLICIT_RULE_MATRIX doit avoir un
+    scénario canonique — ajouter une règle/un cran force son scénario à exister."""
+    missing = [c.case_id for c in IMPLICIT_RULE_MATRIX if (c.rule_key, c.intensity) not in _IMPLICIT_SCENARIOS]
+    assert missing == [], f"cellules de règle implicite sans scénario : {missing}"
+
+
+@pytest.mark.parametrize("cell", IMPLICIT_RULE_MATRIX, ids=lambda c: c.case_id)
+def test_implicit_rule_cell_honours_its_intensity(cell: ImplicitRuleCell) -> None:
+    result = solve_payload(_IMPLICIT_SCENARIOS[(cell.rule_key, cell.intensity)]())
+    warnings = [
+        d
+        for d in result.get("diagnostics", [])
+        if d.get("type") == "implicit_rule_not_honored" and d.get("ruleKey") == cell.rule_key
+    ]
+    if cell.expected is Expectation.HONORED_HARD:
+        # HARD : la règle est posée dure. Le scénario canonique la respecte → aucun
+        # assouplissement à signaler (les warnings « assouplie par vous » sont exclus).
+        assert not any("assouplie par vous" in w["message"] for w in warnings), (
+            f"{cell.case_id}: une règle HARD honorée ne doit pas être signalée assouplie"
+        )
+    else:
+        # PREFERRED : oriente sans bloquer, et la violation est TOUJOURS diagnostiquée.
+        assert result["status"] == "completed", f"{cell.case_id}: PREFERRED ne doit jamais bloquer"
+        assert warnings, f"{cell.case_id}: PREFERRED non tenu doit émettre implicit_rule_not_honored"
 
 
 # --- ENG-13 (dedicated): multiple coach constraints are UNIONed ----------------

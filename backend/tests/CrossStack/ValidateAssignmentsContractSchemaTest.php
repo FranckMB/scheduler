@@ -158,7 +158,7 @@ final class ValidateAssignmentsContractSchemaTest extends TestCase
         // Recalage sur le contrat du nouvel endpoint : version courante, budget
         // COURT (le défaut /generate dépasse le plafond du schéma validate), et le
         // candidat — la seule chose libre.
-        $payload['version'] = '2.4';
+        $payload['version'] = '2.7';
         $payload['solverTimeoutSeconds'] = 2;
         $payload['candidate'] = [
             'teamId' => 'team-1',
@@ -176,7 +176,7 @@ final class ValidateAssignmentsContractSchemaTest extends TestCase
      */
     private function assertPayloadShape(array $payload): void
     {
-        self::assertSame('2.4', $payload['version']);
+        self::assertSame('2.7', $payload['version']);
         self::assertSame(self::CLUB_ID, $payload['clubId']);
         self::assertSame(self::SEASON_ID, $payload['seasonId']);
         self::assertLessThanOrEqual(10, $payload['solverTimeoutSeconds']);

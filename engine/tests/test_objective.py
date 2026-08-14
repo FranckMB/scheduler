@@ -25,6 +25,11 @@ EXPECTED_WEIGHTS = {
     # 15 < 21 (valeur min d'une séance placée) : regrouper ne supprime jamais une séance.
     "overload_day": -15,
     "spacing": -2,
+    # V9 — les 4 règles implicites réglées PREFERRED : malus −6 sur leur littéral de violation.
+    "coach_rest_violation": -6,
+    "salarie_violation": -6,
+    "chain_violation": -6,
+    "age_violation": -6,
 }
 
 
@@ -36,7 +41,7 @@ class LevelTwoObjectiveTest(unittest.TestCase):
 
     def test_fixed_weights_and_formula_version_are_locked(self):
         self.assertEqual(EXPECTED_WEIGHTS, dict(LEVEL_2_OBJECTIVE_WEIGHTS))
-        self.assertEqual("T24_LEVEL_2_FIXED_WEIGHTS_V8", SCORE_FORMULA_VERSION)
+        self.assertEqual("T24_LEVEL_2_FIXED_WEIGHTS_V9", SCORE_FORMULA_VERSION)
 
         with self.assertRaises(TypeError):
             LEVEL_2_OBJECTIVE_WEIGHTS["S"] = 1

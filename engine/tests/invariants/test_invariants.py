@@ -1,109 +1,19 @@
 from __future__ import annotations
 
 import pathlib
-from collections import defaultdict
 from typing import Any
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from ortools.sat.python import cp_model
 
 from app.main import read_contract_version
-from app.solver.constraints import add_level_1_hard_constraints, parse_v2_constraints
-from app.solver.model import build_model
-from app.solver.objective import add_level_2_objective
-from app.solver.result_builder import build_result
-from tests.support.pipeline import solve_payload, team_coach
+from app.solver.constraints import parse_v2_constraints
+from tests.support.pipeline import make_payload, make_venue, solve_payload, team_coach
 
 CONTRACT_VERSION = read_contract_version()
 
 FIXTURES_DIR = pathlib.Path(__file__).resolve().parents[1] / "fixtures"
-
-
-def _normalize_team_fields(data: dict[str, Any]) -> None:
-    """Add snake_case aliases so constraints.py can read camelCase input."""
-    for team in data.get("teams", []):
-        if "sessionsPerWeek" in team and "sessions_per_week" not in team:
-            team["sessions_per_week"] = team["sessionsPerWeek"]
-        if "minSessionsOverride" in team and "min_sessions_override" not in team:
-            team["min_sessions_override"] = team["minSessionsOverride"]
-        if "forcedVenueId" in team and "forced_venue_id" not in team:
-            team["forced_venue_id"] = team["forcedVenueId"]
-
-
-# AUD-ENG-28 (soldé 2026-08-09) — les invariants tournent désormais sur `solve_payload`,
-# c'est-à-dire sur `build_schedule`, le VRAI pipeline. Ce harnais local ne survit que pour
-# UN test : celui du point d'extension `skip_rest_day_and_distribution`, que l'ADR-0001
-# conserve « documenté et testé, mais dormant » et que la production n'emprunte jamais.
-#
-# Le report annoncé ici (« deferred to E1 ») redoutait à raison qu'une migration naïve vide
-# les invariants coach de leur substance : la prod lit les coachs des contraintes
-# TEAM_COACH, et les fixtures n'en portaient aucune — `team_coach_map` serait resté vide et
-# « aucun coach n'est dédoublé » serait devenu vrai PAR ABSENCE DE COACH.
-#
-# Le piège n'a pas été évité en gardant un pipeline parallèle, mais en faisant porter aux
-# fixtures la forme que le backend sérialise. `test_the_fixtures_really_exercise_coaches`
-# interdit le retour en arrière.
-def _run_pipeline(
-    data: dict[str, Any],
-    *,
-    max_time_in_seconds: int = 5,
-    skip_rest_day_and_distribution: bool = False,
-    fallback_used: bool = False,
-) -> dict[str, Any]:
-    _normalize_team_fields(data)
-    model = build_model(data)
-
-    # Build assignments with coach_id so coach constraints are enforced.
-    team_coaches: dict[str, str] = {}
-    for tpl in data.get("slotTemplates", []):
-        tid = tpl.get("teamId")
-        cid = tpl.get("coachId")
-        if tid and cid:
-            team_coaches[tid] = cid
-
-    assignments = []
-    for slot_key, var in model.x.items():
-        team_id, venue_id, day_of_week, slot_start = slot_key
-        assignments.append(
-            {
-                "var": var,
-                "team_id": team_id,
-                "venue_id": venue_id,
-                "slot_id": f"{day_of_week}:{slot_start}",
-                "coach_id": team_coaches.get(team_id),
-            }
-        )
-
-    add_level_1_hard_constraints(
-        model,
-        assignments,
-        teams=data.get("teams", []),
-        coaches=data.get("coaches", []),
-        skip_rest_day_and_distribution=skip_rest_day_and_distribution,
-    )
-
-    # Add realistic upper bound: no team gets more than sessions_per_week.
-    assignments_by_team: dict[str, list[Any]] = {}
-    for assignment in assignments:
-        tid = assignment["team_id"]
-        if tid:
-            assignments_by_team.setdefault(tid, []).append(assignment["var"])
-
-    for team in data.get("teams", []):
-        tid = team.get("id")
-        max_sessions = team.get("sessions_per_week") or team.get("sessionsPerWeek")
-        if tid and max_sessions:
-            team_vars = assignments_by_team.get(tid, [])
-            if team_vars:
-                model.Add(sum(team_vars) <= int(max_sessions))
-
-    add_level_2_objective(model, assignments, teams=data.get("teams", []))
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = max_time_in_seconds
-    status = solver.Solve(model)
-    return build_result(data, solver, model, status=status, fallback_used=fallback_used)
 
 
 def _team_age_min_by_id(data: dict[str, Any]) -> dict[str, int | None]:
@@ -638,24 +548,29 @@ class TestInvariants:
                     f"Slot for {tid} at {key} has coach {cid}, expected {expected_coaches[key]}"
                 )
 
-    def test_coach_rest_day_warning_matches_five_weekday_workload(self) -> None:
-        data = {
-            "clubId": "club-rest-day-warning",
-            "seasonId": "season-2024",
-            "version": "2.0",
-            "solverSeed": 42,
-            "venues": [
+    @staticmethod
+    def _five_weekday_workload(*, coach_rest_intensity: str | None) -> dict[str, Any]:
+        """5 équipes, 1 séance chacune, chacune verrouillée sur SON jour (lun-ven) via
+        ``allowedDays`` HARD, toutes encadrées par le MÊME coach — le placer toutes = coach
+        présent les 5 jours. ``coach_rest_intensity`` règle la 3b (None = bloc absent = HARD)."""
+        constraints: list[dict[str, Any]] = []
+        for d in range(1, 6):
+            constraints.append(team_coach(f"tc-{d}", f"team-{d}", "coach-1"))
+            constraints.append(
                 {
-                    "id": "venue-1",
-                    "name": "Venue 1",
+                    "id": f"day-{d}",
+                    "scope": "TEAM",
+                    "scopeTargetId": f"team-{d}",
+                    "family": "DAY",
+                    "ruleType": "HARD",
+                    "name": "jour imposé",
+                    "config": {"allowedDays": [d]},
+                    "sortOrder": 0,
                     "isActive": True,
-                    "trainingSlots": [
-                        {"dayOfWeek": d, "startTime": "18:00", "durationMinutes": 60, "capacity": 1}
-                        for d in range(1, 6)
-                    ],
                 }
-            ],
-            "teams": [
+            )
+        payload = make_payload(
+            teams=[
                 {
                     "id": f"team-{d}",
                     "sportCategoryId": "sc-1",
@@ -666,62 +581,53 @@ class TestInvariants:
                 }
                 for d in range(1, 6)
             ],
-            "coaches": [
-                {
-                    "id": "coach-1",
-                    "firstName": "Coach",
-                    "lastName": "One",
-                    "isActive": True,
-                }
-            ],
-            "slotTemplates": [
-                {
-                    "id": f"tpl-{d}",
-                    "teamId": f"team-{d}",
-                    "venueId": "venue-1",
-                    "coachId": "coach-1",
-                    "dayOfWeek": d,
-                    "startTime": "18:00",
-                    "durationMinutes": 60,
-                    "lockLevel": "NONE",
-                }
-                for d in range(1, 6)
-            ],
-            "constraints": [],
-            "priorityTiers": [
-                {"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 1},
-            ],
+            venues=[make_venue("venue-1", [(d, "18:00") for d in range(1, 6)], duration_minutes=60)],
+            coaches=[{"id": "coach-1", "firstName": "Coach", "lastName": "One", "isActive": True}],
+            constraints=constraints,
+            priority_tiers=[{"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 1}],
+            timeout=10,
+        )
+        if coach_rest_intensity is not None:
+            payload["implicitRules"] = {"coachRestDay": {"intensity": coach_rest_intensity}}
+        return payload
+
+    @staticmethod
+    def _coach_weekdays(result: dict[str, Any], coach_id: str) -> set[int]:
+        return {
+            int(slot["dayOfWeek"])
+            for slot in result["slots"]
+            if slot.get("coachId") == coach_id
+            and slot.get("dayOfWeek") is not None
+            and 1 <= int(slot["dayOfWeek"]) <= 5
         }
 
-        first_pass = _run_pipeline(data)
-        assert first_pass["status"] == "failed", "Pass 1 should fail when coach works all 5 weekdays"
-
-        result = _run_pipeline(
-            data,
-            skip_rest_day_and_distribution=True,
-            fallback_used=True,
+    def test_coach_rest_day_hard_default_keeps_a_rest_day(self) -> None:
+        """ADR-0001 : single-pass, aucun fallback. En HARD (défaut, bloc absent), le solveur
+        garde le jour de repos plutôt que de le relaxer — le coach ne travaille jamais 5 jours."""
+        result = solve_payload(self._five_weekday_workload(coach_rest_intensity=None))
+        assert result["status"] == "completed"
+        assert len(self._coach_weekdays(result, "coach-1")) <= 4, (
+            "en HARD le coach doit garder un jour de repos (au plus 4 jours travaillés)"
         )
 
+    def test_coach_rest_day_preferred_completes_with_warning(self) -> None:
+        """En PREFERRED, la 3b n'est plus dure : le solveur place les 5 séances (coach présent
+        les 5 jours) ET signale la règle non tenue via ``implicit_rule_not_honored``."""
+        result = solve_payload(self._five_weekday_workload(coach_rest_intensity="PREFERRED"))
         assert result["status"] == "completed"
-
-        coach_days: dict[str, set[int]] = defaultdict(set)
-        for slot in result["slots"]:
-            coach_id = slot.get("coachId")
-            day_of_week = slot.get("dayOfWeek")
-            if coach_id and day_of_week is not None and 1 <= int(day_of_week) <= 5:
-                coach_days[str(coach_id)].add(int(day_of_week))
-
+        assert self._coach_weekdays(result, "coach-1") == {1, 2, 3, 4, 5}, (
+            "en PREFERRED le solveur doit pouvoir placer les 5 séances"
+        )
         warnings_by_coach = {
-            str(diag["coachId"])
+            str(diag.get("coachId"))
             for diag in result["diagnostics"]
-            if diag.get("type") == "coach_no_rest_day" and diag.get("severity") == "WARNING" and diag.get("coachId")
+            if diag.get("type") == "implicit_rule_not_honored"
+            and diag.get("ruleKey") == "coachRestDay"
+            and diag.get("severity") == "WARNING"
         }
-
-        for coach_id, days in coach_days.items():
-            if len(days) == 5:
-                assert coach_id in warnings_by_coach, (
-                    f"Coach {coach_id} works all 5 weekdays, but no coach_no_rest_day WARNING was emitted"
-                )
+        assert "coach-1" in warnings_by_coach, (
+            "coach-1 travaille les 5 jours en PREFERRED, un warning implicit_rule_not_honored doit sortir"
+        )
 
     @settings(max_examples=20, deadline=None)
     @given(data=random_fixture())

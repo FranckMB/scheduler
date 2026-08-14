@@ -40,11 +40,11 @@ class DiagnosticSchema(SerializableModel):
     # front — sans erreur nulle part. La liste est donc une CONTRAINTE : Pydantic refuse
     # desormais un type hors enumeration, a la construction, cote emetteur.
     type: Literal[
-        "coach_no_rest_day",
         "coach_overload",
         "conflict",
         "constraint_not_honored",
         "day_constraint_conflict",
+        "implicit_rule_not_honored",
         "session_below_effective_min",
         "soft_lock_moved",
         "unplaced",
@@ -53,6 +53,10 @@ class DiagnosticSchema(SerializableModel):
         "venue_minimum_unreachable",
     ]
     severity: str
+    # ``implicit_rule_not_honored`` porte la RÈGLE concernée (les 4 clés du bloc
+    # ``implicitRules`` du contrat) pour que le front la surligne. Optionnel : les autres
+    # types de diagnostic ne le renseignent pas.
+    rule_key: str | None = Field(default=None, alias="ruleKey")
     team_id: str | None = Field(default=None, alias="teamId")
     coach_id: str | None = Field(default=None, alias="coachId")
     venue_id: str | None = Field(default=None, alias="venueId")

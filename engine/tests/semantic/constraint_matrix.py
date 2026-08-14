@@ -428,3 +428,37 @@ MATRIX: tuple[MatrixCell, ...] = (
         lock_silence=LockSilence.SOFT,
     ),
 )
+
+
+# ---------------------------------------------------------------------------
+# Matrice des RÈGLES IMPLICITES réglables (lot « règles implicites réglables »).
+#
+# Les 4 règles « bien-être » ne vivent pas dans ``constraints[]`` mais dans le bloc
+# ``implicitRules`` du payload : elles n'entrent donc PAS dans ``MATRIX`` (dont le
+# vocabulaire family/ruleType/config décrit les contraintes saisies). Chacune a 2 crans —
+# HARD (posée dure, honorée) et PREFERRED (retirée du dur, oriente sans bloquer + toujours
+# diagnostiquée si non tenue) — offerts par le wizard. Cette table est la source unique de ce
+# que le wizard offre ; ``test_constraint_matrix.py`` en génère un cas par cellule.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ImplicitRuleCell:
+    rule_key: str
+    intensity: str  # HARD | PREFERRED
+    expected: Expectation  # HONORED_HARD (HARD) | HONORED_SOFT (PREFERRED)
+    note: str = ""
+
+    @property
+    def case_id(self) -> str:
+        return f"{self.rule_key}-{self.intensity}"
+
+
+IMPLICIT_RULE_MATRIX: tuple[ImplicitRuleCell, ...] = tuple(
+    ImplicitRuleCell(rule_key, intensity, expected, note)
+    for rule_key in ("coachRestDay", "salarieDistribution", "maxConsecutiveSessions", "ageAscending")
+    for intensity, expected, note in (
+        ("HARD", Expectation.HONORED_HARD, "cran dur (défaut) : le solveur ne place jamais en violation"),
+        ("PREFERRED", Expectation.HONORED_SOFT, "cran préféré : oriente sans bloquer + warning si non tenu"),
+    )
+)

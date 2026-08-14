@@ -17,7 +17,7 @@ from .model import _time_to_minutes
 AssignmentLike = Any
 BoolVarLike = Any
 
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V8"
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V9"
 
 LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     {
@@ -46,6 +46,23 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
         # two CONSECUTIVE days. Low weight (< rest) so it only breaks ties — never
         # moves or drops a real placement (each session is worth ≥ 21).
         "spacing": -2,
+        # Les 4 règles implicites « bien-être » réglées PREFERRED par le club (V9). Chaque
+        # littéral de violation AGRÉGÉ (constraints.py) porte un malus de −6.
+        #
+        # Preuve d'empilement (patron CHAINING_TIER_WEIGHTS ci-dessous) — pourquoi −6 oriente
+        # sans jamais SUPPRIMER une séance. Une séance placée vaut au minimum 21 (tier D 1 +
+        # session_count 20). En la retirant, on soulage au pire : 1 littéral âge (un couple
+        # inversé de son gymnase-jour) + k littéraux repos (les k coach-personnes de l'équipe)
+        # + k littéraux chaîne (mêmes k). Cas dominant k=1 → 3 littéraux → 3×6 = 18 < 21 :
+        # supprimer la séance coûte plus que ce qu'elle rapporte en malus évités, jamais
+        # rentable. Et 6 > rest(3) + spacing(2) : le malus bat les nudges, donc PREFERRED
+        # oriente réellement. Le résiduel k≥2 (équipe à plusieurs coach-personnes) n'est pas
+        # couvert par cette arithmétique seule ; il est gardé par le test NR « PREFERRED ne
+        # supprime jamais une séance » (fixture pire-cas tier D à 2 coach-personnes).
+        "coach_rest_violation": -6,
+        "salarie_violation": -6,
+        "chain_violation": -6,
+        "age_violation": -6,
     }
 )
 
@@ -99,6 +116,12 @@ BONUS_WEIGHT_NAMES = (
     "session_count",
     "spacing",
     "overload_day",
+    # V9 — littéraux de violation des règles implicites PREFERRED, passés en soft_terms
+    # (jamais des bonus par assignment : aucun champ d'assignment ne porte ces noms).
+    "coach_rest_violation",
+    "salarie_violation",
+    "chain_violation",
+    "age_violation",
 )
 
 _PRIORITY_TIER_FIELDS = (

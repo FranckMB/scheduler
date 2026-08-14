@@ -1,37 +1,40 @@
-"""NR — P4-55. L'écran ANNONCE six règles structurelles : elles doivent rester appliquées.
+"""NR — P4-55 / lot « règles implicites réglables ». L'écran ANNONCE six règles
+structurelles : elles doivent rester appliquées. Les 4 règles « bien-être » réglables
+(repos coach, distribution salariés, dos-à-dos, âge) restent APPELÉES quel que soit le
+réglage — le cran décide seulement HARD vs PREFERRED, jamais le silence.
 
-Le wizard porte désormais un encart « ce que le système applique déjà, sans que vous le
-saisissiez » (`frontend/src/features/wizard/steps/ImplicitRulesPanel.tsx`). Il affirme six
-comportements du solveur que le gestionnaire ne saisit nulle part.
+Le wizard porte un encart « ce que le système applique déjà, sans que vous le saisissiez »
+(`frontend/src/features/wizard/steps/ImplicitRulesPanel.tsx`). Il affirme six comportements
+du solveur que le gestionnaire ne saisit nulle part.
 
-⚠ **Le risque que ce test couvre est celui d'une AFFIRMATION devenue fausse**, pas celui d'un
-solveur cassé. Si l'une de ces six règles disparaît du moteur — retirée, ou passée derrière
-une condition — rien ne rougirait côté frontend : son gel Vitest continuerait de figer un
-texte que plus personne n'honore. Le produit annoncerait une garantie qu'il ne tient plus,
-et c'est exactement le motif « contrainte saisie ≠ contrainte honorée » qui a coûté ENG-10 à
-ENG-13, ici retourné du côté de l'implicite.
+⚠ **Le risque couvert est celui d'une AFFIRMATION devenue fausse**, pas d'un solveur cassé.
+Si l'une de ces règles disparaît du moteur — retirée, ou passée derrière une condition — rien
+ne rougirait côté frontend : son gel Vitest continuerait de figer un texte que plus personne
+n'honore. C'est le motif « contrainte saisie ≠ contrainte honorée » (ENG-10 à ENG-13), ici
+retourné du côté de l'implicite.
 
 On vérifie donc que `add_level_1_hard_constraints` appelle les six, **sans condition**, dans
-son appel par défaut. Le mock est délibéré : la sémantique de chaque règle a déjà ses propres
-tests (`test_coach_rest_day.py`, `test_capacity_slots.py`, la matrice sémantique…). Ce qu'AUCUN
-d'eux ne garde, c'est le fait qu'elles soient toujours BRANCHÉES — une fonction parfaitement
-testée mais plus appelée passe tous les tests du monde.
+son appel par défaut, et que le repos coach est **appelé selon le réglage** : HARD par défaut
+(bloc absent), PREFERRED quand le gestionnaire l'a explicitement demandé. Le mock est
+délibéré : la sémantique de chaque règle a ses propres tests (`test_coach_rest_day.py`, la
+matrice sémantique, `test_implicit_rules_adjustable.py`…). Ce qu'AUCUN d'eux ne garde, c'est
+que la règle soit toujours BRANCHÉE — une fonction parfaitement testée mais plus appelée passe
+tous les tests du monde.
 
 ⚠ Les trois règles délibérément TUES par l'encart (`age_ascending`, `salarie_distribution`,
-`max_consecutive_sessions`) ne sont pas listées ici : ce test garde l'accord entre l'écran et
-le moteur, pas l'inventaire du moteur. Les ajouter ferait rougir le jour où on les retirerait
-du solveur alors que l'écran n'en parle pas — un faux positif.
+`max_consecutive_sessions`) ne sont pas listées dans `ANNOUNCED_BY_THE_UI` : ce bloc garde
+l'accord entre l'écran et le moteur, pas l'inventaire du moteur.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 from unittest.mock import DEFAULT, patch
 
 import pytest
 
 from app.solver import constraints as C
+from app.solver.constraints import ResolvedImplicitRules, resolve_implicit_rules
 
 # Les six fonctions correspondant, dans l'ordre, aux six entrées de `IMPLICIT_RULES`.
 # Le libellé est celui de l'encart : il rend la panne lisible sans ouvrir le frontend.
@@ -58,56 +61,6 @@ def test_the_rule_the_ui_announces_is_still_wired(function_name: str, ui_label: 
     )
 
 
-def test_the_rest_day_rule_is_on_by_default() -> None:
-    """Le repos du coach est le seul des six à vivre derrière un drapeau.
-
-    ``skip_rest_day_and_distribution`` existe encore dans la signature. Aucun appelant
-    applicatif ne le passe à ``True`` — mais l'encart affirme la règle sans réserve, donc
-    c'est le DÉFAUT qui doit rester « appliquée ». Basculer ce défaut rendrait l'écran faux
-    sans casser aucun autre test.
-    """
-    with patch.object(C, "add_coach_rest_day_constraints") as spied:
-        C.add_level_1_hard_constraints(object(), assignments=[])
-
-    assert spied.called, (
-        "le défaut de skip_rest_day_and_distribution doit rester False — l'encart annonce le jour de repos sans condition"
-    )
-
-
-def test_no_applicative_caller_relaxes_the_rest_day_rule() -> None:
-    """ADR-0001 : single-pass, AUCUN fallback de relaxation — et on le vérifie sur le CODE.
-
-    Le docstring de ``add_level_1_hard_constraints`` a longtemps décrit un « two-pass
-    fallback » qui abandonnait repos-coach et distribution-salariés quand la passe 1 rendait
-    INFEASIBLE. Ce chemin n'existe pas, et c'est cette doc fausse qui a failli faire publier
-    au gestionnaire une règle présentée comme abandonnable.
-
-    ⚠ La première version de ce test cherchait la CHAÎNE « two-pass fallback » dans le
-    docstring. Elle rougissait sur le docstring CORRIGÉ, qui cite l'expression pour la
-    démentir — un test qui interdit de nommer l'erreur qu'on répare. On garde donc
-    l'invariant réel, vérifiable et stable : **aucun appelant applicatif ne relaxe la règle**.
-    Le jour où un vrai fallback est réintroduit, c'est ici que ça rougit, et c'est l'ADR
-    qu'il faut rouvrir d'abord.
-    """
-    # Le module qui DÉFINIT le paramètre est exclu : il le nomme forcément (signature,
-    # branches, et le docstring qui explique justement que le fallback n'existe pas).
-    # Ce sont les APPELANTS qui décideraient de relaxer.
-    definition_site = Path(C.__file__).resolve()
-    app_dir = definition_site.parent.parent
-    culprits = sorted(
-        path.relative_to(app_dir).as_posix()
-        for path in app_dir.rglob("*.py")
-        if path.resolve() != definition_site
-        and "skip_rest_day_and_distribution=True" in path.read_text(encoding="utf-8").replace(" ", "")
-    )
-
-    assert culprits == [], (
-        f"ces modules applicatifs relaxent le repos du coach : {culprits}. "
-        "ADR-0001 pose un solve single-pass SANS relaxation (INFEASIBLE → failed + diagnostics), "
-        "et depuis P4-55 l'encart du wizard annonce cette règle sans réserve."
-    )
-
-
 def test_the_six_are_wired_together_not_one_by_one() -> None:
     """Le filet d'ensemble : un seul appel par défaut doit les déclencher TOUTES.
 
@@ -121,3 +74,57 @@ def test_the_six_are_wired_together_not_one_by_one() -> None:
 
     silent = sorted(name for name, _ in ANNOUNCED_BY_THE_UI if not patches[name].called)
     assert silent == [], f"ces règles annoncées par le wizard n'ont pas été appliquées : {silent}"
+
+
+def test_default_resolution_is_all_hard() -> None:
+    """Absence totale du bloc `implicitRules` = défauts partout : tout HARD, seuils historiques.
+
+    C'est ce qui garantit qu'un payload sans le bloc est byte-identique à l'ancien contrat.
+    """
+    default = resolve_implicit_rules(None)
+    assert default == ResolvedImplicitRules()
+    assert default.coach_rest_day_intensity == "HARD"
+    assert default.salarie_distribution_intensity == "HARD"
+    assert default.max_consecutive_sessions_intensity == "HARD"
+    assert default.age_ascending_intensity == "HARD"
+    assert default.min_rest_days == 1
+    assert default.max_consecutive == 3
+
+
+def test_the_four_adjustable_rules_are_called_according_to_the_setting() -> None:
+    """Les 4 règles réglables restent APPELÉES quel que soit le cran — HARD par défaut,
+    PREFERRED quand demandé. On ne les DÉBRANCHE jamais : PREFERRED n'est pas une relaxation
+    de secours (ADR-0001, single-pass sans fallback) mais un réglage explicite du gestionnaire.
+    """
+    adjustable = {
+        "add_coach_rest_day_constraints": "coach_rest_day_intensity",
+        "add_salarie_distribution_constraints": "salarie_distribution_intensity",
+        "add_max_consecutive_sessions_constraints": "max_consecutive_sessions_intensity",
+        "add_age_ascending_constraints": "age_ascending_intensity",
+    }
+
+    # Défaut (bloc absent) : chaque règle est appelée avec intensity="HARD".
+    for function_name in adjustable:
+        with patch.object(C, function_name) as spied:
+            C.add_level_1_hard_constraints(object(), assignments=[])
+        assert spied.called, f"`{function_name}` n'est plus appelée par défaut"
+        assert spied.call_args.kwargs.get("intensity") == "HARD", (
+            f"`{function_name}` doit être appelée en HARD par défaut (bloc absent), "
+            f"pas {spied.call_args.kwargs.get('intensity')!r}"
+        )
+
+    # Réglage PREFERRED : la MÊME fonction est toujours appelée, avec intensity="PREFERRED".
+    preferred_block = {
+        "coachRestDay": {"intensity": "PREFERRED"},
+        "salarieDistribution": {"intensity": "PREFERRED"},
+        "maxConsecutiveSessions": {"intensity": "PREFERRED"},
+        "ageAscending": {"intensity": "PREFERRED"},
+    }
+    resolved = resolve_implicit_rules(preferred_block)
+    for function_name in adjustable:
+        with patch.object(C, function_name) as spied:
+            C.add_level_1_hard_constraints(object(), assignments=[], implicit_rules=resolved)
+        assert spied.called, f"`{function_name}` doit rester appelée même en PREFERRED"
+        assert spied.call_args.kwargs.get("intensity") == "PREFERRED", (
+            f"`{function_name}` doit passer intensity='PREFERRED' quand le gestionnaire l'a réglé"
+        )

@@ -50,9 +50,9 @@ def test_hard_only_team_no_penalty() -> None:
     assert result.score >= 0, f"score should be >= 0 (HARD-only team not penalized), got {result.score}"
 
 
-def test_score_formula_version_is_v7() -> None:
-    """Guard: version bumped to V5 when preferred_time was added (E-feat)."""
-    assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V8", f"expected V5, got {SCORE_FORMULA_VERSION!r}"
+def test_score_formula_version_is_v9() -> None:
+    """Guard: version bumped to V9 when the 4 implicit-rule PREFERRED penalties were added."""
+    assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V9", f"expected V9, got {SCORE_FORMULA_VERSION!r}"
 
 
 def test_unplaced_penalty_unchanged() -> None:
