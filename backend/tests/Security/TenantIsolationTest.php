@@ -6,8 +6,15 @@ namespace App\Tests\Security;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\ImplicitRuleSetting;
+use App\Entity\Season;
 use App\Entity\User;
+use App\Enum\ImplicitRuleIntensity;
+use App\Enum\ImplicitRuleKey;
+use App\Enum\SeasonStatus;
+use App\Service\SeasonResolver;
 use App\Tests\TenantGucTrait;
+use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -102,6 +109,74 @@ final class TenantIsolationTest extends WebTestCase
         $this->client->loginUser($userA);
         $this->client->request('GET', '/api/teams');
         self::assertResponseIsSuccessful();
+    }
+
+    /**
+     * Un réglage de règle implicite (bien-être) posé par le club A est INVISIBLE au club B : la
+     * collection RÉSOLUE de B reste au défaut HARD. RLS + filtre tenant bornent la ligne au club.
+     */
+    public function testImplicitRuleSettingOfClubAIsInvisibleToClubB(): void
+    {
+        [$clubA, $clubB, $userA] = $this->createTwoClubs();
+
+        // Un second gestionnaire, membre du club B seulement.
+        $this->scopeGucToClub($clubB->getId());
+        $userB = new User;
+        $userB->setEmail('b' . uniqid('', true) . '@test.com');
+        $userB->setFirstName('B');
+        $userB->setLastName('User');
+        $userB->setPasswordHash(self::getContainer()->get('security.user_password_hasher')->hashPassword($userB, 'pass'));
+        $this->em->persist($userB);
+        $this->em->flush();
+        $cuB = new ClubUser;
+        $cuB->setClubId($clubB->getId());
+        $cuB->setUserId($userB->getId());
+        $cuB->setRole('admin');
+        $cuB->setIsActive(true);
+        $this->em->persist($cuB);
+        // Le club B a sa propre saison courante (sinon sa collection résolue serait vide,
+        // faute de saison à scoper).
+        $year = SeasonResolver::seasonYear(new DateTimeImmutable('today'));
+        $seasonB = new Season;
+        $seasonB->setClubId($clubB->getId());
+        $seasonB->setName($year . '-' . ($year + 1));
+        $seasonB->setStartDate(new DateTimeImmutable($year . '-08-01'));
+        $seasonB->setEndDate(new DateTimeImmutable(($year + 1) . '-07-15'));
+        $seasonB->setStatus(SeasonStatus::ACTIVE);
+        $seasonB->setTransitionData([]);
+        $this->em->persist($seasonB);
+        $this->em->flush();
+
+        // Club A assouplit coachRestDay (écrit directement sous le contexte tenant du club A).
+        $this->scopeGucToClub($clubA->getId());
+        $seasonA = new Season;
+        $seasonA->setClubId($clubA->getId());
+        $seasonA->setName('2025-2026');
+        $seasonA->setStartDate(new DateTimeImmutable('2025-08-01'));
+        $seasonA->setEndDate(new DateTimeImmutable('2026-07-15'));
+        $seasonA->setStatus(SeasonStatus::ACTIVE);
+        $seasonA->setTransitionData([]);
+        $this->em->persist($seasonA);
+        $this->em->flush();
+        $setting = new ImplicitRuleSetting;
+        $setting->setClubId($clubA->getId());
+        $setting->setSeasonId($seasonA->getId());
+        $setting->setRuleKey(ImplicitRuleKey::COACH_REST_DAY);
+        $setting->setIntensity(ImplicitRuleIntensity::PREFERRED);
+        $this->em->persist($setting);
+        $this->em->flush();
+
+        // Le club B ne voit QUE le défaut — la ligne du club A lui est invisible.
+        $this->client->loginUser($userB);
+        $this->client->request('GET', '/api/implicit_rule_settings', [], [], [
+            'HTTP_X-Club-Id' => $clubB->getId(),
+        ]);
+        self::assertResponseStatusCodeSame(200);
+        /** @var array{member?: list<array{ruleKey: string, intensity: string}>} $data */
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        $coachRest = array_values(array_filter($data['member'] ?? [], static fn (array $r): bool => 'coachRestDay' === $r['ruleKey']));
+        self::assertNotEmpty($coachRest, 'la collection résolue du club B porte coachRestDay');
+        self::assertSame('HARD', $coachRest[0]['intensity'], 'le club B reste au défaut — le réglage du club A ne fuit pas');
     }
 
     protected function setUp(): void

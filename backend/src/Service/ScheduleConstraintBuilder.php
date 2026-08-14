@@ -99,6 +99,10 @@ final class ScheduleConstraintBuilder
         // sans DB que les trois deps ci-dessus — le chemin overlay, lui, les exige.
         private readonly ?TeamTagResolver $tagResolver = null,
         private readonly ?PeriodConstraintSelector $periodConstraintSelector = null,
+        // Résout le bloc `implicitRules` (règles bien-être réglables, contrat 2.7). Nullable
+        // pour le mode léger sans DB : le chemin `build()` en mémoire retombe alors sur les
+        // défauts (tout HARD), byte-identique au payload historique de PR 1 côté absence.
+        private readonly ?ImplicitRuleResolver $implicitRuleResolver = null,
     ) {}
 
     /**
@@ -523,6 +527,14 @@ final class ScheduleConstraintBuilder
             array_map($this->serializeReservation(...), $reservations),
         );
 
+        // Règles implicites « bien-être » (contrat 2.7) : le bloc RÉSOLU des 4 clés, réglages
+        // stockés par-dessus les défauts. Season-scopé (ADR-0002 : PAS de calendarEntryId — un
+        // réglage vaut pour toute la saison, base comme périodes). Sans résolveur (mode léger
+        // sans DB) ou sans club/saison → défauts (tout HARD), payload d'absence de PR 1.
+        $implicitRules = ($this->implicitRuleResolver instanceof ImplicitRuleResolver && '' !== $clubId && '' !== $seasonId)
+            ? $this->implicitRuleResolver->resolve($clubId, $seasonId)
+            : ImplicitRuleResolver::defaults();
+
         return [
             'version' => self::CONTRACT_VERSION,
             'clubId' => $clubId,
@@ -534,6 +546,7 @@ final class ScheduleConstraintBuilder
             'coaches' => array_map($this->serializeCoach(...), $coaches),
             'constraints' => $serializedConstraints,
             'slotTemplates' => array_values($serializedSlots),
+            'implicitRules' => $implicitRules,
         ];
     }
 

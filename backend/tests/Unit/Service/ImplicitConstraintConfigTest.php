@@ -13,16 +13,46 @@ final class ImplicitConstraintConfigTest extends TestCase
 {
     private ImplicitConstraintConfig $config;
 
-    public function testGetConfigReturnsFiveImplicitConstraints(): void
+    public function testGetConfigReturnsTwelveImplicitConstraints(): void
     {
         $result = $this->config->getConfig();
 
-        self::assertCount(5, $result);
+        // 6 règles du produit + 4 de bien-être + 2 extensions futures désactivées (D-43 étendu).
+        self::assertCount(12, $result);
         self::assertArrayHasKey('venueAtMostOne', $result);
         self::assertArrayHasKey('coachNoOverlap', $result);
         self::assertArrayHasKey('coachPlayerNoOverlap', $result);
         self::assertArrayHasKey('teamNoOverlap', $result);
         self::assertArrayHasKey('minSessions', $result);
+        self::assertArrayHasKey('oneSessionPerDay', $result);
+        self::assertArrayHasKey('coachRestDay', $result);
+        self::assertArrayHasKey('salarieDistribution', $result);
+        self::assertArrayHasKey('maxConsecutiveSessions', $result);
+        self::assertArrayHasKey('ageAscending', $result);
+        self::assertArrayHasKey('travelFeasibility', $result);
+        self::assertArrayHasKey('requiredBridge', $result);
+    }
+
+    public function testWellnessRulesCarryTheirFamilyAndDefaultIntensity(): void
+    {
+        $result = $this->config->getConfig();
+
+        foreach (['coachRestDay', 'salarieDistribution', 'maxConsecutiveSessions', 'ageAscending'] as $key) {
+            self::assertTrue($result[$key]['enabled'], $key . ' est active par défaut');
+            self::assertSame('WELLNESS', $result[$key]['family'], $key . ' est une règle de bien-être');
+            self::assertSame('HARD', $result[$key]['defaultIntensity'], $key . ' est dure par défaut (absence de réglage)');
+        }
+    }
+
+    public function testFutureExtensionRulesAreDisabledAndAnnouncedAsSuch(): void
+    {
+        $result = $this->config->getConfig();
+
+        foreach (['travelFeasibility', 'requiredBridge'] as $key) {
+            self::assertFalse($result[$key]['enabled'], $key . ' est une extension future, désactivée');
+            self::assertSame('DÉSACTIVÉE = extension future', $result[$key]['note']);
+            self::assertStringContainsString('DISABLED (future extension)', $result[$key]['description']);
+        }
     }
 
     public function testVenueAtMostOneConfig(): void
@@ -92,11 +122,11 @@ final class ImplicitConstraintConfigTest extends TestCase
         self::assertStringContainsString('not a hard floor', $result['minSessions']['description']);
     }
 
-    public function testGetConstraintsArrayReturnsFiveIndexedEntries(): void
+    public function testGetConstraintsArrayReturnsTwelveIndexedEntries(): void
     {
         $result = $this->config->getConstraintsArray();
 
-        self::assertCount(5, $result);
+        self::assertCount(12, $result);
         self::assertSame('VENUE_AT_MOST_ONE', $result[0]['type']);
     }
 

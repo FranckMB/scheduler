@@ -8623,6 +8623,309 @@
                 ]
             }
         },
+        "/api/implicit_rule_settings": {
+            "get": {
+                "operationId": "api_implicit_rule_settings_get_collection",
+                "tags": [
+                    "ImplicitRuleSetting"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ImplicitRuleSetting collection",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "description": "ImplicitRuleSetting.jsonld collection.",
+                                    "allOf": [
+                                        {
+                                            "$ref": "#/components/schemas/HydraCollectionBaseSchemaNoPagination"
+                                        },
+                                        {
+                                            "type": "object",
+                                            "required": [
+                                                "member"
+                                            ],
+                                            "properties": {
+                                                "member": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/ImplicitRuleSetting.jsonld"
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ImplicitRuleSetting"
+                                    }
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ImplicitRuleSetting.html"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "summary": "Retrieves the collection of ImplicitRuleSetting resources.",
+                "description": "Retrieves the collection of ImplicitRuleSetting resources.",
+                "parameters": []
+            }
+        },
+        "/api/implicit_rule_settings/{ruleKey}": {
+            "get": {
+                "operationId": "api_implicit_rule_settings_ruleKey_get",
+                "tags": [
+                    "ImplicitRuleSetting"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ImplicitRuleSetting resource",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImplicitRuleSetting.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImplicitRuleSetting"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImplicitRuleSetting.html"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Retrieves a ImplicitRuleSetting resource.",
+                "description": "Retrieves a ImplicitRuleSetting resource.",
+                "parameters": [
+                    {
+                        "name": "ruleKey",
+                        "in": "path",
+                        "description": "ImplicitRuleSetting identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            },
+            "put": {
+                "operationId": "api_implicit_rule_settings_ruleKey_put",
+                "tags": [
+                    "ImplicitRuleSetting"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "ImplicitRuleSetting resource updated",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImplicitRuleSetting.jsonld"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImplicitRuleSetting"
+                                }
+                            },
+                            "text/html": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ImplicitRuleSetting.html"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "400": {
+                        "description": "Invalid input",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "422": {
+                        "description": "An error occurred",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConstraintViolation"
+                                }
+                            }
+                        },
+                        "links": {}
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Replaces the ImplicitRuleSetting resource.",
+                "description": "Replaces the ImplicitRuleSetting resource.",
+                "parameters": [
+                    {
+                        "name": "ruleKey",
+                        "in": "path",
+                        "description": "ImplicitRuleSetting identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ],
+                "requestBody": {
+                    "description": "The updated ImplicitRuleSetting resource",
+                    "content": {
+                        "application/ld+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImplicitRuleSetting.ImplicitRuleSettingInput"
+                            }
+                        },
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImplicitRuleSetting.ImplicitRuleSettingInput"
+                            }
+                        },
+                        "text/html": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ImplicitRuleSetting.ImplicitRuleSettingInput"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "api_implicit_rule_settings_ruleKey_delete",
+                "tags": [
+                    "ImplicitRuleSetting"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "ImplicitRuleSetting resource deleted"
+                    },
+                    "404": {
+                        "description": "Not found",
+                        "content": {
+                            "application/ld+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error.jsonld"
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Error"
+                                }
+                            }
+                        },
+                        "links": {}
+                    }
+                },
+                "summary": "Removes the ImplicitRuleSetting resource.",
+                "description": "Removes the ImplicitRuleSetting resource.",
+                "parameters": [
+                    {
+                        "name": "ruleKey",
+                        "in": "path",
+                        "description": "ImplicitRuleSetting identifier",
+                        "required": true,
+                        "deprecated": false,
+                        "schema": {
+                            "type": "string"
+                        },
+                        "style": "simple",
+                        "explode": false
+                    }
+                ]
+            }
+        },
         "/api/login": {
             "post": {
                 "operationId": "login_check_post",
@@ -21738,6 +22041,145 @@
                     "@type"
                 ]
             },
+            "ImplicitRuleSetting": {
+                "type": "object",
+                "description": "Les 4 r\u00e8gles implicites \u00ab bien-\u00eatre \u00bb, R\u00c9GLABLES par club/saison (contrat moteur 2.7).\n\nL'identifiant EST `ruleKey` (la cl\u00e9 camelCase du contrat), pas un uuid : le front r\u00e8gle une\nr\u00e8gle par son nom, sans conna\u00eetre de ligne en base. La collection est R\u00c9SOLUE \u2014 toujours 4\nentr\u00e9es, d\u00e9fauts inclus, pour que le front n'invente rien. Le PUT UPSERTE (cr\u00e9e la ligne au\npremier r\u00e9glage), le DELETE R\u00c9INITIALISE (supprime la ligne \u2192 retour au d\u00e9faut).",
+                "properties": {
+                    "ruleKey": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "intensity": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "minRestDays": {
+                        "description": "Seuil de repos coach \u2014 pr\u00e9sent pour coachRestDay uniquement, sinon null.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "maxConsecutive": {
+                        "description": "Plafond de cr\u00e9neaux cons\u00e9cutifs \u2014 pr\u00e9sent pour maxConsecutiveSessions uniquement, sinon null.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "isDefault": {
+                        "description": "true tant que la r\u00e8gle est au d\u00e9faut (aucune ligne stock\u00e9e) \u2014 le front sait quoi mettre en avant.",
+                        "default": true,
+                        "type": "boolean"
+                    }
+                }
+            },
+            "ImplicitRuleSetting.ImplicitRuleSettingInput": {
+                "type": "object",
+                "description": "Les 4 r\u00e8gles implicites \u00ab bien-\u00eatre \u00bb, R\u00c9GLABLES par club/saison (contrat moteur 2.7).\n\nL'identifiant EST `ruleKey` (la cl\u00e9 camelCase du contrat), pas un uuid : le front r\u00e8gle une\nr\u00e8gle par son nom, sans conna\u00eetre de ligne en base. La collection est R\u00c9SOLUE \u2014 toujours 4\nentr\u00e9es, d\u00e9fauts inclus, pour que le front n'invente rien. Le PUT UPSERTE (cr\u00e9e la ligne au\npremier r\u00e9glage), le DELETE R\u00c9INITIALISE (supprime la ligne \u2192 retour au d\u00e9faut).",
+                "required": [
+                    "intensity"
+                ],
+                "properties": {
+                    "intensity": {
+                        "enum": [
+                            "HARD",
+                            "PREFERRED"
+                        ],
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "minRestDays": {
+                        "description": "Seuil de repos coach (r\u00e8gle coachRestDay uniquement) \u2014 born\u00e9 1-4 c\u00f4t\u00e9 processor.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "maxConsecutive": {
+                        "description": "Plafond de cr\u00e9neaux cons\u00e9cutifs (r\u00e8gle maxConsecutiveSessions uniquement) \u2014 born\u00e9 2-6.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    }
+                }
+            },
+            "ImplicitRuleSetting.html": {
+                "type": "object",
+                "description": "Les 4 r\u00e8gles implicites \u00ab bien-\u00eatre \u00bb, R\u00c9GLABLES par club/saison (contrat moteur 2.7).\n\nL'identifiant EST `ruleKey` (la cl\u00e9 camelCase du contrat), pas un uuid : le front r\u00e8gle une\nr\u00e8gle par son nom, sans conna\u00eetre de ligne en base. La collection est R\u00c9SOLUE \u2014 toujours 4\nentr\u00e9es, d\u00e9fauts inclus, pour que le front n'invente rien. Le PUT UPSERTE (cr\u00e9e la ligne au\npremier r\u00e9glage), le DELETE R\u00c9INITIALISE (supprime la ligne \u2192 retour au d\u00e9faut).",
+                "properties": {
+                    "ruleKey": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "intensity": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "minRestDays": {
+                        "description": "Seuil de repos coach \u2014 pr\u00e9sent pour coachRestDay uniquement, sinon null.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "maxConsecutive": {
+                        "description": "Plafond de cr\u00e9neaux cons\u00e9cutifs \u2014 pr\u00e9sent pour maxConsecutiveSessions uniquement, sinon null.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "isDefault": {
+                        "description": "true tant que la r\u00e8gle est au d\u00e9faut (aucune ligne stock\u00e9e) \u2014 le front sait quoi mettre en avant.",
+                        "default": true,
+                        "type": "boolean"
+                    }
+                }
+            },
+            "ImplicitRuleSetting.jsonld": {
+                "allOf": [
+                    {
+                        "$ref": "#/components/schemas/HydraItemBaseSchema"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "ruleKey": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "intensity": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "minRestDays": {
+                                "description": "Seuil de repos coach \u2014 pr\u00e9sent pour coachRestDay uniquement, sinon null.",
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "maxConsecutive": {
+                                "description": "Plafond de cr\u00e9neaux cons\u00e9cutifs \u2014 pr\u00e9sent pour maxConsecutiveSessions uniquement, sinon null.",
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "isDefault": {
+                                "description": "true tant que la r\u00e8gle est au d\u00e9faut (aucune ligne stock\u00e9e) \u2014 le front sait quoi mettre en avant.",
+                                "default": true,
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                ],
+                "description": "Les 4 r\u00e8gles implicites \u00ab bien-\u00eatre \u00bb, R\u00c9GLABLES par club/saison (contrat moteur 2.7).\n\nL'identifiant EST `ruleKey` (la cl\u00e9 camelCase du contrat), pas un uuid : le front r\u00e8gle une\nr\u00e8gle par son nom, sans conna\u00eetre de ligne en base. La collection est R\u00c9SOLUE \u2014 toujours 4\nentr\u00e9es, d\u00e9fauts inclus, pour que le front n'invente rien. Le PUT UPSERTE (cr\u00e9e la ligne au\npremier r\u00e9glage), le DELETE R\u00c9INITIALISE (supprime la ligne \u2192 retour au d\u00e9faut)."
+            },
             "PriorityTier": {
                 "type": "object",
                 "properties": {
@@ -26987,6 +27429,10 @@
         {
             "name": "Fixture",
             "description": "Resource 'Fixture' operations."
+        },
+        {
+            "name": "ImplicitRuleSetting",
+            "description": "Les 4 r\u00e8gles implicites \u00ab bien-\u00eatre \u00bb, R\u00c9GLABLES par club/saison (contrat moteur 2.7).\n\nL'identifiant EST `ruleKey` (la cl\u00e9 camelCase du contrat), pas un uuid : le front r\u00e8gle une\nr\u00e8gle par son nom, sans conna\u00eetre de ligne en base. La collection est R\u00c9SOLUE \u2014 toujours 4\nentr\u00e9es, d\u00e9fauts inclus, pour que le front n'invente rien. Le PUT UPSERTE (cr\u00e9e la ligne au\npremier r\u00e9glage), le DELETE R\u00c9INITIALISE (supprime la ligne \u2192 retour au d\u00e9faut)."
         },
         {
             "name": "PriorityTier",

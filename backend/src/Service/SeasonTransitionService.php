@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
+use App\Entity\ImplicitRuleSetting;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
@@ -387,6 +388,21 @@ final class SeasonTransitionService
             $copy->setParentConstraintId($constraint->getId());
             $this->entityManager->persist($copy);
             ++$constraints;
+        }
+
+        // Réglages des règles implicites (bien-être) : recopiés tels quels — aucune référence
+        // d'entité à remapper, une règle est un cran d'intensité + un seuil. Une saison N+1
+        // hérite donc des assouplissements décidés en N (au lieu de repartir tout HARD). Pas
+        // comptabilisé dans `$counts` : la clé y ferait diverger un miroir exact ailleurs, et
+        // la copie n'a pas de conflit à diagnostiquer.
+        foreach ($this->rows(ImplicitRuleSetting::class, $clubId, $sourceId) as $setting) {
+            $copy = new ImplicitRuleSetting;
+            $copy->setClubId($clubId);
+            $copy->setSeasonId($target->getId());
+            $copy->setRuleKey($setting->getRuleKey());
+            $copy->setIntensity($setting->getIntensity());
+            $copy->setParams($setting->getParams());
+            $this->entityManager->persist($copy);
         }
 
         $counts = [

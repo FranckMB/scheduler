@@ -137,10 +137,52 @@ final class SeasonIsolationTest extends WebTestCase
         self::assertResponseStatusCodeSame(409);
     }
 
+    /**
+     * Un réglage de règle implicite (bien-être) est season-scopé : posé sur la saison N, il ne
+     * doit PAS teindre la collection RÉSOLUE de la saison N+1 (qui reste au défaut HARD).
+     */
+    public function testImplicitRuleSettingsAreScopedToTheSelectedSeason(): void
+    {
+        [, $user, , $seasonN1] = $this->createClubWithTwoSeasons();
+        $auth = $this->authHeaders($user);
+
+        // PUT sur la saison COURANTE (sans header) : coachRestDay assoupli en PREFERRED.
+        $this->client->request('PUT', '/api/implicit_rule_settings/coachRestDay', [], [], $auth + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['intensity' => 'PREFERRED', 'minRestDays' => 2], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        // La saison courante voit l'assouplissement.
+        $this->client->request('GET', '/api/implicit_rule_settings', [], [], $auth);
+        self::assertResponseStatusCodeSame(200);
+        self::assertSame('PREFERRED', $this->resolvedIntensity('coachRestDay'), 'la saison courante voit son réglage');
+
+        // La saison N+1 reste au défaut : le réglage de N ne fuit pas.
+        $this->client->request('GET', '/api/implicit_rule_settings', [], [], $auth + [
+            'HTTP_X-Season-Id' => $seasonN1->getId(),
+        ]);
+        self::assertResponseStatusCodeSame(200);
+        self::assertSame('HARD', $this->resolvedIntensity('coachRestDay'), 'la saison N+1 reste au défaut — pas de fuite entre saisons');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
+    /** L'intensité résolue d'une règle dans la dernière réponse collection. */
+    private function resolvedIntensity(string $ruleKey): string
+    {
+        /** @var array{member?: list<array{ruleKey: string, intensity: string}>} $data */
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        foreach ($data['member'] ?? [] as $rule) {
+            if ($rule['ruleKey'] === $ruleKey) {
+                return $rule['intensity'];
+            }
+        }
+
+        self::fail(\sprintf('la règle %s doit figurer dans la collection résolue', $ruleKey));
     }
 
     /**

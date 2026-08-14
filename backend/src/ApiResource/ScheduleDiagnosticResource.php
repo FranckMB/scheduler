@@ -67,6 +67,9 @@ class ScheduleDiagnosticResource
     public ?string $startTime = null;
 
     #[Groups(['read'])]
+    public ?string $ruleKey = null;
+
+    #[Groups(['read'])]
     public string $message = '';
 
     /** @var array<string, mixed> */
@@ -88,6 +91,7 @@ class ScheduleDiagnosticResource
         $dto->venueId = $entity->getVenueId();
         $dto->dayOfWeek = $entity->getDayOfWeek();
         $dto->startTime = $entity->getStartTime();
+        $dto->ruleKey = $entity->getRuleKey();
         $dto->message = $entity->getMessage();
         $dto->suggestions = $entity->getSuggestions();
 

@@ -66,6 +66,12 @@ class ScheduleDiagnostic implements TenantOwnedInterface
     #[ORM\Column(type: 'string', length: 5, nullable: true)]
     private ?string $startTime = null;
 
+    // `implicit_rule_not_honored` (of the diagnostic types) carries the wellness rule it
+    // concerns — the contract ruleKey (coachRestDay/…), so the UI can name it. Nullable
+    // because every other type leaves it absent.
+    #[ORM\Column(type: 'string', length: 40, nullable: true)]
+    private ?string $ruleKey = null;
+
     #[ORM\Column(type: 'text')]
     private string $message;
 
@@ -244,6 +250,18 @@ class ScheduleDiagnostic implements TenantOwnedInterface
     public function setStartTime(?string $startTime): self
     {
         $this->startTime = $startTime;
+
+        return $this;
+    }
+
+    public function getRuleKey(): ?string
+    {
+        return $this->ruleKey;
+    }
+
+    public function setRuleKey(?string $ruleKey): self
+    {
+        $this->ruleKey = $ruleKey;
 
         return $this;
     }

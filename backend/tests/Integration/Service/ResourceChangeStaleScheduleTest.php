@@ -6,6 +6,7 @@ namespace App\Tests\Integration\Service;
 
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
+use App\Entity\ImplicitRuleSetting;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\Season;
@@ -15,6 +16,8 @@ use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ImplicitRuleIntensity;
+use App\Enum\ImplicitRuleKey;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
@@ -273,6 +276,47 @@ final class ResourceChangeStaleScheduleTest extends KernelTestCase
         );
     }
 
+    public function testAnImplicitRuleSettingChangeMarksTheClubSeasonSchedules(): void
+    {
+        [$club, $season] = $this->seed();
+        $schedule = $this->seasonSchedule($club, $season);
+
+        $otherSeason = $this->season($club, '2026-2027', '2026-09-01', '2027-06-30');
+        $otherSchedule = $this->seasonSchedule($club, $otherSeason);
+        $this->em->flush();
+
+        // Régler une règle implicite (bien-être) change ce que le solveur applique → les plannings
+        // COMPLETED du club+saison sont périmés. Season-scopé : la saison N+1 n'est pas touchée.
+        $this->storeImplicitRule($club, $season, ImplicitRuleKey::COACH_REST_DAY, ImplicitRuleIntensity::PREFERRED);
+
+        self::assertTrue(
+            $this->reload($schedule)->isResourcesChangedSinceGeneration(),
+            'Un réglage de règle implicite modifié périme les plannings du club+saison.',
+        );
+        self::assertFalse(
+            $this->reload($otherSchedule)->isResourcesChangedSinceGeneration(),
+            'La frontière saison tient : un réglage de la saison N ne périme pas la saison N+1.',
+        );
+    }
+
+    public function testAnImportClearsTheMarkerAfterAnImplicitRuleChange(): void
+    {
+        [$club, $season] = $this->seed();
+        $schedule = $this->seasonSchedule($club, $season);
+        $this->em->flush();
+
+        $this->storeImplicitRule($club, $season, ImplicitRuleKey::MAX_CONSECUTIVE_SESSIONS, ImplicitRuleIntensity::PREFERRED);
+        self::assertTrue($this->reload($schedule)->isResourcesChangedSinceGeneration());
+
+        $managed = $this->reload($schedule);
+        $this->importer->import($managed, ['slots' => []]);
+
+        self::assertFalse(
+            $this->reload($schedule)->isResourcesChangedSinceGeneration(),
+            'Un import de résultat solveur démarque le planning après un réglage de règle implicite.',
+        );
+    }
+
     public function testAResultEntityWriteMarksNothing(): void
     {
         [$club, $season] = $this->seed();
@@ -415,6 +459,18 @@ final class ResourceChangeStaleScheduleTest extends KernelTestCase
     {
         $venue = (new Venue)->setClubId($club->getId())->setSeasonId($season->getId())->setName('Gymnase renommé')->setSource('manual');
         $this->em->persist($venue);
+        $this->em->flush();
+        $this->em->clear();
+    }
+
+    private function storeImplicitRule(Club $club, Season $season, ImplicitRuleKey $ruleKey, ImplicitRuleIntensity $intensity): void
+    {
+        $setting = (new ImplicitRuleSetting)
+            ->setClubId($club->getId())
+            ->setSeasonId($season->getId())
+            ->setRuleKey($ruleKey)
+            ->setIntensity($intensity);
+        $this->em->persist($setting);
         $this->em->flush();
         $this->em->clear();
     }

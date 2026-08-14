@@ -105,6 +105,11 @@ final class ScheduleDiagnosticsRecorder
             if (isset($diagnostic['start_time']) || isset($diagnostic['startTime'])) {
                 $entity->setStartTime((string) ($diagnostic['start_time'] ?? $diagnostic['startTime']));
             }
+            // `implicit_rule_not_honored` carries the wellness rule it concerns (contract
+            // ruleKey). Dual-casing like the ids above (engine sends camelCase).
+            if (isset($diagnostic['rule_key']) || isset($diagnostic['ruleKey'])) {
+                $entity->setRuleKey((string) ($diagnostic['rule_key'] ?? $diagnostic['ruleKey']));
+            }
 
             $this->entityManager->persist($entity);
         }

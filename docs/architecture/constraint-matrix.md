@@ -138,11 +138,28 @@ passer » est refusé.
 | Au plus une séance par jour et par équipe | `add_one_session_per_day_constraints` | **sans exception** depuis le retrait du levier mort (P4-79, voir ci-dessous) |
 | Chaque coach garde un jour de repos | `add_coach_rest_day_constraints:452` | lundi→vendredi ; le week-end ne compte pas |
 
-**Trois sont TUES, délibérément** (décision fondateur 2026-08-11) : `add_age_ascending_constraints`
-(les jeunes avant les grands, même gymnase+jour), `add_salarie_distribution_constraints` (au moins
-un salarié chaque jour ouvré) et `add_max_consecutive_sessions_constraints` (pas trois créneaux
-consécutifs pour un coach). Détails d'implémentation ou règles de confort : les énoncer coûterait
-plus de confusion qu'il n'apporte.
+**Depuis P2-28 (2026-08-14), les règles se rangent en DEUX FAMILLES** — né de la reproduction du
+planning réel BCCL (P5-13) : le planning du club, 100 % verrouillé, était INFEASIBLE parce que deux
+règles « de bon sens » sont plus strictes que la réalité (un coach-joueur enchaîne 3 créneaux dont
+une séance JOUÉE ; deux coachs-joueurs sont présents les 5 soirs).
+
+- **Règles du produit — immuables** (rien à régler) : capacité, coach mono-gymnase (D-14),
+  coach-joueur non simultané, équipe non dédoublée, une séance/jour. Le modèle lui-même.
+- **Règles de bien-être — RÉGLABLES par club+saison** (contrat **2.7**, bloc optionnel
+  `implicitRules` ; entité `ImplicitRuleSetting`, absence de ligne = défaut) : **jour de repos
+  coach** (`coachRestDay`, seuil `minRestDays` 1-4, défaut 1), **distribution des salariés**
+  (`salarieDistribution`), **jamais N créneaux dos-à-dos** (`maxConsecutiveSessions`, seuil
+  `maxConsecutive` 2-6, défaut 3 — coaché ET joué confondus), **âge croissant** (`ageAscending`).
+  Intensité **HARD** (bloque, comportement historique = défaut) ou **PREFERRED** (le solveur vise
+  la règle via un littéral de violation AGRÉGÉ par entité, poids −6, preuve d'empilement dans
+  `objective.py` — jamais un terme par occurrence, qui pouvait supprimer des séances). Un cran
+  DÉSACTIVÉE est une **extension future**, coupée du lot sur contrarian-review.
+- **Violation TOUJOURS diagnostiquée**, quel que soit le cran (exigence fondateur) : type
+  `implicit_rule_not_honored` + `ruleKey`, détection post-solve inconditionnelle au **même grain
+  que la pose** (coach MAIN — les ASSISTANT ne comptent pas — + séances jouées), textes
+  différenciés : « règle assouplie par vous » (PREFERRED, informatif) vs « le solveur n'a pas pu
+  honorer » (HARD contourné par un verrou, alerte). Dédoublonné avec `coach_overload`.
+  La parité génération ⇄ verdict tient : `/validate-assignments` reçoit le même bloc.
 
 ✦ **Le levier `allowMultipleSessionsPerDay` a été RETIRÉ de bout en bout le 2026-08-12 (P4-79)** :
 il valait `false` partout (aucune route, aucun écran ne l'écrivait), la branche d'exemption du
@@ -154,11 +171,14 @@ reconstruira proprement (champ d'API, case sur la fiche équipe, encart des règ
 « two-pass fallback » abandonnant repos-coach et distribution-salariés sur INFEASIBLE. Ce chemin
 n'existe pas — ADR-0001 pose un solve **single-pass sans relaxation**. Corrigé au même lot.
 
-**Le garde anti-mensonge, dans les deux zones** : `ConstraintsStep.test.tsx` gèle le texte des six
-règles côté écran, et `engine/tests/semantic/test_implicit_rules_are_still_applied.py` vérifie que
-les six fonctions sont **toujours appelées sans condition** — retirer une règle du moteur sans
-toucher l'écran fait rougir la CI, en nommant l'intitulé affiché. Sans ce second verrou, le gel
-Vitest figerait un texte que plus personne n'honore.
+**Le garde anti-mensonge, dans les deux zones** : `ConstraintsStep.test.tsx` gèle le texte des
+règles côté écran, et `engine/tests/semantic/test_implicit_rules_are_still_applied.py` (muté à
+P2-28 PR 1) vérifie que les fonctions sont **appelées selon le réglage — défaut = toutes en
+HARD** et qu'une règle en PREFERRED reste **diagnostiquée**. L'inventaire cross-stack
+(`ImplicitConstraintConfig` ⇄ `engine/implicit_rules.json`, RULESET 2.4, 12 règles avec leur
+famille) est comparé par `ImplicitRulesMatchEngineTest` ; le réglage stocké ⇄ le bloc payload par
+`ImplicitRulePayloadParityTest` (step bloquant). L'onglet UI de réglage arrive en P2-28 PR 3 —
+d'ici là, le réglage se fait par l'API.
 
 ## Verrous
 

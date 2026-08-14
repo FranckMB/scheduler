@@ -14,6 +14,7 @@ use App\Entity\Constraint;
 use App\Entity\ConstraintConflict;
 use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Fixture;
+use App\Entity\ImplicitRuleSetting;
 use App\Entity\PeriodReminderLog;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
@@ -101,6 +102,9 @@ final class SeasonDataPurger
             ScheduleStructureSnapshot::class,
             ScheduleSlotTemplate::class,
             Constraint::class,
+            // Réglages des règles implicites (club_id+season_id, aucun enfant) : purgés avec
+            // la saison comme les contraintes.
+            ImplicitRuleSetting::class,
             Reservation::class,
             TeamPeriodOverride::class,
             ConstraintPeriodOverride::class,
