@@ -125,6 +125,32 @@ describe("computeReservationWarnings (W6)", () => {
     expect(computeReservationWarnings(reservations, teams, [], slots)).toEqual([]);
   });
 
+  it("nomme la cause quand un créneau à 2 places est saisi sur un gymnase NON divisible (v2)", () => {
+    // Le créneau porte une capacité BRUTE de 2 (intention « deux équipes »), mais le gymnase
+    // n'est pas déclaré divisible : la capacité effective retombe à 1. Le message générique
+    // « max 1 » laissait le gestionnaire deviner POURQUOI ; ici on nomme la cause et le geste.
+    const teams = [team("t1", "U13", 1), team("t2", "U15", 1)];
+    const venues = [venue("v1", "Gymnase A", false)];
+    const slots = [slot("v1", 2, "18:00", 2)];
+    const reservations = [reservation("r1", "t1", "v1", 2, "18:00"), reservation("r2", "t2", "v1", 2, "18:00")];
+    const warnings = computeReservationWarnings(reservations, teams, venues, slots);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("n'est pas déclaré divisible");
+    expect(warnings[0]).toContain("Gymnase A");
+  });
+
+  it("garde le message générique quand la cause n'est PAS la divisibilité (créneau brut à 1)", () => {
+    // Capacité brute 1 sur gymnase non divisible : le partage n'a rien à voir avec « terrain
+    // divisible » — le message reste le générique « max 1 » (cas historique l.94-102).
+    const teams = [team("t1", "U13", 1), team("t2", "U15", 1)];
+    const venues = [venue("v1", "Gymnase A", false)];
+    const slots = [slot("v1", 2, "18:00", 1)];
+    const reservations = [reservation("r1", "t1", "v1", 2, "18:00"), reservation("r2", "t2", "v1", 2, "18:00")];
+    const warnings = computeReservationWarnings(reservations, teams, venues, slots);
+    expect(warnings[0]).toContain("Créneau partagé par 2 équipes (max 1)");
+    expect(warnings[0]).not.toContain("divisible");
+  });
+
   it("does not warn when a splittable slot with capacity 2 holds two teams", () => {
     const teams = [team("t1", "U13", 1), team("t2", "U15", 1)];
     const venues = [venue("v1", "Gymnase A", true)];

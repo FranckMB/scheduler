@@ -162,6 +162,47 @@ final class EntityCascadeDeleter
     }
 
     /**
+     * v2 cohérence canSplit — un gymnase repasse « indivisible » alors que des créneaux y
+     * accueillent 2 équipes ou plus (état incohérent, cf. VenueStateProcessor). Sur CONFIRMATION
+     * du gestionnaire, chaque créneau visé :
+     *   - retombe à capacité 1 et perd son libellé de groupe (un libellé suppose ≥ 2 équipes,
+     *     cf. VenueTrainingSlotStateProcessor::validateGroupLabel) ;
+     *   - voit ses épinglages vidés — réservations ET les seuls verrous HARD qu'elles ont
+     *     matérialisés, exactement les DEUX familles de {@see purgeChildrenOfSlot} (une réservation
+     *     et son verrou sont les deux faces d'un même épinglage : en supprimer une sans l'autre est
+     *     précisément le bug d'orphelin que ces méthodes existent pour fermer).
+     *
+     * Bornage par COUCHE assuré par `deleteBySlotKey` : chaque créneau porte son `schedulePlanId`,
+     * donc un créneau de saison ne vide que les épinglages de base, un créneau de période que les
+     * siens — les deux couches sont couvertes parce que l'appelant passe TOUS les créneaux ≥ 2 du
+     * gymnase. Écrit en DQL comme le reste du service (hors UnitOfWork). Le planning est marqué
+     * périmé par le write du gymnase lui-même (ResourceChangeStaleScheduleListener::venueTouched).
+     *
+     * @param list<VenueTrainingSlot> $slots les créneaux du gymnase à capacité ≥ 2
+     */
+    public function clampSplitSlotsAndClearPins(array $slots): void
+    {
+        $this->withoutTenantFilters(function () use ($slots): void {
+            foreach ($slots as $slot) {
+                $clubId = $slot->getClubId();
+                $seasonId = $slot->getSeasonId();
+                $this->deleteBySlotKey(Reservation::class, $slot, $clubId, $seasonId, hardOnly: false);
+                $this->deleteBySlotKey(ScheduleSlotTemplate::class, $slot, $clubId, $seasonId, hardOnly: true);
+
+                $this->entityManager->createQueryBuilder()
+                    ->update(VenueTrainingSlot::class, 's')
+                    ->set('s.capacity', ':one')
+                    ->set('s.groupLabel', 'NULL')
+                    ->where('s.id = :id')
+                    ->setParameter('one', 1)
+                    ->setParameter('id', $slot->getId())
+                    ->getQuery()
+                    ->execute();
+            }
+        });
+    }
+
+    /**
      * P4-44 — DÉPLACER un créneau déplace ses réservations, il ne les orpheline pas.
      *
      * Une `Reservation` désigne son créneau par le TRIPLET (gymnase, jour, heure),

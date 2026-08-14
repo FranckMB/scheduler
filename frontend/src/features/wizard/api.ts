@@ -111,6 +111,13 @@ export interface VenuePayload {
   externalRef?: string | null;
   latitude?: string | null;
   longitude?: string | null;
+  /**
+   * v2 cohérence canSplit — confirme une transition « terrain divisible » true→false alors que
+   * des créneaux du gymnase accueillent 2 équipes ou plus. Sans elle, le backend refuse (422) ;
+   * avec elle, il ramène ces créneaux à 1 et vide leurs réservations. Posée par la modale de
+   * confirmation de `VenuesStep` uniquement.
+   */
+  confirmSplitCascade?: boolean;
 }
 
 /** Une salle FFBB de la commune (P2-20) — mapping serveur, jamais le hit brut. */

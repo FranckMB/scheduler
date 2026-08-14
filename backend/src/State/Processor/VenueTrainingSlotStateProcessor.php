@@ -189,7 +189,7 @@ class VenueTrainingSlotStateProcessor extends AbstractStateProcessor
         $venue = $this->entityManager->find(Venue::class, $entity->getVenueId());
 
         if ($venue instanceof Venue && false === $venue->getCanSplit()) {
-            throw new ValidationException('Cannot set capacity > 1 on a venue that cannot split.');
+            throw new ValidationException('Un créneau ne peut accueillir 2 équipes ou plus que si le gymnase est déclaré divisible : cochez « terrain divisible » dans l\'étape Gymnases, ou laissez la capacité à 1.');
         }
     }
 

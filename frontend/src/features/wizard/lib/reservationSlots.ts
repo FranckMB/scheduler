@@ -39,6 +39,28 @@ export function effectiveSlotCapacity(slot: VenueTrainingSlot, venueCanSplit: Ma
   return false === venueCanSplit.get(slot.venueId) ? 1 : slot.capacity;
 }
 
+/** Ce que la modale de confirmation « décocher terrain divisible » doit montrer et vider. */
+export interface SplitCascadePreview {
+  /** Les créneaux du gymnase à capacité ≥ 2 — ceux qui repasseront à 1 équipe. */
+  slots: VenueTrainingSlot[];
+  /** Combien de réservations posées sur ces créneaux seront vidées. */
+  reservationCount: number;
+}
+
+/**
+ * v2 cohérence canSplit — décocher « terrain divisible » sur un gymnase dont des créneaux
+ * accueillent 2 équipes ou plus est une cascade destructive : ces créneaux repassent à 1 et
+ * leurs réservations sont vidées (backend `VenueStateProcessor`). La modale AVERTIT avec ces
+ * deux nombres AVANT de confirmer. Fonction pure : le test la falsifie sans monter l'écran.
+ * Vide (`slots: []`) ⇒ décocher est cohérent, pas de modale.
+ */
+export function splitCascadePreview(slots: VenueTrainingSlot[], reservations: Reservation[], venueId: string): SplitCascadePreview {
+  const affected = slots.filter((s) => s.venueId === venueId && s.capacity >= 2);
+  const keys = new Set(affected.map((s) => slotKey(s.venueId, s.dayOfWeek, s.startTime)));
+  const reservationCount = reservations.filter((r) => keys.has(slotKey(r.venueId, r.dayOfWeek, r.startTime))).length;
+  return { slots: affected, reservationCount };
+}
+
 /** Un créneau partagé et l'état de ses réservations, pour les avertissements du récap. */
 export interface SharedSlotStatus {
   slot: VenueTrainingSlot;

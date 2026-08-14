@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Seed;
 
-use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Coach;
@@ -22,9 +21,6 @@ use App\Entity\TeamCoach;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
-use App\Enum\CalendarEntryKind;
-use App\Enum\CalendarEntryPeriodType;
-use App\Enum\CalendarEntryStatus;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -294,7 +290,7 @@ final class BcclSeeder
         // (« Associer à… », salles FFBB de Villeurbanne) — le nom d'usage reste
         // celui du club, seule l'ancre fédérale est portée.
         $venuesData = [
-            ['name' => 'Armand', 'var' => 'vArmand', 'color' => '#1E88E5', 'canSplit' => false, 'ref' => '166926610', 'lat' => '45.77935', 'lng' => '4.88604'],
+            ['name' => 'Armand', 'var' => 'vArmand', 'color' => '#1E88E5', 'canSplit' => true, 'ref' => '166926610', 'lat' => '45.77935', 'lng' => '4.88604'],
             ['name' => 'ADN', 'var' => 'vAdn', 'color' => '#FDD835', 'canSplit' => true, 'ref' => '6926617', 'lat' => '45.77184', 'lng' => '4.87672'],
             ['name' => 'Debarros', 'var' => 'vDebarros', 'color' => '#2E7D32', 'canSplit' => false, 'ref' => '166926603', 'lat' => '45.76799', 'lng' => '4.88853'],
             ['name' => 'Annexe', 'var' => 'vDebarrosAnnexe', 'color' => '#66BB6A', 'canSplit' => false, 'ref' => '166926616', 'lat' => '45.76294', 'lng' => '4.91014'],
@@ -979,40 +975,6 @@ final class BcclSeeder
         // U18F2 / U18M2 : Armand préféré (une contrainte par équipe).
         foreach (['U18F2', 'U18M2'] as $teamName) {
             $addConstraint($teamName . ' - Armand préféré', ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vArmand']->getId()]);
-        }
-        // Fermeture datée du gymnase De Barros (fête du livre) : une contrainte FACILITY
-        // « venue_closed » (ce que LIT le solveur, VenueClosureDays) DOUBLÉE d'une entrée
-        // de calendrier (ce que voit le radar/UI), reliées par calendarEntryId. Idempotent
-        // par le nom de la contrainte (aucun doublon d'entrée de calendrier au second passage).
-        $closureName = 'Debarros — fete du livre';
-        if (!$manager->getRepository(Constraint::class)->findOneBy(['clubId' => $club->getId(), 'name' => $closureName]) instanceof Constraint) {
-            $entry = $manager->getRepository(CalendarEntry::class)->findOneBy(['clubId' => $club->getId(), 'seasonId' => $season->getId(), 'title' => $closureName]);
-            if (!$entry instanceof CalendarEntry) {
-                $entry = new CalendarEntry;
-                $entry->setClubId($club->getId());
-                $entry->setSeasonId($season->getId());
-                $entry->setKind(CalendarEntryKind::PERIOD);
-                $entry->setPeriodType(CalendarEntryPeriodType::CLOSURE);
-                $entry->setStatus(CalendarEntryStatus::ACTIVE);
-                $entry->setTitle($closureName);
-                $entry->setStartDate(new DateTimeImmutable('2026-09-16'));
-                $entry->setEndDate(new DateTimeImmutable('2026-09-23'));
-                $entry->setIsDisruptive(false);
-                $manager->persist($entry);
-                $manager->flush();
-            }
-            $closure = new Constraint;
-            $closure->setClubId($club->getId());
-            $closure->setSeasonId($season->getId());
-            $closure->setScope(ConstraintScope::FACILITY);
-            $closure->setScopeTargetId($venues['vDebarros']->getId());
-            $closure->setFamily(ConstraintFamily::FACILITY);
-            $closure->setRuleType(ConstraintRuleType::HARD);
-            $closure->setName($closureName);
-            $closure->setConfig(['type' => 'venue_closed', 'startDate' => '2026-09-16', 'endDate' => '2026-09-23']);
-            $closure->setCalendarEntryId($entry->getId());
-            $closure->setIsActive(true);
-            $manager->persist($closure);
         }
 
         // --- COACH_AVAILABILITY (indisponibilités ; 5 = vendredi, 4 = jeudi) ---

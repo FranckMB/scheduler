@@ -34,6 +34,10 @@ export function computeReservationWarnings(reservations: Reservation[], teams: T
   // s'appliquait) et un gymnase pas encore chargé y valait 1 au lieu de sa capacité. L'étape
   // criait « max 1 » pendant que le Récap, branché sur la source, annonçait « 2 places ».
   const slotCapacity = new Map(slots.map((s) => [slotKey(s.venueId, s.dayOfWeek, s.startTime), effectiveSlotCapacity(s, venueSplit)]));
+  // v2 — la capacité BRUTE (avant clamp `canSplit`) à côté de l'effective : c'est l'écart entre
+  // les deux qui NOMME la cause. Un créneau saisi à 2 mais effectif à 1 sur un gymnase non
+  // divisible n'est pas « max 1 » au hasard — c'est la divisibilité qui manque, et on le dit.
+  const slotRawCapacity = new Map(slots.map((s) => [slotKey(s.venueId, s.dayOfWeek, s.startTime), s.capacity]));
 
   // Rule 1 — same slot shared by more distinct teams than allowed.
   const bySlot = new Map<string, Set<string>>();
@@ -45,7 +49,15 @@ export function computeReservationWarnings(reservations: Reservation[], teams: T
     const [venueId, day, start] = key.split("|");
     const allowed = slotCapacity.get(key) ?? 1;
     if (teamIds.size > allowed) {
-      warnings.push(`Créneau partagé par ${teamIds.size} équipes (max ${allowed}) : ${venueName.get(venueId) ?? "?"} ${DAY_LABELS[Number(day)] ?? ""} ${start}.`);
+      // Cause NOMMÉE : le créneau a été saisi pour ≥ 2 équipes (capacité brute), mais le gymnase
+      // n'est PAS déclaré divisible (test STRICT sur false — jamais sur `undefined`, cas gymnase
+      // pas encore chargé), donc l'effectif retombe à 1. Ici on dit QUOI corriger. Présentation
+      // (choix de libellé), pas une règle métier : le clamp vit dans `effectiveSlotCapacity`.
+      if (1 === allowed && (slotRawCapacity.get(key) ?? 1) >= 2 && false === venueSplit.get(venueId)) {
+        warnings.push(`Créneau partagé par ${teamIds.size} équipes : le gymnase ${venueName.get(venueId) ?? "?"} n'est pas déclaré divisible — cochez « terrain divisible » dans l'étape Gymnases.`);
+      } else {
+        warnings.push(`Créneau partagé par ${teamIds.size} équipes (max ${allowed}) : ${venueName.get(venueId) ?? "?"} ${DAY_LABELS[Number(day)] ?? ""} ${start}.`);
+      }
     }
   });
 

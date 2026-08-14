@@ -41,4 +41,14 @@ class VenueInput
 
     #[Groups(['write'])]
     public ?bool $canSplit = null;
+
+    /**
+     * v2 cohérence canSplit — confirmation EXPLICITE d'une transition « terrain divisible »
+     * true→false alors que des créneaux du gymnase accueillent encore 2 équipes ou plus.
+     * Sans elle, cette transition est refusée (422) ; avec elle, la cascade ramène ces créneaux
+     * à capacité 1, retire leur libellé et vide leurs réservations (VenueStateProcessor).
+     * Défaut false : une écriture qui l'ignore garde le comportement de refus, jamais la cascade.
+     */
+    #[Groups(['write'])]
+    public bool $confirmSplitCascade = false;
 }
