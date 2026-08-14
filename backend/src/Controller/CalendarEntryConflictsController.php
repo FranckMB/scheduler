@@ -71,7 +71,7 @@ final class CalendarEntryConflictsController extends AbstractController
         // An IGNORED entry was explicitly dismissed by the manager: it must not
         // keep raising conflicts (the radar would resurrect it as a to-do).
         if (CalendarEntryKind::PERIOD !== $entry->getKind() || CalendarEntryStatus::IGNORED === $entry->getStatus()) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'seasonPlanChosen' => $planChosen]);
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'closures' => [], 'seasonPlanChosen' => $planChosen]);
         }
 
         // Closed venues = active FACILITY constraints attached to this entry.
@@ -89,8 +89,14 @@ final class CalendarEntryConflictsController extends AbstractController
         $closedDatesByVenue = VenueClosureDays::closedDatesByVenue($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
         $venueIds = array_keys($closedDatesByVenue);
 
+        // Les fermetures affichables (gymnase, titre, bornes, jours fermés) : servies sur
+        // TOUTES les sorties, y compris sans plan choisi — une fermeture est un fait
+        // déclaré, indépendant de l'existence d'un calendrier à comparer. Seuls les
+        // `conflicts` (séances à replacer) dépendent du plan.
+        $closures = VenueClosureDays::closureSummaries($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
+
         if ([] === $venueIds) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'seasonPlanChosen' => $planChosen]);
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'closures' => $closures, 'seasonPlanChosen' => $planChosen]);
         }
 
         // The entry's OWN season baseline (not the active season) — an entry may
@@ -105,7 +111,7 @@ final class CalendarEntryConflictsController extends AbstractController
         // gymnase, lisait que tout allait bien, et n'adaptait rien — alors que le radar
         // n'avait simplement rien regardé. Un silence qui ment est pire qu'un blanc.
         if (null === $seasonScheduleId) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => $venueIds, 'conflicts' => [], 'seasonPlanChosen' => false]);
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => $venueIds, 'conflicts' => [], 'closures' => $closures, 'seasonPlanChosen' => false]);
         }
 
         /** @var list<ScheduleSlotTemplate> $slots */
@@ -148,6 +154,7 @@ final class CalendarEntryConflictsController extends AbstractController
             'entryId' => $entry->getId(),
             'venueIds' => $venueIds,
             'conflicts' => $conflicts,
+            'closures' => $closures,
             'seasonPlanChosen' => $planChosen,
         ]);
     }
