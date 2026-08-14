@@ -119,11 +119,9 @@ final class MoveSlotService
 
         $currentSlotTemplates = \is_array($payload['slotTemplates'] ?? null) ? $payload['slotTemplates'] : [];
         $payload['slotTemplates'] = $this->baselineWithoutSourceAndSiblings($currentSlotTemplates, $schedule, $slot);
-        // Le bloc `implicitRules` (P2-28) est émis par `buildForClubSeason`/`buildForOverlay`, mais
-        // le schéma `/validate-assignments` ne le porte PAS (extra=forbid → 422). Le verdict d'un
-        // déplacement valide un candidat contre la baseline HARD ; les règles bien-être y jouent
-        // avec leurs défauts moteur, sans réglage transmis. On le retire donc du payload de verdict.
-        unset($payload['implicitRules']);
+        // Le bloc `implicitRules` (P2-28) reste dans le payload : parité génération ⇄ verdict —
+        // un déplacement sur un planning généré en PREFERRED doit être jugé au MÊME réglage,
+        // sinon le verdict tout-HARD refuserait à tort ce que la génération a permis.
         $payload['version'] = self::CONTRACT_VERSION;
         $payload['solverTimeoutSeconds'] = self::VALIDATE_TIMEOUT_SECONDS;
         $payload['candidate'] = [

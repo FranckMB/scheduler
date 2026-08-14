@@ -7,6 +7,7 @@ from pydantic import Field
 from app.schemas.input_schema import (
     CoachSchema,
     ConstraintV2Schema,
+    ImplicitRulesSchema,
     PriorityTierSchema,
     ScheduleSlotTemplateSchema,
     SerializableModel,
@@ -54,6 +55,11 @@ class ValidateAssignmentsInputSchema(SerializableModel):
     teams: list[TeamSchema] = Field(default_factory=list, max_length=MAX_TEAMS)
     coaches: list[CoachSchema] = Field(default_factory=list, max_length=MAX_COACHES)
     constraints: list[ConstraintV2Schema] = Field(default_factory=list)
+    # Parite generation <=> verdict (P2-28) : le MEME reglage de regles implicites
+    # s'applique au solve et au verdict — sans lui, un deplacement sur un planning
+    # genere en PREFERRED serait juge en tout-HARD et refuse a tort. Optionnel :
+    # absence = tout HARD, seuils par defaut (retro-compat 2.6).
+    implicit_rules: ImplicitRulesSchema | None = Field(default=None, alias="implicitRules")
     # Le planning COURANT (HARD + non-HARD) : les verrous HARD restent pre-places
     # hors solveur (comme /generate), le reste est FIGE via add_fixed_slots.
     slot_templates: list[ScheduleSlotTemplateSchema] = Field(
