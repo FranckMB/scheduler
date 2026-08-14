@@ -22,6 +22,7 @@ use Doctrine\Bundle\DoctrineBundle\Attribute\AsDoctrineListener;
 use Doctrine\Bundle\DoctrineBundle\Attribute\AsEntityListener;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Event\PostFlushEventArgs;
+use Doctrine\ORM\Event\PostUpdateEventArgs;
 use Doctrine\ORM\Events;
 
 /**
@@ -102,7 +103,7 @@ use Doctrine\ORM\Events;
  * écrites — un seed qui écrit des centaines de créneaux d'un même plan ne fait QU'UN bulk UPDATE.
  */
 #[AsEntityListener(event: Events::postPersist, method: 'venueTrainingSlotTouched', entity: VenueTrainingSlot::class)]
-#[AsEntityListener(event: Events::postUpdate, method: 'venueTrainingSlotTouched', entity: VenueTrainingSlot::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'venueTrainingSlotUpdated', entity: VenueTrainingSlot::class)]
 #[AsEntityListener(event: Events::postRemove, method: 'venueTrainingSlotTouched', entity: VenueTrainingSlot::class)]
 #[AsEntityListener(event: Events::postPersist, method: 'reservationTouched', entity: Reservation::class)]
 #[AsEntityListener(event: Events::postUpdate, method: 'reservationTouched', entity: Reservation::class)]
@@ -136,12 +137,42 @@ final class ResourceChangeStaleScheduleListener
 {
     private const string SET_STALE = 'UPDATE ' . Schedule::class . ' s SET s.resourcesChangedSinceGeneration = true';
 
+    /**
+     * Champs d'un créneau dont la SEULE modification ne périme rien : `groupLabel` (le libellé
+     * « CEC3 » est esthétique — renommer un groupe ne change RIEN à ce que le solveur place),
+     * plus les techniques `updatedAt`/`version` qui accompagnent toute écriture. Modifier
+     * l'heure, le jour, la capacité, le gymnase… reste hors de cette liste, donc marque.
+     *
+     * @var list<string>
+     */
+    private const array COSMETIC_SLOT_FIELDS = ['groupLabel', 'updatedAt', 'version'];
+
     /** @var array<string, array{scope: string, planId: ?string, clubId: ?string, seasonId: ?string}> périmètres à marquer, dédupliqués par clé */
     private array $pending = [];
 
     public function venueTrainingSlotTouched(VenueTrainingSlot $entity): void
     {
         $this->markPlanScoped($entity->getSchedulePlanId(), $entity->getClubId(), $entity->getSeasonId());
+    }
+
+    /**
+     * postUpdate d'un créneau — la seule source qui FILTRE son changeset. Un renommage du libellé
+     * de groupe (« CEC3 ») est esthétique pur : le planning reste FIDÈLE aux données que le
+     * solveur a consommées, une bannière « régénérez » serait un faux signal qui use la bannière.
+     * On lit donc le changeset (dispo en postUpdate) : si les seuls champs modifiés sont
+     * cosmétiques, on ne marque pas. Tout vrai changement (heure, jour, capacité…) marque comme
+     * avant. Réservé au postUpdate : le postPersist (créneau neuf) et le postRemove (créneau
+     * supprimé) passent par `venueTrainingSlotTouched` et marquent toujours — il n'y a pas là de
+     * changeset « seul champ cosmétique » à considérer.
+     */
+    public function venueTrainingSlotUpdated(VenueTrainingSlot $entity, PostUpdateEventArgs $args): void
+    {
+        $changed = array_keys($args->getObjectManager()->getUnitOfWork()->getEntityChangeSet($entity));
+        if ([] === array_diff($changed, self::COSMETIC_SLOT_FIELDS)) {
+            return;
+        }
+
+        $this->venueTrainingSlotTouched($entity);
     }
 
     public function reservationTouched(Reservation $entity): void

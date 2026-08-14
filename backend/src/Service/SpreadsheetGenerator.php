@@ -38,7 +38,7 @@ class SpreadsheetGenerator
      * Les lignes sont désormais construites PAR NOM et projetées ici : ajouter une colonne
      * rend une cellule vide (visible), plus jamais un décalage (invisible).
      */
-    private const HEADERS = ['Jour', 'Début', 'Fin', 'Gymnase', 'Équipe', 'Catégorie', 'Coach'];
+    private const HEADERS = ['Jour', 'Début', 'Fin', 'Gymnase', 'Groupe', 'Équipe', 'Catégorie', 'Coach'];
 
     public function __construct(
         private readonly ScheduleExportDataProvider $exportData,
@@ -64,6 +64,9 @@ class SpreadsheetGenerator
                     'Début' => $start->format('H:i'),
                     'Fin' => $end->format('H:i'),
                     'Gymnase' => $venueName($slot->getVenueId()),
+                    // Libellé de groupe (« CEC3 ») du créneau, vide s'il n'en porte pas. Projeté PAR
+                    // NOM comme le reste : une colonne qu'aucune ligne ne renseigne sort vide.
+                    'Groupe' => $data->groupLabels[$slot->getVenueId() . '|' . $slot->getDayOfWeek() . '|' . $start->format('H:i')] ?? '',
                     'Équipe' => $data->teamNames[$slot->getTeamId()] ?? '',
                     'Catégorie' => $data->teamCategories[$slot->getTeamId()] ?? '',
                     'Coach' => null !== $slot->getCoachId() ? ($data->coachNames[$slot->getCoachId()] ?? '') : '',

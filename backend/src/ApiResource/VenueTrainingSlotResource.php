@@ -56,6 +56,10 @@ class VenueTrainingSlotResource
     #[Groups(['read'])]
     public int $capacity = 1;
 
+    /** Libellé d'un créneau mutualisé (« CEC3 »), null quand le créneau n'en porte pas. Esthétique. */
+    #[Groups(['read'])]
+    public ?string $groupLabel = null;
+
     /** Period-editable structure: null = permanent seasonal slot; set = a slot scoped to that period (additive). */
     #[Groups(['read'])]
     public ?string $schedulePlanId = null;
@@ -72,6 +76,7 @@ class VenueTrainingSlotResource
         $dto->startTime = $entity->getStartTime();
         $dto->durationMinutes = $entity->getDurationMinutes();
         $dto->capacity = $entity->getCapacity();
+        $dto->groupLabel = $entity->getGroupLabel();
         $dto->schedulePlanId = $entity->getSchedulePlanId();
 
         return $dto;

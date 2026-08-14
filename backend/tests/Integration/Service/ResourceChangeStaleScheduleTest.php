@@ -145,6 +145,53 @@ final class ResourceChangeStaleScheduleTest extends KernelTestCase
         );
     }
 
+    public function testUpdatingOnlyTheGroupLabelDoesNotMarkStale(): void
+    {
+        [$club, $season] = $this->seed();
+        $venueId = $this->venue($club, $season);
+        $seasonSchedule = $this->seasonSchedule($club, $season);
+        $this->em->flush();
+        // Le créneau EXISTE déjà (sa création a légitimement marqué) : on repart d'une ardoise
+        // propre pour ne mesurer QUE l'édition du libellé.
+        $slotId = $this->persistedSeasonSlot($club, $season, $venueId)->getId();
+        $this->resetMarkers($seasonSchedule);
+
+        // Renommer le SEUL libellé de groupe (« CEC3 ») — esthétique : le solveur ne le consomme
+        // pas, le planning reste fidèle. Le filtre du changeset ne doit donc pas périmer.
+        $slot = $this->em->find(VenueTrainingSlot::class, $slotId);
+        self::assertInstanceOf(VenueTrainingSlot::class, $slot);
+        $slot->setGroupLabel('CEC3');
+        $this->em->flush();
+
+        self::assertFalse(
+            $this->reload($seasonSchedule)->isResourcesChangedSinceGeneration(),
+            'Renommer le seul libellé de groupe (esthétique) ne doit PAS périmer le planning — un « régénérez » serait un faux signal.',
+        );
+    }
+
+    public function testUpdatingTheGroupLabelAndTheTimeMarksStale(): void
+    {
+        [$club, $season] = $this->seed();
+        $venueId = $this->venue($club, $season);
+        $seasonSchedule = $this->seasonSchedule($club, $season);
+        $this->em->flush();
+        $slotId = $this->persistedSeasonSlot($club, $season, $venueId)->getId();
+        $this->resetMarkers($seasonSchedule);
+
+        // Le libellé accompagné d'un VRAI changement (l'heure) : le filtre ne doit pas AVALER le
+        // vrai changement. Un créneau déplacé périme comme avant, libellé ou pas.
+        $slot = $this->em->find(VenueTrainingSlot::class, $slotId);
+        self::assertInstanceOf(VenueTrainingSlot::class, $slot);
+        $slot->setGroupLabel('CEC3');
+        $slot->setStartTime(new DateTimeImmutable('19:30'));
+        $this->em->flush();
+
+        self::assertTrue(
+            $this->reload($seasonSchedule)->isResourcesChangedSinceGeneration(),
+            'Un changement d\'heure (même accompagné d\'un libellé) périme le planning : le filtre esthétique ne doit avaler que le libellé seul.',
+        );
+    }
+
     public function testAPeriodOverrideMarksItsPlanOnly(): void
     {
         [$club, $season] = $this->seed();
@@ -336,6 +383,28 @@ final class ResourceChangeStaleScheduleTest extends KernelTestCase
         $this->em->persist($slot);
         $this->em->flush();
         $this->em->clear();
+    }
+
+    /**
+     * Un créneau de la grille SAISON (schedule_plan_id NULL) DÉJÀ persisté — capacité 2 (un
+     * groupe suppose deux équipes). Retourné pour que l'appelant le retrouve par son id après
+     * un clear() et le MUTE (postUpdate), là où trainingSlot() ne teste que la naissance.
+     */
+    private function persistedSeasonSlot(Club $club, Season $season, string $venueId): VenueTrainingSlot
+    {
+        $slot = (new VenueTrainingSlot)
+            ->setClubId($club->getId())
+            ->setSeasonId($season->getId())
+            ->setVenueId($venueId)
+            ->setDayOfWeek(1)
+            ->setStartTime(new DateTimeImmutable('18:00'))
+            ->setDurationMinutes(90)
+            ->setCapacity(2)
+            ->setSchedulePlanId(null);
+        $this->em->persist($slot);
+        $this->em->flush();
+
+        return $slot;
     }
 
     /**

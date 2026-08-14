@@ -180,7 +180,7 @@ class PdfGenerator
         }
 
         $steps = max(1, intdiv($endMin - $startMin, self::STEP_MINUTES));
-        $rows = $this->buildRows($columns, $byColStep, $emptyByColStep, $startMin, $steps, $teamNames, $venues, $coachNames, null !== $venueId);
+        $rows = $this->buildRows($columns, $byColStep, $emptyByColStep, $startMin, $steps, $teamNames, $venues, $coachNames, $data->groupLabels, null !== $venueId);
         $header = $this->buildHeader($columns, $venues);
 
         $scopeLabel = null === $venueId ? 'Tous les gymnases' : ($venues[$venueId]['name'] ?? 'Gymnase');
@@ -222,8 +222,9 @@ class PdfGenerator
      * @param array<string, string>                                 $teamNames
      * @param array<string, array{name:string,color:?string}>       $venues
      * @param array<string, string>                                 $coachNames
+     * @param array<string, string>                                 $groupLabels    "venue|day|H:i" → label
      */
-    private function buildRows(array $columns, array $byColStep, array $emptyByColStep, int $startMin, int $steps, array $teamNames, array $venues, array $coachNames, bool $singleVenue): string
+    private function buildRows(array $columns, array $byColStep, array $emptyByColStep, int $startMin, int $steps, array $teamNames, array $venues, array $coachNames, array $groupLabels, bool $singleVenue): string
     {
         // covered[colIndex][step] = true when a rowspan from above occupies the cell.
         $covered = [];
@@ -269,7 +270,7 @@ class PdfGenerator
                 for ($k = 1; $k < $span; ++$k) {
                     $covered[$colIndex][$step + $k] = true;
                 }
-                $cells .= $this->slotCell($bucket, $span, $teamNames, $venues, $coachNames, $singleVenue);
+                $cells .= $this->slotCell($bucket, $span, $teamNames, $venues, $coachNames, $groupLabels, $singleVenue);
             }
             $rows .= \sprintf('<tr><th class="time">%s</th>%s</tr>', $timeLabel, $cells);
         }
@@ -278,17 +279,26 @@ class PdfGenerator
     }
 
     /**
-     * @param list<ScheduleSlotTemplate>                      $bucket     concurrent slots (≥1) in one cell
+     * @param list<ScheduleSlotTemplate>                      $bucket      concurrent slots (≥1) in one cell
      * @param array<string, string>                           $teamNames
      * @param array<string, array{name:string,color:?string}> $venues
      * @param array<string, string>                           $coachNames
+     * @param array<string, string>                           $groupLabels "venue|day|H:i" → label
      */
-    private function slotCell(array $bucket, int $span, array $teamNames, array $venues, array $coachNames, bool $singleVenue): string
+    private function slotCell(array $bucket, int $span, array $teamNames, array $venues, array $coachNames, array $groupLabels, bool $singleVenue): string
     {
         // Colour the cell by the (shared) venue of the bucket; stack each team.
         $venue = $venues[$bucket[0]->getVenueId()] ?? ['name' => 'Salle', 'color' => null];
         $color = $venue['color'] ?? '#666666';
         $fg = $this->readableForeground($color);
+
+        // Group label ("CEC3") of this cell's window, if any — titled above the stacked teams.
+        // Keyed by the window identity (venue|day|start) all slots of the bucket share. It is user
+        // content: escaped like everything else in the template.
+        $slot0 = $bucket[0];
+        $groupKey = $slot0->getVenueId() . '|' . $slot0->getDayOfWeek() . '|' . $slot0->getStartTime()->format('H:i');
+        $groupLabel = $groupLabels[$groupKey] ?? null;
+        $title = null === $groupLabel ? '' : \sprintf('<div class="group-title">%s</div>', htmlspecialchars($groupLabel));
 
         $entries = '';
         foreach ($bucket as $slot) {
@@ -305,10 +315,11 @@ class PdfGenerator
         }
 
         return \sprintf(
-            '<td class="cell filled" rowspan="%d" style="background:%s;color:%s">%s</td>',
+            '<td class="cell filled" rowspan="%d" style="background:%s;color:%s">%s%s</td>',
             $span,
             htmlspecialchars($color),
             htmlspecialchars($fg),
+            $title,
             $entries,
         );
     }
@@ -570,6 +581,7 @@ class PdfGenerator
                 th.corner { width: 34px; background: #fff; border: none; }
                 th.time { background: #fafafa; text-align: right; white-space: nowrap; font-weight: normal; color: #555; width: 34px; }
                 td.cell { height: 14px; }
+                td.filled .group-title { display: block; font-weight: bold; font-size: 8px; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.95; margin-bottom: 2px; padding-bottom: 1px; border-bottom: 1px solid rgba(255,255,255,0.55); }
                 td.filled .entry + .entry { margin-top: 2px; padding-top: 2px; border-top: 1px dashed rgba(255,255,255,0.45); }
                 td.filled .team { display: block; font-weight: bold; line-height: 1.1; }
                 td.filled .sub { display: block; font-size: 8px; opacity: 0.9; line-height: 1.1; }

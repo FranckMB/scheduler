@@ -780,8 +780,8 @@ final class SchedulePlanProvisioner
     /** @param string|null $venueId null = tous les gymnases */
     private function copySeasonalSlotRows(string $schedulePlanId, string $clubId, string $seasonId, ?string $venueId): void
     {
-        $sql = 'INSERT INTO venue_training_slot (id, version, created_at, updated_at, club_id, season_id, venue_id, day_of_week, start_time, duration_minutes, capacity, schedule_plan_id) '
-            . 'SELECT gen_random_uuid(), 1, now(), now(), club_id, season_id, venue_id, day_of_week, start_time, duration_minutes, capacity, :planId '
+        $sql = 'INSERT INTO venue_training_slot (id, version, created_at, updated_at, club_id, season_id, venue_id, day_of_week, start_time, duration_minutes, capacity, group_label, schedule_plan_id) '
+            . 'SELECT gen_random_uuid(), 1, now(), now(), club_id, season_id, venue_id, day_of_week, start_time, duration_minutes, capacity, group_label, :planId '
             . 'FROM venue_training_slot WHERE club_id = :clubId AND season_id = :seasonId AND schedule_plan_id IS NULL';
         $params = ['planId' => $schedulePlanId, 'clubId' => $clubId, 'seasonId' => $seasonId];
         if (null !== $venueId) {

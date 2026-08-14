@@ -44,6 +44,15 @@ class VenueTrainingSlotInput
     #[Groups(['write'])]
     public ?int $capacity = 1;
 
+    /**
+     * Libellé d'un créneau mutualisé (« CEC3 ») — optionnel, ≤ 40. Le processeur le trim et
+     * normalise la chaîne vide en null ; posé sur un créneau non partageable (capacité < 2), il
+     * est refusé (422). Esthétique : ne rejoint jamais le payload solveur.
+     */
+    #[Assert\Length(max: 40)]
+    #[Groups(['write'])]
+    public ?string $groupLabel = null;
+
     /** Period-editable structure: null = seasonal slot; a period id scopes the slot to that period (additive). */
     // `NotBlank(allowNull: true)` en plus d'`Uuid` : le validateur Uuid de Symfony
     // laisse passer la chaîne VIDE, qui atteindrait la colonne `uuid` en base (22P02).
