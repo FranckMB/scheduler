@@ -9,6 +9,7 @@ use App\Export\ScheduleExportData;
 use App\Export\ScheduleExportDataProvider;
 use DateInterval;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\StringValueBinder;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
@@ -47,7 +48,17 @@ class SpreadsheetGenerator
     /** @return string binary .xlsx content */
     public function generate(Schedule $schedule, ?string $venueId = null): string
     {
-        $data = $this->exportData->load($schedule, $venueId);
+        return $this->render($this->exportData->load($schedule, $venueId));
+    }
+
+    /**
+     * Construit le classeur complet depuis les données déjà chargées — le seam testable :
+     * `ScheduleExportDataProvider` est `final` (indoublable), la donnée, elle, se fabrique.
+     *
+     * @return string binary .xlsx content
+     */
+    public function render(ScheduleExportData $data): string
+    {
         $venueName = static fn (string $id): string => $data->venues[$id]['name'] ?? '';
 
         // One sortable row per placement AND per empty window (team = "(vide)"), so
@@ -89,6 +100,12 @@ class SpreadsheetGenerator
         usort($rows, static fn (array $a, array $b): int => [$a['day'], $a['start'], $a['venue']] <=> [$b['day'], $b['start'], $b['venue']]);
 
         $spreadsheet = new Spreadsheet;
+        // Injection de formule XLSX (revue sécurité) : tout le contenu de ce
+        // classeur est de la DONNÉE club (équipes, coachs, gymnases, libellés de
+        // groupe) — un « =HYPERLINK(...) » saisi comme libellé deviendrait une
+        // formule vivante à l'ouverture dans Excel. Le binder force TOUTES les
+        // cellules en chaînes : couvre la colonne nouvelle ET les préexistantes.
+        $spreadsheet->setValueBinder(new StringValueBinder);
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Planning');
 
@@ -252,6 +269,10 @@ class SpreadsheetGenerator
     private function toBinary(Spreadsheet $spreadsheet): string
     {
         $writer = new Xlsx($spreadsheet);
+        // Ceinture-bretelles de la même revue : jamais de pré-calcul de formule
+        // côté serveur (une formule malgré tout présente ne peut ni boucler ni
+        // faire lever l'export).
+        $writer->setPreCalculateFormulas(false);
         $stream = fopen('php://temp', 'r+');
         if (false === $stream) {
             throw new RuntimeException('Cannot open temp stream for XLSX.');

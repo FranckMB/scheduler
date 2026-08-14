@@ -36,6 +36,51 @@ final class SpreadsheetTeamDayMatrixTest extends TestCase
     /** Le contenu de la feuille Planning simulée : en-têtes + 2 lignes, figé pour prouver qu'il ne bouge pas. */
     private const PLANNING_ROWS = 2;
 
+    /**
+     * Injection de formule (revue sécurité P2-17) : tout le classeur est de la
+     * donnée club — un nom d'équipe ou un libellé de groupe « =HYPERLINK(...) »
+     * doit rester une CHAÎNE à l'ouverture dans Excel, jamais une formule vivante.
+     * Le StringValueBinder posé sur le classeur garde TOUTES les colonnes.
+     */
+    public function testFormulaLookingContentStaysAPlainString(): void
+    {
+        // Le nom d'équipe (colonne préexistante) ET le libellé de groupe (colonne
+        // nouvelle) sont piégés : le binder doit couvrir les deux.
+        $teamPayload = '=HYPERLINK("http://evil/?t","U13")';
+        $groupPayload = '=HYPERLINK("http://evil/?g","CEC3")';
+        $data = new ScheduleExportData(
+            slots: [$this->slot('t-u13', 'v-a', 1, '18:30')],
+            teamNames: ['t-u13' => $teamPayload],
+            teamCategories: ['t-u13' => 'U13'],
+            venues: ['v-a' => ['name' => 'Gymnase Municipal', 'color' => null]],
+            coachNames: [],
+            groupLabels: ['v-a|1|18:30' => $groupPayload],
+        );
+
+        // Le VRAI classeur livré : `render()` (la totalité de `generate()` après chargement),
+        // sérialisé puis relu — pas la maquette de `renderAndReadBack`, qui n'exerce que la matrice.
+        $generator = new ReflectionClass(SpreadsheetGenerator::class)->newInstanceWithoutConstructor();
+        $path = tempnam(sys_get_temp_dir(), 'xlsx_') ?: throw new RuntimeException('no temp file');
+        try {
+            file_put_contents($path, $generator->render($data));
+            $planning = new XlsxReader()->load($path)->getSheetByName('Planning');
+        } finally {
+            unlink($path);
+        }
+        self::assertNotNull($planning, 'la feuille Planning doit exister');
+
+        $found = [];
+        foreach ($planning->getRowIterator(2) as $row) {
+            foreach ($row->getCellIterator() as $cell) {
+                if (\in_array($cell->getValue(), [$teamPayload, $groupPayload], true)) {
+                    $found[] = $cell->getValue();
+                    self::assertNotSame('f', $cell->getDataType(), 'le contenu utilisateur en forme de formule doit rester une chaîne, pas une formule');
+                }
+            }
+        }
+        self::assertSame([$groupPayload, $teamPayload], $found, 'les deux contenus piégés doivent être présents tels quels (chaînes intactes), équipe et groupe');
+    }
+
     public function testSecondSheetIsAddedAndPlanningStaysUntouched(): void
     {
         $data = new ScheduleExportData(
