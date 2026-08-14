@@ -27,6 +27,10 @@ interface Props {
   disabledVenueIds?: ReadonlySet<string>;
   /** Équipes en pause pour la période : nommées sur un épinglage existant, jamais proposées. */
   pausedTeamIds?: ReadonlySet<string>;
+  /** P2-22 D2 — ce créneau tombe un jour de fermeture du gymnase : ajout FERMÉ, retrait ouvert
+   *  (l'épinglage sur un jour fermé est orphelin et bloque la génération). Même patron que
+   *  `disabledVenueIds`, au grain JOUR : atteignable pour corriger, pas pour aggraver. */
+  slotClosed?: boolean;
   venueCanSplit: Map<string, boolean>;
   schedulePlanId: string | null;
   onClose: () => void;
@@ -63,6 +67,7 @@ export function SlotReservationModal({
   venues,
   disabledVenueIds,
   pausedTeamIds,
+  slotClosed = false,
   venueCanSplit,
   schedulePlanId,
   onClose,
@@ -111,8 +116,10 @@ export function SlotReservationModal({
   // son nom reste lisible sur un épinglage existant, mais elle n'est plus proposée (le
   // solveur ne la verra pas, l'épingler serait un geste sans effet).
   const venueDisabled = true === disabledVenueIds?.has(slot.venueId);
+  // Un jour de fermeture ferme l'ajout comme un gymnase désactivé, au grain JOUR (P2-22 D2).
+  const blockAdd = venueDisabled || slotClosed;
   const offerable = undefined === pausedTeamIds ? teams : teams.filter((t) => !pausedTeamIds.has(t.id));
-  const pickable = venueDisabled ? [] : assignableTeams(offerable, tiers, slot, draftReservations, venueCanSplit);
+  const pickable = blockAdd ? [] : assignableTeams(offerable, tiers, slot, draftReservations, venueCanSplit);
 
   const pick = (teamId: string) => {
     if ("" === teamId) {
@@ -242,6 +249,10 @@ export function SlotReservationModal({
       {venueDisabled ? (
         <p role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
           {venue.name} est désactivé pour cette période : on ne peut plus y ajouter d'équipe. Retirez les réservations ci-dessus pour débloquer la génération.
+        </p>
+      ) : slotClosed ? (
+        <p role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+          Ce créneau tombe un jour de fermeture de {venue.name} : on ne peut plus y ajouter d'équipe ici. Retirez les réservations ci-dessus pour débloquer la génération.
         </p>
       ) : !guardReady ? (
         <p role="status" className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">

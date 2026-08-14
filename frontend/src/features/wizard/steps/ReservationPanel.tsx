@@ -1,10 +1,14 @@
 import { useState } from "react";
 
+import { useEntryConflicts } from "@/features/cockpit/queries";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
+import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
 import { VenueSelect } from "@/shared/components/ui/venue-select";
+import { readFailed } from "@/shared/lib/readState";
 
 import type { PriorityTier, Team, Venue, VenueTrainingSlot } from "../api";
 import { reservedTeamsBySlot, effectiveSlotCapacity, slotKey } from "../lib/reservationSlots";
+import { closuresByVenue, isSlotClosed } from "../lib/venueClosures";
 import { useGridSlots, useReservations, useWizardTeamCoaches } from "../queries";
 import { ReservationGrid } from "./ReservationGrid";
 import { SlotReservationModal } from "./SlotReservationModal";
@@ -21,6 +25,7 @@ export function ReservationPanel({
   tiers,
   venues,
   schedulePlanId,
+  entryId,
   pausedTeamIds,
   disabledVenueIds,
 }: {
@@ -28,6 +33,11 @@ export function ReservationPanel({
   tiers: PriorityTier[];
   venues: Venue[];
   schedulePlanId: string | null;
+  /** L'entrée de la période (P2-22 D2) — porte les fermetures de gymnase servies par
+   *  /calendar-entries/{id}/conflicts. `null` hors période (socle) : le hook est désactivé,
+   *  aucune fermeture. On interroge l'id de l'entrée COURANTE (semaine enfant comprise) : le
+   *  serveur résout la mère (`parentEntryId ?? id`) pour les fermetures. */
+  entryId?: string | null;
   /** Équipes en pause pour la période : NOMMÉES (un épinglage existant reste lisible) mais jamais proposées. */
   pausedTeamIds?: ReadonlySet<string>;
   /** Gymnases désactivés pour la période : ATTEIGNABLES (pour retirer une réservation — le geste correctif) mais marqués, et fermés à l'ajout. */
@@ -37,6 +47,9 @@ export function ReservationPanel({
   // une réservation hors de la grille servie bloquerait la génération (#8).
   const { data: slots = [] } = useGridSlots(schedulePlanId);
   const { data: reservations = [] } = useReservations(schedulePlanId);
+  // P2-22 D2 — les fermetures de gymnase de la période. Hors période (entryId null) le hook
+  // est désactivé → aucune fermeture, socle inchangé.
+  const conflictsQuery = useEntryConflicts(entryId ?? null);
   // P2-9 PR C : le lien équipe→coach permet à la modale de refuser au clic une affectation
   // qui dédoublerait un coach — même règle que le blocage du récap (PR B).
   // ⚠ On passe l'état de la requête, PAS un `= []` de confort : sans les liens, la règle ne
@@ -51,10 +64,23 @@ export function ReservationPanel({
     return <EmptyHint>Ajoutez d'abord un gymnase et ses créneaux pour pouvoir réserver.</EmptyHint>;
   }
 
+  // FAIL-CLOSED (P2-22 D2) : sans les fermetures, la grille paraîtrait pleinement réservable —
+  // le gestionnaire poserait un épinglage sur un jour fermé, orphelin qui bloque la génération.
+  // On refuse donc de rendre la grille tant que la lecture a échoué (hors période : hook
+  // désactivé → jamais `failed`). Même patron que `PeriodStructure`.
+  if (readFailed(conflictsQuery)) {
+    return (
+      <LoadErrorHint onRetry={() => void conflictsQuery.refetch()}>
+        Impossible de vérifier les fermetures de gymnase sur cette période.
+      </LoadErrorHint>
+    );
+  }
+
   const selected = venues.find((v) => v.id === venueId) ?? venues[0];
   const venueCanSplit = new Map(venues.map((v) => [v.id, v.canSplit]));
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const venueSlots = slots.filter((s) => s.venueId === selected.id);
+  const closuresOfVenue = closuresByVenue(conflictsQuery.data?.closures ?? []).get(selected.id) ?? [];
 
   // slotKey → reserved team NAMES (for the grid badges).
   const reservedNames = new Map<string, string[]>();
@@ -98,6 +124,7 @@ export function ReservationPanel({
         slotKeyOf={(s) => slotKey(s.venueId, s.dayOfWeek, s.startTime)}
         capacityOf={(s) => effectiveSlotCapacity(s, venueCanSplit)}
         onSelectSlot={setActiveSlot}
+        closures={closuresOfVenue}
       />
 
       {null !== activeSlot ? (
@@ -114,6 +141,7 @@ export function ReservationPanel({
           venues={venues}
           disabledVenueIds={disabledVenueIds}
           pausedTeamIds={pausedTeamIds}
+          slotClosed={isSlotClosed(activeSlot, closuresOfVenue)}
           venueCanSplit={venueCanSplit}
           schedulePlanId={schedulePlanId}
           onClose={() => setActiveSlot(null)}

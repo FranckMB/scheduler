@@ -26,13 +26,20 @@ const SEASON_TEAMS = [
   { id: "t2", name: "Fanion", sportCategoryId: "cat", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true },
 ];
 
-const { activeVenuesState, activeTeamsState, reservationArgs } = vi.hoisted(() => ({
+const { activeVenuesState, activeTeamsState, reservationArgs, entryConflictsState, calendarEntryState, constraintsArg } = vi.hoisted(() => ({
   activeVenuesState: {
     venues: [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }] as { id: string; name: string; isActive: boolean }[],
     disabledIds: new Set<string>(),
     layerRead: "ready" as "loading" | "failed" | "ready",
   },
   activeTeamsState: { pausedIds: new Set<string>(), layerRead: "ready" as "loading" | "failed" | "ready" },
+  // P2-22 — les fermetures servies par /calendar-entries/{id}/conflicts (D2) et l'entrée
+  // courante (D5, parentEntryId). Défauts neutres : aucune fermeture, entrée racine.
+  entryConflictsState: { data: { entryId: "e", venueIds: [], conflicts: [], closures: [], seasonPlanChosen: true } as unknown, isError: false },
+  calendarEntryState: { data: { parentEntryId: null } as { parentEntryId: string | null } | undefined },
+  // Capture l'id passé à useWizardConstraints — c'est par lui que le composant doit résoudre
+  // la MÈRE d'une semaine enfant (D5) ; les deux ids sont des string, tsc est muet.
+  constraintsArg: { value: undefined as string | null | undefined },
   // ⚠ Le mock HONORE ses arguments : `useReservations(planId, enabled)` porte la garde qui
   // empêche une période non résolue de servir les réservations du SOCLE. Un mock qui rend
   // une constante rendait cette garde inobservable — c'est ainsi que l'issue de secours
@@ -41,7 +48,10 @@ const { activeVenuesState, activeTeamsState, reservationArgs } = vi.hoisted(() =
 }));
 
 vi.mock("../queries", () => ({
-  useWizardConstraints: () => ({ data: h.list }),
+  useWizardConstraints: (entryId?: string | null) => {
+    constraintsArg.value = entryId;
+    return { data: h.list };
+  },
   useWizardTeams: () => ({ data: SEASON_TEAMS }),
   usePriorityTiers: () => ({ data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 3, label: "B", name: "Moyenne", color: null }] }),
   useWizardTeamTags: () => ({ data: h.tags }),
@@ -96,6 +106,8 @@ vi.mock("@/features/cockpit/queries", () => ({
           ? { state: "failed", planId: null, retry: retryAnchor }
           : { state: "loading", planId: null },
   anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
+  useEntryConflicts: () => ({ data: entryConflictsState.data, isError: entryConflictsState.isError, refetch: vi.fn() }),
+  useCalendarEntry: () => ({ data: calendarEntryState.data }),
 }));
 // Stub : le comportement interne de PeriodConstraints est couvert par
 // PeriodStructure.test — ici on ne teste que son PLACEMENT par onglet (#9).
@@ -902,5 +914,116 @@ describe("ConstraintsStep — période : choisir, nommer, atteindre", () => {
     // Aucune règle ne doit renvoyer vers un réglage inexistant.
     const perDay = IMPLICIT_RULES.find((r) => "one-session-per-day" === r.id);
     expect(perDay?.detail).not.toMatch(/sauf si|autoris/i);
+  });
+});
+
+/**
+ * D2 (P2-22) — l'onglet Réserver honore les fermetures de gymnase de la période. Un créneau
+ * d'un jour fermé se bloque à l'AJOUT tout en restant atteignable pour le RETRAIT (l'épinglage
+ * orphelin bloque la génération) ; un échec de lecture des fermetures ferme la grille (fail-closed).
+ */
+describe("ConstraintsStep — Réserver : fermetures de gymnase (D2)", () => {
+  beforeEach(() => {
+    h.reservations = [];
+    h.teamCoaches = [];
+    h.coachesPending = false;
+    h.coachesFailed = false;
+    periodAnchorReady.value = true;
+    activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }];
+    activeVenuesState.disabledIds = new Set();
+    activeTeamsState.pausedIds = new Set();
+    entryConflictsState.data = { entryId: "e", venueIds: [], conflicts: [], closures: [], seasonPlanChosen: true };
+    entryConflictsState.isError = false;
+    calendarEntryState.data = { parentEntryId: null };
+    useWizardStore.getState().startPeriodMode("entry-closures");
+  });
+  afterEach(() => {
+    useWizardStore.getState().exitPeriodMode();
+    entryConflictsState.data = { entryId: "e", venueIds: [], conflicts: [], closures: [], seasonPlanChosen: true };
+    entryConflictsState.isError = false;
+  });
+
+  it("bloque l'AJOUT sur un créneau fermé sans réservation (bouton de grille désactivé)", async () => {
+    const user = userEvent.setup();
+    // Le créneau de la période (v2, jeudi 19:00) tombe un jour fermé.
+    entryConflictsState.data = { entryId: "e", venueIds: ["v2"], conflicts: [], closures: [{ constraintId: "cc", venueId: "v2", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [4] }], seasonPlanChosen: true };
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v2");
+
+    const slot = screen.getByRole("button", { name: /Jeu 19:00 · Gymnase B/ });
+    expect(slot).toBeDisabled();
+    expect(slot).toHaveAccessibleName(/Indispo du 1\/5 au 10\/5 — Travaux/);
+  });
+
+  it("garde atteignable un créneau fermé RÉSERVÉ : la modale interdit l'ajout, permet le retrait", async () => {
+    const user = userEvent.setup();
+    entryConflictsState.data = { entryId: "e", venueIds: ["v2"], conflicts: [], closures: [{ constraintId: "cc", venueId: "v2", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [4] }], seasonPlanChosen: true };
+    h.reservations = [{ id: "r9", calendarEntryId: null, teamId: "t1", venueId: "v2", dayOfWeek: 4, startTime: "19:00", durationMinutes: 90 }];
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v2");
+    await user.click(screen.getByRole("button", { name: /Jeu 19:00 · Gymnase B/ }));
+
+    // Ajout fermé : pas de picker, un message qui dit pourquoi.
+    expect(screen.queryByLabelText("Ajouter une équipe")).toBeNull();
+    expect(screen.getByText(/jour de fermeture/)).toBeInTheDocument();
+    // Retrait ouvert : c'est la raison d'être de la porte.
+    expect(screen.getByRole("button", { name: "Retirer SM1" })).toBeInTheDocument();
+  });
+
+  it("FAIL-CLOSED : un échec de lecture des fermetures ferme la grille (pas de grille faussement réservable)", async () => {
+    const user = userEvent.setup();
+    entryConflictsState.data = undefined;
+    entryConflictsState.isError = true;
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+
+    expect(screen.getByText(/Impossible de vérifier les fermetures de gymnase/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /cliquer pour gérer/ })).toBeNull();
+  });
+});
+
+/**
+ * D5 (P2-22) — une semaine ENFANT partage les contraintes DATÉES de sa MÈRE. Le front résout
+ * `sourceEntryId = entry.parentEntryId ?? periodEntryId` (miroir de
+ * CalendarEntry::datedConstraintSourceId) AVANT de lister ET de créer, sinon une datée créée
+ * depuis l'enfant porte le mauvais calendarEntryId et PeriodConstraintSelector ne la voit jamais.
+ */
+describe("ConstraintsStep — datées d'une semaine enfant (D5)", () => {
+  beforeEach(() => {
+    h.list = [];
+    h.createMut.mockClear();
+    periodAnchorReady.value = true;
+    activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }];
+    activeVenuesState.disabledIds = new Set();
+    activeTeamsState.pausedIds = new Set();
+    entryConflictsState.data = { entryId: "e", venueIds: [], conflicts: [], closures: [], seasonPlanChosen: true };
+    entryConflictsState.isError = false;
+    calendarEntryState.data = { parentEntryId: "mother-1" };
+    useWizardStore.getState().startPeriodMode("child-week");
+  });
+  afterEach(() => {
+    useWizardStore.getState().exitPeriodMode();
+    calendarEntryState.data = { parentEntryId: null };
+  });
+
+  it("liste les datées par la MÈRE (parentEntryId), pas par la semaine enfant", () => {
+    renderWithProviders(<ConstraintsStep />);
+    expect(constraintsArg.value).toBe("mother-1");
+  });
+
+  it("crée une datée en la rattachant à la MÈRE (sinon PeriodConstraintSelector ne la voit pas)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Jours" }));
+    await user.click(screen.getByRole("button", { name: "Mer" }));
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    expect(h.createMut.mock.calls[0][0].calendarEntryId).toBe("mother-1");
   });
 });
