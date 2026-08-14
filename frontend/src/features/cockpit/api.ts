@@ -101,10 +101,28 @@ export interface EntryConflict {
   dates: string[];
 }
 
+/**
+ * Une FERMETURE de gymnase déclarée sur la fenêtre de l'entrée (P2-22 PR 1, backend).
+ * `weekdays` = jours ISO fermés (1 = lundi … 7 = dimanche) ∩ fenêtre de l'entrée, calculés
+ * SERVEUR avec la même sémantique que le retrait des créneaux du payload solveur — le front
+ * les LIT (régime 1), il ne dérive rien. Servie sur TOUTES les sorties du endpoint, même
+ * `seasonPlanChosen=false`.
+ */
+export interface Closure {
+  constraintId: string;
+  venueId: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  weekdays: number[];
+}
+
 export interface EntryConflictsResponse {
   entryId: string;
   venueIds: string[];
   conflicts: EntryConflict[];
+  /** Fermetures de gymnase déclarées sur la fenêtre (toujours servies, indépendantes de `seasonPlanChosen`). */
+  closures: Closure[];
   /**
    * Le plan de la saison pointe-t-il une version ? Sinon la saison n'a PAS de
    * calendrier et le radar n'a rien pu comparer : `conflicts: []` veut alors dire
