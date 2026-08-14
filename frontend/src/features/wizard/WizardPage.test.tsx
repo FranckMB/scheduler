@@ -7,6 +7,9 @@ import { renderWithProviders } from "@/test/utils";
 // Established club (a main plan exists) → free wizard navigation, not guided.
 vi.mock("@/features/auth/queries", () => ({
   useMe: () => ({ data: { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "b1", hasFinishedVersion: true }, club: { id: "c", name: "C", onboardingCompleted: true } } }),
+  // Le panneau des règles du système (dans l'étape Contraintes) lit la saison de travail pour
+  // savoir si elle est archivée (lecture seule). Non-archivée par défaut ici.
+  useWorkingSeason: () => null,
 }));
 
 // Garde d'abandon de période (retour fondateur 2026-07-18) : contrôle des
@@ -68,6 +71,13 @@ vi.mock("./api", async (orig) => ({
   listConstraints: vi.fn(() => Promise.resolve([])),
   createConstraint: vi.fn(() => Promise.resolve({})),
   deleteConstraint: vi.fn(() => Promise.resolve()),
+  // P2-28 — le panneau des règles du système (étape Contraintes) lit les 4 règles résolues.
+  listImplicitRuleSettings: vi.fn(() => Promise.resolve([
+    { ruleKey: "coachRestDay", intensity: "HARD", minRestDays: 1, maxConsecutive: null, isDefault: true },
+    { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+    { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, isDefault: true },
+    { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+  ])),
   validateConstraints: vi.fn(() => Promise.resolve({ valid: true, errors: {}, conflicts: [] })),
   createSchedule: vi.fn(() => Promise.resolve({ id: "s1" })),
   generateSchedule: vi.fn(() => Promise.resolve({})),

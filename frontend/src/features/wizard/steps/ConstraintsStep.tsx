@@ -5,7 +5,7 @@ import { useSearchParams } from "react-router";
 import { Button } from "@/shared/components/ui/button";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { PeriodAnchorGate } from "./PeriodAnchorGate";
-import { ImplicitRulesPanel } from "./ImplicitRulesPanel";
+import { ProductRulesPanel, WellbeingRulesPanel, isWellbeingKey } from "./ImplicitRulesPanel";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Select } from "@/shared/components/ui/select";
@@ -129,7 +129,10 @@ export function ConstraintsStep() {
   const del = useDeleteConstraint();
 
   const [family, setFamily] = useState<ConstraintFamily>("TIME");
-  const [mode, setMode] = useState<"constraint" | "reserve">("constraint");
+  // Onglets de PRÉSENTATION (ne créent AUCUNE contrainte) : "base" = règles immuables lecture
+  // seule, "wellbeing" = règles réglables (implicit_rule_settings). "constraint"/"reserve"
+  // pilotent le formulaire de contraintes / la réservation.
+  const [mode, setMode] = useState<"constraint" | "reserve" | "base" | "wellbeing">("constraint");
   const [ruleType, setRuleType] = useState<ConstraintRuleType>("PREFERRED");
   // target: "" = toutes les équipes (CLUB) · "tag:NAME" = un groupe · sinon un id d'équipe (TEAM)
   const [target, setTarget] = useState("");
@@ -402,8 +405,12 @@ export function ConstraintsStep() {
   const [searchParams] = useSearchParams();
   const editTarget = searchParams.get("edit");
   const tabTarget = searchParams.get("tab");
+  // P2-28 — un diagnostic « règle assouplie » du planning atterrit ici en ciblant SA règle
+  // (`?rule=<ruleKey>`) : le panneau des règles du système l'ouvre, la surligne et la scrolle.
+  const ruleTarget = searchParams.get("rule");
   const consumedEditRef = useRef<string | null>(null);
   const consumedTabRef = useRef(false);
+  const consumedRuleTabRef = useRef(false);
   // `?tab=reserve` (cible du « Retour à la réservation ») → bascule une fois sur l'onglet Réserver.
   useEffect(() => {
     if (consumedTabRef.current || "reserve" !== tabTarget) {
@@ -412,6 +419,16 @@ export function ConstraintsStep() {
     consumedTabRef.current = true;
     setMode("reserve");
   }, [tabTarget]);
+  // `?rule=<ruleKey>` (cible du « Ajuster cette règle » d'un diagnostic) → bascule une fois sur
+  // l'onglet Bien-être, où le panneau surligne et scrolle la règle visée. Clé inconnue → no-op :
+  // atterrissage propre (on reste sur l'onglet par défaut, rien n'est surligné).
+  useEffect(() => {
+    if (consumedRuleTabRef.current || !isWellbeingKey(ruleTarget)) {
+      return;
+    }
+    consumedRuleTabRef.current = true;
+    setMode("wellbeing");
+  }, [ruleTarget]);
   // `?step=constraints&edit=Y` → ouvre l'éditeur PRÉ-REMPLI sur Y (editConstraint = inverse de
   // build()). Introuvable (id supprimé, autre couche) → no-op : atterrissage propre, jamais un
   // écran cassé. `constraints` en dep : quand la liste charge, on retente et on POSITIONNE.
@@ -495,14 +512,12 @@ export function ConstraintsStep() {
       {/* P4-55 — « coach jamais en double » a été RETIRÉ de cette phrase : c'est faux depuis
           D-14 (deux équipes d'un même coach au MÊME gymnase sont autorisées), et le
           raccourci décourageait une pratique que le produit permet. Le détail exact vit
-          désormais dans l'encart ci-dessous, gardé contre la dérive du moteur. */}
+          désormais dans l'onglet « Base », gardé contre la dérive du moteur. */}
       <p className="mb-3 text-sm text-muted-foreground">
         Ici, ajoutez vos préférences et restrictions : ciblez
         <strong> tout le club</strong>, un <strong>groupe</strong> (ex. les jeunes → pas de créneau après 19h50) ou une <strong>équipe</strong> précise. La capacité d'un gymnase se règle
-        sur l'écran <strong>Gymnases</strong> (1, 2 ou 3 équipes par créneau).
+        sur l'écran <strong>Gymnases</strong> (1, 2 ou 3 équipes par créneau). L'onglet <strong>Base</strong> montre ce que le système applique d'office ; <strong>Bien-être</strong> laisse régler les règles de confort.
       </p>
-
-      <ImplicitRulesPanel />
 
       {/* Même règle qu'au récap : quand les réglages de la période ne sont pas lus, on ne
           masque RIEN — mais on ne laisse pas croire que la liste est celle de la période.
@@ -518,8 +533,31 @@ export function ConstraintsStep() {
         </p>
       ))}
 
-      {/* Family + reservation tabs */}
+      {/* Family + reservation tabs. « Base » puis « Bien-être » sont les DEUX PREMIERS onglets —
+          décision fondateur : plus logique qu'un accordéon. Ce sont des onglets de PRÉSENTATION,
+          pas des familles de contrainte (ils ne créent rien : Base est en lecture seule,
+          Bien-être règle les implicit_rule_settings). */}
       <div className="mb-3 flex flex-wrap gap-1 border-b border-border">
+        {(
+          [
+            ["base", "Base"],
+            ["wellbeing", "Bien-être"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => {
+              if (null !== editingId) {
+                resetForm();
+              }
+              setMode(key);
+            }}
+            className={cn("-mb-px border-b-2 px-3 py-1.5 text-sm", key === mode ? "border-accent font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+          >
+            {label}
+          </button>
+        ))}
         {FAMILIES.map((f) => {
           const active = "constraint" === mode && f.key === family;
           return (
@@ -567,12 +605,18 @@ export function ConstraintsStep() {
           second POST (create dupliqué → 422 muet, case qui semble ignorer les clics).
           Revue #284 round 1. */}
       {periodEntryId ? (
-        <div className={cn("reserve" === mode && "hidden")} aria-hidden={"reserve" === mode}>
+        <div className={cn("constraint" !== mode && "hidden")} aria-hidden={"constraint" !== mode}>
           <PeriodConstraints calendarEntryId={periodEntryId} family={family} />
         </div>
       ) : null}
 
-      {"reserve" === mode ? (
+      {/* Onglets de présentation : Base (immuables, lecture seule) et Bien-être (réglables). Aucun
+          ne crée de contrainte. */}
+      {"base" === mode ? (
+        <ProductRulesPanel />
+      ) : "wellbeing" === mode ? (
+        <WellbeingRulesPanel ruleTarget={ruleTarget} />
+      ) : "reserve" === mode ? (
         // Une seule échelle d'états pour l'ancre — la PORTE. Le premier jet
         // re-implémentait ses quatre cas en ternaire imbriqué : les libellés
         // divergeaient déjà entre les deux copies au round suivant.

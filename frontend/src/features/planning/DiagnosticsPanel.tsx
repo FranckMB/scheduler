@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
+import { WizardStepLink } from "@/features/wizard/WizardStepLink";
 import { cn } from "@/shared/lib/utils";
 
 import type { Diagnostic, DiagnosticSeverity, Slot } from "./api";
@@ -154,7 +155,7 @@ export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups,
                   {open ? (
                     <ul className="flex flex-col border-t border-border">
                       {group.items.map((item) => (
-                        <li key={item.id}>
+                        <li key={item.id} className="flex flex-col">
                           <button
                             type="button"
                             onClick={() => selectDiagnostic(item)}
@@ -165,6 +166,19 @@ export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups,
                           >
                             {item.message}
                           </button>
+                          {/* P2-28 — un diagnostic « règle assouplie » mène à SON réglage : l'onglet
+                              Contraintes du wizard, ouvert sur la règle visée (`?rule=<ruleKey>`).
+                              Retour nommé « ← Retour au planning ». */}
+                          {"implicit_rule_not_honored" === item.type && null !== item.ruleKey ? (
+                            <WizardStepLink
+                              step="constraints"
+                              params={{ rule: item.ruleKey }}
+                              from="planning"
+                              className="self-start px-3 pb-1.5 text-xs font-medium text-accent underline underline-offset-2 hover:text-accent/80"
+                            >
+                              Ajuster cette règle
+                            </WizardStepLink>
+                          ) : null}
                         </li>
                       ))}
                     </ul>
