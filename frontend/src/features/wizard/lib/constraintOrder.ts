@@ -1,5 +1,6 @@
 import type { Coach, Constraint, PriorityTier, Team, TeamTag, Venue } from "@/features/wizard/api";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
+import { targetTagNames } from "@/shared/lib/tagTeamIds";
 
 import { AXIS_LABEL, groupTagsByAxis, KNOWN_AXES, tagLabel } from "./tagLabels";
 
@@ -119,7 +120,9 @@ export function groupConstraints(constraints: Constraint[], family: string, ctx:
   const clubWide: Constraint[] = [];
   const other: Constraint[] = [];
   for (const c of constraints) {
-    const tag = "string" === typeof c.config?.targetTag ? (c.config.targetTag as string) : null;
+    // Groupé sous le tag PRINCIPAL (le 1er de `targetTags`, ou le legacy `targetTag`) : un
+    // raffinage « + / sauf » ne déplace pas la contrainte de section — son NOM le porte (P2-29).
+    const tag = targetTagNames(c.config)[0] ?? null;
     const axis = null !== tag ? tagAxis.get(tag) ?? null : null;
     if (null !== axis && axis in byAxis) {
       byAxis[axis].push(c);
@@ -136,7 +139,8 @@ export function groupConstraints(constraints: Constraint[], family: string, ctx:
     }
   }
   const out: ConstraintSection[] = [];
-  const byTag = (a: Constraint, b: Constraint): number => (tagRank.get(String(a.config?.targetTag)) ?? RANK_FALLBACK) - (tagRank.get(String(b.config?.targetTag)) ?? RANK_FALLBACK);
+  const primaryTag = (c: Constraint): string => targetTagNames(c.config)[0] ?? "";
+  const byTag = (a: Constraint, b: Constraint): number => (tagRank.get(primaryTag(a)) ?? RANK_FALLBACK) - (tagRank.get(primaryTag(b)) ?? RANK_FALLBACK);
   KNOWN_AXES.forEach((axis) => {
     if (byAxis[axis].length > 0) {
       out.push({ key: `axis:${axis}`, label: AXIS_LABEL[axis], items: [...byAxis[axis]].sort(byTag) });

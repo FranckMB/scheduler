@@ -1,4 +1,5 @@
 import { dayLabelLong } from "@/shared/lib/days";
+import { excludeTagNames, targetTagNames } from "@/shared/lib/tagTeamIds";
 
 import type { Constraint } from "../api";
 
@@ -68,8 +69,13 @@ export function describeConstraint(constraint: Constraint, lookups: ConstraintTa
 
 /**
  * Le « qui » d'une contrainte, vocabulaire du wizard (`ConstraintsStep.build()`) : équipe → son
- * nom ; coach → son nom ; CLUB+`targetTag` → `Groupe <tag>` ; CLUB nu → « Toutes les équipes ».
- * Équipe/coach dont le nom ne se résout pas (cible supprimée) → `null` : le prédicat ira seul.
+ * nom ; coach → son nom ; CLUB ciblant un/des tag(s) → `Groupe <A + B sauf C>` ; CLUB nu →
+ * « Toutes les équipes ». Équipe/coach dont le nom ne se résout pas (cible supprimée) → `null` :
+ * le prédicat ira seul.
+ *
+ * ⚠ Noms de tags BRUTS (comme `TeamTagResolver::tagTargetLabel` côté backend, et comme le test
+ * `« Groupe FEMININE »` de ce module) — ce module ne connaît pas les libellés d'affichage du
+ * wizard (`tagLabel`), et les mêler ici serait une seconde source de vérité de présentation.
  */
 function resolveTarget(constraint: Constraint, lookups: ConstraintTargetLookups): string | null {
   if ("COACH" === constraint.scope) {
@@ -78,12 +84,15 @@ function resolveTarget(constraint: Constraint, lookups: ConstraintTargetLookups)
   if ("TEAM" === constraint.scope) {
     return null !== constraint.scopeTargetId ? (lookups.teamName(constraint.scopeTargetId) ?? null) : null;
   }
-  // CLUB : un groupe (tag) OU tout le club. `targetTag` porte le nom brut, comme le wizard.
-  const tag = constraint.config?.targetTag;
-  if ("string" === typeof tag && "" !== tag) {
-    return `Groupe ${tag}`;
+  // CLUB : un groupe (un ou plusieurs tags, avec exclusions) OU tout le club.
+  const targets = targetTagNames(constraint.config);
+  const excludes = excludeTagNames(constraint.config);
+  if (0 === targets.length && 0 === excludes.length) {
+    return "Toutes les équipes";
   }
-  return "Toutes les équipes";
+  const base = targets.length > 0 ? targets.join(" + ") : "toutes les équipes";
+
+  return `Groupe ${base}${excludes.length > 0 ? ` sauf ${excludes.join(", ")}` : ""}`;
 }
 
 function buildPredicate(constraint: Constraint, venueName: VenueNameFn): string | null {

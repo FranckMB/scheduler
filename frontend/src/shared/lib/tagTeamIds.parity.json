@@ -1,5 +1,5 @@
 {
-  "_comment": "P4-88 — cas de PARITÉ MÉCANIQUE du groupement « nom de tag → équipes ». Consommé par tagTeamIds.parity.test.ts (front, shared/lib/tagTeamIds.ts::buildTagTeamIds) ET par TagTeamIdsMirrorParityTest.php (backend, TeamTagResolver::teamIdsByTagName). `expected` est le verdict des deux implémentations (name → teamIds triés). Les assignations sont supposées DÉJÀ filtrées à la saison, comme les reçoit le front.",
+  "_comment": "P4-88 + P2-29 — cas de PARITÉ MÉCANIQUE partagés front⇄backend. `cases` = groupement « nom de tag → équipes » (front buildTagTeamIds ⇄ TeamTagResolver::teamIdsByTagName). `tagNameCases` = lecture des clés de ciblage d'un config (targetTag legacy ≡ targetTags:[x], + excludeTags) (front targetTagNames/excludeTagNames ⇄ TeamTagResolver::targetTagNames/excludeTagNames). `intersectCases` = algèbre « (∩ targetSets) − (∪ excludeSets) » (front intersectMinusExclude ⇄ TeamTagResolver::intersectMinusExclude). Les assignations/ensembles sont supposés DÉJÀ filtrés à la saison, comme les reçoit le front. Les ids sont NON numériques : PHP sort() et JS Array.sort() ne coïncident que hors chaînes numériques.",
   "cases": [
     {
       "name": "un tag, deux équipes",
@@ -30,6 +30,88 @@
       "tags": [{ "id": "t-reg", "name": "REGIONAL" }],
       "assignments": [],
       "expected": {}
+    }
+  ],
+  "tagNameCases": [
+    {
+      "name": "targetTag singulier (legacy) ≡ targetTags:[x], aucune exclusion",
+      "config": { "targetTag": "ADULTE" },
+      "expectedTargets": ["ADULTE"],
+      "expectedExcludes": []
+    },
+    {
+      "name": "targetTags pluriel — intersection de deux tags",
+      "config": { "targetTags": ["ADULTE", "COMPETITION"] },
+      "expectedTargets": ["ADULTE", "COMPETITION"],
+      "expectedExcludes": []
+    },
+    {
+      "name": "targetTags PRIME sur le legacy targetTag quand les deux sont présents",
+      "config": { "targetTag": "ADULTE", "targetTags": ["SENIOR", "COMPETITION"] },
+      "expectedTargets": ["SENIOR", "COMPETITION"],
+      "expectedExcludes": []
+    },
+    {
+      "name": "targetTags + excludeTags — cible et exclusion",
+      "config": { "targetTags": ["ADULTE"], "excludeTags": ["LOISIR_ADULTE"] },
+      "expectedTargets": ["ADULTE"],
+      "expectedExcludes": ["LOISIR_ADULTE"]
+    },
+    {
+      "name": "excludeTags seul (D8) — aucune cible",
+      "config": { "excludeTags": ["LOISIR_ADULTE", "U21"] },
+      "expectedTargets": [],
+      "expectedExcludes": ["LOISIR_ADULTE", "U21"]
+    },
+    {
+      "name": "valeurs vides/non-chaînes ignorées (robustesse imports)",
+      "config": { "targetTags": ["ADULTE", "", "  "], "excludeTags": ["LOISIR_ADULTE"] },
+      "expectedTargets": ["ADULTE"],
+      "expectedExcludes": ["LOISIR_ADULTE"]
+    },
+    {
+      "name": "aucune clé de tag — ni cible ni exclusion",
+      "config": { "maxStartTime": "21:00" },
+      "expectedTargets": [],
+      "expectedExcludes": []
+    }
+  ],
+  "intersectCases": [
+    {
+      "name": "cible unique, aucune exclusion — l'ensemble trié dédoublonné",
+      "targetSets": [["team-B", "team-A", "team-A"]],
+      "excludeSets": [],
+      "expected": ["team-A", "team-B"]
+    },
+    {
+      "name": "intersection de deux cibles",
+      "targetSets": [["team-A", "team-B", "team-C"], ["team-B", "team-C", "team-D"]],
+      "excludeSets": [],
+      "expected": ["team-B", "team-C"]
+    },
+    {
+      "name": "intersection MOINS une exclusion",
+      "targetSets": [["team-A", "team-B", "team-C"]],
+      "excludeSets": [["team-B"]],
+      "expected": ["team-A", "team-C"]
+    },
+    {
+      "name": "exclusion = union de plusieurs ensembles",
+      "targetSets": [["team-A", "team-B", "team-C", "team-D"]],
+      "excludeSets": [["team-B"], ["team-D", "team-A"]],
+      "expected": ["team-C"]
+    },
+    {
+      "name": "l'exclusion vide tout — résultat vide",
+      "targetSets": [["team-A", "team-B"]],
+      "excludeSets": [["team-A", "team-B", "team-Z"]],
+      "expected": []
+    },
+    {
+      "name": "intersection disjointe — résultat vide",
+      "targetSets": [["team-A"], ["team-B"]],
+      "excludeSets": [],
+      "expected": []
     }
   ]
 }

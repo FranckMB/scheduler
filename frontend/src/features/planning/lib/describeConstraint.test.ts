@@ -119,6 +119,22 @@ describe("describeConstraint — la cible est NOMMÉE en tête (P4-94)", () => {
     expect(desc).toBe("Groupe FEMININE · préfère Matéo");
   });
 
+  it("CLUB + targetTags/excludeTags → « Groupe A + B sauf C · prédicat » (noms bruts, P2-29)", () => {
+    const desc = describeConstraint(
+      constraint({ scope: "CLUB", family: "FACILITY", config: { targetTags: ["ADULTE", "COMPETITION"], excludeTags: ["SENIOR"], preferredVenueId: "v-mateo" } }),
+      fullLookups,
+    );
+    expect(desc).toBe("Groupe ADULTE + COMPETITION sauf SENIOR · préfère Matéo");
+  });
+
+  it("CLUB + excludeTags seul → « Groupe toutes les équipes sauf C » (jamais « ? »)", () => {
+    const desc = describeConstraint(
+      constraint({ scope: "CLUB", family: "FACILITY", config: { excludeTags: ["LOISIR"], preferredVenueId: "v-mateo" } }),
+      fullLookups,
+    );
+    expect(desc).toBe("Groupe toutes les équipes sauf LOISIR · préfère Matéo");
+  });
+
   it("CLUB nu → « Toutes les équipes · prédicat »", () => {
     const desc = describeConstraint(
       constraint({ scope: "CLUB", family: "FACILITY", config: { preferredVenueId: "v-mateo" } }),
