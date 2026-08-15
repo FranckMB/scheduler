@@ -45,19 +45,34 @@ runs:
         restore-keys: |
           composer-${{ runner.os }}-
 
+    # ⚠ Réessayer À L'IDENTIQUE ne suffit pas, c'est mesuré : la première version de
+    # cette action (3 tentatives dist, ~30 s) a quand même laissé tomber le job
+    # `rector` pendant que les 6 autres passaient — une panne de registre dure plus
+    # longtemps que le backoff. Les dernières tentatives CHANGENT donc de canal :
+    # `--prefer-source` clone depuis github.com (git) au lieu de tirer la zipball
+    # d'api.github.com, qui est précisément l'hôte qui rend des 504. git et unzip
+    # sont présents dans l'image php (vérifié).
     - name: Install PHP deps
       shell: bash
       run: |
         set -u
-        for attempt in 1 2 3; do
-          if docker compose exec -T php-fpm composer install --no-interaction; then
+        for attempt in 1 2 3 4; do
+          if [ "$attempt" -le 2 ]; then
+            mode=""            # dist : le chemin normal, rapide
+            label="dist"
+          else
+            mode="--prefer-source"  # autre canal : git, pas la zipball
+            label="source (canal de repli)"
+          fi
+          if docker compose exec -T php-fpm composer install --no-interaction $mode; then
+            [ "$attempt" -eq 1 ] || echo "::notice title=composer install a fini par passer::tentative $attempt/4 en mode $label"
             exit 0
           fi
-          if [ "$attempt" -lt 3 ]; then
-            delay=$((attempt * 10))
-            echo "::warning title=composer install a échoué::tentative $attempt/3 — nouvelle tentative dans ${delay}s (panne amont probable : 5xx sur le registre)"
+          if [ "$attempt" -lt 4 ]; then
+            delay=$((attempt * 15))
+            echo "::warning title=composer install a échoué::tentative $attempt/4 (mode $label) — nouvelle tentative dans ${delay}s"
             sleep "$delay"
           fi
         done
-        echo "::error title=composer install a échoué 3 fois::ce n'est probablement plus un hoquet réseau — lire le log ci-dessus avant de relancer"
+        echo "::error title=composer install a échoué 4 fois, dist ET source::les deux canaux sont tombés — ce n'est probablement plus un hoquet réseau, lire le log avant de relancer"
         exit 1
