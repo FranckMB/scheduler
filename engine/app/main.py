@@ -39,6 +39,7 @@ from app.solver.objective import (
     add_coach_day_cap_penalty,
     add_level_2_objective,
     add_match_day_rest_bonus,
+    add_missing_session_penalty,
     add_preferred_day_bonus,
     add_preferred_time_bonus,
     add_spacing_penalty,
@@ -570,14 +571,21 @@ def _solve(
         team_id = slot_key[0]
         assignments_by_team.setdefault(team_id, []).append(var)
 
+    # « Combien de séances reste-t-il à placer pour cette équipe ? » — SOURCE UNIQUE :
+    # max(0, spw − verrous HARD). Elle BORNE le nombre de séances placées (ci-dessous) ET
+    # calibre le malus missing_session (add_missing_session_penalty, V10) ; les deux doivent
+    # parler du même reste, sinon le solveur optimise une définition et est borné par une autre.
+    remaining_by_team: dict[str, int] = {}
     for team in data.get("teams", []):
         team_id = team.get("id")
         max_sessions = team.get("sessions_per_week") or team.get("sessionsPerWeek")
         if team_id and max_sessions:
-            team_vars = assignments_by_team.get(team_id, [])
-            if team_vars:
-                remaining_sessions = int(max_sessions) - locked_slots_by_team.get(team_id, 0)
-                cast(Any, model).Add(sum(team_vars) <= max(0, remaining_sessions))
+            remaining_by_team[str(team_id)] = max(0, int(max_sessions) - locked_slots_by_team.get(team_id, 0))
+
+    for team_id, team_vars in assignments_by_team.items():
+        remaining = remaining_by_team.get(str(team_id))
+        if remaining is not None and team_vars:
+            cast(Any, model).Add(sum(team_vars) <= remaining)
 
     # Add objective function.
     # PR B — SET of preferred venues per team: the bonus fires when the session
@@ -612,6 +620,18 @@ def _solve(
     # Littéraux de violation des règles implicites passées PREFERRED (poids −6). Vide quand
     # tout est HARD (défaut) : objectif byte-identique à l'ancien contrat dans ce cas.
     soft_terms.extend(hard_stats.implicit_soft_terms)
+    # V10 — LE REMPLISSAGE PRIME SUR LE CONFORT : un malus −1000 par séance sous le quota
+    # (remaining_by_team = même reste que la borne ci-dessus). Les équipes satisfaites par
+    # verrous HARD n'en reçoivent pas (comme pour UNPLACED_PENALTY).
+    soft_terms.extend(
+        add_missing_session_penalty(
+            model,
+            assignments_by_team,
+            remaining_by_team,
+            LEVEL_2_OBJECTIVE_WEIGHTS,
+            hard_satisfied_team_ids=hard_satisfied_team_ids,
+        )
+    )
 
     # Phase 1 installs the PLACEMENT objective only; the chaining terms are built
     # into the model but kept out of the objective (apply_chaining=False) so their

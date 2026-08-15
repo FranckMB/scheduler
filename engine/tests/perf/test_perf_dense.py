@@ -48,11 +48,11 @@ def test_dense_club_completes_under_budget() -> None:
 
 
 @pytest.mark.perf
-def test_bccl_regression_completes_under_budget() -> None:
-    """BCCL (49 teams · 9 gyms = 441, 55 soft venue preferences) — the exact
-    profile that stalled the single default worker for 612 s. Must now finish
-    well under budget with the multi-worker optimality proof."""
-    with open(FIXTURES_DIR / "bccl_regression.json", encoding="utf-8") as f:
+def test_bccl_completes_under_budget() -> None:
+    """BCCL real payload (50 teams · 9 gyms = 450, Σ sessionsPerWeek = 90 for 90 places) —
+    the densest club in the repo and the profile that stalled the single default worker
+    for 612 s. Must finish well under budget with the multi-worker optimality proof."""
+    with open(FIXTURES_DIR / "bccl_2026_08_15.json", encoding="utf-8") as f:
         data = json.load(f)
 
     start = time.monotonic()

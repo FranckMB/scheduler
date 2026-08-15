@@ -659,13 +659,16 @@ def _diagnose_session_below_effective_min(
             team_name = team_names.get(team_id, team_id)
             below_floor = placed < effective_min
             severity = "ERROR" if below_floor else "WARNING"
-            if below_floor:
-                # "cible", not "garanti" : le minimum de séances est appliqué en
-                # objectif soft (bonus), pas en plancher dur (ENG-18) — le solveur
-                # ne le garantit pas, il le vise. Dire "garanti" serait faux.
-                reason = f"en-dessous de son minimum cible de {effective_min} (créneaux de gymnase insuffisants)."
-            else:
-                reason = "faute de créneau de gymnase disponible."
+            # Message NEUTRE : on rapporte le FAIT (N demandée(s), M placée(s), et le cas
+            # échéant sous le minimum cible), jamais une CAUSE devinée. Affirmer « créneaux
+            # de gymnase insuffisants » / « faute de créneau disponible » était un mensonge
+            # de diagnostic — sous V10 une séance peut manquer alors que des créneaux étaient
+            # libres (le remplissage prime, mais un conflit dur ou un arbitrage a laissé un
+            # trou). La vraie transgression, quand il y en a une, remonte par son diagnostic
+            # dédié (verrou, conflit, coach_overload…), pas par une cause inventée ici.
+            # "cible", pas "garanti" : le minimum est visé en objectif soft (ENG-18), pas
+            # garanti en plancher dur.
+            reason = f" — en-dessous de son minimum cible de {effective_min}." if below_floor else "."
             diagnostics.append(
                 {
                     "id": f"diag-session-below-min-{team_id}",
@@ -674,7 +677,7 @@ def _diagnose_session_below_effective_min(
                     "teamId": team_id,
                     "message": (
                         f"L'équipe {team_name} : {spw} séance(s) demandée(s) par semaine, "
-                        f"seulement {placed} placée(s) — {reason}"
+                        f"seulement {placed} placée(s){reason}"
                     ),
                     "suggestions": [
                         "Ajoutez de la disponibilité de gymnase ou un créneau supplémentaire pour cette équipe.",

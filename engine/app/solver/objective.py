@@ -17,7 +17,7 @@ from .model import _time_to_minutes
 AssignmentLike = Any
 BoolVarLike = Any
 
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V9"
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V10"
 
 LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     {
@@ -25,13 +25,33 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
         "A": 1000,
         "B": 100,
         "session_count": 20,
-        "preferred": 60,
+        # V10 — LE REMPLISSAGE PRIME SUR LE CONFORT (arbitrage fondateur 2026-08-15 :
+        # « s'il y a 90 créneaux je veux 90 placés, quitte à ce que certains n'aient pas
+        # ce qu'ils veulent »). Le confort ne sert qu'à départager des solutions qui placent
+        # le MÊME nombre de séances. Les poids de confort sont donc recalés SOUS le seuil
+        # d'une séance nue (tier D 1 + session_count 20 = 21).
+        #
+        # P1 — cumul MAX de conforts sur une séance = preferred 10 + preferred_day 5 +
+        #      preferred_time 5 = 20 < 21 : une préférence empilée ne vaut jamais une séance
+        #      nue. Une séance placée dans un gymnase/jour/heure non préférés bat toujours
+        #      un trou.
+        # P6 — discriminance vs nudges : preferred 10 > rest(3) + spacing(2), donc PREFERRED
+        #      oriente réellement. L'égalité preferred_day(5) = rest(3) + spacing(2) est une
+        #      INDIFFÉRENCE ASSUMÉE (arbitrée par l'orchestrateur) : 12/6/6 casserait P1
+        #      (24 > 21), 10/6/4 casserait l'égalité jour = heure.
+        "preferred": 10,
         # Soft "avoid this venue" (ENG-11): a true malus on the avoided slot —
         # a complement bonus would hand the team a flat objective advantage at
         # every other venue and bias cross-team allocation.
-        "avoided_venue": -60,
-        "preferred_day": 30,
-        "preferred_time": 30,
+        #
+        # P2 — |avoided_venue| 10 < 21 : supprimer une séance pour FUIR un gymnase évité
+        #      relâche 10 < 21, donc fuir ne supprime jamais une séance (à −60, fuir en
+        #      supprimant la séance relâchait 60 > 21 — le trou vécu côté avoided).
+        "avoided_venue": -10,
+        # Hiérarchie gymnase > jour préservée (ratio preferred:preferred_day = 2:1) ;
+        # égalité jour = heure préservée (preferred_day == preferred_time).
+        "preferred_day": 5,
+        "preferred_time": 5,
         "C": 10,
         "D": 1,
         "rest": 3,
@@ -63,9 +83,31 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
         "salarie_violation": -6,
         "chain_violation": -6,
         "age_violation": -6,
+        # V10 — malus PAR séance SOUS le quota hebdomadaire (une équipe à 1 sur 2 demandées
+        # paie −1000 ; 2 manquantes = −2000). Construit dans build_schedule via
+        # ``add_missing_session_penalty`` (patron overload_day), passé en soft_terms.
+        #
+        # P3 — pourquoi les plafonds de confort ne suffisent PAS : le pire swing NET d'un
+        #      déplacement bénéficiaire (une équipe gagne son confort maximal 20 en volant
+        #      un créneau, ET relâche un avoided_venue 10) = 20 + 10 = 30 > 21. Sans malus,
+        #      ce déplacement supprimerait une séance pour un gain de confort de 30 (net +9
+        #      après la séance perdue à 21). C'est missing_session qui ferme le trou :
+        #      supprimer une séance coûte au moins 1 (tier D) + 20 (session_count) + 1000
+        #      (missing_session) = 1021, hors d'atteinte de tout empilement de confort.
+        # P4 — dominance : le relief MAX réaliste en supprimant une séance ≈ 107 (confort
+        #      direct + littéraux de règles), et chaque déplacement en cascade rend au plus
+        #      +30 net ; atteindre 1021 exigerait > 30 mouvements nets — hors de portée des
+        #      datasets réels. Le résiduel est gardé par le test NR (même schéma que V9).
+        # P5 — les tiers restent souverains : missing_session s'applique SYMÉTRIQUEMENT aux
+        #      deux camps d'un conflit de créneau (chaque équipe sous quota paie le sien),
+        #      donc il n'inverse jamais l'ordre S > A > B > C > D d'un arbitrage de créneau.
+        "missing_session": -1000,
     }
 )
 
+# Une équipe à ZÉRO séance paie UNPLACED_PENALTY (question « placée ou pas »), ET, depuis
+# V10, spw × |missing_session| (question « combien manque-t-il »). Deux questions distinctes :
+# l'ordre 0 placée < 1 placée < 2 placées reste STRICTEMENT décroissant en pénalité.
 UNPLACED_PENALTY = 100000
 
 
@@ -122,6 +164,9 @@ BONUS_WEIGHT_NAMES = (
     "salarie_violation",
     "chain_violation",
     "age_violation",
+    # V10 — littéral « une séance de plus manque au quota », passé en soft_terms depuis
+    # add_missing_session_penalty (jamais un bonus par assignment : aucun champ ne le porte).
+    "missing_session",
 )
 
 _PRIORITY_TIER_FIELDS = (
@@ -263,6 +308,54 @@ def add_coach_day_cap_penalty(
             cast(Any, model).Add(total >= over).OnlyEnforceIf(literal)
             cast(Any, model).Add(total <= over - 1).OnlyEnforceIf(literal.Not())
             terms.append((literal, "overload_day"))
+
+    return terms
+
+
+def add_missing_session_penalty(
+    model: Any,
+    assignments_by_team: Mapping[Any, Sequence[BoolVarLike]],
+    remaining_by_team: Mapping[str, int],
+    weights: Mapping[str, int],
+    *,
+    hard_satisfied_team_ids: set[str] | None = None,
+) -> list[tuple[BoolVarLike, str]]:
+    """V10 — LE REMPLISSAGE PRIME SUR LE CONFORT : un malus PAR séance sous le quota.
+
+    Pour chaque équipe ayant des variables candidates, ``remaining`` = le nombre de séances
+    encore à placer après crédit des verrous HARD (``max(0, spw − verrous HARD)``), fourni
+    par ``remaining_by_team`` — la MÊME source que la borne ``sum(vars) <= remaining`` posée
+    dans ``build_schedule`` (une seule définition de « combien reste-t-il à placer »).
+
+    Pour ``m`` de 1 à ``remaining``, un littéral ``miss_m`` est vrai ssi ``sum(vars) <=
+    remaining − m`` : il compte « au moins m séances manquent ». Chaque littéral actif coûte
+    ``missing_session`` (−1000) : 1 manquante → −1000, 2 → −2000, monotone. Une équipe
+    satisfaite par des verrous HARD (``remaining`` ≤ 0, ou ``hard_satisfied_team_ids``) ou
+    sans variable candidate n'émet AUCUN littéral (ni malus indu, ni terme mort).
+
+    Complète ``UNPLACED_PENALTY`` sans le remplacer : une équipe à zéro paie les deux
+    (100000 + spw × 1000). Voir la preuve d'empilement (P3/P4/P5) sur ``missing_session``
+    dans ``LEVEL_2_OBJECTIVE_WEIGHTS``.
+    """
+
+    if "missing_session" not in weights:
+        raise KeyError("missing_session")
+
+    terms: list[tuple[BoolVarLike, str]] = []
+    for team_id, team_vars in assignments_by_team.items():
+        if not team_vars:
+            continue
+        if hard_satisfied_team_ids is not None and str(team_id) in hard_satisfied_team_ids:
+            continue
+        remaining = int(remaining_by_team.get(str(team_id), 0))
+        if remaining <= 0:
+            continue
+        team_sum = sum(cast(Any, v) for v in team_vars)
+        for m in range(1, remaining + 1):
+            miss = cast(Any, model).NewBoolVar(f"miss_{team_id}_{m}")
+            cast(Any, model).Add(team_sum <= remaining - m).OnlyEnforceIf(miss)
+            cast(Any, model).Add(team_sum >= remaining - m + 1).OnlyEnforceIf(miss.Not())
+            terms.append((miss, "missing_session"))
 
     return terms
 
@@ -1024,6 +1117,7 @@ __all__ = [
     "Level2ObjectiveStats",
     "add_chaining_bonus",
     "add_level_2_objective",
+    "add_missing_session_penalty",
     "add_preferred_day_bonus",
     "is_team_satisfied_by_hard_locks",
 ]
