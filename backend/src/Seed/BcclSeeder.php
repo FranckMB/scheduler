@@ -19,6 +19,8 @@ use App\Entity\SportCategory;
 use App\Entity\SubscriptionPlan;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamTag;
+use App\Entity\TeamTagAssignment;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
@@ -32,6 +34,7 @@ use App\Enum\LockLevel;
 use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
+use App\Enum\TeamTagAxis;
 use App\Service\Basketball\CategoryCatalog;
 use App\Service\LeagueResolver;
 use App\Service\SchedulePlanProvisioner;
@@ -929,8 +932,52 @@ final class BcclSeeder
         $manager->flush();
 
         // --- TIME (heures de début, portée club par tranche d'âge) ---
+        // --- Tags MAISON « en compétition » (décision fondateur 2026-08-15) ---------------
+        // La règle du week-end visait « toutes les équipes » : trop large. Une équipe qui JOUE
+        // le week-end ne s'entraîne pas le week-end ; Baby/Micro/Académies/Loisirs, eux, n'ont
+        // pas de match — leur samedi est légitime. Idem « adultes ≥ 18h50 » : elle attrapait le
+        // Basket Santé (senior d'âge, mais LOISIR). Deux tags, parce qu'une contrainte ne cible
+        // QU'UN tag : ni intersection (« SENIOR et COMPÉTITION »), ni exclusion (« sauf loisir »).
+        $competitionTags = ['COMPETITION' => '#B71C1C', 'SENIOR_COMPETITION' => '#7B1FA2'];
+        $tagIds = [];
+        foreach ($competitionTags as $tagName => $tagColor) {
+            $tag = $manager->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => $tagName]);
+            if (!$tag instanceof TeamTag) {
+                $tag = new TeamTag;
+                $tag->setClubId($club->getId());
+                $tag->setName($tagName);
+                $tag->setColor($tagColor);
+                $tag->setAxis(TeamTagAxis::NIVEAU);
+                $manager->persist($tag);
+                $manager->flush();
+            }
+            $tagIds[$tagName] = $tag->getId();
+        }
+        $seniorTag = $manager->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => 'SENIOR']);
+        foreach ($teams as $teamToTag) {
+            if (\in_array($teamToTag->getLevel(), [TeamLevel::LOISIR_ADULTE, TeamLevel::LOISIR_JEUNE], true)) {
+                continue;
+            }
+            $wanted = [$tagIds['COMPETITION']];
+            if ($seniorTag instanceof TeamTag && $manager->getRepository(TeamTagAssignment::class)->findOneBy(['teamId' => $teamToTag->getId(), 'tagId' => $seniorTag->getId()]) instanceof TeamTagAssignment) {
+                $wanted[] = $tagIds['SENIOR_COMPETITION'];
+            }
+            foreach ($wanted as $tagId) {
+                if ($manager->getRepository(TeamTagAssignment::class)->findOneBy(['teamId' => $teamToTag->getId(), 'tagId' => $tagId]) instanceof TeamTagAssignment) {
+                    continue;
+                }
+                $assignment = new TeamTagAssignment;
+                $assignment->setClubId($club->getId());
+                $assignment->setSeasonId($season->getId());
+                $assignment->setTeamId($teamToTag->getId());
+                $assignment->setTagId($tagId);
+                $manager->persist($assignment);
+            }
+        }
+        $manager->flush();
+
         $addConstraint('EMB (U9/U11) - Début au premier créneau (max 17h30)', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '17:30', 'targetTag' => 'EMB']);
-        $addConstraint('Adultes - Début minimum 18h50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTag' => 'SENIOR']);
+        $addConstraint('Seniors en compétition - Début minimum 18h50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTag' => 'SENIOR_COMPETITION']);
         $addConstraint('Jeunes - Début maximum 19h50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:50', 'targetTag' => 'JEUNE']);
         // U15 : finir à 20h30 max ≈ début max 19h00 (séances ~90 min ; le modèle a maxStartTime, pas maxEndTime).
         $addConstraint('U15 - Fin 20h30 max (début max 19h00)', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:00', 'targetTag' => 'U15']);
@@ -952,7 +999,7 @@ final class BcclSeeder
         // fondateur 2026-08-12, qui remplace un premier essai mal nommé n'interdisant que
         // le samedi. Le builder éclate cette règle CLUB en une contrainte par équipe ;
         // les réservations HARD du samedi (académies, Baby) restent posées (pré-placées).
-        $addConstraint('Toutes les équipes · pas samedi, dimanche', ConstraintScope::CLUB, null, ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [6, 7]]);
+        $addConstraint('Compétition · pas samedi, dimanche', ConstraintScope::CLUB, null, ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [6, 7], 'targetTag' => 'COMPETITION']);
 
         // --- FACILITY (gymnases imposés / interdits / préférés) ---
         $addConstraint('Jean Vilar - Pas équipes féminines', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venues['vJeanVilar']->getId(), 'targetTag' => 'FEMININE']);
