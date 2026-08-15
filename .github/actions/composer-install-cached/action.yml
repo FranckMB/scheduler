@@ -1,0 +1,78 @@
+# P4-100 — `composer install` qui survit à un hoquet de GitHub.
+#
+# Le 2026-08-15, DEUX fois en une heure, des required checks sont tombés au ROUGE
+# sans que le code y soit pour quoi que ce soit : `api.github.com` rendait des
+# `HTTP/2 504` sur les zipballs, et Composer meurt au premier échec —
+# « Source fallback is disabled. Not trying alternative sources. » La première
+# fois, QUATRE checks d'un coup (blocking-tests, engine-semantics, rector,
+# smoke-tests) : une PR saine donnée pour cassée.
+#
+# Deux causes cumulées, deux remèdes ici :
+#
+#   1. AUCUN cache — sept jobs relançaient `composer install` et retéléchargeaient
+#      ~175 paquets CHACUN, à chaque run. Sept fenêtres de tir pour une panne
+#      amont. On cache donc `backend/vendor` : le repo entier est bind-monté dans
+#      le conteneur (`./:/app:cached`), donc ce que le conteneur installe atterrit
+#      sur le disque du runner et se cache comme n'importe quel dossier. Cache
+#      chaud + lock inchangé ⇒ « Nothing to install » ⇒ ZÉRO appel réseau.
+#
+#   2. AUCUN retry — un 504 unique tuait le job. Trois tentatives, backoff
+#      croissant.
+#
+# ⚠ Ce que ça ne couvre PAS, et c'est assumé : au tout premier run après un
+# changement de `composer.lock`, les sept jobs démarrent en parallèle et aucun ne
+# voit encore le cache de l'autre (GHA ne publie l'entrée qu'en fin de job).
+# C'est le retry qui tient ce cas-là. Sérialiser les jobs derrière un job
+# « warm-up » coûterait plus cher, en temps de CI, que la panne qu'il éviterait.
+#
+# ⚠ Ce qu'on ne fera JAMAIS ici : `continue-on-error`. Ça verdirait la CI en
+# avalant de vraies pannes — l'exact inverse du but. Un échec après trois
+# tentatives DOIT rougir.
+name: Install PHP deps (cached + retried)
+description: Restore backend/vendor from the GHA cache, then run composer install inside php-fpm with retries.
+runs:
+  using: composite
+  steps:
+    # Clé stricte sur le lock : c'est lui qui détermine le contenu de vendor/.
+    # `composer.json` entre dans la clé parce qu'il porte les autoloads et les
+    # scripts, que le lock ne reflète pas. Les restore-keys laissent repartir
+    # d'un vendor voisin (composer réconcilie le delta) plutôt que de zéro.
+    - name: Restore backend/vendor
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: backend/vendor
+        key: composer-${{ runner.os }}-${{ hashFiles('backend/composer.lock', 'backend/composer.json') }}
+        restore-keys: |
+          composer-${{ runner.os }}-
+
+    # ⚠ Réessayer À L'IDENTIQUE ne suffit pas, c'est mesuré : la première version de
+    # cette action (3 tentatives dist, ~30 s) a quand même laissé tomber le job
+    # `rector` pendant que les 6 autres passaient — une panne de registre dure plus
+    # longtemps que le backoff. Les dernières tentatives CHANGENT donc de canal :
+    # `--prefer-source` clone depuis github.com (git) au lieu de tirer la zipball
+    # d'api.github.com, qui est précisément l'hôte qui rend des 504. git et unzip
+    # sont présents dans l'image php (vérifié).
+    - name: Install PHP deps
+      shell: bash
+      run: |
+        set -u
+        for attempt in 1 2 3 4; do
+          if [ "$attempt" -le 2 ]; then
+            mode=""            # dist : le chemin normal, rapide
+            label="dist"
+          else
+            mode="--prefer-source"  # autre canal : git, pas la zipball
+            label="source (canal de repli)"
+          fi
+          if docker compose exec -T php-fpm composer install --no-interaction $mode; then
+            [ "$attempt" -eq 1 ] || echo "::notice title=composer install a fini par passer::tentative $attempt/4 en mode $label"
+            exit 0
+          fi
+          if [ "$attempt" -lt 4 ]; then
+            delay=$((attempt * 15))
+            echo "::warning title=composer install a échoué::tentative $attempt/4 (mode $label) — nouvelle tentative dans ${delay}s"
+            sleep "$delay"
+          fi
+        done
+        echo "::error title=composer install a échoué 4 fois, dist ET source::les deux canaux sont tombés — ce n'est probablement plus un hoquet réseau, lire le log avant de relancer"
+        exit 1
