@@ -111,7 +111,7 @@ describe("describeConstraint — la cible est NOMMÉE en tête (P4-94)", () => {
     expect(desc).toBe("Jean Dupont · indisponible vendredi");
   });
 
-  it("CLUB + targetTag → « Groupe <tag> · prédicat » (nom brut, comme le wizard)", () => {
+  it("CLUB + targetTag SANS résolveur → nom brut (dégradation douce)", () => {
     const desc = describeConstraint(
       constraint({ scope: "CLUB", family: "FACILITY", config: { targetTag: "FEMININE", preferredVenueId: "v-mateo" } }),
       fullLookups,
@@ -119,7 +119,7 @@ describe("describeConstraint — la cible est NOMMÉE en tête (P4-94)", () => {
     expect(desc).toBe("Groupe FEMININE · préfère Matéo");
   });
 
-  it("CLUB + targetTags/excludeTags → « Groupe A + B sauf C · prédicat » (noms bruts, P2-29)", () => {
+  it("CLUB + targetTags/excludeTags SANS résolveur → « Groupe A + B sauf C » en noms bruts (P2-29)", () => {
     const desc = describeConstraint(
       constraint({ scope: "CLUB", family: "FACILITY", config: { targetTags: ["ADULTE", "COMPETITION"], excludeTags: ["SENIOR"], preferredVenueId: "v-mateo" } }),
       fullLookups,
@@ -151,5 +151,15 @@ describe("describeConstraint — la cible est NOMMÉE en tête (P4-94)", () => {
     expect(desc).toBe("Préfère Matéo");
     expect(desc).not.toContain("?");
     expect(desc).not.toContain("·");
+  });
+
+  // Le panneau de créneau INJECTE `tagLabel` (comme il injecte `venueName`) : sans lui, l'écran
+  // mentait à deux voix — description « Groupe ADULTE » au-dessus du nom « Groupe Adulte (+ de 18) ».
+  it("avec le résolveur tagLabel → libellés AFFICHÉS, des deux côtés du « sauf »", () => {
+    const desc = describeConstraint(
+      constraint({ scope: "CLUB", family: "FACILITY", config: { targetTags: ["ADULTE", "COMPETITION"], excludeTags: ["U21"], preferredVenueId: "v-mateo" } }),
+      { ...fullLookups, tagLabel: (n) => ({ ADULTE: "Adulte (+ de 18)", COMPETITION: "Compétition (hors loisir)", U21: "U21" })[n] ?? n },
+    );
+    expect(desc).toBe("Groupe Adulte (+ de 18) + Compétition (hors loisir) sauf U21 · préfère Matéo");
   });
 });
