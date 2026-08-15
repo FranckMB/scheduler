@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\CrossStack;
 
 use App\ApiResource\ScheduleDiagnosticResource;
+use App\Dto\DiagnosticCause;
 use App\Entity\Coach;
 use App\Entity\Constraint;
 use App\Entity\Schedule;
@@ -168,11 +169,17 @@ final class ContractSchemaTest extends TestCase
         self::assertSame('constraint-1', $causes[0]['constraintId'], 'Le suffixe :team-1 est coupé — le deep-link wizard résoudra.');
         self::assertSame(3, $causes[0]['count']);
 
-        // Exposition : la resource porte les deux champs.
+        // Exposition : la resource porte les deux champs. P4-101 — chaque cause est désormais
+        // un OBJET `DiagnosticCause` et non plus un tableau nu : c'est ce typage qui rend le
+        // snapshot OpenAPI juste (`$ref` au lieu d'un objet libre qui annonçait `count` en
+        // string). La forme SÉRIALISÉE est identique — seule la description change — et cette
+        // assertion garde le passage tableau → objet contre un retour en arrière silencieux.
         $dto = ScheduleDiagnosticResource::fromEntity($entity);
         self::assertSame(2, $dto->openCandidates);
-        self::assertSame('constraint-1', $dto->causes[0]['constraintId']);
-        self::assertSame(3, $dto->causes[0]['count']);
+        self::assertInstanceOf(DiagnosticCause::class, $dto->causes[0]);
+        self::assertSame('venue_forbidden', $dto->causes[0]->kind);
+        self::assertSame('constraint-1', $dto->causes[0]->constraintId);
+        self::assertSame(3, $dto->causes[0]->count);
     }
 
     private function buildPayload(): array
