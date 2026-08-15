@@ -12,6 +12,7 @@ use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
 use ApiPlatform\Metadata\Post;
 use ApiPlatform\Metadata\Put;
+use App\Dto\DiagnosticCause;
 use App\Dto\ScheduleDiagnosticInput;
 use App\Entity\ScheduleDiagnostic;
 use App\Enum\ScheduleDiagnosticSeverity;
@@ -76,7 +77,13 @@ class ScheduleDiagnosticResource
     #[Groups(['read'])]
     public array $suggestions = [];
 
-    /** @var list<array<string, mixed>> */
+    /**
+     * P4-101 — typé par une CLASSE, pas un tableau nu : c'est ce qui rend le snapshot
+     * OpenAPI juste (`$ref` vers la forme réelle) au lieu du `additionalProperties:
+     * string|null` qu'un `array` laissait déduire — et qui mentait sur `count`.
+     *
+     * @var list<DiagnosticCause>
+     */
     #[Groups(['read'])]
     public array $causes = [];
 
@@ -101,7 +108,7 @@ class ScheduleDiagnosticResource
         $dto->ruleKey = $entity->getRuleKey();
         $dto->message = $entity->getMessage();
         $dto->suggestions = $entity->getSuggestions();
-        $dto->causes = $entity->getCauses();
+        $dto->causes = array_map(DiagnosticCause::fromArray(...), $entity->getCauses());
         $dto->openCandidates = $entity->getOpenCandidates();
 
         return $dto;

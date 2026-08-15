@@ -1,6 +1,16 @@
-Last verified @ 2026-08-15 (JSON **régénéré** — P4-99 PR 2 : `ScheduleDiagnosticResource` gagne `causes` (liste) + `openCandidates` (int|null))
+Last verified @ 2026-08-15 (JSON **régénéré** — P4-101 : `causes` est désormais un `$ref` vers le schéma **`DiagnosticCause`** au lieu d'un objet libre ; plus tôt le même jour, P4-99 PR 2 avait ajouté `causes` + `openCandidates` à `ScheduleDiagnosticResource`)
 
 Changements récents :
+- **P4-101 — le snapshot cesse de mentir sur `causes` (2026-08-15)** : la propriété était un
+  `array` nu, donc décrite `items: {type: object, additionalProperties: {type: [string, null]}}` —
+  **deux mensonges** : `count` est un **entier**, et les noms de champs disparaissaient. Qui aurait
+  généré ses types depuis ce snapshot aurait obtenu `Record<string, string|null>` ; le front de
+  P4-99 PR 3 avait dû se typer d'après le contrat engine plutôt que d'après le snapshot. Corrigé
+  par une **classe** `App\Dto\DiagnosticCause` (idiome `ScheduleCapabilities`) : le snapshot rend
+  maintenant `$ref: DiagnosticCause` avec `kind: string`, `constraintId: string|null`,
+  `label: string|null`, **`count: integer`**, descriptions comprises. Aucun changement de charge
+  utile ni de contrat 2.8 — la forme sérialisée est identique, c'est sa DESCRIPTION qui devient
+  vraie.
 - **P4-99 PR 2 — la cause mesurée d'une séance manquante (2026-08-15)** : `ScheduleDiagnosticResource`
   gagne `causes` (liste de `{kind, constraintId, label, count}`, défaut `[]`) et `openCandidates`
   (int|null — `null` = non mesuré, `0` = aucun créneau resté ouvert), renseignés **seulement** par

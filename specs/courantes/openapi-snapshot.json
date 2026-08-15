@@ -21434,6 +21434,87 @@
                 ],
                 "description": "Unprocessable entity"
             },
+            "DiagnosticCause": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "description": "Famille de la fermeture \u2014 vocabulaire de l'engine (`hard_lock`, `time_window`, \u2026).",
+                        "type": "string"
+                    },
+                    "constraintId": {
+                        "description": "UUID de la contrainte en cause, NORMALIS\u00c9 (sans suffixe) ; null si non identifiable.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "label": {
+                        "description": "Nom lisible de la contrainte, tel que saisi par le gestionnaire ; null si absent.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "count": {
+                        "description": "Nombre de cr\u00e9neaux candidats que cette cause a ferm\u00e9s.",
+                        "type": "integer"
+                    }
+                }
+            },
+            "DiagnosticCause.html": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "description": "Famille de la fermeture \u2014 vocabulaire de l'engine (`hard_lock`, `time_window`, \u2026).",
+                        "type": "string"
+                    },
+                    "constraintId": {
+                        "description": "UUID de la contrainte en cause, NORMALIS\u00c9 (sans suffixe) ; null si non identifiable.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "label": {
+                        "description": "Nom lisible de la contrainte, tel que saisi par le gestionnaire ; null si absent.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "count": {
+                        "description": "Nombre de cr\u00e9neaux candidats que cette cause a ferm\u00e9s.",
+                        "type": "integer"
+                    }
+                }
+            },
+            "DiagnosticCause.jsonld": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "description": "Famille de la fermeture \u2014 vocabulaire de l'engine (`hard_lock`, `time_window`, \u2026).",
+                        "type": "string"
+                    },
+                    "constraintId": {
+                        "description": "UUID de la contrainte en cause, NORMALIS\u00c9 (sans suffixe) ; null si non identifiable.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "label": {
+                        "description": "Nom lisible de la contrainte, tel que saisi par le gestionnaire ; null si absent.",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "count": {
+                        "description": "Nombre de cr\u00e9neaux candidats que cette cause a ferm\u00e9s.",
+                        "type": "integer"
+                    }
+                }
+            },
             "Error": {
                 "type": "object",
                 "description": "A representation of common errors.",
@@ -23280,13 +23361,7 @@
                     "causes": {
                         "type": "array",
                         "items": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ]
-                            }
+                            "$ref": "#/components/schemas/DiagnosticCause"
                         }
                     },
                     "openCandidates": {
@@ -23455,13 +23530,7 @@
                     "causes": {
                         "type": "array",
                         "items": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ]
-                            }
+                            "$ref": "#/components/schemas/DiagnosticCause.html"
                         }
                     },
                     "openCandidates": {
@@ -23565,13 +23634,7 @@
                             "causes": {
                                 "type": "array",
                                 "items": {
-                                    "type": "object",
-                                    "additionalProperties": {
-                                        "type": [
-                                            "string",
-                                            "null"
-                                        ]
-                                    }
+                                    "$ref": "#/components/schemas/DiagnosticCause.jsonld"
                                 }
                             },
                             "openCandidates": {

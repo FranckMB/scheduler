@@ -1,4 +1,4 @@
-# Roadmap (39) — ce qui reste à faire
+# Roadmap (38) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
@@ -118,7 +118,6 @@
 | P4-98 | **Rien ne dit qu'on regarde une version ANTÉRIEURE du planning** | 🟡 | S | Retour fondateur du 2026-08-15 : de fausses violations constatées, puis « je pense que j'ai ouvert un ancien planning » — c'était le cas. **Le code est sain, l'affordance manque** : `lib/pickLandingSchedule.ts:20-22` fait atterrir DÉLIBÉRÉMENT sur la version en vigueur (`isChosen`) — qui peut être bien plus ancienne que la dernière générée — et `store.ts:40` ne persiste pas les sélections (« selections are per-session »). Le rafraîchissement, lui, marche : `PlanningPage.tsx:329-336` invalide slots+diagnostics à la fin d'une génération, `:662` et `:857` sélectionnent la version créée. Manque donc **le seul signal** : aucun composant de `features/planning/` ne compare la version affichée à la plus récente `COMPLETED`. À faire : bandeau « vous regardez une version antérieure » + geste « ouvrir la dernière version ». ⚑ Ne PAS transformer ça en redirection automatique : ouvrir la version en vigueur est un choix produit (elle EST le calendrier), c'est le silence qui est le défaut |
 
 
-| P4-101 | **Le snapshot OpenAPI décrit `causes` en `Record<string, string\|null>` — un type FAUX pour qui le génère** | ⚪ | XS | Relevé pendant P4-99 PR-3 (2026-08-15) et **vérifié dans le fichier** : `openapi-snapshot.json` annonce `causes: {type: array, items: {type: object, additionalProperties: {type: [string, null]}}}` alors que la forme réelle est **`{kind: string, constraintId: string\|null, label: string\|null, count: int}`** (`engine/app/schemas/output_schema.py` `DiagnosticCauseSchema` · `ScheduleDiagnosticsRecorder::normalizeCauses`). Deux mensonges : `count` est un **entier**, pas une string ; et les noms de champs disparaissent. Le front de PR-3 a donc été typé **d'après le contrat réel, pas d'après le snapshot** — le bon choix, mais qui laisse le piège en place pour le prochain. ⚠ `openCandidates` est correct (`integer\|null`) : le défaut est propre à `causes`. Cause probable : la propriété est déclarée `array` nu côté `ScheduleDiagnosticResource` sans forme d'item. Fix : typer l'item (attribut ApiPlatform/OpenAPI) puis **régénérer** le snapshot. Impact réel le jour où quelqu'un génère les types depuis le snapshot — sinon dormant |
 
 ### Retour terrain du 2026-07-31 (wizard, overlay, général)
 
