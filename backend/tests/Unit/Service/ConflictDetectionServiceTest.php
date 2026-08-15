@@ -186,6 +186,70 @@ final class ConflictDetectionServiceTest extends TestCase
         self::assertCount(1, $this->service->detectConflicts([$c1, $c2]));
     }
 
+    /**
+     * P2-29 D14 — recouvrement CONSERVATIF sur cibles multiples : deux règles qui PARTAGENT
+     * un tag se recouvrent (intersection non vide possible) → conflit signalé.
+     */
+    public function testDetectsConflictBetweenTargetSetsThatShareATag(): void
+    {
+        $c1 = new Constraint;
+        $c1->setScope(ConstraintScope::CLUB);
+        $c1->setFamily(ConstraintFamily::TIME);
+        $c1->setRuleType(ConstraintRuleType::HARD);
+        $c1->setConfig(['maxStartTime' => '18:00', 'targetTags' => ['ADULTE', 'COMPETITION']]);
+
+        $c2 = new Constraint;
+        $c2->setScope(ConstraintScope::CLUB);
+        $c2->setFamily(ConstraintFamily::TIME);
+        $c2->setRuleType(ConstraintRuleType::HARD);
+        $c2->setConfig(['minStartTime' => '18:50', 'targetTags' => ['COMPETITION']]);
+
+        self::assertCount(1, $this->service->detectConflicts([$c1, $c2]), 'COMPETITION est commun aux deux cibles → recouvrement');
+    }
+
+    /**
+     * P2-29 D14 — la SEULE preuve statique de non-recouvrement : des cibles de tags DISJOINTS,
+     * sans exclusion. Deux tags qui ne se croisent pas ne peuvent pas se contredire.
+     */
+    public function testNoConflictBetweenDisjointMultiTagTargets(): void
+    {
+        $c1 = new Constraint;
+        $c1->setScope(ConstraintScope::CLUB);
+        $c1->setFamily(ConstraintFamily::TIME);
+        $c1->setRuleType(ConstraintRuleType::HARD);
+        $c1->setConfig(['maxStartTime' => '18:00', 'targetTags' => ['ADULTE']]);
+
+        $c2 = new Constraint;
+        $c2->setScope(ConstraintScope::CLUB);
+        $c2->setFamily(ConstraintFamily::TIME);
+        $c2->setRuleType(ConstraintRuleType::HARD);
+        $c2->setConfig(['minStartTime' => '18:50', 'targetTags' => ['BABY']]);
+
+        self::assertCount(0, $this->service->detectConflicts([$c1, $c2]));
+    }
+
+    /**
+     * P2-29 D14 — une exclusion peut ROUVRIR une équipe partagée : le verdict statique
+     * l'ignore et SUR-avertit. Des tags de cible disjoints qui, SANS exclusion, ne se
+     * recouvriraient pas, se recouvrent dès qu'un côté exclut (jamais sous-avertir).
+     */
+    public function testExclusionForcesConservativeOverlapEvenOnDisjointTargets(): void
+    {
+        $c1 = new Constraint;
+        $c1->setScope(ConstraintScope::CLUB);
+        $c1->setFamily(ConstraintFamily::TIME);
+        $c1->setRuleType(ConstraintRuleType::HARD);
+        $c1->setConfig(['maxStartTime' => '18:00', 'targetTags' => ['ADULTE'], 'excludeTags' => ['LOISIR_ADULTE']]);
+
+        $c2 = new Constraint;
+        $c2->setScope(ConstraintScope::CLUB);
+        $c2->setFamily(ConstraintFamily::TIME);
+        $c2->setRuleType(ConstraintRuleType::HARD);
+        $c2->setConfig(['minStartTime' => '18:50', 'targetTags' => ['BABY']]);
+
+        self::assertCount(1, $this->service->detectConflicts([$c1, $c2]), 'l\'exclusion impose le recouvrement conservateur : on avertit');
+    }
+
     public function testDetectsTimeConflictRegardlessOfOrder(): void
     {
         // The min-rule is listed BEFORE the max-rule: an order-sensitive check would

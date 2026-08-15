@@ -39,6 +39,10 @@ final class ConstraintConfigValidatorTest extends TestCase
         yield 'FACILITY — fermeture datée (backend seul)' => [ConstraintFamily::FACILITY, ['type' => 'venue_closed', 'startDate' => '2026-12-24', 'endDate' => '2027-01-02']];
         yield 'COACH_AVAILABILITY — jours + fenêtre' => [ConstraintFamily::COACH_AVAILABILITY, ['unavailableDays' => [5], 'fromTime' => '18:00', 'untilTime' => '20:00']];
         yield 'cible de groupe, toutes familles' => [ConstraintFamily::TIME, ['maxStartTime' => '19:00', 'targetTag' => 'JEUNE']];
+        // P2-29 — cibles multiples (intersection) et exclusions.
+        yield 'plusieurs groupes ciblés (intersection)' => [ConstraintFamily::TIME, ['maxStartTime' => '19:00', 'targetTags' => ['ADULTE', 'COMPETITION']]];
+        yield 'cible + exclusion' => [ConstraintFamily::TIME, ['maxStartTime' => '19:00', 'targetTags' => ['ADULTE'], 'excludeTags' => ['LOISIR_ADULTE']]];
+        yield 'exclusion sans cible (D8)' => [ConstraintFamily::DAY, ['forbiddenDays' => [7], 'excludeTags' => ['BABY']]];
         yield 'config vide' => [ConstraintFamily::DAY, []];
     }
 
@@ -62,6 +66,13 @@ final class ConstraintConfigValidatorTest extends TestCase
         yield 'date inexistante' => [ConstraintFamily::FACILITY, ['type' => 'venue_closed', 'startDate' => '2026-02-31'], 'AAAA-MM-JJ'];
         yield 'type de fermeture inventé' => [ConstraintFamily::FACILITY, ['type' => 'gymnase_ferme'], 'venue_closed'];
         yield 'groupe vide' => [ConstraintFamily::TIME, ['targetTag' => '   '], 'groupe'];
+        // P2-29 D7/D10 — la forme des cibles multiples et exclusions.
+        yield 'targetTags non-liste' => [ConstraintFamily::TIME, ['maxStartTime' => '19:00', 'targetTags' => 'ADULTE'], 'liste'];
+        yield 'targetTags avec un élément vide' => [ConstraintFamily::TIME, ['maxStartTime' => '19:00', 'targetTags' => ['ADULTE', '  ']], 'liste'];
+        yield 'excludeTags vide' => [ConstraintFamily::DAY, ['forbiddenDays' => [7], 'excludeTags' => []], 'liste'];
+        yield 'mélange targetTag + targetTags (D7)' => [ConstraintFamily::TIME, ['maxStartTime' => '19:00', 'targetTag' => 'ADULTE', 'targetTags' => ['SENIOR']], 'mélanger'];
+        yield 'mélange targetTag + excludeTags (D7)' => [ConstraintFamily::TIME, ['maxStartTime' => '19:00', 'targetTag' => 'ADULTE', 'excludeTags' => ['LOISIR_ADULTE']], 'mélanger'];
+        yield 'groupe ciblé ET exclu (D10)' => [ConstraintFamily::TIME, ['maxStartTime' => '19:00', 'targetTags' => ['ADULTE', 'SENIOR'], 'excludeTags' => ['SENIOR']], 'ciblé et exclu'];
         // Retirées par décision : le doublon du scope, et deux dates que
         // personne ne lit (le moteur les ignore, `extra="ignore"`).
         yield 'coachId, doublon du scope (PR B)' => [ConstraintFamily::COACH_AVAILABILITY, ['coachId' => self::VENUE], 'coachId'];

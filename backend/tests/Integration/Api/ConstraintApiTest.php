@@ -7,11 +7,16 @@ namespace App\Tests\Integration\Api;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Constraint;
+use App\Entity\PriorityTier;
 use App\Entity\Season;
+use App\Entity\Sport;
+use App\Entity\SportCategory;
+use App\Entity\Team;
 use App\Entity\User;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Enum\Gender;
 use App\Enum\SeasonStatus;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
@@ -165,6 +170,113 @@ final class ConstraintApiTest extends WebTestCase
 
         self::assertSame(422, $client->getResponse()->getStatusCode(), 'Un gymnase inexistant doit être refusé : la contrainte rendrait l\'équipe impossible à placer, et le diagnostic du moteur accuserait autre chose.');
         self::assertStringContainsString('forcedVenueId', (string) $client->getResponse()->getContent(), 'La réponse doit NOMMER la clé fautive.');
+    }
+
+    /**
+     * P2-29 — la NOUVELLE forme de ciblage (`targetTags` INTERSECTION, `excludeTags` UNION
+     * soustraite) est acceptée à l'écriture quand elle désigne au moins une équipe.
+     */
+    public function testNewFormTargetTagsIsAcceptedWhenItResolves(): void
+    {
+        $this->createTeamWithGender('SM', Gender::M);
+
+        $status = $this->postConstraint([
+            'name' => 'Masculins · pas le dimanche',
+            'scope' => 'CLUB',
+            'family' => 'DAY',
+            'ruleType' => 'PREFERRED',
+            'config' => ['targetTags' => ['MASCULINE'], 'forbiddenDays' => [7]],
+        ]);
+
+        self::assertSame(201, $status, 'un ciblage qui désigne une équipe passe');
+    }
+
+    /**
+     * P2-29 D10 — un groupe INCONNU du club est refusé à l'écriture (nouvelle forme).
+     */
+    public function testUnknownTagInNewFormIsRefused(): void
+    {
+        $status = $this->postConstraint([
+            'name' => 'Groupe fantôme',
+            'scope' => 'CLUB',
+            'family' => 'DAY',
+            'ruleType' => 'PREFERRED',
+            'config' => ['targetTags' => ['CE_GROUPE_N_EXISTE_PAS'], 'forbiddenDays' => [7]],
+        ]);
+
+        self::assertSame(422, $status, 'un groupe inconnu doit être refusé');
+        self::assertStringContainsString('CE_GROUPE_N_EXISTE_PAS', (string) $this->client->getResponse()->getContent());
+    }
+
+    /**
+     * P2-29 D10 — une résolution VIDE contre la saison (ici une intersection de deux tags
+     * qu'aucune équipe ne porte ensemble) est refusée, en nommant les groupes.
+     */
+    public function testEmptyIntersectionIsRefused(): void
+    {
+        $this->createTeamWithGender('SM', Gender::M);
+        $this->createTeamWithGender('SF', Gender::F);
+
+        $status = $this->postConstraint([
+            'name' => 'À la fois masculin et féminin',
+            'scope' => 'CLUB',
+            'family' => 'DAY',
+            'ruleType' => 'PREFERRED',
+            'config' => ['targetTags' => ['MASCULINE', 'FEMININE'], 'forbiddenDays' => [7]],
+        ]);
+
+        self::assertSame(422, $status, 'une intersection vide n\'a aucun effet → refus');
+        self::assertStringContainsString('aucune équipe', (string) $this->client->getResponse()->getContent());
+    }
+
+    /**
+     * P2-29 D7 — mélanger l'ancienne forme (`targetTag`) et la nouvelle (`targetTags`) est
+     * refusé : jamais d'ambiguïté silencieuse sur la cible.
+     */
+    public function testMixingSingularAndPluralTagFormsIsRefused(): void
+    {
+        $status = $this->postConstraint([
+            'name' => 'Mélange interdit',
+            'scope' => 'CLUB',
+            'family' => 'DAY',
+            'ruleType' => 'PREFERRED',
+            'config' => ['targetTag' => 'MASCULINE', 'targetTags' => ['FEMININE'], 'forbiddenDays' => [7]],
+        ]);
+
+        self::assertSame(422, $status, 'targetTag + targetTags dans un même config → refus');
+    }
+
+    /**
+     * P2-29 D10 — cibler ET exclure le même groupe se contredit : refus de forme.
+     */
+    public function testTargetingAndExcludingTheSameGroupIsRefused(): void
+    {
+        $status = $this->postConstraint([
+            'name' => 'Ciblé et exclu',
+            'scope' => 'CLUB',
+            'family' => 'DAY',
+            'ruleType' => 'PREFERRED',
+            'config' => ['targetTags' => ['MASCULINE', 'FEMININE'], 'excludeTags' => ['FEMININE'], 'forbiddenDays' => [7]],
+        ]);
+
+        self::assertSame(422, $status, 'un groupe à la fois ciblé et exclu → refus');
+    }
+
+    /**
+     * P2-29 — RÉTRO-COMPAT stricte : le legacy `targetTag` (un seul tag) n'est PAS soumis à
+     * la validation DB. Un tag inconnu y reste un NO-OP au build (jamais un 422 à l'écriture).
+     */
+    public function testLegacyTargetTagWithUnknownTagIsStillAccepted(): void
+    {
+        $status = $this->postConstraint([
+            'name' => 'Ancienne forme, tag pas encore posé',
+            'scope' => 'CLUB',
+            'family' => 'DAY',
+            'ruleType' => 'PREFERRED',
+            'config' => ['targetTag' => 'PAS_ENCORE_LA', 'forbiddenDays' => [7]],
+        ]);
+
+        self::assertSame(201, $status, 'le legacy targetTag garde son comportement — aucune validation DB');
     }
 
     public function testListConstraints(): void
@@ -330,6 +442,73 @@ final class ConstraintApiTest extends WebTestCase
         $this->em->flush();
 
         return $season;
+    }
+
+    /**
+     * POST /api/constraints avec un corps minimal ; renvoie le code HTTP.
+     *
+     * @param array<string, mixed> $body
+     */
+    private function postConstraint(array $body): int
+    {
+        $this->client->loginUser($this->user);
+        $this->client->request('POST', '/api/constraints', [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], json_encode($body + ['isActive' => true, 'sortOrder' => 1], \JSON_THROW_ON_ERROR));
+
+        return $this->client->getResponse()->getStatusCode();
+    }
+
+    /**
+     * Une équipe dont le genre fait naître son tag système (MASCULINE/FEMININE), via le
+     * listener de dérivation — on ne pose jamais les tags à la main.
+     */
+    private function createTeamWithGender(string $name, Gender $gender): Team
+    {
+        $this->scopeGucToClub($this->club->getId());
+
+        $sport = new Sport;
+        $sport->setName('Basketball');
+        $sport->setSlug('cst-' . uniqid('', true));
+        $sport->setIsActive(true);
+        $this->em->persist($sport);
+        $this->em->flush();
+
+        $category = new SportCategory;
+        $category->setClubId($this->club->getId());
+        $category->setSportId($sport->getId());
+        $category->setName('Cat ' . $name);
+        $category->setIsCustom(false);
+        $category->setSortOrder(0);
+        $this->em->persist($category);
+
+        $tier = $this->em->getRepository(PriorityTier::class)->find(1);
+        if (!$tier instanceof PriorityTier) {
+            $tier = new PriorityTier;
+            $tier->setId(1);
+            $tier->setLabel('S');
+            $tier->setName('Senior');
+            $tier->setColor('#FF0000');
+            $tier->setOrToolsWeight(100);
+            $tier->setDefaultMinSessions(2);
+            $this->em->persist($tier);
+        }
+        $this->em->flush();
+
+        $team = new Team;
+        $team->setClubId($this->club->getId());
+        $team->setSeasonId($this->season->getId());
+        $team->setSportCategoryId($category->getId());
+        $team->setPriorityTierId(1);
+        $team->setName($name);
+        $team->setGender($gender);
+        $team->setSessionsPerWeek(1);
+        $team->setIsActive(true);
+        $this->em->persist($team);
+        $this->em->flush();
+
+        return $team;
     }
 
     private function createConstraint(string $name, string $scope): Constraint

@@ -24,6 +24,13 @@ use Symfony\Contracts\Service\ResetInterface;
  */
 final class TeamTagResolver implements ResetInterface
 {
+    /**
+     * Les clés de `config` qui portent un ciblage par groupe (tag) — lues ICI, et
+     * JAMAIS par le moteur (P2-29 D11 : l'expansion reste backend, le payload sort
+     * des lignes TEAM sans clé de tag). Le builder les retire du config sérialisé.
+     */
+    public const array TAG_CONFIG_KEYS = ['targetTag', 'targetTags', 'excludeTags'];
+
     /** @var array<string, list<string>> mémo par MESSAGE/REQUÊTE — la sélection ET la sérialisation résolvent les mêmes tags */
     private array $memo = [];
 
@@ -73,6 +80,142 @@ final class TeamTagResolver implements ResetInterface
         return $byName;
     }
 
+    /**
+     * P2-29 D9 — LE foyer serveur de « (∩ targetTags) − (∪ excludeTags) », sous forme
+     * PURE (aucune DB, juste de l'algèbre d'ensembles) : le VRAI calcul qu'une contrainte
+     * CLUB ciblée par plusieurs tags — ou en excluant — désigne. `resolveConstraintTeamIds`
+     * l'alimente en résolvant chaque tag par `tagTeamIds`, le builder (payload) et le
+     * sélecteur de période (gate) passent tous deux par lui : une seule maison, jamais deux
+     * réponses à « quelles équipes ». Le TRI final fait partie du contrat (il ordonne
+     * l'expansion par équipe du payload, donc son hash).
+     *
+     * Un miroir front naîtra en PR 3 (`shared/lib/tagTeamIds.ts`) : les cas partagés ne
+     * sont PAS étendus ici — ce lot ne touche pas le front.
+     *
+     * @param non-empty-list<list<string>> $targetSets  équipes par tag ciblé (INTERSECTION)
+     * @param list<list<string>>           $excludeSets équipes par tag exclu (UNION soustraite)
+     *
+     * @return list<string> teamIds triés, dédoublonnés
+     */
+    public static function intersectMinusExclude(array $targetSets, array $excludeSets): array
+    {
+        $intersection = array_shift($targetSets);
+        foreach ($targetSets as $set) {
+            $intersection = array_values(array_intersect($intersection, $set));
+        }
+
+        $excluded = [];
+        foreach ($excludeSets as $set) {
+            foreach ($set as $id) {
+                $excluded[$id] = true;
+            }
+        }
+
+        $result = [];
+        foreach ($intersection as $id) {
+            if (!isset($excluded[$id])) {
+                $result[$id] = true;
+            }
+        }
+        $result = array_keys($result);
+        sort($result);
+
+        return $result;
+    }
+
+    /**
+     * Ce `config` cible-t-il un ou plusieurs groupes (tags) ? Vrai dès qu'une des trois
+     * clés est présente et non vide : `targetTag` (legacy), `targetTags` (intersection),
+     * `excludeTags` (union soustraite — D8 : exclure sans cibler = toutes les équipes).
+     *
+     * @param array<string, mixed> $config
+     */
+    public static function targetsTags(array $config): bool
+    {
+        return [] !== self::targetTagNames($config) || [] !== self::excludeTagNames($config);
+    }
+
+    /**
+     * Les noms de tags de CIBLE d'un config : `targetTags` s'il est non vide, sinon le
+     * `targetTag` singulier (legacy, équivalent à `targetTags: [x]`), sinon `[]`.
+     *
+     * @param array<string, mixed> $config
+     *
+     * @return list<string>
+     */
+    public static function targetTagNames(array $config): array
+    {
+        $plural = self::tagList($config['targetTags'] ?? null);
+        if ([] !== $plural) {
+            return $plural;
+        }
+
+        $singular = self::singularTag($config);
+
+        return null !== $singular ? [$singular] : [];
+    }
+
+    /**
+     * Les noms de tags EXCLUS d'un config (union soustraite).
+     *
+     * @param array<string, mixed> $config
+     *
+     * @return list<string>
+     */
+    public static function excludeTagNames(array $config): array
+    {
+        return self::tagList($config['excludeTags'] ?? null);
+    }
+
+    /**
+     * Un libellé lisible des groupes visés — pour les warnings de sélection et le 422
+     * « nommant les groupes ». Ex. « ADULTE + SENIOR sauf LOISIR_ADULTE ».
+     *
+     * @param array<string, mixed> $config
+     */
+    public static function tagTargetLabel(array $config): string
+    {
+        $targets = self::targetTagNames($config);
+        $excludes = self::excludeTagNames($config);
+
+        $label = [] === $targets ? 'toutes les équipes' : implode(' + ', $targets);
+        if ([] !== $excludes) {
+            $label .= ' sauf ' . implode(', ', $excludes);
+        }
+
+        return $label;
+    }
+
+    /**
+     * Une liste de libellés de tags NON vides, normalisée depuis une valeur brute de config
+     * (ignore ce qui n'est pas une chaîne non vide — robustesse aux imports/écritures SQL).
+     *
+     * @return list<string>
+     */
+    private static function tagList(mixed $value): array
+    {
+        if (!\is_array($value)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($value as $item) {
+            if (\is_string($item) && '' !== trim($item)) {
+                $out[] = $item;
+            }
+        }
+
+        return $out;
+    }
+
+    /** @param array<string, mixed> $config */
+    private static function singularTag(array $config): ?string
+    {
+        $tag = $config['targetTag'] ?? null;
+
+        return \is_string($tag) && '' !== trim($tag) ? $tag : null;
+    }
+
     public function reset(): void
     {
         $this->memo = [];
@@ -114,5 +257,43 @@ final class TeamTagResolver implements ResetInterface
         sort($teamIds);
 
         return $this->memo[$memoKey] = $teamIds;
+    }
+
+    /**
+     * P2-29 D9 — L'ensemble d'équipes FINAL que vise une contrainte CLUB ciblée par tag(s) :
+     * (∩ targetTags) − (∪ excludeTags). Le legacy `targetTag` vaut `targetTags: [x]`.
+     * D8 : `excludeTags` seul (aucune cible) → base = TOUTES les équipes de la saison
+     * (`$seasonTeamIds`), moins les exclus. Passe par le foyer pur `intersectMinusExclude`,
+     * comme le gate — d'où la parité.
+     *
+     * Résolution vide (typo, équipes désactivées, tags non ré-appliqués après bascule de
+     * saison) : liste vide, gérée en NO-OP par ses appelants (le builder saute la contrainte,
+     * le gate la déclare cachée) — jamais un ban tous-clubs.
+     *
+     * @param array<string, mixed> $config
+     * @param list<string>         $seasonTeamIds base D8 (exclusion sans cible)
+     *
+     * @return list<string> teamIds triés
+     */
+    public function resolveConstraintTeamIds(array $config, string $seasonId, string $clubId, array $seasonTeamIds): array
+    {
+        $targetTags = self::tagList($config['targetTags'] ?? null);
+        $singular = self::singularTag($config);
+        $excludeTags = self::excludeTagNames($config);
+
+        if ([] !== $targetTags) {
+            $targetSets = array_map(fn (string $tag): array => $this->tagTeamIds($tag, $seasonId, $clubId), $targetTags);
+        } elseif (null !== $singular) {
+            $targetSets = [$this->tagTeamIds($singular, $seasonId, $clubId)];
+        } else {
+            // D8 : exclusion sans cible → base = toutes les équipes de la saison.
+            $base = array_values(array_unique($seasonTeamIds));
+            sort($base);
+            $targetSets = [$base];
+        }
+
+        $excludeSets = array_map(fn (string $tag): array => $this->tagTeamIds($tag, $seasonId, $clubId), $excludeTags);
+
+        return self::intersectMinusExclude($targetSets, $excludeSets);
     }
 }

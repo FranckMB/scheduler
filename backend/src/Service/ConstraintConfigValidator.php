@@ -39,8 +39,13 @@ use App\Enum\ConstraintFamily;
  */
 final class ConstraintConfigValidator
 {
-    /** Une clé lisible par TOUTES les familles : le groupe d'équipes visé. */
+    /** Une clé lisible par TOUTES les familles : le groupe d'équipes visé (legacy, un seul tag). */
     private const string TAG_KEY = 'targetTag';
+
+    /** P2-29 — cibler PLUSIEURS groupes (INTERSECTION) ou en EXCLURE (UNION soustraite). */
+    private const string TARGET_TAGS_KEY = 'targetTags';
+
+    private const string EXCLUDE_TAGS_KEY = 'excludeTags';
 
     /**
      * famille => clé => type attendu.
@@ -115,6 +120,14 @@ final class ConstraintConfigValidator
                 continue;
             }
 
+            // P2-29 : `targetTags`/`excludeTags` = une LISTE de libellés de groupe non vides.
+            if (self::TARGET_TAGS_KEY === $key || self::EXCLUDE_TAGS_KEY === $key) {
+                if (!$this->isNonEmptyStringList($value)) {
+                    $errors[] = \sprintf('« %s » attend une liste non vide de libellés de groupe.', $key);
+                }
+                continue;
+            }
+
             if (!isset($allowed[$key])) {
                 // Le message NOMME la clé ET la famille : une faute de frappe se
                 // corrige en la lisant, sans aller ouvrir le code.
@@ -133,7 +146,7 @@ final class ConstraintConfigValidator
             }
         }
 
-        return $errors;
+        return array_merge($errors, $this->tagFormErrors($config));
     }
 
     /**
@@ -194,6 +207,83 @@ final class ConstraintConfigValidator
         $out = [];
         foreach (self::SPEC as $family => $keys) {
             $out[$family] = array_values(array_diff(array_keys($keys), $backendOnly));
+        }
+
+        return $out;
+    }
+
+    /**
+     * P2-29 D7/D10 — la COHÉRENCE des clés de ciblage par tag (forme seule, sans DB) :
+     *
+     * - D7 : `targetTag` (ancienne forme, un seul tag) et `targetTags`/`excludeTags`
+     *   (nouvelle forme) ne coexistent JAMAIS — sinon deux façons de dire la cible dans
+     *   un même config, et une ambiguïté silencieuse sur laquelle fait foi.
+     * - D10 : un même groupe ciblé ET exclu (`targetTags ∩ excludeTags`) se contredit.
+     *
+     * La cible vide contre la saison (tag inconnu, résolution nulle) est un refus DB : il
+     * vit dans le state processor, qui a le club et la saison.
+     *
+     * @param array<string, mixed> $config
+     *
+     * @return list<string>
+     */
+    private function tagFormErrors(array $config): array
+    {
+        $errors = [];
+
+        $hasSingular = \array_key_exists(self::TAG_KEY, $config);
+        $hasNewForm = \array_key_exists(self::TARGET_TAGS_KEY, $config) || \array_key_exists(self::EXCLUDE_TAGS_KEY, $config);
+        if ($hasSingular && $hasNewForm) {
+            $errors[] = \sprintf(
+                'Un même réglage ne peut pas mélanger « %s » (ancienne forme) et « %s »/« %s » : choisissez l\'une ou l\'autre.',
+                self::TAG_KEY,
+                self::TARGET_TAGS_KEY,
+                self::EXCLUDE_TAGS_KEY,
+            );
+        }
+
+        $overlap = array_values(array_intersect(
+            $this->stringList($config[self::TARGET_TAGS_KEY] ?? null),
+            $this->stringList($config[self::EXCLUDE_TAGS_KEY] ?? null),
+        ));
+        if ([] !== $overlap) {
+            $errors[] = \sprintf('Un même groupe ne peut pas être à la fois ciblé et exclu : %s.', implode(', ', $overlap));
+        }
+
+        return $errors;
+    }
+
+    private function isNonEmptyStringList(mixed $value): bool
+    {
+        if (!\is_array($value) || [] === $value || array_keys($value) !== range(0, \count($value) - 1)) {
+            return false;
+        }
+        foreach ($value as $item) {
+            if (!\is_string($item) || '' === trim($item)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Les libellés de groupe NON vides d'une valeur brute (ignore le reste) — pour comparer
+     * `targetTags` et `excludeTags` sans dépendre de leur validité de forme.
+     *
+     * @return list<string>
+     */
+    private function stringList(mixed $value): array
+    {
+        if (!\is_array($value)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($value as $item) {
+            if (\is_string($item) && '' !== trim($item)) {
+                $out[] = $item;
+            }
         }
 
         return $out;

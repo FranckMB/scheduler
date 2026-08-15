@@ -91,7 +91,7 @@ final class ConstraintValidationService
                     // les lit (retour fondateur 2026-08-05 : le groupe est légitime).
                     // Seul « toutes les équipes » sans tag reste fermé : rien n'éclate,
                     // l'engine jette la ligne en silence.
-                    if (ConstraintScope::TEAM !== $scope && !isset($config['targetTag'])) {
+                    if (ConstraintScope::TEAM !== $scope && !TeamTagResolver::targetsTags($config)) {
                         $errors[] = '« Au moins N séances dans ce gymnase » se pose sur une équipe ou un groupe — pas sur « toutes les équipes ».';
                     }
                 }
@@ -101,7 +101,7 @@ final class ConstraintValidationService
                 // SEC-13 : la cible du coach est le SCOPE, plus une clé du config
                 // (doublon exact retiré par Version20260807190000). `targetTag`
                 // reste une cible légitime — il désigne un GROUPE de coachs.
-                if (null === $constraint->getScopeTargetId() && !isset($config['targetTag'])) {
+                if (null === $constraint->getScopeTargetId() && !TeamTagResolver::targetsTags($config)) {
                     $errors[] = 'Une contrainte de disponibilité doit cibler un coach.';
                 }
                 // Lot C: optional time window (fromTime / untilTime, HH:MM). Absent = whole day.
@@ -189,14 +189,20 @@ final class ConstraintValidationService
         $config1 = $c1->getConfig();
         $config2 = $c2->getConfig();
 
-        // Two rules can only contradict if their TARGET SETS overlap. The targetTag
-        // narrows the target: two rules with DIFFERENT non-null tags (e.g. EMB max
-        // 18:00 vs ADULTE min 18:50) apply to disjoint teams → no conflict. But an
-        // UNTAGGED rule (null tag = the whole club) overlaps every tagged rule, so
-        // "overlap" is: same tag, OR at least one side untagged.
-        $tag1 = $config1['targetTag'] ?? null;
-        $tag2 = $config2['targetTag'] ?? null;
-        $targetsOverlap = null === $tag1 || null === $tag2 || $tag1 === $tag2;
+        // Two rules can only contradict if their TARGET SETS overlap. P2-29 D14 — the
+        // verdict is CONSERVATIVE (over-warn, never under-warn), decided WITHOUT resolving
+        // teams: two targets overlap UNLESS statically proven disjoint — i.e. both name a
+        // non-empty set of tags, those tag NAMES are disjoint, AND neither side excludes.
+        // Everything else overlaps: an untagged side (the whole club), a shared tag name,
+        // or ANY exclusion (an exclusion could reopen a shared team — ignored here on
+        // purpose, so we never miss a conflict; the cost is a possible extra warning).
+        $targets1 = TeamTagResolver::targetTagNames($config1);
+        $targets2 = TeamTagResolver::targetTagNames($config2);
+        $hasExclusion = [] !== TeamTagResolver::excludeTagNames($config1) || [] !== TeamTagResolver::excludeTagNames($config2);
+        $targetsOverlap = [] === $targets1
+            || [] === $targets2
+            || $hasExclusion
+            || [] !== array_intersect($targets1, $targets2);
 
         if ($c1->getScopeTargetId() === $c2->getScopeTargetId()
             && $c1->getScope() === $c2->getScope()

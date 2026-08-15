@@ -98,7 +98,9 @@ final class PeriodConstraintSelector
         }
 
         $activeTeamIds = [];
+        $allSeasonTeamIds = [];
         foreach ($clubSeasonTeams ?? $this->teamRepository->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]) as $team) {
+            $allSeasonTeamIds[] = $team->getId();
             if (!isset($deactivatedTeamIds[$team->getId()])) {
                 $activeTeamIds[$team->getId()] = true;
             }
@@ -132,9 +134,9 @@ final class PeriodConstraintSelector
             // encore quelque chose (revue #340 round 1 — un drop entité aveugle effaçait
             // l'exclusivité de gymnase dédié quand une clé SECONDAIRE visait un gymnase
             // désactivé, un cas que le post-filtre par ligne préservait).
-            $targetTag = $constraint->getConfig()['targetTag'] ?? null;
-            if (ConstraintScope::CLUB === $constraint->getScope() && null !== $targetTag && '' !== $targetTag) {
-                switch ($this->clubTagVerdict($constraint, (string) $targetTag, $clubId, $seasonId, $activeTeamIds, $disabledVenueIds)) {
+            $config = $constraint->getConfig();
+            if (ConstraintScope::CLUB === $constraint->getScope() && TeamTagResolver::targetsTags($config)) {
+                switch ($this->clubTagVerdict($constraint, $clubId, $seasonId, $activeTeamIds, $disabledVenueIds, $allSeasonTeamIds)) {
                     case self::TAG_KEEP:
                         $kept[] = $constraint;
                         // KEEP ne veut pas dire INTACTE (revue #340 round 2) : si ses lignes
@@ -152,8 +154,8 @@ final class PeriodConstraintSelector
                     default: // TAG_DROP_INERT
                         // Miroir du log que le builder émettait à la sérialisation — l'entité
                         // ne l'atteignant plus, le silence reviendrait sans lui (revue #340).
-                        $this->logger->warning('Tag "{tag}" resolves to no active team — constraint {id} dropped from the period selection.', [
-                            'tag' => (string) $targetTag,
+                        $this->logger->warning('Tag targeting "{label}" resolves to no active team — constraint {id} dropped from the period selection.', [
+                            'label' => TeamTagResolver::tagTargetLabel($config),
                             'id' => $constraint->getId(),
                         ]);
                         // Une DATÉE inerte est un geste explicite du gestionnaire POUR cette
@@ -204,14 +206,19 @@ final class PeriodConstraintSelector
      *   désactivé — même si une clé secondaire l'est, ou si toutes les taguées sont en
      *   pause (divergence n° 2 alignée).
      *
-     * Tag inconnu ou vide : le builder saute la contrainte entière (aucune ligne).
+     * Tag inconnu ou résolution vide : le builder saute la contrainte entière (aucune ligne).
+     *
+     * P2-29 : passe par le MÊME foyer que le builder (`resolveConstraintTeamIds`) — cibles
+     * multiples (intersection) et exclusions comprises, D13 (l'exclusivité de gymnase dédié
+     * s'applique au set résolu FINAL).
      *
      * @param array<string, true> $activeTeamIds
      * @param array<string, true> $disabledVenueIds
+     * @param list<string>        $allSeasonTeamIds base D8 (exclusion sans cible)
      */
-    private function clubTagVerdict(Constraint $constraint, string $targetTag, string $clubId, string $seasonId, array $activeTeamIds, array $disabledVenueIds): string
+    private function clubTagVerdict(Constraint $constraint, string $clubId, string $seasonId, array $activeTeamIds, array $disabledVenueIds, array $allSeasonTeamIds): string
     {
-        $tagTeamIds = $this->tagResolver->tagTeamIds($targetTag, $seasonId, $clubId);
+        $tagTeamIds = $this->tagResolver->resolveConstraintTeamIds($constraint->getConfig(), $seasonId, $clubId, $allSeasonTeamIds);
         $hasActiveTagged = false;
         foreach ($tagTeamIds as $teamId) {
             if (isset($activeTeamIds[$teamId])) {

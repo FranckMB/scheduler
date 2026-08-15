@@ -855,19 +855,22 @@ final class ScheduleConstraintBuilder
         foreach ($constraints as $constraint) {
             $scope = $constraint->getScope();
             $config = $constraint->getConfig();
-            $targetTag = $config['targetTag'] ?? null;
 
-            // Resolve CLUB+targetTag into N TEAM constraints
-            if (ConstraintScope::CLUB === $scope && null !== $targetTag && '' !== $targetTag) {
-                $teamIds = $this->resolveTagToTeamIds($targetTag, $seasonId, $clubId);
+            // Resolve a CLUB constraint targeted by tag(s) into N TEAM constraints.
+            // P2-29 : targetTag (legacy, one tag), targetTags (INTERSECTION) or
+            // excludeTags (UNION subtracted; alone = every team of the season, D8).
+            if (ConstraintScope::CLUB === $scope && TeamTagResolver::targetsTags($config)) {
+                $teamIds = $this->resolveTagToTeamIds($config, $seasonId, $clubId, $teams);
 
                 // An empty resolution (typo, tags not re-applied after a season
-                // rollover) must be a NO-OP: running the "forbidden outside the
-                // tag" loop below with zero tagged teams would ban the venue
-                // for EVERY team of the club (audit review).
+                // rollover, teams deactivated) must be a NO-OP: running the
+                // "forbidden outside the tag" loop below with zero tagged teams
+                // would ban the venue for EVERY team of the club (audit review).
+                // Kept as a BACKSTOP for the new form too (a resolution can go
+                // empty AFTER the write-time 422 — teams disabled since).
                 if ([] === $teamIds) {
-                    $this->logger->warning('Tag "{tag}" resolves to no team — constraint {id} skipped.', [
-                        'tag' => $targetTag,
+                    $this->logger->warning('Tag targeting "{label}" resolves to no team — constraint {id} skipped.', [
+                        'label' => TeamTagResolver::tagTargetLabel($config),
                         'id' => $constraint->getId(),
                     ]);
 
@@ -876,7 +879,11 @@ final class ScheduleConstraintBuilder
 
                 foreach ($teamIds as $teamId) {
                     $resolvedConfig = $config;
-                    unset($resolvedConfig['targetTag']);
+                    // P2-29 D11 : le contrat ne bouge pas — aucune clé de tag ne
+                    // part au moteur (grep `targetTag*` dans engine/ = zéro).
+                    foreach (TeamTagResolver::TAG_CONFIG_KEYS as $tagKey) {
+                        unset($resolvedConfig[$tagKey]);
+                    }
 
                     $result[] = $this->serializeConstraintRow($constraint, $constraint->getId() . ':' . $teamId, $teamId, $resolvedConfig);
                 }
@@ -967,16 +974,26 @@ final class ScheduleConstraintBuilder
     }
 
     /**
-     * Resolve a tag name to the list of team IDs tagged with it in the given season.
+     * Resolve a tag-targeted CLUB config to its final list of team IDs for the season
+     * — (∩ targetTags) − (∪ excludeTags), D8 exclude-only base = every season team.
+     *
+     * @param array<string, mixed> $config
+     * @param array<Team>          $teams  the season roster (D8 base for exclude-only)
      *
      * @return list<string>
      */
-    private function resolveTagToTeamIds(string $targetTag, string $seasonId, string $clubId): array
+    private function resolveTagToTeamIds(array $config, string $seasonId, string $clubId, array $teams): array
     {
-        // P2-14 : la résolution vit dans TeamTagResolver (source unique, partagée avec la
-        // sélection de période — le gate en dépend transitivement). Le mode léger sans DB
-        // (ContractSchemaTest) n'a pas de résolveur : aucune ligne, comme avant.
-        return $this->tagResolver?->tagTeamIds($targetTag, $seasonId, $clubId) ?? [];
+        // P2-14 / P2-29 : la résolution vit dans TeamTagResolver (source unique, partagée
+        // avec la sélection de période — le gate en dépend transitivement, d'où la parité).
+        // Le mode léger sans DB (ContractSchemaTest) n'a pas de résolveur : aucune ligne.
+        if (!$this->tagResolver instanceof TeamTagResolver) {
+            return [];
+        }
+
+        $seasonTeamIds = array_values(array_map(static fn (Team $team): string => $team->getId(), $teams));
+
+        return $this->tagResolver->resolveConstraintTeamIds($config, $seasonId, $clubId, $seasonTeamIds);
     }
 
     /** @param array<object> $entities */
