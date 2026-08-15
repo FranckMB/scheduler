@@ -34,7 +34,6 @@ use App\Enum\LockLevel;
 use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
-use App\Enum\TeamTagAxis;
 use App\Service\Basketball\CategoryCatalog;
 use App\Service\LeagueResolver;
 use App\Service\SchedulePlanProvisioner;
@@ -930,6 +929,10 @@ final class BcclSeeder
             'De Barros Annexe - Préféré équipes départementales',
             'De Barros Annexe - Préféré LOISIR_ADULTE',
             'De Barros Annexe - Préféré LOISIR_JEUNE',
+            // Lot tags PR 4 : la règle des 18h50 ne vise plus le tag maison SENIOR_COMPETITION
+            // (qui disparaît) mais la cible combinée « ADULTE sauf LOISIR_ADULTE ». Son nom
+            // change → l'ancienne ligne doit partir pour qu'un reseed en append ne la garde pas.
+            'Groupe SENIOR_COMPETITION · pas avant 18:50',
         ];
         // Renommage 2026-08-15 (suite) — anciens noms DYNAMIQUES (équipe/coach).
         foreach (['U15M2', 'U18M2', 'U21M2'] as $teamName) {
@@ -968,59 +971,32 @@ final class BcclSeeder
         }
         $manager->flush();
 
-        // --- TIME (heures de début, portée club par tranche d'âge) ---
-        // --- Tags MAISON « en compétition » (décision fondateur 2026-08-15) ---------------
-        // La règle du week-end visait « toutes les équipes » : trop large. Une équipe qui JOUE
-        // le week-end ne s'entraîne pas le week-end ; Baby/Micro/Académies/Loisirs, eux, n'ont
-        // pas de match — leur samedi est légitime. Idem « adultes ≥ 18h50 » : elle attrapait le
-        // Basket Santé (senior d'âge, mais LOISIR). Deux tags, parce qu'une contrainte ne cible
-        // QU'UN tag : ni intersection (« ADULTE et COMPÉTITION »), ni exclusion (« sauf loisir »).
-        $competitionTags = ['COMPETITION' => '#B71C1C', 'SENIOR_COMPETITION' => '#7B1FA2'];
-        $tagIds = [];
-        foreach ($competitionTags as $tagName => $tagColor) {
-            $tag = $manager->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => $tagName]);
-            if (!$tag instanceof TeamTag) {
-                $tag = new TeamTag;
-                $tag->setClubId($club->getId());
-                $tag->setName($tagName);
-                $tag->setColor($tagColor);
-                $tag->setAxis(TeamTagAxis::NIVEAU);
-                $manager->persist($tag);
-                $manager->flush();
+        // --- Tags MAISON retirés (lot tags PR 4) ------------------------------------------
+        // COMPETITION et SENIOR_COMPETITION étaient deux tags MAISON créés en dépannage quand
+        // une contrainte ne pouvait cibler QU'UN tag. Les cibles multiples existent désormais :
+        //   • COMPETITION est devenu un tag SYSTÈME (dérivé du niveau non-loisir par
+        //     TeamTagService::determineTagNames) — le sync d'équipe le crée et l'assigne aux 32
+        //     équipes en compétition. Plus aucun geste maison à faire : le bloc de création a
+        //     disparu, la règle du week-end continue de le cibler par son nom (désormais système).
+        //   • SENIOR_COMPETITION disparaît : sa règle des 18h50 se ré-exprime en cible combinée
+        //     « ADULTE sauf LOISIR_ADULTE » (voir plus bas). On purge donc le tag maison ET ses
+        //     assignations, pour qu'un reseed en append ne laisse pas un tag orphelin en base.
+        $seniorCompTag = $manager->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => 'SENIOR_COMPETITION']);
+        if ($seniorCompTag instanceof TeamTag) {
+            foreach ($manager->getRepository(TeamTagAssignment::class)->findBy(['tagId' => $seniorCompTag->getId()]) as $assignment) {
+                $manager->remove($assignment);
             }
-            $tagIds[$tagName] = $tag->getId();
+            $manager->remove($seniorCompTag);
+            $manager->flush();
         }
-        // ⚠ On lit le tag ADULTE (= « + de 18 »), PAS le nouveau SENIOR (= « + de 22 ») : le tag
-        // système « adulte » s'appelle désormais ADULTE (Volet A). SENIOR_COMPETITION vise les
-        // ADULTES en compétition (Senior ET U21), exactement comme avant le rename — clé du tag
-        // repointée pour que la DONNÉE du club (les équipes visées) reste identique.
-        $adulteTag = $manager->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => 'ADULTE']);
-        foreach ($teams as $teamToTag) {
-            if (\in_array($teamToTag->getLevel(), [TeamLevel::LOISIR_ADULTE, TeamLevel::LOISIR_JEUNE], true)) {
-                continue;
-            }
-            $wanted = [$tagIds['COMPETITION']];
-            if ($adulteTag instanceof TeamTag && $manager->getRepository(TeamTagAssignment::class)->findOneBy(['teamId' => $teamToTag->getId(), 'tagId' => $adulteTag->getId()]) instanceof TeamTagAssignment) {
-                $wanted[] = $tagIds['SENIOR_COMPETITION'];
-            }
-            foreach ($wanted as $tagId) {
-                if ($manager->getRepository(TeamTagAssignment::class)->findOneBy(['teamId' => $teamToTag->getId(), 'tagId' => $tagId]) instanceof TeamTagAssignment) {
-                    continue;
-                }
-                $assignment = new TeamTagAssignment;
-                $assignment->setClubId($club->getId());
-                $assignment->setSeasonId($season->getId());
-                $assignment->setTeamId($teamToTag->getId());
-                $assignment->setTagId($tagId);
-                $manager->persist($assignment);
-            }
-        }
-        $manager->flush();
 
+        // --- TIME (heures de début, portée club par tranche d'âge) ---
         $addConstraint('Groupe EMB (U9-U11) · pas après 17:30', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '17:30', 'targetTag' => 'EMB']);
-        // Cible = tag MAISON SENIOR_COMPETITION (sans libellé d'écran → nom brut, comme le
-        // wizard le rend). ⚠ La cible ne change pas (elle part en PR 4) ; seul le nom s'aligne.
-        $addConstraint('Groupe SENIOR_COMPETITION · pas avant 18:50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTag' => 'SENIOR_COMPETITION']);
+        // La règle des 18h50 vise « les adultes EN COMPÉTITION » : Senior + U21, sans le Basket
+        // Santé (senior d'âge mais LOISIR). Cible combinée « ADULTE sauf LOISIR_ADULTE » — prouvé
+        // en PR 2 : résout exactement SM1-4, SF1-3, U21M1-2. (Ex-tag maison SENIOR_COMPETITION,
+        // retiré en PR 4 : une contrainte peut désormais croiser cible et exclusion.)
+        $addConstraint('Groupe Adulte (+ de 18) sauf Loisir adulte · pas avant 18:50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTags' => ['ADULTE'], 'excludeTags' => ['LOISIR_ADULTE']]);
         $addConstraint('Groupe Jeune (U13-U18) · pas après 19:50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:50', 'targetTag' => 'JEUNE']);
         // U15 : finir à 20h30 max ≈ début max 19h00 (séances ~90 min ; le modèle a maxStartTime, pas maxEndTime).
         $addConstraint('Groupe U15 · pas après 19:00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:00', 'targetTag' => 'U15']);
