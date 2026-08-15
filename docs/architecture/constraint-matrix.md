@@ -157,7 +157,8 @@ une séance JOUÉE ; deux coachs-joueurs sont présents les 5 soirs).
 
 - **Règles du produit — immuables** (rien à régler) : capacité, coach mono-gymnase (D-14),
   coach-joueur non simultané, équipe non dédoublée, une séance/jour. Le modèle lui-même.
-- **Règles de bien-être — RÉGLABLES par club+saison** (contrat **2.7**, bloc optionnel
+- **Règles de bien-être — RÉGLABLES par club+saison** (bloc **introduit au contrat 2.7** — la
+  version COURANTE se lit dans `engine/CONTRACT_VERSION`, jamais ici ; bloc optionnel
   `implicitRules` ; entité `ImplicitRuleSetting`, absence de ligne = défaut) : **jour de repos
   coach** (`coachRestDay`, seuil `minRestDays` 1-4, défaut 1), **distribution des salariés**
   (`salarieDistribution`), **jamais N créneaux dos-à-dos** (`maxConsecutiveSessions`, seuil
