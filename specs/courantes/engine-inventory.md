@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 2026-08-14 (recalé ce jour : CONTRACT_VERSION **2.7** = bloc optionnel `implicitRules` — intensité HARD/PREFERRED + seuils des 4 règles de bien-être (P2-28 PR 1), diagnostic `implicit_rule_not_honored` + `ruleKey`, retrait du type mort `coach_no_rest_day` et du drapeau mort `skip_rest_day_and_distribution` ; précédemment : 2026-08-13 (gymnase imposé dans le diagnostic de verrou + dimension `lock_silence` de la matrice ; 2026-08-12 : 2.4 = `/validate-assignments` P2-2 F2a · 2.3 = retrait `maxDaysOverrideConfirmed` P4-51 · 2.2 = `/place-matches` P1-4 PR D · 2.1 = fenêtres horaires coach #195))
+Last verified @ 2026-08-15 (recalé ce jour : objectif **V10** — le remplissage prime sur le confort ; conforts ramenés sous le seuil de 21 (preferred 60→10, day/time 30→5, avoided −60→−10) et nouveau `missing_session` −1000 par séance manquante ; la table de poids disait encore **V7**, deux versions de retard. Diagnostic `session_below_effective_min` rendu neutre (il affirmait « créneaux insuffisants » à tort). Nouveau golden d'acceptation `bccl_2026_08_15` (90 séances, étalon de confiance) remplaçant `bccl_regression` (payload de juin, 75 séances) ; précédemment : 2026-08-14, CONTRACT_VERSION 2.7 (bloc implicitRules))
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
@@ -250,7 +250,14 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
   `tests/test_harness_speaks_the_real_contract.py`.
 - **Workers** : `num_search_workers` **adaptatif** (`_adaptive_workers`, main.py) — complexité `n_teams×n_venues` ≤200 → **1** (déterministe, dont dépendent les goldens petits) · else → **8** (le worker unique trouve l'optimum en ~2s sur les problèmes denses riches en soft mais ne le prouve pas — 612s de blocage sur BCCL ; le portfolio 8 workers ferme la preuve en ~2s, même valeur d'objectif, assignation non-déterministe mais valeur stable). Appliqué aux deux phases.
   - ⚠️ **Réconciliation spec** : `specs/initiales/…contraintes_v2.md §2` promet « même entrée + même `solver_seed` + même version → planning **exactement** identique ». Depuis les workers adaptatifs, cette garantie n'est plus **exacte** qu'en dessous du seuil (≤200 complexité, 1 worker) ; au-dessus, seule la **valeur d'objectif** (score) est reproductible, pas l'arrangement exact (décision produit 2026-07-07, cf. roadmap §1 — le gestionnaire ajuste de toute façon). Les initiales étant gelées, la réconciliation vit ici.
-- **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V7"`. Maximise somme pondérée. Poids fixes (`LEVEL_2_OBJECTIVE_WEIGHTS`, objective.py — source de vérité, ne pas figer d'autres valeurs ici) :
+- **Objectif Level-2** : `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V10"`. Maximise somme pondérée.
+  ⚑ **Principe fondateur gravé en V10 (2026-08-15) : LE REMPLISSAGE PRIME SUR LE CONFORT.** Une séance
+  placée — même dans un gymnase, un jour ou à une heure non préférés — vaut TOUJOURS mieux qu'un trou ;
+  le confort ne sert qu'à départager des solutions qui placent le MÊME nombre de séances. Deux garde-fous :
+  **(1)** tout poids de confort reste sous **21** (valeur minimale d'une séance : tier D 1 + session_count 20),
+  cumul compris (10+5+5 = 20 < 21) ; **(2)** `missing_session` **−1000 PAR séance manquante** sous le quota —
+  avant V10, seule l'équipe à ZÉRO séance coûtait quelque chose, et une préférence à 60 rachetait une séance
+  à 21 (vécu : le club réel rendait OPTIMAL à 89/90). Poids fixes (`LEVEL_2_OBJECTIVE_WEIGHTS`, objective.py — source de vérité, ne pas figer d'autres valeurs ici) :
 
 | Critère | Poids |
 |---------|-------|
@@ -258,12 +265,13 @@ Stubs (toujours satisfaits, 0 contraintes) : `travel_feasibility`, `required_bri
 | Tier A | 1 000 |
 | Tier B | 100 |
 | `session_count` | 20 |
-| `preferred` | 60 |
-| `avoided_venue` | −60 (malus soft, audit P0.1 ENG-11) |
-| `preferred_day` | 30 |
-| `preferred_time` | 30 |
+| `preferred` | **10** (V10 — était 60) |
+| `avoided_venue` | **−10** (V10 — était −60 ; même seuil : fuir un gymnase ne doit pas coûter une séance) |
+| `preferred_day` | **5** (V10 — était 30) |
+| `preferred_time` | **5** (V10 — était 30) |
 | Tier C | 10 |
 | Tier D | 1 |
+| **`missing_session`** | **−1000 PAR séance sous le quota** (V10, nouveau — domine tout cumul de confort) |
 | `rest` | 3 |
 | `spacing` | −2 (malus soft, ALIGN-06 : deux séances d'une même équipe sur des jours consécutifs) |
 

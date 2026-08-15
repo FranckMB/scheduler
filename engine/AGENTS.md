@@ -17,7 +17,7 @@
 
 1. **All commands run in the engine container** — `engine/Makefile` wraps `docker compose exec`. Host `pytest`/`ruff` fail without a local venv.
 2. **Output `status` literals** are `"queued" | "generating" | "completed" | "failed"` (`app/schemas/output_schema.py` — `Literal`, source of truth).
-3. **Score formula** — `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V7"` (`app/solver/objective.py`). Changing any level-2 weight requires bumping it. Weights table lives in the root spec / `objective.py`, not here.
+3. **Score formula** — `SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V10"` (`app/solver/objective.py`). Changing any level-2 weight requires bumping it. Weights table lives in the root spec / `objective.py`, not here.
 4. **Two-phase solve** — phase 1 optimal placement (locked), phase 2 bounded 10 s chaining bonus with warm-start. Both phases get the payload seed. See `app/main.py`.
 5. **Timeout is payload-driven** — `solver_timeout_seconds` (default 650 s) is a **ceiling only**; the real budget is the adaptive tier computed in `main.py` (`_adaptive_timeout`: 60 / 180 / 600 s by `n_teams × n_venues`).
 6. **Workers are adaptive too** — `_adaptive_workers` (`main.py`): complexity ≤200 → 1 worker (deterministic, the golden fixtures depend on it), else → 8 (closes the optimality proof on the stall-prone tier). Above the threshold the objective *value* stays reproducible, the exact assignment does not.
