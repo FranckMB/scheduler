@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from typing import Any, TypedDict, cast
 
 from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
-from .model import DEFAULT_SESSION_MINUTES, _time_to_minutes
+from .model import DEFAULT_SESSION_MINUTES, SLOT_MINUTES, _format_time, _time_to_minutes
 
 logger = logging.getLogger("engine.constraints")
 
@@ -399,6 +399,37 @@ def add_room_at_most_one(model: Any, assignments: Sequence[AssignmentVariable]) 
             cap = 1
         model.Add(sum(deduped) <= cap)
         added += 1
+
+    # P4-97 bis — un verrou occupe une place de la capacité. ``build_model`` retire déjà les
+    # variables libres dont le DÉBUT tombe sur un sous-créneau verrouillé ; il reste le cas
+    # d'un placement libre qui commence AVANT le verrou et le chevauche (mêmes gymnase et jour,
+    # départs différents) — invisible au groupement par heure exacte ci-dessus. On force ce
+    # créneau libre à 0 quand, sur l'un de ses sous-créneaux de 15 min, les verrous saturent
+    # déjà la capacité. (Un conflit entre verrous SEULS est laissé au diagnostic post-solve.)
+    locked_counts = _locked_venue_substart_counts(model)
+    if locked_counts:
+        for assignment in assignments:
+            venue_id = assignment.venue_id
+            start = assignment.start
+            end = assignment.end
+            if venue_id is None or start is None or end is None:
+                continue
+            day, _start_min = _assignment_day_start(assignment)
+            if day is None:
+                continue
+            start_min = int(start)
+            end_min = int(end)
+            cap = slot_capacities.get((venue_id, day, _format_time(start_min)), 1)
+            max_locked = 0
+            minute = start_min
+            while minute < end_min:
+                occupied = locked_counts.get((str(venue_id), day, minute), 0)
+                if occupied > max_locked:
+                    max_locked = occupied
+                minute += SLOT_MINUTES
+            if max_locked >= cap:
+                model.Add(assignment.var == 0)
+                added += 1
     return added
 
 
@@ -462,7 +493,13 @@ def add_coach_at_most_one(
 
     time_key_added = _add_cross_venue_at_most_one(model, groups)
     interval_added = _add_interval_at_most_one(model, person_entries, same_venue_allowed=True)
-    return time_key_added + interval_added
+
+    # P4-97 bis — un coach VERROUILLÉ dans un gymnase occupe la personne : un placement LIBRE
+    # qui la ferait coacher AILLEURS au même moment est refusé (le même gymnase reste permis,
+    # D-14). ``team_player_map=None`` : ici on ne modélise que la ressource COACH (comme ci-dessus).
+    coach_locked = _locked_person_day_occupations(model, team_coach_map, None)
+    locked_added = _add_free_vs_locked_interval_conflicts(model, person_entries, coach_locked)
+    return time_key_added + interval_added + locked_added
 
 
 def add_coach_player_non_overlap(
@@ -540,7 +577,14 @@ def add_coach_player_non_overlap(
     # D-14 : le drapeau est levé ici AUSSI, mais il ne relâche que les paires coach-coach —
     # que la contrainte 2 possède déjà. Coach-joueur et joueur-joueur restent opposés.
     interval_added = _add_interval_at_most_one(model, person_entries, same_venue_allowed=True)
-    return time_key_added + interval_added
+
+    # P4-97 bis — le CAS RÉEL (BCCL) : « Mara » coache une équipe LIBRE pendant qu'elle JOUE
+    # dans une équipe VERROUILLÉE au même moment dans un AUTRE gymnase. Le verrou occupe la
+    # personne ; le placement libre incompatible est refusé (toutes combinaisons de rôles, avec
+    # la seule exemption coach-coach même-gymnase de D-14). Source : les cartes, jamais slot.coachId.
+    locked_occ = _locked_person_day_occupations(model, team_coach_map, team_player_map)
+    locked_added = _add_free_vs_locked_interval_conflicts(model, person_entries, locked_occ)
+    return time_key_added + interval_added + locked_added
 
 
 def _locked_person_day_intervals(
@@ -588,6 +632,136 @@ def _locked_person_day_intervals(
         for person in persons:
             result[person][day].append((start, end))
     return result
+
+
+def _locked_person_day_occupations(
+    model: Any,
+    team_coach_map: dict[str, list[str]] | None,
+    team_player_map: dict[str, list[str]] | None,
+) -> dict[str, dict[int, list[tuple[int, int, str | None, str]]]]:
+    """Comme ``_locked_person_day_intervals`` mais AVEC le gymnase et le RÔLE de chaque
+    occupation verrouillée — de quoi opposer un placement LIBRE à un verrou sous la règle
+    D-14 (P4-97 bis).
+
+    Retourne ``person_id -> weekday(int) -> [(start, end, venue, role), …]`` où ``role`` vaut
+    ``"coach"`` (via ``team_coach_map``, ASSISTANT déjà filtré) ou ``"player"`` (via
+    ``team_player_map`` — le joueur l'emporte, on ne joue pas en coachant). Source unique :
+    ``model.locked_slots`` × les cartes — JAMAIS ``slot.coachId``.
+    """
+    result: dict[str, dict[int, list[tuple[int, int, str | None, str]]]] = defaultdict(lambda: defaultdict(list))
+    coach_map = team_coach_map or {}
+    player_map = team_player_map or {}
+    for locked in getattr(model, "locked_slots", ()) or ():
+        team_id = str(_get(locked, "team_id", "teamId", default="") or "")
+        if not team_id:
+            continue
+        day_raw = _get(locked, "day_of_week", "dayOfWeek", default=None)
+        start_raw = _get(locked, "start_time", "startTime", default=None)
+        if day_raw is None or start_raw is None:
+            continue
+        try:
+            day = int(day_raw)
+        except (TypeError, ValueError):
+            continue
+        start = _time_to_minutes(start_raw)
+        duration = int(_get(locked, "duration_minutes", "durationMinutes", default=DEFAULT_SESSION_MINUTES))
+        end = start + duration
+        venue = str(_get(locked, "venue_id", "venueId", default="") or "") or None
+        roles: dict[str, str] = {}
+        for coach_id in coach_map.get(team_id, ()):
+            roles.setdefault(str(coach_id), "coach")
+        for player_id in player_map.get(team_id, ()):
+            roles[str(player_id)] = "player"  # jouer l'emporte sur coacher (D-14)
+        for person, role in roles.items():
+            result[person][day].append((start, end, venue, role))
+    return result
+
+
+def _locked_team_days(model: Any) -> dict[str, dict[int, int]]:
+    """``team_id -> weekday(int) -> nombre de séances verrouillées ce jour-là`` (P4-97 bis).
+
+    Une séance verrouillée EST déjà la séance du jour de son équipe : le placement LIBRE d'un
+    second créneau le même jour doit en tenir compte (règle 11 « une séance par jour »)."""
+    result: dict[str, dict[int, int]] = defaultdict(lambda: defaultdict(int))
+    for locked in getattr(model, "locked_slots", ()) or ():
+        team_id = str(_get(locked, "team_id", "teamId", default="") or "")
+        if not team_id:
+            continue
+        day_raw = _get(locked, "day_of_week", "dayOfWeek", default=None)
+        if day_raw is None:
+            continue
+        try:
+            day = int(day_raw)
+        except (TypeError, ValueError):
+            continue
+        result[team_id][day] += 1
+    return result
+
+
+def _locked_venue_substart_counts(model: Any) -> dict[tuple[str, int, int], int]:
+    """``(venue, weekday, sub-slot start minute) -> nombre de séances verrouillées`` (P4-97 bis).
+
+    Chaque verrou occupe UNE place de la capacité du gymnase sur chacun de ses sous-créneaux de
+    15 min : un placement LIBRE ne peut s'y ajouter que s'il reste de la place (règle 1)."""
+    counts: dict[tuple[str, int, int], int] = defaultdict(int)
+    for locked in getattr(model, "locked_slots", ()) or ():
+        venue = str(_get(locked, "venue_id", "venueId", default="") or "")
+        if not venue:
+            continue
+        day_raw = _get(locked, "day_of_week", "dayOfWeek", default=None)
+        start_raw = _get(locked, "start_time", "startTime", default=None)
+        if day_raw is None or start_raw is None:
+            continue
+        try:
+            day = int(day_raw)
+        except (TypeError, ValueError):
+            continue
+        start = _time_to_minutes(start_raw)
+        duration = int(_get(locked, "duration_minutes", "durationMinutes", default=DEFAULT_SESSION_MINUTES))
+        minute = start
+        while minute < start + duration:
+            counts[(venue, day, minute)] += 1
+            minute += SLOT_MINUTES
+    return counts
+
+
+def _add_free_vs_locked_interval_conflicts(
+    model: Any,
+    free_entries: dict[str, list[tuple[int, int, BoolVarLike, str, str | None, str]]],
+    locked_occupations: dict[str, dict[int, list[tuple[int, int, str | None, str]]]],
+) -> int:
+    """Force à 0 tout créneau LIBRE d'une personne qui chevauche une de ses occupations
+    VERROUILLÉES, sous l'exemption D-14 (P4-97 bis).
+
+    ``free_entries`` : ``person -> [(start, end, var, day, venue, role)]`` (le ``day`` est une
+    chaîne, comme le produit ``_extract_interval``). ``locked_occupations`` :
+    ``person -> weekday(int) -> [(start, end, venue, role)]`` (cf. ``_locked_person_day_occupations``).
+
+    D-14 (arbitrage fondateur) : deux occupations **coach-coach dans le MÊME gymnase** ne
+    s'opposent pas (le coach surveille deux groupes, présent une fois) ; tout le reste —
+    gymnases différents, ou l'un des deux rôles ``player`` — est une impossibilité physique.
+    Le verrou est souverain : on ne touche QUE le créneau libre, jamais le verrou.
+    """
+    added = 0
+    for person, entries in free_entries.items():
+        locked_days = locked_occupations.get(person)
+        if not locked_days:
+            continue
+        for start, end, var, day, venue, role in entries:
+            try:
+                day_int = int(day)
+            except (TypeError, ValueError):
+                continue
+            for l_start, l_end, l_venue, l_role in locked_days.get(day_int, ()):
+                if not _intervals_overlap(start, end, l_start, l_end):
+                    continue
+                both_coaching = role == "coach" and l_role == "coach"
+                if both_coaching and venue is not None and venue == l_venue:
+                    continue
+                model.Add(var == 0)
+                added += 1
+                break
+    return added
 
 
 def add_coach_rest_day_constraints(
@@ -1917,24 +2091,62 @@ def add_one_session_per_day_constraints(
     for (team_id, day), vars_list in groups.items():
         days_by_team[team_id].append((day, vars_list))
 
+    # P4-97 bis — le second CAS RÉEL (BCCL) : une équipe a un jeudi VERROUILLÉ et le solveur
+    # lui ajoutait une séance LIBRE ce même jeudi. Le jour verrouillé EST déjà la séance du
+    # jour ; il crédite le budget hebdomadaire et interdit tout créneau libre ce jour-là.
+    locked_team_days = _locked_team_days(model)
+
     added = 0
     for team_id, day_entries in days_by_team.items():
-        if len(day_entries) <= 1:
-            continue
         spw = sessions_per_week.get(team_id, 1)
-        day_active_vars: list[BoolVarLike] = []
-        for _day, vars_list in day_entries:
+        locked_days_for_team = locked_team_days.get(team_id, {})
+
+        if not locked_days_for_team:
+            # Chemin historique — byte-identique en l'absence de verrou.
+            if len(day_entries) <= 1:
+                continue
+            day_active_vars: list[BoolVarLike] = []
+            for _day, vars_list in day_entries:
+                day_active = cast(Any, model).NewBoolVar(f"day_active_{team_id}_{_day}")
+                day_active_vars.append(day_active)
+                slot_sum = sum(cast(Any, v) for v in vars_list)
+                cast(Any, model).Add(slot_sum >= 1).OnlyEnforceIf(day_active)
+                cast(Any, model).Add(slot_sum == 0).OnlyEnforceIf(day_active.Not())
+            cast(Any, model).Add(sum(day_active_vars) <= spw)
+            added += 1
+            continue
+
+        # Jours verrouillés = jours travaillés CONSTANTS : le budget hebdomadaire libre est
+        # ``spw - nb_jours_verrouillés`` (plancher 0 — verrou souverain, jamais d'infaisable).
+        free_day_entries = [(d, v) for (d, v) in day_entries if _to_day_int(d) not in locked_days_for_team]
+        free_day_active_vars: list[BoolVarLike] = []
+        for _day, vars_list in free_day_entries:
             day_active = cast(Any, model).NewBoolVar(f"day_active_{team_id}_{_day}")
-            day_active_vars.append(day_active)
+            free_day_active_vars.append(day_active)
             slot_sum = sum(cast(Any, v) for v in vars_list)
             cast(Any, model).Add(slot_sum >= 1).OnlyEnforceIf(day_active)
             cast(Any, model).Add(slot_sum == 0).OnlyEnforceIf(day_active.Not())
-        cast(Any, model).Add(sum(day_active_vars) <= spw)
-        added += 1
+        if free_day_active_vars:
+            cast(Any, model).Add(sum(free_day_active_vars) <= max(0, spw - len(locked_days_for_team)))
+            added += 1
 
-    for (_team_id, _day), vars_list in groups.items():
+    for (team_id, day), vars_list in groups.items():
         deduped = _dedupe_variables(vars_list)
-        if len(deduped) > 1:
+        locked_count = 0
+        team_locks = locked_team_days.get(team_id)
+        if team_locks:
+            try:
+                locked_count = team_locks.get(int(day), 0)
+            except (TypeError, ValueError):
+                locked_count = 0
+        if locked_count >= 1:
+            # Un verrou occupe déjà l'unique séance du jour → aucun créneau libre ce jour-là.
+            # ``<= 0`` (et non ``<= 1 - locked_count``) : deux verrous le même jour sont un
+            # conflit ENTRE verrous, laissé au diagnostic — jamais une contrainte infaisable.
+            if deduped:
+                cast(Any, model).Add(sum(deduped) <= 0)
+                added += 1
+        elif len(deduped) > 1:
             cast(Any, model).Add(sum(deduped) <= 1)
             added += 1
 
