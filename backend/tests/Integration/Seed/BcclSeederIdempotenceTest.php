@@ -69,6 +69,37 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
         self::assertSame([], $this->duplicateSlots(), 'aucun créneau en doublon pour la clé (gymnase, jour, heure, saison, plan)');
     }
 
+    /**
+     * NR — les noms des contraintes semées SONT ceux que le wizard produirait (décision fondateur
+     * 2026-08-15 : « on doit croire que la donnée vient de l'app »). Test de FORME, pas de contenu :
+     * chaque nom suit « <cible> · <prédicat> », et une contrainte ciblant un TAG commence par
+     * « Groupe » (le sélecteur de cible du wizard préfixe ainsi les groupes). La convention ne se
+     * perd donc pas au fil des éditions du seed.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testSeededConstraintNamesLookAppGenerated(): void
+    {
+        $club = $this->seeder->run($this->em, BcclSeedProfile::dev());
+
+        /** @var list<array{name: string, config: string}> $rows */
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT name, config FROM "constraint" WHERE club_id = ?',
+            [$club->getId()],
+        );
+        self::assertNotEmpty($rows, 'le seed pose bien des contraintes');
+
+        foreach ($rows as $row) {
+            $name = (string) $row['name'];
+            self::assertMatchesRegularExpression('/^.+ · .+$/u', $name, \sprintf('« %s » ne suit pas « <cible> · <prédicat> »', $name));
+
+            $config = json_decode((string) $row['config'], true);
+            if (\is_array($config) && isset($config['targetTag'])) {
+                self::assertStringStartsWith('Groupe ', $name, \sprintf('« %s » cible un tag : le nom doit commencer par « Groupe »', $name));
+            }
+        }
+    }
+
     protected function setUp(): void
     {
         $adminUrl = $_SERVER['DATABASE_ADMIN_URL'] ?? getenv('DATABASE_ADMIN_URL');

@@ -21,7 +21,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * Décisions fondateur (2026-08-04) :
  *  - TOUT en PREFERRED — du HARD semé d'office peut rendre INFEASIBLE un club
  *    atypique dès son premier planning ; le gestionnaire durcit lui-même s'il veut ;
- *  - liste : jeunes ≤ 19h30 · baby ≤ 18h30 · EMB ≤ 19h · seniors ≥ 19h · pas le
+ *  - liste : jeunes ≤ 19h30 · baby ≤ 18h30 · EMB ≤ 19h · adultes ≥ 19h · pas le
  *    dimanche (club entier) ;
  *  - « pas après » se sème en `maxStartTime` (heure de DÉBUT) : `maxEndTime` n'existe
  *    qu'en HARD (le chemin soft de l'engine ne lit que min/maxStartTime) ;
@@ -47,12 +47,13 @@ final class DefaultConstraintSeeder
     public function seed(Club $club, Season $season): void
     {
         $rows = [
-            // [nom (vocabulaire de l'écran Contraintes), family, config]
-            ['Jeune (U13-U18) · pas après 19:30', ConstraintFamily::TIME, ['targetTag' => 'JEUNE', 'maxStartTime' => '19:30']],
-            ['Baby (U5-U7, Baby basket) · pas après 18:30', ConstraintFamily::TIME, ['targetTag' => 'BABY', 'maxStartTime' => '18:30']],
-            ['EMB (U9-U11) · pas après 19:00', ConstraintFamily::TIME, ['targetTag' => 'EMB', 'maxStartTime' => '19:00']],
-            ['Adulte · pas avant 19:00', ConstraintFamily::TIME, ['targetTag' => 'SENIOR', 'minStartTime' => '19:00']],
-            ['Toutes les équipes · pas Dim', ConstraintFamily::DAY, ['forbiddenDays' => [7]]],
+            // [nom (EXACTEMENT ce que le wizard génère : « <cible> · <prédicat> », cible tag =
+            //  « Groupe <libellé affiché> »), family, config]
+            ['Groupe Jeune (U13-U18) · pas après 19:30', ConstraintFamily::TIME, ['targetTag' => 'JEUNE', 'maxStartTime' => '19:30']],
+            ['Groupe Baby (U5-U7, Baby basket) · pas après 18:30', ConstraintFamily::TIME, ['targetTag' => 'BABY', 'maxStartTime' => '18:30']],
+            ['Groupe EMB (U9-U11) · pas après 19:00', ConstraintFamily::TIME, ['targetTag' => 'EMB', 'maxStartTime' => '19:00']],
+            ['Groupe Adulte (+ de 18) · pas avant 19:00', ConstraintFamily::TIME, ['targetTag' => 'ADULTE', 'minStartTime' => '19:00']],
+            ['Toutes les équipes · pas dimanche', ConstraintFamily::DAY, ['forbiddenDays' => [7]]],
         ];
 
         foreach ($rows as $order => [$name, $family, $config]) {

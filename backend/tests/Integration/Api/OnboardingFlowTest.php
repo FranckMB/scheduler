@@ -85,7 +85,7 @@ final class OnboardingFlowTest extends WebTestCase
         // neuf naît avec ses contraintes de base, TOUTES en PREFERRED (du HARD semé
         // peut rendre INFEASIBLE un club atypique dès son premier planning), visibles
         // et supprimables comme n'importe quelle contrainte. La liste exacte est un
-        // contrat : jeunes ≤ 19h30 · baby ≤ 18h30 · EMB ≤ 19h · seniors ≥ 19h ·
+        // contrat : jeunes ≤ 19h30 · baby ≤ 18h30 · EMB ≤ 19h · adultes ≥ 19h ·
         // pas le dimanche. « Pas après » = maxStartTime (maxEndTime n'existe qu'en HARD).
         $seeded = $this->get('/api/constraints')['member'];
         self::assertCount(5, $seeded, 'un club neuf naît avec ses 5 contraintes de base');
@@ -98,7 +98,7 @@ final class OnboardingFlowTest extends WebTestCase
         self::assertSame('19:30', $byTag['JEUNE']['config']['maxStartTime']);
         self::assertSame('18:30', $byTag['BABY']['config']['maxStartTime']);
         self::assertSame('19:00', $byTag['EMB']['config']['maxStartTime']);
-        self::assertSame('19:00', $byTag['SENIOR']['config']['minStartTime']);
+        self::assertSame('19:00', $byTag['ADULTE']['config']['minStartTime']);
         self::assertSame([7], $byTag['CLUB']['config']['forbiddenDays'], 'le dimanche (7) est exclu pour tout le club');
 
         // 3. Minimal data: one team, one gym with a slot, one coach.

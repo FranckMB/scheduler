@@ -1124,14 +1124,14 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
 
   it("hides a CLUB+targetTag constraint when every tagged team is paused", () => {
     entryState.data = { periodType: "holiday" };
-    tagsState.data = [{ id: "tag-sen", name: "SENIOR", color: null, isSystem: true, axis: "AGE" }];
-    tagAssignmentsState.data = [{ id: "a1", teamId: "t2", tagId: "tag-sen", seasonId: "s1" }];
+    tagsState.data = [{ id: "tag-adu", name: "ADULTE", color: null, isSystem: true, axis: "AGE" }];
+    tagAssignmentsState.data = [{ id: "a1", teamId: "t2", tagId: "tag-adu", seasonId: "s1" }];
     overridesState.data = [{ id: "to1", teamId: "t2", isActive: false, sessionsPerWeek: null, schedulePlanId: "plan-1" }];
-    constraintsState.data = [constraint({ id: "cg", name: "Groupe SENIOR · pas après 21:00", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null, family: "TIME", config: { targetTag: "SENIOR" }, isActive: true })];
+    constraintsState.data = [constraint({ id: "cg", name: "Groupe Adulte (+ de 18) · pas après 21:00", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null, family: "TIME", config: { targetTag: "ADULTE" }, isActive: true })];
 
     render(<PeriodConstraints calendarEntryId="e1" />);
 
-    expect(screen.queryByRole("checkbox", { name: "Groupe SENIOR · pas après 21:00 appliquée cette période" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Groupe Adulte (+ de 18) · pas après 21:00 appliquée cette période" })).not.toBeInTheDocument();
   });
 
   it("does not render on a non-overlay period type (cutoff) — no dead override rows", () => {

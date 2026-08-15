@@ -10,7 +10,7 @@ const teams = [
 ] as unknown as Team[];
 const tags = [
   { id: "g-fem", name: "FEMININE", axis: "GENRE" },
-  { id: "g-adulte", name: "SENIOR", axis: "AGE" },
+  { id: "g-adulte", name: "ADULTE", axis: "AGE" },
 ] as unknown as TeamTag[];
 const coaches = [
   { id: "co-vol", firstName: "Zoe", lastName: "V", isEmployee: false },
@@ -49,7 +49,7 @@ describe("groupConstraints", () => {
   it("TIME/DAY → groups by tag axis (Genre before Âge), then teams by their RANG group", () => {
     const sections = groupConstraints(
       [
-        c({ scope: "CLUB", config: { targetTag: "SENIOR" } }), // axis AGE
+        c({ scope: "CLUB", config: { targetTag: "ADULTE" } }), // axis AGE
         c({ scope: "CLUB", config: { targetTag: "FEMININE" } }), // axis GENRE
         c({ scope: "TEAM", scopeTargetId: "t-b" }), // SM1 (tier B)
         c({ scope: "TEAM", scopeTargetId: "t-s" }), // Fanion (tier S)

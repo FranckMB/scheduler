@@ -886,6 +886,12 @@ final class BcclSeeder
             $manager->persist($c);
         };
 
+        // Libellés EXACTEMENT comme le wizard les écrit (décision fondateur 2026-08-15 :
+        // « on doit croire que la donnée vient de l'app »). Jours en toutes lettres
+        // (`dayLabelLong`, front) ; nom de coach = « prénom nom » comme `coachName` du wizard.
+        $dayLong = static fn (int $iso): string => ['', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'][$iso];
+        $coachDisplay = static fn (Coach $coach): string => trim($coach->getFirstName() . ' ' . $coach->getLastName());
+
         // Purge des contraintes renommées/retirées OU dont la config a changé à nom
         // constant (utile en mode append ; un rechargement complet truncate d'abord).
         // Sans ça, le helper name-keyed conserverait l'ancienne config (ex. EMB 18h00
@@ -906,7 +912,38 @@ final class BcclSeeder
             'Matéo - Préféré équipes régionales', // retirée (la base ne l'a plus)
             'U18F2 - Matéo préféré',              // U18F2/U18M2 ne préfèrent plus qu'Armand
             'U18M2 - Matéo préféré',
+            // Renommage 2026-08-15 : noms alignés EXACTEMENT sur le wizard (« <cible> ·
+            // <prédicat> », cible tag = « Groupe <libellé affiché> »). Anciens noms à purger
+            // pour qu'un reseed en append ne garde pas la ligne d'avant (helper name-keyed).
+            'Seniors en compétition - Début minimum 18h50',
+            'Jeunes - Début maximum 19h50',
+            'U15 - Fin 20h30 max (début max 19h00)',
+            'U13 - Début après 17h00',
+            'U13 - Début préféré avant 19h00',
+            'Veterans - Vendredi uniquement',
+            'Veterans - Début après 20h',
+            'SM2 · pas Ven',
+            'SF2 · pas Ven',
+            'Compétition · pas samedi, dimanche',
+            'Jean Vilar - Pas équipes féminines',
+            'Groupe DEPARTEMENTAL · préfère Tonkin',
+            'De Barros Annexe - Préféré équipes départementales',
+            'De Barros Annexe - Préféré LOISIR_ADULTE',
+            'De Barros Annexe - Préféré LOISIR_JEUNE',
         ];
+        // Renommage 2026-08-15 (suite) — anciens noms DYNAMIQUES (équipe/coach).
+        foreach (['U15M2', 'U18M2', 'U21M2'] as $teamName) {
+            $staleNames[] = $teamName . ' - Jean Vilar préféré';
+        }
+        foreach (['U18F2', 'U18M2'] as $teamName) {
+            $staleNames[] = $teamName . ' - Armand préféré';
+        }
+        foreach ([$coachLionel, $coachThomas, $coachEnzo, $coachJordan] as $coach) {
+            $staleNames[] = \sprintf('%s - Indisponible le vendredi', $coach->getFirstName());
+        }
+        foreach ([$coachEmerick, $coachNicolasBarilleau] as $coach) {
+            $staleNames[] = \sprintf('%s - Indisponible le jeudi', $coach->getFirstName());
+        }
         // Ancienne indispo coach du jeudi retirée de la base (Nico Patin) — nom dérivé
         // de l'entité pour suivre l'anonymisation du profil démo.
         $staleNames[] = \sprintf('%s - Indisponible le jeudi', $coachNicoPatin->getFirstName());
@@ -937,7 +974,7 @@ final class BcclSeeder
         // le week-end ne s'entraîne pas le week-end ; Baby/Micro/Académies/Loisirs, eux, n'ont
         // pas de match — leur samedi est légitime. Idem « adultes ≥ 18h50 » : elle attrapait le
         // Basket Santé (senior d'âge, mais LOISIR). Deux tags, parce qu'une contrainte ne cible
-        // QU'UN tag : ni intersection (« SENIOR et COMPÉTITION »), ni exclusion (« sauf loisir »).
+        // QU'UN tag : ni intersection (« ADULTE et COMPÉTITION »), ni exclusion (« sauf loisir »).
         $competitionTags = ['COMPETITION' => '#B71C1C', 'SENIOR_COMPETITION' => '#7B1FA2'];
         $tagIds = [];
         foreach ($competitionTags as $tagName => $tagColor) {
@@ -953,13 +990,17 @@ final class BcclSeeder
             }
             $tagIds[$tagName] = $tag->getId();
         }
-        $seniorTag = $manager->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => 'SENIOR']);
+        // ⚠ On lit le tag ADULTE (= « + de 18 »), PAS le nouveau SENIOR (= « + de 22 ») : le tag
+        // système « adulte » s'appelle désormais ADULTE (Volet A). SENIOR_COMPETITION vise les
+        // ADULTES en compétition (Senior ET U21), exactement comme avant le rename — clé du tag
+        // repointée pour que la DONNÉE du club (les équipes visées) reste identique.
+        $adulteTag = $manager->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => 'ADULTE']);
         foreach ($teams as $teamToTag) {
             if (\in_array($teamToTag->getLevel(), [TeamLevel::LOISIR_ADULTE, TeamLevel::LOISIR_JEUNE], true)) {
                 continue;
             }
             $wanted = [$tagIds['COMPETITION']];
-            if ($seniorTag instanceof TeamTag && $manager->getRepository(TeamTagAssignment::class)->findOneBy(['teamId' => $teamToTag->getId(), 'tagId' => $seniorTag->getId()]) instanceof TeamTagAssignment) {
+            if ($adulteTag instanceof TeamTag && $manager->getRepository(TeamTagAssignment::class)->findOneBy(['teamId' => $teamToTag->getId(), 'tagId' => $adulteTag->getId()]) instanceof TeamTagAssignment) {
                 $wanted[] = $tagIds['SENIOR_COMPETITION'];
             }
             foreach ($wanted as $tagId) {
@@ -976,71 +1017,74 @@ final class BcclSeeder
         }
         $manager->flush();
 
-        $addConstraint('EMB (U9/U11) - Début au premier créneau (max 17h30)', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '17:30', 'targetTag' => 'EMB']);
-        $addConstraint('Seniors en compétition - Début minimum 18h50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTag' => 'SENIOR_COMPETITION']);
-        $addConstraint('Jeunes - Début maximum 19h50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:50', 'targetTag' => 'JEUNE']);
+        $addConstraint('Groupe EMB (U9-U11) · pas après 17:30', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '17:30', 'targetTag' => 'EMB']);
+        // Cible = tag MAISON SENIOR_COMPETITION (sans libellé d'écran → nom brut, comme le
+        // wizard le rend). ⚠ La cible ne change pas (elle part en PR 4) ; seul le nom s'aligne.
+        $addConstraint('Groupe SENIOR_COMPETITION · pas avant 18:50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTag' => 'SENIOR_COMPETITION']);
+        $addConstraint('Groupe Jeune (U13-U18) · pas après 19:50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:50', 'targetTag' => 'JEUNE']);
         // U15 : finir à 20h30 max ≈ début max 19h00 (séances ~90 min ; le modèle a maxStartTime, pas maxEndTime).
-        $addConstraint('U15 - Fin 20h30 max (début max 19h00)', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:00', 'targetTag' => 'U15']);
-        $addConstraint('U13 - Début après 17h00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::PREFERRED, ['minStartTime' => '17:00', 'targetTag' => 'U13']);
+        $addConstraint('Groupe U15 · pas après 19:00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:00', 'targetTag' => 'U15']);
+        $addConstraint('Groupe U13 · pas avant 17:00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::PREFERRED, ['minStartTime' => '17:00', 'targetTag' => 'U13']);
         // U13 : ne pas commencer après 19h00 (laisse la marge du vendredi 20h30, l'exception par-jour n'étant pas exprimable).
-        $addConstraint('U13 - Début préféré avant 19h00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::PREFERRED, ['maxStartTime' => '19:00', 'targetTag' => 'U13']);
+        $addConstraint('Groupe U13 · pas après 19:00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::PREFERRED, ['maxStartTime' => '19:00', 'targetTag' => 'U13']);
 
         // --- DAY (jours imposés / interdits) ---
         // « uniquement » = allowedDays (whitelist : seul le vendredi permis). forcedDays
         // ne veut dire QUE « au moins une séance ce jour-là » côté engine (audit ENG-16).
-        $addConstraint('Veterans - Vendredi uniquement', ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['allowedDays' => [5]]);
+        $addConstraint(\sprintf('Veterans · uniquement %s', $dayLong(5)), ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['allowedDays' => [5]]);
         // Vétérans : créneau du soir imposé — début à 20h00 au plus tôt (réalité terrain :
         // ils passent après les jeunes/adultes, jamais avant 20h).
-        $addConstraint('Veterans - Début après 20h', ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '20:00']);
-        // SM2 / SF2 : pas de séance le vendredi (nom auto-généré par le wizard « … · pas Ven »).
-        $addConstraint('SM2 · pas Ven', ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
-        $addConstraint('SF2 · pas Ven', ConstraintScope::TEAM, $teams['SF2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
-        // Aucune séance le week-end pour tout le club (samedi ET dimanche) — décision
-        // fondateur 2026-08-12, qui remplace un premier essai mal nommé n'interdisant que
-        // le samedi. Le builder éclate cette règle CLUB en une contrainte par équipe ;
-        // les réservations HARD du samedi (académies, Baby) restent posées (pré-placées).
-        $addConstraint('Compétition · pas samedi, dimanche', ConstraintScope::CLUB, null, ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [6, 7], 'targetTag' => 'COMPETITION']);
+        $addConstraint('Veterans · pas avant 20:00', ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '20:00']);
+        // SM2 / SF2 : pas de séance le vendredi (nom auto-généré par le wizard « … · pas vendredi »).
+        $addConstraint(\sprintf('SM2 · pas %s', $dayLong(5)), ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
+        $addConstraint(\sprintf('SF2 · pas %s', $dayLong(5)), ConstraintScope::TEAM, $teams['SF2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
+        // Aucune séance le week-end pour les équipes EN COMPÉTITION (samedi ET dimanche) —
+        // décision fondateur 2026-08-12. Le builder éclate cette règle CLUB en une contrainte
+        // par équipe ; les réservations HARD du samedi (académies, Baby) restent posées.
+        $addConstraint(\sprintf('Groupe Compétition (hors loisir) · pas %s, %s', $dayLong(6), $dayLong(7)), ConstraintScope::CLUB, null, ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [6, 7], 'targetTag' => 'COMPETITION']);
 
         // --- FACILITY (gymnases imposés / interdits / préférés) ---
-        $addConstraint('Jean Vilar - Pas équipes féminines', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venues['vJeanVilar']->getId(), 'targetTag' => 'FEMININE']);
+        $addConstraint('Groupe Femme · évite ' . $venues['vJeanVilar']->getName(), ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venues['vJeanVilar']->getId(), 'targetTag' => 'FEMININE']);
         // Venue OBLIGATOIRE (HARD) = forcedVenueId : l'engine ne force la salle que
         // via forcedVenueId (ou preferredVenueId en HARD), jamais via un `venueId` —
         // clé qu'aucune branche du parseur ne lit (sinon contrainte silencieuse).
-        $addConstraint('SM4 - Jean Vilar obligatoire', ConstraintScope::TEAM, $sm4->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forcedVenueId' => $venues['vJeanVilar']->getId()]);
+        $addConstraint('SM4 · impose ' . $venues['vJeanVilar']->getName(), ConstraintScope::TEAM, $sm4->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forcedVenueId' => $venues['vJeanVilar']->getId()]);
         // SM2 : au moins une séance à Matéo (compte plancher minAtVenueId, toujours dur).
-        $addConstraint('SM2 · au moins 1 à Matéo', ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['minAtVenueId' => $venues['vMateo']->getId(), 'minAtVenueCount' => 1]);
+        $addConstraint('SM2 · au moins 1 à ' . $venues['vMateo']->getName(), ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['minAtVenueId' => $venues['vMateo']->getId(), 'minAtVenueCount' => 1]);
         // Camus réservé EXCLUSIVEMENT aux Loisir 1/2/3 (HARD forcedVenueId, pas un simple nudge).
         foreach (['Loisir 1', 'Loisir 2', 'Loisir 3'] as $loisirName) {
-            $addConstraint('Camus - Réservé ' . $loisirName . ' exclusivement', ConstraintScope::TEAM, $teams[$loisirName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forcedVenueId' => $venues['vCamus']->getId()]);
+            $addConstraint($loisirName . ' · impose ' . $venues['vCamus']->getName(), ConstraintScope::TEAM, $teams[$loisirName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forcedVenueId' => $venues['vCamus']->getId()]);
         }
         // Veterans interdits sur Camus/JDR/Jean Vilar/Tonkin/ADN (nom auto « Veterans · évite <gymnase> »).
         foreach (['vCamus', 'vJdr', 'vJeanVilar', 'vTonkin', 'vAdn'] as $venueVar) {
             $venue = $venues[$venueVar];
             $addConstraint('Veterans · évite ' . $venue->getName(), ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venue->getId()]);
         }
-        // Préférences de gymnase par niveau (portée club).
-        $addConstraint('Groupe DEPARTEMENTAL · préfère Tonkin', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['targetTag' => 'DEPARTEMENTAL', 'preferredVenueId' => $venues['vTonkin']->getId()]);
-        $addConstraint('De Barros Annexe - Préféré équipes départementales', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => 'DEPARTEMENTAL']);
+        // Préférences de gymnase par niveau (portée club). Libellé du tag AFFICHÉ (« Départemental »,
+        // « Loisir adulte/jeune ») exactement comme le sélecteur de cible du wizard.
+        $addConstraint('Groupe Départemental · préfère ' . $venues['vTonkin']->getName(), ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['targetTag' => 'DEPARTEMENTAL', 'preferredVenueId' => $venues['vTonkin']->getId()]);
+        $addConstraint('Groupe Départemental · préfère ' . $venues['vDebarrosAnnexe']->getName(), ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => 'DEPARTEMENTAL']);
+        $loisirLabels = [TeamLevel::LOISIR_ADULTE->value => 'Loisir adulte', TeamLevel::LOISIR_JEUNE->value => 'Loisir jeune'];
         foreach ([TeamLevel::LOISIR_ADULTE, TeamLevel::LOISIR_JEUNE] as $loisirLevel) {
-            $addConstraint('De Barros Annexe - Préféré ' . $loisirLevel->value, ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => $loisirLevel->value]);
+            $addConstraint('Groupe ' . $loisirLabels[$loisirLevel->value] . ' · préfère ' . $venues['vDebarrosAnnexe']->getName(), ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vDebarrosAnnexe']->getId(), 'targetTag' => $loisirLevel->value]);
         }
         // Jean Vilar préféré pour les équipes départementales -2 (U15M2/U18M2/U21M2).
         foreach ([$u15m2, $u18m2, $u21m2] as $targetTeam) {
-            $addConstraint($targetTeam->getName() . ' - Jean Vilar préféré', ConstraintScope::TEAM, $targetTeam->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vJeanVilar']->getId()]);
+            $addConstraint($targetTeam->getName() . ' · préfère ' . $venues['vJeanVilar']->getName(), ConstraintScope::TEAM, $targetTeam->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vJeanVilar']->getId()]);
         }
         // U18F2 / U18M2 : Armand préféré (une contrainte par équipe).
         foreach (['U18F2', 'U18M2'] as $teamName) {
-            $addConstraint($teamName . ' - Armand préféré', ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vArmand']->getId()]);
+            $addConstraint($teamName . ' · préfère ' . $venues['vArmand']->getName(), ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vArmand']->getId()]);
         }
 
         // --- COACH_AVAILABILITY (indisponibilités ; 5 = vendredi, 4 = jeudi) ---
         // Variables coach déjà résolues (l.618+) : un coach manquant lève une erreur PHP au lieu de disparaître en silence.
         foreach ([[$coachLionel, 5], [$coachThomas, 5], [$coachEnzo, 5], [$coachJordan, 5], [$coachEmerick, 4], [$coachNicolasBarilleau, 4]] as [$coach, $day]) {
-            $label = 5 === $day ? 'le vendredi' : 'le jeudi';
             // SEC-13 : la cible du coach est le SCOPE (3e argument), plus une clé du config —
             // `coachId` en doublon est refusé depuis la validation stricte, et un club seedé
             // qui le porte ferme le gate du récap (bouton « Continuer » gris, e2e bloquée).
-            $addConstraint(\sprintf('%s - Indisponible %s', $coach->getFirstName(), $label), ConstraintScope::COACH, $coach->getId(), ConstraintFamily::COACH_AVAILABILITY, ConstraintRuleType::HARD, ['unavailableDays' => [$day]]);
+            // Nom auto-généré par le wizard : « <coach> · indispo <jour> » (indisponibilité).
+            $addConstraint(\sprintf('%s · indispo %s', $coachDisplay($coach), $dayLong($day)), ConstraintScope::COACH, $coach->getId(), ConstraintFamily::COACH_AVAILABILITY, ConstraintRuleType::HARD, ['unavailableDays' => [$day]]);
         }
 
         $manager->flush();

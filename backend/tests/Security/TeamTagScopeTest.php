@@ -12,6 +12,7 @@ use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamTag;
 use App\Enum\SeasonStatus;
+use App\Enum\TeamLevel;
 use App\Enum\TeamTagAxis;
 use App\Service\TeamTagResolver;
 use App\Service\TeamTagService;
@@ -100,13 +101,55 @@ final class TeamTagScopeTest extends KernelTestCase
         // aucune tranche. C'est ce qui prouve que la règle de nom vise « baby » et n'avale
         // pas toute catégorie sans âge.
         $loisir = $this->teams['Loisir']->getId();
-        foreach (['BABY', 'EMB', 'JEUNE', 'SENIOR'] as $bracket) {
+        foreach (['BABY', 'EMB', 'JEUNE', 'ADULTE', 'SENIOR'] as $bracket) {
             self::assertNotContains(
                 $loisir,
                 $this->resolver->tagTeamIds($bracket, $this->season->getId(), $this->club->getId()),
                 \sprintf('« Loisir » ne doit pas tomber dans %s', $bracket),
             );
         }
+    }
+
+    /**
+     * NR — Volet A « tags » : ADULTE (= +18) et SENIOR (= +22) SE CHEVAUCHENT.
+     *
+     * U21 (19-21) est ADULTE mais PAS SENIOR ; « Senior » (22-99) et « Vétéran » (35-99) portent
+     * les DEUX. La frontière est 22 : la déplacer élargirait ou rétrécirait SENIOR en silence, sur
+     * des contraintes qui peuvent être HARD.
+     */
+    public function testU21IsAdulteButNotSenior(): void
+    {
+        $u21 = $this->teams['U21']->getId();
+        self::assertContains($u21, $this->resolver->tagTeamIds('ADULTE', $this->season->getId(), $this->club->getId()), 'U21 est ADULTE (+ de 18)');
+        self::assertNotContains($u21, $this->resolver->tagTeamIds('SENIOR', $this->season->getId(), $this->club->getId()), 'U21 (19-21) n\'atteint pas la borne SENIOR (22)');
+    }
+
+    public function testSeniorAndVeteranAreBothAdulteAndSenior(): void
+    {
+        foreach (['Senior', 'Vétéran'] as $categoryName) {
+            $teamId = $this->teams[$categoryName]->getId();
+            self::assertContains($teamId, $this->resolver->tagTeamIds('ADULTE', $this->season->getId(), $this->club->getId()), \sprintf('« %s » est ADULTE', $categoryName));
+            self::assertContains($teamId, $this->resolver->tagTeamIds('SENIOR', $this->season->getId(), $this->club->getId()), \sprintf('« %s » (ageMin >= 22) est aussi SENIOR', $categoryName));
+        }
+    }
+
+    /**
+     * NR — Volet A « tags » : COMPETITION = niveau NON loisir. Une équipe SANS level n'est PAS en
+     * compétition (décision fondateur : ne jamais contraindre par défaut).
+     */
+    public function testCompetitionTagsOnlyLevelledNonLoisirTeams(): void
+    {
+        $this->scopeGucToClub($this->club->getId());
+        $competing = $this->createTeamInCategory('U15 compet', 14, 15, TeamLevel::REGIONAL);
+        $loisir = $this->createTeamInCategory('U15 loisir', 14, 15, TeamLevel::LOISIR_JEUNE);
+        // Les équipes du setUp n'ont AUCUN level : elles servent de témoin « sans level ».
+        $noLevel = $this->teams['U13']->getId();
+        $this->resolver->reset();
+
+        $competition = $this->resolver->tagTeamIds('COMPETITION', $this->season->getId(), $this->club->getId());
+        self::assertContains($competing->getId(), $competition, 'un niveau NON loisir (REGIONAL) → COMPETITION');
+        self::assertNotContains($loisir->getId(), $competition, 'un niveau loisir → jamais COMPETITION');
+        self::assertNotContains($noLevel, $competition, 'une équipe SANS level n\'est PAS en compétition');
     }
 
     /**
@@ -380,6 +423,10 @@ final class TeamTagScopeTest extends KernelTestCase
             ['U9', 8, 9],
             ['U11', 10, 11],
             ['U13', 12, 13],
+            // Volet A — les frontières ADULTE/SENIOR (bornes RÉELLES du catalogue).
+            ['U21', 19, 21],
+            ['Senior', 22, 99],
+            ['Vétéran', 35, 99],
             ['Baby basket', null, null],
             ['Loisir', null, null],
         ] as [$name, $ageMin, $ageMax]) {
@@ -413,7 +460,7 @@ final class TeamTagScopeTest extends KernelTestCase
      * les pose au postFlush de la Team — on ne les écrit jamais à la main, sans quoi le
      * test vérifierait ses propres fixtures au lieu de la règle.
      */
-    private function createTeamInCategory(string $categoryName, ?int $ageMin, ?int $ageMax): Team
+    private function createTeamInCategory(string $categoryName, ?int $ageMin, ?int $ageMax, ?TeamLevel $level = null): Team
     {
         $this->scopeGucToClub($this->club->getId());
 
@@ -434,6 +481,9 @@ final class TeamTagScopeTest extends KernelTestCase
         $team->setSportCategoryId($category->getId());
         $team->setPriorityTierId($this->priorityTier->getId());
         $team->setName($categoryName . ' 1');
+        if ($level instanceof TeamLevel) {
+            $team->setLevel($level);
+        }
         $team->setSessionsPerWeek(1);
         $team->setIsActive(true);
         $this->em->persist($team);

@@ -191,7 +191,7 @@ final class ConstraintValidationService
 
         // Two rules can only contradict if their TARGET SETS overlap. The targetTag
         // narrows the target: two rules with DIFFERENT non-null tags (e.g. EMB max
-        // 18:00 vs SENIOR min 18:50) apply to disjoint teams → no conflict. But an
+        // 18:00 vs ADULTE min 18:50) apply to disjoint teams → no conflict. But an
         // UNTAGGED rule (null tag = the whole club) overlaps every tagged rule, so
         // "overlap" is: same tag, OR at least one side untagged.
         $tag1 = $config1['targetTag'] ?? null;
