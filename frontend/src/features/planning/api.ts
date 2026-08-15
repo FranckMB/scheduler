@@ -186,6 +186,33 @@ export interface Slot {
   temporaryLock: boolean;
 }
 
+/** Les 7 familles de cause qu'un `session_below_effective_min` peut porter (contrat 2.8,
+ *  `DiagnosticCauseSchema.kind`). Fermée côté moteur ; le front la traite en `string` (cf.
+ *  `DiagnosticCause.kind`) pour dégrader proprement sur un kind futur qu'il ne connaît pas
+ *  encore — la table de libellés reste, elle, exhaustive sur ces 7. */
+export type DiagnosticCauseKind =
+  | "hard_lock"
+  | "venue_forbidden"
+  | "coach_unavailability"
+  | "time_window"
+  | "day_conflict"
+  | "day_forbidden"
+  | "forced_venue_elsewhere";
+
+/** Une cause MESURÉE (pas re-dérivée) d'un créneau fermé pour l'équipe. Le backend a
+ *  déjà ramené `constraintId` à l'UUID de l'entité (il avait suffixé les CLUB→TEAM) : c'est
+ *  la cible directe du deep-link `?edit=<id>`. `constraintId`/`label` sont `null` quand la
+ *  contrainte source n'a pas pu être nommée — la cause s'affiche alors sans lien. */
+export interface DiagnosticCause {
+  /** `string` et non l'union : une donnée future doit rester représentable et s'afficher
+   *  dégradée, jamais faire mentir le type ni planter le rendu. */
+  kind: string;
+  constraintId: string | null;
+  label: string | null;
+  /** Nombre de créneaux candidats que cette cause a fermés pour l'équipe. */
+  count: number;
+}
+
 export interface Diagnostic {
   id: string;
   scheduleId: string;
@@ -205,6 +232,12 @@ export interface Diagnostic {
   ruleKey: string | null;
   message: string;
   suggestions: unknown;
+  /** Causes MESURÉES d'une séance manquante — renseignées SEULEMENT par un
+   *  `session_below_effective_min` (contrat 2.8), `[]` sur les autres types. */
+  causes: DiagnosticCause[];
+  /** Créneaux restés OUVERTS (rien ne les a fermés, l'arbitrage a placé autre chose).
+   *  ⚠ `null` = non mesuré, `0` = aucun n'est resté ouvert — deux choses différentes. */
+  openCandidates: number | null;
 }
 
 export interface Team {

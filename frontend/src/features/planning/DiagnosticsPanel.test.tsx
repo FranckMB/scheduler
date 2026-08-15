@@ -232,3 +232,114 @@ describe("DiagnosticsPanel — lien « Ajuster cette règle » (P2-28)", () => {
     expect(screen.queryByRole("link", { name: "Ajuster cette règle" })).toBeNull();
   });
 });
+
+/**
+ * P4-99 PR-3 — la CAUSE d'une séance manquante (`session_below_effective_min`) s'affiche et
+ * devient cliquable. Le moteur a MESURÉ la cause (contrat 2.8) ; le front l'AFFICHE, il ne la
+ * recalcule pas. Chaque cause identifiée par un `constraintId` mène à SA contrainte
+ * (`?step=constraints&edit=<id>`, le rail existe déjà — ConstraintsStep). `openCandidates` porte
+ * l'info qui a manqué au fondateur le 15 août : des créneaux étaient DISPONIBLES, le planning a
+ * placé autre chose — ce n'est pas une cause, elle a sa propre phrase.
+ */
+describe("DiagnosticsPanel — la cause d'une séance manquante (P4-99)", () => {
+  const below = (over: Partial<Diagnostic> = {}): Diagnostic =>
+    ({
+      id: "sb",
+      scheduleId: "s",
+      type: "session_below_effective_min",
+      severity: "WARNING",
+      teamId: "t1",
+      coachId: null,
+      venueId: null,
+      dayOfWeek: null,
+      startTime: null,
+      ruleKey: null,
+      message: "Séance manquante pour SM1",
+      suggestions: null,
+      causes: [],
+      openCandidates: null,
+      ...over,
+    }) as Diagnostic;
+
+  const render1 = (diagnostic: Diagnostic) =>
+    renderWithProviders(<DiagnosticsPanel diagnostics={[diagnostic]} slots={[]} lookups={lookups} onHighlight={vi.fn()} openMostSevere />);
+
+  it("une cause avec constraintId : le NOM de la règle se lit sans cliquer + lien vers ?edit=<id>", () => {
+    render1(below({ causes: [{ kind: "time_window", constraintId: "c-123", label: "Fenêtre ligue U13", count: 8 }] }));
+
+    const link = screen.getByRole("link", { name: "Corriger cette règle" });
+    const href = link.getAttribute("href") ?? "";
+    expect(href).toContain("step=constraints");
+    expect(href).toContain("edit=c-123");
+    expect(href).toContain("from=planning");
+    // Le NOM de la règle est l'information principale — celle qui répond à « quelle contrainte
+    // a mangé la séance ? » sans cliquer ; le compte accompagne, l'identifiant interne jamais.
+    expect(screen.getByText(/Fenêtre ligue U13/)).toBeInTheDocument();
+    expect(screen.getByText(/8 créneaux fermés/)).toBeInTheDocument();
+    expect(screen.queryByText(/c-123/)).toBeNull();
+  });
+
+  it("deux causes de même kind mais règles différentes restent DISTINGUABLES (le nom, pas la famille)", () => {
+    // LE cas qui vide le lot de son sens si on n'affiche que la famille : trois `time_window`
+    // issues de trois règles rendraient trois lignes identiques, aux liens divergents.
+    render1(
+      below({
+        causes: [
+          { kind: "time_window", constraintId: "c-1", label: "Fenêtre ligue U13", count: 8 },
+          { kind: "time_window", constraintId: "c-2", label: "Fenêtre ligue U15", count: 2 },
+        ],
+      }),
+    );
+
+    // Les deux NOMS se lisent — sans eux, deux lignes « une plage horaire » indiscernables.
+    expect(screen.getByText(/Fenêtre ligue U13/)).toBeInTheDocument();
+    expect(screen.getByText(/Fenêtre ligue U15/)).toBeInTheDocument();
+    // Et chaque ligne mène bien à SA contrainte.
+    const hrefs = screen.getAllByRole("link", { name: "Corriger cette règle" }).map((l) => l.getAttribute("href") ?? "");
+    expect(hrefs.some((h) => h.includes("edit=c-1"))).toBe(true);
+    expect(hrefs.some((h) => h.includes("edit=c-2"))).toBe(true);
+  });
+
+  it("une cause SANS nom (label null) : repli sur la famille, jamais « null », et sans lien si pas d'id", () => {
+    render1(below({ causes: [{ kind: "coach_unavailability", constraintId: null, label: null, count: 3 }] }));
+
+    expect(screen.getByText(/3 créneaux fermés par l'indisponibilité d'un coach/)).toBeInTheDocument();
+    expect(screen.queryByText(/null/)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Corriger cette règle" })).toBeNull();
+  });
+
+  it("openCandidates > 0 dit que des créneaux étaient DISPONIBLES (pas une cause, sa phrase à part)", () => {
+    render1(below({ causes: [], openCandidates: 5 }));
+
+    expect(screen.getByText(/5 créneaux restaient disponibles/)).toBeInTheDocument();
+  });
+
+  it("openCandidates === 0 (rien n'est resté ouvert) n'affiche PAS la phrase", () => {
+    render1(below({ openCandidates: 0 }));
+
+    expect(screen.queryByText(/disponible/)).toBeNull();
+  });
+
+  it("openCandidates === null (non mesuré) n'affiche PAS la phrase", () => {
+    render1(below({ openCandidates: null }));
+
+    expect(screen.queryByText(/disponible/)).toBeNull();
+  });
+
+  it("un kind inconnu (donnée future) ne casse pas le rendu — le compte, jamais le code brut", () => {
+    render1(below({ causes: [{ kind: "future_kind_xyz", constraintId: null, label: null, count: 4 }] }));
+
+    // Le diagnostic reste rendu (pas de crash)…
+    expect(screen.getByText("Séance manquante pour SM1")).toBeInTheDocument();
+    // …le compte s'affiche sans phrase inventée…
+    expect(screen.getByText(/4 créneaux fermés/)).toBeInTheDocument();
+    // …et jamais le code brut du kind.
+    expect(screen.queryByText(/future_kind_xyz/)).toBeNull();
+  });
+
+  it("aucun lien « Corriger cette règle » sur un autre type de diagnostic", () => {
+    render1(diag("WARNING", "autre alerte"));
+
+    expect(screen.queryByRole("link", { name: "Corriger cette règle" })).toBeNull();
+  });
+});
