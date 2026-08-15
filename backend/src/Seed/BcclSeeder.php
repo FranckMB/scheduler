@@ -997,6 +997,12 @@ final class BcclSeeder
         // en PR 2 : résout exactement SM1-4, SF1-3, U21M1-2. (Ex-tag maison SENIOR_COMPETITION,
         // retiré en PR 4 : une contrainte peut désormais croiser cible et exclusion.)
         $addConstraint('Groupe Adulte (+ de 18) sauf Loisir adulte · pas avant 18:50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTags' => ['ADULTE'], 'excludeTags' => ['LOISIR_ADULTE']]);
+        // Saisie PAR LE FONDATEUR dans l'UI le 2026-08-15 (13:00), portée ici le même jour :
+        // elle n'existait qu'en base — donc perdue au prochain reseed, et absente pour tout
+        // autre poste ou pour la CI. C'est le SENIOR d'âge (+22) EN COMPÉTITION qui ne commence
+        // pas avant 20:00 — plus tard que le plancher 18:50 des adultes ci-dessus, qu'elle
+        // resserre pour ce sous-groupe (les deux HARD coexistent : la plus stricte gagne).
+        $addConstraint('Groupe Senior (+ de 22) + Compétition (hors loisir) · pas avant 20:00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '20:00', 'targetTags' => ['SENIOR', 'COMPETITION']]);
         $addConstraint('Groupe Jeune (U13-U18) · pas après 19:50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:50', 'targetTag' => 'JEUNE']);
         // U15 : finir à 20h30 max ≈ début max 19h00 (séances ~90 min ; le modèle a maxStartTime, pas maxEndTime).
         $addConstraint('Groupe U15 · pas après 19:00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:00', 'targetTag' => 'U15']);
