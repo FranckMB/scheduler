@@ -7,6 +7,23 @@
 
 ## 2026-08-15 — lot Dependabot
 
+### Groupe frontend-npm — Vite, Storybook, Lucide (PR #550)
+
+**C'est quoi** : trois outils de la partie visible. **Vite** est la machine qui assemble le code de
+l'interface en fichiers que le navigateur sait lire — c'est lui qui tourne quand tu lances le mode
+développement, et c'est lui qui fabrique la version de production. **Storybook** est l'atelier où
+l'on regarde un composant seul, hors de l'application, pratique pour travailler un bouton ou une
+carte sans devoir naviguer jusqu'à son écran. **Lucide** est la bibliothèque d'icônes.
+
+**Ça apporte** : trois correctifs et un lot d'icônes — Vite 8.2.0 → **8.2.1**, Storybook 10.5.6 →
+**10.5.7**, Lucide 1.28 → **1.29**. Aucune rupture, aucune nouveauté à apprendre. Sur Vite, prendre
+les correctifs vite est utile : c'est la brique qui fabrique ce que les clubs téléchargent, un bug
+d'assemblage s'y voit en production, pas chez nous.
+
+**Adapté chez nous** : rien. Suite complète verte (1328 tests) et **build de production vérifié en
+plus des tests** — Vite touchant justement la fabrication, un test vert ne prouve pas qu'on sait
+encore livrer : 2511 modules assemblés sans erreur.
+
 ### Groupe backend-composer — Doctrine, Sentry, Symfony (PR #549)
 
 **C'est quoi** : quatre briques de la partie serveur. **Doctrine ORM** est le traducteur entre les
