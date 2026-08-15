@@ -488,6 +488,18 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     [setSelectedSlotId],
   );
 
+  // Le chemin SURLIGNAGE (tous les autres types de diagnostic) n'amenait PAS la grille au
+  // créneau : « ça illumine mais je dois chercher pour le trouver » (retour fondateur
+  // 2026-08-15). Même recette que openSlot — le PREMIER créneau surligné est centré ; un
+  // clic qui ÉTEINT le surlignage (set vide) ne scrolle pas.
+  const highlightSlots = useCallback((slotIds: Set<string>) => {
+    setHighlightSlotIds(slotIds);
+    const [first] = slotIds;
+    if (undefined !== first) {
+      requestAnimationFrame(() => document.querySelector(`[data-slot-id="${first}"]`)?.scrollIntoView?.({ block: "center", inline: "center", behavior: "smooth" }));
+    }
+  }, []);
+
   const selectedCell = model.cells.find((c) => c.slotId === selectedSlotId) ?? null;
 
   // Sélectionner un créneau REPLIE les diagnostics (retour fondateur : « réduire
@@ -785,7 +797,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                       ) : null}
                       {showDiagnostics ? (
                         <div className="min-h-[12rem] flex-1">
-                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={setHighlightSlotIds} onFocusVenue={focusVenue} onOpenSlot={openSlot} onCollapse={() => setDiagnosticsCollapsed(true)} openMostSevere={embedded} seedToken={validScheduleId} pending={diagnosticsPending} />
+                          <DiagnosticsPanel diagnostics={diagnostics} slots={slots} emptySlots={emptySlots} lookups={lookups} onHighlight={highlightSlots} onFocusVenue={focusVenue} onOpenSlot={openSlot} onCollapse={() => setDiagnosticsCollapsed(true)} openMostSevere={embedded} seedToken={validScheduleId} pending={diagnosticsPending} />
                         </div>
                       ) : null}
                     </div>
