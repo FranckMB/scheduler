@@ -31,6 +31,32 @@ class ScheduleSlotSchema(SerializableModel):
     )
 
 
+class DiagnosticCauseSchema(SerializableModel):
+    """La cause STRUCTURÉE d'un créneau fermé, MESURÉE au moment où le solveur ferme le
+    candidat (P4-99, décision B) — jamais reconstituée après coup en re-testant la règle.
+
+    Portée par ``DiagnosticSchema.causes`` pour que le front rende la règle cliquable
+    (« corriger cette contrainte »). ``kind`` est un ``Literal`` FERMÉ (leçon D-41 : un kind
+    renommé hors énumération s'éteindrait en silence côté front). ``constraintId``/``label``
+    nomment la contrainte source quand elle est connue (``None`` sinon — une contrainte peut
+    arriver sans ``id``/``name``, la cause dégrade au ``kind`` seul, jamais un KeyError).
+    ``count`` = nombre de créneaux candidats que cette cause a fermés pour l'équipe.
+    """
+
+    kind: Literal[
+        "hard_lock",
+        "venue_forbidden",
+        "coach_unavailability",
+        "time_window",
+        "day_conflict",
+        "day_forbidden",
+        "forced_venue_elsewhere",
+    ]
+    constraint_id: str | None = Field(default=None, alias="constraintId")
+    label: str | None = None
+    count: int
+
+
 class DiagnosticSchema(SerializableModel):
     id: str
     # D-41 — c'etait un COMMENTAIRE, donc rien : il annoncait 7 types alors que le solveur en
@@ -66,6 +92,13 @@ class DiagnosticSchema(SerializableModel):
     message: str
     suggestions: list[str] = Field(default_factory=list)
     created_at: datetime | None = Field(default=None, alias="createdAt")
+    # P4-99 — la cause RÉELLE d'une séance manquante, MESURÉE à la pose. Renseigné UNIQUEMENT
+    # par ``session_below_effective_min`` ; les autres types de diagnostic gardent ``causes: []``.
+    causes: list[DiagnosticCauseSchema] = Field(default_factory=list)
+    # « Resté ouvert » n'est PAS une cause (rien ne l'a fermé) : un champ DÉDIÉ porte le
+    # COMPTE des créneaux libres, non fermés et non retenus — jamais un pseudo-kind dans
+    # ``causes`` que le front devrait filtrer. ``None`` quand le cas ne s'applique pas.
+    open_candidates: int | None = Field(default=None, alias="openCandidates")
 
 
 class SolverMetricsSchema(SerializableModel):

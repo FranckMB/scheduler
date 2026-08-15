@@ -30,7 +30,7 @@ use Psr\Log\LoggerInterface;
 final class MoveSlotService
 {
     /** Contrat backend⇄engine du endpoint de validation (F2a). Un seul contrat, 3 endpoints. */
-    private const string CONTRACT_VERSION = '2.7';
+    private const string CONTRACT_VERSION = '2.8';
 
     /**
      * Budget COURT : la baseline est entièrement figée, le moteur ne place qu'UN candidat

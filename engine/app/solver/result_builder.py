@@ -87,6 +87,12 @@ def build_result(
     # calculer au MÊME grain que la pose (personnes = coachs/joueurs des contraintes).
     slot_capacities: dict[Any, int] = getattr(model, "slot_capacities", {})
     resolved_team_coach_map = team_coach_map if team_coach_map is not None else getattr(model, "team_coach_map", None)
+    # P4-99 — la cause MESURÉE d'un créneau manquant, par équipe. Calculée UNIQUEMENT sur un
+    # solve abouti (les variables n'ont de valeur qu'alors) ; l'inversion var→équipe se fait
+    # ici, depuis `model.x`, seul endroit qui tient variable ET slot_key.
+    session_causes_by_team: dict[str, dict[str, Any]] = {}
+    if solver_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        session_causes_by_team = _collect_session_causes(model, solver)
     diagnostics.extend(
         _generate_diagnostics(
             model_data,
@@ -96,6 +102,7 @@ def build_result(
             implicit_rules=getattr(model, "implicit_rules", None),
             team_coach_map=resolved_team_coach_map,
             team_player_map=getattr(model, "team_player_map", None),
+            session_causes_by_team=session_causes_by_team,
         )
     )
 
@@ -260,6 +267,7 @@ def _generate_diagnostics(
     implicit_rules: ResolvedImplicitRules | None = None,
     team_coach_map: Mapping[str, list[str]] | None = None,
     team_player_map: Mapping[str, list[str]] | None = None,
+    session_causes_by_team: Mapping[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Run post-solve checks and return manager-readable diagnostics."""
     diagnostics: list[dict[str, Any]] = []
@@ -296,7 +304,9 @@ def _generate_diagnostics(
             for diag in _diagnose_coach_overload(model_data, slots)
             if str(diag.get("coachId")) not in rest_flagged_coaches
         )
-        diagnostics.extend(_diagnose_session_below_effective_min(model_data, slots))
+        diagnostics.extend(
+            _diagnose_session_below_effective_min(model_data, slots, session_causes_by_team=session_causes_by_team)
+        )
         diagnostics.extend(_diagnose_unused_slots(model_data, slots))
     diagnostics.extend(_diagnose_conflicts(model_data, solver_status, slots, slot_capacities=slot_capacities))
     return diagnostics
@@ -590,12 +600,62 @@ def _diagnose_coach_overload(
     return diagnostics
 
 
+def _collect_session_causes(
+    model: ScheduleCpModel,
+    solver: cp_model.CpSolver,
+) -> dict[str, dict[str, Any]]:
+    """Agrège, PAR ÉQUIPE, la cause MESURÉE des créneaux non retenus (P4-99, décision B).
+
+    Ne RE-TESTE aucune règle : lit les fermetures enregistrées À LA POSE — par variable dans
+    ``model.candidate_closures``, et pour les candidats SANS variable (retirés par le verrou
+    d'une autre équipe) dans ``model.lock_removed_candidates``. Un candidat dont la variable
+    EXISTE, sans fermeture, et non retenu (``solver.Value == 0``) tombe dans la famille
+    « resté ouvert » : on rapporte le COMPTE seul, jamais qui a pris la place (ce serait une
+    re-dérivation). Renvoie ``team_id -> {"causes": [...], "openCandidates": int}`` où chaque
+    cause est ``{kind, constraintId, label, count}`` (forme ``DiagnosticCauseSchema``)."""
+    candidate_closures: dict[int, list[dict[str, Any]]] = getattr(model, "candidate_closures", {}) or {}
+    lock_removed: dict[Any, dict[str, Any]] = getattr(model, "lock_removed_candidates", {}) or {}
+
+    # team -> (kind, constraintId, label) -> nombre de créneaux fermés par cette cause
+    aggregated: dict[str, dict[tuple[Any, Any, Any], int]] = defaultdict(lambda: defaultdict(int))
+    open_counts: dict[str, int] = defaultdict(int)
+
+    for slot_key, var in model.x.items():
+        if solver.Value(var) != 0:
+            continue  # créneau RETENU — ce n'est pas un candidat manquant
+        team_id = str(slot_key[0])
+        closures = candidate_closures.get(int(var.Index()))
+        if closures:
+            for cause in closures:
+                key = (cause.get("kind"), cause.get("constraintId"), cause.get("label"))
+                aggregated[team_id][key] += 1
+        else:
+            open_counts[team_id] += 1  # existe, non fermé, non retenu → resté ouvert
+
+    for slot_key, cause in lock_removed.items():
+        team_id = str(slot_key[0])
+        key = (cause.get("kind"), cause.get("constraintId"), cause.get("label"))
+        aggregated[team_id][key] += 1
+
+    result: dict[str, dict[str, Any]] = {}
+    for team_id in set(aggregated) | set(open_counts):
+        causes = [
+            {"kind": kind, "constraintId": constraint_id, "label": label, "count": count}
+            for (kind, constraint_id, label), count in aggregated.get(team_id, {}).items()
+        ]
+        result[team_id] = {"causes": causes, "openCandidates": open_counts.get(team_id, 0)}
+    return result
+
+
 def _diagnose_session_below_effective_min(
     model_data: Mapping[str, Any] | Any,
     slots: list[dict[str, Any]],
+    *,
+    session_causes_by_team: Mapping[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Warn when a team's placed session units fall below its effective minimum."""
     diagnostics: list[dict[str, Any]] = []
+    causes_by_team = session_causes_by_team or {}
 
     tier_min: dict[int, int] = {}
     for tier in _collection(model_data, "priorityTiers", "priority_tiers"):
@@ -669,6 +729,12 @@ def _diagnose_session_below_effective_min(
             # "cible", pas "garanti" : le minimum est visé en objectif soft (ENG-18), pas
             # garanti en plancher dur.
             reason = f" — en-dessous de son minimum cible de {effective_min}." if below_floor else "."
+            # P4-99 — la cause RÉELLE, MESURÉE à la pose (jamais devinée) : la liste des règles
+            # ayant fermé un créneau de cette équipe (cliquable côté front) + le compte des
+            # créneaux « restés ouverts » (libres, non fermés, non retenus). Absent de la carte
+            # (aucune donnée mesurée) → causes vide + openCandidates None : on garde alors le
+            # message NEUTRE et les suggestions statiques, sans inventer de cause.
+            team_causes = causes_by_team.get(team_id, {})
             diagnostics.append(
                 {
                     "id": f"diag-session-below-min-{team_id}",
@@ -683,6 +749,8 @@ def _diagnose_session_below_effective_min(
                         "Ajoutez de la disponibilité de gymnase ou un créneau supplémentaire pour cette équipe.",
                         "Vérifiez le tier de priorité et le nombre de séances/semaine de l'équipe.",
                     ],
+                    "causes": team_causes.get("causes", []),
+                    "openCandidates": team_causes.get("openCandidates"),
                     "createdAt": datetime.now(UTC).isoformat(),
                 }
             )

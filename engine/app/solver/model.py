@@ -36,6 +36,20 @@ class ScheduleCpModel(cp_model.CpModel):
         # Typé ``Any`` ici pour éviter un cycle d'import avec ``constraints`` (qui importe model).
         self.implicit_rules: Any = None
         self.slot_capacities: dict[VenueSlotKey, int] = {}
+        # P4-99 — la cause MESURÉE d'un candidat fermé, indexée par la variable OR-Tools
+        # (``var.Index()``, entier stable). Remplie par les sites de pose de `constraints.py`
+        # au moment EXACT où ils forcent un candidat à 0 (décision B : jamais reconstituée
+        # après coup). Même idiome `locked_slots`/`team_coach_map` : un attribut posé sur le
+        # modèle, lu une seule fois par `result_builder`.
+        self.candidate_closures: dict[int, list[dict[str, Any]]] = {}
+        # Candidats SANS variable : `build_model` retire (jamais de `NewBoolVar`) le créneau
+        # libre qu'un verrou d'une AUTRE équipe bloque. Clé = SlotKey (pas d'`Index()` possible).
+        self.lock_removed_candidates: dict[SlotKey, dict[str, Any]] = {}
+        # Sources de contraintes posées par `_solve` depuis `parse_v2_constraints`, pour que
+        # les fermetures gymnase-forcé / indispo-coach nomment leur contrainte SANS re-parser
+        # (aucune signature publique de `constraints.py` ne change — le canal est le modèle).
+        self.forced_venue_sources: dict[str, dict[str, Any]] = {}
+        self.coach_unavailability_sources: dict[str, list[dict[str, Any]]] = {}
 
     def NumVariables(self) -> int:
         return len(self.Proto().variables)
@@ -70,7 +84,15 @@ def build_model(data: Mapping[str, Any] | Any) -> ScheduleCpModel:
         for venue_id, day_of_week, slot_start in available_slots:
             slot_key = (team_id, venue_id, day_of_week, slot_start)
             venue_slot_key = (venue_id, day_of_week, slot_start)
-            if slot_key in hard_slot_keys or venue_slot_key in blocked_venue_slots:
+            # P4-99 — deux cas dans cette branche, à ne PAS confondre :
+            #   * `slot_key in hard_slot_keys` = ce créneau EST la séance verrouillée de CETTE
+            #     équipe : elle l'a, rien à diagnostiquer.
+            #   * `venue_slot_key in blocked_venue_slots` (sans être son propre verrou) = un
+            #     verrou d'une AUTRE équipe occupe la place : candidat retiré → cause hard_lock.
+            if slot_key in hard_slot_keys:
+                continue
+            if venue_slot_key in blocked_venue_slots:
+                model.lock_removed_candidates[slot_key] = {"kind": "hard_lock"}
                 continue
 
             model.x[slot_key] = cast(Any, model).NewBoolVar(_variable_name(slot_key))
