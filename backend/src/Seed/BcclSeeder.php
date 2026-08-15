@@ -941,6 +941,10 @@ final class BcclSeeder
         foreach (['U18F2', 'U18M2'] as $teamName) {
             $staleNames[] = $teamName . ' - Armand préféré';
         }
+        // Retrait fondateur 2026-08-15 : U18F2 ne préfère plus Armand (terrain réel = JDR mardi
+        // + Tonkin mercredi, zéro Armand — la préférence contredisait le réel). Nom au format
+        // wizard, à purger pour qu'un reseed en append ne garde pas la ligne d'avant.
+        $staleNames[] = 'U18F2 · préfère ' . $venues['vArmand']->getName();
         foreach ([$coachLionel, $coachThomas, $coachEnzo, $coachJordan] as $coach) {
             $staleNames[] = \sprintf('%s - Indisponible le vendredi', $coach->getFirstName());
         }
@@ -997,6 +1001,12 @@ final class BcclSeeder
         // en PR 2 : résout exactement SM1-4, SF1-3, U21M1-2. (Ex-tag maison SENIOR_COMPETITION,
         // retiré en PR 4 : une contrainte peut désormais croiser cible et exclusion.)
         $addConstraint('Groupe Adulte (+ de 18) sauf Loisir adulte · pas avant 18:50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTags' => ['ADULTE'], 'excludeTags' => ['LOISIR_ADULTE']]);
+        // Saisie PAR LE FONDATEUR dans l'UI le 2026-08-15 (13:00), portée ici le même jour :
+        // elle n'existait qu'en base — donc perdue au prochain reseed, et absente pour tout
+        // autre poste ou pour la CI. C'est le SENIOR d'âge (+22) EN COMPÉTITION qui ne commence
+        // pas avant 20:00 — plus tard que le plancher 18:50 des adultes ci-dessus, qu'elle
+        // resserre pour ce sous-groupe (les deux HARD coexistent : la plus stricte gagne).
+        $addConstraint('Groupe Senior (+ de 22) + Compétition (hors loisir) · pas avant 20:00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '20:00', 'targetTags' => ['SENIOR', 'COMPETITION']]);
         $addConstraint('Groupe Jeune (U13-U18) · pas après 19:50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:50', 'targetTag' => 'JEUNE']);
         // U15 : finir à 20h30 max ≈ début max 19h00 (séances ~90 min ; le modèle a maxStartTime, pas maxEndTime).
         $addConstraint('Groupe U15 · pas après 19:00', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:00', 'targetTag' => 'U15']);
@@ -1011,6 +1021,10 @@ final class BcclSeeder
         // Vétérans : créneau du soir imposé — début à 20h00 au plus tôt (réalité terrain :
         // ils passent après les jeunes/adultes, jamais avant 20h).
         $addConstraint('Veterans · pas avant 20:00', ConstraintScope::TEAM, $teams['Veterans']->getId(), ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '20:00']);
+        // U21M2 : même plancher du soir (jeu Jean Vilar 20:30 + ven Debarros 20:30, réalité
+        // terrain). La règle Senior+22 en compétition ci-dessus exclut les U21 (âge < 22),
+        // d'où cette contrainte TEAM dédiée pour ce sous-groupe.
+        $addConstraint('U21M2 · pas avant 20:00', ConstraintScope::TEAM, $u21m2->getId(), ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '20:00']);
         // SM2 / SF2 : pas de séance le vendredi (nom auto-généré par le wizard « … · pas vendredi »).
         $addConstraint(\sprintf('SM2 · pas %s', $dayLong(5)), ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
         $addConstraint(\sprintf('SF2 · pas %s', $dayLong(5)), ConstraintScope::TEAM, $teams['SF2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
@@ -1048,10 +1062,9 @@ final class BcclSeeder
         foreach ([$u15m2, $u18m2, $u21m2] as $targetTeam) {
             $addConstraint($targetTeam->getName() . ' · préfère ' . $venues['vJeanVilar']->getName(), ConstraintScope::TEAM, $targetTeam->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vJeanVilar']->getId()]);
         }
-        // U18F2 / U18M2 : Armand préféré (une contrainte par équipe).
-        foreach (['U18F2', 'U18M2'] as $teamName) {
-            $addConstraint($teamName . ' · préfère ' . $venues['vArmand']->getName(), ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vArmand']->getId()]);
-        }
+        // U18M2 : Armand préféré. (U18F2 retirée le 2026-08-15 — terrain réel = JDR mardi +
+        // Tonkin mercredi, zéro Armand ; voir la purge dans $staleNames.)
+        $addConstraint('U18M2 · préfère ' . $venues['vArmand']->getName(), ConstraintScope::TEAM, $u18m2->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vArmand']->getId()]);
 
         // --- COACH_AVAILABILITY (indisponibilités ; 5 = vendredi, 4 = jeudi) ---
         // Variables coach déjà résolues (l.618+) : un coach manquant lève une erreur PHP au lieu de disparaître en silence.

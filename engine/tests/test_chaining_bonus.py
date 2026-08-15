@@ -463,6 +463,262 @@ class TestChainingBonusIntegration:
         assert add_chaining_bonus(model, [slot], teams=[{"id": "team-1", "priority_tier": "A"}]) == []
 
 
+class TestChainingBonusPersons:
+    """Chaining now rewards a PERSON present at both sessions — coach OR player.
+
+    ``team_player_map`` maps ``str(team_id) -> [person_id, ...]``. A ``set``
+    dedups double roles; the per-person weight ceiling (≤ 8) is unchanged.
+    """
+
+    def test_coach_player_pair_rewarded(self) -> None:
+        """Inès coaches slot A (U18F2) and PLAYS slot B (SF2) back-to-back in the
+        same venue → exactly one chaining term, weight = highest tier of the pair."""
+        model = cp_model.CpModel()
+
+        slot_a = _assignment(
+            model,
+            "slot_a",
+            team_id="U18F2",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="ines",
+            priority_tier="B",
+            start=1080,
+            end=1170,
+        )
+        slot_b = _assignment(
+            model,
+            "slot_b",
+            team_id="SF2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-sf2",  # NOT ines — the link is Inès playing SF2
+            priority_tier="S",
+            start=1170,
+            end=1260,
+        )
+
+        terms = add_chaining_bonus(
+            model,
+            [slot_a, slot_b],
+            teams=[{"id": "U18F2", "priority_tier": "B"}, {"id": "SF2", "priority_tier": "S"}],
+            team_player_map={"SF2": ["ines"]},
+        )
+        assert len(terms) == 1, f"Expected 1 person chaining term, got {len(terms)}"
+        _var, weight = terms[0]
+        assert weight == CHAINING_TIER_WEIGHTS["S"], "weight = highest tier (S) of the chained pair"
+
+    def test_coach_player_chain_wins_the_tie_in_solve(self) -> None:
+        """Equal placement value; the enchained slot must be chosen.
+
+        Slot A (U18F2, coach Inès) is fixed. SF2 has two equal-value candidate
+        placements — one CONSECUTIVE to A (Inès plays SF2 → chains) and one with a
+        gap (no chain). The chaining bonus must break the tie toward the enchained
+        slot."""
+        model = cp_model.CpModel()
+
+        slot_a = _assignment(
+            model,
+            "slot_a",
+            team_id="U18F2",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="ines",
+            priority_tier="B",
+            start=1080,
+            end=1170,
+        )
+        sf2_chain = _assignment(
+            model,
+            "sf2_chain",
+            team_id="SF2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-sf2",
+            priority_tier="S",
+            start=1170,  # consecutive with slot_a (1170 == slot_a.end)
+            end=1260,
+        )
+        sf2_nochain = _assignment(
+            model,
+            "sf2_nochain",
+            team_id="SF2",
+            slot_id="1:20:00",
+            venue_id="venue-1",
+            coach_id="coach-sf2",
+            priority_tier="S",
+            start=1200,  # 30-min gap after slot_a → no chaining
+            end=1290,
+        )
+
+        # SF2 takes exactly one candidate; slot_a always placed.
+        model.Add(sf2_chain.var + sf2_nochain.var == 1)
+        model.Add(slot_a.var == 1)
+
+        add_level_2_objective(
+            model,
+            [slot_a, sf2_chain, sf2_nochain],
+            teams=[
+                {"id": "U18F2", "priority_tier": "B"},
+                {"id": "SF2", "priority_tier": "S"},
+            ],
+            team_player_map={"SF2": ["ines"]},
+        )
+
+        status, solver = _solve(model)
+        assert status == cp_model.OPTIMAL, f"Expected OPTIMAL, got {status}"
+        assert solver.Value(sf2_chain.var) == 1, "the enchained slot must win the tie"
+        assert solver.Value(sf2_nochain.var) == 0
+
+    def test_double_role_counts_once(self) -> None:
+        """Inès both COACHES and PLAYS slot A, and coaches slot B → still ONE term
+        for the pair (the set dedups the double role)."""
+        model = cp_model.CpModel()
+
+        slot_a = _assignment(
+            model,
+            "slot_a",
+            team_id="team-1",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="ines",  # coach
+            priority_tier="A",
+            start=1080,
+            end=1170,
+        )
+        slot_b = _assignment(
+            model,
+            "slot_b",
+            team_id="team-2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="ines",
+            priority_tier="A",
+            start=1170,
+            end=1260,
+        )
+
+        terms = add_chaining_bonus(
+            model,
+            [slot_a, slot_b],
+            teams=[{"id": "team-1", "priority_tier": "A"}, {"id": "team-2", "priority_tier": "A"}],
+            team_player_map={"team-1": ["ines"]},  # Inès ALSO plays her own coached team
+        )
+        assert len(terms) == 1, f"Double role must yield exactly one term, got {len(terms)}"
+
+    def test_two_distinct_persons_stack_but_stay_bounded(self) -> None:
+        """Two DISTINCT people shared by the pair → two terms, each weight ≤ 8."""
+        model = cp_model.CpModel()
+
+        slot_a = _assignment(
+            model,
+            "slot_a",
+            team_id="team-1",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="ines",  # person 1 (coach of both)
+            priority_tier="A",
+            start=1080,
+            end=1170,
+        )
+        slot_b = _assignment(
+            model,
+            "slot_b",
+            team_id="team-2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="ines",
+            priority_tier="A",
+            start=1170,
+            end=1260,
+        )
+
+        # "bob" plays both teams → a second distinct common person.
+        terms = add_chaining_bonus(
+            model,
+            [slot_a, slot_b],
+            teams=[{"id": "team-1", "priority_tier": "A"}, {"id": "team-2", "priority_tier": "A"}],
+            team_player_map={"team-1": ["bob"], "team-2": ["bob"]},
+        )
+        assert len(terms) == 2, f"Two distinct people → two terms, got {len(terms)}"
+        assert all(weight <= 8 for _var, weight in terms), "each per-person weight stays capped at 8"
+
+    def test_none_map_is_byte_identical_to_absent(self) -> None:
+        """team_player_map=None reproduces the coach-only behaviour exactly."""
+        model = cp_model.CpModel()
+
+        def _pair() -> list[AssignmentVariable]:
+            a = _assignment(
+                model,
+                f"a_{model.NewBoolVar('x').Index()}",
+                team_id="team-1",
+                slot_id="1:18:00",
+                venue_id="venue-1",
+                coach_id="coach-1",
+                priority_tier="A",
+                start=1080,
+                end=1170,
+            )
+            b = _assignment(
+                model,
+                f"b_{model.NewBoolVar('y').Index()}",
+                team_id="team-2",
+                slot_id="1:19:30",
+                venue_id="venue-1",
+                coach_id="coach-1",
+                priority_tier="B",
+                start=1170,
+                end=1260,
+            )
+            return [a, b]
+
+        teams = [{"id": "team-1", "priority_tier": "A"}, {"id": "team-2", "priority_tier": "B"}]
+        absent = add_chaining_bonus(model, _pair(), teams=teams)
+        explicit_none = add_chaining_bonus(model, _pair(), teams=teams, team_player_map=None)
+        assert [w for _v, w in absent] == [w for _v, w in explicit_none] == [CHAINING_TIER_WEIGHTS["A"]]
+
+    def test_two_phase_path_builds_player_chaining_terms(self) -> None:
+        """apply_chaining=False still BUILDS the player chaining terms (phase 2 reuses
+        stats.chaining_terms). Here only a shared PLAYER links the pair — coaches
+        differ — so a non-empty chaining_bonus proves the player path is wired in."""
+        model = cp_model.CpModel()
+
+        slot_a = _assignment(
+            model,
+            "slot_a",
+            team_id="team-1",
+            slot_id="1:18:00",
+            venue_id="venue-1",
+            coach_id="coach-a",
+            priority_tier="A",
+            start=1080,
+            end=1170,
+        )
+        slot_b = _assignment(
+            model,
+            "slot_b",
+            team_id="team-2",
+            slot_id="1:19:30",
+            venue_id="venue-1",
+            coach_id="coach-b",  # different coach → only the player can link them
+            priority_tier="B",
+            start=1170,
+            end=1260,
+        )
+
+        stats = add_level_2_objective(
+            model,
+            [slot_a, slot_b],
+            teams=[{"id": "team-1", "priority_tier": "A"}, {"id": "team-2", "priority_tier": "B"}],
+            apply_chaining=False,
+            team_player_map={"team-1": ["ines"], "team-2": ["ines"]},
+        )
+        assert stats.chaining_bonus == 1, "the shared player must build one chaining term"
+        assert len(stats.chaining_terms) == 1
+        _var, weight = stats.chaining_terms[0]
+        assert weight == CHAINING_TIER_WEIGHTS["A"], "term takes the pair's highest tier (A)"
+
+
 if __name__ == "__main__":
     import unittest
 
