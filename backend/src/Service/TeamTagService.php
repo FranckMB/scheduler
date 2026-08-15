@@ -21,12 +21,19 @@ final class TeamTagService
     /** Deterministic axis of each system tag, for the constraint target grouping (Lot B). */
     private const SYSTEM_TAG_AXES = [
         'FEMININE' => TeamTagAxis::GENRE, 'MASCULINE' => TeamTagAxis::GENRE, 'MIXTE' => TeamTagAxis::GENRE,
-        'BABY' => TeamTagAxis::AGE, 'EMB' => TeamTagAxis::AGE, 'JEUNE' => TeamTagAxis::AGE, 'SENIOR' => TeamTagAxis::AGE,
+        // ADULTE (= +18, ageMin >= 19) et SENIOR (= +22) sont deux tags d'âge qui SE
+        // CHEVAUCHENT (décision fondateur 2026-08-15) : « Senior » 22-99 et « Vétéran »
+        // 35-99 portent les deux, « U21 » 19-21 n'a qu'ADULTE. Voir `ageBracketsFor`.
+        'BABY' => TeamTagAxis::AGE, 'EMB' => TeamTagAxis::AGE, 'JEUNE' => TeamTagAxis::AGE,
+        'ADULTE' => TeamTagAxis::AGE, 'SENIOR' => TeamTagAxis::AGE,
         'U9' => TeamTagAxis::AGE, 'U11' => TeamTagAxis::AGE, 'U13' => TeamTagAxis::AGE,
         'U15' => TeamTagAxis::AGE, 'U18' => TeamTagAxis::AGE, 'U21' => TeamTagAxis::AGE,
         'ELITE' => TeamTagAxis::NIVEAU, 'REGIONAL' => TeamTagAxis::NIVEAU, 'NATIONAL' => TeamTagAxis::NIVEAU,
         'DEPARTEMENTAL' => TeamTagAxis::NIVEAU, 'LOISIR_ADULTE' => TeamTagAxis::NIVEAU, 'LOISIR_JEUNE' => TeamTagAxis::NIVEAU,
         'HONNEUR' => TeamTagAxis::NIVEAU, 'PROMOTION' => TeamTagAxis::NIVEAU, 'PRE_REGION' => TeamTagAxis::NIVEAU,
+        // COMPETITION (axe NIVEAU) : équipe engagée en compétition — level non nul ET hors
+        // loisir (voir `determineTagNames`). Une équipe sans level n'est PAS en compétition.
+        'COMPETITION' => TeamTagAxis::NIVEAU,
     ];
 
     /**
@@ -91,10 +98,7 @@ final class TeamTagService
     }
 
     /**
-     * @return list<string>
-     */
-    /**
-     * La tranche d'âge d'une catégorie — LA règle, isolée de toute lecture en base.
+     * Les tranches d'âge d'une catégorie — LA règle, isolée de toute lecture en base.
      *
      * ⚑ Extraite pour être vérifiable (D-35). Elle vivait au milieu d'une méthode qui charge
      * la `SportCategory` : impossible de la faire tourner sur le catalogue sans monter une
@@ -103,10 +107,40 @@ final class TeamTagService
      * contraintes qui peuvent être HARD. `TagLabelsMatchTheRuleTest` la compare désormais aux
      * étiquettes ; `TeamTagScopeTest` (phase1) garde ses frontières.
      *
-     * ⚠ BABY passe AVANT EMB (P4-42) : U5/U7 satisfont les deux bornes, c'est l'ORDRE qui
-     * tranche — le réordonner élargirait EMB en silence.
+     * ⚠ Un ENSEMBLE, plus un unique tag (décision fondateur 2026-08-15) : ADULTE et SENIOR
+     * se CHEVAUCHENT. Le « bracket principal » reste tranché par la CHAÎNE de `if` ci-dessous,
+     * dont l'ORDRE porte une garantie (BABY avant EMB : P4-42) ; SENIOR s'y AJOUTE quand
+     * `ageMin >= 22`, sans jamais remplacer le principal ni toucher au sens de JEUNE/EMB/BABY.
+     *
+     * @return list<string>
      */
-    public function ageBracketFor(string $name, ?int $ageMin, ?int $ageMax): ?string
+    public function ageBracketsFor(string $name, ?int $ageMin, ?int $ageMax): array
+    {
+        $brackets = [];
+
+        $principal = $this->principalAgeBracket($name, $ageMin, $ageMax);
+        if (null !== $principal) {
+            $brackets[] = $principal;
+        }
+
+        // SENIOR (= +22) EN PLUS du principal. « Senior » (22-99) et « Vétéran » (35-99) le
+        // portent donc en plus d'ADULTE ; « U21 » (19-21) reste ADULTE seul. C'est le seul
+        // point où deux tranches coexistent — les autres restent exclusives.
+        if (null !== $ageMin && $ageMin >= 22) {
+            $brackets[] = 'SENIOR';
+        }
+
+        return $brackets;
+    }
+
+    /**
+     * Le bracket PRINCIPAL — une seule tranche, tranchée par l'ORDRE des `if`.
+     *
+     * ⚠ BABY passe AVANT EMB (P4-42) : U5/U7 satisfont les deux bornes, c'est l'ORDRE qui
+     * tranche — le réordonner élargirait EMB en silence. ADULTE (= +18) est le principal dès
+     * `ageMin >= 19` (ce que « Adulte » a toujours signifié, jadis nommé SENIOR).
+     */
+    private function principalAgeBracket(string $name, ?int $ageMin, ?int $ageMax): ?string
     {
         if ($this->isBabyCategory($name, $ageMax)) {
             return 'BABY';
@@ -118,7 +152,7 @@ final class TeamTagService
             return 'JEUNE';
         }
         if (null !== $ageMin && $ageMin >= 19) {
-            return 'SENIOR';
+            return 'ADULTE';
         }
 
         return null;
@@ -183,7 +217,11 @@ final class TeamTagService
 
         $requiredTags = [
             'JEUNE' => '#FF6B6B',
-            'SENIOR' => '#4ECDC4',
+            'ADULTE' => '#4ECDC4',
+            // Nouveau tag d'âge « + de 22 » (couleur distincte d'ADULTE, qu'il chevauche).
+            'SENIOR' => '#009688',
+            // Engagement en compétition (axe NIVEAU) — couleur reprise du tag maison BCCL.
+            'COMPETITION' => '#B71C1C',
             'EMB' => '#45B7D1',
             // P4-42. Pas de migration : un club antérieur gagne le tag à sa prochaine écriture
             // d'équipe. La course qu'ouvrait cette ligne est fermée depuis P4-64 (index unique
@@ -352,8 +390,7 @@ final class TeamTagService
             $ageMax = $sportCategory->getAgeMax();
             $name = $sportCategory->getName();
 
-            $bracket = $this->ageBracketFor($name, $ageMin, $ageMax);
-            if (null !== $bracket) {
+            foreach ($this->ageBracketsFor($name, $ageMin, $ageMax) as $bracket) {
                 $tags[] = $bracket;
             }
 
@@ -387,6 +424,15 @@ final class TeamTagService
         $level = $team->getLevel();
         if ($level instanceof TeamLevel) {
             $tags[] = $level->value;
+
+            // COMPETITION (axe NIVEAU) — décision fondateur 2026-08-15 : une équipe est « en
+            // compétition » dès qu'elle a un niveau NON loisir. Une équipe SANS level n'est
+            // PAS en compétition (on ne contraint jamais par défaut) : la garde est déjà le
+            // `instanceof TeamLevel` ci-dessus. Elle porte alors DEUX tags NIVEAU (ex.
+            // REGIONAL + COMPETITION), ce que la liste plate autorise.
+            if (!\in_array($level, [TeamLevel::LOISIR_ADULTE, TeamLevel::LOISIR_JEUNE], true)) {
+                $tags[] = 'COMPETITION';
+            }
         }
 
         return $tags;

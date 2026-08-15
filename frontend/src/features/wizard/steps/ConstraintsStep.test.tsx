@@ -192,32 +192,32 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
   it("only offers groups (tags) that have at least one assigned team", () => {
     h.tags = [
       { id: "tag-fem", name: "FEMININE", color: null, isSystem: true, axis: "GENRE" },
-      { id: "tag-sen", name: "SENIOR", color: null, isSystem: true, axis: "AGE" },
+      { id: "tag-adu", name: "ADULTE", color: null, isSystem: true, axis: "AGE" },
     ];
-    // Only SENIOR is assigned to a team — FEMININE concerns no team.
-    h.tagAssignments = [{ id: "a1", teamId: "t1", tagId: "tag-sen", seasonId: "s1" }];
+    // Only ADULTE is assigned to a team — FEMININE concerns no team.
+    h.tagAssignments = [{ id: "a1", teamId: "t1", tagId: "tag-adu", seasonId: "s1" }];
 
     renderWithProviders(<ConstraintsStep />);
     const target = screen.getByRole("combobox", { name: "Cible" });
     const options = Array.from(target.querySelectorAll("option")).map((o) => o.textContent);
-    // SENIOR is shown under the Âge axis, labelled « Adulte »; FEMININE (unassigned) is absent.
+    // ADULTE is shown under the Âge axis, labelled « Adulte (+ de 18) »; FEMININE (unassigned) is absent.
     expect(within(target).getByRole("group", { name: "Âge" })).toBeInTheDocument();
-    expect(options).toContain("Adulte");
+    expect(options).toContain("Adulte (+ de 18)");
     expect(options).not.toContain("Femme");
     expect(options).not.toContain("FEMININE");
   });
 
   it("groups horaire/jours constraints by AXIS (Âge…) then per team in rank order", () => {
-    h.tags = [{ id: "tag-sen", name: "SENIOR", color: null, isSystem: true, axis: "AGE" }];
+    h.tags = [{ id: "tag-adu", name: "ADULTE", color: null, isSystem: true, axis: "AGE" }];
     h.list = [
-      { id: "cg", name: "Groupe SENIOR · pas après 21:00", scope: "CLUB", scopeTargetId: null, family: "TIME", ruleType: "PREFERRED", config: { targetTag: "SENIOR" }, isActive: true },
+      { id: "cg", name: "Groupe Adulte (+ de 18) · pas après 21:00", scope: "CLUB", scopeTargetId: null, family: "TIME", ruleType: "PREFERRED", config: { targetTag: "ADULTE" }, isActive: true },
       { id: "cb", name: "SM1 · pas après 21:00", scope: "TEAM", scopeTargetId: "t1", family: "TIME", ruleType: "PREFERRED", config: {}, isActive: true }, // t1 = tier B
       { id: "cs", name: "Fanion · pas après 21:00", scope: "TEAM", scopeTargetId: "t2", family: "TIME", ruleType: "PREFERRED", config: {}, isActive: true }, // t2 = tier S
     ] as Constraint[];
 
     renderWithProviders(<ConstraintsStep />);
 
-    // SENIOR tag → axis « Âge » ; team-targeted constraints go under their
+    // ADULTE tag → axis « Âge » ; team-targeted constraints go under their
     // team's RANG group (Fanion=S, SM1=B), in tier order.
     const sections = screen.getAllByTestId("constraint-section").map((e) => e.textContent);
     expect(sections).toEqual(["Âge", "S · Fanion", "B · Moyenne"]);

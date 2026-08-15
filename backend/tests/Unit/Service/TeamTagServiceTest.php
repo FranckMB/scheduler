@@ -56,29 +56,33 @@ final class TeamTagServiceTest extends TestCase
      * Complément rapide au NR d'intégration `TeamTagScopeTest` : ici on lit le NOM du tag
      * posé, catégorie par catégorie, sans base.
      *
-     * @return iterable<string, array{0: string, 1: int|null, 2: int|null, 3: string|null}>
+     * @return iterable<string, array{0: string, 1: int|null, 2: int|null, 3: list<string>}>
      */
     public static function ageBracketCases(): iterable
     {
-        yield 'U5 → BABY' => ['U5', 3, 5, 'BABY'];
-        yield 'U7 → BABY (dernière année de la tranche)' => ['U7', 6, 7, 'BABY'];
-        yield 'U9 → EMB (première année d\'EMB)' => ['U9', 8, 9, 'EMB'];
-        yield 'U11 → EMB' => ['U11', 10, 11, 'EMB'];
-        yield 'U13 → JEUNE, jamais EMB' => ['U13', 12, 13, 'JEUNE'];
+        yield 'U5 → BABY' => ['U5', 3, 5, ['BABY']];
+        yield 'U7 → BABY (dernière année de la tranche)' => ['U7', 6, 7, ['BABY']];
+        yield 'U9 → EMB (première année d\'EMB)' => ['U9', 8, 9, ['EMB']];
+        yield 'U11 → EMB' => ['U11', 10, 11, ['EMB']];
+        yield 'U13 → JEUNE, jamais EMB' => ['U13', 12, 13, ['JEUNE']];
+        // Volet A — ADULTE (= +18, ageMin >= 19) et SENIOR (= +22) se CHEVAUCHENT.
+        yield 'U21 → ADULTE SEUL (19-21, sous 22)' => ['U21', 19, 21, ['ADULTE']];
+        yield 'Senior → ADULTE + SENIOR (22-99)' => ['Senior', 22, 99, ['ADULTE', 'SENIOR']];
+        yield 'Vétéran → ADULTE + SENIOR (35-99)' => ['Vétéran', 35, 99, ['ADULTE', 'SENIOR']];
         // Sans âge : seul le NOM peut trancher. « Baby basket » entre, « Loisir » non —
         // c'est la paire qui prouve que la règle vise « baby » et n'avale pas toute
         // catégorie sans âge.
-        yield 'Baby basket → BABY par son nom, faute d\'âges' => ['Baby basket', null, null, 'BABY'];
-        yield 'Loisir → aucune tranche' => ['Loisir', null, null, null];
+        yield 'Baby basket → BABY par son nom, faute d\'âges' => ['Baby basket', null, null, ['BABY']];
+        yield 'Loisir → aucune tranche' => ['Loisir', null, null, []];
         // LA frontière de la règle, et le SEUL endroit où elle peut dériver : quand le nom
         // dit « baby » mais que l'âge dit autre chose, c'est l'ÂGE qui tranche. Sans ce
         // cas, inverser la précédence laissait toute la suite verte (revue #352).
-        yield 'nom « Baby » mais âges de U9 → EMB, l\'âge prime' => ['Baby élite', 8, 9, 'EMB'];
-        yield 'nom « Baby » mais âges de U15 → JEUNE, l\'âge prime' => ['Baby compétition', 14, 15, 'JEUNE'];
+        yield 'nom « Baby » mais âges de U9 → EMB, l\'âge prime' => ['Baby élite', 8, 9, ['EMB']];
+        yield 'nom « Baby » mais âges de U15 → JEUNE, l\'âge prime' => ['Baby compétition', 14, 15, ['JEUNE']];
         // `ageMin` seul renseigné : l'API les rend indépendamment optionnels
         // (`SportCategoryInput`). Exiger les DEUX bornes nulles faisait retomber ce cas
         // hors de toutes les branches — le trou que le lot vient boucher (revue #352).
-        yield 'Baby basket avec le seul ageMin → BABY quand même' => ['Baby basket', 3, null, 'BABY'];
+        yield 'Baby basket avec le seul ageMin → BABY quand même' => ['Baby basket', 3, null, ['BABY']];
     }
 
     public function testSyncTeamTagsForU15F(): void
@@ -135,7 +139,8 @@ final class TeamTagServiceTest extends TestCase
         // garçons sans qu'aucun test rougisse.
         $tagNames = array_map(static fn (TeamTagAssignment $a): string => $a->getTagId(), $persistedAssignments);
         sort($tagNames);
-        self::assertSame(['FEMININE', 'JEUNE', 'REGIONAL', 'U15'], $tagNames);
+        // REGIONAL est un niveau NON loisir → l'équipe est aussi taguée COMPETITION (Volet A).
+        self::assertSame(['COMPETITION', 'FEMININE', 'JEUNE', 'REGIONAL', 'U15'], $tagNames);
     }
 
     public function testSyncTeamTagsForSeniorLoisir(): void
@@ -149,6 +154,7 @@ final class TeamTagServiceTest extends TestCase
 
         $sportCategory = new SportCategory;
         $sportCategory->setName('Senior');
+        // ageMin 19 : ADULTE (= +18) mais PAS SENIOR (= +22). Niveau loisir → pas COMPETITION.
         $sportCategory->setAgeMin(19);
         $sportCategory->setAgeMax(99);
 
@@ -188,7 +194,7 @@ final class TeamTagServiceTest extends TestCase
         // Idem : les noms, pas le compte (revue #356).
         $tagNames = array_map(static fn (TeamTagAssignment $a): string => $a->getTagId(), $persistedAssignments);
         sort($tagNames);
-        self::assertSame(['LOISIR_ADULTE', 'MASCULINE', 'SENIOR'], $tagNames);
+        self::assertSame(['ADULTE', 'LOISIR_ADULTE', 'MASCULINE'], $tagNames);
     }
 
     public function testSyncTeamTagsRemovesExistingAssignments(): void
@@ -310,8 +316,11 @@ final class TeamTagServiceTest extends TestCase
         }
     }
 
+    /**
+     * @param list<string> $expected
+     */
     #[DataProvider('ageBracketCases')]
-    public function testAgeBracketTagPerCategory(string $categoryName, ?int $ageMin, ?int $ageMax, ?string $expected): void
+    public function testAgeBracketTagPerCategory(string $categoryName, ?int $ageMin, ?int $ageMax, array $expected): void
     {
         $team = new Team;
         $team->setClubId('club-1');
@@ -341,8 +350,8 @@ final class TeamTagServiceTest extends TestCase
 
         $this->service->syncTeamTags($team, 'season-1');
 
-        $brackets = array_values(array_intersect($assigned, ['BABY', 'EMB', 'JEUNE', 'SENIOR']));
-        self::assertSame(null === $expected ? [] : [$expected], $brackets, \sprintf('tranche d\'âge de « %s »', $categoryName));
+        $brackets = array_values(array_intersect($assigned, ['BABY', 'EMB', 'JEUNE', 'ADULTE', 'SENIOR']));
+        self::assertSame($expected, $brackets, \sprintf('tranche(s) d\'âge de « %s »', $categoryName));
     }
 
     /**

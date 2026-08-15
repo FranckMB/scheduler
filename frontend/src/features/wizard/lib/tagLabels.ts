@@ -12,8 +12,14 @@ const TAG_LABELS: Record<string, string> = {
   MASCULINE: "Homme",
   FEMININE: "Femme",
   MIXTE: "Mixte",
-  // ÂGE
-  SENIOR: "Adulte",
+  // NIVEAU (hors LEVEL_LABEL : COMPETITION n'est pas un TeamLevel)
+  // Engagement en compétition = niveau NON loisir (`TeamTagService::determineTagNames`).
+  COMPETITION: "Compétition (hors loisir)",
+  // ÂGE — ADULTE (« + de 18 », `ageMin >= 19`) et SENIOR (« + de 22 ») se CHEVAUCHENT
+  // (décision fondateur 2026-08-15) : « Senior »/« Vétéran » portent les deux, « U21 »
+  // n'a qu'ADULTE. Le nom d'écran dit la borne pour lever l'ambiguïté.
+  ADULTE: "Adulte (+ de 18)",
+  SENIOR: "Senior (+ de 22)",
   // ⚠ « Jeune (U13-U21) » MENTAIT jusqu'à P4-63 : la règle serveur branche JEUNE sur
   // `ageMin <= 18` (`TeamTagService::determineTagNames`) et U21 a `ageMin` 19
   // (`CategoryCatalog`) — il est donc tagué SENIOR. Un gestionnaire qui posait une

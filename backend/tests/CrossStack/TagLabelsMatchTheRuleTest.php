@@ -82,7 +82,9 @@ final class TagLabelsMatchTheRuleTest extends TestCase
         $drifted = [];
         foreach (self::AGE_TAGS as $tag) {
             $label = $this->labelOf($tag);
-            if (!str_contains($seeder, '\'' . $label . ' ·')) {
+            // Le nom semé est « Groupe <libellé> · <prédicat> » (cible tag préfixée « Groupe »
+            // par le wizard) : on cherche « <libellé> · » sans figer le préfixe.
+            if (!str_contains($seeder, $label . ' ·')) {
                 $drifted[] = \sprintf('%s : « %s » n\'apparaît plus dans les noms semés', $tag, $label);
             }
         }
@@ -110,7 +112,10 @@ final class TagLabelsMatchTheRuleTest extends TestCase
                 continue; // « Baby basket », « Loisir »… : nommés à part dans les libellés
             }
 
-            if ($tag === $service->ageBracketFor($category['name'], $category['ageMin'], $category['ageMax'])) {
+            // `ageBracketsFor` rend un ENSEMBLE depuis le Volet A (ADULTE et SENIOR se
+            // chevauchent) : on teste l'APPARTENANCE. Les AGE_TAGS gardés ici (BABY/EMB/JEUNE)
+            // restent exclusifs, donc l'ensemble n'en contient qu'un pour ces catégories.
+            if (\in_array($tag, $service->ageBracketsFor($category['name'], $category['ageMin'], $category['ageMax']), true)) {
                 $tagged[] = $category['name'];
             }
         }
