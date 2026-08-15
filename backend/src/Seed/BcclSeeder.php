@@ -19,6 +19,8 @@ use App\Entity\SportCategory;
 use App\Entity\SubscriptionPlan;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamTag;
+use App\Entity\TeamTagAssignment;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
@@ -32,6 +34,7 @@ use App\Enum\LockLevel;
 use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
+use App\Enum\TeamTagAxis;
 use App\Service\Basketball\CategoryCatalog;
 use App\Service\LeagueResolver;
 use App\Service\SchedulePlanProvisioner;
@@ -356,7 +359,7 @@ final class BcclSeeder
             // Matéo — Tue
             ['vMateo', 2, '17:30', 90, 1],
             ['vMateo', 2, '19:00', 105, 1],
-            ['vMateo', 2, '20:45', 115, 1],
+            ['vMateo', 2, '20:45', 105, 1],
             // Matéo — Wed
             ['vMateo', 3, '09:30', 75, 1],
             // Mer 16:00 partagé U11F2/U9M1, 17:30 partagé U11F1/U11M2 (ex-CEC, Matéo divisible en 2).
@@ -929,8 +932,52 @@ final class BcclSeeder
         $manager->flush();
 
         // --- TIME (heures de début, portée club par tranche d'âge) ---
+        // --- Tags MAISON « en compétition » (décision fondateur 2026-08-15) ---------------
+        // La règle du week-end visait « toutes les équipes » : trop large. Une équipe qui JOUE
+        // le week-end ne s'entraîne pas le week-end ; Baby/Micro/Académies/Loisirs, eux, n'ont
+        // pas de match — leur samedi est légitime. Idem « adultes ≥ 18h50 » : elle attrapait le
+        // Basket Santé (senior d'âge, mais LOISIR). Deux tags, parce qu'une contrainte ne cible
+        // QU'UN tag : ni intersection (« SENIOR et COMPÉTITION »), ni exclusion (« sauf loisir »).
+        $competitionTags = ['COMPETITION' => '#B71C1C', 'SENIOR_COMPETITION' => '#7B1FA2'];
+        $tagIds = [];
+        foreach ($competitionTags as $tagName => $tagColor) {
+            $tag = $manager->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => $tagName]);
+            if (!$tag instanceof TeamTag) {
+                $tag = new TeamTag;
+                $tag->setClubId($club->getId());
+                $tag->setName($tagName);
+                $tag->setColor($tagColor);
+                $tag->setAxis(TeamTagAxis::NIVEAU);
+                $manager->persist($tag);
+                $manager->flush();
+            }
+            $tagIds[$tagName] = $tag->getId();
+        }
+        $seniorTag = $manager->getRepository(TeamTag::class)->findOneBy(['clubId' => $club->getId(), 'name' => 'SENIOR']);
+        foreach ($teams as $teamToTag) {
+            if (\in_array($teamToTag->getLevel(), [TeamLevel::LOISIR_ADULTE, TeamLevel::LOISIR_JEUNE], true)) {
+                continue;
+            }
+            $wanted = [$tagIds['COMPETITION']];
+            if ($seniorTag instanceof TeamTag && $manager->getRepository(TeamTagAssignment::class)->findOneBy(['teamId' => $teamToTag->getId(), 'tagId' => $seniorTag->getId()]) instanceof TeamTagAssignment) {
+                $wanted[] = $tagIds['SENIOR_COMPETITION'];
+            }
+            foreach ($wanted as $tagId) {
+                if ($manager->getRepository(TeamTagAssignment::class)->findOneBy(['teamId' => $teamToTag->getId(), 'tagId' => $tagId]) instanceof TeamTagAssignment) {
+                    continue;
+                }
+                $assignment = new TeamTagAssignment;
+                $assignment->setClubId($club->getId());
+                $assignment->setSeasonId($season->getId());
+                $assignment->setTeamId($teamToTag->getId());
+                $assignment->setTagId($tagId);
+                $manager->persist($assignment);
+            }
+        }
+        $manager->flush();
+
         $addConstraint('EMB (U9/U11) - Début au premier créneau (max 17h30)', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '17:30', 'targetTag' => 'EMB']);
-        $addConstraint('Adultes - Début minimum 18h50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTag' => 'SENIOR']);
+        $addConstraint('Seniors en compétition - Début minimum 18h50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['minStartTime' => '18:50', 'targetTag' => 'SENIOR_COMPETITION']);
         $addConstraint('Jeunes - Début maximum 19h50', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:50', 'targetTag' => 'JEUNE']);
         // U15 : finir à 20h30 max ≈ début max 19h00 (séances ~90 min ; le modèle a maxStartTime, pas maxEndTime).
         $addConstraint('U15 - Fin 20h30 max (début max 19h00)', ConstraintScope::CLUB, null, ConstraintFamily::TIME, ConstraintRuleType::HARD, ['maxStartTime' => '19:00', 'targetTag' => 'U15']);
@@ -952,7 +999,7 @@ final class BcclSeeder
         // fondateur 2026-08-12, qui remplace un premier essai mal nommé n'interdisant que
         // le samedi. Le builder éclate cette règle CLUB en une contrainte par équipe ;
         // les réservations HARD du samedi (académies, Baby) restent posées (pré-placées).
-        $addConstraint('Toutes les équipes · pas samedi, dimanche', ConstraintScope::CLUB, null, ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [6, 7]]);
+        $addConstraint('Compétition · pas samedi, dimanche', ConstraintScope::CLUB, null, ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [6, 7], 'targetTag' => 'COMPETITION']);
 
         // --- FACILITY (gymnases imposés / interdits / préférés) ---
         $addConstraint('Jean Vilar - Pas équipes féminines', ConstraintScope::CLUB, null, ConstraintFamily::FACILITY, ConstraintRuleType::HARD, ['forbiddenVenueId' => $venues['vJeanVilar']->getId(), 'targetTag' => 'FEMININE']);
@@ -1004,110 +1051,66 @@ final class BcclSeeder
 
         // JDR Saturday — Academie hard-locked sessions
         $additionalSlots = [
-            // ============================================================
-            // LE PLANNING VALIDÉ 2025-26, transcrit séance par séance (P5-13,
-            // relevé fondateur du 2026-08-14). Ces réservations HARD SONT la
-            // transcription du réel : le planning viole certaines fenêtres
-            // déclarées (U18F3 après 19h50, activités du samedi…) — exceptions
-            // assumées du gestionnaire, que seule une réservation SOUVERAINE
-            // sait exprimer. À 90 séances pour 90 places (zéro marge), le
-            // solveur libre n'a AUCUNE solution légale sans elles.
-            // --- Lundi ---
-            ['team' => $teams['Section J.Macé'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U9F1'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U9F2'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15F1'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SM2'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13M1'], 'venue' => 'vArmand', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13M2'], 'venue' => 'vArmand', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18M1'], 'venue' => 'vArmand', 'day' => 1, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Training Individuel'], 'venue' => 'vArmand', 'day' => 1, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13F2'], 'venue' => 'vTonkin', 'day' => 1, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13F1'], 'venue' => 'vDebarros', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18F1'], 'venue' => 'vDebarros', 'day' => 1, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SF3'], 'venue' => 'vDebarrosAnnexe', 'day' => 1, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            // --- Mardi ---
-            ['team' => $teams['U11M1'], 'venue' => 'vArmand', 'day' => 2, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18M2'], 'venue' => 'vArmand', 'day' => 2, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U11F2'], 'venue' => 'vDebarros', 'day' => 2, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15F3'], 'venue' => 'vDebarros', 'day' => 2, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SF1'], 'venue' => 'vDebarros', 'day' => 2, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15F2'], 'venue' => 'vDebarrosAnnexe', 'day' => 2, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Loisir 1'], 'venue' => 'vCamus', 'day' => 2, 'startTime' => '20:00', 'duration' => 150, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13F2'], 'venue' => 'vJdr', 'day' => 2, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13F3'], 'venue' => 'vJdr', 'day' => 2, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18F2'], 'venue' => 'vJdr', 'day' => 2, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18F3'], 'venue' => 'vJdr', 'day' => 2, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15M1'], 'venue' => 'vMateo', 'day' => 2, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U21M1'], 'venue' => 'vMateo', 'day' => 2, 'startTime' => '19:00', 'duration' => 105, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SM1'], 'venue' => 'vMateo', 'day' => 2, 'startTime' => '20:45', 'duration' => 115, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15M2'], 'venue' => 'vJeanVilar', 'day' => 2, 'startTime' => '18:45', 'duration' => 105, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SM4'], 'venue' => 'vJeanVilar', 'day' => 2, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            // --- Mercredi ---
+            // SM1
+            ['team' => $sm1, 'venue' => 'vMateo', 'day' => 2, 'startTime' => '20:45', 'duration' => 105, 'lock' => LockLevel::HARD],
+            ['team' => $sm1, 'venue' => 'vMateo', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            // SM2
+            ['team' => $sm2, 'venue' => 'vJdr', 'day' => 4, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            // SF2
+            ['team' => $sf2, 'venue' => 'vJdr', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            // SF1
+            ['team' => $sf1, 'venue' => 'vDebarros', 'day' => 2, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            ['team' => $sf1, 'venue' => 'vMateo', 'day' => 3, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            // Loisir Feminine
+            ['team' => $loisirFeminine, 'venue' => 'vDebarros', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            // 3x3
+            ['team' => $team3x3, 'venue' => 'vAdn', 'day' => 3, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            // SM3
+            ['team' => $sm3, 'venue' => 'vArmand', 'day' => 3, 'startTime' => '20:15', 'duration' => 135, 'lock' => LockLevel::HARD],
+            // Training indiv
+            ['team' => $trainigIndiv, 'venue' => 'vArmand', 'day' => 1, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            // JDR Saturday academies
+            ['team' => $academieU9U11, 'venue' => 'vJdr', 'day' => 6, 'startTime' => '09:00', 'duration' => 75, 'lock' => LockLevel::HARD],
+            ['team' => $academieU13U15, 'venue' => 'vJdr', 'day' => 6, 'startTime' => '10:15', 'duration' => 75, 'lock' => LockLevel::HARD],
+            ['team' => $academieU18, 'venue' => 'vJdr', 'day' => 6, 'startTime' => '11:30', 'duration' => 75, 'lock' => LockLevel::HARD],
+            // Matéo Saturday morning — Baby & Micro Basket
+            ['team' => $microBasket, 'venue' => 'vMateo', 'day' => 6, 'startTime' => '09:00', 'duration' => 45, 'lock' => LockLevel::HARD],
+            ['team' => $baby1, 'venue' => 'vMateo', 'day' => 6, 'startTime' => '09:45', 'duration' => 60, 'lock' => LockLevel::HARD],
+            ['team' => $baby2, 'venue' => 'vMateo', 'day' => 6, 'startTime' => '10:45', 'duration' => 60, 'lock' => LockLevel::HARD],
+            // Mercredi jeunes (ex-CEC, désormais des séances d'équipe individuelles sur
+            // des courts partagés) — ADN 17:30 en 3 (U9F1/U9F2/U9M2), Matéo 16:00 en 2
+            // (U11F2/U9M1) et Matéo 17:30 en 2 (U11F1/U11M2), d'où les capacités 3/2/2.
             ['team' => $teams['U9F1'], 'venue' => 'vAdn', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
             ['team' => $teams['U9F2'], 'venue' => 'vAdn', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
             ['team' => $teams['U9M2'], 'venue' => 'vAdn', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18F1'], 'venue' => 'vAdn', 'day' => 3, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Mercredi Shark U9-U11'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '09:30', 'duration' => 75, 'lock' => LockLevel::HARD],
             ['team' => $teams['U11F2'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
             ['team' => $teams['U9M1'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
             ['team' => $teams['U11F1'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
             ['team' => $teams['U11M2'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15F1'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SF1'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            // --- Réservations posées sur le terrain (état 2026-08-05) ---
+            ['team' => $teams['Basket Santé'], 'venue' => 'vDebarrosAnnexe', 'day' => 3, 'startTime' => '10:45', 'duration' => 75, 'lock' => LockLevel::HARD],
+            ['team' => $teams['Section J.Macé'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['Section J.Macé'], 'venue' => 'vMateo', 'day' => 4, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['Section J.Macé'], 'venue' => 'vMateo', 'day' => 5, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U18M Fays'], 'venue' => 'vDebarros', 'day' => 5, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U18F Fays'], 'venue' => 'vDebarros', 'day' => 4, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U13M1'], 'venue' => 'vArmand', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U13M2'], 'venue' => 'vArmand', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
             ['team' => $teams['U13F1'], 'venue' => 'vArmand', 'day' => 3, 'startTime' => '14:00', 'duration' => 105, 'lock' => LockLevel::HARD],
             ['team' => $teams['U13F2'], 'venue' => 'vArmand', 'day' => 3, 'startTime' => '14:00', 'duration' => 105, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13M1'], 'venue' => 'vArmand', 'day' => 3, 'startTime' => '15:45', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15M1'], 'venue' => 'vArmand', 'day' => 3, 'startTime' => '17:15', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18M1'], 'venue' => 'vArmand', 'day' => 3, 'startTime' => '18:45', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SM3'], 'venue' => 'vArmand', 'day' => 3, 'startTime' => '20:15', 'duration' => 135, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13F3'], 'venue' => 'vTonkin', 'day' => 3, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13M2'], 'venue' => 'vTonkin', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18F2'], 'venue' => 'vTonkin', 'day' => 3, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SF2'], 'venue' => 'vTonkin', 'day' => 3, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Basket Santé'], 'venue' => 'vDebarrosAnnexe', 'day' => 3, 'startTime' => '10:45', 'duration' => 75, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U11M1'], 'venue' => 'vDebarrosAnnexe', 'day' => 3, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15F3'], 'venue' => 'vDebarrosAnnexe', 'day' => 3, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SF3'], 'venue' => 'vDebarrosAnnexe', 'day' => 3, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['3x3'], 'venue' => 'vAdn', 'day' => 3, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            // --- Jeudi ---
-            ['team' => $teams['U11M2'], 'venue' => 'vArmand', 'day' => 4, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18F Fays'], 'venue' => 'vDebarros', 'day' => 4, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15M1'], 'venue' => 'vDebarros', 'day' => 4, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U21M1'], 'venue' => 'vDebarros', 'day' => 4, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Loisir Feminine'], 'venue' => 'vDebarros', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Loisir 3'], 'venue' => 'vCamus', 'day' => 4, 'startTime' => '20:00', 'duration' => 150, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U13F2'], 'venue' => 'vJdr', 'day' => 2, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U13F3'], 'venue' => 'vJdr', 'day' => 2, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U18F3'], 'venue' => 'vJdr', 'day' => 2, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U18F3'], 'venue' => 'vArmand', 'day' => 5, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U9F1'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
+            ['team' => $teams['U9F2'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
             ['team' => $teams['U9M1'], 'venue' => 'vJdr', 'day' => 4, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
             ['team' => $teams['U9M2'], 'venue' => 'vJdr', 'day' => 4, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SM2'], 'venue' => 'vJdr', 'day' => 4, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SF2'], 'venue' => 'vJdr', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Section J.Macé'], 'venue' => 'vMateo', 'day' => 4, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13F1'], 'venue' => 'vMateo', 'day' => 4, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18F1'], 'venue' => 'vMateo', 'day' => 4, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['SM1'], 'venue' => 'vMateo', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18M2'], 'venue' => 'vJeanVilar', 'day' => 4, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U21M2'], 'venue' => 'vJeanVilar', 'day' => 4, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            // --- Vendredi ---
-            ['team' => $teams['Section J.Macé'], 'venue' => 'vMateo', 'day' => 5, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13M1'], 'venue' => 'vMateo', 'day' => 5, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18M1'], 'venue' => 'vMateo', 'day' => 5, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Veterans'], 'venue' => 'vMateo', 'day' => 5, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U11F1'], 'venue' => 'vArmand', 'day' => 5, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15M2'], 'venue' => 'vArmand', 'day' => 5, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18F3'], 'venue' => 'vArmand', 'day' => 5, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U18M Fays'], 'venue' => 'vDebarros', 'day' => 5, 'startTime' => '16:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U13M2'], 'venue' => 'vDebarros', 'day' => 5, 'startTime' => '17:30', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15F1'], 'venue' => 'vDebarros', 'day' => 5, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U21M2'], 'venue' => 'vDebarros', 'day' => 5, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
-            ['team' => $teams['U15F2'], 'venue' => 'vDebarrosAnnexe', 'day' => 5, 'startTime' => '19:00', 'duration' => 90, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Loisir 2'], 'venue' => 'vCamus', 'day' => 5, 'startTime' => '20:00', 'duration' => 150, 'lock' => LockLevel::HARD],
-            // --- Samedi ---
-            ['team' => $teams['Micro Basket'], 'venue' => 'vMateo', 'day' => 6, 'startTime' => '09:00', 'duration' => 45, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Baby 1'], 'venue' => 'vMateo', 'day' => 6, 'startTime' => '09:45', 'duration' => 60, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Baby 2'], 'venue' => 'vMateo', 'day' => 6, 'startTime' => '10:45', 'duration' => 60, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Academie U9-U11'], 'venue' => 'vJdr', 'day' => 6, 'startTime' => '09:00', 'duration' => 75, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Academie U13-U15'], 'venue' => 'vJdr', 'day' => 6, 'startTime' => '10:15', 'duration' => 75, 'lock' => LockLevel::HARD],
-            ['team' => $teams['Academie U18'], 'venue' => 'vJdr', 'day' => 6, 'startTime' => '11:30', 'duration' => 75, 'lock' => LockLevel::HARD],
+            // mercredi shark a mateo
+            ['team' => $teams['Mercredi Shark U9-U11'], 'venue' => 'vMateo', 'day' => 3, 'startTime' => '09:30', 'duration' => 75, 'lock' => LockLevel::HARD],
+            // --- Ancre saison (reconstruction du planning validé, 2026-08-14) ---
+            // SM2 : sa 2e séance est un créneau fixe le lundi soir à Matéo (l'autre reste JDR jeu 19:00).
+            ['team' => $teams['SM2'], 'venue' => 'vMateo', 'day' => 1, 'startTime' => '20:30', 'duration' => 120, 'lock' => LockLevel::HARD],
         ];
 
         // Les 4 règles de bien-être en PRÉFÉRÉ : l'état RÉEL du club (fondateur,

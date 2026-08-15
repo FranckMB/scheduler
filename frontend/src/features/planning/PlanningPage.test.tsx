@@ -557,6 +557,36 @@ describe("PlanningPage (integration)", () => {
     raf.mockRestore();
   });
 
+  // Retour fondateur 2026-08-15 — le chemin SURLIGNAGE (diagnostics sans jour/heure : warnings,
+  // infos) illuminait les créneaux concernés SANS amener la grille dessus : « je dois chercher
+  // pour le trouver ». Le premier créneau surligné est désormais centré, même recette que le
+  // clic-conflict.
+  it("cliquer un diagnostic à surlignage CENTRE le premier créneau concerné", async () => {
+    const user = userEvent.setup();
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => (cb(0), 0));
+    const scrolled: Element[] = [];
+    const originalScroll = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    // Un warning SANS jour/heure : il ne peut que surligner (rapprochement par équipe).
+    vi.mocked(getDiagnostics).mockResolvedValue([
+      { id: "wa", scheduleId: SID, type: "constraint_not_honored", severity: "WARNING", teamId: "team-1", venueId: null, coachId: null, dayOfWeek: null, startTime: null, ruleKey: null, message: "Règle non honorée.", suggestions: [] },
+    ]);
+    renderWithProviders(<PlanningPage />);
+    await screen.findByText("U11");
+
+    await user.click(screen.getByRole("button", { name: /Diagnostics du système/ }));
+    await user.click(await screen.findByRole("button", { name: /Alertes/ }));
+    await user.click(screen.getByText("Règle non honorée."));
+
+    // La cellule surlignée (data-slot-id) a été amenée à l'écran.
+    expect(scrolled.some((el) => null !== el.getAttribute("data-slot-id"))).toBe(true);
+
+    Element.prototype.scrollIntoView = originalScroll;
+    raf.mockRestore();
+  });
+
   it("ouvre les diagnostics au sortir du WIZARD, et les laisse repliés en boucle de travail (P4-40)", async () => {
     // Retour terrain : « sinon on risque de ne pas le voir si on n'est pas familier avec
     // l'écran génération ». La règle est CONTEXTUELLE — elle ne contredit pas la demande
