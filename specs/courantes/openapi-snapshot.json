@@ -23258,6 +23258,12 @@
                             "null"
                         ]
                     },
+                    "ruleKey": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "message": {
                         "default": "",
                         "type": "string"
@@ -23270,6 +23276,24 @@
                                 "null"
                             ]
                         }
+                    },
+                    "causes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        }
+                    },
+                    "openCandidates": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -23409,6 +23433,12 @@
                             "null"
                         ]
                     },
+                    "ruleKey": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "message": {
                         "default": "",
                         "type": "string"
@@ -23421,6 +23451,24 @@
                                 "null"
                             ]
                         }
+                    },
+                    "causes": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            }
+                        }
+                    },
+                    "openCandidates": {
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -23495,6 +23543,12 @@
                                     "null"
                                 ]
                             },
+                            "ruleKey": {
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
                             "message": {
                                 "default": "",
                                 "type": "string"
@@ -23507,6 +23561,24 @@
                                         "null"
                                     ]
                                 }
+                            },
+                            "causes": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": [
+                                            "string",
+                                            "null"
+                                        ]
+                                    }
+                                }
+                            },
+                            "openCandidates": {
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
                             }
                         }
                     }

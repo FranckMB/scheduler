@@ -76,6 +76,13 @@ class ScheduleDiagnosticResource
     #[Groups(['read'])]
     public array $suggestions = [];
 
+    /** @var list<array<string, mixed>> */
+    #[Groups(['read'])]
+    public array $causes = [];
+
+    #[Groups(['read'])]
+    public ?int $openCandidates = null;
+
     public static function fromEntity(ScheduleDiagnostic $entity): self
     {
         $dto = new self;
@@ -94,6 +101,8 @@ class ScheduleDiagnosticResource
         $dto->ruleKey = $entity->getRuleKey();
         $dto->message = $entity->getMessage();
         $dto->suggestions = $entity->getSuggestions();
+        $dto->causes = $entity->getCauses();
+        $dto->openCandidates = $entity->getOpenCandidates();
 
         return $dto;
     }

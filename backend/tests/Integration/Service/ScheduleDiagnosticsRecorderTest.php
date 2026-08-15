@@ -29,6 +29,12 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
  * les 10 autres types de diagnostic les laissent NULL — et que les mappages existants
  * (team/coach/venue, sévérité) + la purge restent inchangés.
  *
+ * P4-99 — étend la garde à `session_below_effective_min` : `causes` (liste
+ * {kind, constraintId, label, count}) + `openCandidates` entrent en base, DANS LES DEUX CASSES,
+ * et le `constraintId` de chaque cause est NORMALISÉ (le suffixe `:teamId` / `:forbidden:teamId`
+ * que le builder ajoute est coupé au premier deux-points, l'UUID nu reste intact) pour que le
+ * deep-link wizard `?edit=<id>` résolve. `openCandidates` distingue NULL (non mesuré) de 0.
+ *
  * Additive display data → pas de step `blocking-tests` : tourne dans `unit-tests` (phpunit tests/).
  */
 #[Group('phase1')]
@@ -43,6 +49,8 @@ final class ScheduleDiagnosticsRecorderTest extends KernelTestCase
     private const string TEAM_ID = '22222222-2222-4222-8222-222222222222';
 
     private const string COACH_ID = '33333333-3333-4333-8333-333333333333';
+
+    private const string CONSTRAINT_ID = '44444444-4444-4444-8444-444444444444';
 
     private EntityManagerInterface $em;
 
@@ -129,6 +137,158 @@ final class ScheduleDiagnosticsRecorderTest extends KernelTestCase
         self::assertSame(ScheduleDiagnosticSeverity::WARNING, $diagnostic->getSeverity());
         self::assertNull($diagnostic->getDayOfWeek());
         self::assertNull($diagnostic->getStartTime());
+    }
+
+    public function testSessionCausesAndOpenCandidatesArePersisted(): void
+    {
+        $schedule = $this->seedSchedule();
+
+        $this->recorder->record($schedule, ['diagnostics' => [[
+            'type' => 'session_below_effective_min',
+            'severity' => 'WARNING',
+            'teamId' => self::TEAM_ID,
+            'message' => 'Une séance manque à cette équipe.',
+            'causes' => [
+                ['kind' => 'venue_forbidden', 'constraintId' => self::CONSTRAINT_ID, 'label' => 'Gymnase interdit', 'count' => 3],
+            ],
+            'openCandidates' => 2,
+        ]]]);
+        $this->em->flush();
+
+        $diagnostic = $this->onlyDiagnostic($schedule);
+        self::assertSame('session_below_effective_min', $diagnostic->getType());
+        self::assertSame(2, $diagnostic->getOpenCandidates());
+        $causes = $diagnostic->getCauses();
+        self::assertCount(1, $causes);
+        self::assertSame('venue_forbidden', $causes[0]['kind']);
+        self::assertSame(self::CONSTRAINT_ID, $causes[0]['constraintId']);
+        self::assertSame(3, $causes[0]['count']);
+    }
+
+    public function testTeamSuffixedConstraintIdIsNormalisedToTheEntityUuid(): void
+    {
+        $schedule = $this->seedSchedule();
+
+        // The builder suffixes a CLUB constraint expanded per team: `<uuid>:<teamId>`.
+        $this->recorder->record($schedule, ['diagnostics' => [[
+            'type' => 'session_below_effective_min',
+            'severity' => 'WARNING',
+            'teamId' => self::TEAM_ID,
+            'message' => 'Séance manquante.',
+            'causes' => [
+                ['kind' => 'day_forbidden', 'constraintId' => self::CONSTRAINT_ID . ':' . self::TEAM_ID, 'label' => 'Jour interdit', 'count' => 1],
+            ],
+        ]]]);
+        $this->em->flush();
+
+        $causes = $this->onlyDiagnostic($schedule)->getCauses();
+        self::assertSame(self::CONSTRAINT_ID, $causes[0]['constraintId'], 'Le suffixe :teamId est coupé au premier deux-points.');
+    }
+
+    public function testForbiddenSuffixedConstraintIdIsNormalisedToTheEntityUuid(): void
+    {
+        $schedule = $this->seedSchedule();
+
+        // The other suffix form: `<uuid>:forbidden:<teamId>` (venue dedicated to a tag).
+        $this->recorder->record($schedule, ['diagnostics' => [[
+            'type' => 'session_below_effective_min',
+            'severity' => 'WARNING',
+            'teamId' => self::TEAM_ID,
+            'message' => 'Séance manquante.',
+            'causes' => [
+                ['kind' => 'forced_venue_elsewhere', 'constraintId' => self::CONSTRAINT_ID . ':forbidden:' . self::TEAM_ID, 'label' => 'Gymnase dédié', 'count' => 4],
+            ],
+        ]]]);
+        $this->em->flush();
+
+        $causes = $this->onlyDiagnostic($schedule)->getCauses();
+        self::assertSame(self::CONSTRAINT_ID, $causes[0]['constraintId'], 'Le suffixe :forbidden:teamId est coupé au premier deux-points, restituant l\'UUID nu.');
+    }
+
+    public function testBareConstraintIdIsLeftIntact(): void
+    {
+        $schedule = $this->seedSchedule();
+
+        // A real TEAM/COACH constraint arrives un-suffixed: it must NOT be touched.
+        $this->recorder->record($schedule, ['diagnostics' => [[
+            'type' => 'session_below_effective_min',
+            'severity' => 'WARNING',
+            'teamId' => self::TEAM_ID,
+            'message' => 'Séance manquante.',
+            'causes' => [
+                ['kind' => 'time_window', 'constraintId' => self::CONSTRAINT_ID, 'label' => 'Fenêtre horaire', 'count' => 2],
+            ],
+        ]]]);
+        $this->em->flush();
+
+        $causes = $this->onlyDiagnostic($schedule)->getCauses();
+        self::assertSame(self::CONSTRAINT_ID, $causes[0]['constraintId'], 'Un id nu (sans suffixe) reste intact.');
+    }
+
+    public function testOpenCandidatesDistinguishesNullFromZero(): void
+    {
+        // Absent → NULL (not measured). Explicit 0 → 0 (nothing stayed open). The product
+        // signal lives in this distinction — a smallint nullable carries it.
+        $scheduleAbsent = $this->seedSchedule();
+        $this->recorder->record($scheduleAbsent, ['diagnostics' => [[
+            'type' => 'session_below_effective_min',
+            'severity' => 'WARNING',
+            'teamId' => self::TEAM_ID,
+            'message' => 'Séance manquante, cause non mesurée.',
+        ]]]);
+        $this->em->flush();
+        self::assertNull($this->onlyDiagnostic($scheduleAbsent)->getOpenCandidates(), 'Champ absent → NULL (non mesuré).');
+
+        $scheduleZero = $this->seedSchedule();
+        $this->recorder->record($scheduleZero, ['diagnostics' => [[
+            'type' => 'session_below_effective_min',
+            'severity' => 'WARNING',
+            'teamId' => self::TEAM_ID,
+            'message' => 'Séance manquante, aucun créneau resté ouvert.',
+            'openCandidates' => 0,
+        ]]]);
+        $this->em->flush();
+        self::assertSame(0, $this->onlyDiagnostic($scheduleZero)->getOpenCandidates(), '0 explicite → 0 (aucun resté ouvert).');
+    }
+
+    public function testSnakeCaseCauseAndOpenCandidatesAreAlsoAccepted(): void
+    {
+        $schedule = $this->seedSchedule();
+
+        $this->recorder->record($schedule, ['diagnostics' => [[
+            'type' => 'session_below_effective_min',
+            'severity' => 'WARNING',
+            'team_id' => self::TEAM_ID,
+            'message' => 'Séance manquante.',
+            'causes' => [
+                ['kind' => 'hard_lock', 'constraint_id' => self::CONSTRAINT_ID . ':' . self::TEAM_ID, 'label' => 'Verrou', 'count' => 1],
+            ],
+            'open_candidates' => 5,
+        ]]]);
+        $this->em->flush();
+
+        $diagnostic = $this->onlyDiagnostic($schedule);
+        self::assertSame(5, $diagnostic->getOpenCandidates());
+        $causes = $diagnostic->getCauses();
+        self::assertSame(self::CONSTRAINT_ID, $causes[0]['constraintId'], 'constraintId snake_case est lu, normalisé et restitué en camelCase.');
+        self::assertArrayNotHasKey('constraint_id', $causes[0], 'La variante snake_case ne subsiste pas dans la donnée stockée.');
+    }
+
+    public function testOtherDiagnosticTypesLeaveCausesEmptyAndOpenCandidatesNull(): void
+    {
+        $schedule = $this->seedSchedule();
+
+        $this->recorder->record($schedule, ['diagnostics' => [[
+            'type' => 'unplaced',
+            'severity' => 'WARNING',
+            'teamId' => self::TEAM_ID,
+            'message' => 'Équipe non placée.',
+        ]]]);
+        $this->em->flush();
+
+        $diagnostic = $this->onlyDiagnostic($schedule);
+        self::assertSame([], $diagnostic->getCauses());
+        self::assertNull($diagnostic->getOpenCandidates());
     }
 
     public function testPurgePreviousRemovesEarlierRunsForThisSchedule(): void

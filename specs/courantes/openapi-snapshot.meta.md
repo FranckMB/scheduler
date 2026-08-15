@@ -1,6 +1,13 @@
-Last verified @ 2026-08-14 (JSON **régénéré** — P2-28 PR 2 : nouvelle ressource `ImplicitRuleSetting` (règles implicites bien-être réglables) + `ScheduleDiagnostic` gagne `ruleKey`)
+Last verified @ 2026-08-15 (JSON **régénéré** — P4-99 PR 2 : `ScheduleDiagnosticResource` gagne `causes` (liste) + `openCandidates` (int|null))
 
 Changements récents :
+- **P4-99 PR 2 — la cause mesurée d'une séance manquante (2026-08-15)** : `ScheduleDiagnosticResource`
+  gagne `causes` (liste de `{kind, constraintId, label, count}`, défaut `[]`) et `openCandidates`
+  (int|null — `null` = non mesuré, `0` = aucun créneau resté ouvert), renseignés **seulement** par
+  le type `session_below_effective_min` (les 10 autres restent `[]`/`null`). Contrat backend⇄engine
+  **2.8 INCHANGÉ** (les champs, émis par l'engine en PR 1, n'étaient jusqu'ici pas importés). Le
+  `constraintId` de chaque cause est normalisé côté backend (suffixe `:teamId` retiré) pour le
+  deep-link wizard. Property-only sur les 3 endpoints portant la ressource : 0 path ajouté/retiré.
 - **P2-28 PR 2 — règles implicites « bien-être » réglables (2026-08-14)** : nouvelle ressource
   `ImplicitRuleSetting` (identifiant = `ruleKey`) avec `GET /api/implicit_rule_settings`
   (collection RÉSOLUE, toujours 4), `GET/PUT/DELETE /api/implicit_rule_settings/{ruleKey}`

@@ -4,15 +4,22 @@ declare(strict_types=1);
 
 namespace App\Tests\CrossStack;
 
+use App\ApiResource\ScheduleDiagnosticResource;
 use App\Entity\Coach;
 use App\Entity\Constraint;
+use App\Entity\Schedule;
+use App\Entity\ScheduleDiagnostic;
 use App\Entity\Team;
 use App\Entity\Venue;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Service\DiagnosticMessageBuilder;
 use App\Service\EngineClient;
 use App\Service\ScheduleConstraintBuilder;
+use App\Service\ScheduleDiagnosticsRecorder;
+use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\EntityRepository;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -97,6 +104,75 @@ final class ContractSchemaTest extends TestCase
         self::assertArrayHasKey('slots', $data);
         self::assertArrayHasKey('diagnostics', $data);
         self::assertArrayHasKey('metrics', $data);
+    }
+
+    /**
+     * NR — axe §7.1 « backend↔engine contract » : la CAUSE mesurée émise par l'engine
+     * (contrat 2.8, `session_below_effective_min.causes` + `openCandidates`) traverse l'import
+     * du backend jusqu'à l'API, sans se perdre. Le mock engine renvoie le diagnostic ; le
+     * recorder le PERSISTE (constraintId suffixé `:teamId` normalisé en UUID nu) ; la resource
+     * l'EXPOSE. Sans cette garde, les deux champs restaient mort-nés (le recorder ne mappait
+     * que ce qu'il connaissait) — l'objet même du lot.
+     */
+    #[Group('phase1')]
+    public function testEngineSessionCausesArePersistedAndExposed(): void
+    {
+        // Le mock engine renvoie un `session_below_effective_min` portant la cause structurée +
+        // openCandidates. Le constraintId est SUFFIXÉ `:team-1` comme le builder le produit en
+        // éclatant une contrainte CLUB en N contraintes TEAM.
+        $engineBody = json_encode([
+            'status' => 'completed',
+            'score' => 0,
+            'slots' => [],
+            'metrics' => ['solver_version' => 'test', 'nb_variables' => 0, 'nb_constraints' => 0, 'wall_time_ms' => 0],
+            'diagnostics' => [[
+                'type' => 'session_below_effective_min',
+                'severity' => 'WARNING',
+                'teamId' => 'team-1',
+                'message' => 'Une séance manque à cette équipe.',
+                'causes' => [
+                    ['kind' => 'venue_forbidden', 'constraintId' => 'constraint-1:team-1', 'label' => 'Gymnase interdit', 'count' => 3],
+                ],
+                'openCandidates' => 2,
+            ]],
+        ], \JSON_THROW_ON_ERROR);
+
+        $client = new MockHttpClient(static fn (): MockResponse => new MockResponse($engineBody, ['http_code' => 200]));
+        $result = $client->request('POST', self::engineUrl(), ['json' => $this->buildPayload()])->toArray(false);
+
+        // Import : le recorder persiste. EM mocké (findBy => [] pour les name-maps), on capture
+        // l'entité persistée — la persistance se PROUVE sur l'entité, pas via une DB ici.
+        $captured = [];
+        $repository = $this->createMock(EntityRepository::class);
+        $repository->method('findBy')->willReturn([]);
+        $entityManager = $this->createMock(EntityManagerInterface::class);
+        $entityManager->method('getRepository')->willReturn($repository);
+        $entityManager->method('persist')->willReturnCallback(static function (object $entity) use (&$captured): void {
+            $captured[] = $entity;
+        });
+
+        $schedule = new Schedule;
+        $schedule->setClubId(self::CLUB_ID)->setSeasonId(self::SEASON_ID);
+
+        new ScheduleDiagnosticsRecorder($entityManager, new DiagnosticMessageBuilder)->record($schedule, $result);
+
+        self::assertCount(1, $captured);
+        $entity = $captured[0];
+        self::assertInstanceOf(ScheduleDiagnostic::class, $entity);
+
+        // Persistance : la cause survit, l'id suffixé est normalisé en UUID nu, openCandidates aussi.
+        self::assertSame(2, $entity->getOpenCandidates());
+        $causes = $entity->getCauses();
+        self::assertCount(1, $causes);
+        self::assertSame('venue_forbidden', $causes[0]['kind']);
+        self::assertSame('constraint-1', $causes[0]['constraintId'], 'Le suffixe :team-1 est coupé — le deep-link wizard résoudra.');
+        self::assertSame(3, $causes[0]['count']);
+
+        // Exposition : la resource porte les deux champs.
+        $dto = ScheduleDiagnosticResource::fromEntity($entity);
+        self::assertSame(2, $dto->openCandidates);
+        self::assertSame('constraint-1', $dto->causes[0]['constraintId']);
+        self::assertSame(3, $dto->causes[0]['count']);
     }
 
     private function buildPayload(): array
