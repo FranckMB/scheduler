@@ -170,8 +170,10 @@ jobs:
       - name: Start services
         run: docker compose up -d --wait php-fpm postgres redis
 
-      - name: Install PHP deps
-        run: docker compose exec -T php-fpm composer install --no-interaction
+      # P4-100 — cache de backend/vendor + retry : un 5xx du registre ne doit
+      # plus rougir une PR saine (voir l'action).
+      - name: Install PHP deps (cached + retried)
+        uses: ./.github/actions/composer-install-cached
 
       - name: Run PHPStan
         run: docker compose exec -T php-fpm composer phpstan
@@ -210,8 +212,10 @@ jobs:
       - name: Start services
         run: docker compose up -d --wait php-fpm postgres redis
 
-      - name: Install PHP deps
-        run: docker compose exec -T php-fpm composer install --no-interaction
+      # P4-100 — cache de backend/vendor + retry : un 5xx du registre ne doit
+      # plus rougir une PR saine (voir l'action).
+      - name: Install PHP deps (cached + retried)
+        uses: ./.github/actions/composer-install-cached
 
       # Dry-run : la CI rapporte le diff, elle ne réécrit pas. Pour CORRIGER en
       # local : `docker compose exec php-fpm sh -c 'cd /app/backend && composer rector'`
@@ -238,8 +242,10 @@ jobs:
       - name: Start services
         run: docker compose up -d --wait php-fpm engine
 
-      - name: Install PHP deps
-        run: docker compose exec -T php-fpm composer install --no-interaction
+      # P4-100 — cache de backend/vendor + retry : un 5xx du registre ne doit
+      # plus rougir une PR saine (voir l'action).
+      - name: Install PHP deps (cached + retried)
+        uses: ./.github/actions/composer-install-cached
 
       - name: Generate JWT keys
         run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction'
@@ -460,8 +466,10 @@ jobs:
       - name: Start services
         run: docker compose up -d --wait php-fpm engine
 
-      - name: Install PHP deps
-        run: docker compose exec -T php-fpm composer install --no-interaction
+      # P4-100 — cache de backend/vendor + retry : un 5xx du registre ne doit
+      # plus rougir une PR saine (voir l'action).
+      - name: Install PHP deps (cached + retried)
+        uses: ./.github/actions/composer-install-cached
 
       - name: Generate JWT keys
         run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction'
@@ -551,8 +559,10 @@ jobs:
       - name: Start services
         run: docker compose up -d --wait php-fpm nginx engine mercure redis postgres
 
-      - name: Install PHP deps
-        run: docker compose exec -T php-fpm composer install --no-interaction
+      # P4-100 — cache de backend/vendor + retry : un 5xx du registre ne doit
+      # plus rougir une PR saine (voir l'action).
+      - name: Install PHP deps (cached + retried)
+        uses: ./.github/actions/composer-install-cached
 
       - name: Generate JWT keys
         run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction'
@@ -691,8 +701,10 @@ jobs:
       - name: Start services
         run: docker compose up -d --wait php-fpm engine
 
-      - name: Install PHP deps
-        run: docker compose exec -T php-fpm composer install --no-interaction
+      # P4-100 — cache de backend/vendor + retry : un 5xx du registre ne doit
+      # plus rougir une PR saine (voir l'action).
+      - name: Install PHP deps (cached + retried)
+        uses: ./.github/actions/composer-install-cached
 
       # ⚠ La base EST nécessaire, contrairement à ce que le périmètre laissait
       # croire : trois des quatre tests du groupe POSTent des payloads construits
@@ -732,8 +744,10 @@ jobs:
       - name: Start services
         run: docker compose up -d --wait php-fpm nginx engine mercure redis postgres
 
-      - name: Install PHP deps
-        run: docker compose exec -T php-fpm composer install --no-interaction
+      # P4-100 — cache de backend/vendor + retry : un 5xx du registre ne doit
+      # plus rougir une PR saine (voir l'action).
+      - name: Install PHP deps (cached + retried)
+        uses: ./.github/actions/composer-install-cached
 
       - name: Generate JWT keys
         run: docker compose exec -T php-fpm sh -c 'cd /app/backend && php bin/console lexik:jwt:generate-keypair --skip-if-exists --no-interaction'
