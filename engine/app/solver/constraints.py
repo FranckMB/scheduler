@@ -43,6 +43,12 @@ class ParsedConstraints(TypedDict):
     # falls in ANY interval (Lot C: coach unavailability with time windows).
     coach_unavailability: dict[str, set[tuple[int, int, int]]]
     forced_venues: dict[str, str]
+    # P4-99 — équipe → {constraint_id, label} de la règle de gymnase forcé (last-wins, aligné
+    # sur `forced_venues`) ; source cliquable de la cause `forced_venue_elsewhere`.
+    forced_venue_sources: dict[str, dict[str, Any]]
+    # P4-99 — coach → [{constraint_id, label}] des contraintes d'indispo (grain COACH, pas
+    # l'intervalle : l'arité de `coach_unavailability` NE change pas). Cause `coach_unavailability`.
+    coach_unavailability_sources: dict[str, list[dict[str, Any]]]
     # PR B (2026-08-06) — un ENSEMBLE par équipe : les règles PREFERRED se cumulent
     # (« privilégier Vilar ET Tonkin »), elles ne s'écrasent plus en last-wins.
     preferred_venues: dict[str, set[str]]
@@ -115,6 +121,25 @@ AGE_VIOLATION_WEIGHT = "age_violation"
 
 HARD = "HARD"
 PREFERRED = "PREFERRED"
+
+
+def _record_closure(model: Any, var: BoolVarLike, cause: dict[str, Any]) -> None:
+    """Enregistre la cause MESURÉE d'une fermeture de candidat (P4-99, décision B).
+
+    Indexée par la variable OR-Tools (``var.Index()``, entier stable) dans
+    ``model.candidate_closures``. DÉFENSIF par conception : les tests unitaires de
+    ``constraints.py`` passent des ``cp_model.CpModel`` NUS, sans attribut custom — un modèle
+    nu = aucun enregistrement, pose strictement inchangée (sinon la moitié de
+    ``test_constraints.py`` casse). Appelé APRÈS le ``model.Add(var == 0)`` du site : le
+    recueil est passif, il n'ajoute ni variable ni contrainte (les golden ne bougent pas)."""
+    closures = getattr(model, "candidate_closures", None)
+    if closures is None:
+        return
+    try:
+        index = int(var.Index())
+    except (AttributeError, TypeError):
+        return
+    closures.setdefault(index, []).append(cause)
 
 
 @dataclass(frozen=True)
@@ -430,6 +455,9 @@ def add_room_at_most_one(model: Any, assignments: Sequence[AssignmentVariable]) 
             if max_locked >= cap:
                 model.Add(assignment.var == 0)
                 added += 1
+                # P4-99 — un verrou (d'une autre équipe) sature la capacité du gymnase sur ce
+                # sous-créneau : la vraie cause de ce candidat fermé est un verrou.
+                _record_closure(model, assignment.var, {"kind": "hard_lock"})
     return added
 
 
@@ -760,6 +788,9 @@ def _add_free_vs_locked_interval_conflicts(
                     continue
                 model.Add(var == 0)
                 added += 1
+                # P4-99 — une occupation VERROUILLÉE de la personne rend ce créneau libre
+                # impossible : cause hard_lock.
+                _record_closure(model, var, {"kind": "hard_lock"})
                 break
     return added
 
@@ -887,6 +918,9 @@ def add_coach_rest_day_constraints(
             day_vars = _dedupe_variables(person_day_vars.get((coach_id_str, day), []))
             is_working = cast(Any, model).NewBoolVar(f"coach_rest_day_is_working_{coach_id_str}_day{day}")
             free_is_working_vars.append(is_working)
+            # P4-99 — HORS mesure de cause : `is_working` est une var de réification (canal
+            # `OnlyEnforceIf`), pas un candidat de séance ; rien n'est fermé inconditionnellement.
+            # L'effet d'un plafond de repos non tenu tombe dans la famille « resté ouvert ».
             if not day_vars:
                 # No assignments on this day => coach is definitely not working
                 cast(Any, model).Add(is_working == 0)
@@ -1002,6 +1036,8 @@ def add_salarie_distribution_constraints(
     for day in range(1, 6):
         day_has_salarie = cast(Any, model).NewBoolVar(f"day_has_salarie_day{day}")
 
+        # P4-99 — HORS mesure de cause : `day_has_salarie` est une var de réification agrégée
+        # (canal `OnlyEnforceIf`), pas un candidat de séance ; aucune fermeture inconditionnelle.
         if day in locked_salarie_days:
             # Un salarié encadre/joue ce jour-là par un verrou → présence constante.
             cast(Any, model).Add(day_has_salarie == 1)
@@ -1231,14 +1267,16 @@ def add_forbidden_assignments(
     """
 
     forbidden_ids: set[Any] = set()
-    forbidden_pairs: set[tuple[Any, Any]] = set()
+    # P4-99 — la paire (équipe, gymnase) porte AUSSI l'id/le libellé de la contrainte source
+    # (enrichis dans `parse_v2_constraints`), pour rendre la cause cliquable côté front.
+    forbidden_pairs: dict[tuple[str, str], tuple[str | None, str | None]] = {}
 
     for item in forbidden_assignments or ():
         if isinstance(item, dict):
             tid = item.get("scope_target_id") or item.get("team_id")
             vid = item.get("venue_id") or item.get("room_id")
             if tid is not None and vid is not None:
-                forbidden_pairs.add((str(tid), str(vid)))
+                forbidden_pairs[(str(tid), str(vid))] = (item.get("constraint_id"), item.get("label"))
         else:
             forbidden_ids.add(item)
 
@@ -1247,13 +1285,19 @@ def add_forbidden_assignments(
         assignment_id = assignment.id
         team_id = assignment.team_id
         venue_id = assignment.venue_id
-        if (
-            assignment.forbidden
-            or (assignment_id is not None and assignment_id in forbidden_ids)
-            or (team_id is not None and venue_id is not None and (str(team_id), str(venue_id)) in forbidden_pairs)
-        ):
+        pair: tuple[str, str] | None = (
+            (str(team_id), str(venue_id)) if team_id is not None and venue_id is not None else None
+        )
+        pair_match = pair is not None and pair in forbidden_pairs
+        if assignment.forbidden or (assignment_id is not None and assignment_id in forbidden_ids) or pair_match:
             model.Add(assignment.var == 0)
             added += 1
+            cause: dict[str, Any] = {"kind": "venue_forbidden"}
+            if pair_match and pair is not None:
+                constraint_id, label = forbidden_pairs[pair]
+                cause["constraintId"] = constraint_id
+                cause["label"] = label
+            _record_closure(model, assignment.var, cause)
     return added
 
 
@@ -1300,24 +1344,63 @@ def add_coach_unavailability_constraints(
     """
     rules: Mapping[Any, Any] = coach_unavailability if isinstance(coach_unavailability, Mapping) else {}
     coach_map = team_coach_map or {}
+    # P4-99 — coach → [{constraint_id, label, intervals}] (posé sur le modèle par `_solve`).
+    # La cause est MESURÉE : on retient QUEL intervalle ferme le créneau et on remonte à SA
+    # contrainte — jamais la « première venue ». L'arité `(day, from, to)` de `rules` (union
+    # consommée par validate_assignments) NE change pas ; `intervals` vit dans la carte parallèle.
+    sources: Mapping[str, Any] = getattr(model, "coach_unavailability_sources", {}) or {}
     added = 0
     for assignment in assignments:
-        blocked = assignment.coach_unavailable
-        if not blocked and rules:
+        intrinsic = assignment.coach_unavailable
+        day, start = _assignment_day_start(assignment)
+        # (coach_id, source) de chaque contrainte dont un intervalle contient (jour, début) :
+        # ce sont TOUTES celles qui ferment réellement ce créneau (même règle que day_forbidden).
+        matched_sources: list[tuple[str, dict[str, Any]]] = []
+        first_matched_coach: str | None = None
+        if not intrinsic and rules and day is not None and start is not None:
             coach_ids = coach_map.get(str(assignment.team_id))
             if not coach_ids:
                 single = assignment.coach_id
                 coach_ids = [str(single)] if single is not None else []
-            day, start = _assignment_day_start(assignment)
-            if day is not None and start is not None:
-                blocked = any(
-                    iv_day == day and iv_from <= start < iv_to
-                    for cid in coach_ids
-                    for iv_day, iv_from, iv_to in (rules.get(str(cid)) or ())
+            for cid in coach_ids:
+                cid_str = str(cid)
+                coach_blocked = any(
+                    iv_day == day and iv_from <= start < iv_to for iv_day, iv_from, iv_to in (rules.get(cid_str) or ())
                 )
-        if blocked:
+                if not coach_blocked:
+                    continue
+                if first_matched_coach is None:
+                    first_matched_coach = cid_str
+                for src in sources.get(cid_str) or []:
+                    if any(
+                        iv_day == day and iv_from <= start < iv_to
+                        for iv_day, iv_from, iv_to in (src.get("intervals") or ())
+                    ):
+                        matched_sources.append((cid_str, src))
+        if intrinsic or first_matched_coach is not None:
             model.Add(assignment.var == 0)
             added += 1
+            if matched_sources:
+                # Une cause PAR contrainte qui ferme le créneau — plusieurs sont vraies quand
+                # deux règles couvrent le même moment (mesuré, jamais deviné).
+                for cid_str, src in matched_sources:
+                    _record_closure(
+                        model,
+                        assignment.var,
+                        {
+                            "kind": "coach_unavailability",
+                            "coachId": cid_str,
+                            "constraintId": src.get("constraint_id"),
+                            "label": src.get("label"),
+                        },
+                    )
+            else:
+                # Bloqué mais aucune source identifiable (indispo intrinsèque, ou carte absente) :
+                # `constraintId` null honnête + le coach s'il est connu — jamais un id faux.
+                cause: dict[str, Any] = {"kind": "coach_unavailability"}
+                if first_matched_coach is not None:
+                    cause["coachId"] = first_matched_coach
+                _record_closure(model, assignment.var, cause)
     return added
 
 
@@ -1332,6 +1415,15 @@ def add_time_window_constraints(
     day_rules_by_team: dict[str, dict[str, set[int]]] = defaultdict(
         lambda: {"forced": set(), "forbidden": set(), "allowed": set()}
     )
+    # P4-99 — les règles DAY sont FUSIONNÉES par équipe (plusieurs contraintes peuvent nourrir
+    # le même jour interdit) : on garde, MESURÉE au moment de la fusion, la liste des
+    # contraintes qui citent chaque jour interdit, plus celles qui posent une liste blanche
+    # (`allowedDays`) — le complément d'une liste blanche est un jour interdit sans règle
+    # `forbiddenDays` propre. Sert à nommer la cause `day_forbidden` à la fermeture.
+    day_forbid_sources: dict[str, dict[int, list[tuple[str | None, str | None]]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    allowed_sources: dict[str, list[tuple[str | None, str | None]]] = defaultdict(list)
 
     for constraint in time_windows or ():
         if not constraint.get("isActive", True):
@@ -1354,12 +1446,21 @@ def add_time_window_constraints(
         config = constraint.get("config") or {}
 
         if family == "DAY":
+            forbidden_days = _day_int_set(config.get("forbiddenDays"))
+            allowed_days = _day_int_set(config.get("allowedDays"))
             day_rules_by_team[team_id_text]["forced"].update(_day_int_set(config.get("forcedDays")))
-            day_rules_by_team[team_id_text]["forbidden"].update(_day_int_set(config.get("forbiddenDays")))
+            day_rules_by_team[team_id_text]["forbidden"].update(forbidden_days)
             # An empty allowedDays is treated as "unconfigured" (no restriction),
             # matching the coach-availability whitelist semantics — never "no day
             # allowed" (which would force the team to zero sessions).
-            day_rules_by_team[team_id_text]["allowed"].update(_day_int_set(config.get("allowedDays")))
+            day_rules_by_team[team_id_text]["allowed"].update(allowed_days)
+            # P4-99 — trace la contrainte source de chaque jour interdit / liste blanche.
+            constraint_id = constraint.get("id")
+            constraint_label = constraint.get("name")
+            for forbidden_day in forbidden_days:
+                day_forbid_sources[team_id_text][forbidden_day].append((constraint_id, constraint_label))
+            if allowed_days:
+                allowed_sources[team_id_text].append((constraint_id, constraint_label))
             continue
 
         min_start_time = config.get("minStartTime")
@@ -1379,13 +1480,22 @@ def add_time_window_constraints(
 
             slot_start = slot_key[3]
             slot_start_minutes = _time_to_minutes(slot_start)
+            # P4-99 — fenêtre horaire violée : cause `time_window` + la contrainte source
+            # (`constraint` porte déjà son id/name, aucun re-parse).
+            window_cause: dict[str, Any] = {
+                "kind": "time_window",
+                "constraintId": constraint.get("id"),
+                "label": constraint.get("name"),
+            }
             if min_start_minutes is not None and slot_start_minutes < min_start_minutes:
                 model.Add(var == 0)
                 added += 1
+                _record_closure(model, var, dict(window_cause))
                 continue
             if max_start_minutes is not None and slot_start_minutes > max_start_minutes:
                 model.Add(var == 0)
                 added += 1
+                _record_closure(model, var, dict(window_cause))
                 continue
             # maxEndTime: the session must END by that time (start + its duration).
             # The duration is the slot's own (venue/day/start), default 90 min.
@@ -1394,6 +1504,7 @@ def add_time_window_constraints(
                 if slot_start_minutes + duration > max_end_minutes:
                     model.Add(var == 0)
                     added += 1
+                    _record_closure(model, var, dict(window_cause))
 
     team_day_vars: dict[str, dict[int, list[BoolVarLike]]] = defaultdict(lambda: defaultdict(list))
     team_all_vars: dict[str, list[BoolVarLike]] = defaultdict(list)
@@ -1449,12 +1560,27 @@ def add_time_window_constraints(
             for var in team_all_vars.get(team_id_text, []):
                 model.Add(var == 0)
                 added += 1
+                # P4-99 — jours contradictoires : aucune contrainte seule n'est « la » cause
+                # (c'est leur combinaison) → kind `day_conflict`, sans constraintId unique.
+                _record_closure(model, var, {"kind": "day_conflict"})
             continue
 
         for day_value in forbidden_day_set:
+            # P4-99 — les contraintes qui interdisent CE jour : celles qui le listent en
+            # `forbiddenDays`, à défaut celles qui posent la liste blanche qui l'exclut.
+            day_sources = day_forbid_sources.get(team_id_text, {}).get(day_value) or allowed_sources.get(team_id_text)
             for var in team_day_vars.get(team_id_text, {}).get(day_value, []):
                 model.Add(var == 0)
                 added += 1
+                if day_sources:
+                    for source_id, source_label in day_sources:
+                        _record_closure(
+                            model,
+                            var,
+                            {"kind": "day_forbidden", "constraintId": source_id, "label": source_label},
+                        )
+                else:
+                    _record_closure(model, var, {"kind": "day_forbidden"})
 
         if forced_day_set:
             forced_day_vars: list[BoolVarLike] = []
@@ -1514,6 +1640,9 @@ def add_forced_venue_constraints(
 ) -> int:
     """Constraint 11: when a venue is forced, all other venues are fixed to 0."""
 
+    # P4-99 — équipe → contrainte de gymnase forcé (posé sur le modèle par `_solve`), pour
+    # nommer la cause `forced_venue_elsewhere` sans re-parser.
+    sources: Mapping[str, Any] = getattr(model, "forced_venue_sources", {}) or {}
     added = 0
     for assignment in assignments:
         venue_id = assignment.venue_id
@@ -1522,6 +1651,12 @@ def add_forced_venue_constraints(
             continue
         model.Add(assignment.var == 0)
         added += 1
+        cause: dict[str, Any] = {"kind": "forced_venue_elsewhere"}
+        source = sources.get(str(assignment.team_id)) if assignment.team_id is not None else None
+        if source:
+            cause["constraintId"] = source.get("constraint_id")
+            cause["label"] = source.get("label")
+        _record_closure(model, assignment.var, cause)
     return added
 
 
@@ -2146,6 +2281,11 @@ def add_one_session_per_day_constraints(
             if deduped:
                 cast(Any, model).Add(sum(deduped) <= 0)
                 added += 1
+                # P4-99 — le jour est déjà pris par un verrou : chaque créneau libre fermé ici a
+                # pour cause ce verrou. (Les `day_active`/`OnlyEnforceIf` du budget hebdomadaire
+                # ci-dessus sont des canaux de réification, PAS des fermetures — hors mesure.)
+                for locked_out_var in deduped:
+                    _record_closure(model, locked_out_var, {"kind": "hard_lock"})
         elif len(deduped) > 1:
             cast(Any, model).Add(sum(deduped) <= 1)
             added += 1
@@ -2309,11 +2449,15 @@ def _set_venue_rule(
     venue_id: str,
     constraint: dict[str, Any],
     warnings: list[dict[str, Any]],
+    sources: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     """Single-venue-per-team rule maps are last-wins by structure — surface a
     conflicting overwrite instead of silently dropping the earlier rule (the
     same silent-overwrite class as ENG-13). Since PR B this only guards the
-    HARD map (`forced_venues`) — soft preferences accumulate into a set."""
+    HARD map (`forced_venues`) — soft preferences accumulate into a set.
+
+    P4-99 — `sources` (facultatif) reçoit, en last-wins comme `rules`, la contrainte qui
+    force ce gymnase, pour nommer la cause `forced_venue_elsewhere`."""
     existing = rules.get(team_id)
     if existing is not None and existing != venue_id:
         warnings.append(
@@ -2324,6 +2468,8 @@ def _set_venue_rule(
             )
         )
     rules[team_id] = venue_id
+    if sources is not None:
+        sources[team_id] = {"constraint_id": constraint.get("id"), "label": constraint.get("name")}
 
 
 def _not_honored_warning(constraint: dict[str, Any], severity: str, message: str) -> dict[str, Any]:
@@ -2352,7 +2498,9 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
     result: ParsedConstraints = {
         "forbidden_assignments": [],
         "coach_unavailability": {},
+        "coach_unavailability_sources": {},
         "forced_venues": {},
+        "forced_venue_sources": {},
         "preferred_venues": {},
         "avoided_venues": [],
         "venue_minimums": [],
@@ -2444,22 +2592,35 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             # Optional time window (Lot C): absent → whole day (0..1440), i.e. the
             # legacy day-level behaviour, so old configs stay byte-identical.
             from_min, to_min = _coach_window_minutes(config)
-            intervals = coach_blocked_intervals.setdefault(coach_key, set())
-            for day in _day_int_set(config.get("unavailableDays")):
-                intervals.add((day, from_min, to_min))
             available_set = _day_int_set(config.get("availableDays"))
+            # P4-99 — les intervalles que CETTE contrainte déclare, calculés UNE fois et versés
+            # à la fois dans l'union `coach_blocked_intervals` (consommée par
+            # validate_assignments — structure/arité/valeurs INCHANGÉES) ET dans la carte de
+            # sources, pour rattacher PLUS TARD un créneau fermé à SA contrainte exacte (pas la
+            # première venue). L'arité `(day, from, to)` ne bouge pas : c'est une carte parallèle.
+            constraint_intervals: list[tuple[int, int, int]] = []
+            for day in _day_int_set(config.get("unavailableDays")):
+                constraint_intervals.append((day, from_min, to_min))
             if available_set:
                 # Available ONLY on these days within [from, to] → block the
                 # complement: every other day whole, plus the out-of-window parts
                 # of the available days.
                 for day in range(0, 8):
                     if day not in available_set:
-                        intervals.add((day, 0, 1440))
+                        constraint_intervals.append((day, 0, 1440))
                         continue
                     if from_min > 0:
-                        intervals.add((day, 0, from_min))
+                        constraint_intervals.append((day, 0, from_min))
                     if to_min < 1440:
-                        intervals.add((day, to_min, 1440))
+                        constraint_intervals.append((day, to_min, 1440))
+            intervals = coach_blocked_intervals.setdefault(coach_key, set())
+            intervals.update(constraint_intervals)
+            # Source enregistrée seulement si elle ferme réellement quelque chose (au moins un
+            # intervalle) : une « dispo » couvrant toute la semaine ne nomme aucune cause.
+            if constraint_intervals:
+                result["coach_unavailability_sources"].setdefault(coach_key, []).append(
+                    {"constraint_id": c.get("id"), "label": c.get("name"), "intervals": constraint_intervals}
+                )
             # Coach availability is always enforced HARD (a person cannot be in
             # two places); the UI now forces HARD — surface legacy soft rows.
             if rule_type not in (None, "HARD", "LOCK"):
@@ -2482,7 +2643,12 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             and scope_target_id
         ):
             _set_venue_rule(
-                result["forced_venues"], scope_target_id, config["preferredVenueId"], c, result["parse_warnings"]
+                result["forced_venues"],
+                scope_target_id,
+                config["preferredVenueId"],
+                c,
+                result["parse_warnings"],
+                result["forced_venue_sources"],
             )
 
         elif (
@@ -2493,7 +2659,12 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             and scope_target_id
         ):
             _set_venue_rule(
-                result["forced_venues"], scope_target_id, config["forcedVenueId"], c, result["parse_warnings"]
+                result["forced_venues"],
+                scope_target_id,
+                config["forcedVenueId"],
+                c,
+                result["parse_warnings"],
+                result["forced_venue_sources"],
             )
 
         elif (
@@ -2533,8 +2704,16 @@ def parse_v2_constraints(constraints: list[dict[str, Any]]) -> ParsedConstraints
             # branch used to escalate every ruleType into a hard interdiction,
             # making INFEASIBLE possible on a mere preference).
             if rule_type in ("HARD", "LOCK", None):
+                # P4-99 — l'id/le libellé de la contrainte accompagnent la paire, pour que la
+                # cause `venue_forbidden` soit cliquable. Consommé par `.get` en aval — un dict
+                # sans ces clés (tests hérités) reste valide, la cause dégrade au kind seul.
                 result["forbidden_assignments"].append(
-                    {"scope_target_id": scope_target_id, "venue_id": config["forbiddenVenueId"]}
+                    {
+                        "scope_target_id": scope_target_id,
+                        "venue_id": config["forbiddenVenueId"],
+                        "constraint_id": c.get("id"),
+                        "label": c.get("name"),
+                    }
                 )
             elif scope_target_id:
                 # PREFERRED (incl. normalized BONUS): soft "avoid" — an

@@ -450,6 +450,10 @@ def _solve(
     model.team_player_map = team_player_map
     resolved_implicit_rules = resolve_implicit_rules(data.get("implicitRules"))
     model.implicit_rules = resolved_implicit_rules
+    # P4-99 — les sources de contraintes (gymnase forcé, indispo coach) sur le MODÈLE, pour que
+    # les sites de pose nomment la contrainte fermant un candidat sans re-parser (décision B).
+    model.forced_venue_sources = parsed.get("forced_venue_sources", {})
+    model.coach_unavailability_sources = parsed.get("coach_unavailability_sources", {})
 
     # (La famille FACILITY_CAPACITY rabotait ici la capacité d'un gymnase entier
     # à `maxTeams`. RETIRÉE le 2026-08-08 : aucun chemin UI ne la créait, zéro
