@@ -59,9 +59,9 @@ vi.mock("./api", () => {
   getConstraints: vi.fn(() => Promise.resolve([])),
   getDiagnostics: vi.fn(() =>
     Promise.resolve([
-      { id: "diag-1", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, message: "Conflit de gymnase.", suggestions: [] },
+      { id: "diag-1", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, ruleKey: null, message: "Conflit de gymnase.", suggestions: [] },
       // The solver's own "unused_slot" warning for the ts-2 empty window.
-      { id: "diag-unused-slot-venue-1-2-19:00", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, message: "Créneau disponible non utilisé : Gymnase Alpha (mardi de 19:00 à 20:30).", suggestions: [] },
+      { id: "diag-unused-slot-venue-1-2-19:00", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, ruleKey: null, message: "Créneau disponible non utilisé : Gymnase Alpha (mardi de 19:00 à 20:30).", suggestions: [] },
     ]),
   ),
   getTeams: vi.fn(() => Promise.resolve([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0 }])),
@@ -160,8 +160,8 @@ beforeEach(() => {
   // piège que ci-dessus). Sans ce reset, « groups diagnostics » et le cas ERREUR
   // perdraient leur « Conflit de gymnase » (ERROR) et rougiraient sans rapport.
   vi.mocked(getDiagnostics).mockResolvedValue([
-    { id: "diag-1", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, message: "Conflit de gymnase.", suggestions: [] },
-    { id: "diag-unused-slot-venue-1-2-19:00", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, message: "Créneau disponible non utilisé : Gymnase Alpha (mardi de 19:00 à 20:30).", suggestions: [] },
+    { id: "diag-1", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, ruleKey: null, message: "Conflit de gymnase.", suggestions: [] },
+    { id: "diag-unused-slot-venue-1-2-19:00", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, ruleKey: null, message: "Créneau disponible non utilisé : Gymnase Alpha (mardi de 19:00 à 20:30).", suggestions: [] },
   ]);
   navigate.mockClear();
   usePlanningStore.setState({ viewMode: "gymnase", selectedScheduleId: null, selectedSlotId: null, resourceFilter: [] });
@@ -479,7 +479,7 @@ describe("PlanningPage (integration)", () => {
     const user = userEvent.setup();
     // Que des ALERTES : le cas ERREUR (exception d'hier retirée) est traité par le test suivant.
     vi.mocked(getDiagnostics).mockResolvedValue([
-      { id: "w1", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, message: "Créneau libre.", suggestions: [] },
+      { id: "w1", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, ruleKey: null, message: "Créneau libre.", suggestions: [] },
     ]);
     renderWithProviders(<PlanningPage />);
     await screen.findByText("U11");
@@ -538,7 +538,7 @@ describe("PlanningPage (integration)", () => {
     };
     // Un conflict désignant slot-1 (venue-1, lundi 18:00).
     vi.mocked(getDiagnostics).mockResolvedValue([
-      { id: "cf", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00", message: "Conflit ciblé.", suggestions: [] },
+      { id: "cf", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00", ruleKey: null, message: "Conflit ciblé.", suggestions: [] },
     ]);
     renderWithProviders(<PlanningPage />);
     await screen.findByText("U11");

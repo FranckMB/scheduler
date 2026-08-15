@@ -4,8 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
-import type { Constraint } from "../api";
-import { IMPLICIT_RULES } from "./ImplicitRulesPanel";
+import type { Constraint, ImplicitRuleSetting } from "../api";
+import { PRODUCT_RULES, WELLBEING_RULES } from "./ImplicitRulesPanel";
+
+const RESOLVED_IMPLICIT_RULES: ImplicitRuleSetting[] = [
+  { ruleKey: "coachRestDay", intensity: "HARD", minRestDays: 1, maxConsecutive: null, isDefault: true },
+  { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+  { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, isDefault: true },
+  { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+];
 
 const h = vi.hoisted(() => ({
   createMut: vi.fn(),
@@ -19,6 +26,7 @@ const h = vi.hoisted(() => ({
   coachesFailed: false,
   tags: [] as { id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }[],
   tagAssignments: [] as { id: string; teamId: string; tagId: string; seasonId: string }[],
+  implicitRules: [] as ImplicitRuleSetting[],
 }));
 
 const SEASON_TEAMS = [
@@ -86,6 +94,11 @@ vi.mock("../queries", () => ({
   useWizardTeamCoaches: () => ({ data: h.teamCoaches, isPending: h.coachesPending, isError: h.coachesFailed, refetch: vi.fn() }),
   useCreateReservation: () => ({ mutateAsync: h.resCreate, isPending: false }),
   useDeleteReservation: () => ({ mutateAsync: h.resDelete, isPending: false }),
+  // P2-28 — les 4 règles bien-être résolues + leurs mutations (le détail du panneau est
+  // couvert par ImplicitRulesPanel.test ; ici on ne garde que le CÂBLAGE dans l'étape).
+  useImplicitRuleSettings: () => ({ data: h.implicitRules, isError: false }),
+  useUpdateImplicitRuleSetting: () => ({ mutate: vi.fn(), isPending: false }),
+  useResetImplicitRuleSetting: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // Contrat réel de usePeriodAnchor : sans entrée (mode saison) l'ancre est la BASE
@@ -131,6 +144,7 @@ describe("ConstraintsStep — constraint-matrix offer lock", () => {
     h.list = [];
     h.tags = [];
     h.tagAssignments = [];
+    h.implicitRules = RESOLVED_IMPLICIT_RULES;
     activeVenuesState.venues = [{ id: "v1", name: "Gymnase A", isActive: true }, { id: "v2", name: "Gymnase B", isActive: true }];
     activeVenuesState.disabledIds = new Set();
     activeVenuesState.layerRead = "ready";
@@ -943,51 +957,122 @@ describe("ConstraintsStep — période : choisir, nommer, atteindre", () => {
 
     raf.mockRestore();
   });
-  it("montre les règles implicites en lecture seule, repliées par défaut (P4-55)", async () => {
-    // Le besoin fondateur : « le gestionnaire ne sait pas ce qui s'applique gratuitement ».
-    // On garde le CONTRAT, pas la mise en forme : l'encart existe, il est fermé, il annonce
-    // les six règles triées, et il ne propose AUCUNE écriture.
+  it("« Base » puis « Bien-être » sont les DEUX PREMIERS onglets, inactifs par défaut (P2-28)", () => {
+    // Décision fondateur : les règles du système vivent dans deux onglets à gauche d'« Horaires »,
+    // pas dans un accordéon. Par défaut on est sur Horaires : ni les règles du produit ni les
+    // réglables ne sont montées.
+    renderWithProviders(<ConstraintsStep />);
+
+    const tabs = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(tabs.slice(0, 2)).toEqual(["Base", "Bien-être"]);
+    expect(screen.queryByText(PRODUCT_RULES[0].title)).toBeNull();
+    expect(screen.queryByRole("group", { name: `Intensité — ${WELLBEING_RULES[0].title}` })).toBeNull();
+  });
+
+  it("l'onglet « Base » montre les règles immuables en LECTURE SEULE (aucun réglage) (P2-28)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ConstraintsStep />);
 
-    const panel = screen.getByText("Ce que le système applique déjà, sans que vous le saisissiez").closest("details");
-    expect(panel).toBeInTheDocument();
-    expect((panel as HTMLDetailsElement).open).toBe(false); // replié : il informe, il n'encombre pas
+    await user.click(screen.getByRole("button", { name: "Base" }));
 
-    await user.click(screen.getByText("Ce que le système applique déjà, sans que vous le saisissiez"));
-
-    for (const rule of IMPLICIT_RULES) {
-      expect(within(panel as HTMLElement).getByText(rule.title)).toBeInTheDocument();
+    for (const rule of PRODUCT_RULES) {
+      expect(screen.getByText(rule.title)).toBeInTheDocument();
     }
-    // Lecture seule : le moteur n'expose aucune de ces règles à l'édition. Un bouton ici
-    // promettrait un réglage qui n'existe pas.
-    expect(within(panel as HTMLElement).queryByRole("button")).toBeNull();
-    expect(within(panel as HTMLElement).queryByRole("textbox")).toBeNull();
-    expect(within(panel as HTMLElement).queryByRole("checkbox")).toBeNull();
+    // Aucun contrôle d'intensité ici : les règles réglables vivent dans l'onglet Bien-être.
+    expect(screen.queryByRole("group", { name: `Intensité — ${WELLBEING_RULES[0].title}` })).toBeNull();
   });
 
-  it("GÈLE le texte des règles implicites — il doit rester d'accord avec le moteur (P4-55)", () => {
+  it("l'onglet « Bien-être » montre les 4 règles réglables avec leur sélecteur d'intensité (P2-28)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Bien-être" }));
+
+    for (const meta of WELLBEING_RULES) {
+      expect(screen.getByRole("group", { name: `Intensité — ${meta.title}` })).toBeInTheDocument();
+    }
+    // Les règles immuables ne sont PAS répétées ici.
+    expect(screen.queryByText(PRODUCT_RULES[0].title)).toBeNull();
+  });
+
+  it("GÈLE le texte des règles du système — il doit rester d'accord avec le moteur (P2-28)", () => {
     // ⚠ Ce gel n'est pas de la cosmétique. Chaque ligne AFFIRME un comportement du solveur ;
-    // la réécrire à la légère fait mentir le produit. Deux affirmations ont déjà été
-    // corrigées en écrivant l'encart : le coach PEUT doubler dans le même gymnase (D-14), et
-    // « une séance par jour » n'a AUCUNE exception (le drapeau allowMultipleSessionsPerDay,
-    // jamais écrit par aucune route, a été retiré de bout en bout en P4-79). Si vous changez
-    // ce tableau, allez d'abord relire `engine/app/solver/constraints.py`.
-    expect(IMPLICIT_RULES.map((r) => r.id)).toEqual(["venue-capacity", "coach-two-venues", "coach-player", "team-overlap", "one-session-per-day", "coach-rest-day"]);
+    // la réécrire à la légère fait mentir le produit. Si vous changez ces tableaux, allez
+    // d'abord relire `engine/app/solver/constraints.py`.
+    expect(PRODUCT_RULES.map((r) => r.id)).toEqual([
+      "venue-capacity",
+      "coach-two-venues",
+      "coach-player",
+      "team-overlap",
+      "one-session-per-day",
+      "reservations-honored",
+      "team-minimum-target",
+    ]);
 
     // Le même gymnase est AUTORISÉ — la formulation inverse était affichée avant P4-55.
-    const coachRule = IMPLICIT_RULES.find((r) => "coach-two-venues" === r.id);
+    const coachRule = PRODUCT_RULES.find((r) => "coach-two-venues" === r.id);
     expect(coachRule?.detail).toContain("MÊME gymnase");
     expect(coachRule?.detail).toContain("autorisées");
 
-    // Aucune règle ne doit renvoyer vers un réglage inexistant.
-    const perDay = IMPLICIT_RULES.find((r) => "one-session-per-day" === r.id);
+    // Aucune règle du produit ne doit renvoyer vers un réglage inexistant.
+    const perDay = PRODUCT_RULES.find((r) => "one-session-per-day" === r.id);
     expect(perDay?.detail).not.toMatch(/sauf si|autoris/i);
 
-    // Le repos coach est désormais RÉGLABLE (contrat moteur 2.7, HARD/PREFERRED) : l'encart ne
-    // doit plus l'affirmer comme un absolu — il porte « Par défaut », pas une garantie sèche.
-    const coachRest = IMPLICIT_RULES.find((r) => "coach-rest-day" === r.id);
-    expect(coachRest?.detail).toMatch(/[Pp]ar défaut/);
+    // Le minimum de séances est une CIBLE, pas une loi (honnêteté du produit).
+    const minimum = PRODUCT_RULES.find((r) => "team-minimum-target" === r.id);
+    expect(minimum?.detail).toMatch(/cible/i);
+
+    // Les 4 règles réglables, dans l'ordre du contrat moteur 2.7.
+    expect(WELLBEING_RULES.map((r) => r.ruleKey)).toEqual(["coachRestDay", "salarieDistribution", "maxConsecutiveSessions", "ageAscending"]);
+  });
+});
+
+/**
+ * P2-28 — la boucle S1 : un diagnostic « règle assouplie » du planning atterrit ici en ciblant
+ * SA règle (`?rule=<ruleKey>`). Le panneau s'ouvre, surligne la règle et l'amène à l'écran.
+ */
+describe("ConstraintsStep — atterrissage d'un diagnostic sur une règle (P2-28)", () => {
+  let scrolled: Element[];
+  let originalScroll: typeof Element.prototype.scrollIntoView;
+
+  beforeEach(() => {
+    useWizardStore.getState().exitPeriodMode();
+    h.list = [];
+    h.implicitRules = RESOLVED_IMPLICIT_RULES;
+    scrolled = [];
+    originalScroll = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+  });
+  afterEach(() => {
+    Element.prototype.scrollIntoView = originalScroll;
+    useWizardStore.getState().exitPeriodMode();
+  });
+
+  it("?rule=<ruleKey> → bascule sur l'onglet Bien-être, règle surlignée ET amenée à l'écran", () => {
+    const raf = vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb) => (cb(0), 0));
+    const { container } = renderWithProviders(<ConstraintsStep />, { route: "/wizard?step=constraints&rule=maxConsecutiveSessions&from=planning" });
+
+    // L'onglet Bien-être est ACTIF (le panneau est monté → la ligne existe).
+    const row = container.querySelector('[data-rule-key="maxConsecutiveSessions"]');
+    expect(row).not.toBeNull();
+    expect(row?.className).toContain("ring-accent");
+    expect(scrolled).toContain(row);
+    raf.mockRestore();
+  });
+
+  it("sans ?rule= l'onglet Bien-être n'est pas actif (panneau non monté)", () => {
+    const { container } = renderWithProviders(<ConstraintsStep />, { route: "/wizard?step=constraints" });
+
+    expect(container.querySelector('[data-rule-key="maxConsecutiveSessions"]')).toBeNull();
+  });
+
+  it("?rule= inconnu → atterrissage propre : onglet Bien-être non forcé, aucun crash", () => {
+    const { container } = renderWithProviders(<ConstraintsStep />, { route: "/wizard?step=constraints&rule=pasUneRegle&from=planning" });
+
+    // Clé inconnue : on ne bascule pas, le panneau n'est pas monté, rien n'est surligné.
+    expect(container.querySelector('[data-rule-key="maxConsecutiveSessions"]')).toBeNull();
   });
 });
 

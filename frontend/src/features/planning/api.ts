@@ -199,6 +199,10 @@ export interface Diagnostic {
    *  venueId, ils identifient LE créneau à ouvrir sur la grille. */
   dayOfWeek: number | null;
   startTime: string | null;
+  /** Clé de la règle implicite « bien-être » assouplie — renseignée SEULEMENT par un
+   *  `implicit_rule_not_honored` (l'engine la porte, cf. contrat 2.7), null partout ailleurs.
+   *  Elle cible le réglage à ajuster dans le wizard (`?step=constraints&rule=<ruleKey>`). */
+  ruleKey: string | null;
   message: string;
   suggestions: unknown;
 }

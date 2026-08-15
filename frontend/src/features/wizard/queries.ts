@@ -587,6 +587,30 @@ export function useDeleteConstraint() {
   });
 }
 
+// --- Implicit "well-being" rules, adjustable (P2-28) ---
+
+/** Les 4 règles bien-être RÉSOLUES (défauts inclus) pour le club/saison courant. */
+export function useImplicitRuleSettings() {
+  return useQuery({ queryKey: ["wizard", "implicit_rule_settings"], queryFn: wizardApi.listImplicitRuleSettings, staleTime: 30_000 });
+}
+
+export function useUpdateImplicitRuleSetting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ruleKey, body }: { ruleKey: string; body: wizardApi.ImplicitRuleSettingPayload }) => wizardApi.updateImplicitRuleSetting(ruleKey, body),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "implicit_rule_settings"] }),
+  });
+}
+
+/** « Réinitialiser » une règle : DELETE par clé → retour au défaut. */
+export function useResetImplicitRuleSetting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ruleKey: string) => wizardApi.resetImplicitRuleSetting(ruleKey),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "implicit_rule_settings"] }),
+  });
+}
+
 // --- Recap + generate (W5) ---
 
 export function useConstraintValidation(enabled: boolean, calendarEntryId?: string | null) {

@@ -1,52 +1,49 @@
-/**
- * P4-55 — « qu'est-ce qui s'applique déjà, sans que je l'aie saisi ? »
- *
- * Le solveur pose une douzaine de règles structurelles que personne n'entre nulle part
- * (`engine/app/solver/constraints.py`, `add_level_1_hard_constraints`). Le gestionnaire ne
- * les voyait pas : il ne savait donc pas ce qu'il obtient gratuitement, ni pourquoi le
- * solveur refuse parfois un placement qui « aurait dû » passer.
- *
- * ⚠ **Lecture seule, et ce n'est pas un choix d'UI paresseux** : ces règles ne sont pas
- * éditables côté moteur. Un panneau qui laisserait croire l'inverse serait pire que pas de
- * panneau.
- *
- * ⚠ **Six règles, pas douze — tri assumé (décision fondateur 2026-08-11).** On montre celles
- * qu'un non-technicien peut reconnaître comme des faits de son gymnase. Sont tues :
- * `add_age_ascending_constraints` (les jeunes avant les grands sur un même gymnase+jour),
- * `add_salarie_distribution_constraints` (au moins un salarié présent chaque jour ouvré) et
- * `add_max_consecutive_sessions_constraints` (pas trois créneaux consécutifs pour un coach)
- * — des détails d'implémentation ou des règles de confort, dont l'énoncé coûterait plus de
- * confusion qu'il n'apporte.
- *
- * ⚠ **Le texte ci-dessous est un CONTRAT avec le moteur, pas de la prose.** Deux formulations
- * ont été corrigées en le rédigeant, contre ce que l'écran affirmait jusqu'ici :
- *  - un coach PEUT encadrer deux équipes à la fois **dans le même gymnase** (D-14, arbitrage
- *    fondateur 2026-08-09 — `constraints.py:317-325`). L'ancien intitulé « coach jamais en
- *    double » était faux, et il décourageait une pratique que le produit autorise ;
- *  - un gymnase accueille « au plus sa CAPACITÉ » d'équipes, pas « une seule »
- *    (`add_room_at_most_one`, la capacité se règle par créneau).
- *
- * ⚠ « Une séance par jour » n'a AUCUNE exception. Un drapeau `allowMultipleSessionsPerDay`
- * exemptait jadis une équipe côté moteur, mais il était ABSENT de `TeamInput` : aucune route,
- * aucun écran ne l'écrivait, il valait `false` partout et la branche d'exemption était morte.
- * Il a été retiré de bout en bout en P4-79 (moteur, payload backend, entité, schéma Pydantic),
- * jumeau du drapeau supprimé en P4-51. La règle s'applique donc sans condition — le texte ne
- * doit renvoyer vers aucun réglage.
- * Deux verrous gardent cet accord : le gel Vitest de ce fichier, et le test sémantique
- * `engine/tests/semantic/test_implicit_rules_are_still_applied.py`, qui vérifie que les six
- * fonctions correspondantes sont TOUJOURS appelées sans condition. Retirer une règle du
- * moteur sans toucher cet écran fait rougir la CI — sans quoi on continuerait d'annoncer une
- * règle morte.
- */
+import { useEffect, useRef } from "react";
 
+import { useWorkingSeason } from "@/features/auth/queries";
+import { Button } from "@/shared/components/ui/button";
+import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
+import { Select } from "@/shared/components/ui/select";
+import { readState } from "@/shared/lib/readState";
+import { cn } from "@/shared/lib/utils";
+
+import type { ImplicitRuleIntensity, ImplicitRuleKey, ImplicitRuleSetting, ImplicitRuleSettingPayload } from "../api";
+import { useImplicitRuleSettings, useResetImplicitRuleSetting, useUpdateImplicitRuleSetting } from "../queries";
+
+/**
+ * P2-28 — « les règles du système », remaniement de l'encart P4-55.
+ *
+ * Deux familles, la frontière est le MOTEUR, pas l'UI :
+ *  - **Règles du produit** — LECTURE SEULE. Le solveur les pose d'office ; elles ne sont pas
+ *    éditables côté moteur, un contrôle ici promettrait un réglage qui n'existe pas. Le texte
+ *    est un CONTRAT (gelé par le test) : chaque ligne AFFIRME un comportement du solveur.
+ *  - **Règles de bien-être** — RÉGLABLES (contrat moteur 2.7). Chacune porte une intensité
+ *    (Obligatoire = HARD / Objectif = PREFERRED) et, pour deux d'entre elles, un seuil.
+ *
+ * ⚠ **Régime 1 strict** (`.claude/rules/frontend.md`) : ce panneau N'INVENTE aucune règle. Il
+ * AFFICHE la collection RÉSOLUE par le serveur (toujours 4 entrées, défauts inclus) et POSTE le
+ * choix du gestionnaire. Les libellés/descriptions sont de la PRÉSENTATION (précédent P4-55). Les
+ * bornes de seuil offertes ci-dessous ne sont qu'une ergonomie de saisie : le SERVEUR reste le
+ * seul juge (422), il n'y a donc pas de règle métier redérivée ici.
+ *
+ * Deux verrous gardent l'accord avec le moteur : le gel Vitest de ce fichier, et le test
+ * sémantique `engine/tests/semantic/test_implicit_rules_are_still_applied.py`.
+ */
 export interface ImplicitRule {
   id: string;
   title: string;
   detail: string;
 }
 
-/** L'ordre compte : du plus visible sur la grille au plus subtil. */
-export const IMPLICIT_RULES: ImplicitRule[] = [
+/**
+ * Les règles POSÉES D'OFFICE, lecture seule. L'ordre compte : du plus visible sur la grille au
+ * plus subtil, puis les deux garanties de saisie honorée.
+ *
+ * ⚠ Le texte est un CONTRAT avec le moteur (`engine/app/solver/constraints.py`). Deux
+ * formulations corrigées en le rédigeant : un coach PEUT encadrer deux équipes à la fois DANS LE
+ * MÊME gymnase (D-14), et « une séance par jour » n'a AUCUNE exception (P4-79).
+ */
+export const PRODUCT_RULES: ImplicitRule[] = [
   {
     id: "venue-capacity",
     title: "Un gymnase ne dépasse jamais sa capacité",
@@ -74,33 +71,257 @@ export const IMPLICIT_RULES: ImplicitRule[] = [
     detail: "Deux créneaux le même jour pour la même équipe ne sont jamais proposés.",
   },
   {
-    id: "coach-rest-day",
-    title: "Chaque coach garde un jour de repos",
-    detail: "Par défaut, au moins un jour sans séance entre le lundi et le vendredi (les week-ends ne comptent pas dans ce calcul).",
+    id: "reservations-honored",
+    title: "Vos réservations, indisponibilités et gymnases imposés sont toujours honorés",
+    detail: "Ce que vous avez fixé vous-même — un créneau réservé, un coach indisponible, un gymnase imposé — n'est jamais remis en cause par le solveur.",
+  },
+  {
+    id: "team-minimum-target",
+    title: "Chaque équipe vise son minimum de séances",
+    detail: "Le solveur cherche à donner à chaque équipe son nombre de séances par semaine. C'est une cible, pas une loi : quand le gymnase manque, une séance peut sauter — et le planning vous le dit.",
   },
 ];
 
 /**
- * L'encart replié par défaut : il informe, il n'occupe pas la place de ce que le
- * gestionnaire vient faire ici (saisir SES règles). `<details>`/`<summary>` natifs — le
- * clavier, le lecteur d'écran et l'état ouvert/fermé sont gérés par le navigateur, sans
- * `aria-expanded` à tenir à la main.
+ * La PRÉSENTATION des 4 règles réglables (libellés humains + description). La clé EST celle du
+ * contrat moteur ; ici on ne fait que la nommer pour un non-technicien.
  */
-export function ImplicitRulesPanel() {
+export const WELLBEING_RULES: { ruleKey: ImplicitRuleKey; title: string; detail: string }[] = [
+  { ruleKey: "coachRestDay", title: "Chaque coach garde un jour de repos", detail: "Au moins le nombre de jours choisi sans séance entre le lundi et le vendredi (les week-ends ne comptent pas)." },
+  { ruleKey: "salarieDistribution", title: "Au moins un salarié présent chaque jour ouvré", detail: "Sur chaque jour de la semaine où le club tourne, au moins un coach salarié encadre une séance." },
+  { ruleKey: "maxConsecutiveSessions", title: "Jamais trop de créneaux dos-à-dos", detail: "Un même coach n'enchaîne pas plus que le nombre choisi de créneaux d'affilée — qu'il les encadre ou qu'il y joue." },
+  { ruleKey: "ageAscending", title: "Les jeunes avant les grands", detail: "Sur un même gymnase et un même jour, les catégories d'âge se placent du plus jeune au plus âgé." },
+];
+
+/** Les deux crans d'intensité, libellés humains. Les valeurs techniques (HARD/PREFERRED) restent
+ *  celles du contrat — jamais affichées telles quelles. */
+const INTENSITY_CRANS: { value: ImplicitRuleIntensity; label: string }[] = [
+  { value: "HARD", label: "Obligatoire" },
+  { value: "PREFERRED", label: "Objectif" },
+];
+
+/** Bornes OFFERTES pour chaque seuil (ergonomie de saisie ; le serveur reste juge, 422). Clés =
+ *  le champ du payload, pas un enum métier. */
+const THRESHOLD_BOUNDS: Record<"minRestDays" | "maxConsecutive", { min: number; max: number; label: string }> = {
+  minRestDays: { min: 1, max: 4, label: "Jours de repos minimum" },
+  maxConsecutive: { min: 2, max: 6, label: "Créneaux consécutifs maximum" },
+};
+
+/** Le seuil d'une règle est celui que le serveur a RÉSOLU (non-null) — on ne le devine pas. */
+function thresholdOf(setting: ImplicitRuleSetting): { field: "minRestDays" | "maxConsecutive"; value: number } | null {
+  if (null !== setting.minRestDays) {
+    return { field: "minRestDays", value: setting.minRestDays };
+  }
+  if (null !== setting.maxConsecutive) {
+    return { field: "maxConsecutive", value: setting.maxConsecutive };
+  }
+  return null;
+}
+
+/**
+ * Compose le corps du PUT en PRÉSERVANT le seuil courant : le PUT n'accepte qu'un `intensity`
+ * plus, optionnellement, un seuil ; l'omettre le ferait retomber au défaut. On renvoie donc
+ * toujours le seuil résolu de la règle (ou la nouvelle valeur quand c'est lui qu'on change).
+ */
+function buildPayload(setting: ImplicitRuleSetting, intensity: ImplicitRuleIntensity, nextThreshold?: number): ImplicitRuleSettingPayload {
+  const threshold = thresholdOf(setting);
+  const payload: ImplicitRuleSettingPayload = { intensity };
+  if (null !== threshold) {
+    payload[threshold.field] = nextThreshold ?? threshold.value;
+  }
+  return payload;
+}
+
+export function isWellbeingKey(ruleKey: string | null): ruleKey is ImplicitRuleKey {
+  return null !== ruleKey && WELLBEING_RULES.some((r) => r.ruleKey === ruleKey);
+}
+
+function range(min: number, max: number): number[] {
+  return Array.from({ length: max - min + 1 }, (_, i) => min + i);
+}
+
+/**
+ * Une règle réglable : intensité 2 crans + seuil optionnel + « Réinitialiser ». En saison
+ * archivée (`readOnly`), tout est désactivé — le serveur rendrait 409, l'écran ne le laisse pas
+ * tenter en aveugle.
+ */
+function WellbeingRuleRow({
+  meta,
+  setting,
+  readOnly,
+  highlighted,
+  onIntensity,
+  onThreshold,
+  onReset,
+}: {
+  meta: { ruleKey: ImplicitRuleKey; title: string; detail: string };
+  setting: ImplicitRuleSetting;
+  readOnly: boolean;
+  highlighted: boolean;
+  onIntensity: (setting: ImplicitRuleSetting, intensity: ImplicitRuleIntensity) => void;
+  onThreshold: (setting: ImplicitRuleSetting, value: number) => void;
+  onReset: (ruleKey: ImplicitRuleKey) => void;
+}) {
+  const threshold = thresholdOf(setting);
+
   return (
-    <details className="mb-4 rounded-md border border-border bg-muted/30">
-      <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-foreground">Ce que le système applique déjà, sans que vous le saisissiez</summary>
-      <div className="border-t border-border px-3 py-2">
-        <p className="mb-2 text-sm text-muted-foreground">Ces règles s'appliquent d'office, sans saisie. Elles s'ajoutent à celles que vous saisissez ci-dessous.</p>
-        <ul className="flex flex-col gap-2">
-          {IMPLICIT_RULES.map((rule) => (
-            <li key={rule.id} className="text-sm">
-              <span className="font-medium text-foreground">{rule.title}</span>
-              <span className="text-muted-foreground"> — {rule.detail}</span>
-            </li>
-          ))}
-        </ul>
+    <div
+      data-rule-key={meta.ruleKey}
+      className={cn("flex flex-col gap-2 rounded-md border bg-card px-3 py-2", highlighted ? "border-accent ring-1 ring-accent" : "border-border")}
+    >
+      <div>
+        <p className="text-sm font-medium text-foreground">{meta.title}</p>
+        <p className="text-xs text-muted-foreground">{meta.detail}</p>
       </div>
-    </details>
+      <div className="flex flex-wrap items-center gap-2">
+        <div role="group" aria-label={`Intensité — ${meta.title}`} className="inline-flex overflow-hidden rounded-md border border-border">
+          {INTENSITY_CRANS.map((cran) => {
+            const active = setting.intensity === cran.value;
+            return (
+              <button
+                key={cran.value}
+                type="button"
+                aria-label={`${cran.label} — ${meta.title}`}
+                aria-pressed={active}
+                disabled={readOnly}
+                onClick={() => onIntensity(setting, cran.value)}
+                className={cn(
+                  "px-2.5 py-1 text-xs disabled:opacity-50",
+                  active ? "bg-accent text-accent-foreground" : "bg-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {cran.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {null !== threshold ? (
+          <label className="flex items-center gap-1 text-xs text-muted-foreground">
+            {THRESHOLD_BOUNDS[threshold.field].label}
+            <Select
+              aria-label={`${THRESHOLD_BOUNDS[threshold.field].label} — ${meta.title}`}
+              className="h-8 w-16"
+              value={String(threshold.value)}
+              disabled={readOnly}
+              onChange={(e) => onThreshold(setting, Number(e.target.value))}
+            >
+              {range(THRESHOLD_BOUNDS[threshold.field].min, THRESHOLD_BOUNDS[threshold.field].max).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
+
+        {/* « Réinitialiser » n'apparaît que hors défaut (le GET porte `isDefault`) : rien à
+            réinitialiser tant que la règle est au défaut. */}
+        {!setting.isDefault ? (
+          <Button size="sm" variant="ghost" className="ml-auto h-8 text-xs" disabled={readOnly} onClick={() => onReset(meta.ruleKey)}>
+            Réinitialiser
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Le CONTENU de l'onglet « Base » de l'étape Contraintes : les règles IMMUABLES, posées d'office,
+ * en lecture seule. Décision fondateur : un onglet à gauche d'« Horaires », sans titre de section
+ * redondant (le nom de l'onglet porte déjà l'information), juste une phrase d'intro.
+ */
+export function ProductRulesPanel() {
+  return (
+    <div>
+      <p className="mb-3 text-xs text-muted-foreground">Ces règles s'appliquent d'office, sans saisie. Le système les garantit à chaque génération.</p>
+      <ul className="flex flex-col gap-2">
+        {PRODUCT_RULES.map((rule) => (
+          <li key={rule.id} className="text-sm">
+            <span className="font-medium text-foreground">{rule.title}</span>
+            <span className="text-muted-foreground"> — {rule.detail}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Le CONTENU de l'onglet « Bien-être » : les 4 règles RÉGLABLES (contrat moteur 2.7). Il ne crée
+ * AUCUNE contrainte : il RÈGLE les `implicit_rule_settings`. Un deep-link `?rule=<ruleKey>` (depuis
+ * un diagnostic du planning) ouvre cet onglet — géré par `ConstraintsStep` —, surligne la règle
+ * visée et l'amène à l'écran. Pas de titre de section : l'onglet le porte déjà.
+ */
+export function WellbeingRulesPanel({ ruleTarget = null }: { ruleTarget?: string | null }) {
+  const settingsQuery = useImplicitRuleSettings();
+  const update = useUpdateImplicitRuleSetting();
+  const reset = useResetImplicitRuleSetting();
+  const readOnly = true === useWorkingSeason()?.isReadonly;
+
+  const settings = settingsQuery.data ?? [];
+  const byKey = new Map(settings.map((s) => [s.ruleKey, s]));
+  const state = readState(settingsQuery);
+
+  // Amène la LIGNE ciblée à l'écran (centrée), une seule fois. La ligne n'existe qu'une fois les
+  // règles RENDUES : tant que la lecture est en vol (row absente), on ne consomme pas — l'effet
+  // retente quand la donnée arrive (dép. `state`). rAF + `scrollIntoView` optionnel (absent en
+  // jsdom) : même patron que l'atterrissage `edit=` (P4-95).
+  const consumedRuleRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isWellbeingKey(ruleTarget) || consumedRuleRef.current === ruleTarget) {
+      return;
+    }
+    const el = document.querySelector(`[data-rule-key="${ruleTarget}"]`);
+    if (null === el) {
+      return;
+    }
+    consumedRuleRef.current = ruleTarget;
+    requestAnimationFrame(() => el.scrollIntoView?.({ block: "center", behavior: "smooth" }));
+  }, [ruleTarget, state]);
+
+  const applyIntensity = (setting: ImplicitRuleSetting, intensity: ImplicitRuleIntensity) => {
+    if (setting.intensity === intensity) {
+      return;
+    }
+    update.mutate({ ruleKey: setting.ruleKey, body: buildPayload(setting, intensity) });
+  };
+  const applyThreshold = (setting: ImplicitRuleSetting, value: number) => {
+    update.mutate({ ruleKey: setting.ruleKey, body: buildPayload(setting, setting.intensity, value) });
+  };
+  const applyReset = (ruleKey: ImplicitRuleKey) => reset.mutate(ruleKey);
+
+  return (
+    <div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        Réglez chacune sur « Obligatoire » (toujours respectée) ou « Objectif » (respectée quand c'est possible). Une règle en Objectif peut être dépassée — chaque dépassement est signalé
+        au planning (« assouplie par vous »).
+      </p>
+
+      {"failed" === state ? (
+        <LoadErrorHint onRetry={() => void settingsQuery.refetch()}>Impossible de lire les réglages des règles de bien-être.</LoadErrorHint>
+      ) : "loading" === state ? (
+        <p className="text-xs text-muted-foreground">Lecture des réglages…</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {WELLBEING_RULES.map((meta) => {
+            const setting = byKey.get(meta.ruleKey);
+            return undefined === setting ? null : (
+              <WellbeingRuleRow
+                key={meta.ruleKey}
+                meta={meta}
+                setting={setting}
+                readOnly={readOnly}
+                highlighted={ruleTarget === meta.ruleKey}
+                onIntensity={applyIntensity}
+                onThreshold={applyThreshold}
+                onReset={applyReset}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

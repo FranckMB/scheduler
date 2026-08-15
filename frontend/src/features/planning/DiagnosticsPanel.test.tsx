@@ -2,6 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { renderWithProviders } from "@/test/utils";
+
 import type { Diagnostic, DiagnosticSeverity, Slot } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import type { Lookups } from "./lib/grid";
@@ -182,5 +184,51 @@ describe("DiagnosticsPanel — l'état vide ne ment pas", () => {
     render(panel({ diagnostics: [] }));
 
     expect(screen.getByText(/planning est propre/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * P2-28 — la boucle S1 : un diagnostic « règle assouplie » (`implicit_rule_not_honored`) porte
+ * un lien « Ajuster cette règle » vers l'onglet Contraintes du wizard, ciblant SA règle par
+ * `ruleKey`. Le lien passe par WizardStepLink (Router + auth) : on rend donc avec les providers.
+ */
+describe("DiagnosticsPanel — lien « Ajuster cette règle » (P2-28)", () => {
+  const softened = (over: Partial<Diagnostic> = {}): Diagnostic =>
+    ({
+      id: "ir",
+      scheduleId: "s",
+      type: "implicit_rule_not_honored",
+      severity: "WARNING",
+      teamId: null,
+      coachId: null,
+      venueId: null,
+      dayOfWeek: null,
+      startTime: null,
+      ruleKey: "coachRestDay",
+      message: "Le repos des coachs a été assoupli",
+      suggestions: null,
+      ...over,
+    }) as Diagnostic;
+
+  it("porte un lien vers ?step=constraints&rule=<ruleKey>&from=planning", () => {
+    renderWithProviders(<DiagnosticsPanel diagnostics={[softened()]} slots={[]} lookups={lookups} onHighlight={vi.fn()} openMostSevere />);
+
+    const link = screen.getByRole("link", { name: "Ajuster cette règle" });
+    const href = link.getAttribute("href") ?? "";
+    expect(href).toContain("step=constraints");
+    expect(href).toContain("rule=coachRestDay");
+    expect(href).toContain("from=planning");
+  });
+
+  it("aucun lien quand le diagnostic ne porte pas de ruleKey", () => {
+    renderWithProviders(<DiagnosticsPanel diagnostics={[softened({ ruleKey: null })]} slots={[]} lookups={lookups} onHighlight={vi.fn()} openMostSevere />);
+
+    expect(screen.queryByRole("link", { name: "Ajuster cette règle" })).toBeNull();
+  });
+
+  it("aucun lien sur un diagnostic d'un autre type (le lien est réservé aux règles assouplies)", () => {
+    renderWithProviders(<DiagnosticsPanel diagnostics={[diag("WARNING", "autre alerte")]} slots={[]} lookups={lookups} onHighlight={vi.fn()} openMostSevere />);
+
+    expect(screen.queryByRole("link", { name: "Ajuster cette règle" })).toBeNull();
   });
 });

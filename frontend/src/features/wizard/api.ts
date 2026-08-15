@@ -379,6 +379,44 @@ export const createConstraint = (body: ConstraintPayload): Promise<Constraint> =
 export const updateConstraint = (id: string, body: ConstraintPayload): Promise<Constraint> => api.put(`constraints/${id}`, { json: body }).json();
 export const deleteConstraint = (id: string): Promise<void> => api.delete(`constraints/${id}`).then(() => undefined);
 
+// --- Implicit "well-being" rules, adjustable (P2-28) ---
+
+/**
+ * Les 4 règles implicites « bien-être », RÉGLABLES par club/saison (contrat moteur 2.7).
+ * L'identifiant EST `ruleKey` (la clé camelCase du contrat), pas un uuid : on règle une règle
+ * par son nom. La collection est RÉSOLUE côté serveur — TOUJOURS 4 entrées, défauts inclus —
+ * pour que le front n'invente aucune valeur. Le front AFFICHE ce que le GET renvoie et POSTE ce
+ * que le gestionnaire choisit ; les bornes de seuil et le couple règle↔seuil restent jugés par
+ * le serveur (422). Voir `App\ApiResource\ImplicitRuleSettingResource`.
+ */
+export type ImplicitRuleKey = "coachRestDay" | "salarieDistribution" | "maxConsecutiveSessions" | "ageAscending";
+export type ImplicitRuleIntensity = "HARD" | "PREFERRED";
+
+export interface ImplicitRuleSetting {
+  ruleKey: ImplicitRuleKey;
+  intensity: ImplicitRuleIntensity;
+  /** Seuil de repos coach — non-null UNIQUEMENT pour coachRestDay (le serveur le résout ainsi). */
+  minRestDays: number | null;
+  /** Plafond de créneaux consécutifs — non-null UNIQUEMENT pour maxConsecutiveSessions. */
+  maxConsecutive: number | null;
+  /** true tant que la règle est au défaut (aucune ligne stockée) : pilote « Réinitialiser ». */
+  isDefault: boolean;
+}
+
+export interface ImplicitRuleSettingPayload {
+  intensity: ImplicitRuleIntensity;
+  minRestDays?: number;
+  maxConsecutive?: number;
+}
+
+/** Collection RÉSOLUE (toujours 4, non paginée). */
+export const listImplicitRuleSettings = (): Promise<ImplicitRuleSetting[]> => collection<ImplicitRuleSetting>("implicit_rule_settings");
+/** Upsert d'un réglage par sa clé (crée la ligne au premier réglage). */
+export const updateImplicitRuleSetting = (ruleKey: string, body: ImplicitRuleSettingPayload): Promise<ImplicitRuleSetting> =>
+  api.put(`implicit_rule_settings/${ruleKey}`, { json: body }).json();
+/** Réinitialiser = supprimer la ligne → retour au défaut. */
+export const resetImplicitRuleSetting = (ruleKey: string): Promise<void> => api.delete(`implicit_rule_settings/${ruleKey}`).then(() => undefined);
+
 // --- Recap + generate (W5) ---
 
 export interface ValidateResult {
