@@ -138,6 +138,18 @@ passer » est refusé.
 | Au plus une séance par jour et par équipe | `add_one_session_per_day_constraints` | **sans exception** depuis le retrait du levier mort (P4-79, voir ci-dessous) |
 | Chaque coach garde un jour de repos | `add_coach_rest_day_constraints:452` | lundi→vendredi ; le week-end ne compte pas |
 
+⚑ **Un créneau VERROUILLÉ est un FAIT du planning, pas une exception aux règles** (spécification fondateur
+2026-08-15, P4-97 + P4-97 bis) : il est **imposé** (le solveur ne le déplace ni ne le supprime) **et il
+compte dans TOUTES les règles** — il occupe la personne, l'équipe, le gymnase, le jour, la chaîne. Tout
+placement LIBRE doit être compatible avec lui. Deux verrous qui se contredisent ENTRE EUX (choix du
+gestionnaire) ne rendent jamais la génération infaisable : le planning sort, la violation est
+**diagnostiquée**. Historique du défaut : `_extract_hard_locks` retire les créneaux verrouillés des
+variables du modèle, donc toute règle qui n'itère que sur les variables était aveugle — corrigé en deux
+passes (repos coach, distribution salariés, enchaînements, plancher « au moins N à V » ; puis capacité,
+coach mono-gymnase, coach-joueur, une séance/jour). Trouvé sur données réelles : une coach jouait dans un
+gymnase pendant qu'elle en coachait un autre à la même heure, et une équipe avait deux séances le même
+jour — planning COMPLETED, aucun diagnostic.
+
 **Depuis P2-28 (2026-08-14), les règles se rangent en DEUX FAMILLES** — né de la reproduction du
 planning réel BCCL (P5-13) : le planning du club, 100 % verrouillé, était INFEASIBLE parce que deux
 règles « de bon sens » sont plus strictes que la réalité (un coach-joueur enchaîne 3 créneaux dont
