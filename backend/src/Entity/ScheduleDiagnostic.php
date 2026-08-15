@@ -79,6 +79,24 @@ class ScheduleDiagnostic implements TenantOwnedInterface
     #[ORM\Column(type: 'json')]
     private array $suggestions = [];
 
+    // `session_below_effective_min` (of the diagnostic types) carries the MEASURED
+    // causes of a missing session: one `{kind, constraintId, label, count}` row per
+    // rule that closed candidate slots. Non-nullable, default [] — every other type
+    // leaves it empty, existing rows backfill to []. The `constraintId` here is
+    // NORMALISED to the entity UUID (the recorder strips the `:teamId` suffix the
+    // builder adds when it expands a CLUB constraint into N TEAM rows), so the wizard
+    // deep-link `?edit=<id>` resolves.
+    /** @var list<array<string, mixed>> */
+    #[ORM\Column(type: 'json')]
+    private array $causes = [];
+
+    // `session_below_effective_min` also carries how many candidate slots stayed OPEN
+    // (nothing closed them, the solver simply placed something else). Nullable on
+    // purpose: 0 means "no slot stayed open", null means "not measured" — the
+    // distinction is product signal, never collapse it.
+    #[ORM\Column(type: 'smallint', nullable: true)]
+    private ?int $openCandidates = null;
+
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -288,6 +306,32 @@ class ScheduleDiagnostic implements TenantOwnedInterface
     public function setSuggestions(array $suggestions): self
     {
         $this->suggestions = $suggestions;
+
+        return $this;
+    }
+
+    /** @return list<array<string, mixed>> */
+    public function getCauses(): array
+    {
+        return $this->causes;
+    }
+
+    /** @param list<array<string, mixed>> $causes */
+    public function setCauses(array $causes): self
+    {
+        $this->causes = $causes;
+
+        return $this;
+    }
+
+    public function getOpenCandidates(): ?int
+    {
+        return $this->openCandidates;
+    }
+
+    public function setOpenCandidates(?int $openCandidates): self
+    {
+        $this->openCandidates = $openCandidates;
 
         return $this;
     }

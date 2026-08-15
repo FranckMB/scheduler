@@ -110,9 +110,65 @@ final class ScheduleDiagnosticsRecorder
             if (isset($diagnostic['rule_key']) || isset($diagnostic['ruleKey'])) {
                 $entity->setRuleKey((string) ($diagnostic['rule_key'] ?? $diagnostic['ruleKey']));
             }
+            // `session_below_effective_min` carries the MEASURED cause of a missing session:
+            // `causes` (a list of {kind, constraintId, label, count}) + `openCandidates`
+            // (slots left open, none closed them). Each cause's constraintId is NORMALISED to
+            // the entity UUID — see normalizeCauses. openCandidates is dual-cased; `isset`
+            // deliberately treats a null value as absent, preserving null (not measured) vs
+            // 0 (nothing stayed open).
+            if (isset($diagnostic['causes'])) {
+                $entity->setCauses($this->normalizeCauses($diagnostic['causes']));
+            }
+            if (isset($diagnostic['open_candidates']) || isset($diagnostic['openCandidates'])) {
+                $entity->setOpenCandidates((int) ($diagnostic['open_candidates'] ?? $diagnostic['openCandidates']));
+            }
 
             $this->entityManager->persist($entity);
         }
+    }
+
+    /**
+     * Normalise the MEASURED causes of a `session_below_effective_min` diagnostic.
+     *
+     * The backend is what suffixed a CLUB constraint into N TEAM rows with an id
+     * `<uuid>:<teamId>` (ScheduleConstraintBuilder:888/:930) or `<uuid>:forbidden:<teamId>`
+     * (:909); the engine echoes THAT suffixed id back on the cause. The wizard deep-link
+     * `?edit=<id>` matches on the entity UUID, so the backend strips the suffix here —
+     * symmetry, and the only home that knows it added it. Cutting at the first ':' is safe:
+     * a UUID never contains one. The bare id (no suffix, a real TEAM/COACH constraint) is
+     * left untouched. `priority-tier:%d` (:827) is SOFT and never surfaces as a cause; were
+     * it ever to, this would truncate it to `priority-tier` — a non-resolvable id, i.e. a
+     * visible no-match, not a wrong match (flagged in the plan, not worked around here).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function normalizeCauses(mixed $causes): array
+    {
+        if (!\is_array($causes)) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ($causes as $cause) {
+            if (!\is_array($cause)) {
+                continue;
+            }
+
+            /** @var array<string, mixed> $cause */
+            // constraintId dual-cased (engine sends camelCase); store the normalised id back
+            // under camelCase to match the serialised contract shape the frontend reads.
+            $rawId = $cause['constraintId'] ?? $cause['constraint_id'] ?? null;
+            unset($cause['constraint_id']);
+            if (null !== $rawId) {
+                $id = (string) $rawId;
+                $colon = strpos($id, ':');
+                $cause['constraintId'] = false === $colon ? $id : substr($id, 0, $colon);
+            }
+
+            $normalized[] = $cause;
+        }
+
+        return $normalized;
     }
 
     /**
