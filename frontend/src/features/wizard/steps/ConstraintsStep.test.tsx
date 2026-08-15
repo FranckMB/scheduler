@@ -1186,3 +1186,210 @@ describe("ConstraintsStep — datées d'une semaine enfant (D5)", () => {
     expect(h.createMut.mock.calls[0][0].calendarEntryId).toBe("mother-1");
   });
 });
+
+/**
+ * P2-29 (lot tags PR 3) — « Affiner ce groupe » : sous le sélecteur de cible, quand la cible est
+ * un TAG, un lien discret déplie deux listes de cases — « ET AUSSI » (intersection → `targetTags`)
+ * et « SAUF » (union soustraite → `excludeTags`). Le nom auto devient « A + B sauf C » (libellés
+ * AFFICHÉS). Cas simple (aucun affinage) : `targetTag` seul, zéro churn. Jamais les deux formes
+ * ensemble (le backend rend 422 sur l'intersection).
+ */
+describe("ConstraintsStep — affiner un groupe (targetTags / excludeTags)", () => {
+  const REFINE_TAGS = [
+    { id: "tag-adu", name: "ADULTE", color: null, isSystem: true, axis: "AGE" as const },
+    { id: "tag-sen", name: "SENIOR", color: null, isSystem: true, axis: "AGE" as const },
+    { id: "tag-comp", name: "COMPETITION", color: null, isSystem: true, axis: "NIVEAU" as const },
+  ];
+  const REFINE_ASSIGN = [
+    { id: "a1", teamId: "t1", tagId: "tag-adu", seasonId: "s1" },
+    { id: "a2", teamId: "t1", tagId: "tag-sen", seasonId: "s1" },
+    { id: "a3", teamId: "t1", tagId: "tag-comp", seasonId: "s1" },
+  ];
+
+  beforeEach(() => {
+    useWizardStore.getState().exitPeriodMode();
+    h.createMut.mockClear();
+    h.updateMut.mockClear();
+    h.list = [];
+    h.tags = REFINE_TAGS;
+    h.tagAssignments = REFINE_ASSIGN;
+    h.reservations = [];
+  });
+  afterEach(() => useWizardStore.getState().exitPeriodMode());
+
+  const refineLink = /Affiner ce groupe/;
+
+  it("n'affiche PAS « Affiner ce groupe » quand la cible est « Toutes les équipes »", () => {
+    renderWithProviders(<ConstraintsStep />);
+    expect(screen.queryByRole("button", { name: refineLink })).toBeNull();
+  });
+
+  it("n'affiche PAS « Affiner ce groupe » quand la cible est une équipe précise", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cible" }), "t1");
+    expect(screen.queryByRole("button", { name: refineLink })).toBeNull();
+  });
+
+  it("affiche le lien (aria-expanded) SEULEMENT pour un tag ; il déplie/replie", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cible" }), "tag:ADULTE");
+    const link = screen.getByRole("button", { name: refineLink });
+    expect(link).toHaveAttribute("aria-expanded", "false");
+    await user.click(link);
+    expect(screen.getByRole("button", { name: refineLink })).toHaveAttribute("aria-expanded", "true");
+    // Les deux groupes de cases sont nommés (a11y : fieldset/legend).
+    expect(screen.getByRole("group", { name: /Et aussi/ })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /Sauf/ })).toBeInTheDocument();
+  });
+
+  it("le tag CIBLE n'apparaît pas dans les listes d'affinage", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cible" }), "tag:ADULTE");
+    await user.click(screen.getByRole("button", { name: refineLink }));
+    const andGroup = screen.getByRole("group", { name: /Et aussi/ });
+    expect(within(andGroup).queryByRole("checkbox", { name: "Adulte (+ de 18)" })).toBeNull();
+    expect(within(andGroup).getByRole("checkbox", { name: "Compétition (hors loisir)" })).toBeInTheDocument();
+  });
+
+  it("« ET AUSSI » → émet targetTags [cible, …] + nom « A + B », JAMAIS targetTag", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cible" }), "tag:SENIOR");
+    await user.click(screen.getByRole("button", { name: refineLink }));
+    const andGroup = screen.getByRole("group", { name: /Et aussi/ });
+    await user.click(within(andGroup).getByRole("checkbox", { name: "Compétition (hors loisir)" }));
+    await user.type(screen.getByLabelText("Pas avant"), "20:00");
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    const payload = h.createMut.mock.calls[0][0];
+    expect(payload.config).toMatchObject({ targetTags: ["SENIOR", "COMPETITION"], minStartTime: "20:00" });
+    expect(payload.config).not.toHaveProperty("targetTag");
+    expect(payload.config).not.toHaveProperty("excludeTags");
+    expect(payload.name).toBe("Groupe Senior (+ de 22) + Compétition (hors loisir) · pas avant 20:00");
+  });
+
+  it("« SAUF » → émet targetTags [cible] + excludeTags + nom « A sauf C »", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cible" }), "tag:ADULTE");
+    await user.click(screen.getByRole("button", { name: refineLink }));
+    const exceptGroup = screen.getByRole("group", { name: /Sauf/ });
+    await user.click(within(exceptGroup).getByRole("checkbox", { name: "Compétition (hors loisir)" }));
+    await user.type(screen.getByLabelText("Pas avant"), "18:50");
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    const payload = h.createMut.mock.calls[0][0];
+    expect(payload.config).toMatchObject({ targetTags: ["ADULTE"], excludeTags: ["COMPETITION"], minStartTime: "18:50" });
+    expect(payload.config).not.toHaveProperty("targetTag");
+    expect(payload.name).toBe("Groupe Adulte (+ de 18) sauf Compétition (hors loisir) · pas avant 18:50");
+  });
+
+  it("un même tag ne peut pas être à la fois « ET AUSSI » et « SAUF » (le cocher d'un côté le décoche de l'autre)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cible" }), "tag:ADULTE");
+    await user.click(screen.getByRole("button", { name: refineLink }));
+    const andGroup = screen.getByRole("group", { name: /Et aussi/ });
+    const exceptGroup = screen.getByRole("group", { name: /Sauf/ });
+
+    await user.click(within(andGroup).getByRole("checkbox", { name: "Compétition (hors loisir)" }));
+    expect(within(andGroup).getByRole("checkbox", { name: "Compétition (hors loisir)" })).toBeChecked();
+
+    // Le cocher en « Sauf » le retire de « Et aussi ».
+    await user.click(within(exceptGroup).getByRole("checkbox", { name: "Compétition (hors loisir)" }));
+    expect(within(exceptGroup).getByRole("checkbox", { name: "Compétition (hors loisir)" })).toBeChecked();
+    expect(within(andGroup).getByRole("checkbox", { name: "Compétition (hors loisir)" })).not.toBeChecked();
+  });
+
+  it("le cas SIMPLE (aucun affinage) émet targetTag SEUL — zéro churn", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cible" }), "tag:ADULTE");
+    await user.type(screen.getByLabelText("Pas avant"), "20:00");
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+
+    const payload = h.createMut.mock.calls[0][0];
+    expect(payload.config).toMatchObject({ targetTag: "ADULTE", minStartTime: "20:00" });
+    expect(payload.config).not.toHaveProperty("targetTags");
+    expect(payload.config).not.toHaveProperty("excludeTags");
+    expect(payload.name).toBe("Groupe Adulte (+ de 18) · pas avant 20:00");
+  });
+
+  it("changer la cible pour « Toutes les équipes » VIDE l'affinage (pas d'état fantôme)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cible" }), "tag:SENIOR");
+    await user.click(screen.getByRole("button", { name: refineLink }));
+    await user.click(within(screen.getByRole("group", { name: /Et aussi/ })).getByRole("checkbox", { name: "Compétition (hors loisir)" }));
+
+    // On repointe la cible sur « Toutes les équipes » : le lien disparaît, l'affinage se vide.
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cible" }), "");
+    expect(screen.queryByRole("button", { name: refineLink })).toBeNull();
+
+    // On revient sur un tag et on ajoute SANS re-cocher : aucune trace de l'ancien affinage.
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cible" }), "tag:SENIOR");
+    await user.type(screen.getByLabelText("Pas avant"), "20:00");
+    await user.click(screen.getByRole("button", { name: "Ajouter la contrainte" }));
+    expect(h.createMut.mock.calls[0][0].config).toMatchObject({ targetTag: "SENIOR" });
+    expect(h.createMut.mock.calls[0][0].config).not.toHaveProperty("targetTags");
+  });
+
+  it("recharge une contrainte à FORME COMBINÉE (targetTags/excludeTags) : cible + affinage dépliés", async () => {
+    h.list = [
+      {
+        id: "c-combo",
+        name: "Groupe Adulte (+ de 18) + Compétition (hors loisir) sauf Senior (+ de 22) · pas avant 20:00",
+        scope: "CLUB",
+        scopeTargetId: null,
+        family: "TIME",
+        ruleType: "PREFERRED",
+        config: { targetTags: ["ADULTE", "COMPETITION"], excludeTags: ["SENIOR"], minStartTime: "20:00" },
+        isActive: true,
+      },
+    ] as Constraint[];
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Modifier" }));
+
+    // La cible principale = le 1er targetTags ; l'affinage est DÉPLIÉ (non vide) et pré-coché.
+    expect(screen.getByRole("combobox", { name: "Cible" })).toHaveValue("tag:ADULTE");
+    const andGroup = screen.getByRole("group", { name: /Et aussi/ });
+    const exceptGroup = screen.getByRole("group", { name: /Sauf/ });
+    expect(within(andGroup).getByRole("checkbox", { name: "Compétition (hors loisir)" })).toBeChecked();
+    expect(within(exceptGroup).getByRole("checkbox", { name: "Senior (+ de 22)" })).toBeChecked();
+
+    // Ré-enregistrer sans rien changer round-trip la forme combinée (jamais targetTag).
+    await user.click(screen.getByRole("button", { name: "Enregistrer la contrainte" }));
+    const body = (h.updateMut.mock.calls[0][0] as { body: Constraint }).body;
+    expect(body.config).toMatchObject({ targetTags: ["ADULTE", "COMPETITION"], excludeTags: ["SENIOR"] });
+    expect(body.config).not.toHaveProperty("targetTag");
+  });
+
+  it("recharge une contrainte LEGACY (targetTag) : cible remplie, affinage vide et replié", async () => {
+    h.list = [
+      { id: "c-legacy", name: "Groupe Adulte (+ de 18) · pas avant 20:00", scope: "CLUB", scopeTargetId: null, family: "TIME", ruleType: "PREFERRED", config: { targetTag: "ADULTE", minStartTime: "20:00" }, isActive: true },
+    ] as Constraint[];
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Modifier" }));
+    expect(screen.getByRole("combobox", { name: "Cible" })).toHaveValue("tag:ADULTE");
+    // Affinage replié (rien à montrer) : le lien est là, aria-expanded false.
+    expect(screen.getByRole("button", { name: refineLink })).toHaveAttribute("aria-expanded", "false");
+
+    // Round-trip : reste un targetTag SEUL (zéro churn).
+    await user.click(screen.getByRole("button", { name: "Enregistrer la contrainte" }));
+    const body = (h.updateMut.mock.calls[0][0] as { body: Constraint }).body;
+    expect(body.config).toMatchObject({ targetTag: "ADULTE" });
+    expect(body.config).not.toHaveProperty("targetTags");
+  });
+});

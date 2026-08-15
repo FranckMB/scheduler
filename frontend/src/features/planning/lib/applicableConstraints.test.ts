@@ -100,12 +100,49 @@ describe("applicableConstraints — CLUB ciblant un tag (miroir de ScheduleConst
   });
 });
 
+describe("applicableConstraints — CLUB ciblant plusieurs tags / en excluant (P2-29)", () => {
+  // team-A : REGIONAL + COMPETITION ; team-B : REGIONAL ; team-C : COMPETITION.
+  const tagged = buildTagTeamIds(
+    [{ id: "t-reg", name: "REGIONAL" }, { id: "t-comp", name: "COMPETITION" }],
+    [
+      { teamId: "team-A", tagId: "t-reg" },
+      { teamId: "team-A", tagId: "t-comp" },
+      { teamId: "team-B", tagId: "t-reg" },
+      { teamId: "team-C", tagId: "t-comp" },
+    ],
+  );
+
+  it("targetTags = INTERSECTION : seule l'équipe qui porte TOUS les tags", () => {
+    const both = constraint({ id: "both", scope: "CLUB", config: { targetTags: ["REGIONAL", "COMPETITION"] } });
+    expect(applicableConstraints(slot({ teamId: "team-A" }), [both], tagged).map((c) => c.id)).toEqual(["both"]);
+    expect(applicableConstraints(slot({ teamId: "team-B" }), [both], tagged)).toEqual([]);
+    expect(applicableConstraints(slot({ teamId: "team-C" }), [both], tagged)).toEqual([]);
+  });
+
+  it("excludeTags = union soustraite : la cible MOINS les exclus", () => {
+    // cible REGIONAL (A, B) sauf COMPETITION (A, C) → seulement B.
+    const c = constraint({ id: "sub", scope: "CLUB", config: { targetTags: ["REGIONAL"], excludeTags: ["COMPETITION"] } });
+    expect(applicableConstraints(slot({ teamId: "team-B" }), [c], tagged).map((x) => x.id)).toEqual(["sub"]);
+    expect(applicableConstraints(slot({ teamId: "team-A" }), [c], tagged)).toEqual([]);
+  });
+
+  it("legacy targetTag se comporte comme targetTags:[x]", () => {
+    const c = constraint({ id: "leg", scope: "CLUB", config: { targetTag: "REGIONAL" } });
+    expect(applicableConstraints(slot({ teamId: "team-B" }), [c], tagged).map((x) => x.id)).toEqual(["leg"]);
+    expect(applicableConstraints(slot({ teamId: "team-C" }), [c], tagged)).toEqual([]);
+  });
+});
+
 describe("isClubWide — ce qui concerne le club ENTIER vs l'équipe", () => {
   it("CLUB sans tag = club entier", () => {
     expect(isClubWide(constraint({ scope: "CLUB", config: {} }))).toBe(true);
   });
   it("CLUB avec tag = concerne l'équipe (taguée), pas le club entier", () => {
     expect(isClubWide(constraint({ scope: "CLUB", config: { targetTag: "REGIONAL" } }))).toBe(false);
+  });
+  it("CLUB avec targetTags/excludeTags = un sous-ensemble, pas le club entier (P2-29)", () => {
+    expect(isClubWide(constraint({ scope: "CLUB", config: { targetTags: ["REGIONAL", "COMPETITION"] } }))).toBe(false);
+    expect(isClubWide(constraint({ scope: "CLUB", config: { excludeTags: ["COMPETITION"] } }))).toBe(false);
   });
   it("TEAM/FACILITY/COACH ne sont jamais club entier", () => {
     expect(isClubWide(constraint({ scope: "TEAM", scopeTargetId: "team-A" }))).toBe(false);

@@ -12,9 +12,10 @@ import { Select } from "@/shared/components/ui/select";
 import { VenueSelect } from "@/shared/components/ui/venue-select";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 
-import { groupConstraints } from "../lib/constraintOrder";
+import { groupConstraints, orderedTagNames } from "../lib/constraintOrder";
 import { groupedCoaches } from "../lib/ranking";
 import { groupTagsByAxis, tagLabel } from "../lib/tagLabels";
+import { excludeTagNames, targetTagNames } from "@/shared/lib/tagTeamIds";
 import { cn } from "@/shared/lib/utils";
 
 import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleType } from "../api";
@@ -136,6 +137,13 @@ export function ConstraintsStep() {
   const [ruleType, setRuleType] = useState<ConstraintRuleType>("PREFERRED");
   // target: "" = toutes les équipes (CLUB) · "tag:NAME" = un groupe · sinon un id d'équipe (TEAM)
   const [target, setTarget] = useState("");
+  // Affinage d'un groupe (P2-29) — visible SEULEMENT quand la cible est un tag. « ET AUSSI » =
+  // intersection (l'équipe doit porter les deux) → `targetTags` ; « SAUF » = union soustraite →
+  // `excludeTags`. Replié par défaut ; vidé dès que la cible n'est plus un tag (pas d'état
+  // fantôme qui repartirait à la contrainte suivante).
+  const [refineOpen, setRefineOpen] = useState(false);
+  const [andTags, setAndTags] = useState<Set<string>>(new Set());
+  const [exceptTags, setExceptTags] = useState<Set<string>>(new Set());
   const [minTime, setMinTime] = useState("");
   const [maxTime, setMaxTime] = useState("");
   // "finir avant" = maxEndTime (l'engine calcule fin = début + durée du créneau).
@@ -199,19 +207,107 @@ export function ConstraintsStep() {
     "ready" === teamsRead ? null : { message: `La sélection d'équipes de la période ${"loading" === teamsRead ? "est en cours de lecture" : "n'a pas pu être lue"} — la liste ci-dessous est celle de la saison et peut contenir une équipe en pause.`, pending: "loading" === teamsRead },
   ].filter((n): n is { message: string; pending: boolean } => null !== n);
 
-  // Resolve the target into scope + optional tag (CLUB+targetTag → N team constraints backend-side).
+  // Only groups (tags) that ACTUALLY concern a team of the club: the backend always creates the
+  // system tags, but a group with no assigned team (e.g. FEMININE when the club has no female
+  // team) must never appear in the selector — ni dans l'affinage.
+  const assignedTagIds = useMemo(() => new Set(tagAssignments.map((a) => a.tagId)), [tagAssignments]);
+  const visibleTags = useMemo(() => tags.filter((t) => assignedTagIds.has(t.id)), [tags, assignedTagIds]);
+
+  // Resolve the target into scope + optional tag (CLUB+tag(s) → N team constraints backend-side).
   const isTag = target.startsWith("tag:");
   const tagName = isTag ? target.slice(4) : "";
   const teamTargetId = !isTag && "" !== target ? target : "";
   const scope: "CLUB" | "TEAM" = "" !== teamTargetId ? "TEAM" : "CLUB";
   const scopeTargetId = "" !== teamTargetId ? teamTargetId : null;
-  const tagConfig: Record<string, string> = isTag ? { targetTag: tagName } : {};
+  // Ordre canonique des tags (axe puis libellé) — pour un `targetTags`/`excludeTags` STABLE et un
+  // nom auto déterministe. Même ordre que le sélecteur et le récap.
+  const tagOrder = useMemo(() => new Map(orderedTagNames(visibleTags).map((n, i) => [n, i] as const)), [visibleTags]);
+  const ordered = (names: Set<string>): string[] => [...names].sort((a, b) => (tagOrder.get(a) ?? 9999) - (tagOrder.get(b) ?? 9999));
+  const andList = ordered(andTags);
+  const exceptList = ordered(exceptTags);
+  const refined = isTag && (andList.length > 0 || exceptList.length > 0);
+  // Émission : `targetTag` SEUL tant qu'il n'y a ni « et aussi » ni « sauf » (zéro churn sur
+  // l'existant) ; sinon `targetTags` (intersection) + `excludeTags` — JAMAIS les deux formes
+  // ensemble (le backend rend 422 si `targetTag` et `targetTags` cohabitent).
+  const tagConfig: Record<string, unknown> = !isTag
+    ? {}
+    : refined
+      ? { targetTags: [tagName, ...andList], ...(exceptList.length > 0 ? { excludeTags: exceptList } : {}) }
+      : { targetTag: tagName };
   // « au moins » n'existe que par équipe : si la cible quitte l'équipe APRÈS le
   // choix du mode, la valeur retombe d'elle-même sur « préfère » (dérivé au
   // rendu — jamais un état qui pourrait rester coincé sur l'option désactivée).
   const minAllowed = "TEAM" === scope || isTag;
   const effectiveVenueMode = "min" === venueMode && !minAllowed ? "preferred" : venueMode;
-  const who = "" !== teamTargetId ? (teamName.get(teamTargetId) ?? "?") : isTag ? `Groupe ${tagName}` : "Toutes les équipes";
+  // Le « qui » du nom auto : format « Groupe A + B sauf C » avec les libellés AFFICHÉS
+  // (`tagLabel`, ce que le gestionnaire a sous les yeux), pas les noms techniques (P2-29).
+  const whoGroup = (): string => {
+    const parts = [tagLabel(tagName), ...andList.map(tagLabel)].join(" + ");
+
+    return `Groupe ${parts}${exceptList.length > 0 ? ` sauf ${exceptList.map(tagLabel).join(", ")}` : ""}`;
+  };
+  const who = "" !== teamTargetId ? (teamName.get(teamTargetId) ?? "?") : isTag ? whoGroup() : "Toutes les équipes";
+  // Changer la cible : hors tag → l'affinage se vide (repli inclus) ; vers un tag → ce tag ne
+  // peut pas être aussi « et aussi »/« sauf » de lui-même, on l'en retire.
+  const changeTarget = (value: string) => {
+    setTarget(value);
+    if (!value.startsWith("tag:")) {
+      setAndTags(new Set());
+      setExceptTags(new Set());
+      setRefineOpen(false);
+      return;
+    }
+    const primary = value.slice(4);
+    setAndTags((prev) => new Set([...prev].filter((n) => n !== primary)));
+    setExceptTags((prev) => new Set([...prev].filter((n) => n !== primary)));
+  };
+  // Cocher/décocher un tag en « et aussi » ou « sauf ». Un tag ne peut pas être dans les deux
+  // (le backend rend 422 sur l'intersection targetTag/targetTags) : l'ajouter d'un côté le
+  // retire de l'autre.
+  const toggleAnd = (name: string) => {
+    const adding = !andTags.has(name);
+    setAndTags((p) => {
+      const n = new Set(p);
+      if (adding) {
+        n.add(name);
+      } else {
+        n.delete(name);
+      }
+      return n;
+    });
+    if (adding) {
+      setExceptTags((p) => {
+        if (!p.has(name)) {
+          return p;
+        }
+        const n = new Set(p);
+        n.delete(name);
+        return n;
+      });
+    }
+  };
+  const toggleExcept = (name: string) => {
+    const adding = !exceptTags.has(name);
+    setExceptTags((p) => {
+      const n = new Set(p);
+      if (adding) {
+        n.add(name);
+      } else {
+        n.delete(name);
+      }
+      return n;
+    });
+    if (adding) {
+      setAndTags((p) => {
+        if (!p.has(name)) {
+          return p;
+        }
+        const n = new Set(p);
+        n.delete(name);
+        return n;
+      });
+    }
+  };
   const toggleDay = (n: number) => setDays((prev) => (prev.has(n) ? new Set([...prev].filter((x) => x !== n)) : new Set([...prev, n])));
   // Le NOM auto-généré écrit les jours EN TOUTES LETTRES (« jeudi », pas « Jeu ») — le
   // court reste réservé aux colonnes de la grille. Forme longue au foyer unique (D-22).
@@ -222,7 +318,7 @@ export function ConstraintsStep() {
       if ("" === minTime && "" === maxTime && "" === endTime) {
         return null;
       }
-      const config: Record<string, string> = { ...tagConfig };
+      const config: Record<string, unknown> = { ...tagConfig };
       if ("" !== minTime) {
         config.minStartTime = minTime;
       }
@@ -303,6 +399,9 @@ export function ConstraintsStep() {
   const resetForm = () => {
     setEditingId(null);
     setTarget("");
+    setAndTags(new Set());
+    setExceptTags(new Set());
+    setRefineOpen(false);
     setDayMode("forbidden");
     setCoachMode("unavailable");
     setVenueMode("preferred");
@@ -348,7 +447,10 @@ export function ConstraintsStep() {
     // auto-migrates to allowedDays on save.
     const isForced = ("FACILITY" === c.family && ("string" === typeof cfg.forcedVenueId || "string" === typeof cfg.minAtVenueId)) || ("DAY" === c.family && (Array.isArray(cfg.allowedDays) || Array.isArray(cfg.forcedDays))) || "COACH_AVAILABILITY" === c.family;
     setRuleType(isForced ? "PREFERRED" : c.ruleType);
-    const tag = "string" === typeof cfg.targetTag ? cfg.targetTag : "";
+    // Affinage : on repart propre, la branche « cible = tag » ci-dessous le repeuple si besoin.
+    setAndTags(new Set());
+    setExceptTags(new Set());
+    setRefineOpen(false);
     if ("COACH_AVAILABILITY" === c.family) {
       setCoachId(c.scopeTargetId ?? ""); // SEC-13 : le scope EST la cible (le config ne la porte plus)
       const available = Array.isArray(cfg.availableDays);
@@ -359,7 +461,19 @@ export function ConstraintsStep() {
     } else if ("TEAM" === c.scope && null !== c.scopeTargetId) {
       setTarget(c.scopeTargetId);
     } else {
-      setTarget("" !== tag ? `tag:${tag}` : "");
+      // CLUB : reconnaît les DEUX formes — `targetTag` legacy OU `targetTags`/`excludeTags`. La
+      // 1re cible devient le tag principal, le reste l'affinage (déplié si non vide, pour que le
+      // gestionnaire voie pourquoi le nom est long).
+      const targets = targetTagNames(cfg);
+      const excludes = excludeTagNames(cfg);
+      if (targets.length > 0) {
+        setTarget(`tag:${targets[0]}`);
+        setAndTags(new Set(targets.slice(1)));
+        setExceptTags(new Set(excludes));
+        setRefineOpen(targets.length > 1 || excludes.length > 0);
+      } else {
+        setTarget("");
+      }
     }
     if ("TIME" === c.family) {
       setMinTime("string" === typeof cfg.minStartTime ? cfg.minStartTime : "");
@@ -451,14 +565,8 @@ export function ConstraintsStep() {
     requestAnimationFrame(() => document.querySelector(`[data-constraint-id="${editTarget}"]`)?.scrollIntoView?.({ block: "center", behavior: "smooth" }));
   }, [editTarget, constraints]);
 
-  // Only groups (tags) that ACTUALLY concern a team of the club: the backend
-  // always creates the 21 system tags, but a group with no assigned team (e.g.
-  // FEMININE when the club has no female team) must never appear in the selector.
-  const assignedTagIds = useMemo(() => new Set(tagAssignments.map((a) => a.tagId)), [tagAssignments]);
-  const visibleTags = useMemo(() => tags.filter((t) => assignedTagIds.has(t.id)), [tags, assignedTagIds]);
-
   const teamPicker = (
-    <Select aria-label="Cible" title="Qui est concerné : tout le club, un groupe (tag), ou une équipe précise" className="h-8 w-48" value={target} onChange={(e) => setTarget(e.target.value)}>
+    <Select aria-label="Cible" title="Qui est concerné : tout le club, un groupe (tag), ou une équipe précise" className="h-8 w-48" value={target} onChange={(e) => changeTarget(e.target.value)}>
       <option value="">Toutes les équipes</option>
       {/* Groups by axis: Genre, Niveau, Âge (Lot B) — then the teams by tier below. */}
       {groupTagsByAxis(visibleTags).map((group) => (
@@ -481,6 +589,55 @@ export function ConstraintsStep() {
       ))}
     </Select>
   );
+
+  // Les tags proposés à l'affinage : les MÊMES que le sélecteur (`visibleTags`), triés par
+  // libellé affiché, MOINS le tag déjà choisi comme cible principale (l'affiner par lui-même
+  // n'a pas de sens). Liste simple (pas de sous-groupes d'axe) : deux colonnes de cases restent
+  // lisibles ainsi, comme la maquette validée.
+  const refineTags = [...visibleTags]
+    .filter((t) => t.name !== tagName)
+    .sort((a, b) => tagLabel(a.name).localeCompare(tagLabel(b.name), "fr"));
+  // « Affiner ce groupe » — visible SEULEMENT quand la cible est un tag (jamais pour « Toutes
+  // les équipes », jamais pour une équipe précise). Replié par défaut ; l'affinage compte
+  // (`refined`) reste appliqué même replié — d'où le pastillage du lien.
+  const refinePanel = isTag ? (
+    <div className="w-full basis-full">
+      <button
+        type="button"
+        className="text-xs text-muted-foreground underline decoration-dotted underline-offset-2 hover:text-foreground"
+        aria-expanded={refineOpen}
+        onClick={() => setRefineOpen((v) => !v)}
+      >
+        Affiner ce groupe{refined ? " (actif)" : ""}
+      </button>
+      {refineOpen ? (
+        <div className="mt-2 flex flex-wrap gap-x-6 gap-y-3">
+          <fieldset className="min-w-0 border-0 p-0">
+            <legend className="mb-1 text-xs font-semibold text-muted-foreground">Et aussi (l'équipe doit porter les deux)</legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {refineTags.map((t) => (
+                <label key={t.id} className="flex items-center gap-1 text-xs">
+                  <input type="checkbox" checked={andTags.has(t.name)} onChange={() => toggleAnd(t.name)} />
+                  {tagLabel(t.name)}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="min-w-0 border-0 p-0">
+            <legend className="mb-1 text-xs font-semibold text-muted-foreground">Sauf (retirer ces groupes)</legend>
+            <div className="flex flex-wrap gap-x-4 gap-y-1">
+              {refineTags.map((t) => (
+                <label key={t.id} className="flex items-center gap-1 text-xs">
+                  <input type="checkbox" checked={exceptTags.has(t.name)} onChange={() => toggleExcept(t.name)} />
+                  {tagLabel(t.name)}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+      ) : null}
+    </div>
+  ) : null;
 
   const list = constraints.filter((c) => c.family === family);
 
@@ -636,6 +793,7 @@ export function ConstraintsStep() {
           {/* Per-family add form */}
           <div ref={formRef} className="mb-4 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3">
         {("TIME" === family || "DAY" === family || "FACILITY" === family) && teamPicker}
+        {("TIME" === family || "DAY" === family || "FACILITY" === family) && refinePanel}
 
         {"TIME" === family && (
           <>

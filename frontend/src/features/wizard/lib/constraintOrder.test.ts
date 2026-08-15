@@ -60,6 +60,17 @@ describe("groupConstraints", () => {
     expect(sections).toEqual(["Genre", "Âge", "S · Fanion", "B · Moyenne"]);
   });
 
+  it("TIME/DAY → une contrainte à CIBLE COMBINÉE se range sous l'axe de son tag PRINCIPAL (P2-29)", () => {
+    // targetTags:[ADULTE(AGE), FEMININE(GENRE)] → tag principal ADULTE → axe Âge (jamais « Autres »
+    // ni « Toutes les équipes »). L'affinage vit dans le NOM, pas dans la section.
+    const sections = groupConstraints(
+      [c({ scope: "CLUB", config: { targetTags: ["ADULTE", "FEMININE"], excludeTags: ["FEMININE"] } })],
+      "TIME",
+      ctx,
+    ).map((s) => s.label);
+    expect(sections).toEqual(["Âge"]);
+  });
+
   it("FACILITY → groups by venue, A→Z", () => {
     const sections = groupConstraints(
       [

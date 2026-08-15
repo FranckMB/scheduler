@@ -15,7 +15,7 @@ import { VenueSelect } from "@/shared/components/ui/venue-select";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
-import { buildTagTeamIds } from "@/shared/lib/tagTeamIds";
+import { buildTagTeamIds, resolveConstraintTeamIds, targetsTags } from "@/shared/lib/tagTeamIds";
 import { formatDuration } from "@/shared/lib/duration";
 import { cn } from "@/shared/lib/utils";
 import { toast } from "@/shared/stores/toastStore";
@@ -942,15 +942,19 @@ function PeriodConstraintsPanel({
     }
     return byTag;
   }, [activeTeamIds, tagTeamIdsByName]);
-  const needsTagResolution = constraints.some((c) => "string" === typeof c.config?.targetTag && "" !== c.config.targetTag);
+  const activeTeamIdList = useMemo(() => [...activeTeamIds], [activeTeamIds]);
+  const needsTagResolution = constraints.some((c) => targetsTags(c.config));
   const tagResolutionReady = !needsTagResolution || (!tagsLoading && !tagAssignmentsLoading && !tagsError && !tagAssignmentsError);
   // ⚠️ MIROIR DÉCLARÉ (régime 2, P4-88). Deux branchements sur les valeurs d'un enum de
   // contrainte, reflétant le serveur :
   //  - `defaultKept` (scope) reflète `ScheduleConstraintBuilder::inheritedPermanents` (prédicat
   //    reprise) — FACILITY tombe, TEAM garde si l'équipe reprend, CLUB/COACH gardés ;
-  //  - `hidden` (CLUB + targetTag sans équipe active) reflète l'expansion du payload.
-  // La résolution tag→équipes (`buildTagTeamIds`, foyer partagé) est pinnée mécaniquement par
-  // `TagTeamIdsMirrorParityTest`. Ce module figure au registre `FrontRederivationRegistryTest`.
+  //  - `hidden` (CLUB ciblant un/des tag(s), sans AUCUNE équipe active résolue) reflète
+  //    l'expansion du payload — P2-29 : « (∩ targetTags) − (∪ excludeTags) » sur les équipes
+  //    actives, via le foyer partagé `resolveConstraintTeamIds`.
+  // La résolution tag→équipes (`buildTagTeamIds` / `resolveConstraintTeamIds`, foyer partagé) est
+  // pinnée mécaniquement par `TagTeamIdsMirrorParityTest`. Ce module figure au registre
+  // `FrontRederivationRegistryTest`.
   const defaultKept = (c: Constraint): boolean => {
     if (isClosure) {
       return true; // fermeture: everything kept by default (B3+F2 unchanged)
@@ -968,12 +972,10 @@ function PeriodConstraintsPanel({
   // show it struck & disabled, never toggle-able, so the checklist matches the payload.
   const notApplicable = (c: Constraint): boolean => "TEAM" === c.scope && deactivatedTeamIds.has(c.scopeTargetId ?? "");
   const overrideOf = new Map(overrides.map((o) => [o.constraintId, o]));
-  const activeTagTeamIds = (tagName: string): Set<string> => activeTagTeamIdsByName.get(tagName) ?? new Set();
-  const targetTagOf = (c: Constraint): string | null => ("string" === typeof c.config?.targetTag && "" !== c.config.targetTag ? (c.config.targetTag as string) : null);
-  const hidden = (c: Constraint): boolean => {
-    const tagName = targetTagOf(c);
-    return tagResolutionReady && "CLUB" === c.scope && null !== tagName && 0 === activeTagTeamIds(tagName).size;
-  };
+  // Les équipes ACTIVES que la contrainte vise réellement : « (∩ targetTags) − (∪ excludeTags) »
+  // posé sur la carte des tags RESTREINTE aux équipes actives (le raffinement d'overlay, P2-29).
+  const activeResolvedTeamIds = (c: Constraint): string[] => resolveConstraintTeamIds(c.config, activeTagTeamIdsByName, activeTeamIdList);
+  const hidden = (c: Constraint): boolean => tagResolutionReady && "CLUB" === c.scope && targetsTags(c.config) && 0 === activeResolvedTeamIds(c).length;
   const shown = (c: Constraint): boolean => !hidden(c) && (undefined === family || familyTabOf(c.family) === family);
   const activeOf = (c: Constraint): boolean => (notApplicable(c) ? false : inflight.has(c.id) ? (inflight.get(c.id) as boolean) : (overrideOf.get(c.id)?.isActive ?? defaultKept(c)));
   const mutating = inflight.size > 0;
@@ -1059,8 +1061,7 @@ function PeriodConstraintsPanel({
           {visible.map((c) => {
             const active = activeOf(c);
             const naf = notApplicable(c);
-            const tagName = targetTagOf(c);
-            const tagUnknown = "CLUB" === c.scope && null !== tagName && !tagResolutionReady;
+            const tagUnknown = "CLUB" === c.scope && targetsTags(c.config) && !tagResolutionReady;
             return (
               <li key={c.id} className="flex items-center justify-between gap-3 border-b border-border/60 py-1.5 text-sm last:border-0">
                 <label className="flex items-center gap-2">

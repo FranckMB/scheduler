@@ -1,4 +1,5 @@
 import { dayLabelLong } from "@/shared/lib/days";
+import { excludeTagNames, targetTagNames } from "@/shared/lib/tagTeamIds";
 
 import type { Constraint } from "../api";
 
@@ -40,6 +41,10 @@ export interface ConstraintTargetLookups {
   venueName: VenueNameFn;
   teamName: (teamId: string) => string | undefined;
   coachName: (coachId: string) => string | undefined;
+  /** Libellé AFFICHÉ d'un tag (« Adulte (+ de 18) » pour `ADULTE`). Optionnel : absent, on
+   *  retombe sur le nom brut — jamais un « ? ». Injecté comme `venueName`, donc ce module ne
+   *  connaît toujours aucune table de libellés : il reçoit le résolveur, il ne le fabrique pas. */
+  tagLabel?: (tagName: string) => string;
 }
 
 const capitalize = (s: string): string => ("" === s ? s : s.charAt(0).toUpperCase() + s.slice(1));
@@ -68,8 +73,16 @@ export function describeConstraint(constraint: Constraint, lookups: ConstraintTa
 
 /**
  * Le « qui » d'une contrainte, vocabulaire du wizard (`ConstraintsStep.build()`) : équipe → son
- * nom ; coach → son nom ; CLUB+`targetTag` → `Groupe <tag>` ; CLUB nu → « Toutes les équipes ».
- * Équipe/coach dont le nom ne se résout pas (cible supprimée) → `null` : le prédicat ira seul.
+ * nom ; coach → son nom ; CLUB ciblant un/des tag(s) → `Groupe <A + B sauf C>` ; CLUB nu →
+ * « Toutes les équipes ». Équipe/coach dont le nom ne se résout pas (cible supprimée) → `null` :
+ * le prédicat ira seul.
+ *
+ * ⚠ Les tags sont rendus avec le libellé AFFICHÉ quand l'appelant fournit `tagLabel` (même
+ * patron d'INJECTION que `venueName` — ce module ne fabrique aucune table de libellés). Sans
+ * résolveur : nom brut, dégradation douce. Sans cette injection, l'écran mentait à deux voix —
+ * le panneau de créneau décrivait « Groupe ADULTE » pendant que le NOM de la même contrainte,
+ * juste en dessous, disait « Groupe Adulte (+ de 18) » (le wizard nomme en libellés depuis le
+ * lot tags).
  */
 function resolveTarget(constraint: Constraint, lookups: ConstraintTargetLookups): string | null {
   if ("COACH" === constraint.scope) {
@@ -78,12 +91,16 @@ function resolveTarget(constraint: Constraint, lookups: ConstraintTargetLookups)
   if ("TEAM" === constraint.scope) {
     return null !== constraint.scopeTargetId ? (lookups.teamName(constraint.scopeTargetId) ?? null) : null;
   }
-  // CLUB : un groupe (tag) OU tout le club. `targetTag` porte le nom brut, comme le wizard.
-  const tag = constraint.config?.targetTag;
-  if ("string" === typeof tag && "" !== tag) {
-    return `Groupe ${tag}`;
+  // CLUB : un groupe (un ou plusieurs tags, avec exclusions) OU tout le club.
+  const targets = targetTagNames(constraint.config);
+  const excludes = excludeTagNames(constraint.config);
+  if (0 === targets.length && 0 === excludes.length) {
+    return "Toutes les équipes";
   }
-  return "Toutes les équipes";
+  const label = (name: string): string => lookups.tagLabel?.(name) ?? name;
+  const base = targets.length > 0 ? targets.map(label).join(" + ") : "toutes les équipes";
+
+  return `Groupe ${base}${excludes.length > 0 ? ` sauf ${excludes.map(label).join(", ")}` : ""}`;
 }
 
 function buildPredicate(constraint: Constraint, venueName: VenueNameFn): string | null {

@@ -1134,6 +1134,43 @@ describe("PeriodConstraints — inherited constraints toggle", () => {
     expect(screen.queryByRole("checkbox", { name: "Groupe Adulte (+ de 18) · pas après 21:00 appliquée cette période" })).not.toBeInTheDocument();
   });
 
+  // P2-29 — la cible peut être « (∩ targetTags) − (∪ excludeTags) » : on la masque quand la
+  // résolution sur les équipes ACTIVES est vide, comme le backend saute la contrainte.
+  it("hides a CLUB constraint with targetTags when its resolved ACTIVE set is empty", () => {
+    entryState.data = { periodType: "holiday" };
+    tagsState.data = [
+      { id: "tag-adu", name: "ADULTE", color: null, isSystem: true, axis: "AGE" },
+      { id: "tag-comp", name: "COMPETITION", color: null, isSystem: true, axis: "NIVEAU" },
+    ];
+    // t1 porte les DEUX tags → l'intersection le vise ; mais t1 est en pause → ensemble actif vide.
+    tagAssignmentsState.data = [
+      { id: "a1", teamId: "t1", tagId: "tag-adu", seasonId: "s1" },
+      { id: "a2", teamId: "t1", tagId: "tag-comp", seasonId: "s1" },
+    ];
+    overridesState.data = [{ id: "to1", teamId: "t1", isActive: false, sessionsPerWeek: null, schedulePlanId: "plan-1" }];
+    constraintsState.data = [constraint({ id: "cc", name: "Groupe combiné", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null, family: "TIME", config: { targetTags: ["ADULTE", "COMPETITION"] }, isActive: true })];
+
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    expect(screen.queryByRole("checkbox", { name: "Groupe combiné appliquée cette période" })).not.toBeInTheDocument();
+  });
+
+  it("keeps a CLUB constraint with targetTags visible while a resolved team stays active (P2-29)", () => {
+    entryState.data = { periodType: "holiday" };
+    tagsState.data = [
+      { id: "tag-adu", name: "ADULTE", color: null, isSystem: true, axis: "AGE" },
+      { id: "tag-comp", name: "COMPETITION", color: null, isSystem: true, axis: "NIVEAU" },
+    ];
+    tagAssignmentsState.data = [
+      { id: "a1", teamId: "t1", tagId: "tag-adu", seasonId: "s1" },
+      { id: "a2", teamId: "t1", tagId: "tag-comp", seasonId: "s1" },
+    ];
+    overridesState.data = []; // t1 actif
+    constraintsState.data = [constraint({ id: "cc", name: "Groupe combiné", ruleType: "PREFERRED", scope: "CLUB", scopeTargetId: null, family: "TIME", config: { targetTags: ["ADULTE", "COMPETITION"] }, isActive: true })];
+
+    render(<PeriodConstraints calendarEntryId="e1" />);
+    expect(screen.getByRole("checkbox", { name: "Groupe combiné appliquée cette période" })).toBeInTheDocument();
+  });
+
   it("does not render on a non-overlay period type (cutoff) — no dead override rows", () => {
     entryState.data = { periodType: "cutoff" };
     constraintsState.data = [constraint({ id: "k1", name: "Pas après 20h", ruleType: "PREFERRED" })];

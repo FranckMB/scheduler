@@ -1,25 +1,18 @@
+import { intersectMinusExclude, targetsTags, targetTagNames, excludeTagNames } from "@/shared/lib/tagTeamIds";
+
 import type { Constraint, Slot } from "../api";
 // FOYER UNIQUE de la résolution tag→équipes (P4-88) : partagé avec `wizard/steps/PeriodStructure.tsx`.
 // Ré-exporté ici pour les consommateurs planning (aucun changement d'import chez eux).
 export { buildTagTeamIds } from "@/shared/lib/tagTeamIds";
 
 /**
- * Le tag ciblé par une contrainte CLUB, s'il y en a un — `config.targetTag` non vide.
- * Une chaîne vide compte pour « pas de tag » (même garde que le backend : `'' !== $targetTag`).
- */
-export function targetTagOf(constraint: Constraint): string | null {
-  const raw = constraint.config?.targetTag;
-
-  return "string" === typeof raw && "" !== raw ? raw : null;
-}
-
-/**
- * La contrainte concerne-t-elle le club ENTIER (et non une équipe en particulier) ? Vrai
- * seulement pour une CLUB SANS `targetTag` : dès qu'un tag est posé, le backend l'éclate en
- * contraintes TEAM — elle concerne alors les équipes taguées, pas tout le club.
+ * La contrainte concerne-t-elle le club ENTIER (et non un sous-ensemble d'équipes) ? Vrai
+ * seulement pour une CLUB SANS aucune clé de tag : dès qu'un tag est ciblé OU exclu (P2-29 :
+ * `targetTag` legacy, `targetTags`, `excludeTags`), le backend l'éclate en contraintes TEAM —
+ * elle concerne alors les équipes résolues, pas tout le club.
  */
 export function isClubWide(constraint: Constraint): boolean {
-  return "CLUB" === constraint.scope && null === targetTagOf(constraint);
+  return "CLUB" === constraint.scope && !targetsTags(constraint.config);
 }
 
 /**
@@ -35,12 +28,14 @@ export function isClubWide(constraint: Constraint): boolean {
  * NULLE PART : sur-afficher serait re-mentir sur ce que le solveur applique.
  *
  * ⚠️ MIROIR DÉCLARÉ (régime 2, P4-88) — le `switch (scope)` d'`applies` reflète l'expansion
- * du payload par `App\Service\ScheduleConstraintBuilder` (une CLUB+targetTag est ÉCLATÉE en N
- * contraintes TEAM par équipe taguée ; TEAM→son équipe, FACILITY→son gymnase, COACH→son coach).
- * C'est la redérivation qui a ouvert P4-88 (le `case "CLUB": return true` d'origine ignorait
- * `targetTag`). La résolution tag→équipes est pinnée mécaniquement par `TagTeamIdsMirrorParityTest`
- * (foyer partagé) ; la portée d'un tag l'est par `TeamTagScopeTest` (blocking). Ce module figure
- * au registre `FrontRederivationRegistryTest`.
+ * du payload par `App\Service\ScheduleConstraintBuilder` (une CLUB ciblant un ou des tags est
+ * ÉCLATÉE en N contraintes TEAM par équipe RÉSOLUE ; TEAM→son équipe, FACILITY→son gymnase,
+ * COACH→son coach). C'est la redérivation qui a ouvert P4-88 (le `case "CLUB": return true`
+ * d'origine ignorait `targetTag`). P2-29 : la cible peut désormais être « (∩ targetTags) −
+ * (∪ excludeTags) » — on passe par le foyer `resolveConstraintTeamIds`/`intersectMinusExclude`
+ * (`@/shared/lib/tagTeamIds`), pinné mécaniquement par `TagTeamIdsMirrorParityTest` (foyer
+ * partagé) ; la portée d'un tag l'est par `TeamTagScopeTest` (blocking). Ce module figure au
+ * registre `FrontRederivationRegistryTest`.
  */
 export function applicableConstraints(
   slot: Slot,
@@ -53,12 +48,20 @@ export function applicableConstraints(
 function applies(constraint: Constraint, slot: Slot, tagTeamIds: ReadonlyMap<string, ReadonlySet<string>>): boolean {
   switch (constraint.scope) {
     case "CLUB": {
-      const tag = targetTagOf(constraint);
-      if (null === tag) {
+      const targets = targetTagNames(constraint.config);
+      const excludes = excludeTagNames(constraint.config);
+      if (0 === targets.length && 0 === excludes.length) {
+        return true; // CLUB nu : concerne vraiment tout le club
+      }
+      // Exclusion SANS cible (D8, base = toutes les équipes de la saison) : non produite par
+      // ce wizard (le raffinage exige un tag cible). Sans le référentiel des équipes de la
+      // saison ici, on la traite comme club-wide — comportement conservé.
+      if (0 === targets.length) {
         return true;
       }
+      const resolve = (name: string): string[] => [...(tagTeamIds.get(name) ?? [])];
 
-      return true === tagTeamIds.get(tag)?.has(slot.teamId);
+      return intersectMinusExclude(targets.map(resolve), excludes.map(resolve)).includes(slot.teamId);
     }
     case "TEAM":
       return constraint.scopeTargetId === slot.teamId;

@@ -8,6 +8,7 @@ import { WizardStepLink } from "@/features/wizard/WizardStepLink";
 
 import type { Constraint, LockOrigin, MoveViolation, Slot, SlotMovePatch, Venue } from "./api";
 import { applicableConstraints, isClubWide } from "./lib/applicableConstraints";
+import { tagLabel } from "@/features/wizard/lib/tagLabels";
 import { describeConstraint } from "./lib/describeConstraint";
 import { DAYS, type GridCell, toHourMinute } from "./lib/grid";
 
@@ -129,7 +130,7 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
   // La description NOMME sa cible en tête (« <équipe/coach/Groupe X/Toutes les équipes> ·
   // <prédicat> »), pour que la boucle de correction pointe le bon objet ; le nom libre reste
   // en 2e ligne. Cible introuvable (résolveur absent) → prédicat seul.
-  const describe = (c: Constraint): string | null => describeConstraint(c, { venueName: (id) => venueNameById.get(id), teamName, coachName });
+  const describe = (c: Constraint): string | null => describeConstraint(c, { venueName: (id) => venueNameById.get(id), teamName, coachName, tagLabel });
   // « Tout le club » ne concerne pas l'équipe DIRECTEMENT (fondateur) : on sépare les deux
   // groupes pour que la distinction se lise sans lire. Une CLUB+tag est côté équipe (elle
   // vise les équipes taguées, comme l'éclatement backend), pas côté club.
