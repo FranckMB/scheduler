@@ -1,4 +1,4 @@
-# Roadmap (37) — ce qui reste à faire
+# Roadmap (39) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
@@ -110,6 +110,13 @@
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
 | P4-95 | **La boucle de correction ne couvre pas toutes les surfaces ni tous les diagnostics** | ⚪ | S | Résidu de P4-95 après sa livraison partielle du 2026-08-14 (trace : état des lieux) — l'atterrissage wizard (`?edit=`) et le clic sur un diagnostic `conflict` ouvrent désormais l'objet visé. Reste ouvert : (1) **aucun lien « corriger »** depuis d'autres surfaces que le panneau de créneau planning — ni le récap du wizard (`RecapStep.tsx`, aucune référence diagnostic), ni les diagnostics de génération embarqués ; (2) les **10 autres types** de `schedule_diagnostic` (`unplaced`, surcharge coach, etc.) ne pointent qu'un rapprochement équipe/gymnase/coach (`DiagnosticsPanel.tsx:120`, `lib/grid.ts` `concernedSlots`), sans ouvrir+scroller un créneau précis comme `conflict` le fait désormais |
+
+### Retour terrain du 2026-08-15 (la confiance dans ce qu'on lit à l'écran)
+
+| # | Sujet | Impact | Effort | Note |
+|---|-------|:---:|:---:|---|
+| P4-98 | **Rien ne dit qu'on regarde une version ANTÉRIEURE du planning** | 🟡 | S | Retour fondateur du 2026-08-15 : de fausses violations constatées, puis « je pense que j'ai ouvert un ancien planning » — c'était le cas. **Le code est sain, l'affordance manque** : `lib/pickLandingSchedule.ts:20-22` fait atterrir DÉLIBÉRÉMENT sur la version en vigueur (`isChosen`) — qui peut être bien plus ancienne que la dernière générée — et `store.ts:40` ne persiste pas les sélections (« selections are per-session »). Le rafraîchissement, lui, marche : `PlanningPage.tsx:329-336` invalide slots+diagnostics à la fin d'une génération, `:662` et `:857` sélectionnent la version créée. Manque donc **le seul signal** : aucun composant de `features/planning/` ne compare la version affichée à la plus récente `COMPLETED`. À faire : bandeau « vous regardez une version antérieure » + geste « ouvrir la dernière version ». ⚑ Ne PAS transformer ça en redirection automatique : ouvrir la version en vigueur est un choix produit (elle EST le calendrier), c'est le silence qui est le défaut |
+| P4-99 | **`session_below_effective_min` dit QU'IL manque une séance, jamais POURQUOI** | 🟡 | M | Le message est devenu VRAI le 2026-08-15 (V10, PR #580 : la cause inventée « créneaux de gymnase insuffisants » a été retirée — `result_builder.py:662-671`), mais il reste **muet sur la cause** : `result_builder.py:682-685` émet deux `suggestions` **statiques**, identiques pour tous les cas, et `DiagnosticSchema` (`schemas/output_schema.py:57-62`) ne porte **aucun champ de cause** — `rule_key` existe mais n'est renseigné que par `implicit_rule_not_honored`. Conséquence terrain : pour savoir quelle contrainte a mangé la séance, il faut relire le solveur. À faire : rattacher au diagnostic ce qui a effectivement fermé les créneaux candidats de l'équipe (contrainte, verrou, indispo coach, capacité). ⚠ Si la cause voyage dans un nouveau champ du schema → **bump `CONTRACT_VERSION` + les 3 tests de contrat** ; et la cause doit être **mesurée**, jamais devinée — c'est précisément le défaut qu'on vient de corriger |
 
 ### Retour terrain du 2026-07-31 (wizard, overlay, général)
 
