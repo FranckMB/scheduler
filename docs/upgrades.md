@@ -5,6 +5,42 @@
 > l'upgrade apporte, et ce qu'il a fallu adapter chez nous. But : comprendre les mises à jour,
 > pas les subir. Ordre antichronologique.
 
+## 2026-08-15 — lot Dependabot
+
+### Groupe backend-composer — Doctrine, Sentry, Symfony (PR #549)
+
+**C'est quoi** : quatre briques de la partie serveur. **Doctrine ORM** est le traducteur entre les
+objets PHP de l'application et les tables de la base de données — c'est lui qui écrit et relit
+chaque équipe, chaque créneau. **Sentry** est le mouchard d'erreurs : quand quelque chose casse en
+production, c'est lui qui te prévient avec la pile d'appels, au lieu que tu l'apprennes par un club
+mécontent. **symfony/mime** fabrique les emails (pièces jointes, encodages), **symfony/yaml** lit
+les fichiers de configuration.
+
+**Ça apporte** : que des correctifs d'entretien — Doctrine 3.6.7 → **3.6.8**, Sentry 5.11 →
+**5.12**, mime 7.4.15 → **7.4.16**, yaml 7.4.13 → **7.4.15**. Rien de spectaculaire, et c'est le
+but : les prendre au fil de l'eau évite le saut coûteux qu'on subit quand on a six mois de retard.
+Les deux paquets Symfony restent sur la branche **LTS 7.4**, celle qu'on tient jusqu'à la 8.4
+(fin 2027).
+
+**Adapté chez nous** : rien dans le code applicatif. Mais **deux interventions sur la PR
+elle-même**, toutes deux prévisibles :
+
+1. **Rector 2.6.1 refusé** — Dependabot avait forcé notre garde-fou (`~2.5.9` réécrit en `~2.6.1`).
+   Vérifié en le testant plutôt qu'en lisant nos notes : la 2.6.1 **réintroduit** le défaut connu,
+   elle réécrit `Cookie::SAMESITE_STRICT` en nom complet dans `JwtCookieFactory` et
+   `MercureAuthController`, que PHP-CS-Fixer raccourcit aussitôt. Les deux outils se contrediraient
+   sans fin et **plus aucune fusion backend ne passerait**. Garde-fou restauré, les quatre autres
+   montées conservées.
+2. **Symfony ramené sur la LTS** — Dependabot calcule les versions **hors de notre conteneur**,
+   donc sans le mécanisme qui force toute la famille Symfony à rester en 7.4. Il avait fait passer
+   neuf briques internes en 8.0. Corrigé en recalculant dans le conteneur ; c'est le réflexe
+   attendu à chaque lot backend, jamais un blocage de version.
+
+⚠ À noter pour plus tard : Rector 2.6 apporte une règle intéressante (`ParamAndEnvAttributeRector`,
+qui modernise l'écriture des variables d'environnement dans le code — 10 fichiers concernés chez
+nous). Elle attend que le défaut ci-dessus soit corrigé en amont. Suivi : ligne **P4-80** de la
+roadmap.
+
 ## 2026-08-11 — lot Dependabot
 
 ### Groupe backend-composer — PHP-CS-Fixer, PHPStan, Rector (outils de dev, PR #504)
