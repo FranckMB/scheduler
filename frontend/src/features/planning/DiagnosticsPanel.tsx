@@ -6,7 +6,7 @@ import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { WizardStepLink } from "@/features/wizard/WizardStepLink";
 import { cn } from "@/shared/lib/utils";
 
-import type { Diagnostic, DiagnosticSeverity, Slot } from "./api";
+import type { Diagnostic, DiagnosticCause, DiagnosticCauseKind, DiagnosticSeverity, Slot } from "./api";
 import { SEVERITY_ORDER } from "./lib/diagnosticsSummary";
 import { concernedSlots, type Lookups } from "./lib/grid";
 
@@ -19,6 +19,47 @@ const SEVERITY: Record<DiagnosticSeverity, { icon: typeof Info; className: strin
 
 // Ordre des sévérités : foyer unique dans `lib/diagnosticsSummary` (partagé avec la barre repliée).
 const ORDER = SEVERITY_ORDER;
+
+// P4-99 — PRÉSENTATION PURE : traduit le `kind` MESURÉ par le moteur en une phrase lisible.
+// Le front n'invente aucune règle métier ; il ne DÉCIDE d'aucun comportement à partir du kind,
+// il choisit seulement un libellé (autorisé — cf. `matches/lib/diagnostic.ts`). `Record` sur
+// l'union → le compilateur exige les 7 familles ; un kind futur, absent, dégrade au compte seul.
+const CAUSE_KIND_LABELS: Record<DiagnosticCauseKind, string> = {
+  hard_lock: "un créneau déjà verrouillé",
+  venue_forbidden: "un gymnase interdit",
+  coach_unavailability: "l'indisponibilité d'un coach",
+  time_window: "une plage horaire trop étroite",
+  day_conflict: "un conflit de jour",
+  day_forbidden: "un jour interdit",
+  forced_venue_elsewhere: "un gymnase imposé ailleurs",
+};
+
+// Kind inconnu → `null` : on affiche le compte SANS phrase inventée, jamais le code brut.
+function causeKindLabel(kind: string): string | null {
+  return CAUSE_KIND_LABELS[kind as DiagnosticCauseKind] ?? null;
+}
+
+function causeSentence(cause: DiagnosticCause): string {
+  const { count, label } = cause;
+  const slots = `${count} créneau${count > 1 ? "x" : ""} fermé${count > 1 ? "s" : ""}`;
+  const kind = causeKindLabel(cause.kind);
+  // Le NOM de la règle est l'information principale — c'est lui qui répond à « quelle
+  // contrainte a mangé la séance ? » sans cliquer, et qui distingue deux causes de même
+  // famille. La famille reste en complément quand elle est connue.
+  if (null !== label && "" !== label) {
+    return null === kind ? `${slots} par « ${label} ».` : `${slots} par « ${label} » (${kind}).`;
+  }
+  // Pas de nom (contrainte sans nom côté payload) → repli sur la famille ; kind inconnu →
+  // le compte seul. Jamais « null », jamais le code brut du kind.
+  return null === kind ? `${slots}.` : `${slots} par ${kind}.`;
+}
+
+// « Resté ouvert » n'est PAS une cause : phrase dédiée, appelée seulement quand n > 0.
+function openCandidatesSentence(count: number): string {
+  const slots = `${count} créneau${count > 1 ? "x" : ""}`;
+  const stayed = count > 1 ? "restaient disponibles" : "restait disponible";
+  return `${slots} ${stayed} — le planning y a placé une autre séance.`;
+}
 
 interface DiagnosticsPanelProps {
   diagnostics: Diagnostic[];
@@ -178,6 +219,33 @@ export function DiagnosticsPanel({ diagnostics, slots, emptySlots = [], lookups,
                             >
                               Ajuster cette règle
                             </WizardStepLink>
+                          ) : null}
+                          {/* P4-99 — la CAUSE mesurée d'une séance manquante. Une ligne par cause
+                              (libellé du kind + compte) ; un `constraintId` connu mène à SA
+                              contrainte (`?step=constraints&edit=<id>`, rail ConstraintsStep). Pas
+                              d'id → pas de lien (jamais de lien mort). `openCandidates > 0` a sa
+                              propre phrase : des créneaux étaient DISPONIBLES, pas une cause. */}
+                          {"session_below_effective_min" === item.type ? (
+                            <div className="flex flex-col gap-1 px-3 pb-1.5">
+                              {item.causes.map((cause, index) => (
+                                <div key={`${cause.kind}-${cause.constraintId ?? "none"}-${index}`} className="flex flex-col gap-0.5">
+                                  <span className="text-xs text-muted-foreground">{causeSentence(cause)}</span>
+                                  {null !== cause.constraintId ? (
+                                    <WizardStepLink
+                                      step="constraints"
+                                      params={{ edit: cause.constraintId }}
+                                      from="planning"
+                                      className="self-start text-xs font-medium text-accent underline underline-offset-2 hover:text-accent/80"
+                                    >
+                                      Corriger cette règle
+                                    </WizardStepLink>
+                                  ) : null}
+                                </div>
+                              ))}
+                              {null !== item.openCandidates && item.openCandidates > 0 ? (
+                                <span className="text-xs italic text-muted-foreground">{openCandidatesSentence(item.openCandidates)}</span>
+                              ) : null}
+                            </div>
                           ) : null}
                         </li>
                       ))}
