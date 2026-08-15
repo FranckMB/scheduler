@@ -190,18 +190,24 @@ final class ConstraintValidationService
         $config2 = $c2->getConfig();
 
         // Two rules can only contradict if their TARGET SETS overlap. P2-29 D14 — the
-        // verdict is CONSERVATIVE (over-warn, never under-warn), decided WITHOUT resolving
-        // teams: two targets overlap UNLESS statically proven disjoint — i.e. both name a
-        // non-empty set of tags, those tag NAMES are disjoint, AND neither side excludes.
-        // Everything else overlaps: an untagged side (the whole club), a shared tag name,
-        // or ANY exclusion (an exclusion could reopen a shared team — ignored here on
-        // purpose, so we never miss a conflict; the cost is a possible extra warning).
+        // verdict est CONSERVATEUR (sur-avertir, jamais sous-avertir) et se décide SANS
+        // résoudre les équipes : deux cibles se recouvrent SAUF si les deux nomment un
+        // ensemble de tags non vide et que ces NOMS sont disjoints. Un côté sans tag (tout
+        // le club) ou un nom de tag partagé ⇒ recouvrement.
+        //
+        // ⚠ Les EXCLUSIONS ne comptent PAS contre la disjonction — corrigé après un faux
+        // conflit BLOQUANT vécu sur le club réel : « Groupe EMB · pas après 17:30 » était
+        // déclaré en contradiction avec « Groupe Adulte sauf Loisir adulte · pas avant
+        // 18:50 », deux cibles pourtant sans une seule équipe commune. La raison est
+        // mathématique : une exclusion ne peut que RÉTRÉCIR un ensemble — (A − X) ⊆ A et
+        // (B − Y) ⊆ B, donc A ∩ B = ∅ implique (A−X) ∩ (B−Y) = ∅. Elle ne peut jamais
+        // créer un recouvrement, seulement en supprimer un. Le conservatisme reste entier
+        // dans l'autre sens : quand les tags SE PARTAGENT un nom, l'exclusion est ignorée
+        // (elle pourrait retirer les équipes communes — on préfère l'avertissement de trop).
         $targets1 = TeamTagResolver::targetTagNames($config1);
         $targets2 = TeamTagResolver::targetTagNames($config2);
-        $hasExclusion = [] !== TeamTagResolver::excludeTagNames($config1) || [] !== TeamTagResolver::excludeTagNames($config2);
         $targetsOverlap = [] === $targets1
             || [] === $targets2
-            || $hasExclusion
             || [] !== array_intersect($targets1, $targets2);
 
         if ($c1->getScopeTargetId() === $c2->getScopeTargetId()

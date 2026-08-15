@@ -229,11 +229,15 @@ final class ConflictDetectionServiceTest extends TestCase
     }
 
     /**
-     * P2-29 D14 — une exclusion peut ROUVRIR une équipe partagée : le verdict statique
-     * l'ignore et SUR-avertit. Des tags de cible disjoints qui, SANS exclusion, ne se
-     * recouvriraient pas, se recouvrent dès qu'un côté exclut (jamais sous-avertir).
+     * P2-29 D14, CORRIGÉ le 2026-08-15 — une exclusion ne peut JAMAIS créer un recouvrement.
+     * Ce test affirmait l'inverse et encodait un bug vécu sur le club réel : « Groupe EMB ·
+     * pas après 17:30 » était déclaré en contradiction BLOQUANTE avec « Groupe Adulte sauf
+     * Loisir adulte · pas avant 18:50 » — deux cibles sans une seule équipe commune, et la
+     * génération refusée. La raison est mathématique : (A − X) ⊆ A, donc A ∩ B = ∅ implique
+     * (A−X) ∩ (B−Y) = ∅. Le conservatisme reste entier dans l'autre sens (tags PARTAGÉS +
+     * exclusion → on avertit quand même, cf. le test précédent).
      */
-    public function testExclusionForcesConservativeOverlapEvenOnDisjointTargets(): void
+    public function testExclusionNeverCreatesOverlapOnDisjointTargets(): void
     {
         $c1 = new Constraint;
         $c1->setScope(ConstraintScope::CLUB);
@@ -247,7 +251,7 @@ final class ConflictDetectionServiceTest extends TestCase
         $c2->setRuleType(ConstraintRuleType::HARD);
         $c2->setConfig(['minStartTime' => '18:50', 'targetTags' => ['BABY']]);
 
-        self::assertCount(1, $this->service->detectConflicts([$c1, $c2]), 'l\'exclusion impose le recouvrement conservateur : on avertit');
+        self::assertCount(0, $this->service->detectConflicts([$c1, $c2]), 'une exclusion ne peut que RÉTRÉCIR une cible : elle ne crée jamais un recouvrement');
     }
 
     public function testDetectsTimeConflictRegardlessOfOrder(): void
