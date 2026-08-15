@@ -22,7 +22,20 @@ avec le nom de la clé et les réglages acceptés pour la famille.
 | **FACILITY** | `type` (`venue_closed`) · `startDate` · `endDate` | constante · `AAAA-MM-JJ` | **backend seul** (`VenueClosureDays`) — une fermeture datée ferme des jours, elle ne produit aucune ligne de payload |
 | **COACH_AVAILABILITY** | `unavailableDays` `availableDays` | liste d'entiers 1-7 | moteur (`constraints.py`) |
 | **COACH_AVAILABILITY** | `fromTime` `untilTime` | `HH:MM` | moteur — bornent l'indisponibilité dans la journée |
-| **toutes** | `targetTag` | libellé de groupe non vide | **backend seul** — éclaté en N contraintes par équipe, puis RETIRÉ du payload (`ScheduleConstraintBuilder`) |
+| **toutes** | `targetTag` | libellé de groupe non vide | **backend seul** — éclaté en N contraintes par équipe, puis RETIRÉ du payload (`ScheduleConstraintBuilder`). **Forme HISTORIQUE, toujours lue** : équivaut à `targetTags: [x]` |
+| **toutes** | `targetTags` | liste de tags | **INTERSECTION** — l'équipe doit porter TOUS ces tags (ex. `["SENIOR","COMPETITION"]`). Mélanger avec `targetTag` → **422** (jamais d'ambiguïté silencieuse) |
+| **toutes** | `excludeTags` | liste de tags | **UNION soustraite** de la cible (ex. `targetTags:["ADULTE"], excludeTags:["LOISIR_ADULTE"]` → les adultes en compétition, sans le loisir adulte). **Sans `targetTags`** : la base est TOUTE la saison, moins les exclus |
+
+
+> ⚑ **Résolution des cibles par tag — foyer UNIQUE** (`TeamTagResolver::resolveConstraintTeamIds`,
+> lot tags PR 2, 2026-08-15) : « (∩ `targetTags`) − (∪ `excludeTags`) », tri contractuel des
+> teamIds conservé. Le **payload solveur** (`ScheduleConstraintBuilder`) ET le **verdict du gate de
+> période** (`PeriodConstraintSelector::clubTagVerdict`) passent par ce foyer — leur parité est un
+> step bloquant (`PeriodGatePayloadParityTest`). **Le contrat moteur ne bouge pas** : les 3 clés de
+> tag sont retirées à la sérialisation, le moteur ne reçoit que des contraintes d'ÉQUIPE résolues.
+> Refus à l'écriture (422) : tag inconnu du club · `targetTags ∩ excludeTags` non vide · mélange
+> `targetTag`+`targetTags` · résolution VIDE sur la saison courante. Le no-op+warning du builder
+> reste en backstop (une résolution peut se vider APRÈS coup — équipes désactivées).
 
 ## Trois règles pour maintenir cette liste
 

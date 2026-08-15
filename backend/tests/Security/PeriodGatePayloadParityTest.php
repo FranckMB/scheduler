@@ -153,6 +153,44 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         self::assertStringContainsString('ses règles par équipe ne seront pas appliquées', $allWarnings, 'une CLUB+tag gardée pour sa seule exclusivité est annoncée PARTIELLE (revue #340 round 2)');
     }
 
+    /**
+     * P2-29 (axe constraint semantics §7.1) — les NOUVELLES formes traversent le MÊME foyer.
+     *
+     * Cibler PLUSIEURS tags (INTERSECTION) ou en EXCLURE (UNION soustraite) : le gate
+     * (sélecteur) et le payload (builder) résolvent désormais via `TeamTagResolver::
+     * resolveConstraintTeamIds`, une seule maison. Ce test le PROUVE de bout en bout —
+     * `targetTags: [G1,G2] excludeTags: [EXCL]` ne retient QUE l'équipe des deux tags de
+     * cible et hors du tag exclu, à l'identique des deux côtés, et sans qu'aucune clé de tag
+     * ne parte au moteur (contrat 2.7 inchangé, D11).
+     */
+    public function testGateAndPayloadAgreeOnMultiTargetAndExclusion(): void
+    {
+        [$club, $season, $entry, $planId, $constraintId, $teamAId] = $this->seedMultiTargetScenario();
+
+        // 1) Le gate (sélecteur) retient la contrainte : elle vise encore une équipe.
+        $selection = self::getContainer()->get(PeriodConstraintSelector::class)
+            ->selectForPeriodPlan($club->getId(), $season->getId(), $planId, $entry);
+        self::assertSame(
+            [$constraintId],
+            array_map(static fn (Constraint $c): string => $c->getId(), $selection->kept),
+            'la CLUB multi-cible est retenue par le gate',
+        );
+
+        // 2) Le payload (builder) sérialise EXACTEMENT l'équipe de l'intersection moins
+        //    l'exclusion — et AUCUNE clé de tag ne part au moteur.
+        $payload = self::getContainer()->get(ScheduleConstraintBuilder::class)
+            ->buildForPeriodPlan($club->getId(), $season->getId(), $planId, $entry);
+        $teamRows = array_values(array_filter(
+            $payload['constraints'],
+            static fn (mixed $row): bool => \is_array($row) && str_starts_with((string) $row['id'], $constraintId . ':'),
+        ));
+        self::assertCount(1, $teamRows, 'une seule équipe : (G1 ∩ G2) − EXCL');
+        self::assertSame($teamAId, $teamRows[0]['scopeTargetId'], 'l\'équipe des deux tags de cible, hors du tag exclu');
+        foreach (['targetTag', 'targetTags', 'excludeTags'] as $tagKey) {
+            self::assertArrayNotHasKey($tagKey, $teamRows[0]['config'], 'aucune clé de tag ne part au moteur (D11)');
+        }
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -160,6 +198,127 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         $this->em = $container->get(EntityManagerInterface::class);
         $this->hasher = $container->get(UserPasswordHasherInterface::class);
         $this->jwt = $container->get(JWTTokenManagerInterface::class);
+    }
+
+    /**
+     * Une scène minimale à tags MANUELS (noms neutres G1/G2/EXCL) : l'intersection et
+     * l'exclusion se prouvent sans dépendre de la dérivation d'âge/niveau. Équipe A porte
+     * G1+G2 ; B porte G1 seul ; C porte G1+G2+EXCL.
+     *
+     * @return array{0: Club, 1: Season, 2: CalendarEntry, 3: string, 4: string, 5: string}
+     */
+    private function seedMultiTargetScenario(): array
+    {
+        $uid = uniqid('', true);
+
+        $club = new Club;
+        $club->setName('Club multi ' . $uid);
+        $club->setSlug('multi-' . $uid);
+        $club->setTimezone('Europe/Paris');
+        $club->setLocale('fr');
+        $club->setOnboardingCompleted(true);
+        $club->setFfbbClubCode('MUL' . strtoupper(substr(md5($uid), 0, 10)));
+        $this->em->persist($club);
+        $this->em->flush();
+
+        $this->scopeGucToClub($club->getId());
+
+        $season = new Season;
+        $season->setClubId($club->getId());
+        $season->setName('2025-2026');
+        $season->setStartDate(new DateTimeImmutable('2025-09-01'));
+        $season->setEndDate(new DateTimeImmutable('2026-06-30'));
+        $season->setStatus(SeasonStatus::ACTIVE);
+        $season->setTransitionData([]);
+        $this->em->persist($season);
+
+        $sport = new Sport;
+        $sport->setName('Basketball');
+        $sport->setSlug('multi-' . $uid);
+        $sport->setIsActive(true);
+        $this->em->persist($sport);
+        $this->em->flush();
+
+        $category = new SportCategory;
+        $category->setClubId($club->getId());
+        $category->setSportId($sport->getId());
+        $category->setName('U11');
+        $category->setIsCustom(false);
+        $category->setSortOrder(0);
+        $this->em->persist($category);
+
+        $tier = $this->em->getRepository(PriorityTier::class)->find(1);
+        if (!$tier instanceof PriorityTier) {
+            $tier = new PriorityTier;
+            $tier->setId(1);
+            $tier->setLabel('S');
+            $tier->setName('Senior');
+            $tier->setColor('#FF0000');
+            $tier->setOrToolsWeight(100);
+            $tier->setDefaultMinSessions(2);
+            $this->em->persist($tier);
+        }
+        $this->em->flush();
+
+        $teamA = $this->team($club, $season, $category, 'Équipe A');
+        $teamB = $this->team($club, $season, $category, 'Équipe B');
+        $teamC = $this->team($club, $season, $category, 'Équipe C');
+
+        // Tags manuels et leurs assignations. Les tags dérivés du listener existent aussi
+        // (U11…) mais on ne les vise pas : la résolution ne touche que G1/G2/EXCL.
+        $assign = function (Team $team, TeamTag $tag) use ($club, $season): void {
+            $a = new TeamTagAssignment;
+            $a->setClubId($club->getId());
+            $a->setTeamId($team->getId());
+            $a->setTagId($tag->getId());
+            $a->setSeasonId($season->getId());
+            $this->em->persist($a);
+        };
+        $tags = [];
+        foreach (['G1', 'G2', 'EXCL'] as $name) {
+            $tag = new TeamTag;
+            $tag->setClubId($club->getId());
+            $tag->setName($name);
+            $this->em->persist($tag);
+            $tags[$name] = $tag;
+        }
+        $this->em->flush();
+        $assign($teamA, $tags['G1']);
+        $assign($teamA, $tags['G2']);
+        $assign($teamB, $tags['G1']);
+        $assign($teamC, $tags['G1']);
+        $assign($teamC, $tags['G2']);
+        $assign($teamC, $tags['EXCL']);
+
+        $entry = new CalendarEntry;
+        $entry->setClubId($club->getId());
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setTitle('Reprise multi');
+        $entry->setStartDate(new DateTimeImmutable('2025-10-20'));
+        $entry->setEndDate(new DateTimeImmutable('2025-10-26'));
+        $entry->setIsDisruptive(false);
+        $entry->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
+        $entry->setStatus(CalendarEntryStatus::ACTIVE);
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        $planId = $this->planIdOf($entry);
+
+        // (G1 ∩ G2) − EXCL = A seule (B manque G2, C est exclue).
+        $constraint = $this->constraint(
+            $club,
+            $season,
+            ConstraintScope::CLUB,
+            null,
+            ConstraintFamily::DAY,
+            ['targetTags' => ['G1', 'G2'], 'excludeTags' => ['EXCL'], 'forbiddenDays' => [3]],
+            null,
+            ConstraintRuleType::PREFERRED,
+        );
+        $this->em->flush();
+
+        return [$club, $season, $entry, $planId, $constraint->getId(), $teamA->getId()];
     }
 
     /**

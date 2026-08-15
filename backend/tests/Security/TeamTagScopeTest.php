@@ -153,6 +153,71 @@ final class TeamTagScopeTest extends KernelTestCase
     }
 
     /**
+     * NR — P2-29 (axe constraint semantics §7.1). CIBLER PLUSIEURS TAGS = INTERSECTION,
+     * EN EXCLURE = UNION SOUSTRAITE. Le foyer `resolveConstraintTeamIds` est ce que le
+     * builder ET le gate appliquent : sa portée EST celle du solveur, cibles multiples et
+     * exclusions comprises. Le cas réel du terrain est épinglé : « ADULTE sauf LOISIR_ADULTE »
+     * doit donner les adultes EN COMPÉTITION (SM/SF/U21), jamais le Basket Santé loisir.
+     */
+    public function testResolveHonoursMultiTargetIntersectionAndExclusion(): void
+    {
+        $this->scopeGucToClub($this->club->getId());
+        // Trois adultes en compétition + un Basket Santé loisir. ADULTE = ageMin >= 19 ;
+        // COMPETITION = un niveau NON loisir ; LOISIR_ADULTE vient du niveau lui-même.
+        $u21 = $this->createTeamInCategory('U21 compet', 19, 21, TeamLevel::REGIONAL);
+        $sm = $this->createTeamInCategory('Senior M compet', 22, 99, TeamLevel::REGIONAL);
+        $sf = $this->createTeamInCategory('Senior F compet', 22, 99, TeamLevel::NATIONAL);
+        $sante = $this->createTeamInCategory('Basket santé', 19, 99, TeamLevel::LOISIR_ADULTE);
+        $this->resolver->reset();
+
+        $seasonId = $this->season->getId();
+        $clubId = $this->club->getId();
+        // La base D8 que le builder passerait pour cette scène — mes quatre équipes.
+        $base = [$u21->getId(), $sm->getId(), $sf->getId(), $sante->getId()];
+
+        // INTERSECTION : ADULTE ET COMPETITION → les trois en compétition, jamais le loisir.
+        $intersection = $this->resolver->resolveConstraintTeamIds(
+            ['targetTags' => ['ADULTE', 'COMPETITION']],
+            $seasonId,
+            $clubId,
+            $base,
+        );
+        self::assertContains($u21->getId(), $intersection);
+        self::assertContains($sm->getId(), $intersection);
+        self::assertContains($sf->getId(), $intersection);
+        self::assertNotContains($sante->getId(), $intersection, 'le Basket Santé n\'est pas en compétition');
+        // Les équipes ADULTE SANS niveau du setUp (U21/Senior/Vétéran) ne sont PAS COMPETITION.
+        self::assertNotContains($this->teams['Senior']->getId(), $intersection, 'une ADULTE sans niveau n\'est pas dans l\'intersection avec COMPETITION');
+
+        // EXCLUSION — le cas terrain : ADULTE sauf LOISIR_ADULTE.
+        $excluded = $this->resolver->resolveConstraintTeamIds(
+            ['targetTags' => ['ADULTE'], 'excludeTags' => ['LOISIR_ADULTE']],
+            $seasonId,
+            $clubId,
+            $base,
+        );
+        self::assertContains($u21->getId(), $excluded);
+        self::assertContains($sm->getId(), $excluded);
+        self::assertContains($sf->getId(), $excluded);
+        self::assertNotContains($sante->getId(), $excluded, 'le loisir adulte est retiré de la cible ADULTE');
+
+        // EXCLUSION SANS CIBLE (D8) : base = mes quatre équipes, moins le loisir.
+        $excludeOnly = $this->resolver->resolveConstraintTeamIds(
+            ['excludeTags' => ['LOISIR_ADULTE']],
+            $seasonId,
+            $clubId,
+            $base,
+        );
+        $expected = [$u21->getId(), $sm->getId(), $sf->getId()];
+        sort($expected);
+        self::assertSame($expected, $excludeOnly, 'D8 : toutes les équipes de la base, moins les exclues — triées');
+
+        // LEGACY : `targetTag` singulier reste équivalent à `targetTags: [x]` (rétro-compat).
+        $legacy = $this->resolver->resolveConstraintTeamIds(['targetTag' => 'ADULTE'], $seasonId, $clubId, $base);
+        self::assertContains($sante->getId(), $legacy, 'sans exclusion, ADULTE couvre AUSSI le Basket Santé');
+    }
+
+    /**
      * NR — P4-64. LA garde : la base refuse deux tags de même nom dans un club.
      *
      * Sans elle, deux écritures de `Team` concurrentes inséraient le tag deux fois, et

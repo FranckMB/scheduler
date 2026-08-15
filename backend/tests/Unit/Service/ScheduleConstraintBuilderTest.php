@@ -221,6 +221,131 @@ final class ScheduleConstraintBuilderTest extends TestCase
         self::assertSame('team-b', $forbidden[0]['scopeTargetId']);
     }
 
+    /**
+     * P2-29 — cibler PLUSIEURS tags = INTERSECTION : seules les équipes portant TOUS les
+     * tags reçoivent la contrainte. « ADULTE et COMPETITION » ne doit PAS toucher une équipe
+     * adulte de loisir, ni une équipe jeune en compétition.
+     */
+    public function testMultiTargetConstraintExpandsToTheTagIntersection(): void
+    {
+        $this->builder = $this->builderWithTagSets([
+            'ADULTE' => ['sm1', 'sf1', 'loisir-adulte'],
+            'COMPETITION' => ['sm1', 'sf1', 'u15-compet'],
+        ]);
+
+        $constraint = (new Constraint)
+            ->setId('c-inter')
+            ->setName('Adultes en compétition · pas le mercredi')
+            ->setScope(ConstraintScope::CLUB)
+            ->setFamily(ConstraintFamily::DAY)
+            ->setRuleType(ConstraintRuleType::PREFERRED)
+            ->setConfig(['targetTags' => ['ADULTE', 'COMPETITION'], 'forbiddenDays' => [3]])
+            ->setSortOrder(0)
+            ->setIsActive(true);
+
+        $serialized = $this->invokeSerializeUnified([$constraint], 'season-1', 'club-1', []);
+
+        self::assertSame(['sf1', 'sm1'], array_column($serialized, 'scopeTargetId'), 'seules les équipes des DEUX tags — triées');
+        foreach ($serialized as $row) {
+            self::assertSame(['forbiddenDays' => [3]], $row['config'], 'aucune clé de tag ne part au moteur (contrat inchangé)');
+        }
+    }
+
+    /**
+     * P2-29 D7/D8 — « ADULTE sauf LOISIR_ADULTE » : l'exclusion RETIRE ses équipes de la
+     * cible. Le cas réel du terrain (les adultes en compétition, PAS le Basket Santé loisir).
+     */
+    public function testExcludeTagsAreSubtractedFromTheTarget(): void
+    {
+        $this->builder = $this->builderWithTagSets([
+            'ADULTE' => ['sm1', 'sf1', 'u21', 'basket-sante'],
+            'LOISIR_ADULTE' => ['basket-sante'],
+        ]);
+
+        $constraint = (new Constraint)
+            ->setId('c-excl')
+            ->setName('Adultes hors loisir · finissent avant 22h')
+            ->setScope(ConstraintScope::CLUB)
+            ->setFamily(ConstraintFamily::TIME)
+            ->setRuleType(ConstraintRuleType::PREFERRED)
+            ->setConfig(['targetTags' => ['ADULTE'], 'excludeTags' => ['LOISIR_ADULTE'], 'maxStartTime' => '20:00'])
+            ->setSortOrder(0)
+            ->setIsActive(true);
+
+        $serialized = $this->invokeSerializeUnified([$constraint], 'season-1', 'club-1', []);
+
+        self::assertSame(['sf1', 'sm1', 'u21'], array_column($serialized, 'scopeTargetId'), 'le loisir adulte est retiré, le reste demeure');
+    }
+
+    /**
+     * P2-29 D8 — `excludeTags` SEUL (aucune cible) : base = TOUTES les équipes de la saison,
+     * moins les exclues. La liste d'équipes passée au builder EST cette base.
+     */
+    public function testExcludeOnlyStartsFromEveryTeamOfTheSeason(): void
+    {
+        $this->builder = $this->builderWithTagSets([
+            'BABY' => ['baby1'],
+        ]);
+
+        $constraint = (new Constraint)
+            ->setId('c-excl-only')
+            ->setName('Tout le monde sauf les bébés · pas le dimanche')
+            ->setScope(ConstraintScope::CLUB)
+            ->setFamily(ConstraintFamily::DAY)
+            ->setRuleType(ConstraintRuleType::PREFERRED)
+            ->setConfig(['excludeTags' => ['BABY'], 'forbiddenDays' => [7]])
+            ->setSortOrder(0)
+            ->setIsActive(true);
+
+        $serialized = $this->invokeSerializeUnified(
+            [$constraint],
+            'season-1',
+            'club-1',
+            [$this->team('baby1'), $this->team('sm1'), $this->team('u13')],
+        );
+
+        self::assertSame(['sm1', 'u13'], array_column($serialized, 'scopeTargetId'), 'toutes les équipes SAUF le bébé exclu');
+    }
+
+    /**
+     * P2-29 D11 — LE contrat ne bouge pas : quelle que soit la forme du ciblage, AUCUNE
+     * ligne du payload ne porte une clé de tag (`targetTag`/`targetTags`/`excludeTags`). Le
+     * moteur ne voit jamais un tag ; l'expansion est purement backend.
+     */
+    public function testNoTagKeyEverLeaksIntoTheSerializedPayload(): void
+    {
+        $this->builder = $this->builderWithTagSets([
+            'ADULTE' => ['sm1', 'sf1', 'basket-sante'],
+            'COMPETITION' => ['sm1', 'sf1'],
+            'LOISIR_ADULTE' => ['basket-sante'],
+        ]);
+
+        $constraint = (new Constraint)
+            ->setId('c-contract')
+            ->setName('Adultes en compétition hors loisir')
+            ->setScope(ConstraintScope::CLUB)
+            ->setFamily(ConstraintFamily::FACILITY)
+            ->setRuleType(ConstraintRuleType::HARD)
+            ->setConfig([
+                'targetTags' => ['ADULTE', 'COMPETITION'],
+                'excludeTags' => ['LOISIR_ADULTE'],
+                'forcedVenueId' => 'v-1',
+            ])
+            ->setSortOrder(0)
+            ->setIsActive(true);
+
+        $serialized = $this->invokeSerializeUnified([$constraint], 'season-1', 'club-1', [$this->team('sm1'), $this->team('sf1'), $this->team('basket-sante')]);
+
+        self::assertNotSame([], $serialized, 'la contrainte produit bien des lignes');
+        foreach ($serialized as $row) {
+            $config = $row['config'];
+            self::assertIsArray($config);
+            foreach (TeamTagResolver::TAG_CONFIG_KEYS as $tagKey) {
+                self::assertArrayNotHasKey($tagKey, $config, \sprintf('« %s » ne doit JAMAIS partir au moteur', $tagKey));
+            }
+        }
+    }
+
     public function testCoachAvailabilityIsNeverClubExpanded(): void
     {
         $constraint = (new Constraint)
@@ -316,9 +441,52 @@ final class ScheduleConstraintBuilderTest extends TestCase
         $method = new ReflectionMethod($this->builder, 'resolveTagToTeamIds');
         $method->setAccessible(true);
 
+        // P2-29 : la résolution prend désormais le CONFIG entier (targetTag legacy inclus)
+        // et la liste d'équipes (base D8 pour l'exclusion sans cible — inutile ici).
         /** @var list<string> $result */
-        $result = $method->invoke($this->builder, $targetTag, $seasonId, $clubId);
+        $result = $method->invoke($this->builder, ['targetTag' => $targetTag], $seasonId, $clubId, []);
 
         return $result;
+    }
+
+    /**
+     * P2-29 — un résolveur bâti sur un EM mocké dont chaque tag NOMMÉ renvoie un jeu
+     * d'équipes distinct, pour éprouver l'intersection et l'exclusion au niveau du builder.
+     *
+     * @param array<string, list<string>> $teamsByTag nom de tag => teamIds
+     */
+    private function builderWithTagSets(array $teamsByTag): ScheduleConstraintBuilder
+    {
+        $tagIdByName = [];
+        foreach (array_keys($teamsByTag) as $name) {
+            $tagIdByName[$name] = 'tag-' . $name;
+        }
+
+        $this->teamTagRepository->method('findOneBy')->willReturnCallback(
+            static function (array $criteria) use ($tagIdByName): ?TeamTag {
+                $name = $criteria['name'] ?? null;
+                if (!\is_string($name) || !isset($tagIdByName[$name])) {
+                    return null;
+                }
+
+                return (new TeamTag)->setId($tagIdByName[$name])->setClubId('club-1')->setName($name);
+            },
+        );
+        $this->teamTagAssignmentRepository->method('findBy')->willReturnCallback(
+            static function (array $criteria) use ($teamsByTag, $tagIdByName): array {
+                $tagId = $criteria['tagId'] ?? null;
+                $name = array_search($tagId, $tagIdByName, true);
+                if (false === $name) {
+                    return [];
+                }
+
+                return array_map(
+                    static fn (string $teamId): TeamTagAssignment => (new TeamTagAssignment)->setTeamId($teamId)->setTagId((string) $tagId)->setSeasonId('season-1'),
+                    $teamsByTag[$name],
+                );
+            },
+        );
+
+        return new ScheduleConstraintBuilder($this->logger, $this->entityManager, null, null, new TeamTagResolver($this->entityManager, $this->logger));
     }
 }

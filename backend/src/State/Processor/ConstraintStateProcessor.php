@@ -8,6 +8,8 @@ use App\ApiResource\ConstraintResource;
 use App\Dto\ConstraintInput;
 use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
+use App\Entity\Team;
+use App\Entity\TeamTag;
 use App\Entity\Venue;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
@@ -17,6 +19,7 @@ use App\Service\ManagementAccessGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
+use App\Service\TeamTagResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -39,6 +42,7 @@ class ConstraintStateProcessor extends AbstractStateProcessor
         ManagementAccessGuard $managementAccessGuard,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly ConstraintConfigValidator $configValidator,
+        private readonly TeamTagResolver $tagResolver,
         ?LoggerInterface $logger = null,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
@@ -195,6 +199,59 @@ class ConstraintStateProcessor extends AbstractStateProcessor
         }
 
         $this->assertVenuesExist($config);
+        $this->assertTagsResolve($config);
+    }
+
+    /**
+     * P2-29 D10 — la NOUVELLE forme de ciblage par tag (`targetTags`/`excludeTags`) est
+     * jugée CONTRE LA SAISON COURANTE : un groupe inconnu du club, ou une résolution vide
+     * (intersection sans équipe commune, exclusion qui vide la cible), sont refusés à
+     * l'écriture — le gestionnaire saurait tout de suite que la contrainte n'aurait aucun
+     * effet, au lieu de la découvrir muette au solve.
+     *
+     * ⚠ Le legacy `targetTag` (un seul tag) GARDE son comportement : aucune validation DB,
+     * rétro-compat stricte — un tag inconnu y reste un NO-OP + warning au build. La nouvelle
+     * forme seule (présence de `targetTags`/`excludeTags`) déclenche ce contrôle.
+     *
+     * Comme `assertVenuesExist`, on s'appuie sur le `TenantFilter` (listener priorité 7,
+     * après le firewall) : la lecture est déjà bornée au club courant, un tag d'un autre
+     * club se signale INCONNU, jamais « interdit ».
+     *
+     * @param array<string, mixed> $config
+     */
+    private function assertTagsResolve(array $config): void
+    {
+        $isNewForm = \array_key_exists('targetTags', $config) || \array_key_exists('excludeTags', $config);
+        if (!$isNewForm) {
+            return;
+        }
+
+        $request = $this->requestStack->getCurrentRequest();
+        $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
+        if (!\is_string($clubId) || '' === $clubId) {
+            return; // hors contexte HTTP tenant (fixtures, CLI) : rien à résoudre ici.
+        }
+        $rawSeason = $request?->attributes->get('_season_id') ?? $request?->headers->get('X-Season-Id');
+        $seasonId = $this->resolveSeasonId($clubId, \is_string($rawSeason) ? $rawSeason : null);
+        if (!\is_string($seasonId) || '' === $seasonId) {
+            return;
+        }
+
+        // Groupe inconnu du club → 422 (le TenantFilter borne au club courant).
+        foreach ([...TeamTagResolver::targetTagNames($config), ...TeamTagResolver::excludeTagNames($config)] as $tagName) {
+            if (!$this->entityManager->getRepository(TeamTag::class)->findOneBy(['name' => $tagName]) instanceof TeamTag) {
+                throw new UnprocessableEntityHttpException(\sprintf('Le groupe « %s » n\'existe pas dans ce club.', $tagName));
+            }
+        }
+
+        // Résolution vide contre la saison courante → 422 nommant les groupes.
+        $seasonTeamIds = array_map(
+            static fn (Team $team): string => $team->getId(),
+            $this->entityManager->getRepository(Team::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId]),
+        );
+        if ([] === $this->tagResolver->resolveConstraintTeamIds($config, $seasonId, $clubId, $seasonTeamIds)) {
+            throw new UnprocessableEntityHttpException(\sprintf('Le ciblage « %s » ne désigne aucune équipe cette saison — la contrainte n\'aurait aucun effet.', TeamTagResolver::tagTargetLabel($config)));
+        }
     }
 
     /**
