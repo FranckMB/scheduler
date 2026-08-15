@@ -128,16 +128,22 @@ def is_team_satisfied_by_hard_locks(
     return hard_count >= sessions_per_week
 
 
-# Small INTEGER tiebreaker weights for the same-coach same-venue chaining bonus.
-# Two ceilings keep it a *bonus*, never a decider:
-#   1. A placed session is worth tier(≥1) + session_count(20) = 21 at minimum,
-#      so a chaining weight < 21 can never drop a session to chain others.
-#   2. The smallest gap between adjacent tiers' placement values is C−D = 9
-#      (30 vs 21), so a weight ≤ 8 can never steal a slot from a higher tier —
-#      S/A/B priority (gaps 90/900) is always safe; only the C↔D arbitration,
-#      which the club treats as indifferent, can wobble.
-# Hence max weight = 8. Order preserved (S>A>B>C>D); the pair's weight is that
-# of its highest tier (chaining SF1(S)+U15F(B) → 8, taken on the S).
+# Small INTEGER tiebreaker weights for the same-venue same-day chaining bonus
+# (a PERSON present at both back-to-back sessions — coach OR player of the team).
+# The scale below is UNCHANGED; what shifts is that a single consecutive pair can
+# now carry up to *k* distinct common people, each its own `chained` term, so the
+# pair's total chaining reward stacks to k × weight ≤ 8k rather than a flat ≤ 8.
+# Two ceilings still keep it a *bonus*, never a decider:
+#   1. Dropping a placed session to chain others costs tier(≥1) + session_count(20)
+#      AND fires missing_session (−1000) → ≥ 1021. Even a fully stacked pair
+#      (k people at S) would need k > 127 to overcome that — unreachable, since k
+#      is the handful of people two adjacent same-venue sessions actually share.
+#   2. Between adjacent tiers the smallest placement gap is C−D = 9 (30 vs 21).
+#      A lone term (≤ 8) never steals a slot from a higher tier; stacking widens
+#      only the C↔D wobble slightly (the club treats C/D as indifferent), and the
+#      missing_session floor above still forbids ever dropping a session for it.
+# Hence per-person max weight = 8. Order preserved (S>A>B>C>D); each term takes the
+# pair's highest tier (chaining SF1(S)+U15F(B) → 8, taken on the S).
 CHAINING_TIER_WEIGHTS = MappingProxyType(
     {
         "S": 8,
@@ -369,6 +375,7 @@ def add_level_2_objective(
     hard_satisfied_team_ids: set[str] | None = None,
     score_formula_version: str = SCORE_FORMULA_VERSION,
     apply_chaining: bool = True,
+    team_player_map: Mapping[str, list[str]] | None = None,
 ) -> Level2ObjectiveStats:
     """Maximize the fixed T24 weighted score for candidate placements.
 
@@ -453,7 +460,7 @@ def add_level_2_objective(
     # objective now depends on apply_chaining: single-phase (default) folds them
     # into the one Maximize; two-phase (apply_chaining=False) maximises placement
     # only, then the caller locks placement and optimises chaining separately.
-    chaining_pairs = add_chaining_bonus(model, assignment_list, teams=teams)
+    chaining_pairs = add_chaining_bonus(model, assignment_list, teams=teams, team_player_map=team_player_map)
 
     if apply_chaining and chaining_pairs:
         model.Maximize(placement_expression + sum(weight * variable for variable, weight in chaining_pairs))
@@ -810,14 +817,20 @@ def add_chaining_bonus(
     assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike],
     *,
     teams: Iterable[Any] = (),
+    team_player_map: Mapping[str, list[str]] | None = None,
 ) -> list[tuple[BoolVarLike, int]]:
-    """Build SOFT bonus terms for same-venue back-to-back coaching sessions.
+    """Build SOFT bonus terms for same-venue back-to-back sessions.
 
     For each pair of consecutive slots (A, B) in the same venue on the same
-    day where A.end == B.start, and for each coach who could be assigned to
-    both slots, create a ``chained`` BoolVar that is true when the coach is
-    assigned to both. The bonus weight is ``CHAINING_TIER_WEIGHTS[tier]`` where
-    the tier is the highest-tier team the coach coaches across the two sessions.
+    day where A.end == B.start, and for each PERSON present at both slots —
+    a coach of the session OR a player of its team (see *team_player_map*) —
+    create a ``chained`` BoolVar that is true when both sessions are placed.
+    The bonus weight is ``CHAINING_TIER_WEIGHTS[tier]`` where the tier is the
+    highest-tier team across the two sessions.
+
+    *team_player_map* maps ``str(team_id) -> [person_id, ...]`` (built from the
+    coach/player links). With it None, only coaches count and the result is
+    byte-identical to the coach-only behaviour.
 
     Returns a list of ``(chained_var, weight)`` terms. The caller MUST fold
     these into its single ``model.Maximize(...)`` — this function must not call
@@ -886,11 +899,11 @@ def add_chaining_bonus(
                     continue
                 seen_pairs.add(pair_key)
 
-                coaches_a = _coach_ids_for(entry["assignment"])
-                coaches_b = _coach_ids_for(next_entry["assignment"])
-                common_coaches = coaches_a & coaches_b
+                persons_a = _person_ids_for(entry["assignment"], team_player_map)
+                persons_b = _person_ids_for(next_entry["assignment"], team_player_map)
+                common_persons = persons_a & persons_b
 
-                for coach_id in common_coaches:
+                for person_id in common_persons:
                     tier_a = _priority_tier_name(entry["assignment"], teams_by_id)
                     tier_b = _priority_tier_name(next_entry["assignment"], teams_by_id)
                     highest_tier = _higher_tier(tier_a, tier_b)
@@ -905,7 +918,7 @@ def add_chaining_bonus(
                     # the maximiser pushes it to min(var_a, var_b) = "both placed".
                     # Avoids the reified AddBoolAnd/AddBoolOr + OnlyEnforceIf, which
                     # blow up the model on real datasets (BCCL solve > 30 s).
-                    chained = model.NewBoolVar(f"chained_{coach_id}_{pair_id_a}_{pair_id_b}")
+                    chained = model.NewBoolVar(f"chained_{person_id}_{pair_id_a}_{pair_id_b}")
                     model.Add(chained <= var_a)
                     model.Add(chained <= var_b)
 
@@ -1097,6 +1110,24 @@ def _coach_ids_for(assignment: AssignmentLike) -> set[str]:
     result: set[str] = set()
     if coach_id is not None:
         result.add(str(coach_id))
+    return result
+
+
+def _person_ids_for(
+    assignment: AssignmentLike,
+    team_player_map: Mapping[str, list[str]] | None,
+) -> set[str]:
+    """People present at a session: its coach(es) UNION the players of its team.
+
+    A ``set`` gives the double-role dedup for free — someone who both coaches and
+    plays the session counts once. With *team_player_map* None the result equals
+    ``_coach_ids_for`` exactly (byte-identical legacy behaviour).
+    """
+    result = _coach_ids_for(assignment)
+    if team_player_map:
+        team_id = _team_id(assignment)
+        if team_id is not None:
+            result.update(team_player_map.get(str(team_id), []))
     return result
 
 

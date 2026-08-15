@@ -647,6 +647,11 @@ def _solve(
         soft_terms=soft_terms,
         hard_satisfied_team_ids=hard_satisfied_team_ids,
         apply_chaining=False,
+        # A person chains a back-to-back pair as coach OR as player of the team;
+        # the map is built once from the constraint links (l.446) and the chaining
+        # terms are built once here, so phase 2 (which reuses chaining_terms) is
+        # covered too.
+        team_player_map=team_player_map,
     )
 
     # Adaptive timeout capped by the payload budget.
