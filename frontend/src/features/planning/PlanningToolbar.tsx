@@ -38,6 +38,11 @@ interface PlanningToolbarProps {
   /** Resource filter, rendered next to the view switcher on row 1 — its label mirrors the
    *  current view mode, so the two belong together (P4-43). Owned by the page. */
   filterSlot?: ReactNode;
+  /** PR 3 — nombre de créneaux du planning affiché verrouillés À LA MAIN (`lockOrigin` MANUAL).
+   *  Le compteur est MASQUÉ à 0 (le cas ordinaire — le plus sobre) ; sinon il ouvre le panneau
+   *  latéral des verrous (`onOpenLocks`, owned par la page). Consultable même en lecture seule. */
+  manualLockCount?: number;
+  onOpenLocks?: () => void;
   /** Wizard-embedded (generation step) vs standalone /planning consultation. The
    *  standalone view hides the version selector and the status badge — version
    *  management lives in the wizard, /planning is for consulting. */
@@ -72,6 +77,8 @@ export function PlanningToolbar({
   actionBusy,
   rightSlot,
   filterSlot,
+  manualLockCount = 0,
+  onOpenLocks,
   embedded = false,
 }: PlanningToolbarProps) {
   const selected = schedules.find((s) => s.id === selectedScheduleId) ?? null;
@@ -227,6 +234,14 @@ export function PlanningToolbar({
           >
             <History className="size-4" />
             Charger cette version
+          </Button>
+        ) : null}
+        {/* PR 3 — compteur des verrous manuels : ouvre le panneau latéral. Masqué à 0 (le
+            cas ordinaire), et affiché même en lecture seule (les verrous restent consultables). */}
+        {undefined !== onOpenLocks && manualLockCount > 0 ? (
+          <Button size="sm" variant="outline" className="h-8" onClick={onOpenLocks} title="Voir les verrous posés à la main">
+            <Lock className="size-4" />
+            Verrous manuels ({manualLockCount})
           </Button>
         ) : null}
         {rightSlot ? <div className="ml-auto flex items-center gap-2">{rightSlot}</div> : null}

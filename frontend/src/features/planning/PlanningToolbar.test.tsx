@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Schedule, ScheduleCapabilities } from "./api";
 import { PlanningToolbar } from "./PlanningToolbar";
@@ -26,7 +26,17 @@ function renderToolbar(
     disableRegenerate = false,
     slots = false,
     outputCredits = null,
-  }: { embedded?: boolean; selectedScheduleId?: string; disableRegenerate?: boolean; slots?: boolean; outputCredits?: { count: number; blocked: boolean } | null } = {},
+    manualLockCount = 0,
+    onOpenLocks,
+  }: {
+    embedded?: boolean;
+    selectedScheduleId?: string;
+    disableRegenerate?: boolean;
+    slots?: boolean;
+    outputCredits?: { count: number; blocked: boolean } | null;
+    manualLockCount?: number;
+    onOpenLocks?: () => void;
+  } = {},
 ) {
   return render(
     <PlanningToolbar
@@ -44,6 +54,8 @@ function renderToolbar(
       onRegenerateFrom={noop}
       disableRegenerate={disableRegenerate}
       outputCredits={outputCredits}
+      manualLockCount={manualLockCount}
+      onOpenLocks={onOpenLocks}
       isGenerating={false}
       actionBusy={false}
       embedded={embedded}
@@ -100,6 +112,27 @@ describe("PlanningToolbar — survie des verrous à la régénération", () => {
   it("n'affiche pas la phrase quand « Régénérer » est masqué (version en vigueur, lecture seule)", () => {
     renderToolbar(schedule("COMPLETED", { isChosen: true }));
     expect(screen.queryByText(/verrouillés sont conservés/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("PlanningToolbar — compteur de verrous manuels (PR 3)", () => {
+  it("affiche « Verrous manuels (n) » et ouvre le panneau au clic", () => {
+    const onOpenLocks = vi.fn();
+    renderToolbar(schedule("COMPLETED"), { manualLockCount: 2, onOpenLocks });
+
+    const btn = screen.getByRole("button", { name: /verrous manuels \(2\)/i });
+    btn.click();
+    expect(onOpenLocks).toHaveBeenCalled();
+  });
+
+  it("masque le compteur quand aucun verrou manuel (n = 0) — le plus sobre", () => {
+    renderToolbar(schedule("COMPLETED"), { manualLockCount: 0, onOpenLocks: vi.fn() });
+    expect(screen.queryByRole("button", { name: /verrous manuels/i })).not.toBeInTheDocument();
+  });
+
+  it("visible aussi en lecture seule (version en vigueur) : les verrous restent consultables", () => {
+    renderToolbar(schedule("COMPLETED", { isChosen: true }), { manualLockCount: 3, onOpenLocks: vi.fn() });
+    expect(screen.getByRole("button", { name: /verrous manuels \(3\)/i })).toBeInTheDocument();
   });
 });
 

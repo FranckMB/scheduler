@@ -6,8 +6,10 @@ import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 import { tint } from "@/shared/lib/color";
 import { cn } from "@/shared/lib/utils";
 
+import type { LockOrigin } from "./api";
 import { isEmptySlotId } from "./lib/emptySlots";
 import type { GridModel } from "./lib/grid";
+import { LOCK_LENS_META } from "./lib/lockLens";
 
 const ROW_HEIGHT = 16; // px per 15-min step (1h = 64px)
 const HEADER_ROW = "1.75rem";
@@ -26,6 +28,13 @@ interface WeekGridProps {
    * compris) vit UNE fois côté page.
    */
   onToggleLock?: (slotId: string) => void;
+  /**
+   * Lentille verrous (PR 3) : quand active, les créneaux SANS verrou sont estompés et les
+   * verrouillés portent l'anneau + l'icône de leur origine (MANUAL/RESERVATION/UNKNOWN,
+   * `lib/lockLens`). ⚠ Le surlignage CONFLIT (`highlightSlotIds`) PRIME : tant qu'un conflit
+   * règne, la lentille se tait — le rouge/ambre du conflit ne doit pas être brouillé.
+   */
+  lockLens?: boolean;
 }
 
 /**
@@ -34,9 +43,22 @@ interface WeekGridProps {
  * a sticky grid item is clamped to its own cell, so it detaches once that narrow
  * cell scrolls out of view.
  */
-export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds, onToggleLock }: WeekGridProps) {
+export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds, onToggleLock, lockLens = false }: WeekGridProps) {
   const { columns, dayGroups, rows, cells } = model;
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Lentille : l'icône de catégorie (F1), coin haut-GAUCHE de la carte — à l'opposé du cadenas
+  // (coin haut-droit), pour ne pas se chevaucher. Décorative (aria-hidden) : la couleur ET la
+  // légende du panneau portent le sens ; le `data-lens` sert au repérage par les tests.
+  const renderLensBadge = (origin: LockOrigin) => {
+    const meta = LOCK_LENS_META[origin];
+    const Icon = meta.Icon;
+    return (
+      <span data-lens={origin} aria-hidden="true" className={cn("pointer-events-none absolute left-0.5 top-0.5 z-20", meta.textClass)}>
+        <Icon className="size-3" />
+      </span>
+    );
+  };
 
   // Le cadenas d'une carte : un bouton FRÈRE, en surimpression coin haut-droit. Éditable
   // (onToggleLock fourni) → bascule le verrou sans sélectionner (zone de clic ≥ 24px,
@@ -143,6 +165,8 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
           // considèrent tous ses membres, pas le seul `slotId` de tête.
           const cellIds = (c: (typeof cells)[number]): string[] => (null !== c.groupLabel ? c.members.map((m) => m.slotId) : [c.slotId]);
           const highlighting = null != highlightSlotIds && highlightSlotIds.size > 0 && cells.some((c) => cellIds(c).some((id) => highlightSlotIds.has(id)));
+          // Le CONFLIT prime : tant qu'un surlignage est en cours, la lentille se tait.
+          const lensActive = lockLens && !highlighting;
           return cells.map((cell) => {
           const dimmed = highlighting && !cellIds(cell).some((id) => highlightSlotIds?.has(id) ?? false);
           // Empty slots = defined venue windows the solver left unfilled. Muted,
@@ -158,6 +182,8 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                   "z-10 m-px flex items-center justify-center overflow-hidden rounded border border-dashed border-muted-foreground/40 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70 transition",
                   dimmed ? "opacity-30" : "",
                   flagged ? "border-warning ring-2 ring-warning text-warning" : "",
+                  // Une fenêtre vide n'a aucun verrou : sous la lentille, elle s'estompe.
+                  lensActive ? "opacity-40" : "",
                 )}
                 style={{
                   gridColumn: cell.gridColumn,
@@ -197,8 +223,16 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                   const memberSelected = member.slotId === selectedSlotId;
                   return (
                     // Wrapper positionné : le cadenas est un bouton FRÈRE du bouton d'équipe
-                    // (jamais imbriqué). `group` scope le survol/focus au membre.
-                    <div key={member.slotId} className="group relative flex w-full items-center">
+                    // (jamais imbriqué). `group` scope le survol/focus au membre. La lentille
+                    // agit PAR MEMBRE : chaque équipe d'une carte fusionnée porte son propre verrou.
+                    <div
+                      key={member.slotId}
+                      className={cn(
+                        "group relative flex w-full items-center",
+                        lensActive && null === member.lockOrigin ? "opacity-40" : "",
+                        lensActive && null !== member.lockOrigin ? LOCK_LENS_META[member.lockOrigin].ringClass : "",
+                      )}
+                    >
                       <button
                         type="button"
                         data-slot-id={member.slotId}
@@ -212,6 +246,7 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                         <span className="truncate">{member.teamLabel}</span>
                       </button>
                       {renderLock(member.slotId, member.teamLabel, member.locked)}
+                      {lensActive && null !== member.lockOrigin ? renderLensBadge(member.lockOrigin) : null}
                     </div>
                   );
                 })}
@@ -232,6 +267,9 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                 "hover:ring-1 hover:ring-accent",
                 selected ? "ring-2 ring-accent" : "",
                 dimmed ? "opacity-30" : "",
+                // Lentille : sans verrou → estompé ; verrouillé → anneau de sa catégorie.
+                lensActive && null === cell.lockOrigin ? "opacity-40" : "",
+                lensActive && null !== cell.lockOrigin ? LOCK_LENS_META[cell.lockOrigin].ringClass : "",
               )}
               style={{
                 gridColumn: cell.gridColumn,
@@ -259,6 +297,7 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                 <span className="truncate text-[10px] text-muted-foreground">{cell.secondaryLabel}</span>
               </button>
               {renderLock(cell.slotId, cell.teamLabel, cell.locked)}
+              {lensActive && null !== cell.lockOrigin ? renderLensBadge(cell.lockOrigin) : null}
             </div>
           );
           });

@@ -144,6 +144,69 @@ describe("WeekGrid", () => {
     });
   });
 
+  describe("lentille verrous (lockLens, PR 3)", () => {
+    // Trois créneaux : un manuel, une réservation, un libre — trois jours distincts pour
+    // trois colonnes séparées (vue gymnase, même gymnase).
+    const lensSlots: Slot[] = [
+      { ...slot, id: "manual", dayOfWeek: 1, lockLevel: "HARD", lockOrigin: "MANUAL" },
+      { ...slot, id: "reserv", dayOfWeek: 2, lockLevel: "HARD", lockOrigin: "RESERVATION" },
+      { ...slot, id: "free", dayOfWeek: 3, lockLevel: "NONE", lockOrigin: null },
+    ];
+
+    it("estompe les créneaux SANS verrou et cercle les verrouillés par catégorie", () => {
+      const model = buildGrid(lensSlots, "gymnase", lookups);
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} lockLens />);
+
+      // Non verrouillé → estompé (lentille).
+      expect(container.querySelector('[data-slot-id="free"]')?.className).toContain("opacity-40");
+      // Verrouillés → anneau de leur catégorie (« ring-2 ring-* », distinct du hover base
+      // « hover:ring-accent »), jamais estompés.
+      expect(container.querySelector('[data-slot-id="manual"]')?.className).toContain("ring-2 ring-accent");
+      expect(container.querySelector('[data-slot-id="manual"]')?.className).not.toContain("opacity-40");
+      expect(container.querySelector('[data-slot-id="reserv"]')?.className).toContain("ring-warning");
+    });
+
+    it("donne un style ET une icône DISTINCTS à MANUAL / RESERVATION / UNKNOWN (jamais la couleur seule)", () => {
+      const slots: Slot[] = [
+        { ...slot, id: "manual", dayOfWeek: 1, lockLevel: "HARD", lockOrigin: "MANUAL" },
+        { ...slot, id: "reserv", dayOfWeek: 2, lockLevel: "HARD", lockOrigin: "RESERVATION" },
+        { ...slot, id: "unknown", dayOfWeek: 3, lockLevel: "HARD", lockOrigin: "UNKNOWN" },
+      ];
+      const model = buildGrid(slots, "gymnase", lookups);
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} lockLens />);
+
+      expect(container.querySelector('[data-slot-id="manual"]')?.className).toContain("ring-2 ring-accent");
+      expect(container.querySelector('[data-slot-id="reserv"]')?.className).toContain("ring-warning");
+      expect(container.querySelector('[data-slot-id="unknown"]')?.className).toContain("ring-muted-foreground");
+      // Une icône par catégorie (pas la couleur seule) — repérée par son data-lens.
+      expect(container.querySelector('[data-lens="MANUAL"]')).not.toBeNull();
+      expect(container.querySelector('[data-lens="RESERVATION"]')).not.toBeNull();
+      expect(container.querySelector('[data-lens="UNKNOWN"]')).not.toBeNull();
+    });
+
+    it("le surlignage CONFLIT prime sur la lentille (le refus de move l'emporte)", () => {
+      const model = buildGrid(lensSlots, "gymnase", lookups);
+      // « free » est le créneau en conflit surligné ; la lentille ne doit PAS colorer.
+      const { container } = render(
+        <WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} lockLens highlightSlotIds={new Set(["free"])} />,
+      );
+
+      // Conflit : le hors-conflit est estompé par le CONFLIT (opacity-30), pas par la lentille.
+      expect(container.querySelector('[data-slot-id="manual"]')?.className).toContain("opacity-30");
+      // La lentille est suffoquée : ni anneau de catégorie ni icône lentille tant qu'un conflit règne.
+      expect(container.querySelector('[data-slot-id="manual"]')?.className).not.toContain("ring-2 ring-accent");
+      expect(container.querySelector('[data-lens="MANUAL"]')).toBeNull();
+    });
+
+    it("lentille inactive (lockLens absent) : ni estompe ni anneau de catégorie", () => {
+      const model = buildGrid(lensSlots, "gymnase", lookups);
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} />);
+
+      expect(container.querySelector('[data-slot-id="free"]')?.className).not.toContain("opacity-40");
+      expect(container.querySelector('[data-lens="MANUAL"]')).toBeNull();
+    });
+  });
+
   it("names the venue as TEXT in every view, not colour only (A11Y-01, WCAG 1.4.1)", async () => {
     // In the team ('equipe') view the venue is no longer a column header — it must
     // still be readable as text on the cell (not conveyed by the border/tint colour

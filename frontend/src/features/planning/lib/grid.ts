@@ -1,6 +1,6 @@
 import { compareTeamsByRank, groupTeamsByTier, tierGroupLabel, type TierLike } from "@/shared/lib/teamTiers";
 
-import type { Coach, Slot, Team, Venue } from "../api";
+import type { Coach, LockOrigin, Slot, Team, Venue } from "../api";
 import type { ViewMode } from "../store";
 
 /**
@@ -241,6 +241,9 @@ export interface GridCellMember {
   teamLabel: string;
   coachLabel: string;
   locked: boolean;
+  /** L'ORIGINE du verrou (F1), pour la lentille verrous : `null` quand le membre n'est
+   *  pas verrouillé. Le front l'AFFICHE (couleur/icône par catégorie), il ne re-dérive rien. */
+  lockOrigin: LockOrigin | null;
 }
 
 export interface GridCell {
@@ -266,6 +269,9 @@ export interface GridCell {
   startLabel: string;
   endLabel: string;
   locked: boolean;
+  /** L'ORIGINE du verrou (F1) de la séance de tête de cette cellule ; `null` si non
+   *  verrouillée. Sur une carte fusionnée, chaque `members[i].lockOrigin` porte la sienne. */
+  lockOrigin: LockOrigin | null;
   /**
    * P2-17 D4 — libellé d'une carte FUSIONNÉE (vue gymnase, ≥ 2 équipes partageant un
    * créneau mutualisé libellé) ; `null` sur une cellule ordinaire à une seule équipe.
@@ -396,7 +402,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
       // par le libellé, chaque équipe restant un membre cliquable (D4).
       const mk = "" !== label ? mergeKeyOf(slot, key, label) : "";
       if ("" !== mk && (groupSize.get(mk) ?? 0) >= 2) {
-        const member: GridCellMember = { slotId: slot.id, teamLabel, coachLabel, locked };
+        const member: GridCellMember = { slotId: slot.id, teamLabel, coachLabel, locked, lockOrigin: slot.lockOrigin };
         const existing = merged.get(mk);
         if (undefined === existing) {
           const cell: GridCell = {
@@ -418,6 +424,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
             startLabel: formatMinutes(start),
             endLabel: formatMinutes(start + slot.durationMinutes),
             locked,
+            lockOrigin: slot.lockOrigin,
             groupLabel: label,
             members: [member],
           };
@@ -470,6 +477,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
         startLabel: formatMinutes(start),
         endLabel: formatMinutes(start + slot.durationMinutes),
         locked,
+        lockOrigin: slot.lockOrigin,
         groupLabel: null,
         members: [],
       };

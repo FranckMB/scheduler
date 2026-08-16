@@ -23,6 +23,7 @@ import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
 import { GenerationInProgressError, MoveRejectedError, OverlaysExistError, type Slot } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
+import { LocksPanel } from "./LocksPanel";
 import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
 import { buildTagTeamIds } from "./lib/applicableConstraints";
@@ -115,6 +116,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // visé (et non un booléen) : le cadenas de la grille (PR 2) peut viser un créneau NON
   // sélectionné, la confirmation doit muter celui-là, pas le sélectionné.
   const [pendingUnlockSlotId, setPendingUnlockSlotId] = useState<string | null>(null);
+  // PR 3 — panneau latéral des verrous manuels + lentille (surbrillance de la grille par
+  // origine de verrou). Fermer le panneau ÉTEINT la lentille : pas d'état fantôme.
+  const [locksPanelOpen, setLocksPanelOpen] = useState(false);
+  const [lockLens, setLockLens] = useState(false);
   // Source partagée avec le cockpit (radar/DayDialog) — une seule dérivation de
   // la saison de travail, plus de copie inline qui pourrait diverger.
   const workingSeason = useWorkingSeason();
@@ -341,6 +346,15 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   }, [selectedSchedule?.status, validScheduleId, queryClient]);
 
   const selectedSlot = slots.find((s) => s.id === selectedSlotId) ?? null;
+
+  // PR 3 — les créneaux verrouillés À LA MAIN (le compteur toolbar + la liste du panneau).
+  // SEULS les MANUAL comptent : ni les réservations de gymnase (RESERVATION), ni les verrous
+  // d'origine indécidable (UNKNOWN) — c'est le « travail de verrouillage » du gestionnaire.
+  const manualLocks = useMemo(() => slots.filter((s) => "MANUAL" === s.lockOrigin), [slots]);
+  const closeLocksPanel = useCallback(() => {
+    setLocksPanelOpen(false);
+    setLockLens(false);
+  }, []);
 
   // F1 (PR 2) — LE point d'entrée UNIQUE de la bascule de verrou, partagé par le panneau de
   // détail ET le cadenas de la grille : la règle RÉSERVATION (déverrouiller → confirmation)
@@ -711,6 +725,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onReopen={() => reopen()}
               onDelete={() => validScheduleId && deleteMutation.mutate(validScheduleId)}
               onRegenerateFrom={() => setRegenerateFromOpen(true)}
+              manualLockCount={manualLocks.length}
+              onOpenLocks={() => setLocksPanelOpen(true)}
               embedded={embedded}
               rightSlot={
                 null !== validScheduleId && !isGenerating && slots.length > 0 ? (
@@ -777,7 +793,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               // un créneau replie les diagnostics (cf. `slotCollapse`) : ils cohabitent alors
               // avec le détail dans l'aside dès qu'on les rouvre — chacun borné à la grille.
               const showDiagnostics = !isReadOnly && !diagnosticsCollapsed;
-              const showAside = showDetail || showDiagnostics;
+              const showAside = showDetail || showDiagnostics || locksPanelOpen;
               // Barre repliée : le compte TOTAL + la sévérité la plus haute restent lisibles —
               // replier ne doit rien enterrer (« Diagnostics (6) · 2 erreurs »).
               const topSummary = topSeveritySummary(diagnostics);
@@ -810,11 +826,27 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                         // Lecture seule (validé) ou FAILED (pseudo-créneaux sans existence
                         // serveur) → pas de bascule : le cadenas reste indicateur passif.
                         onToggleLock={isReadOnly || isFailed ? undefined : requestToggleLock}
+                        lockLens={lockLens}
                       />
                     </div>
                   </div>
                   {showAside ? (
                     <div className="mt-4 flex min-h-0 flex-col gap-4 lg:mt-0 lg:h-full">
+                      {/* PR 3 — le panneau des verrous manuels cohabite dans l'aside (même
+                          patron que SlotDetail/DiagnosticsPanel) ; sa lentille surligne la grille. */}
+                      {locksPanelOpen ? (
+                        <div className="min-h-0 flex-1">
+                          <LocksPanel
+                            locks={manualLocks}
+                            lookups={lookups}
+                            selectedSlotId={selectedSlotId}
+                            onSelectSlot={openSlot}
+                            lensActive={lockLens}
+                            onToggleLens={() => setLockLens((on) => !on)}
+                            onClose={closeLocksPanel}
+                          />
+                        </div>
+                      ) : null}
                       {null !== selectedCell && null !== selectedSlot ? (
                         <SlotDetail
                           key={selectedSlot.id}

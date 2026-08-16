@@ -385,3 +385,34 @@ describe("le dimanche dans la boucle de travail (revue P4-37)", () => {
     expect(grid.dayGroups.map((g) => g.label)).toEqual(["Mar"]);
   });
 });
+
+describe("lockOrigin transite dans la grille (lentille verrous, PR 3)", () => {
+  // La lentille colore un créneau par l'ORIGINE de son verrou (MANUAL/RESERVATION/UNKNOWN) :
+  // ce champ, déjà porté par le Slot, doit atteindre la cellule ET chaque membre d'une carte
+  // fusionnée — sinon WeekGrid ne pourrait pas les distinguer.
+  it("porte lockOrigin sur une cellule ordinaire", () => {
+    const grid = buildGrid([slot({ id: "a", lockLevel: "HARD", lockOrigin: "MANUAL" })], "gymnase", lookups);
+    expect(grid.cells.find((c) => c.slotId === "a")?.lockOrigin).toBe("MANUAL");
+  });
+
+  it("laisse lockOrigin à null sur un créneau non verrouillé", () => {
+    const grid = buildGrid([slot({ id: "a", lockLevel: "NONE", lockOrigin: null })], "gymnase", lookups);
+    expect(grid.cells.find((c) => c.slotId === "a")?.lockOrigin).toBeNull();
+  });
+
+  it("porte lockOrigin sur chaque membre d'une carte fusionnée", () => {
+    const mergeLookups: Lookups = { ...lookups, groupLabels: new Map<string, string>([["v1|1|1080", "CEC3"]]) };
+    const grid = buildGrid(
+      [
+        slot({ id: "s1", teamId: "t1", lockLevel: "HARD", lockOrigin: "RESERVATION" }),
+        slot({ id: "s2", teamId: "t2", lockLevel: "NONE", lockOrigin: null }),
+      ],
+      "gymnase",
+      mergeLookups,
+    );
+    const card = grid.cells.find((c) => null !== c.groupLabel);
+    expect(card?.members.map((m) => m.lockOrigin)).toEqual(["RESERVATION", null]);
+    // Le lockOrigin de tête de carte = celui de la première séance du groupe.
+    expect(card?.lockOrigin).toBe("RESERVATION");
+  });
+});
