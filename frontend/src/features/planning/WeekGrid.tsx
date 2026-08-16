@@ -55,7 +55,11 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
     const meta = LOCK_LENS_META[origin];
     const Icon = meta.Icon;
     return (
-      <span data-lens={origin} aria-hidden="true" className={cn("pointer-events-none absolute bottom-0.5 left-0.5 z-20", meta.textClass)}>
+      // Aligné sur le cadenas (retour fondateur) : l'icône du bouton (12 px dans une boîte
+      // de 24 px à bottom-0.5) a son centre à 14 px du bas → le badge nu (12 px) se pose à
+      // bottom-2 (8 px) pour le même centre. Pas de boîte : une boîte de 24 px chevauchait
+      // le cadenas sur les cartes étroites (demi-colonnes).
+      <span data-lens={origin} aria-hidden="true" className={cn("pointer-events-none absolute bottom-2 left-1 z-20", meta.textClass)}>
         <Icon className="size-3" />
       </span>
     );
