@@ -20,7 +20,6 @@ function slot(id: string, teamId: string): Slot {
     durationMinutes: 90,
     lockLevel: "NONE",
     lockOrigin: null,
-    temporaryLock: false,
   };
 }
 

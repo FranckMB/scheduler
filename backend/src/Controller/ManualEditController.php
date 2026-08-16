@@ -34,52 +34,6 @@ final class ManualEditController extends AbstractController implements SeasonSco
         private readonly MoveSlotService $moveSlotService,
     ) {}
 
-    #[Route('/api/schedule-slots/{id}/manual-edit/constraint', name: 'api_manual_edit_constraint', methods: ['POST'])]
-    public function applyConstraint(string $id, Request $request): JsonResponse
-    {
-        $this->managementAccessGuard->assertManager(); // SEC-07
-        $slot = $this->findSlot($id);
-
-        if (!$slot instanceof ScheduleSlotTemplate) {
-            return $this->json(['error' => 'Slot not found.'], Response::HTTP_NOT_FOUND);
-        }
-
-        if ($this->scheduleIsLocked($slot)) {
-            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before editing.'], Response::HTTP_CONFLICT);
-        }
-
-        $data = json_decode($request->getContent(), true);
-
-        if (!\is_array($data)) {
-            return $this->json(['error' => 'Invalid JSON body.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        $type = (string) ($data['type'] ?? '');
-
-        if ('' === $type) {
-            return $this->json(['error' => 'Missing required field: type.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        try {
-            $constraint = $this->manualEditService->applyPermanentConstraint(
-                $slot,
-                $type,
-                isset($data['reason']) ? (string) $data['reason'] : null,
-                isset($data['createdBy']) ? (string) $data['createdBy'] : null,
-            );
-        } catch (Throwable $e) {
-            // SEC-08: log the internal detail, never surface getMessage() to the client.
-            $this->logger->error('Manual edit failed.', ['exception' => $e]);
-
-            return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        return $this->json([
-            'message' => 'Permanent constraint created.',
-            'constraintId' => $constraint->getId(),
-        ], Response::HTTP_CREATED);
-    }
-
     #[Route('/api/schedule-slots/{id}/manual-edit/lock', name: 'api_manual_edit_lock', methods: ['POST'])]
     public function applyLock(string $id, Request $request): JsonResponse
     {

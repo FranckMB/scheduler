@@ -27,7 +27,7 @@ use Doctrine\ORM\EntityManagerInterface;
  *    qu'en HARD (le chemin soft de l'engine ne lit que min/maxStartTime) ;
  *  - visibles et supprimables comme n'importe quelle contrainte de l'écran
  *    Contraintes (jamais de règle implicite silencieuse — série ENGINE) ; `source`
- *    = 'onboarding_seed' les rend identifiables (patron 'manual_edit').
+ *    = 'onboarding_seed' les rend identifiables.
  *
  * Les cibles par tag suivent le patron de l'UI : scope CLUB + `config.targetTag`,
  * que `ScheduleConstraintBuilder::resolveTagToTeamIds` éclate en N contraintes

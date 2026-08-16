@@ -65,15 +65,6 @@ class ScheduleSlotTemplateResource
     #[Groups(['read'])]
     public ?LockOrigin $lockOrigin = null;
 
-    #[Groups(['read'])]
-    public bool $temporaryLock = false;
-
-    #[Groups(['read'])]
-    public ?string $temporaryLockFor = null;
-
-    #[Groups(['read'])]
-    public ?int $temporaryMinSessionsOverride = null;
-
     /** @var array<string, mixed>|null */
     #[Groups(['read'])]
     public ?array $pendingConstraintSuggestion = null;
@@ -94,9 +85,6 @@ class ScheduleSlotTemplateResource
         $dto->durationMinutes = $entity->getDurationMinutes();
         $dto->lockLevel = $entity->getLockLevel();
         $dto->lockOrigin = $entity->getLockOrigin();
-        $dto->temporaryLock = $entity->getTemporaryLock();
-        $dto->temporaryLockFor = $entity->getTemporaryLockFor();
-        $dto->temporaryMinSessionsOverride = $entity->getTemporaryMinSessionsOverride();
         $dto->pendingConstraintSuggestion = $entity->getPendingConstraintSuggestion();
 
         return $dto;

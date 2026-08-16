@@ -221,7 +221,6 @@ final class ScheduleSlotTemplateApiTest extends WebTestCase
         $slot->setStartTime(new DateTimeImmutable('18:00'));
         $slot->setDurationMinutes(90);
         $slot->setLockLevel(LockLevel::NONE);
-        $slot->setTemporaryLock(false);
         $this->em->persist($slot);
         $this->em->flush();
     }

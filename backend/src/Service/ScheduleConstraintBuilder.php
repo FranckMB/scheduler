@@ -51,7 +51,7 @@ final class ScheduleConstraintBuilder
      * Elle DOIT valoir exactement la valeur du fichier — gardé par
      * `PayloadVersionMatchesContractVersionTest`.
      */
-    public const string CONTRACT_VERSION = '2.8';
+    public const string CONTRACT_VERSION = '2.9';
     private const CACHE_TTL_SECONDS = 14_400;
     private const DEFAULT_SOLVER_SEED = 42;
     /**
@@ -737,17 +737,14 @@ final class ScheduleConstraintBuilder
             'startTime' => $this->formatTime($slotTemplate->getStartTime()),
             'durationMinutes' => $slotTemplate->getDurationMinutes(),
             'lockLevel' => $slotTemplate->getLockLevel()->value,
-            'temporaryLock' => $slotTemplate->getTemporaryLock(),
-            'temporaryLockFor' => $slotTemplate->getTemporaryLockFor(),
-            'temporaryMinSessionsOverride' => $slotTemplate->getTemporaryMinSessionsOverride(),
             'pendingConstraintSuggestion' => $pendingConstraintSuggestion,
         ];
     }
 
     /**
      * A Reservation is a HARD team→slot pin — same engine payload shape as a
-     * HARD ScheduleSlotTemplate, minus the work-loop fields (temporary locks,
-     * pending suggestions) which reservations never carry.
+     * HARD ScheduleSlotTemplate, minus the pending suggestion which reservations
+     * never carry.
      *
      * @return array<string, mixed>
      */
@@ -762,9 +759,6 @@ final class ScheduleConstraintBuilder
             'startTime' => $this->formatTime($reservation->getStartTime()),
             'durationMinutes' => $reservation->getDurationMinutes(),
             'lockLevel' => LockLevel::HARD->value,
-            'temporaryLock' => false,
-            'temporaryLockFor' => null,
-            'temporaryMinSessionsOverride' => null,
             'pendingConstraintSuggestion' => null,
         ];
     }

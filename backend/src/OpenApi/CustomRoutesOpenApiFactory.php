@@ -1893,32 +1893,6 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
         );
 
         return [
-            '/api/schedule-slots/{id}/manual-edit/constraint' => new PathItem(post: new Operation(
-                operationId: 'postManualEditConstraint',
-                tags: ['ManualEdit'],
-                responses: [
-                    '201' => $this->jsonResponse('Constraint created — returns its id', [
-                        'type' => 'object',
-                        'properties' => [
-                            'message' => ['type' => 'string'],
-                            'constraintId' => ['type' => 'string'],
-                        ],
-                    ]),
-                    '400' => new Response('Missing/invalid field'),
-                    '404' => new Response('Slot not found'),
-                    '409' => new Response('Schedule is validated (read-only)'),
-                ],
-                summary: 'Attach a manual constraint to a schedule slot',
-                requestBody: $this->jsonBody([
-                    'type' => 'object',
-                    'required' => ['type'],
-                    'properties' => [
-                        'type' => ['type' => 'string'],
-                        'reason' => ['type' => 'string'],
-                        'createdBy' => ['type' => 'string'],
-                    ],
-                ]),
-            )),
             '/api/schedule-slots/{id}/manual-edit/lock' => new PathItem(post: new Operation(
                 operationId: 'postManualEditLock',
                 tags: ['ManualEdit'],

@@ -6,7 +6,6 @@ namespace App\Tests\Integration\Api;
 
 use App\Entity\Club;
 use App\Entity\ClubUser;
-use App\Entity\Constraint;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
@@ -26,9 +25,8 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 /**
  * BCK-08: behavioural coverage of the manual-edit routes (planning-lifecycle
  * structuring axis). Beyond the SEC-07 role gate (ManagementRoleTest), this
- * proves each route actually DOES its job: creates the permanent constraint and
- * sets the lock. Moving a slot lives on its own rail (/move) under the engine
- * verdict — covered by SlotMoveVerdictTest.
+ * proves the route actually DOES its job: sets the lock. Moving a slot lives on
+ * its own rail (/move) under the engine verdict — covered by SlotMoveVerdictTest.
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -42,29 +40,6 @@ final class ManualEditBehaviorTest extends WebTestCase
     private KernelBrowser $client;
 
     private UserPasswordHasherInterface $hasher;
-
-    public function testApplyConstraintCreatesAPermanentConstraint(): void
-    {
-        [$user, , $season] = $this->seed('MED1');
-        $schedule = $this->createSchedule($season, ScheduleStatus::COMPLETED);
-        $slot = $this->createSlot($schedule, dayOfWeek: 2, startHm: '18:00');
-
-        $this->client->loginUser($user);
-        $this->client->request('POST', "/api/schedule-slots/{$slot->getId()}/manual-edit/constraint", [], [], [
-            'CONTENT_TYPE' => 'application/json',
-        ], json_encode(['type' => 'PIN_SLOT', 'reason' => 'Fixé par le coach'], \JSON_THROW_ON_ERROR));
-
-        self::assertResponseStatusCodeSame(201);
-        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
-        self::assertNotEmpty($data['constraintId']);
-
-        $this->em->clear();
-        $this->scopeGucToClub($season->getClubId());
-        $constraint = $this->em->getRepository(Constraint::class)->find($data['constraintId']);
-        self::assertNotNull($constraint, 'the manual edit must persist a Constraint');
-        self::assertSame($slot->getTeamId(), $constraint->getScopeTargetId());
-        self::assertSame('manual_edit', $constraint->getSource());
-    }
 
     public function testApplyLockSetsTheSlotLockLevel(): void
     {

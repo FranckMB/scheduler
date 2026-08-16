@@ -112,7 +112,6 @@ describe("DiagnosticsPanel — un conflict OUVRE le créneau fautif (P4-95)", ()
     durationMinutes: 90,
     lockLevel: "NONE",
     lockOrigin: null,
-    temporaryLock: false,
     ...over,
   });
 

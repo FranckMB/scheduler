@@ -32,6 +32,5 @@ export function computeEmptySlots(trainingSlots: VenueTrainingSlot[], slots: Slo
       durationMinutes: ts.durationMinutes,
       lockLevel: "NONE" as const,
       lockOrigin: null,
-      temporaryLock: false,
     }));
 }
