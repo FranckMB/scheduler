@@ -4,9 +4,13 @@ from ortools.sat.python import cp_model
 
 from app.solver.objective import (
     BONUS_WEIGHT_NAMES,
+    CHAINING_STABILITY_MULTIPLIER,
+    CHAINING_TIER_WEIGHTS,
     LEVEL_2_OBJECTIVE_WEIGHTS,
     SCORE_FORMULA_VERSION,
+    STABILITY_TERM_WEIGHT,
     add_level_2_objective,
+    build_stability_terms,
 )
 
 EXPECTED_WEIGHTS = {
@@ -152,6 +156,55 @@ class LevelTwoObjectiveTest(unittest.TestCase):
                 [{"var": variable, "priority_tier": "S"}],
                 score_formula_version="T24_LEVEL_2_FIXED_WEIGHTS_V0",
             )
+
+
+class StabilityTermsTest(unittest.TestCase):
+    """P3-21 — build_stability_terms : +1 par variable dont la clé figure dans
+    previousAssignments, HARD (absent de x) ignoré, dédup, champ vide → []."""
+
+    def _x(self) -> dict:
+        model = cp_model.CpModel()
+        # model.x keys : (team_id, venue_id, day_of_week, "HH:MM"), start déjà normalisé.
+        return {
+            ("t1", "v1", 1, "18:00"): model.NewBoolVar("a"),
+            ("t1", "v1", 3, "18:00"): model.NewBoolVar("b"),
+        }
+
+    def test_empty_previous_yields_no_terms(self):
+        self.assertEqual([], build_stability_terms(self._x(), []))
+        self.assertEqual([], build_stability_terms(self._x(), None))
+
+    def test_matching_key_gets_the_stability_weight(self):
+        x = self._x()
+        terms = build_stability_terms(x, [{"teamId": "t1", "venueId": "v1", "dayOfWeek": 1, "startTime": "18:00"}])
+        self.assertEqual(1, len(terms))
+        var, weight = terms[0]
+        self.assertIs(x[("t1", "v1", 1, "18:00")], var)
+        self.assertEqual(STABILITY_TERM_WEIGHT, weight)
+
+    def test_start_time_is_normalised_like_model_x(self):
+        # "18:00:00" et "18:0" doivent viser la même clé "18:00".
+        x = self._x()
+        terms = build_stability_terms(x, [{"teamId": "t1", "venueId": "v1", "dayOfWeek": 1, "startTime": "18:00:00"}])
+        self.assertEqual(1, len(terms))
+
+    def test_absent_key_hard_or_unknown_is_ignored(self):
+        # (t1,v1,5,18:00) n'a PAS de variable (créneau HARD ou inexistant) → aucun terme.
+        x = self._x()
+        terms = build_stability_terms(x, [{"teamId": "t1", "venueId": "v1", "dayOfWeek": 5, "startTime": "18:00"}])
+        self.assertEqual([], terms)
+
+    def test_duplicate_previous_entries_are_deduplicated(self):
+        x = self._x()
+        prev = {"teamId": "t1", "venueId": "v1", "dayOfWeek": 1, "startTime": "18:00"}
+        terms = build_stability_terms(x, [prev, dict(prev)])
+        self.assertEqual(1, len(terms))
+
+    def test_multiplier_dominates_the_maximum_stability_mass(self):
+        # Séparation lexicographique : un seul point de chaînage (min = 1) prime la masse
+        # MAX de stabilité (2000 entrées × poids 1). C'est la borne codée dans main._solve.
+        max_stability_mass = 2000 * STABILITY_TERM_WEIGHT
+        self.assertGreater(CHAINING_STABILITY_MULTIPLIER * min(CHAINING_TIER_WEIGHTS.values()), max_stability_mass)
 
 
 if __name__ == "__main__":

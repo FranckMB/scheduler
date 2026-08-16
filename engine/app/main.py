@@ -35,6 +35,7 @@ from app.solver.constraints import (
 from app.solver.match_placement import solve_match_placement
 from app.solver.model import DEFAULT_SESSION_MINUTES, ScheduleCpModel, _time_to_minutes, build_model
 from app.solver.objective import (
+    CHAINING_STABILITY_MULTIPLIER,
     LEVEL_2_OBJECTIVE_WEIGHTS,
     add_coach_day_cap_penalty,
     add_level_2_objective,
@@ -44,6 +45,7 @@ from app.solver.objective import (
     add_preferred_time_bonus,
     add_spacing_penalty,
     add_venue_preference_bonus,
+    build_stability_terms,
     is_team_satisfied_by_hard_locks,
 )
 from app.solver.result_builder import build_result
@@ -638,6 +640,11 @@ def _solve(
         team_player_map=team_player_map,
     )
 
+    # P3-21 — termes de stabilité (convergence). Une clé absente de model.x (créneau HARD, ou
+    # créneau qu'aucune training-slot ne porte) est ignorée : jamais de double paiement d'un
+    # pin. Vide/absent ⇒ [] ⇒ phase 2 inchangée (chemin byte-identique).
+    stability_terms = build_stability_terms(model.x, data.get("previousAssignments", []))
+
     # Adaptive timeout capped by the payload budget.
     n_teams = len(data.get("teams") or [])
     n_venues = len(data.get("venues") or [])
@@ -663,17 +670,29 @@ def _solve(
 
     # --- Phase 2: lock the placement quality, then optimise the chaining bonus
     # under a hard time cap. Proving chaining-optimality can be slow, so we bound
-    # it and keep the best-effort result — placement stays optimal either way. ---
-    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE) and objective_stats.chaining_terms:
+    # it and keep the best-effort result — placement stays optimal either way.
+    # P3-21 — phase 2 is now ALSO entered when only stability terms exist (chaining
+    # empty): `chaining_terms OR stability_terms`. Without previousAssignments this
+    # reduces to the historical `chaining_terms` condition (byte-identical). ---
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE) and (objective_stats.chaining_terms or stability_terms):
         placement_optimum = int(solver.ObjectiveValue())
         cast(Any, model).Add(objective_stats.placement_expression >= placement_optimum)
         # Warm-start phase 2 with the placement-optimal solution so it always has
         # at least that (chaining ≥ 0) to return, even if the cap fires early.
         for phase1_var in model.x.values():
             cast(Any, model).AddHint(phase1_var, solver.Value(phase1_var))
-        cast(Any, model).Maximize(
-            objective_stats.placement_expression + sum(weight * var for var, weight in objective_stats.chaining_terms)
-        )
+        chaining_expr = sum(weight * var for var, weight in objective_stats.chaining_terms)
+        if stability_terms:
+            # Séparation LEXICOGRAPHIQUE : placement (verrouillé ci-dessus) > chaînage (×K) >
+            # stabilité. K = CHAINING_STABILITY_MULTIPLIER > masse max de stabilité (voir la
+            # preuve dans objective.py) : la stabilité ne départage QUE les ex æquo exacts.
+            stability_expr = sum(weight * var for var, weight in stability_terms)
+            cast(Any, model).Maximize(
+                objective_stats.placement_expression + CHAINING_STABILITY_MULTIPLIER * chaining_expr + stability_expr
+            )
+        else:
+            # previousAssignments vide/absent ⇒ objectif phase 2 STRICTEMENT historique.
+            cast(Any, model).Maximize(objective_stats.placement_expression + chaining_expr)
         phase2_solver = cp_model.CpSolver()
         phase2_solver.parameters.max_time_in_seconds = min(timeout_seconds, CHAINING_PHASE_MAX_SECONDS)
         phase2_solver.parameters.random_seed = input_data.solver_seed
@@ -681,6 +700,15 @@ def _solve(
         phase2_status = phase2_solver.Solve(model)
         if phase2_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             solver, status = phase2_solver, phase2_status
+        if stability_terms:
+            # Score RAPPORTÉ aux poids d'ORIGINE, stabilité EXCLUE : le placement est verrouillé
+            # à `placement_optimum` (phase 1 = placement seul), le chaînage se lit aux poids
+            # naturels sur le solveur final. C'est exactement ce qu'aurait rapporté une phase 2
+            # SANS stabilité — la stabilité ne modifie donc pas le score. Sans stabilité on ne
+            # touche à rien : `result_builder` lit `ObjectiveValue()` tel quel (byte-identique).
+            model.reported_score_override = placement_optimum + sum(
+                int(weight) * int(solver.Value(var)) for var, weight in objective_stats.chaining_terms
+            )
 
     return status, solver, model, conflicts, solve_stats
 

@@ -2,7 +2,9 @@
 
 - Status: accepted   Date: 2026-07-01
 - Amended: 2026-07-07 — clarifies "single pass" vs the two-PHASE lexicographic
-  objective optimisation now in production (see Amendment below).
+  objective optimisation now in production (see Amendment below). 2026-07-10 —
+  generation complexity cap (A10). 2026-08-17 — the lexicographic objective grows a
+  third, optional tier: generation **stability** (P3-21).
 - Zone: engine (`app/main.py`, `app/solver/`)
 
 ## Context
@@ -104,3 +106,40 @@ boundaries (generous — ~10× a large FFBB club; only a genuine bomb trips them
 
 This is a defensive input bound, not a solver-behaviour change: it neither relaxes
 constraints nor alters the single-pass decision above.
+
+## Amendment (2026-08-17) — third lexicographic tier: generation stability (P3-21)
+
+The two-phase objective-layering technique (2026-07-07 amendment) grows a **third**,
+strictly-lower tier inside phase 2: **stability**, i.e. "at equal score, prefer the
+placement the previous generation already chose." An optional input field,
+`previousAssignments` (contract 2.11, `engine/app/schemas/input_schema.py`), lists the
+prior generation's `(teamId, venueId, dayOfWeek, startTime)` placements; each CP-SAT
+variable whose key matches one earns `STABILITY_TERM_WEIGHT = 1` in phase 2
+(`build_stability_terms`, `objective.py`).
+
+The separation from chaining is **lexicographic by construction**, not by chance:
+phase 2 maximises `placement + CHAINING_STABILITY_MULTIPLIER(4096) × chaining +
+stability`. The maximum possible stability mass is `STABILITY_TERM_WEIGHT × cap(
+previousAssignments) = 1 × 2000 = 2000`, strictly below `4096` — the smallest possible
+chaining increment (one `CHAINING_TIER_WEIGHTS["D"] = 1` point, amplified by the
+multiplier) always outweighs the *entire* stacked stability mass. Stability can
+therefore never overturn a chaining trade-off, let alone a placement one (placement is
+already locked to the phase-1 optimum before phase 2 runs, per the 2026-07-07
+amendment) — it only breaks EXACT ties on (placement, chaining). A HARD-locked slot
+has no CP-SAT variable at all (`build_model` skips it), so it can never be double-paid
+by the stability term.
+
+Because phase 2's raw `ObjectiveValue()` would otherwise carry the `4096×` multiplier
+and the stability mass, the reported score is recomputed at the *original* weights
+(placement + natural-weight chaining, stability excluded — `model.
+reported_score_override`, read by `result_builder.build_result` in place of
+`solver.ObjectiveValue()` when stability terms were used) so that
+`SCORE_FORMULA_VERSION` stays meaningful and unchanged.
+
+`previousAssignments` absent or empty (the default, and the only path reachable in
+production until the backend PR that feeds it — see `specs/evolution/roadmap.md`
+P3-21) takes the historical phase-2 objective (`placement + chaining`) byte-for-byte —
+this amendment adds a **dormant** third tier, exactly as A10 (2026-07-10) added a
+dormant-until-tripped input bound: neither relaxes a HARD constraint nor changes the
+no-relaxation decision above. Detail: `specs/courantes/engine-inventory.md` §POST
+/generate, §5 Solver.
