@@ -867,9 +867,11 @@ describe("PlanningPage (integration)", () => {
       expect(within(panel).getByText("U11")).toBeInTheDocument();
       expect(within(panel).queryByText("U13")).not.toBeInTheDocument();
 
-      // Fermeture propre : le panneau disparaît.
-      await user.click(within(panel).getByRole("button", { name: /fermer/i }));
+      // Repli propre (même affordance que Diagnostics) : le panneau disparaît,
+      // le bouton de la barre revient.
+      await user.click(within(panel).getByRole("button", { name: /réduire les verrous manuels/i }));
       expect(screen.queryByRole("region", { name: /verrous manuels/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /verrous manuels \(1\)/i })).toBeInTheDocument();
     });
 
     it("la lentille s'active depuis le panneau, colore la grille, et s'éteint à la fermeture", async () => {
@@ -888,8 +890,8 @@ describe("PlanningPage (integration)", () => {
       await vi.waitFor(() => expect(container.querySelector('[data-lens="MANUAL"]')).not.toBeNull());
       expect(container.querySelector('[data-lens="RESERVATION"]')).not.toBeNull();
 
-      // Fermer le panneau coupe la lentille — pas d'état fantôme.
-      await user.click(within(panel).getByRole("button", { name: /fermer/i }));
+      // Replier le panneau coupe la lentille — pas d'état fantôme.
+      await user.click(within(panel).getByRole("button", { name: /réduire les verrous manuels/i }));
       await vi.waitFor(() => expect(container.querySelector('[data-lens="MANUAL"]')).toBeNull());
     });
   });

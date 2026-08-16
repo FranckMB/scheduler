@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Lock, X } from "lucide-react";
+import { Eye, EyeOff, Lock, PanelRightClose } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
@@ -19,8 +19,9 @@ interface LocksPanelProps {
   /** État de la lentille verrous (surbrillance de la grille). */
   lensActive: boolean;
   onToggleLens: () => void;
-  /** Ferme le panneau (et éteint la lentille — géré côté page, pas d'état fantôme). */
-  onClose: () => void;
+  /** Replie le panneau (et éteint la lentille — géré côté page, pas d'état fantôme).
+   *  Même affordance que le repli des diagnostics : le bouton de la barre le rouvre. */
+  onCollapse: () => void;
 }
 
 const dayLabelOf = (day: number): string => DAYS.find((d) => d.n === day)?.label ?? "?";
@@ -32,7 +33,7 @@ const dayLabelOf = (day: number): string => DAYS.find((d) => d.n === day)?.label
  * la grille par origine de verrou) et sa légende. Décision fondateur : panneau latéral, PAS de
  * menu déroulant — cohérent avec SlotDetail/DiagnosticsPanel qui vivent dans le même aside.
  */
-export function LocksPanel({ locks, lookups, selectedSlotId, onSelectSlot, lensActive, onToggleLens, onClose }: LocksPanelProps) {
+export function LocksPanel({ locks, lookups, selectedSlotId, onSelectSlot, lensActive, onToggleLens, onCollapse }: LocksPanelProps) {
   const entries = [...locks]
     .map((slot) => ({
       slotId: slot.id,
@@ -60,8 +61,9 @@ export function LocksPanel({ locks, lookups, selectedSlotId, onSelectSlot, lensA
             {count} verrou{count > 1 ? "s" : ""} posé{count > 1 ? "s" : ""} à la main
           </p>
         </div>
-        <button type="button" onClick={onClose} aria-label="Fermer" title="Fermer le panneau des verrous" className="rounded p-1 text-muted-foreground hover:text-foreground">
-          <X className="size-4" />
+        {/* Repli — MÊME affordance que DiagnosticsPanel (retour fondateur : une seule manière). */}
+        <button type="button" onClick={onCollapse} aria-label="Réduire les verrous manuels" title="Réduire (plus de place pour la grille)" className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <PanelRightClose className="size-4" />
         </button>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pt-0">

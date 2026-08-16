@@ -1,6 +1,6 @@
 import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarX2, CheckCircle2, Pencil, Star } from "lucide-react";
+import { AlertTriangle, CalendarX2, CheckCircle2, Lock, Pencil, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
@@ -725,8 +725,6 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
               onReopen={() => reopen()}
               onDelete={() => validScheduleId && deleteMutation.mutate(validScheduleId)}
               onRegenerateFrom={() => setRegenerateFromOpen(true)}
-              manualLockCount={manualLocks.length}
-              onOpenLocks={() => setLocksPanelOpen(true)}
               embedded={embedded}
               rightSlot={
                 null !== validScheduleId && !isGenerating && slots.length > 0 ? (
@@ -804,19 +802,34 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                       its content height and overflows past the container, spilling
                       under the sticky footer (revue #204 — grille coupée en 2). */}
                   <div className="relative flex min-h-0 min-w-0 flex-col gap-2 lg:h-full">
-                    {/* Collapsed diagnostics → a compact bar re-opens the aside;
-                        the grid keeps full width until then (user request). */}
-                    {!isReadOnly && diagnosticsCollapsed ? (
-                      <button
-                        type="button"
-                        onClick={() => setDiagnosticsCollapsed(false)}
-                        className="flex shrink-0 items-center gap-2 self-start rounded-md border border-border px-2 py-1 text-sm hover:bg-muted"
-                      >
-                        <AlertTriangle className={`size-4 ${diagnostics.length > 0 ? "text-warning" : "text-muted-foreground"}`} />
-                        <span>Diagnostics du système{diagnostics.length > 0 ? ` (${diagnostics.length})` : ""}</span>
-                        {null !== topSummary ? <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{topSummary}</span> : null}
-                      </button>
-                    ) : null}
+                    {/* Collapsed panels → compact bar buttons re-open the aside; the grid keeps
+                        full width until then (user request). Verrous manuels vit À CÔTÉ de
+                        Diagnostics avec la MÊME affordance (retour fondateur : un clic ouvre,
+                        le repli du panneau referme — plus de bouton dans la toolbar). */}
+                    <div className="flex shrink-0 flex-wrap items-center gap-2 self-start empty:hidden">
+                      {!isReadOnly && diagnosticsCollapsed ? (
+                        <button
+                          type="button"
+                          onClick={() => setDiagnosticsCollapsed(false)}
+                          className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-sm hover:bg-muted"
+                        >
+                          <AlertTriangle className={`size-4 ${diagnostics.length > 0 ? "text-warning" : "text-muted-foreground"}`} />
+                          <span>Diagnostics du système{diagnostics.length > 0 ? ` (${diagnostics.length})` : ""}</span>
+                          {null !== topSummary ? <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{topSummary}</span> : null}
+                        </button>
+                      ) : null}
+                      {!locksPanelOpen && manualLocks.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setLocksPanelOpen(true)}
+                          title="Voir les verrous posés à la main"
+                          className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-sm hover:bg-muted"
+                        >
+                          <Lock className="size-4 text-accent" />
+                          <span>Verrous manuels ({manualLocks.length})</span>
+                        </button>
+                      ) : null}
+                    </div>
                     <div className="relative min-h-0 min-w-0 flex-1">
                       <WeekGrid
                         model={model}
@@ -843,7 +856,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                             onSelectSlot={openSlot}
                             lensActive={lockLens}
                             onToggleLens={() => setLockLens((on) => !on)}
-                            onClose={closeLocksPanel}
+                            onCollapse={closeLocksPanel}
                           />
                         </div>
                       ) : null}

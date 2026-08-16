@@ -49,7 +49,7 @@ function renderPanel(over: Partial<Parameters<typeof LocksPanel>[0]> = {}) {
       onSelectSlot={vi.fn()}
       lensActive={false}
       onToggleLens={vi.fn()}
-      onClose={vi.fn()}
+      onCollapse={vi.fn()}
       {...over}
     />,
   );
@@ -84,12 +84,14 @@ describe("LocksPanel — panneau latéral des verrous manuels (PR 3)", () => {
     expect(onSelectSlot).toHaveBeenCalledWith("lundi");
   });
 
-  it("le bouton fermer déclenche onClose", () => {
-    const onClose = vi.fn();
-    renderPanel({ onClose });
+  it("le repli suit l'affordance des diagnostics (retour fondateur : une seule manière)", () => {
+    const onCollapse = vi.fn();
+    renderPanel({ onCollapse });
 
-    screen.getByRole("button", { name: /fermer/i }).click();
-    expect(onClose).toHaveBeenCalled();
+    // MÊME libellé/patron que « Réduire les diagnostics » — pas de bouton « Fermer ».
+    expect(screen.queryByRole("button", { name: /fermer/i })).not.toBeInTheDocument();
+    screen.getByRole("button", { name: /réduire les verrous manuels/i }).click();
+    expect(onCollapse).toHaveBeenCalled();
   });
 
   it("le toggle « Voir sur la grille » déclenche onToggleLens", () => {
