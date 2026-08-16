@@ -130,9 +130,12 @@ export function resourceKeysForSlot(slot: Slot, viewMode: ViewMode, lookups: Loo
   return keys.size > 0 ? [...keys] : [NO_COACH];
 }
 
+/** Libellé sentinelle d'une équipe sans coach — comparé par SlotDetail pour substituer la croix. */
+export const NO_COACH_LABEL = "Sans coach";
+
 function coachName(coaches: Map<string, Coach>, coachId: string | null): string {
   if (null === coachId) {
-    return "Sans coach";
+    return NO_COACH_LABEL;
   }
   const coach = coaches.get(coachId);
   // D-33 : formatage partagé — cette version omettait le `.trim()`, laissant un espace
@@ -145,7 +148,7 @@ function resourceLabel(id: string, viewMode: ViewMode, lookups: Lookups): string
     return lookups.venues.get(id)?.name ?? "Gymnase ?";
   }
   if ("coach" === viewMode) {
-    return id === NO_COACH ? "Sans coach" : coachName(lookups.coaches, id);
+    return id === NO_COACH ? NO_COACH_LABEL : coachName(lookups.coaches, id);
   }
   return lookups.teams.get(id)?.name ?? "Équipe ?";
 }

@@ -10,7 +10,7 @@ import type { Constraint, LockOrigin, MoveViolation, Slot, SlotMovePatch, Venue 
 import { applicableConstraints, isClubWide } from "./lib/applicableConstraints";
 import { tagLabel } from "@/features/wizard/lib/tagLabels";
 import { describeConstraint } from "./lib/describeConstraint";
-import { DAYS, type GridCell, toHourMinute } from "./lib/grid";
+import { DAYS, type GridCell, NO_COACH_LABEL, toHourMinute } from "./lib/grid";
 
 /** Map vide partagée : une CLUB+tag ne s'affiche nulle part tant que la résolution n'est pas fournie. */
 const NO_TAGS: ReadonlyMap<string, ReadonlySet<string>> = new Map();
@@ -145,9 +145,16 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
       <CardContent className="min-h-0 flex-1 overflow-y-auto pt-0">
         {/* B1 — une seule ligne discrète sous le titre (au lieu de trois lignes étiquetées).
             Séparateurs « · », aucun libellé sauf le préfixe « Coach » ; un segment vide est
-            omis sans « · » orphelin ; wrapping naturel (pas de troncature). */}
+            omis sans « · » orphelin ; wrapping naturel (pas de troncature). Sans coach, le
+            préfixe reste et le nom devient une croix rouge (décision fondateur 2026-08-16). */}
         <p className="text-sm text-muted-foreground">
-          {[categoryLabel || null, `${slot.durationMinutes} min`, cell.coachLabel ? `Coach ${cell.coachLabel}` : null].filter(Boolean).join(" · ")}
+          {[categoryLabel || null, `${slot.durationMinutes} min`].filter(Boolean).join(" · ")}
+          {cell.coachLabel ? (
+            <>
+              {" · Coach "}
+              {NO_COACH_LABEL === cell.coachLabel ? <X aria-label={NO_COACH_LABEL} className="inline size-3.5 align-text-bottom text-destructive" /> : cell.coachLabel}
+            </>
+          ) : null}
         </p>
 
         {null !== origin ? (

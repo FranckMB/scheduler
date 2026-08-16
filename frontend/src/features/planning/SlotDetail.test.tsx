@@ -75,12 +75,13 @@ function renderDetail(
     teamName?: (id: string) => string | undefined;
     coachName?: (id: string) => string | undefined;
     categoryLabel?: string;
+    cell?: Partial<ReturnType<typeof cell>>;
   } = {},
 ) {
   const s = slot(over.slot);
   renderWithProviders(
     <SlotDetail
-      cell={cell(s.lockLevel !== "NONE")}
+      cell={{ ...cell(s.lockLevel !== "NONE"), ...over.cell }}
       slot={s}
       venues={over.venues ?? []}
       categoryLabel={over.categoryLabel ?? "U11"}
@@ -114,6 +115,14 @@ describe("SlotDetail — sous-ligne compacte (B1)", () => {
     renderDetail({ slot: { durationMinutes: 60 }, categoryLabel: "" });
     // Catégorie vide → la ligne commence à la durée, jamais par un « · » orphelin.
     expect(screen.getByText("60 min · Coach Jean Dupont")).toBeInTheDocument();
+  });
+
+  it("remplace le nom par une croix rouge quand l'équipe n'a pas de coach", () => {
+    renderDetail({ cell: { coachLabel: "Sans coach" } });
+    // Décision fondateur 2026-08-16 : jamais « Coach Sans coach » — le préfixe reste,
+    // le nom devient une croix rouge, lisible aussi au lecteur d'écran.
+    expect(screen.getByLabelText("Sans coach")).toBeInTheDocument();
+    expect(screen.queryByText(/Sans coach/)).not.toBeInTheDocument();
   });
 });
 
