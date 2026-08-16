@@ -1,6 +1,6 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-14 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-14 par les livraisons elles-mêmes : `GET /api/calendar-entries/{id}/conflicts` sert `closures` depuis P2-22 PR 1 (§6) et le surfaçage écran de la PR 2 (détail : `frontend-wizard.md`) est intégralement livré — le lot P2-22 est clos ; précédemment recalé jusqu'au 2026-08-06 : radar borné à l'avenir actionnable P3-13/15c/11 · bandeau de période et diagnostics contextuels P4-38/39 · gymnase désactivé qui ne bloque plus la génération, 2026-08-06)
+Last verified @ 2026-08-16 (corrigé ce jour : le §d citait `ManualEditController`/`manual-edit/one-time`/`temporaryLock` comme couvrant déjà le grain fin « juste ce mardi-là » — les deux sont retirés (P4-86, contrat 2.9), la phrase affirmait une capacité qui n'existe plus ; précédemment : 2026-08-14 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-14 par les livraisons elles-mêmes : `GET /api/calendar-entries/{id}/conflicts` sert `closures` depuis P2-22 PR 1 (§6) et le surfaçage écran de la PR 2 (détail : `frontend-wizard.md`) est intégralement livré — le lot P2-22 est clos ; précédemment recalé jusqu'au 2026-08-06 : radar borné à l'avenir actionnable P3-13/15c/11 · bandeau de période et diagnostics contextuels P4-38/39 · gymnase désactivé qui ne bloque plus la génération, 2026-08-06))
 
 > **Statut** : **approche arrêtée** (décisions tranchées §9) — **livrée** ; cf. [`etat-des-lieux.md`](etat-des-lieux.md) §1.2.
 > **Pas un plan** — pas de tâches, pas d'effort chiffré ; l'exécution se planifiera palier par palier (§8).
@@ -700,9 +700,11 @@ CalendarEntry
 - **Overlay = le `Schedule` existant + un lien vers la `CalendarEntry` + la fenêtre.** Ses slots
   sont des `ScheduleSlotTemplate` bornés à la fenêtre. **On ne réinvente pas le planning.**
 - **Pas de table `schedule_slot_occurrences` per-date au départ.** L'override se fait au grain
-  **période** (la fenêtre bascule sur l'overlay). Le grain fin « juste ce mardi-là est annulé »
-  existe **déjà** via `ManualEditController` (`/manual-edit/one-time` + `temporaryLock`). Une
-  vraie table d'occurrences éparses ne s'ajoute **que si** le besoin fin le justifie (palier B/C).
+  **période** (la fenêtre bascule sur l'overlay). ⚠ Le grain fin « juste ce mardi-là est annulé »
+  **n'existe plus** : `ManualEditController` a perdu `/manual-edit/one-time` (P4-86, 2026-08-12)
+  et le champ `temporaryLock` a été retiré de bout en bout (contrat 2.9, 2026-08-16, jamais lu
+  par le solveur) — une vraie table d'occurrences éparses repartirait de zéro, ne s'ajoute
+  **que si** le besoin fin le justifie (palier B/C).
 
 ### d. Deux lectures distinctes — ne pas les confondre
 
