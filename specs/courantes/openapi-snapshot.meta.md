@@ -1,6 +1,24 @@
-Last verified @ 2026-08-16 (JSON **régénéré** — contrat 2.9 : le path placebo `POST /api/schedule-slots/{id}/manual-edit/constraint` et les 3 propriétés mortes `temporaryLock`/`temporaryLockFor`/`temporaryMinSessionsOverride` du schéma `ScheduleSlotTemplate` quittent le contrat ; 110 lignes retirées, aucune ajoutée)
+Last verified @ 2026-08-16 (JSON **régénéré** — éviction + placement à la dérive : +1 path `POST /api/schedules/{id}/place-slot`, `POST /api/schedule-slots/{id}/move` enrichi ; contrat backend⇄engine **2.9 INCHANGÉ**)
 
 Changements récents :
+- **P2-30 PR A — éviction + placement sous verdict (2026-08-16)** : nouveau path
+  `POST /api/schedules/{id}/place-slot` (créer une séance à la dérive — surnuméraire /
+  rattrapage — SOUS le verdict moteur : 200 `{valid, slotId}` d'une ligne DÉVERROUILLÉE,
+  422 équipe inconnue ou verdict refusé, 409 génération/version choisie, 404 planning,
+  502 moteur muet ; pas de garde de comptage). `POST /api/schedule-slots/{id}/move` gagne
+  l'entrée optionnelle `evictSlotId` (libérer un occupant de la cible, supprimé dans la même
+  transaction une fois le move accepté), un bloc `evicted` dans le 200 (état de l'occupant
+  AVANT suppression) et deux refus 422 nommés au pré-check d'éviction (`code=evict_target_mismatch`,
+  `code=target_locked` — D3, moteur jamais appelé). Sur `place-slot`, `durationMinutes` est
+  **OPTIONNEL** (quitte la liste `required`) : la durée persistée est TOUJOURS celle de la fenêtre
+  de gymnase visée, résolue côté serveur (même source que le solveur) ; le champ n'est qu'une
+  ASSERTION du client — s'il contredit la fenêtre → 422 `code=duration_mismatch`, et aucune fenêtre
+  à ce créneau → 422 `code=slot_unavailable`, tous deux avant tout appel moteur (durcissement
+  revue sécurité : une durée client non validée écrivait sinon une occupation jamais jugée).
+  Set-diff : **1 path ajouté, 0 retiré** ; le reste est property-only sur `/move` (schémas inline
+  du contrôleur custom, pas de DTO). Contrat backend⇄engine **2.9 INCHANGÉ** (aucun schéma Pydantic
+  touché : l'éviction supprime des lignes, le placement en crée, le payload `/validate-assignments`
+  est inchangé).
 - **Contrat 2.9 — nettoyage des champs morts + endpoint placebo (2026-08-16)** : le path
   `POST /api/schedule-slots/{id}/manual-edit/constraint` **quitte** le contrat (contrainte
   créée sur des clés config que le solveur ne lit jamais — placebo persisté en contournant le

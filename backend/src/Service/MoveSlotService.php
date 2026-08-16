@@ -7,11 +7,17 @@ namespace App\Service;
 use App\Entity\CalendarEntry;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
+use App\Enum\LockLevel;
+use App\Exception\DurationMismatchException;
+use App\Exception\EvictTargetLockedException;
+use App\Exception\EvictTargetMismatchException;
 use App\Exception\ScheduleGenerationInProgressException;
+use App\Exception\SlotUnavailableException;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
+use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 
 /**
  * Déplacer un créneau SOUS LE VERDICT DU MOTEUR (P2-2 F2b).
@@ -26,6 +32,13 @@ use Psr\Log\LoggerInterface;
  *
  * ⚠ La re-validation a lieu AU MOMENT D'ÉCRIRE (décision fondateur) : le verdict n'est pas
  * un cache. Chaque appel reconstruit la baseline courante et redemande au moteur.
+ *
+ * P2-30 PR A — deux gestes de plus, MÊME rail (verdict souverain, écriture sous « oui ») :
+ *  - {@see move()} accepte une ÉVICTION (`evictSlotId`) : retirer l'occupant de la cible, sous D3
+ *    (un occupant verrouillé refuse l'éviction avant tout appel moteur) — suppression dans la
+ *    même transaction que le déplacement ;
+ *  - {@see place()} CRÉE une séance à la dérive (surnuméraire / rattrapage) : pas de source, la
+ *    baseline reste complète, et la ligne naît déverrouillée.
  */
 final class MoveSlotService
 {
@@ -50,11 +63,14 @@ final class MoveSlotService
 
     /**
      * @throws ScheduleGenerationInProgressException une génération tourne pour ce club (→ 409)
+     * @throws EvictTargetMismatchException          l'occupant à évincer ne siège pas à la cible (→ 422)
+     * @throws EvictTargetLockedException            l'occupant à évincer est verrouillé, D3 (→ 422)
+     * @throws TransportExceptionInterface           le moteur n'a pas répondu (→ 502)
      * @throws InvalidArgumentException              le créneau n'a pas de planning parent (état incohérent)
      *
-     * @return array{valid: bool, violations: list<array{rule: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string, conflictingTeamId: ?string}>}
+     * @return array{valid: bool, violations: list<array{rule: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string, conflictingTeamId: ?string}>, evicted?: array{slotId: string, teamId: string, dayOfWeek: int, startTime: string, venueId: string, durationMinutes: int}}
      */
-    public function move(ScheduleSlotTemplate $slot, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId): array
+    public function move(ScheduleSlotTemplate $slot, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId, ?string $evictSlotId = null): array
     {
         $schedule = $this->entityManager->getRepository(Schedule::class)->find($slot->getScheduleId());
         if (!$schedule instanceof Schedule) {
@@ -67,27 +83,175 @@ final class MoveSlotService
             throw new ScheduleGenerationInProgressException;
         }
 
-        // (2)+(3) baseline figée SANS la source → verdict moteur sur le candidat.
-        $payload = $this->buildValidationPayload($schedule, $slot, $dayOfWeek, $startTime, $venueId);
+        // (1bis) Éviction éventuelle : on VALIDE la cible AVANT tout appel moteur (D3 : un verrou
+        //        est souverain, un occupant verrouillé fait échouer ici sans jamais consulter le moteur).
+        $evicted = null === $evictSlotId
+            ? null
+            : $this->resolveEvictionTarget($slot, $schedule, $evictSlotId, $dayOfWeek, $startTime, $venueId);
+
+        // (2)+(3) baseline figée SANS la source (ni l'occupant évincé) → verdict moteur sur le candidat.
+        $payload = $this->buildBasePayload($schedule, $slot, $evicted);
+        $payload['candidate'] = [
+            'teamId' => $slot->getTeamId(),
+            'venueId' => $venueId,
+            'dayOfWeek' => $dayOfWeek,
+            'startTime' => $startTime->format('H:i'),
+            // La durée est CELLE de la séance déplacée (le déplacement la préserve) — côté serveur,
+            // jamais du client.
+            'durationMinutes' => $slot->getDurationMinutes(),
+        ];
         $result = $this->engineClient->validateAssignment($payload, self::VALIDATE_TIMEOUT_SECONDS);
 
         if (true !== ($result['valid'] ?? false)) {
-            // (4) Le déplacement N'A PAS LIEU — les règles violées sont rendues nommées.
+            // (4) Le déplacement N'A PAS LIEU (ni l'éviction) — les règles violées sont rendues nommées.
             return ['valid' => false, 'violations' => $this->namedViolations($result)];
         }
 
-        // (5) Écrire le déplacement, poser le marqueur (score désormais périmé), publier.
+        // (5) Écrire le déplacement, supprimer l'occupant évincé (MÊME transaction), poser le
+        //     marqueur (score désormais périmé), publier.
         $slot
             ->setDayOfWeek($dayOfWeek)
             ->setStartTime($startTime)
             ->setVenueId($venueId);
+
+        $response = ['valid' => true, 'violations' => []];
+        if ($evicted instanceof ScheduleSlotTemplate) {
+            // Capturer l'état d'AVANT suppression : le front s'en sert pour proposer de replacer.
+            $response['evicted'] = [
+                'slotId' => $evicted->getId(),
+                'teamId' => $evicted->getTeamId(),
+                'dayOfWeek' => $evicted->getDayOfWeek(),
+                'startTime' => $evicted->getStartTime()->format('H:i'),
+                'venueId' => $evicted->getVenueId(),
+                'durationMinutes' => $evicted->getDurationMinutes(),
+            ];
+            $this->entityManager->remove($evicted);
+        }
         $schedule->setManuallyEditedSinceGeneration(true);
         $this->entityManager->flush();
 
         // Les autres gestionnaires voient le planning bouger (best-effort, comme la génération).
         $this->progressPublisher->publishSafely($schedule, []);
 
-        return ['valid' => true, 'violations' => []];
+        return $response;
+    }
+
+    /**
+     * PLACER une séance À LA DÉRIVE (P2-30) sous le verdict — création, pas déplacement. Il n'y a
+     * pas de source : la baseline reste COMPLÈTE (moins les frères d'une autre version du plan).
+     * Refus → RIEN créé ; accepté → une ligne `ScheduleSlotTemplate` DÉVERROUILLÉE (lockLevel
+     * NONE, lockOrigin null, coachId null), le marqueur « retouché », la publication Mercure.
+     *
+     * ⚠ Aucune garde de comptage ici : placer une séance surnuméraire reste permis — le verdict
+     * moteur est le seul juge de la légalité (capacité, fenêtre, repos coach…).
+     *
+     * ⚠ La DURÉE ne vient JAMAIS du client : elle est résolue de la fenêtre de gymnase visée, dans
+     * le MÊME payload que le moteur (le solveur ne lit pas `candidate.durationMinutes`, il dérive
+     * tout de la fenêtre — un client qui posterait 600 min sur une fenêtre de 90 écrirait sinon une
+     * occupation jamais validée). `$clientDurationMinutes` n'est donc qu'une ASSERTION : s'il ment
+     * → 422 `duration_mismatch` ; s'il est null → la fenêtre fait foi.
+     *
+     * @throws ScheduleGenerationInProgressException une génération tourne pour ce club (→ 409)
+     * @throws SlotUnavailableException              aucune fenêtre de gymnase à ce créneau (→ 422)
+     * @throws DurationMismatchException             la durée du client contredit la fenêtre (→ 422)
+     * @throws TransportExceptionInterface           le moteur n'a pas répondu (→ 502)
+     *
+     * @return array{valid: bool, violations: list<array{rule: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string, conflictingTeamId: ?string}>, slotId?: string}
+     */
+    public function place(Schedule $schedule, string $teamId, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId, ?int $clientDurationMinutes = null): array
+    {
+        if ($this->clubGenerationLock->isGenerating($schedule->getClubId())) {
+            throw new ScheduleGenerationInProgressException;
+        }
+
+        // Baseline + fenêtres de gymnase, AVANT tout appel moteur. La durée se résout ici, de la
+        // fenêtre — jamais du client.
+        $payload = $this->buildBasePayload($schedule, null, null);
+
+        $durationMinutes = $this->resolveWindowDurationMinutes($payload, $venueId, $dayOfWeek, $startTime);
+        if (null === $durationMinutes) {
+            // Aucune fenêtre à (gymnase, jour, heure) : le créneau n'existe pas. Rien à faire juger,
+            // aucune durée à propager — on tranche avant l'appel.
+            throw new SlotUnavailableException;
+        }
+        if (null !== $clientDurationMinutes && $clientDurationMinutes !== $durationMinutes) {
+            // Le client a menti sur la durée de la fenêtre : refus avant le moteur, rien écrit.
+            throw new DurationMismatchException;
+        }
+
+        $payload['candidate'] = [
+            'teamId' => $teamId,
+            'venueId' => $venueId,
+            'dayOfWeek' => $dayOfWeek,
+            'startTime' => $startTime->format('H:i'),
+            'durationMinutes' => $durationMinutes,
+        ];
+        $result = $this->engineClient->validateAssignment($payload, self::VALIDATE_TIMEOUT_SECONDS);
+
+        if (true !== ($result['valid'] ?? false)) {
+            return ['valid' => false, 'violations' => $this->namedViolations($result)];
+        }
+
+        $slot = (new ScheduleSlotTemplate)
+            ->setClubId($schedule->getClubId())
+            ->setSeasonId($schedule->getSeasonId())
+            ->setScheduleId($schedule->getId())
+            ->setTeamId($teamId)
+            ->setVenueId($venueId)
+            ->setDayOfWeek($dayOfWeek)
+            ->setStartTime($startTime)
+            // La durée PERSISTÉE est celle de la fenêtre (résolue serveur), pas celle du client.
+            ->setDurationMinutes($durationMinutes);
+        // Déverrouillée par construction : lockLevel NONE / lockOrigin null / coachId null (défauts
+        // d'entité). L'API ne pose JAMAIS un verrou ici — c'est le rail manual-edit/lock qui le fait.
+        $this->entityManager->persist($slot);
+        $schedule->setManuallyEditedSinceGeneration(true);
+        $this->entityManager->flush();
+
+        $this->progressPublisher->publishSafely($schedule, []);
+
+        return ['valid' => true, 'violations' => [], 'slotId' => $slot->getId()];
+    }
+
+    /**
+     * Valide et retourne le créneau OCCUPANT désigné par `evictSlotId`, ou lève. TOUTE la
+     * validation a lieu AVANT le moteur : introuvable / d'un autre planning / égal à la source /
+     * ne siégeant pas à la cible → {@see EvictTargetMismatchException} ; verrouillé →
+     * {@see EvictTargetLockedException} (D3 : un verrou est souverain, le moteur n'est pas appelé).
+     */
+    private function resolveEvictionTarget(ScheduleSlotTemplate $source, Schedule $schedule, string $evictSlotId, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId): ScheduleSlotTemplate
+    {
+        $evicted = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->find($evictSlotId);
+        if (!$evicted instanceof ScheduleSlotTemplate
+            || $evicted->getScheduleId() !== $schedule->getId()
+            || $evicted->getId() === $source->getId()) {
+            throw new EvictTargetMismatchException;
+        }
+
+        // L'occupant doit SIÉGER à la cible : même gymnase + même jour + chevauchement horaire
+        // avec la fenêtre du candidat [startTime, startTime + durée du candidat[.
+        if ($evicted->getVenueId() !== $venueId
+            || $evicted->getDayOfWeek() !== $dayOfWeek
+            || !$this->overlaps($startTime, $source->getDurationMinutes(), $evicted->getStartTime(), $evicted->getDurationMinutes())) {
+            throw new EvictTargetMismatchException;
+        }
+
+        // D3 — un verrou est souverain, quelle que soit son origine : on n'évince jamais un
+        // créneau verrouillé sans qu'il soit déverrouillé d'abord.
+        if (LockLevel::NONE !== $evicted->getLockLevel()) {
+            throw new EvictTargetLockedException;
+        }
+
+        return $evicted;
+    }
+
+    /** Deux fenêtres [start, start+durée[ (minutes depuis minuit) se chevauchent-elles ? */
+    private function overlaps(DateTimeImmutable $startA, int $durationA, DateTimeImmutable $startB, int $durationB): bool
+    {
+        $aStart = (int) $startA->format('G') * 60 + (int) $startA->format('i');
+        $bStart = (int) $startB->format('G') * 60 + (int) $startB->format('i');
+
+        return $aStart < $bStart + $durationB && $bStart < $aStart + $durationA;
     }
 
     /**
@@ -102,11 +266,19 @@ final class MoveSlotService
      *  - les créneaux des AUTRES versions du même plan : `buildForClubSeason` fige toutes
      *    les versions du plan de saison ; l'équipe se heurterait à son propre placement
      *    dans un brouillon voisin. On ne garde donc de la baseline QUE les créneaux de CE
-     *    planning (moins la source) et les réservations durables — jamais ceux d'un frère.
+     *    planning (moins les ids exclus) et les réservations durables — jamais ceux d'un frère.
+     *
+     * `$source` (déplacement) et `$evicted` (occupant à évincer) sont retirés de la baseline
+     * en plus des frères ; à la CRÉATION (place), les deux sont null → baseline complète moins
+     * les frères.
+     *
+     * Le `candidate` n'est PAS posé ici : chaque appelant l'ajoute une fois sa durée résolue
+     * CÔTÉ SERVEUR (le déplacement la tient du slot ; la création la lit de la fenêtre de gymnase
+     * de CE payload — jamais du client). Le payload rendu porte déjà les fenêtres (`venues`).
      *
      * @return array<string, mixed>
      */
-    private function buildValidationPayload(Schedule $schedule, ScheduleSlotTemplate $slot, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId): array
+    private function buildBasePayload(Schedule $schedule, ?ScheduleSlotTemplate $source, ?ScheduleSlotTemplate $evicted): array
     {
         $overlayEntryId = $this->schedulePlanProvisioner->periodEntryIdOf($schedule);
         $overlayEntry = null === $overlayEntryId
@@ -117,39 +289,68 @@ final class MoveSlotService
             ? $this->constraintBuilder->buildForOverlay($schedule, $overlayEntry)
             : $this->constraintBuilder->buildForClubSeason($schedule->getClubId(), $schedule->getSeasonId());
 
+        $excludedIds = [];
+        if ($source instanceof ScheduleSlotTemplate) {
+            $excludedIds[] = $source->getId();
+        }
+        if ($evicted instanceof ScheduleSlotTemplate) {
+            $excludedIds[] = $evicted->getId();
+        }
+
         $currentSlotTemplates = \is_array($payload['slotTemplates'] ?? null) ? $payload['slotTemplates'] : [];
-        $payload['slotTemplates'] = $this->baselineWithoutSourceAndSiblings($currentSlotTemplates, $schedule, $slot);
+        $payload['slotTemplates'] = $this->baselineWithoutSiblings($currentSlotTemplates, $schedule, $excludedIds);
         // Le bloc `implicitRules` (P2-28) reste dans le payload : parité génération ⇄ verdict —
-        // un déplacement sur un planning généré en PREFERRED doit être jugé au MÊME réglage,
+        // un geste sur un planning généré en PREFERRED doit être jugé au MÊME réglage,
         // sinon le verdict tout-HARD refuserait à tort ce que la génération a permis.
         $payload['version'] = self::CONTRACT_VERSION;
         $payload['solverTimeoutSeconds'] = self::VALIDATE_TIMEOUT_SECONDS;
-        $payload['candidate'] = [
-            'teamId' => $slot->getTeamId(),
-            'venueId' => $venueId,
-            'dayOfWeek' => $dayOfWeek,
-            'startTime' => $startTime->format('H:i'),
-            // La durée est CELLE de la séance déplacée (le déplacement la préserve).
-            'durationMinutes' => $slot->getDurationMinutes(),
-        ];
 
         return $payload;
     }
 
     /**
-     * Retire de la baseline sérialisée la source ET tout créneau d'une AUTRE version du
-     * plan de saison — en gardant réservations et créneaux de CE planning. On identifie
-     * les « frères » par leur id de `ScheduleSlotTemplate` (une réservation n'y figure
-     * pas), donc filtrer sur cet ensemble laisse intacts les pins durables.
+     * La durée d'une séance NE VIENT JAMAIS DU CLIENT : c'est celle de la fenêtre de gymnase visée
+     * (venueId + dayOfWeek + startTime), lue dans le MÊME payload que le moteur — `venues[].trainingSlots`
+     * dérive de `VenueTrainingSlot`, exactement la source dont le solveur tire `slot_durations`.
+     * Aucune fenêtre à ce triplet → null (le créneau n'existe pas).
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function resolveWindowDurationMinutes(array $payload, string $venueId, int $dayOfWeek, DateTimeImmutable $startTime): ?int
+    {
+        $venues = \is_array($payload['venues'] ?? null) ? $payload['venues'] : [];
+        $wanted = $startTime->format('H:i');
+
+        foreach ($venues as $venue) {
+            if (!\is_array($venue) || ($venue['id'] ?? null) !== $venueId) {
+                continue;
+            }
+            $slots = \is_array($venue['trainingSlots'] ?? null) ? $venue['trainingSlots'] : [];
+            foreach ($slots as $slot) {
+                if (\is_array($slot)
+                    && ($slot['dayOfWeek'] ?? null) === $dayOfWeek
+                    && ($slot['startTime'] ?? null) === $wanted) {
+                    return (int) $slot['durationMinutes'];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Retire de la baseline sérialisée les ids exclus (source et/ou occupant évincé) ET tout
+     * créneau d'une AUTRE version du plan de saison — en gardant réservations et créneaux de CE
+     * planning. On identifie les « frères » par leur id de `ScheduleSlotTemplate` (une
+     * réservation n'y figure pas), donc filtrer sur cet ensemble laisse intacts les pins durables.
      *
      * @param array<int, mixed> $slotTemplates
+     * @param list<string>      $excludedIds
      *
      * @return array<int, mixed>
      */
-    private function baselineWithoutSourceAndSiblings(array $slotTemplates, Schedule $schedule, ScheduleSlotTemplate $slot): array
+    private function baselineWithoutSiblings(array $slotTemplates, Schedule $schedule, array $excludedIds): array
     {
-        $sourceId = $slot->getId();
-
         /** @var list<array{id: string}> $rows */
         $rows = $this->entityManager->createQueryBuilder()
             ->select('s.id')
@@ -163,7 +364,10 @@ final class MoveSlotService
             ->getQuery()
             ->getScalarResult();
 
-        $excluded = [$sourceId => true];
+        $excluded = [];
+        foreach ($excludedIds as $id) {
+            $excluded[$id] = true;
+        }
         foreach ($rows as $row) {
             $excluded[$row['id']] = true;
         }

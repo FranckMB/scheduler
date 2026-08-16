@@ -94,6 +94,7 @@ Ce qu'il faut retenir en toute session :
 `Security/TeamTagScopeTest` (portée d'un tag = ce que le solveur applique) ·
 `Integration/Service/LockOriginProvenanceTest` (origine d'un verrou VRAIE : réservation → RESERVATION, épinglage → MANUAL, indécidable → UNKNOWN, jamais deviné) ·
 `Security/SlotMoveVerdictTest` (déplacer un créneau passe sous le verdict moteur : refus = planning intact, source hors baseline, 409 pendant une génération) ·
+`Security/SlotPlacementVerdictTest` (placer une séance à la dérive passe sous le verdict moteur : refus = rien créé, gardes 409, tenant) ·
 `Integration/Service/ConstraintChangeStaleScheduleTest` (une contrainte modifiée APRÈS génération marque les plannings COMPLETED du club+saison comme périmés — listener d'entité, tout writer, frontière saison — et un import les démarque) ·
 `Integration/Service/ResourceChangeStaleScheduleTest` (une RESSOURCE du club modifiée — gymnase/coach/créneau/grille/réservation/override/tag/calendrier — marque les plannings périmés ; périmètre dérivé de `schedule_plan_id` : ADR-0002, la grille saison ne périme pas les copies de période et inversement ; un import démarque) ·
 `Security/PasswordResetEnumerationTest` (parité anti-énumération du rail mot de passe : hash factice, mail par le bus, 429 reset) ·

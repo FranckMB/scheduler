@@ -6,8 +6,13 @@ namespace App\Controller;
 
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\Team;
 use App\Enum\LockLevel;
+use App\Exception\DurationMismatchException;
+use App\Exception\EvictTargetLockedException;
+use App\Exception\EvictTargetMismatchException;
 use App\Exception\ScheduleGenerationInProgressException;
+use App\Exception\SlotUnavailableException;
 use App\Service\ManagementAccessGuard;
 use App\Service\ManualEditService;
 use App\Service\MoveSlotService;
@@ -124,11 +129,24 @@ final class ManualEditController extends AbstractController implements SeasonSco
             return $this->json(['error' => 'Missing or invalid field: startTime.'], Response::HTTP_BAD_REQUEST);
         }
 
+        // Éviction OPTIONNELLE : déplacer vers une cible occupée peut demander d'en retirer
+        // l'occupant. Le service valide la cible AVANT le moteur (D3 : verrou souverain).
+        $evictSlotId = isset($data['evictSlotId']) && \is_string($data['evictSlotId']) && '' !== $data['evictSlotId']
+            ? $data['evictSlotId']
+            : null;
+
         try {
-            $result = $this->moveSlotService->move($slot, $dayOfWeek, $startTime, $venueId);
+            $result = $this->moveSlotService->move($slot, $dayOfWeek, $startTime, $venueId, $evictSlotId);
         } catch (ScheduleGenerationInProgressException) {
             // Déplacer pendant qu'une génération réécrit le planning écraserait son résultat.
             return $this->json(['code' => 'generation_in_progress'], Response::HTTP_CONFLICT);
+        } catch (EvictTargetMismatchException) {
+            // La cible d'éviction est incohérente (introuvable, autre planning, ne siège pas là) :
+            // rien n'est écrit, le moteur n'est pas appelé.
+            return $this->json(['code' => 'evict_target_mismatch', 'error' => 'Le créneau à libérer ne correspond pas à la cible du déplacement.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (EvictTargetLockedException) {
+            // D3 : un verrou est souverain — on ne libère pas un créneau verrouillé.
+            return $this->json(['code' => 'target_locked', 'error' => 'Ce créneau est verrouillé — déverrouillez-le d\'abord.'], Response::HTTP_UNPROCESSABLE_ENTITY);
         } catch (TransportExceptionInterface $e) {
             // Le moteur n'a pas répondu — RIEN n'est écrit, le gestionnaire réessaie.
             $this->logger->error('Move validation could not reach the engine.', ['exception' => $e]);
@@ -146,7 +164,109 @@ final class ManualEditController extends AbstractController implements SeasonSco
             return $this->json(['valid' => false, 'violations' => $result['violations']], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        return $this->json(['message' => 'Slot moved.', 'valid' => true], Response::HTTP_OK);
+        $body = ['message' => 'Slot moved.', 'valid' => true];
+        if (isset($result['evicted'])) {
+            // État de l'occupant AVANT sa suppression — le front s'en sert pour proposer un replacement.
+            $body['evicted'] = $result['evicted'];
+        }
+
+        return $this->json($body, Response::HTTP_OK);
+    }
+
+    /**
+     * PLACER une séance À LA DÉRIVE — créer une séance qui n'existait pas (surnuméraire ou
+     * rattrapage) SOUS LE VERDICT DU MOTEUR (P2-30). Comme /move : géré management, refus 409 si
+     * une génération tourne ou si la version est choisie (lecture seule), 422 si le moteur refuse.
+     */
+    #[Route('/api/schedules/{id}/place-slot', name: 'api_schedule_place_slot', methods: ['POST'])]
+    public function placeSlot(string $id, Request $request): JsonResponse
+    {
+        $this->managementAccessGuard->assertManager(); // SEC-07
+
+        $schedule = $this->findSchedule($id);
+        if (!$schedule instanceof Schedule) {
+            return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+        }
+
+        // ADR-0002 inv. 1 : la version choisie du plan est le calendrier — lecture seule.
+        if ($this->schedulePlanProvisioner->isChosen($schedule->getId())) {
+            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before editing.'], Response::HTTP_CONFLICT);
+        }
+
+        $data = json_decode($request->getContent(), true);
+        if (!\is_array($data)) {
+            return $this->json(['error' => 'Invalid JSON body.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $teamId = isset($data['teamId']) && \is_string($data['teamId']) ? $data['teamId'] : '';
+        if ('' === $teamId) {
+            return $this->json(['error' => 'Missing required field: teamId.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $dayOfWeek = isset($data['dayOfWeek']) ? (int) $data['dayOfWeek'] : 0;
+        if ($dayOfWeek < 1 || $dayOfWeek > 7) {
+            return $this->json(['error' => 'Missing or invalid field: dayOfWeek.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $venueId = isset($data['venueId']) && \is_string($data['venueId']) ? $data['venueId'] : '';
+        if ('' === $venueId) {
+            return $this->json(['error' => 'Missing required field: venueId.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $startTime = null;
+        if (isset($data['startTime']) && \is_string($data['startTime'])) {
+            $startTime = DateTimeImmutable::createFromFormat('!H:i', $data['startTime'])
+                ?: DateTimeImmutable::createFromFormat('!H:i:s', $data['startTime'])
+                ?: null;
+        }
+        if (!$startTime instanceof DateTimeImmutable) {
+            return $this->json(['error' => 'Missing or invalid field: startTime.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        // durationMinutes est OPTIONNEL : la durée fait foi CÔTÉ SERVEUR (fenêtre de gymnase), ce
+        // champ n'est qu'une assertion du client. Fourni → il doit être un entier > 0 (sinon 400) ;
+        // absent → la fenêtre décide ; menteur → 422 duration_mismatch (tranché dans le service).
+        $durationMinutes = null;
+        if (isset($data['durationMinutes'])) {
+            $durationMinutes = (int) $data['durationMinutes'];
+            if ($durationMinutes <= 0) {
+                return $this->json(['error' => 'Invalid field: durationMinutes.'], Response::HTTP_BAD_REQUEST);
+            }
+        }
+
+        // L'équipe doit appartenir au club ET à la saison du planning (sinon 422). Le filtre
+        // tenant rend déjà invisible l'équipe d'un autre club ; on borne aussi la saison. Un
+        // teamId malformé (non-UUID) ne doit pas remonter en 500 driver → try/catch, comme findSlot.
+        $team = $this->findTeamInSchedule($teamId, $schedule);
+        if (!$team instanceof Team) {
+            return $this->json(['error' => 'Unknown team for this schedule.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        try {
+            $result = $this->moveSlotService->place($schedule, $teamId, $dayOfWeek, $startTime, $venueId, $durationMinutes);
+        } catch (ScheduleGenerationInProgressException) {
+            return $this->json(['code' => 'generation_in_progress'], Response::HTTP_CONFLICT);
+        } catch (SlotUnavailableException) {
+            // Aucune fenêtre de gymnase à ce créneau : rien à créer, rien écrit.
+            return $this->json(['code' => 'slot_unavailable', 'error' => 'Aucun créneau de gymnase n\'est ouvert à cet horaire.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (DurationMismatchException) {
+            // La durée annoncée contredit la fenêtre : c'est la fenêtre qui fait foi.
+            return $this->json(['code' => 'duration_mismatch', 'error' => 'La durée indiquée ne correspond pas au créneau de gymnase.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (TransportExceptionInterface $e) {
+            $this->logger->error('Placement validation could not reach the engine.', ['exception' => $e]);
+
+            return $this->json(['error' => 'The engine did not respond — please retry.'], Response::HTTP_BAD_GATEWAY);
+        } catch (Throwable $e) {
+            $this->logger->error('Slot placement failed.', ['exception' => $e]);
+
+            return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if (false === $result['valid']) {
+            return $this->json(['valid' => false, 'violations' => $result['violations']], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        return $this->json(['valid' => true, 'slotId' => $result['slotId'] ?? null], Response::HTTP_OK);
     }
 
     private function findSlot(string $id): ?ScheduleSlotTemplate
@@ -158,6 +278,35 @@ final class ManualEditController extends AbstractController implements SeasonSco
         }
 
         return $slot instanceof ScheduleSlotTemplate ? $slot : null;
+    }
+
+    /** Le planning ciblé, tenant-scopé par le filtre Doctrine : un planning d'un autre club est invisible (→ 404). */
+    private function findSchedule(string $id): ?Schedule
+    {
+        try {
+            $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
+        } catch (Throwable) {
+            $schedule = null;
+        }
+
+        return $schedule instanceof Schedule ? $schedule : null;
+    }
+
+    /**
+     * L'équipe, si elle appartient au club ET à la saison du planning. Tenant-scopée par le filtre
+     * Doctrine (équipe d'un autre club invisible) ; un id malformé rend null (jamais un 500 driver).
+     */
+    private function findTeamInSchedule(string $teamId, Schedule $schedule): ?Team
+    {
+        try {
+            $team = $this->entityManager->getRepository(Team::class)->findOneBy([
+                'id' => $teamId, 'clubId' => $schedule->getClubId(), 'seasonId' => $schedule->getSeasonId(),
+            ]);
+        } catch (Throwable) {
+            $team = null;
+        }
+
+        return $team instanceof Team ? $team : null;
     }
 
     /** A slot whose parent schedule is VALIDATED is read-only. */
