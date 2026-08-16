@@ -89,6 +89,20 @@ describe("PlanningToolbar — coût en crédits sur « Régénérer » (P1-3 §4
   });
 });
 
+describe("PlanningToolbar — survie des verrous à la régénération", () => {
+  it("énonce près de « Régénérer » que les créneaux verrouillés sont conservés", () => {
+    renderToolbar(schedule("COMPLETED"));
+    // La garantie ne vivait qu'en commentaire de code ; elle est désormais dite à l'écran,
+    // exactement là où la régénération se déclenche.
+    expect(screen.getByText(/verrouillés sont conservés/i)).toBeInTheDocument();
+  });
+
+  it("n'affiche pas la phrase quand « Régénérer » est masqué (version en vigueur, lecture seule)", () => {
+    renderToolbar(schedule("COMPLETED", { isChosen: true }));
+    expect(screen.queryByText(/verrouillés sont conservés/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("PlanningToolbar — schedule lifecycle (N3)", () => {
   it("offers Valider + a Régénérer button on a completed schedule", () => {
     renderToolbar(schedule("COMPLETED"));

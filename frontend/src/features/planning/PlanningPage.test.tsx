@@ -759,7 +759,9 @@ describe("PlanningPage (integration)", () => {
       renderWithProviders(<PlanningPage />);
 
       await user.click(await screen.findByText("U11"));
-      await user.click(await screen.findByRole("button", { name: /Verrouiller/ }));
+      // Nom EXACT « Verrouiller » = le bouton du PANNEAU ; le cadenas de la grille nomme
+      // l'équipe (« Verrouiller U11 ») — la regex en attraperait deux depuis PR 2.
+      await user.click(await screen.findByRole("button", { name: "Verrouiller" }));
 
       await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "error" === t.variant)).toBe(true));
     });
@@ -773,7 +775,8 @@ describe("PlanningPage (integration)", () => {
       renderWithProviders(<PlanningPage />);
 
       await user.click(await screen.findByText("U11"));
-      await user.click(await screen.findByRole("button", { name: /Déverrouiller/ }));
+      // Nom EXACT = le bouton du PANNEAU (le cadenas de la grille nomme l'équipe depuis PR 2).
+      await user.click(await screen.findByRole("button", { name: "Déverrouiller" }));
 
       // Un dialogue s'interpose — rien n'est muté tant qu'on n'a pas confirmé.
       const dialog = await screen.findByRole("dialog");
@@ -792,10 +795,46 @@ describe("PlanningPage (integration)", () => {
       renderWithProviders(<PlanningPage />);
 
       await user.click(await screen.findByText("U11"));
-      await user.click(await screen.findByRole("button", { name: /Déverrouiller/ }));
+      // Nom EXACT = le bouton du PANNEAU (le cadenas de la grille nomme l'équipe depuis PR 2).
+      await user.click(await screen.findByRole("button", { name: "Déverrouiller" }));
 
       await vi.waitFor(() => expect(vi.mocked(lockSlot)).toHaveBeenCalledWith("slot-1", "NONE"));
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    // Le cadenas de la GRILLE (PR 2) partage EXACTEMENT le handler du panneau : même bascule
+    // directe, même ConfirmDialog RÉSERVATION — écrit une seule fois.
+    it("cadenas de la GRILLE : bascule directe un créneau non verrouillé SANS ouvrir le panneau", async () => {
+      const user = userEvent.setup();
+      vi.mocked(lockSlot).mockResolvedValue({});
+      renderWithProviders(<PlanningPage />);
+      await screen.findByText("U11");
+
+      // Le cadenas de la grille nomme l'équipe (« Verrouiller U11 ») — distinct du bouton du
+      // panneau (« Verrouiller » seul), qui n'est pas ouvert ici.
+      await user.click(screen.getByRole("button", { name: "Verrouiller U11" }));
+
+      await vi.waitFor(() => expect(vi.mocked(lockSlot)).toHaveBeenCalledWith("slot-1", "HARD"));
+      // Un clic sur le cadenas ne SÉLECTIONNE pas : pas de panneau de détail (pas de « Déplacer »).
+      expect(screen.queryByRole("button", { name: /Déplacer/ })).not.toBeInTheDocument();
+    });
+
+    it("cadenas de la GRILLE sur une RÉSERVATION : MÊME ConfirmDialog, mutation après confirmation seulement", async () => {
+      const user = userEvent.setup();
+      vi.mocked(lockSlot).mockResolvedValue({});
+      vi.mocked(getSlots).mockResolvedValue([
+        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "HARD", lockOrigin: "RESERVATION" },
+      ]);
+      renderWithProviders(<PlanningPage />);
+      await screen.findByText("U11");
+
+      await user.click(screen.getByRole("button", { name: "Déverrouiller U11" }));
+
+      const dialog = await screen.findByRole("dialog");
+      expect(vi.mocked(lockSlot)).not.toHaveBeenCalled();
+
+      await user.click(within(dialog).getByRole("button", { name: /Déverrouiller/ }));
+      await vi.waitFor(() => expect(vi.mocked(lockSlot)).toHaveBeenCalledWith("slot-1", "NONE"));
     });
   });
 });
