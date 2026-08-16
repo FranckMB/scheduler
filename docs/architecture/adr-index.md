@@ -20,7 +20,7 @@ This index is the entry point for the repo's ADRs; add one numbered file per str
 ## Index
 | ADR | Title | Status |
 |-----|-------|--------|
-| [ADR-0001](adr-0001-single-pass-solve.md) | Single-pass solve, no silent fallback | accepted — amended 2026-07-07 (two-PHASE lexicographic objective) and 2026-07-10 (A10 complexity cap) |
+| [ADR-0001](adr-0001-single-pass-solve.md) | Single-pass solve, no silent fallback | accepted — amended 2026-07-07 (two-PHASE lexicographic objective), 2026-07-10 (A10 complexity cap) and 2026-08-17 (third lexicographic tier: generation stability, P3-21) |
 | [ADR-0002](adr-0002-pattern-plan.md) | Pattern « Plan » : un plan nommé, des versions, un pointeur | accepted — amended 2026-07-17 (les contraintes datées du FAIT restent sur `CalendarEntry`) and 2026-07-24 (**#8**: inv. 5 — une période POSSÈDE sa grille, copie et non union ; inv. 14 — reprendre le socle détruit tout plan de période **pas encore commencée**, validé ou non) |
 | [ADR-0003](adr-0003-match-placement-solve.md) | Le solve de placement des matchs : second problème engine (`/place-matches`), rail synchrone, best-effort à poids dominant, ancres `placementSource` | accepted (2026-08-03, P1-4 PR D) |
 
