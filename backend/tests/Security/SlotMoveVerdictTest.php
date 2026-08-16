@@ -13,8 +13,12 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\Venue;
+use App\Enum\LockLevel;
+use App\Enum\LockOrigin;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
+use App\Exception\EvictTargetLockedException;
+use App\Exception\EvictTargetMismatchException;
 use App\Exception\ScheduleGenerationInProgressException;
 use App\Service\ClubGenerationLock;
 use App\Service\EngineClient;
@@ -52,6 +56,16 @@ use Symfony\Component\Mercure\HubInterface;
  *  3. la baseline envoyée au moteur NE CONTIENT PAS la source — sinon l'équipe se heurte à
  *     elle-même et un déplacement légal serait refusé (falsification n°2) ;
  *  4. une génération en cours → 409 (exception), le moteur n'est JAMAIS appelé (falsification n°3).
+ *
+ * P2-30 PR A — ÉVICTION (`evictSlotId`) : déplacer un créneau vers une cible occupée peut
+ * demander de retirer l'occupant, MAIS toujours sous le verdict et sous D3 :
+ *  5. éviction acceptée → la source bouge, la ligne de l'occupant est SUPPRIMÉE, la baseline
+ *     figée ne contient NI la source NI l'occupant, le bloc `evicted` restitue l'état d'AVANT
+ *     suppression, et le marqueur « retouché » est posé ;
+ *  6. occupant verrouillé (lockLevel ≠ NONE, D3) → refus AVANT tout appel moteur, RIEN écrit ni
+ *     supprimé ;
+ *  7. verdict « non » sur un move avec éviction → RIEN supprimé ni déplacé ;
+ *  8. `evictSlotId` ne siégeant pas à la cible → refus AVANT tout appel moteur, RIEN écrit.
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -183,10 +197,172 @@ final class SlotMoveVerdictTest extends KernelTestCase
         self::assertSame($slot->getDayOfWeek(), $reloaded?->getDayOfWeek(), 'rien ne bouge pendant une génération');
     }
 
+    /** Éviction acceptée : la source bouge, l'occupant est SUPPRIMÉ, le bloc `evicted` restitue l'avant. */
+    public function testEvictionAcceptedMovesSourceAndDeletesOccupant(): void
+    {
+        $ctx = $this->seed();
+        $slot = $ctx['slot'];
+        $occupant = $this->seedOccupant($ctx, 4, '20:00', $ctx['venue2']);
+        $occupantId = $occupant->getId();
+        $occupantTeamId = $occupant->getTeamId();
+
+        $captured = null;
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured): MockResponse {
+            $captured = json_decode((string) $options['body'], true, 512, \JSON_THROW_ON_ERROR);
+
+            return new MockResponse(self::ACCEPT, ['http_code' => 200]);
+        });
+
+        $result = $this->service($client)->move($slot, 4, new DateTimeImmutable('20:00'), $ctx['venue2'], $occupantId);
+
+        self::assertTrue($result['valid']);
+        // Le bloc `evicted` = l'état d'AVANT suppression, pour que le front propose de replacer.
+        self::assertIsArray($result['evicted']);
+        self::assertSame($occupantId, $result['evicted']['slotId']);
+        self::assertSame($occupantTeamId, $result['evicted']['teamId']);
+        self::assertSame(4, $result['evicted']['dayOfWeek']);
+        self::assertSame('20:00', $result['evicted']['startTime']);
+        self::assertSame($ctx['venue2'], $result['evicted']['venueId']);
+        self::assertSame(90, $result['evicted']['durationMinutes']);
+
+        // La baseline figée ne contient NI la source NI l'occupant évincé.
+        self::assertIsArray($captured);
+        $ids = array_map(static fn (array $t): string => (string) ($t['id'] ?? ''), $captured['slotTemplates']);
+        self::assertNotContains($slot->getId(), $ids, 'la SOURCE doit être retirée de la baseline');
+        self::assertNotContains($occupantId, $ids, 'l\'OCCUPANT évincé doit être retiré de la baseline');
+
+        $this->em->clear();
+        $this->scopeGucToClub($ctx['clubId']);
+        $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
+        self::assertInstanceOf(ScheduleSlotTemplate::class, $reloaded);
+        self::assertSame(4, $reloaded->getDayOfWeek());
+        self::assertSame('20:00', $reloaded->getStartTime()->format('H:i'));
+        self::assertSame($ctx['venue2'], $reloaded->getVenueId());
+
+        self::assertNull(
+            $this->em->getRepository(ScheduleSlotTemplate::class)->find($occupantId),
+            'l\'occupant évincé doit être supprimé de la base',
+        );
+
+        $schedule = $this->em->getRepository(Schedule::class)->find($ctx['scheduleId']);
+        self::assertInstanceOf(Schedule::class, $schedule);
+        self::assertTrue($schedule->isManuallyEditedSinceGeneration());
+    }
+
+    /** D3 : un occupant VERROUILLÉ ne peut être évincé — refus avant tout appel moteur, rien touché. */
+    public function testEvictionOfLockedOccupantIsRefusedWithoutCallingEngine(): void
+    {
+        $ctx = $this->seed();
+        $slot = $ctx['slot'];
+        $occupant = $this->seedOccupant($ctx, 4, '20:00', $ctx['venue2'], 90, LockLevel::HARD);
+        $occupantId = $occupant->getId();
+
+        $client = new MockHttpClient(static function (): MockResponse {
+            self::fail('le moteur ne doit PAS être appelé quand la cible est verrouillée (D3)');
+        });
+
+        try {
+            $this->service($client)->move($slot, 4, new DateTimeImmutable('20:00'), $ctx['venue2'], $occupantId);
+            self::fail('évincer un créneau verrouillé doit lever');
+        } catch (EvictTargetLockedException) {
+            // attendu
+        }
+
+        $this->em->clear();
+        $this->scopeGucToClub($ctx['clubId']);
+        $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
+        self::assertSame($slot->getDayOfWeek(), $reloaded?->getDayOfWeek(), 'la source ne bouge pas');
+        self::assertNotNull(
+            $this->em->getRepository(ScheduleSlotTemplate::class)->find($occupantId),
+            'un occupant verrouillé ne doit pas être supprimé',
+        );
+
+        $schedule = $this->em->getRepository(Schedule::class)->find($ctx['scheduleId']);
+        self::assertFalse($schedule?->isManuallyEditedSinceGeneration());
+    }
+
+    /** Verdict « non » sur un move avec éviction : RIEN supprimé ni déplacé. */
+    public function testRefusedMoveWithEvictionDeletesNothing(): void
+    {
+        $ctx = $this->seed();
+        $slot = $ctx['slot'];
+        $occupant = $this->seedOccupant($ctx, 4, '20:00', $ctx['venue2']);
+        $occupantId = $occupant->getId();
+
+        $service = $this->service(new MockHttpClient(new MockResponse(self::REFUSE, ['http_code' => 200])));
+        $result = $service->move($slot, 4, new DateTimeImmutable('20:00'), $ctx['venue2'], $occupantId);
+
+        self::assertFalse($result['valid']);
+        self::assertArrayNotHasKey('evicted', $result);
+
+        $this->em->clear();
+        $this->scopeGucToClub($ctx['clubId']);
+        $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
+        self::assertSame($slot->getDayOfWeek(), $reloaded?->getDayOfWeek(), 'un refus ne déplace pas la source');
+        self::assertNotNull(
+            $this->em->getRepository(ScheduleSlotTemplate::class)->find($occupantId),
+            'un refus ne supprime pas l\'occupant',
+        );
+    }
+
+    /** L'occupant désigné ne siège PAS à la cible (autre jour) → refus avant le moteur, rien touché. */
+    public function testEvictSlotNotSittingAtTargetIsRejected(): void
+    {
+        $ctx = $this->seed();
+        $slot = $ctx['slot'];
+        // Occupant au MÊME gymnase cible mais un autre jour : il ne siège pas là où le candidat atterrit.
+        $occupant = $this->seedOccupant($ctx, 3, '20:00', $ctx['venue2']);
+        $occupantId = $occupant->getId();
+
+        $client = new MockHttpClient(static function (): MockResponse {
+            self::fail('le moteur ne doit PAS être appelé quand la cible d\'éviction ne correspond pas');
+        });
+
+        try {
+            $this->service($client)->move($slot, 4, new DateTimeImmutable('20:00'), $ctx['venue2'], $occupantId);
+            self::fail('un evictSlotId ne siégeant pas à la cible doit lever');
+        } catch (EvictTargetMismatchException) {
+            // attendu
+        }
+
+        $this->em->clear();
+        $this->scopeGucToClub($ctx['clubId']);
+        $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
+        self::assertSame($slot->getDayOfWeek(), $reloaded?->getDayOfWeek());
+        self::assertNotNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($occupantId));
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
+    }
+
+    /**
+     * Un créneau OCCUPANT sur le planning du contexte, au jour/heure/gymnase donnés — la cible
+     * d'une éviction. Un lockLevel ≠ NONE le rend souverain (D3).
+     *
+     * @param array{clubId: string, seasonId: string, scheduleId: string, venue1: string, venue2: string, slot: ScheduleSlotTemplate} $ctx
+     */
+    private function seedOccupant(array $ctx, int $day, string $startHi, string $venueId, int $durationMinutes = 90, LockLevel $lock = LockLevel::NONE): ScheduleSlotTemplate
+    {
+        $occupant = (new ScheduleSlotTemplate)
+            ->setClubId($ctx['clubId'])
+            ->setSeasonId($ctx['seasonId'])
+            ->setScheduleId($ctx['scheduleId'])
+            ->setTeamId('77777777-7777-4777-8777-777777777777')
+            ->setVenueId($venueId)
+            ->setDayOfWeek($day)
+            ->setStartTime(DateTimeImmutable::createFromFormat('!H:i', $startHi))
+            ->setDurationMinutes($durationMinutes)
+            ->setLockLevel($lock);
+        if (LockLevel::NONE !== $lock) {
+            $occupant->setLockOrigin(LockOrigin::MANUAL);
+        }
+        $this->em->persist($occupant);
+        $this->em->flush();
+
+        return $occupant;
     }
 
     private function service(MockHttpClient $client): MoveSlotService

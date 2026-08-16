@@ -362,6 +362,14 @@ jobs:
       - name: SlotMoveVerdictTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SlotMoveVerdictTest.php --group phase1'
 
+      # P2-30 PR A (axes planning lifecycle + constraint semantics) : PLACER une séance à la
+      # dérive (une séance qui n'existait pas) passe sous le verdict — refus = rien créé, accepté
+      # = ligne DÉVERROUILLÉE + marqueur, 409 pendant une génération (moteur jamais appelé) et sur
+      # la version choisie, tenant (planning/équipe d'un autre club refusés). Pendant de /move
+      # pour la création ; le moteur est moqué (le contrat cross-stack garde le reste).
+      - name: SlotPlacementVerdictTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SlotPlacementVerdictTest.php --group phase1'
+
       # P2-9ter — le fichier portait déjà #[Group('phase1')] sans qu'AUCUN step de CE job
       # ne le lance : il tournait bien, mais dans `unit-tests` (qui exécute `phpunit
       # tests/`) — c'est-à-dire APRÈS `blocking-tests` et sans gater `build-docker`. Il ne

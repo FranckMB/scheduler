@@ -1918,15 +1918,25 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'properties' => [
                             'message' => ['type' => 'string'],
                             'valid' => ['type' => 'boolean', 'enum' => [true]],
+                            'evicted' => ['type' => 'object', 'nullable' => true, 'description' => 'Present only when an occupant was evicted from the target: its state BEFORE deletion, so the UI can offer to re-place it', 'properties' => [
+                                'slotId' => ['type' => 'string'],
+                                'teamId' => ['type' => 'string'],
+                                'dayOfWeek' => ['type' => 'integer'],
+                                'startTime' => ['type' => 'string', 'example' => '20:00'],
+                                'venueId' => ['type' => 'string'],
+                                'durationMinutes' => ['type' => 'integer'],
+                            ]],
                         ],
                     ]),
                     '400' => new Response('Missing or invalid field (dayOfWeek, startTime or venueId)'),
                     '404' => new Response('Slot not found'),
                     '409' => new Response('Schedule is validated (read-only), or a generation is running for the club (body carries code=generation_in_progress)'),
-                    '422' => $this->jsonResponse('The solver refused the move: it is NOT written; the broken rules are named for display', [
+                    '422' => $this->jsonResponse('Refused with nothing written. Either the solver refused the move (broken rules named for display), OR the eviction target is invalid (body carries code=evict_target_mismatch), OR the eviction target is locked (body carries code=target_locked)', [
                         'type' => 'object',
                         'properties' => [
                             'valid' => ['type' => 'boolean', 'enum' => [false]],
+                            'code' => ['type' => 'string', 'nullable' => true, 'description' => 'evict_target_mismatch or target_locked when the eviction pre-check refused (no engine call)'],
+                            'error' => ['type' => 'string', 'nullable' => true, 'description' => 'Human message for the eviction pre-check refusal'],
                             'violations' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
                                 'rule' => ['type' => 'string', 'description' => 'Machine code of the broken rule (UI branches on it)'],
                                 'message' => ['type' => 'string', 'description' => 'Human sentence naming the coach/venue/time in conflict'],
@@ -1941,7 +1951,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     ]),
                     '502' => new Response('Engine unreachable — nothing was written, retry'),
                 ],
-                summary: 'Move a slot (day / time / venue) under the solver verdict: written only if the engine accepts it, otherwise refused with the named broken rules',
+                summary: 'Move a slot (day / time / venue) under the solver verdict: written only if the engine accepts it, otherwise refused with the named broken rules. Optional evictSlotId frees an occupied target (a locked occupant refuses eviction before any engine call)',
                 requestBody: $this->jsonBody([
                     'type' => 'object',
                     'required' => ['dayOfWeek', 'startTime', 'venueId'],
@@ -1949,6 +1959,54 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'dayOfWeek' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 7],
                         'startTime' => ['type' => 'string', 'example' => '20:00'],
                         'venueId' => ['type' => 'string'],
+                        'evictSlotId' => ['type' => 'string', 'nullable' => true, 'description' => 'Optional: id of the slot occupying the target, to evict (deleted in the same transaction) once the move is accepted'],
+                    ],
+                ]),
+            )),
+            '/api/schedules/{id}/place-slot' => new PathItem(post: new Operation(
+                operationId: 'postSchedulePlaceSlot',
+                tags: ['ManualEdit'],
+                responses: [
+                    '200' => $this->jsonResponse('Placement accepted by the solver and written; the schedule is flagged manually edited (its score is now stale)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'valid' => ['type' => 'boolean', 'enum' => [true]],
+                            'slotId' => ['type' => 'string', 'description' => 'Id of the newly created (unlocked) slot'],
+                        ],
+                    ]),
+                    '400' => new Response('Missing or invalid field (teamId, dayOfWeek, startTime, venueId; durationMinutes if present must be a positive integer)'),
+                    '404' => new Response('Schedule not found'),
+                    '409' => new Response('Schedule is validated (read-only), or a generation is running for the club (body carries code=generation_in_progress)'),
+                    '422' => $this->jsonResponse('Refused with nothing written: unknown team for this schedule, OR no venue window at that slot (code=slot_unavailable), OR the asserted durationMinutes contradicts the venue window (code=duration_mismatch), OR the solver refused the placement (broken rules named for display)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'valid' => ['type' => 'boolean', 'enum' => [false]],
+                            'code' => ['type' => 'string', 'nullable' => true, 'description' => 'slot_unavailable or duration_mismatch when a server pre-check refused (no engine call)'],
+                            'error' => ['type' => 'string', 'nullable' => true, 'description' => 'Human message for an unknown team or a server pre-check refusal'],
+                            'violations' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'rule' => ['type' => 'string', 'description' => 'Machine code of the broken rule (UI branches on it)'],
+                                'message' => ['type' => 'string', 'description' => 'Human sentence naming the coach/venue/time in conflict'],
+                                'teamId' => ['type' => 'string', 'nullable' => true],
+                                'coachId' => ['type' => 'string', 'nullable' => true],
+                                'venueId' => ['type' => 'string', 'nullable' => true],
+                                'dayOfWeek' => ['type' => 'integer', 'nullable' => true],
+                                'startTime' => ['type' => 'string', 'nullable' => true],
+                                'conflictingTeamId' => ['type' => 'string', 'nullable' => true],
+                            ]]],
+                        ],
+                    ]),
+                    '502' => new Response('Engine unreachable — nothing was written, retry'),
+                ],
+                summary: 'Place a NEW slot (a drift session, e.g. a make-up) under the solver verdict: created only if the engine accepts it. No count guard — the verdict is the sole judge; the slot is created unlocked. Its duration is the venue window\'s, resolved server-side; durationMinutes in the body is only an assertion',
+                requestBody: $this->jsonBody([
+                    'type' => 'object',
+                    'required' => ['teamId', 'dayOfWeek', 'startTime', 'venueId'],
+                    'properties' => [
+                        'teamId' => ['type' => 'string'],
+                        'dayOfWeek' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 7],
+                        'startTime' => ['type' => 'string', 'example' => '20:00'],
+                        'venueId' => ['type' => 'string'],
+                        'durationMinutes' => ['type' => 'integer', 'minimum' => 1, 'example' => 90, 'description' => 'Optional assertion: the persisted duration is always the venue window\'s (resolved server-side). If provided and it differs from the window, the request is refused with code=duration_mismatch'],
                     ],
                 ]),
             )),
