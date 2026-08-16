@@ -26,7 +26,13 @@ function renderToolbar(
     disableRegenerate = false,
     slots = false,
     outputCredits = null,
-  }: { embedded?: boolean; selectedScheduleId?: string; disableRegenerate?: boolean; slots?: boolean; outputCredits?: { count: number; blocked: boolean } | null } = {},
+  }: {
+    embedded?: boolean;
+    selectedScheduleId?: string;
+    disableRegenerate?: boolean;
+    slots?: boolean;
+    outputCredits?: { count: number; blocked: boolean } | null;
+  } = {},
 ) {
   return render(
     <PlanningToolbar
@@ -100,6 +106,13 @@ describe("PlanningToolbar — survie des verrous à la régénération", () => {
   it("n'affiche pas la phrase quand « Régénérer » est masqué (version en vigueur, lecture seule)", () => {
     renderToolbar(schedule("COMPLETED", { isChosen: true }));
     expect(screen.queryByText(/verrouillés sont conservés/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("PlanningToolbar — compteur de verrous manuels (PR 3, déplacé)", () => {
+  it("le compteur ne vit PLUS dans la toolbar (retour fondateur : à côté de Diagnostics, dans la page)", () => {
+    renderToolbar(schedule("COMPLETED"));
+    expect(screen.queryByRole("button", { name: /verrous manuels/i })).not.toBeInTheDocument();
   });
 });
 

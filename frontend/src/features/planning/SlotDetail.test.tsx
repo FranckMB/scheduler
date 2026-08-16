@@ -48,6 +48,7 @@ const cell = (locked: boolean): GridCell => ({
   startLabel: "18:00",
   endLabel: "19:30",
   locked,
+  lockOrigin: locked ? "MANUAL" : null,
   groupLabel: null,
   members: [],
 });

@@ -837,4 +837,62 @@ describe("PlanningPage (integration)", () => {
       await vi.waitFor(() => expect(vi.mocked(lockSlot)).toHaveBeenCalledWith("slot-1", "NONE"));
     });
   });
+
+  // PR 3 — « Verrous lisibles » : compteur + panneau latéral des verrous MANUELS, et la
+  // lentille (surbrillance de la grille par origine de verrou).
+  describe("verrous lisibles : panneau + lentille", () => {
+    beforeEach(() => {
+      vi.mocked(getTeams).mockResolvedValue([
+        { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0 },
+        { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1 },
+      ]);
+      // Un verrou MANUEL, une RÉSERVATION : seul le MANUEL doit compter et peupler le panneau.
+      vi.mocked(getSlots).mockResolvedValue([
+        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "HARD", lockOrigin: "MANUAL" },
+        { id: "slot-2", scheduleId: SID, teamId: "team-2", venueId: "venue-1", coachId: null, dayOfWeek: 2, startTime: "18:00:00", durationMinutes: 90, lockLevel: "HARD", lockOrigin: "RESERVATION" },
+      ]);
+    });
+
+    it("compte les seuls MANUAL, ouvre le panneau qui liste le créneau, et se ferme proprement", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<PlanningPage />);
+      await screen.findByText("U11");
+
+      // Compteur = 1 (le MANUEL seul ; la RÉSERVATION ne compte pas).
+      const counter = screen.getByRole("button", { name: /verrous manuels \(1\)/i });
+      await user.click(counter);
+
+      // Le panneau liste l'équipe du verrou manuel (U11), pas celle de la réservation (U13).
+      const panel = await screen.findByRole("region", { name: /verrous manuels/i });
+      expect(within(panel).getByText("U11")).toBeInTheDocument();
+      expect(within(panel).queryByText("U13")).not.toBeInTheDocument();
+
+      // Repli propre (même affordance que Diagnostics) : le panneau disparaît,
+      // le bouton de la barre revient.
+      await user.click(within(panel).getByRole("button", { name: /réduire les verrous manuels/i }));
+      expect(screen.queryByRole("region", { name: /verrous manuels/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /verrous manuels \(1\)/i })).toBeInTheDocument();
+    });
+
+    it("la lentille s'active depuis le panneau, colore la grille, et s'éteint à la fermeture", async () => {
+      const user = userEvent.setup();
+      const { container } = renderWithProviders(<PlanningPage />);
+      await screen.findByText("U11");
+
+      await user.click(screen.getByRole("button", { name: /verrous manuels \(1\)/i }));
+      const panel = await screen.findByRole("region", { name: /verrous manuels/i });
+
+      // Avant activation : aucune surbrillance de lentille.
+      expect(container.querySelector('[data-lens="MANUAL"]')).toBeNull();
+
+      await user.click(within(panel).getByRole("button", { name: /voir sur la grille/i }));
+      // La grille distingue le MANUEL et la RÉSERVATION.
+      await vi.waitFor(() => expect(container.querySelector('[data-lens="MANUAL"]')).not.toBeNull());
+      expect(container.querySelector('[data-lens="RESERVATION"]')).not.toBeNull();
+
+      // Replier le panneau coupe la lentille — pas d'état fantôme.
+      await user.click(within(panel).getByRole("button", { name: /réduire les verrous manuels/i }));
+      await vi.waitFor(() => expect(container.querySelector('[data-lens="MANUAL"]')).toBeNull());
+    });
+  });
 });
