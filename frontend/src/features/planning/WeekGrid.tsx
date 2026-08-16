@@ -61,6 +61,18 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
     );
   };
 
+  // Variante EN LIGNE pour les rangées de carte fusionnée (retour fondateur : l'absolu y
+  // chevauchait le nom du membre) — l'icône vit dans le flux, avant le nom d'équipe.
+  const renderLensInline = (origin: LockOrigin) => {
+    const meta = LOCK_LENS_META[origin];
+    const Icon = meta.Icon;
+    return (
+      <span data-lens={origin} aria-hidden="true" className={cn("shrink-0", meta.textClass)}>
+        <Icon className="size-3" />
+      </span>
+    );
+  };
+
   // Le cadenas d'une carte : un bouton FRÈRE, en surimpression coin haut-droit. Éditable
   // (onToggleLock fourni) → bascule le verrou sans sélectionner (zone de clic ≥ 24px,
   // aria-label nommant l'équipe, visible en permanence si verrouillé, sinon au survol/focus).
@@ -244,10 +256,10 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                           memberSelected ? "ring-1 ring-accent" : "",
                         )}
                       >
+                        {lensActive && null !== member.lockOrigin ? renderLensInline(member.lockOrigin) : null}
                         <span className="truncate">{member.teamLabel}</span>
                       </button>
                       {renderLock(member.slotId, member.teamLabel, member.locked)}
-                      {lensActive && null !== member.lockOrigin ? renderLensBadge(member.lockOrigin) : null}
                     </div>
                   );
                 })}
