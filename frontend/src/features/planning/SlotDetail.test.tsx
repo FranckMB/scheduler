@@ -76,6 +76,8 @@ function renderDetail(
     coachName?: (id: string) => string | undefined;
     categoryLabel?: string;
     cell?: Partial<ReturnType<typeof cell>>;
+    armed?: boolean;
+    onArmMove?: () => void;
   } = {},
 ) {
   const s = slot(over.slot);
@@ -91,9 +93,10 @@ function renderDetail(
       coachName={over.coachName}
       busy={false}
       moveState={over.moveState}
+      armed={over.armed}
       onClose={vi.fn()}
       onToggleLock={vi.fn()}
-      onMove={vi.fn()}
+      onArmMove={over.onArmMove ?? vi.fn()}
     />,
   );
 }
@@ -291,6 +294,30 @@ describe("SlotDetail — le panneau dit ce que la règle FAIT, pas seulement son
     await openConstraints();
     // Le nom est là, une seule fois (pas de description approximative doublée).
     expect(screen.getAllByText("Règle exotique")).toHaveLength(1);
+  });
+});
+
+describe("SlotDetail — mode cible (P2-30 PR B, geste 1)", () => {
+  it("« Déplacer » ARME le mode cible (ne rend plus le formulaire 3 champs)", async () => {
+    const onArmMove = vi.fn();
+    renderDetail({ slot: { lockLevel: "NONE", lockOrigin: null }, onArmMove });
+
+    await userEvent.click(screen.getByRole("button", { name: /Déplacer/ }));
+    expect(onArmMove).toHaveBeenCalledTimes(1);
+  });
+
+  // D11 (décision fondateur) : le formulaire jour/heure/gymnase est SUPPRIMÉ — jamais utilisé,
+  // pas intuitif. On le prouve par l'absence des trois champs.
+  it("ne rend AUCUN des trois champs jour / heure / gymnase", () => {
+    renderDetail({ slot: { lockLevel: "NONE", lockOrigin: null } });
+    expect(screen.queryByLabelText("Jour")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Heure")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Gymnase")).not.toBeInTheDocument();
+  });
+
+  it("armé : le bouton bascule sur une consigne de choix de cible et une aide Échap", () => {
+    renderDetail({ slot: { lockLevel: "NONE", lockOrigin: null }, armed: true });
+    expect(screen.getByText(/Échap/i)).toBeInTheDocument();
   });
 });
 

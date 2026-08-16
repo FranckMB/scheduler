@@ -1,5 +1,5 @@
 import { Lock, LockOpen } from "lucide-react";
-import { type UIEvent, useRef } from "react";
+import { type UIEvent, useEffect, useRef } from "react";
 
 import { EmptyBlock } from "@/shared/components/ui/empty-hint";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
@@ -8,8 +8,24 @@ import { cn } from "@/shared/lib/utils";
 
 import type { LockOrigin } from "./api";
 import { isEmptySlotId } from "./lib/emptySlots";
-import type { GridModel } from "./lib/grid";
+import { DAYS, type GridModel } from "./lib/grid";
 import { LOCK_LENS_META } from "./lib/lockLens";
+
+/**
+ * P2-30 (geste 1/2) — le mode cible « click-click ». Armé, la grille cesse d'être une simple
+ * consultation : les cases VIDES deviennent des boutons « Placer ici », les séances occupées
+ * des cibles d'éviction, la SOURCE est marquée. Deux variantes : `move` (déplacer un créneau
+ * existant, `sourceSlotId` = ce créneau) et `place` (placer une séance à la dérive, pas de
+ * source à marquer). Échap sort. Le PICK et l'annulation sont décidés PAR LA PAGE (elle porte
+ * l'état, les verdicts moteur, l'éviction) — la grille ne fait que router les clics.
+ */
+export interface TargetMode {
+  active: boolean;
+  sourceSlotId: string | null;
+  variant: "move" | "place";
+}
+
+const DAY_LABEL = new Map(DAYS.map((d) => [d.n, d.label]));
 
 const ROW_HEIGHT = 16; // px per 15-min step (1h = 64px)
 const HEADER_ROW = "1.75rem";
@@ -35,6 +51,13 @@ interface WeekGridProps {
    * règne, la lentille se tait — le rouge/ambre du conflit ne doit pas être brouillé.
    */
   lockLens?: boolean;
+  /** P2-30 : le mode cible click-click. Absent/inactif = grille normale. */
+  targetMode?: TargetMode;
+  /** Un clic sur une case (vide ou occupée) EN mode cible — l'id de la cible ; la page décide
+   *  (déplacer, évincer, placer, ou annuler si c'est la source). */
+  onPickTarget?: (cellSlotId: string) => void;
+  /** Échap en mode cible : sortir sans rien toucher (le focus revient côté page). */
+  onCancelTarget?: () => void;
 }
 
 /**
@@ -43,9 +66,47 @@ interface WeekGridProps {
  * a sticky grid item is clamped to its own cell, so it detaches once that narrow
  * cell scrolls out of view.
  */
-export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds, onToggleLock, lockLens = false }: WeekGridProps) {
+export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds, onToggleLock, lockLens = false, targetMode, onPickTarget, onCancelTarget }: WeekGridProps) {
   const { columns, dayGroups, rows, cells } = model;
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // P2-30 — état du mode cible (dérivé des props). `targetActive` gouverne le comportement de
+  // TOUTE la grille : les cases deviennent des cibles, la lentille se tait, Échap sort.
+  const targetActive = true === targetMode?.active;
+  const targetSourceId = targetMode?.sourceSlotId ?? null;
+  const isMoveVariant = "move" === targetMode?.variant;
+  const isSource = (slotId: string): boolean => targetActive && null !== targetSourceId && slotId === targetSourceId;
+  // Une séance VERROUILLÉE n'est pas une cible d'ÉVICTION (D3 : le verrou est souverain — le
+  // backend répondrait 422 target_locked). On l'écarte d'emblée, sauf la source elle-même.
+  const targetDisabled = (slotId: string, locked: boolean): boolean => targetActive && isMoveVariant && locked && slotId !== targetSourceId;
+  // Le routage d'un clic de carte : en mode cible → pick (sauf case inerte) ; sinon → sélection.
+  const activateSlot = (slotId: string, locked: boolean): void => {
+    if (!targetActive) {
+      onSelectSlot(slotId);
+      return;
+    }
+    if (targetDisabled(slotId, locked)) {
+      return;
+    }
+    onPickTarget?.(slotId);
+  };
+  const cardTitle = (slotId: string, locked: boolean, base: string): string =>
+    targetDisabled(slotId, locked) ? "Ce créneau est verrouillé — déverrouillez-le d'abord" : base;
+  // Échap sort du mode cible sans rien toucher (écoute globale : marche quel que soit le focus,
+  // et n'impose pas de rôle interactif à la grille — a11y).
+  useEffect(() => {
+    if (!targetActive) {
+      return;
+    }
+    const handler = (event: KeyboardEvent): void => {
+      if ("Escape" === event.key) {
+        event.preventDefault();
+        onCancelTarget?.();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [targetActive, onCancelTarget]);
 
   // Lentille : l'icône de catégorie (F1), coin bas-GAUCHE de la carte (retour fondateur : le
   // haut-gauche empiétait sur le nom d'équipe ; le cadenas garde le haut-droit). Décorative
@@ -184,8 +245,9 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
           // considèrent tous ses membres, pas le seul `slotId` de tête.
           const cellIds = (c: (typeof cells)[number]): string[] => (null !== c.groupLabel ? c.members.map((m) => m.slotId) : [c.slotId]);
           const highlighting = null != highlightSlotIds && highlightSlotIds.size > 0 && cells.some((c) => cellIds(c).some((id) => highlightSlotIds.has(id)));
-          // Le CONFLIT prime : tant qu'un surlignage est en cours, la lentille se tait.
-          const lensActive = lockLens && !highlighting;
+          // Priorités visuelles : surlignage CONFLIT > mode cible > lentille. La lentille se
+          // tait sous un conflit ET tant que le mode cible est armé (comme `highlighting`).
+          const lensActive = lockLens && !highlighting && !targetActive;
           return cells.map((cell) => {
           const dimmed = highlighting && !cellIds(cell).some((id) => highlightSlotIds?.has(id) ?? false);
           // Empty slots = defined venue windows the solver left unfilled. Muted,
@@ -193,6 +255,33 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
           // "créneau vide" warning can draw the eye to them.
           if (isEmptySlotId(cell.slotId)) {
             const flagged = highlighting && highlightSlotIds.has(cell.slotId);
+            const emptyStyle = {
+              gridColumn: cell.gridColumn,
+              gridRow: `${cell.gridRowStart} / span ${cell.gridRowSpan}`,
+              justifySelf: "start" as const,
+              width: `${100 / cell.laneCount}%`,
+              transform: `translateX(${cell.lane * 100}%)`,
+            };
+            // P2-30 — armé, une fenêtre vide devient un VRAI bouton « Placer ici » (focusable,
+            // aria-label nommant gymnase + jour + horaire), cible d'un déplacement/placement.
+            if (targetActive) {
+              const dayLabel = DAY_LABEL.get(cell.day) ?? "";
+              return (
+                <button
+                  key={cell.key}
+                  type="button"
+                  onClick={() => onPickTarget?.(cell.slotId)}
+                  aria-label={`Placer ici — ${cell.venueLabel}, ${dayLabel} ${cell.startLabel}–${cell.endLabel}`}
+                  className={cn(
+                    "z-10 m-px flex items-center justify-center overflow-hidden rounded border border-dashed border-accent/60 bg-accent/5 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent transition hover:border-accent hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                    flagged ? "border-warning ring-2 ring-warning text-warning" : "",
+                  )}
+                  style={emptyStyle}
+                >
+                  vide
+                </button>
+              );
+            }
             return (
               <div
                 key={cell.key}
@@ -204,13 +293,7 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                   // Une fenêtre vide n'a aucun verrou : sous la lentille, elle s'estompe.
                   lensActive ? "opacity-40" : "",
                 )}
-                style={{
-                  gridColumn: cell.gridColumn,
-                  gridRow: `${cell.gridRowStart} / span ${cell.gridRowSpan}`,
-                  justifySelf: "start",
-                  width: `${100 / cell.laneCount}%`,
-                  transform: `translateX(${cell.lane * 100}%)`,
-                }}
+                style={emptyStyle}
               >
                 vide
               </div>
@@ -262,11 +345,14 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                       <button
                         type="button"
                         data-slot-id={member.slotId}
-                        onClick={() => onSelectSlot(member.slotId)}
-                        title={`${member.teamLabel} · ${cell.groupLabel} · ${cell.venueLabel} · ${member.coachLabel} · ${cell.startLabel}–${cell.endLabel}`}
+                        data-target-source={isSource(member.slotId) ? "true" : undefined}
+                        onClick={() => activateSlot(member.slotId, member.locked)}
+                        disabled={targetDisabled(member.slotId, member.locked)}
+                        title={cardTitle(member.slotId, member.locked, `${member.teamLabel} · ${cell.groupLabel} · ${cell.venueLabel} · ${member.coachLabel} · ${cell.startLabel}–${cell.endLabel}`)}
                         className={cn(
-                          "flex w-full items-center gap-1 px-1 py-0.5 pr-6 text-left font-medium hover:ring-1 hover:ring-accent",
+                          "flex w-full items-center gap-1 px-1 py-0.5 pr-6 text-left font-medium hover:ring-1 hover:ring-accent disabled:cursor-not-allowed disabled:opacity-50",
                           memberSelected ? "ring-1 ring-accent" : "",
+                          isSource(member.slotId) ? "animate-pulse ring-2 ring-accent" : "",
                         )}
                       >
                         {lensActive && null === uniformOrigin && null !== member.lockOrigin ? renderLensInline(member.lockOrigin) : null}
@@ -289,11 +375,14 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
             <div
               key={cell.key}
               data-slot-id={cell.slotId}
+              data-target-source={isSource(cell.slotId) ? "true" : undefined}
               className={cn(
                 "group relative z-10 m-px flex overflow-hidden rounded border-l-4 transition",
                 "hover:ring-1 hover:ring-accent",
                 selected ? "ring-2 ring-accent" : "",
                 dimmed ? "opacity-30" : "",
+                // Mode cible : la SOURCE pulse et porte un anneau distinctif.
+                isSource(cell.slotId) ? "animate-pulse ring-2 ring-accent" : "",
                 // Lentille : sans verrou → estompé ; verrouillé → anneau de sa catégorie.
                 lensActive && null === cell.lockOrigin ? "opacity-40" : "",
                 lensActive && null !== cell.lockOrigin ? LOCK_LENS_META[cell.lockOrigin].ringClass : "",
@@ -310,9 +399,10 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
             >
               <button
                 type="button"
-                onClick={() => onSelectSlot(cell.slotId)}
-                title={`${cell.teamLabel} · ${cell.venueLabel} · ${cell.coachLabel} · ${cell.startLabel}–${cell.endLabel}`}
-                className="flex min-w-0 flex-1 flex-col items-start px-1 py-0.5 text-left leading-tight"
+                onClick={() => activateSlot(cell.slotId, cell.locked)}
+                disabled={targetDisabled(cell.slotId, cell.locked)}
+                title={cardTitle(cell.slotId, cell.locked, `${cell.teamLabel} · ${cell.venueLabel} · ${cell.coachLabel} · ${cell.startLabel}–${cell.endLabel}`)}
+                className="flex min-w-0 flex-1 flex-col items-start px-1 py-0.5 text-left leading-tight disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="flex w-full items-center gap-1 pr-5 font-medium">
                   <span className="truncate">{cell.primaryLabel}</span>

@@ -1,16 +1,15 @@
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Lock, LockOpen, X } from "lucide-react";
-import { VenueSelect } from "@/shared/components/ui/venue-select";
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Lock, LockOpen, Move, X } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { WizardStepLink } from "@/features/wizard/WizardStepLink";
 
-import type { Constraint, LockOrigin, MoveViolation, Slot, SlotMovePatch, Venue } from "./api";
+import type { Constraint, LockOrigin, MoveViolation, Slot, Venue } from "./api";
 import { applicableConstraints, isClubWide } from "./lib/applicableConstraints";
 import { tagLabel } from "@/features/wizard/lib/tagLabels";
 import { describeConstraint } from "./lib/describeConstraint";
-import { DAYS, type GridCell, NO_COACH_LABEL, toHourMinute } from "./lib/grid";
+import { type GridCell, NO_COACH_LABEL } from "./lib/grid";
 
 /** Map vide partagée : une CLUB+tag ne s'affiche nulle part tant que la résolution n'est pas fournie. */
 const NO_TAGS: ReadonlyMap<string, ReadonlySet<string>> = new Map();
@@ -46,9 +45,14 @@ interface SlotDetailProps {
   moveState?: MoveFeedback;
   /** VALIDATED schedule → the slot is read-only (no move/lock). */
   readOnly?: boolean;
+  /** P2-30 geste 1 : ce créneau est la SOURCE d'un mode cible armé — le bouton bascule sur
+   *  une consigne de choix de cible, et une aide « Échap pour annuler » s'affiche. */
+  armed?: boolean;
   onClose: () => void;
   onToggleLock: () => void;
-  onMove: (patch: SlotMovePatch) => void;
+  /** P2-30 : « Déplacer » n'ouvre plus de formulaire — il ARME le mode cible click-click (la
+   *  cible se choisit sur la grille). Rappeler quand c'est armé = annuler (toggle côté page). */
+  onArmMove: () => void;
 }
 
 /**
@@ -101,15 +105,10 @@ function ConstraintList({ label, items, describe }: { label: string; items: Cons
 
 const noName = (): string | undefined => undefined;
 
-export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tagTeamIds = NO_TAGS, teamName = noName, coachName = noName, busy, moveState = { status: "idle" }, readOnly = false, onClose, onToggleLock, onMove }: SlotDetailProps) {
-  const [day, setDay] = useState(slot.dayOfWeek);
-  const [time, setTime] = useState(toHourMinute(slot.startTime));
-  const [venueId, setVenueId] = useState(slot.venueId);
+export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tagTeamIds = NO_TAGS, teamName = noName, coachName = noName, busy, moveState = { status: "idle" }, readOnly = false, armed = false, onClose, onToggleLock, onArmMove }: SlotDetailProps) {
   // Repliées par défaut : ouvrir un créneau ne doit pas agrandir l'aside (retour fondateur).
   // Le compte reste visible replié pour savoir s'il y a quelque chose à ouvrir.
   const [constraintsOpen, setConstraintsOpen] = useState(false);
-
-  const dirty = day !== slot.dayOfWeek || time !== toHourMinute(slot.startTime) || venueId !== slot.venueId;
 
   const origin = null !== slot.lockOrigin ? LOCK_ORIGIN[slot.lockOrigin] : null;
   const applicable = applicableConstraints(slot, constraints, tagTeamIds);
@@ -195,33 +194,21 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
           <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">Planning validé (lecture seule). Rouvrez-le pour modifier ce créneau.</p>
         ) : (
         <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
-          <div className="grid grid-cols-3 gap-2">
-            <select aria-label="Jour" value={day} onChange={(e) => setDay(Number(e.target.value))} className="h-9 rounded-md border border-input bg-background px-2 text-sm">
-              {DAYS.map((d) => (
-                <option key={d.n} value={d.n}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
-            <input aria-label="Heure" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm" />
-            <VenueSelect
-              aria-label="Gymnase"
-              className="h-9"
-              venues={venues.map((v) => ({ id: v.id, name: v.name, color: v.color }))}
-              value={venueId}
-              onChange={(e) => setVenueId(e.target.value)}
-            />
-          </div>
-
+          {/* P2-30 (D11) : plus de formulaire jour/heure/gymnase — « Déplacer » ARME le mode
+              cible click-click, la cible se choisit sur la grille. Armé, le bouton bascule sur
+              une consigne, et une aide « Échap pour annuler » apparaît. */}
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="flex-1" disabled={!dirty || busy} onClick={() => onMove({ dayOfWeek: day, startTime: time, venueId })}>
+            <Button size="sm" variant={armed ? "default" : "outline"} className="flex-1" disabled={busy} onClick={onArmMove}>
               {"pending" === moveState.status ? (
                 <>
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                   Vérification…
                 </>
               ) : (
-                "Déplacer"
+                <>
+                  <Move className="size-4" aria-hidden="true" />
+                  {armed ? "Choisir la case cible…" : "Déplacer"}
+                </>
               )}
             </Button>
             <Button size="sm" variant={cell.locked ? "default" : "outline"} className="flex-1" disabled={busy} onClick={onToggleLock}>
@@ -229,6 +216,12 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
               {cell.locked ? "Déverrouiller" : "Verrouiller"}
             </Button>
           </div>
+
+          {armed ? (
+            <p className="rounded-md border border-accent/40 bg-accent/10 p-2 text-xs text-muted-foreground">
+              Cliquez une case libre de la grille pour y déplacer ce créneau, ou une séance à évincer. <span className="font-medium text-foreground">Échap</span> pour annuler.
+            </p>
+          ) : null}
 
           {/* Le déplacement passe sous le verdict du moteur (F2b) : ici le résultat du dernier
               essai. On ne le montre que hors « pending » (le bouton porte déjà l'attente). */}

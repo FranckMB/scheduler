@@ -1,6 +1,6 @@
 import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarX2, CheckCircle2, Lock, Pencil, Star } from "lucide-react";
+import { AlertTriangle, CalendarX2, CheckCircle2, Lock, Pencil, Star, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
@@ -11,9 +11,10 @@ import { useWizardStore } from "@/features/wizard/store";
 import { usePriorityTiers } from "@/features/matches/queries";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
 import { useSchedulePlans } from "@/features/cockpit/queries";
-import { useReservations, useVenuePeriodOverrides, useWizardTeamTagAssignments, useWizardTeamTags } from "@/features/wizard/queries";
+import { useReservations, useTeamPeriodOverrides, useVenuePeriodOverrides, useWizardTeamTagAssignments, useWizardTeamTags } from "@/features/wizard/queries";
 import { coachFullName } from "@/shared/lib/coachName";
 import { readFailed, readLoading } from "@/shared/lib/readState";
+import { toast } from "@/shared/stores/toastStore";
 import { useCredits } from "@/shared/credits/useCredits";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -21,18 +22,20 @@ import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import { GenerationInProgressError, MoveRejectedError, OverlaysExistError, type Slot } from "./api";
+import { type EvictedSlot, GenerationInProgressError, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
+import { DriftBanner } from "./DriftBanner";
 import { LocksPanel } from "./LocksPanel";
 import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
 import { buildTagTeamIds } from "./lib/applicableConstraints";
 import { topSeveritySummary } from "./lib/diagnosticsSummary";
-import { computeEmptySlots } from "./lib/emptySlots";
+import { computeDrift } from "./lib/drift";
+import { computeEmptySlots, isEmptySlotId } from "./lib/emptySlots";
 import { violationHighlightSlotIds } from "./lib/violationHighlight";
-import { availableResourceGroups, buildGrid, type Lookups, slotGroupKey } from "./lib/grid";
+import { availableResourceGroups, buildGrid, DAYS, type Lookups, slotGroupKey, toHourMinute } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, usePlaceSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
@@ -44,6 +47,9 @@ import { WeekGrid } from "./WeekGrid";
 
 // D-31 : foyer unique dans `api.ts`.
 const IN_FLIGHT: readonly string[] = IN_FLIGHT_STATUSES;
+
+/** jour ISO → abréviation, pour le libellé du raccourci d'éviction (« Lun 18:00 »). */
+const DAY_ABBR = new Map(DAYS.map((d) => [d.n, d.label]));
 
 function ValidateDialog({ hasAlerts, siblingCount, busy, onConfirm, onCancel }: { hasAlerts: boolean; siblingCount: number; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (
@@ -120,6 +126,24 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // origine de verrou). Fermer le panneau ÉTEINT la lentille : pas d'état fantôme.
   const [locksPanelOpen, setLocksPanelOpen] = useState(false);
   const [lockLens, setLockLens] = useState(false);
+  // P2-30 (geste 1/2) — le mode cible « click-click ». `move` déplace un créneau existant
+  // (`sourceSlotId`) ; `place` place une séance À LA DÉRIVE pour une équipe (`teamId`). Null =
+  // consultation. Le geste 4 (undo, profondeur 1, session) et le raccourci d'éviction vivent
+  // AUSSI en état de page — ils ont besoin des noms d'équipes et de l'issue exacte du verdict.
+  const [targetMode, setTargetMode] = useState<{ kind: "move"; sourceSlotId: string } | { kind: "place"; teamId: string } | null>(null);
+  // La cible d'éviction en attente de CONFIRMATION (D6) : rien n'est appelé tant qu'on n'a pas
+  // confirmé. Porte la source + la séance occupante à évincer.
+  const [pendingEvict, setPendingEvict] = useState<{ sourceSlotId: string; targetSlot: Slot } | null>(null);
+  // Le dernier geste annulable (profondeur 1). `move` = déplacement simple (inverse = re-move) ;
+  // `move-evict` = déplacement avec éviction (inverse = re-move PUIS replacement de l'évincée).
+  const [undo, setUndo] = useState<
+    | { kind: "move"; slotId: string; sourceTeamId: string; from: { dayOfWeek: number; startTime: string; venueId: string } }
+    | { kind: "move-evict"; slotId: string; sourceTeamId: string; from: { dayOfWeek: number; startTime: string; venueId: string }; evicted: EvictedSlot }
+    | null
+  >(null);
+  // Raccourci d'éviction : proposer de REMETTRE l'évincée sur la case que la source vient de
+  // libérer (position + équipe évincée). Effacé après usage / nouveau geste / changement de version.
+  const [evictionNotice, setEvictionNotice] = useState<{ evicted: EvictedSlot; freed: { dayOfWeek: number; startTime: string; venueId: string } } | null>(null);
   // Source partagée avec le cockpit (radar/DayDialog) — une seule dérivation de
   // la saison de travail, plus de copie inline qui pourrait diverger.
   const workingSeason = useWorkingSeason();
@@ -157,6 +181,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // non plus après les slots) : les réservations affichées sur un FAILED suivent le même
   // filtre — le backend les écarte aussi du payload d'une période (`reservationsInScope`).
   const venueOverrides = useVenuePeriodOverrides(slotLayerId);
+  // P2-30 (dérive) : les overrides d'équipe de la PÉRIODE (seuil/désactivation) — mêmes hooks
+  // que le wizard. Sur le socle (slotLayerId=null) le hook est inerte → `computeDrift` reçoit
+  // `null` et lit le seuil de saison.
+  const teamOverridesQuery = useTeamPeriodOverrides(slotLayerId);
   const disabledVenueIds = useMemo(
     () => new Set(readFailed(venueOverrides) || readLoading(venueOverrides) ? [] : (venueOverrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId)),
     [venueOverrides],
@@ -211,6 +239,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const navigate = useNavigate();
   const lockMutation = useLockSlot();
   const moveMutation = useMoveSlot();
+  const placeMutation = usePlaceSlot();
   const regenerateMutation = useRegenerate();
   const regenerateOverlayMutation = useRegenerateOverlay();
   const validateMutation = useValidateSchedule();
@@ -331,7 +360,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // PENDING schedule (nothing sets isGenerating), so its own restore must disable
   // the action here — else a second click double-runs the destructive restore.
   const actionBusy = validateMutation.isPending || reopenMutation.isPending || deleteMutation.isPending || regenerateFromMutation.isPending;
-  const busy = lockMutation.isPending || moveMutation.isPending;
+  const busy = lockMutation.isPending || moveMutation.isPending || placeMutation.isPending;
   const clubInitial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
   // When a running generation finishes, pull the fresh slots + diagnostics.
@@ -385,9 +414,13 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       ? { status: "rejected", violations: moveMutation.error.violations }
       : moveMutation.error instanceof GenerationInProgressError
         ? { status: "blocked" }
-        : null !== moveMutation.error && undefined !== moveMutation.error
-          ? { status: "error" }
-          : { status: "idle" };
+        : // P2-30 : verrou de cible / cible incohérente sont TOASTÉS (message serveur propre),
+          // pas rendus en panneau — ni un « moteur injoignable » ni un refus de légalité.
+          moveMutation.error instanceof TargetLockedError || moveMutation.error instanceof SlotEditError
+          ? { status: "idle" }
+          : null !== moveMutation.error && undefined !== moveMutation.error
+            ? { status: "error" }
+            : { status: "idle" };
 
   // Changer de créneau sélectionné efface le verdict du précédent — sinon un refus resterait
   // affiché sous un autre créneau.
@@ -460,6 +493,225 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // (`staleVenueSessions`) et on invite à régénérer.
   const emptySlots = useMemo(() => computeEmptySlots(layerSlots, slots, validScheduleId ?? ""), [layerSlots, slots, validScheduleId]);
   const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...slots, ...emptySlots] : slots), [viewMode, slots, emptySlots]);
+
+  // --- P2-30 : mode cible, éviction, dérive, undo -----------------------------------------
+  const teamNameOf = (teamId: string): string => lookups.teams.get(teamId)?.name ?? "une équipe";
+
+  // Changer de version PURGE tout état éphémère de retouche (mode cible, undo, raccourci,
+  // éviction en attente) — ajustement en PHASE DE RENDU (patron `asideSeededFor`, le lint
+  // proscrit un setState d'état dérivé dans un effet).
+  const [retouchVersion, setRetouchVersion] = useState<string | null>(null);
+  if (retouchVersion !== validScheduleId) {
+    setRetouchVersion(validScheduleId);
+    setTargetMode(null);
+    setUndo(null);
+    setEvictionNotice(null);
+    setPendingEvict(null);
+  }
+
+  // Séances à la dérive (geste 3) : COMPLETED seulement, hors génération. Seuil = backend
+  // (saison, ou override de période) ; FAIL-CLOSED — sur un plan de période dont les overrides
+  // ne sont pas encore lus, on ne DEVINE pas une dérive (on n'affiche rien).
+  const driftEntries = useMemo(() => {
+    if (null === displayed || "COMPLETED" !== displayed.status) {
+      return [];
+    }
+    let overrides: { teamId: string; isActive: boolean; sessionsPerWeek: number | null }[] | null;
+    if (null === slotLayerId) {
+      overrides = null; // socle → seuil de saison
+    } else if (readFailed(teamOverridesQuery) || readLoading(teamOverridesQuery)) {
+      return []; // période, overrides pas encore connus → pas de dérive fantôme
+    } else {
+      overrides = teamOverridesQuery.data ?? [];
+    }
+    return computeDrift(teams.map((t) => ({ id: t.id, sessionsPerWeek: t.sessionsPerWeek })), generatedSlots, overrides);
+  }, [displayed, slotLayerId, teamOverridesQuery, teams, generatedSlots]);
+
+  const cancelTarget = () => {
+    const source = targetMode?.kind === "move" ? targetMode.sourceSlotId : null;
+    setTargetMode(null);
+    // Le focus revient sur la source (a11y) — best-effort, inerte en jsdom.
+    if (null !== source) {
+      requestAnimationFrame(() => (document.querySelector(`[data-slot-id="${source}"] button`) as HTMLElement | null)?.focus?.());
+    }
+  };
+  // Armer/désarmer le déplacement d'un créneau depuis son panneau (toggle).
+  const armMove = (slotId: string) => setTargetMode((cur) => (cur?.kind === "move" && cur.sourceSlotId === slotId ? null : { kind: "move", sourceSlotId: slotId }));
+  // Armer le placement d'une équipe à la dérive (le panneau de détail se ferme : pas de source).
+  const armPlace = (teamId: string) => {
+    setSelectedSlotId(null);
+    setTargetMode({ kind: "place", teamId });
+  };
+
+  // Déplacer un créneau (éventuellement en évinçant l'occupant de la cible) sous le verdict
+  // moteur. Le TOAST, l'undo et le raccourci d'éviction sont décidés ICI (noms d'équipes).
+  const doMove = (sourceSlotId: string, patch: { dayOfWeek: number; startTime: string; venueId: string }, evictSlotId?: string) => {
+    const source = slots.find((s) => s.id === sourceSlotId);
+    if (undefined === source) {
+      return;
+    }
+    const from = { dayOfWeek: source.dayOfWeek, startTime: toHourMinute(source.startTime), venueId: source.venueId };
+    const sourceTeamId = source.teamId;
+    moveMutation.mutate(
+      { id: sourceSlotId, patch: undefined === evictSlotId ? patch : { ...patch, evictSlotId } },
+      {
+        onSuccess: (result) => {
+          setPendingEvict(null);
+          setTargetMode(null);
+          if (undefined !== result.evicted) {
+            setUndo({ kind: "move-evict", slotId: sourceSlotId, sourceTeamId, from, evicted: result.evicted });
+            setEvictionNotice({ evicted: result.evicted, freed: from });
+            toast.success(`${teamNameOf(sourceTeamId)} déplacée — ${teamNameOf(result.evicted.teamId)} est à replacer.`);
+          } else {
+            setUndo({ kind: "move", slotId: sourceSlotId, sourceTeamId, from });
+            setEvictionNotice(null);
+            toast.success("Créneau déplacé.");
+          }
+        },
+        onError: (error) => {
+          setPendingEvict(null);
+          // Verrou de cible / cible incohérente : message serveur propre, on RESTE en mode cible.
+          if (error instanceof TargetLockedError || error instanceof SlotEditError) {
+            toast.error(error.message);
+          }
+          // Un refus de légalité (MoveRejectedError) s'affiche dans le panneau (moveState) et
+          // surligne le conflit (phase de rendu) — le mode cible reste armé pour réessayer.
+        },
+      },
+    );
+  };
+
+  // Placer une séance à la dérive pour une équipe, à une position donnée, sous le verdict moteur.
+  const doPlace = (teamId: string, position: { dayOfWeek: number; startTime: string; venueId: string }) => {
+    if (null === validScheduleId) {
+      return;
+    }
+    placeMutation.mutate(
+      { scheduleId: validScheduleId, body: { teamId, ...position } },
+      {
+        onSuccess: () => {
+          setTargetMode(null);
+          setUndo(null); // un placement n'a pas d'inverse (aucun endpoint de suppression de créneau)
+          setEvictionNotice(null);
+          setHighlightSlotIds(new Set());
+          toast.success("Séance placée.");
+        },
+        onError: (error) => {
+          if (error instanceof MoveRejectedError) {
+            toast.error(error.violations[0]?.message ?? "Placement refusé par le moteur.");
+            setHighlightSlotIds(violationHighlightSlotIds(error.violations, slots));
+          } else if (error instanceof GenerationInProgressError) {
+            toast.error("Une génération est en cours pour ce club — réessayez ensuite.");
+          } else if (error instanceof TargetLockedError || error instanceof SlotEditError) {
+            toast.error(error.message);
+          } else {
+            toast.error("Le moteur n'a pas répondu — réessayez.");
+          }
+          // On reste en mode placement pour réessayer ailleurs.
+        },
+      },
+    );
+  };
+
+  // Un clic sur une case de la grille EN mode cible (la grille route tout ici). La page décide :
+  // annuler (re-clic source), déplacer/placer sur une case libre, ou évincer (via confirmation).
+  const onPickTarget = (cellSlotId: string) => {
+    if (null === targetMode) {
+      return;
+    }
+    if (targetMode.kind === "move" && cellSlotId === targetMode.sourceSlotId) {
+      cancelTarget();
+      return;
+    }
+    if (isEmptySlotId(cellSlotId)) {
+      const win = gridSlots.find((s) => s.id === cellSlotId);
+      if (undefined === win) {
+        return;
+      }
+      const position = { dayOfWeek: win.dayOfWeek, startTime: toHourMinute(win.startTime), venueId: win.venueId };
+      if (targetMode.kind === "move") {
+        doMove(targetMode.sourceSlotId, position);
+      } else {
+        doPlace(targetMode.teamId, position);
+      }
+      return;
+    }
+    // Case OCCUPÉE.
+    const targetSlot = slots.find((s) => s.id === cellSlotId);
+    if (undefined === targetSlot) {
+      return;
+    }
+    if (targetMode.kind === "move") {
+      // D6 : confirmation AVANT tout appel — rien n'est écrit tant qu'on n'a pas confirmé.
+      setPendingEvict({ sourceSlotId: targetMode.sourceSlotId, targetSlot });
+    } else {
+      // Placement sur une case occupée : le moteur tranche (capacité). Pas d'éviction ici — le
+      // rail /place-slot n'en porte pas (PR A) ; un refus se lit et on réessaie.
+      doPlace(targetMode.teamId, { dayOfWeek: targetSlot.dayOfWeek, startTime: toHourMinute(targetSlot.startTime), venueId: targetSlot.venueId });
+    }
+  };
+
+  // Annuler le dernier geste (profondeur 1). Move simple = move inverse ; move-éviction = move
+  // inverse PUIS replacement de l'évincée (2 verdicts) ; échec partiel = toast honnête.
+  const runUndo = () => {
+    if (null === undo || null === validScheduleId) {
+      return;
+    }
+    const current = undo;
+    moveMutation.mutate(
+      { id: current.slotId, patch: current.from },
+      {
+        onSuccess: () => {
+          if (current.kind === "move") {
+            setUndo(null);
+            setEvictionNotice(null);
+            toast.success("Dernier geste annulé.");
+            return;
+          }
+          placeMutation.mutate(
+            {
+              scheduleId: validScheduleId,
+              body: { teamId: current.evicted.teamId, dayOfWeek: current.evicted.dayOfWeek, startTime: toHourMinute(current.evicted.startTime), venueId: current.evicted.venueId, durationMinutes: current.evicted.durationMinutes },
+            },
+            {
+              onSuccess: () => {
+                setUndo(null);
+                setEvictionNotice(null);
+                toast.success("Dernier geste annulé.");
+              },
+              onError: () => {
+                // La source est revenue mais l'évincée n'a pas pu être replacée : on le dit sans mentir.
+                setUndo(null);
+                setEvictionNotice(null);
+                toast.error(`${teamNameOf(current.sourceTeamId)} est revenue, ${teamNameOf(current.evicted.teamId)} reste à replacer.`);
+              },
+            },
+          );
+        },
+        onError: () => toast.error("Annulation impossible — réessayez."),
+      },
+    );
+  };
+
+  // Raccourci d'éviction : remettre l'évincée sur la case que la source vient de libérer.
+  const placeEvictedShortcut = () => {
+    if (null === evictionNotice || null === validScheduleId) {
+      return;
+    }
+    const { evicted, freed } = evictionNotice;
+    placeMutation.mutate(
+      { scheduleId: validScheduleId, body: { teamId: evicted.teamId, dayOfWeek: freed.dayOfWeek, startTime: freed.startTime, venueId: freed.venueId } },
+      {
+        onSuccess: () => {
+          setEvictionNotice(null);
+          setUndo(null); // l'évincée est replacée ailleurs que par l'inverse : l'undo n'a plus de sens
+          toast.success(`${teamNameOf(evicted.teamId)} replacée.`);
+        },
+        onError: (error) => toast.error(error instanceof MoveRejectedError ? (error.violations[0]?.message ?? "Replacement refusé par le moteur.") : "Replacement impossible — réessayez."),
+      },
+    );
+  };
+  // ----------------------------------------------------------------------------------------
   // Les séances de cette version que la période ne servirait plus : elles restent à
   // l'écran (et dans l'export), mais le gestionnaire doit savoir qu'elles sont périmées.
   // Sur les créneaux GÉNÉRÉS uniquement : les pseudo-réservations d'un FAILED ne sont
@@ -745,6 +997,34 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             />
           </div>
 
+          {/* P2-30 (geste 3) — les équipes à la dérive : un clic ARME le placement (mode cible).
+              COMPLETED + modifiable seulement. */}
+          {!isGenerating && !isReadOnly ? (
+            <DriftBanner
+              entries={driftEntries}
+              teamName={teamNameOf}
+              onPlace={armPlace}
+              activeTeamId={targetMode?.kind === "place" ? targetMode.teamId : null}
+            />
+          ) : null}
+
+          {/* P2-30 (geste 2) — raccourci d'éviction : remettre l'évincée sur la case libérée par
+              la source. Le toast a déjà PARLÉ ; ce bandeau porte le BOUTON (le toast n'a pas
+              d'action). Il disparaît au geste suivant / changement de version. */}
+          {null !== evictionNotice ? (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm" role="status">
+              <span className="text-foreground">
+                <span className="font-medium">{teamNameOf(evictionNotice.evicted.teamId)}</span> est à replacer.
+              </span>
+              <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={placeEvictedShortcut}>
+                Remettre {teamNameOf(evictionNotice.evicted.teamId)} sur {DAY_ABBR.get(evictionNotice.freed.dayOfWeek) ?? "?"} {evictionNotice.freed.startTime}
+              </Button>
+              <button type="button" onClick={() => setEvictionNotice(null)} aria-label="Ignorer" className="ml-auto rounded p-1 text-muted-foreground hover:text-foreground">
+                <X className="size-4" />
+              </button>
+            </div>
+          ) : null}
+
           {/* Ce planning a été généré quand un gymnase servait encore la période : ses
               séances restent affichées ET exportées, mais elles ne décrivent plus la
               période telle qu'elle est réglée. On le dit plutôt que de les escamoter. */}
@@ -829,6 +1109,18 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           <span>Verrous manuels ({manualLocks.length})</span>
                         </button>
                       ) : null}
+                      {/* P2-30 (geste 4) — annuler le dernier geste (profondeur 1, session). */}
+                      {null !== undo && !isReadOnly ? (
+                        <button
+                          type="button"
+                          onClick={runUndo}
+                          disabled={busy}
+                          className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-sm hover:bg-muted disabled:opacity-60"
+                        >
+                          <Undo2 className="size-4 text-muted-foreground" />
+                          <span>Annuler le dernier geste</span>
+                        </button>
+                      ) : null}
                     </div>
                     <div className="relative min-h-0 min-w-0 flex-1">
                       <WeekGrid
@@ -840,6 +1132,14 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                         // serveur) → pas de bascule : le cadenas reste indicateur passif.
                         onToggleLock={isReadOnly || isFailed ? undefined : requestToggleLock}
                         lockLens={lockLens}
+                        // P2-30 — mode cible click-click (jamais sur un planning lecture seule/FAILED).
+                        targetMode={
+                          null !== targetMode && !isReadOnly && !isFailed
+                            ? { active: true, sourceSlotId: targetMode.kind === "move" ? targetMode.sourceSlotId : null, variant: targetMode.kind === "move" ? "move" : "place" }
+                            : undefined
+                        }
+                        onPickTarget={onPickTarget}
+                        onCancelTarget={cancelTarget}
                       />
                     </div>
                   </div>
@@ -881,11 +1181,14 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           // Un pseudo-créneau de réservation (planning FAILED) n'existe pas
                           // côté serveur : déplacer/verrouiller le viserait dans le vide.
                           readOnly={isReadOnly || isFailed}
+                          // P2-30 : ce créneau est-il la source d'un mode cible armé ?
+                          armed={targetMode?.kind === "move" && targetMode.sourceSlotId === selectedSlot.id}
                           onClose={() => setSelectedSlotId(null)}
                           // Même point d'entrée que le cadenas de la grille : la règle
                           // RÉSERVATION (confirmation) vit dans `requestToggleLock`, pas ici.
                           onToggleLock={() => requestToggleLock(selectedSlot.id)}
-                          onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
+                          // « Déplacer » arme (ou désarme) le mode cible click-click.
+                          onArmMove={() => armMove(selectedSlot.id)}
                         />
                       ) : null}
                       {showDiagnostics ? (
@@ -935,6 +1238,29 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           setPendingUnlockSlotId(null);
         }}
         onCancel={() => setPendingUnlockSlotId(null)}
+      />
+
+      {/* P2-30 (D6) — évincer un créneau occupé demande CONFIRMATION avant tout appel. */}
+      <ConfirmDialog
+        open={null !== pendingEvict}
+        destructive
+        title="Déplacer vers un créneau occupé ?"
+        description={
+          null !== pendingEvict
+            ? `Ce créneau est occupé par ${teamNameOf(pendingEvict.targetSlot.teamId)}. La déplacer d'ici ? Elle passera dans les séances à replacer.`
+            : ""
+        }
+        confirmLabel="Déplacer et évincer"
+        onConfirm={() => {
+          if (null !== pendingEvict) {
+            doMove(
+              pendingEvict.sourceSlotId,
+              { dayOfWeek: pendingEvict.targetSlot.dayOfWeek, startTime: toHourMinute(pendingEvict.targetSlot.startTime), venueId: pendingEvict.targetSlot.venueId },
+              pendingEvict.targetSlot.id,
+            );
+          }
+        }}
+        onCancel={() => setPendingEvict(null)}
       />
 
       <ConfirmDialog

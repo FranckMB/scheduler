@@ -21,8 +21,8 @@ function slot(over: Partial<Slot>): Slot {
 
 const lookups: Lookups = {
   teams: new Map<string, Team>([
-    ["t1", { id: "t1", name: "U11", sportCategoryId: "cat1", priorityTierId: 1, tierOrder: 0 }],
-    ["t2", { id: "t2", name: "U13", sportCategoryId: "cat1", priorityTierId: 2, tierOrder: 0 }],
+    ["t1", { id: "t1", name: "U11", sportCategoryId: "cat1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }],
+    ["t2", { id: "t2", name: "U13", sportCategoryId: "cat1", priorityTierId: 2, tierOrder: 0, sessionsPerWeek: 2 }],
   ]),
   venues: new Map<string, Venue>([
     ["v1", { id: "v1", name: "Alpha", color: "#ff0000" }],
@@ -227,7 +227,7 @@ describe("buildGrid", () => {
 });
 
 describe("buildGrid — libellé de groupe / fusion (P2-17 D4)", () => {
-  const u15: Team = { id: "t3", name: "U15", sportCategoryId: "cat1", priorityTierId: 3, tierOrder: 0 };
+  const u15: Team = { id: "t3", name: "U15", sportCategoryId: "cat1", priorityTierId: 3, tierOrder: 0, sessionsPerWeek: 2 };
   const withLabels = (entries: [string, string][], teams?: Map<string, Team>): Lookups => ({
     ...lookups,
     teams: teams ?? lookups.teams,
@@ -314,8 +314,8 @@ describe("availableResources", () => {
     const ranked: Lookups = {
       ...lookups,
       teams: new Map<string, Team>([
-        ["t1", { id: "t1", name: "Alpha", sportCategoryId: "c", priorityTierId: 5, tierOrder: 0 }], // D
-        ["t2", { id: "t2", name: "Zoulou", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }], // S (fanion)
+        ["t1", { id: "t1", name: "Alpha", sportCategoryId: "c", priorityTierId: 5, tierOrder: 0, sessionsPerWeek: 2 }], // D
+        ["t2", { id: "t2", name: "Zoulou", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }], // S (fanion)
       ]),
     };
     const slots = [slot({ teamId: "t1" }), slot({ teamId: "t2" })];
