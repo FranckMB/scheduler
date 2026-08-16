@@ -140,11 +140,6 @@ def _locked_slot_to_dict(locked: Mapping[str, Any] | Any) -> dict[str, Any]:
     start_time = str(_get(locked, "start_time", "startTime"))[:5]  # normalize "HH:MM:SS" → "HH:MM"
     duration = int(_get(locked, "duration_minutes", "durationMinutes", default=DEFAULT_SESSION_MINUTES))
     coach_id = _get(locked, "coach_id", "coachId", default=None)
-    temporary_lock = bool(_get(locked, "temporary_lock", "temporaryLock", default=False))
-    temporary_lock_for = _get(locked, "temporary_lock_for", "temporaryLockFor", default=None)
-    temporary_min_sessions_override = _get(
-        locked, "temporary_min_sessions_override", "temporaryMinSessionsOverride", default=None
-    )
     pending_constraint_suggestion = _get(
         locked, "pending_constraint_suggestion", "pendingConstraintSuggestion", default=None
     )
@@ -158,9 +153,6 @@ def _locked_slot_to_dict(locked: Mapping[str, Any] | Any) -> dict[str, Any]:
         "startTime": start_time,
         "durationMinutes": duration,
         "lockLevel": "HARD",
-        "temporaryLock": temporary_lock,
-        "temporaryLockFor": temporary_lock_for,
-        "temporaryMinSessionsOverride": temporary_min_sessions_override,
         "pendingConstraintSuggestion": pending_constraint_suggestion,
     }
 
@@ -224,9 +216,6 @@ def _build_solver_slots(
                         "startTime": _format_time(block_start),
                         "durationMinutes": duration,
                         "lockLevel": "NONE",
-                        "temporaryLock": False,
-                        "temporaryLockFor": None,
-                        "temporaryMinSessionsOverride": None,
                         "pendingConstraintSuggestion": None,
                     }
                 )
@@ -245,9 +234,6 @@ def _build_solver_slots(
                 "startTime": _format_time(block_start),
                 "durationMinutes": duration,
                 "lockLevel": "NONE",
-                "temporaryLock": False,
-                "temporaryLockFor": None,
-                "temporaryMinSessionsOverride": None,
                 "pendingConstraintSuggestion": None,
             }
         )

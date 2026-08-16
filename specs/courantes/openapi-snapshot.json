@@ -8966,68 +8966,6 @@
                 }
             }
         },
-        "/api/schedule-slots/{id}/manual-edit/constraint": {
-            "post": {
-                "operationId": "postManualEditConstraint",
-                "tags": [
-                    "ManualEdit"
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Constraint created \u2014 returns its id",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "message": {
-                                            "type": "string"
-                                        },
-                                        "constraintId": {
-                                            "type": "string"
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Missing/invalid field"
-                    },
-                    "404": {
-                        "description": "Slot not found"
-                    },
-                    "409": {
-                        "description": "Schedule is validated (read-only)"
-                    }
-                },
-                "summary": "Attach a manual constraint to a schedule slot",
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "type": "object",
-                                "required": [
-                                    "type"
-                                ],
-                                "properties": {
-                                    "type": {
-                                        "type": "string"
-                                    },
-                                    "reason": {
-                                        "type": "string"
-                                    },
-                                    "createdBy": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    "required": false
-                }
-            }
-        },
         "/api/schedule-slots/{id}/manual-edit/lock": {
             "post": {
                 "operationId": "postManualEditLock",
@@ -23703,22 +23641,6 @@
                             null
                         ]
                     },
-                    "temporaryLock": {
-                        "default": false,
-                        "type": "boolean"
-                    },
-                    "temporaryLockFor": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "temporaryMinSessionsOverride": {
-                        "type": [
-                            "integer",
-                            "null"
-                        ]
-                    },
                     "pendingConstraintSuggestion": {
                         "type": [
                             "object",
@@ -23802,22 +23724,6 @@
                             "MANUAL",
                             "UNKNOWN",
                             null
-                        ]
-                    },
-                    "temporaryLock": {
-                        "default": false,
-                        "type": "boolean"
-                    },
-                    "temporaryLockFor": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "temporaryMinSessionsOverride": {
-                        "type": [
-                            "integer",
-                            "null"
                         ]
                     },
                     "pendingConstraintSuggestion": {
@@ -23908,22 +23814,6 @@
                                     "MANUAL",
                                     "UNKNOWN",
                                     null
-                                ]
-                            },
-                            "temporaryLock": {
-                                "default": false,
-                                "type": "boolean"
-                            },
-                            "temporaryLockFor": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ]
-                            },
-                            "temporaryMinSessionsOverride": {
-                                "type": [
-                                    "integer",
-                                    "null"
                                 ]
                             },
                             "pendingConstraintSuggestion": {

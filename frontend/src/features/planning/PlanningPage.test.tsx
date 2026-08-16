@@ -54,7 +54,7 @@ vi.mock("./api", () => {
   listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }])),
   getSlots: vi.fn(() =>
     Promise.resolve([
-      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null, temporaryLock: false },
+      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null },
     ]),
   ),
   getConstraints: vi.fn(() => Promise.resolve([])),
@@ -146,7 +146,7 @@ beforeEach(() => {
   // gymnase désactivé) et `mockResolvedValue` SURVIT au test suivant — une fuite qui
   // rendrait un échec ultérieur incompréhensible.
   vi.mocked(getSlots).mockResolvedValue([
-    { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null, temporaryLock: false },
+    { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null },
   ]);
   vi.mocked(getVenues).mockResolvedValue([{ id: "venue-1", name: "Gymnase Alpha", color: "#00aa00" }]);
   vi.mocked(getTrainingSlots).mockResolvedValue([
@@ -389,7 +389,7 @@ describe("PlanningPage (integration)", () => {
     // FENÊTRES LIBRES d'un gymnase désactivé (le bruit du retour terrain), pas celui des
     // séances déjà placées — c'est le test au-dessus qui les garde.
     vi.mocked(getSlots).mockResolvedValue([
-      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-2", coachId: null, dayOfWeek: 3, startTime: "17:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null, temporaryLock: false },
+      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-2", coachId: null, dayOfWeek: 3, startTime: "17:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null },
     ]);
     venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
     usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
@@ -720,8 +720,8 @@ describe("PlanningPage (integration)", () => {
         { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1 },
       ]);
       vi.mocked(getSlots).mockResolvedValue([
-        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null, temporaryLock: false },
-        { id: "slot-2", scheduleId: SID, teamId: "team-2", venueId: "venue-1", coachId: null, dayOfWeek: 2, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null, temporaryLock: false },
+        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null },
+        { id: "slot-2", scheduleId: SID, teamId: "team-2", venueId: "venue-1", coachId: null, dayOfWeek: 2, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null },
       ]);
       vi.mocked(moveSlot).mockRejectedValue(
         new MoveRejectedError([{ rule: "coach_double_booking", message: "le coach a déjà les U13 ici.", conflictingTeamId: "team-2" }]),
@@ -768,7 +768,7 @@ describe("PlanningPage (integration)", () => {
       const user = userEvent.setup();
       vi.mocked(lockSlot).mockResolvedValue({});
       vi.mocked(getSlots).mockResolvedValue([
-        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "HARD", lockOrigin: "RESERVATION", temporaryLock: false },
+        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "HARD", lockOrigin: "RESERVATION" },
       ]);
       renderWithProviders(<PlanningPage />);
 
@@ -787,7 +787,7 @@ describe("PlanningPage (integration)", () => {
       const user = userEvent.setup();
       vi.mocked(lockSlot).mockResolvedValue({});
       vi.mocked(getSlots).mockResolvedValue([
-        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "HARD", lockOrigin: "MANUAL", temporaryLock: false },
+        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "HARD", lockOrigin: "MANUAL" },
       ]);
       renderWithProviders(<PlanningPage />);
 

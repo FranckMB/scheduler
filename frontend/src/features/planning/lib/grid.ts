@@ -383,7 +383,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
     const venueLabel = venue?.name ?? "Gymnase ?";
     const mainCoachId = slotCoachId(slot, lookups);
     const coachLabel = coachName(lookups.coaches, mainCoachId);
-    const locked = "NONE" !== slot.lockLevel || slot.temporaryLock;
+    const locked = "NONE" !== slot.lockLevel;
     const label = labelOf(slot);
 
     for (const key of keysFor(slot)) {

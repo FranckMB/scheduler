@@ -5236,9 +5236,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5250,9 +5247,6 @@
             "startTime": "20:30:00",
             "durationMinutes": 120,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5264,9 +5258,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5278,9 +5269,6 @@
             "startTime": "09:30:00",
             "durationMinutes": 75,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5292,9 +5280,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5306,9 +5291,6 @@
             "startTime": "20:15:00",
             "durationMinutes": 135,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5320,9 +5302,6 @@
             "startTime": "09:00:00",
             "durationMinutes": 75,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5334,9 +5313,6 @@
             "startTime": "20:30:00",
             "durationMinutes": 120,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5348,9 +5324,6 @@
             "startTime": "20:30:00",
             "durationMinutes": 120,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5362,9 +5335,6 @@
             "startTime": "16:00:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5376,9 +5346,6 @@
             "startTime": "20:45:00",
             "durationMinutes": 105,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5390,9 +5357,6 @@
             "startTime": "16:00:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5404,9 +5368,6 @@
             "startTime": "20:30:00",
             "durationMinutes": 120,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5418,9 +5379,6 @@
             "startTime": "10:45:00",
             "durationMinutes": 75,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5432,9 +5390,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5446,9 +5401,6 @@
             "startTime": "16:00:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5460,9 +5412,6 @@
             "startTime": "16:00:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5474,9 +5423,6 @@
             "startTime": "20:30:00",
             "durationMinutes": 120,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5488,9 +5434,6 @@
             "startTime": "14:00:00",
             "durationMinutes": 105,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5502,9 +5445,6 @@
             "startTime": "16:00:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5516,9 +5456,6 @@
             "startTime": "20:30:00",
             "durationMinutes": 120,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5530,9 +5467,6 @@
             "startTime": "10:45:00",
             "durationMinutes": 60,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5544,9 +5478,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5558,9 +5489,6 @@
             "startTime": "11:30:00",
             "durationMinutes": 75,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5572,9 +5500,6 @@
             "startTime": "19:00:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5586,9 +5511,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5600,9 +5522,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5614,9 +5533,6 @@
             "startTime": "20:30:00",
             "durationMinutes": 120,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5628,9 +5544,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5642,9 +5555,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5656,9 +5566,6 @@
             "startTime": "16:00:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5670,9 +5577,6 @@
             "startTime": "14:00:00",
             "durationMinutes": 105,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5684,9 +5588,6 @@
             "startTime": "20:30:00",
             "durationMinutes": 120,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5698,9 +5599,6 @@
             "startTime": "10:15:00",
             "durationMinutes": 75,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5712,9 +5610,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5726,9 +5621,6 @@
             "startTime": "09:45:00",
             "durationMinutes": 60,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5740,9 +5632,6 @@
             "startTime": "20:30:00",
             "durationMinutes": 120,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5754,9 +5643,6 @@
             "startTime": "16:00:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5768,9 +5654,6 @@
             "startTime": "20:30:00",
             "durationMinutes": 120,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5782,9 +5665,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5796,9 +5676,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5810,9 +5687,6 @@
             "startTime": "17:30:00",
             "durationMinutes": 90,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         },
         {
@@ -5824,9 +5698,6 @@
             "startTime": "09:00:00",
             "durationMinutes": 45,
             "lockLevel": "HARD",
-            "temporaryLock": false,
-            "temporaryLockFor": null,
-            "temporaryMinSessionsOverride": null,
             "pendingConstraintSuggestion": null
         }
     ],

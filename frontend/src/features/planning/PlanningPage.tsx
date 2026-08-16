@@ -168,7 +168,6 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       lockLevel: "HARD" as const,
       // Ces pseudo-créneaux SONT des réservations — l'origine du verrou est explicite.
       lockOrigin: "RESERVATION" as const,
-      temporaryLock: false,
     })),
     [isFailed, reservationsQuery.data, validScheduleId, disabledVenueIds],
   );

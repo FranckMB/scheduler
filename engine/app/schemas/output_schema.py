@@ -19,12 +19,6 @@ class ScheduleSlotSchema(SerializableModel):
     start_time: time = Field(alias="startTime")
     duration_minutes: int = Field(alias="durationMinutes")
     lock_level: str = Field(default="NONE", alias="lockLevel")
-    temporary_lock: bool = Field(default=False, alias="temporaryLock")
-    temporary_lock_for: str | None = Field(default=None, alias="temporaryLockFor")
-    temporary_min_sessions_override: int | None = Field(
-        default=None,
-        alias="temporaryMinSessionsOverride",
-    )
     pending_constraint_suggestion: dict[str, object] | None = Field(
         default=None,
         alias="pendingConstraintSuggestion",

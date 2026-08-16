@@ -71,15 +71,6 @@ class ScheduleSlotTemplate implements TenantOwnedInterface
     #[ORM\Column(type: 'string', length: 20, nullable: true, enumType: LockOrigin::class)]
     private ?LockOrigin $lockOrigin = null;
 
-    #[ORM\Column(type: 'boolean')]
-    private bool $temporaryLock = false;
-
-    #[ORM\Column(type: 'guid', nullable: true)]
-    private ?string $temporaryLockFor = null;
-
-    #[ORM\Column(type: 'smallint', nullable: true)]
-    private ?int $temporaryMinSessionsOverride = null;
-
     /** @var array<string, mixed>|null */
     #[ORM\Column(type: 'json', nullable: true)]
     private ?array $pendingConstraintSuggestion = null;
@@ -267,47 +258,6 @@ class ScheduleSlotTemplate implements TenantOwnedInterface
     public function setLockOrigin(?LockOrigin $lockOrigin): self
     {
         $this->lockOrigin = $lockOrigin;
-
-        return $this;
-    }
-
-    public function getTemporaryLock(): bool
-    {
-        return $this->temporaryLock;
-    }
-
-    public function isTemporaryLock(): bool
-    {
-        return $this->temporaryLock;
-    }
-
-    public function setTemporaryLock(bool $temporaryLock): self
-    {
-        $this->temporaryLock = $temporaryLock;
-
-        return $this;
-    }
-
-    public function getTemporaryLockFor(): ?string
-    {
-        return $this->temporaryLockFor;
-    }
-
-    public function setTemporaryLockFor(?string $temporaryLockFor): self
-    {
-        $this->temporaryLockFor = $temporaryLockFor;
-
-        return $this;
-    }
-
-    public function getTemporaryMinSessionsOverride(): ?int
-    {
-        return $this->temporaryMinSessionsOverride;
-    }
-
-    public function setTemporaryMinSessionsOverride(?int $temporaryMinSessionsOverride): self
-    {
-        $this->temporaryMinSessionsOverride = $temporaryMinSessionsOverride;
 
         return $this;
     }

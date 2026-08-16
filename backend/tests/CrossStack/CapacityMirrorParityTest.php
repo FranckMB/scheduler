@@ -102,8 +102,7 @@ final class CapacityMirrorParityTest extends TestCase
         $pin = [[
             'id' => 'pin-1', 'teamId' => 't3', 'venueId' => 'v1', 'coachId' => null,
             'dayOfWeek' => 1, 'startTime' => '18:00', 'durationMinutes' => 90,
-            'lockLevel' => 'HARD', 'temporaryLock' => false, 'temporaryLockFor' => null,
-            'temporaryMinSessionsOverride' => null, 'pendingConstraintSuggestion' => null,
+            'lockLevel' => 'HARD', 'pendingConstraintSuggestion' => null,
         ]];
 
         $saturatedPayload = $this->basePayload(teams: $this->teams(3), venues: $venues, constraints: $minConstraints, slotTemplates: $pin);
@@ -143,8 +142,7 @@ final class CapacityMirrorParityTest extends TestCase
             slotTemplates: [[
                 'id' => 'pin-mort', 'teamId' => 't1', 'venueId' => 'v1', 'coachId' => null,
                 'dayOfWeek' => 2, 'startTime' => '18:00', 'durationMinutes' => 90, // horaire MORT
-                'lockLevel' => 'HARD', 'temporaryLock' => false, 'temporaryLockFor' => null,
-                'temporaryMinSessionsOverride' => null, 'pendingConstraintSuggestion' => null,
+                'lockLevel' => 'HARD', 'pendingConstraintSuggestion' => null,
             ]],
         );
 
@@ -244,8 +242,7 @@ final class CapacityMirrorParityTest extends TestCase
         return [
             'id' => \sprintf('pin-%s-%s-%d', $teamId, $venueId, $day), 'teamId' => $teamId, 'venueId' => $venueId,
             'coachId' => null, 'dayOfWeek' => $day, 'startTime' => $startTime, 'durationMinutes' => 90,
-            'lockLevel' => 'HARD', 'temporaryLock' => false, 'temporaryLockFor' => null,
-            'temporaryMinSessionsOverride' => null, 'pendingConstraintSuggestion' => null,
+            'lockLevel' => 'HARD', 'pendingConstraintSuggestion' => null,
         ];
     }
 

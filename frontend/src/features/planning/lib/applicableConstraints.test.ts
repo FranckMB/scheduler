@@ -14,7 +14,6 @@ const slot = (over: Partial<Slot> = {}): Slot => ({
   durationMinutes: 90,
   lockLevel: "NONE",
   lockOrigin: null,
-  temporaryLock: false,
   ...over,
 });
 

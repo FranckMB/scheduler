@@ -183,7 +183,6 @@ export interface Slot {
   lockLevel: LockLevel;
   /** Pourquoi ce créneau est verrouillé (F1). `null` quand il ne l'est pas. */
   lockOrigin: LockOrigin | null;
-  temporaryLock: boolean;
 }
 
 /** Les 7 familles de cause qu'un `session_below_effective_min` peut porter (contrat 2.8,

@@ -1,6 +1,14 @@
-Last verified @ 2026-08-16 (JSON **régénéré** — le rail de retouche `ScheduleSlotTemplate` devient READ-ONLY : `POST /api/schedule_slot_templates`, `PUT` et `DELETE /api/schedule_slot_templates/{id}` retirés, et le schéma `ScheduleSlotTemplate.ScheduleSlotTemplateInput` disparaît avec eux)
+Last verified @ 2026-08-16 (JSON **régénéré** — contrat 2.9 : le path placebo `POST /api/schedule-slots/{id}/manual-edit/constraint` et les 3 propriétés mortes `temporaryLock`/`temporaryLockFor`/`temporaryMinSessionsOverride` du schéma `ScheduleSlotTemplate` quittent le contrat ; 110 lignes retirées, aucune ajoutée)
 
 Changements récents :
+- **Contrat 2.9 — nettoyage des champs morts + endpoint placebo (2026-08-16)** : le path
+  `POST /api/schedule-slots/{id}/manual-edit/constraint` **quitte** le contrat (contrainte
+  créée sur des clés config que le solveur ne lit jamais — placebo persisté en contournant le
+  validateur) ; les deux autres actions du contrôleur (`manual-edit/lock`, `move`) restent. Le
+  schéma de lecture `ScheduleSlotTemplate` perd `temporaryLock`/`temporaryLockFor`/
+  `temporaryMinSessionsOverride` (jamais lus par le solveur, plus aucun writer). Set-diff :
+  1 path retiré, 3 propriétés retirées, aucune addition. Contrat backend⇄engine bumpé **2.8 → 2.9**
+  (retrait de champs sur un schéma `extra="forbid"` = rupture de recevabilité, bump requis).
 - **Rail de retouche read-only — CRUD d'écriture des créneaux retiré (2026-08-16)** : le
   déplacement d'un créneau passe sous le verdict moteur (`POST /api/schedule-slots/{id}/move`)
   et les verrous/contraintes par `manual-edit` ; le CRUD API Platform brut des
