@@ -52,7 +52,7 @@ final class MoveSlotService
      * @throws ScheduleGenerationInProgressException une génération tourne pour ce club (→ 409)
      * @throws InvalidArgumentException              le créneau n'a pas de planning parent (état incohérent)
      *
-     * @return array{valid: bool, violations: list<array{rule: string, message: string}>}
+     * @return array{valid: bool, violations: list<array{rule: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string, conflictingTeamId: ?string}>}
      */
     public function move(ScheduleSlotTemplate $slot, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId): array
     {
@@ -175,13 +175,17 @@ final class MoveSlotService
     }
 
     /**
-     * Les règles violées, réduites à ce que l'UI exploite : un code de règle (pour brancher)
-     * et un message déjà humain (le moteur y nomme coach/gymnase/heure). Rien d'autre ne
-     * quitte le moteur — les ids internes restent côté serveur.
+     * Les règles violées, réduites à ce que l'UI exploite : un code de règle (pour brancher),
+     * un message déjà humain (le moteur y nomme coach/gymnase/heure) ET les ids des entités
+     * fautives, tels que le moteur les émet — pour surligner le conflit côté front. Ce ne sont
+     * pas des ids « internes » cachés : ils désignent des entités que le client possède déjà
+     * (ses équipes/coachs/gymnases). `conflictingTeamId` porte l'équipe DÉJÀ en place qui
+     * bloque le candidat. Chaque champ est null-safe : absent du verdict → null, jamais une
+     * clé manquante.
      *
      * @param array<string, mixed> $result
      *
-     * @return list<array{rule: string, message: string}>
+     * @return list<array{rule: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string, conflictingTeamId: ?string}>
      */
     private function namedViolations(array $result): array
     {
@@ -189,7 +193,12 @@ final class MoveSlotService
         if (!\is_array($raw)) {
             $this->logger->warning('Engine returned an invalid verdict with no violations array.');
 
-            return [['rule' => 'unknown_hard_conflict', 'message' => 'Ce déplacement casse une règle du moteur qui n\'a pas pu être nommée.']];
+            return [[
+                'rule' => 'unknown_hard_conflict',
+                'message' => 'Ce déplacement casse une règle du moteur qui n\'a pas pu être nommée.',
+                'teamId' => null, 'coachId' => null, 'venueId' => null,
+                'dayOfWeek' => null, 'startTime' => null, 'conflictingTeamId' => null,
+            ]];
         }
 
         $violations = [];
@@ -200,9 +209,21 @@ final class MoveSlotService
             $violations[] = [
                 'rule' => (string) ($entry['rule'] ?? 'unknown_hard_conflict'),
                 'message' => (string) ($entry['message'] ?? 'Ce déplacement casse une règle du moteur.'),
+                'teamId' => $this->nullableString($entry['teamId'] ?? null),
+                'coachId' => $this->nullableString($entry['coachId'] ?? null),
+                'venueId' => $this->nullableString($entry['venueId'] ?? null),
+                'dayOfWeek' => isset($entry['dayOfWeek']) ? (int) $entry['dayOfWeek'] : null,
+                'startTime' => $this->nullableString($entry['startTime'] ?? null),
+                'conflictingTeamId' => $this->nullableString($entry['conflictingTeamId'] ?? null),
             ];
         }
 
         return $violations;
+    }
+
+    /** Passe l'id tel quel (string) ou null s'il est absent/null — jamais un cast d'array/objet. */
+    private function nullableString(mixed $value): ?string
+    {
+        return \is_scalar($value) ? (string) $value : null;
     }
 }

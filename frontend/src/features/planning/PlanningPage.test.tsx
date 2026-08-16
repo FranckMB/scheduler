@@ -3,9 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SchedulePlan } from "@/features/cockpit/api";
+import { useToastStore } from "@/shared/stores/toastStore";
 import { renderWithProviders } from "@/test/utils";
 
-import { getDiagnostics, getSlots, getTrainingSlots, getVenues, listSchedules, OverlaysExistError, reopenSchedule } from "./api";
+import { getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, reopenSchedule } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -31,9 +32,9 @@ vi.mock("./api", () => {
   }
   // F2b : mêmes classes réelles pour que `error instanceof …` branche depuis un moveSlot moqué.
   class MoveRejectedError extends Error {
-    public violations: { rule: string; message: string }[];
+    public violations: { rule: string; message: string; conflictingTeamId?: string | null; teamId?: string | null; coachId?: string | null; venueId?: string | null; dayOfWeek?: number | null; startTime?: string | null }[];
 
-    constructor(violations: { rule: string; message: string }[]) {
+    constructor(violations: { rule: string; message: string; conflictingTeamId?: string | null; teamId?: string | null; coachId?: string | null; venueId?: string | null; dayOfWeek?: number | null; startTime?: string | null }[]) {
       super("move_rejected");
       this.name = "MoveRejectedError";
       this.violations = violations;
@@ -693,5 +694,108 @@ describe("PlanningPage (integration)", () => {
     await user.click(screen.getByRole("button", { name: /valider/i }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Valider" }));
     expect(navigate).toHaveBeenCalledWith("/planning");
+  });
+
+  // F2b — retouche du rail : le geste PARLE (toast + surlignage du conflit) et déverrouiller
+  // une RÉSERVATION demande confirmation.
+  describe("retouche : feedback des gestes", () => {
+    beforeEach(() => {
+      useToastStore.setState({ toasts: [] });
+      vi.mocked(moveSlot).mockReset();
+      vi.mocked(lockSlot).mockReset();
+    });
+
+    // Sélectionne le créneau, rend le formulaire de déplacement « dirty », déclenche « Déplacer ».
+    async function requestMove(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+      await user.click(await screen.findByText("U11"));
+      await user.selectOptions(await screen.findByLabelText("Jour"), "3");
+      await user.click(screen.getByRole("button", { name: /Déplacer/ }));
+    }
+
+    it("un déplacement REFUSÉ surligne le créneau de l'équipe en conflit (conflictingTeamId)", async () => {
+      const user = userEvent.setup();
+      // Deux équipes placées : l'une est déplacée, l'autre (team-2) est nommée par le verdict.
+      vi.mocked(getTeams).mockResolvedValue([
+        { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0 },
+        { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1 },
+      ]);
+      vi.mocked(getSlots).mockResolvedValue([
+        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null, temporaryLock: false },
+        { id: "slot-2", scheduleId: SID, teamId: "team-2", venueId: "venue-1", coachId: null, dayOfWeek: 2, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null, temporaryLock: false },
+      ]);
+      vi.mocked(moveSlot).mockRejectedValue(
+        new MoveRejectedError([{ rule: "coach_double_booking", message: "le coach a déjà les U13 ici.", conflictingTeamId: "team-2" }]),
+      );
+      const { container } = renderWithProviders(<PlanningPage />);
+      await requestMove(user);
+
+      // Le refus s'affiche…
+      expect(await screen.findByText(/Déplacement refusé/)).toBeInTheDocument();
+      // …et la grille met en avant slot-2 (équipe en conflit) en estompant les AUTRES cases.
+      await vi.waitFor(() => {
+        const slot1 = container.querySelector('[data-slot-id="slot-1"]');
+        const slot2 = container.querySelector('[data-slot-id="slot-2"]');
+        expect(slot2?.className).not.toContain("opacity-30");
+        expect(slot1?.className).toContain("opacity-30");
+      });
+    });
+
+    it("un déplacement ACCEPTÉ affiche un toast de succès et rafraîchit les diagnostics", async () => {
+      const user = userEvent.setup();
+      vi.mocked(moveSlot).mockResolvedValue({});
+      renderWithProviders(<PlanningPage />);
+      await screen.findByText("U11");
+      const diagBefore = vi.mocked(getDiagnostics).mock.calls.length;
+
+      await requestMove(user);
+
+      await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "success" === t.variant)).toBe(true));
+      await vi.waitFor(() => expect(vi.mocked(getDiagnostics).mock.calls.length).toBeGreaterThan(diagBefore));
+    });
+
+    it("un verrouillage qui ÉCHOUE affiche un toast d'erreur", async () => {
+      const user = userEvent.setup();
+      vi.mocked(lockSlot).mockRejectedValue(new Error("boom"));
+      renderWithProviders(<PlanningPage />);
+
+      await user.click(await screen.findByText("U11"));
+      await user.click(await screen.findByRole("button", { name: /Verrouiller/ }));
+
+      await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "error" === t.variant)).toBe(true));
+    });
+
+    it("déverrouiller une RÉSERVATION demande confirmation avant de muter", async () => {
+      const user = userEvent.setup();
+      vi.mocked(lockSlot).mockResolvedValue({});
+      vi.mocked(getSlots).mockResolvedValue([
+        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "HARD", lockOrigin: "RESERVATION", temporaryLock: false },
+      ]);
+      renderWithProviders(<PlanningPage />);
+
+      await user.click(await screen.findByText("U11"));
+      await user.click(await screen.findByRole("button", { name: /Déverrouiller/ }));
+
+      // Un dialogue s'interpose — rien n'est muté tant qu'on n'a pas confirmé.
+      const dialog = await screen.findByRole("dialog");
+      expect(vi.mocked(lockSlot)).not.toHaveBeenCalled();
+
+      await user.click(within(dialog).getByRole("button", { name: /Déverrouiller/ }));
+      await vi.waitFor(() => expect(vi.mocked(lockSlot)).toHaveBeenCalledWith("slot-1", "NONE"));
+    });
+
+    it("déverrouiller un épinglage MANUEL mute directement, sans dialogue", async () => {
+      const user = userEvent.setup();
+      vi.mocked(lockSlot).mockResolvedValue({});
+      vi.mocked(getSlots).mockResolvedValue([
+        { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "HARD", lockOrigin: "MANUAL", temporaryLock: false },
+      ]);
+      renderWithProviders(<PlanningPage />);
+
+      await user.click(await screen.findByText("U11"));
+      await user.click(await screen.findByRole("button", { name: /Déverrouiller/ }));
+
+      await vi.waitFor(() => expect(vi.mocked(lockSlot)).toHaveBeenCalledWith("slot-1", "NONE"));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
   });
 });

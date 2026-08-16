@@ -9147,6 +9147,36 @@
                                                     "message": {
                                                         "type": "string",
                                                         "description": "Human sentence naming the coach/venue/time in conflict"
+                                                    },
+                                                    "teamId": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Team the violation is about (grid highlighting)"
+                                                    },
+                                                    "coachId": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Coach in conflict, when the rule involves one"
+                                                    },
+                                                    "venueId": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Venue involved in the violation"
+                                                    },
+                                                    "dayOfWeek": {
+                                                        "type": "integer",
+                                                        "nullable": true,
+                                                        "description": "ISO day (1-7) of the conflicting occupation"
+                                                    },
+                                                    "startTime": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Start time (HH:MM) of the conflicting occupation"
+                                                    },
+                                                    "conflictingTeamId": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Team already occupying the target slot"
                                                     }
                                                 }
                                             }
@@ -12258,101 +12288,6 @@
                         "explode": true
                     }
                 ]
-            },
-            "post": {
-                "operationId": "api_schedule_slot_templates_post",
-                "tags": [
-                    "ScheduleSlotTemplate"
-                ],
-                "responses": {
-                    "201": {
-                        "description": "ScheduleSlotTemplate resource created",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ScheduleSlotTemplate.jsonld"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ScheduleSlotTemplate"
-                                }
-                            },
-                            "text/html": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ScheduleSlotTemplate.html"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "400": {
-                        "description": "Invalid input",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "422": {
-                        "description": "An error occurred",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation"
-                                }
-                            }
-                        },
-                        "links": {}
-                    }
-                },
-                "summary": "Creates a ScheduleSlotTemplate resource.",
-                "description": "Creates a ScheduleSlotTemplate resource.",
-                "parameters": [],
-                "requestBody": {
-                    "description": "The new ScheduleSlotTemplate resource",
-                    "content": {
-                        "application/ld+json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ScheduleSlotTemplate.ScheduleSlotTemplateInput"
-                            }
-                        },
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ScheduleSlotTemplate.ScheduleSlotTemplateInput"
-                            }
-                        },
-                        "text/html": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ScheduleSlotTemplate.ScheduleSlotTemplateInput"
-                            }
-                        }
-                    },
-                    "required": true
-                }
             }
         },
         "/api/schedule_slot_templates/{id}": {
@@ -12406,183 +12341,6 @@
                 },
                 "summary": "Retrieves a ScheduleSlotTemplate resource.",
                 "description": "Retrieves a ScheduleSlotTemplate resource.",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "ScheduleSlotTemplate identifier",
-                        "required": true,
-                        "deprecated": false,
-                        "schema": {
-                            "type": "string"
-                        },
-                        "style": "simple",
-                        "explode": false
-                    }
-                ]
-            },
-            "put": {
-                "operationId": "api_schedule_slot_templates_id_put",
-                "tags": [
-                    "ScheduleSlotTemplate"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "ScheduleSlotTemplate resource updated",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ScheduleSlotTemplate.jsonld"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ScheduleSlotTemplate"
-                                }
-                            },
-                            "text/html": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ScheduleSlotTemplate.html"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "400": {
-                        "description": "Invalid input",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "422": {
-                        "description": "An error occurred",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ConstraintViolation"
-                                }
-                            }
-                        },
-                        "links": {}
-                    },
-                    "404": {
-                        "description": "Not found",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    }
-                },
-                "summary": "Replaces the ScheduleSlotTemplate resource.",
-                "description": "Replaces the ScheduleSlotTemplate resource.",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "ScheduleSlotTemplate identifier",
-                        "required": true,
-                        "deprecated": false,
-                        "schema": {
-                            "type": "string"
-                        },
-                        "style": "simple",
-                        "explode": false
-                    }
-                ],
-                "requestBody": {
-                    "description": "The updated ScheduleSlotTemplate resource",
-                    "content": {
-                        "application/ld+json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ScheduleSlotTemplate.ScheduleSlotTemplateInput"
-                            }
-                        },
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ScheduleSlotTemplate.ScheduleSlotTemplateInput"
-                            }
-                        },
-                        "text/html": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ScheduleSlotTemplate.ScheduleSlotTemplateInput"
-                            }
-                        }
-                    },
-                    "required": true
-                }
-            },
-            "delete": {
-                "operationId": "api_schedule_slot_templates_id_delete",
-                "tags": [
-                    "ScheduleSlotTemplate"
-                ],
-                "responses": {
-                    "204": {
-                        "description": "ScheduleSlotTemplate resource deleted"
-                    },
-                    "404": {
-                        "description": "Not found",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    }
-                },
-                "summary": "Removes the ScheduleSlotTemplate resource.",
-                "description": "Removes the ScheduleSlotTemplate resource.",
                 "parameters": [
                     {
                         "name": "id",
@@ -23948,101 +23706,6 @@
                     "temporaryLock": {
                         "default": false,
                         "type": "boolean"
-                    },
-                    "temporaryLockFor": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "temporaryMinSessionsOverride": {
-                        "type": [
-                            "integer",
-                            "null"
-                        ]
-                    },
-                    "pendingConstraintSuggestion": {
-                        "type": [
-                            "object",
-                            "null"
-                        ],
-                        "additionalProperties": {
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        }
-                    }
-                }
-            },
-            "ScheduleSlotTemplate.ScheduleSlotTemplateInput": {
-                "type": "object",
-                "required": [
-                    "scheduleId",
-                    "teamId",
-                    "venueId"
-                ],
-                "properties": {
-                    "scheduleId": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "teamId": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "venueId": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "coachId": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "dayOfWeek": {
-                        "minimum": 1,
-                        "maximum": 7,
-                        "type": [
-                            "integer",
-                            "null"
-                        ]
-                    },
-                    "startTime": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "durationMinutes": {
-                        "default": 90,
-                        "type": [
-                            "integer",
-                            "null"
-                        ]
-                    },
-                    "lockLevel": {
-                        "type": [
-                            "string",
-                            "null"
-                        ],
-                        "enum": [
-                            "NONE",
-                            "SOFT",
-                            "HARD",
-                            null
-                        ]
-                    },
-                    "temporaryLock": {
-                        "type": [
-                            "boolean",
-                            "null"
-                        ]
                     },
                     "temporaryLockFor": {
                         "type": [

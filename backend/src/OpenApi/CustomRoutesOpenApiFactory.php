@@ -1956,6 +1956,12 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                             'violations' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
                                 'rule' => ['type' => 'string', 'description' => 'Machine code of the broken rule (UI branches on it)'],
                                 'message' => ['type' => 'string', 'description' => 'Human sentence naming the coach/venue/time in conflict'],
+                                'teamId' => ['type' => 'string', 'nullable' => true, 'description' => 'Team the violation is about (grid highlighting)'],
+                                'coachId' => ['type' => 'string', 'nullable' => true, 'description' => 'Coach in conflict, when the rule involves one'],
+                                'venueId' => ['type' => 'string', 'nullable' => true, 'description' => 'Venue involved in the violation'],
+                                'dayOfWeek' => ['type' => 'integer', 'nullable' => true, 'description' => 'ISO day (1-7) of the conflicting occupation'],
+                                'startTime' => ['type' => 'string', 'nullable' => true, 'description' => 'Start time (HH:MM) of the conflicting occupation'],
+                                'conflictingTeamId' => ['type' => 'string', 'nullable' => true, 'description' => 'Team already occupying the target slot'],
                             ]]],
                         ],
                     ]),

@@ -28,6 +28,7 @@ import { GenerationWaiting } from "./GenerationWaiting";
 import { buildTagTeamIds } from "./lib/applicableConstraints";
 import { topSeveritySummary } from "./lib/diagnosticsSummary";
 import { computeEmptySlots } from "./lib/emptySlots";
+import { violationHighlightSlotIds } from "./lib/violationHighlight";
 import { availableResourceGroups, buildGrid, type Lookups, slotGroupKey } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
 import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
@@ -109,6 +110,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const { viewMode, selectedScheduleId, selectedSlotId, resourceFilter, setViewMode, setSelectedScheduleId, setSelectedSlotId, toggleResource, clearResourceFilter } =
     usePlanningStore();
   const [highlightSlotIds, setHighlightSlotIds] = useState<Set<string>>(new Set());
+  // Déverrouiller un créneau né d'une RÉSERVATION de gymnase demande confirmation (F1) : c'est
+  // un engagement pris hors de l'app, à ne pas relâcher par inadvertance.
+  const [confirmUnlockReservation, setConfirmUnlockReservation] = useState(false);
   // Source partagée avec le cockpit (radar/DayDialog) — une seule dérivation de
   // la saison de travail, plus de copie inline qui pourrait diverger.
   const workingSeason = useWorkingSeason();
@@ -356,6 +360,20 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   useEffect(() => {
     moveReset();
   }, [selectedSlotId, moveReset]);
+
+  // Un déplacement REFUSÉ surligne le créneau de l'équipe EN CONFLIT (le moteur l'a nommée) —
+  // présentation pure, on retrouve juste où elle siège dans le cache affiché. Ajustement en
+  // phase de rendu (le lint du dépôt interdit setState dans un effet), clé = l'instance
+  // d'erreur : au reset (changement de créneau, nouvel essai), moveState quitte « rejected »
+  // et le surlignage s'efface — sans jamais écraser un surlignage venu d'un diagnostic.
+  const [rejectionHandled, setRejectionHandled] = useState<unknown>(null);
+  if ("rejected" === moveState.status && moveMutation.error !== rejectionHandled) {
+    setRejectionHandled(moveMutation.error);
+    setHighlightSlotIds(violationHighlightSlotIds(moveState.violations, slots));
+  } else if ("rejected" !== moveState.status && null !== rejectionHandled) {
+    setRejectionHandled(null);
+    setHighlightSlotIds(new Set());
+  }
 
   const lookups: Lookups = useMemo(() => {
     // teamId → main coachId (the engine leaves slot.coachId empty).
@@ -791,7 +809,16 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           // côté serveur : déplacer/verrouiller le viserait dans le vide.
                           readOnly={isReadOnly || isFailed}
                           onClose={() => setSelectedSlotId(null)}
-                          onToggleLock={() => lockMutation.mutate({ id: selectedSlot.id, lockLevel: selectedCell.locked ? "NONE" : "HARD" })}
+                          onToggleLock={() => {
+                            // Déverrouiller une RÉSERVATION → confirmation d'abord (l'engagement
+                            // gymnase est pris hors de l'app). MANUAL/UNKNOWN, et tout
+                            // verrouillage, mutent directement.
+                            if (selectedCell.locked && "RESERVATION" === selectedSlot.lockOrigin) {
+                              setConfirmUnlockReservation(true);
+                              return;
+                            }
+                            lockMutation.mutate({ id: selectedSlot.id, lockLevel: selectedCell.locked ? "NONE" : "HARD" });
+                          }}
                           onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
                         />
                       ) : null}
@@ -828,6 +855,20 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         confirmPhrase="modifier mon planning de saison"
         onConfirm={() => reopen(true)}
         onCancel={() => setReopenOverlayCount(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmUnlockReservation}
+        title="Déverrouiller ce créneau réservé ?"
+        description="Ce créneau vient d'une réservation de gymnase. En le déverrouillant, la prochaine génération pourra le déplacer ou le libérer — vérifiez auprès du gymnase avant de continuer."
+        confirmLabel="Déverrouiller"
+        onConfirm={() => {
+          if (null !== selectedSlot) {
+            lockMutation.mutate({ id: selectedSlot.id, lockLevel: "NONE" });
+          }
+          setConfirmUnlockReservation(false);
+        }}
+        onCancel={() => setConfirmUnlockReservation(false)}
       />
 
       <ConfirmDialog

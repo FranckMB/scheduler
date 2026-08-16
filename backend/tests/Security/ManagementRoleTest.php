@@ -74,7 +74,6 @@ final class ManagementRoleTest extends WebTestCase
     {
         return [
             ['POST', '/api/schedules', '{"name":"t","status":"DRAFT"}'],
-            ['POST', '/api/schedule_slot_templates', '{"scheduleId":"' . self::DUMMY_ID . '","teamId":"' . self::DUMMY_ID . '","venueId":"' . self::DUMMY_ID . '","dayOfWeek":1,"startTime":"18:00"}'],
             // #10 — les doléances coachs sont management-only (le guard tire AVANT tout
             // lookup, donc un corps minimal-valide suffit à atteindre le processor).
             // UUID valide-en-forme (le nil-uuid échoue la validation Uuid stricte AVANT le

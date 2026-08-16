@@ -19,6 +19,7 @@ use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
@@ -43,6 +44,23 @@ final class ScheduleSlotTemplateApiTest extends WebTestCase
     private User $user;
 
     private Season $season;
+
+    /**
+     * Le rail de retouche est READ-ONLY : le CRUD brut d'écriture a disparu (le déplacement
+     * passe sous le verdict moteur via /move, verrous/contraintes par manual-edit). POST sur
+     * la collection et PUT/DELETE sur l'item ne sont plus des routes — même pour un manager,
+     * c'est 405 Method Not Allowed (route absente), jamais un 403 de rôle.
+     *
+     * @return list<array{0: string, 1: bool}> [verbe HTTP, cible = item ?]
+     */
+    public static function removedWriteVerbs(): array
+    {
+        return [
+            ['POST', false],
+            ['PUT', true],
+            ['DELETE', true],
+        ];
+    }
 
     public function testSlotsFilteredByScheduleIdReturnOnlyThatSchedule(): void
     {
@@ -93,6 +111,25 @@ final class ScheduleSlotTemplateApiTest extends WebTestCase
         foreach ($members as $diag) {
             self::assertSame($scheduleA->getId(), $diag['scheduleId']);
         }
+    }
+
+    #[DataProvider('removedWriteVerbs')]
+    public function testWriteRoutesAreRemoved(string $method, bool $item): void
+    {
+        $this->client->loginUser($this->user);
+
+        $schedule = $this->createSchedule('Planning RO');
+        $this->createSlot($schedule);
+        $slotId = $this->getMembers('/api/schedule_slot_templates?scheduleId=' . $schedule->getId())[0]['id'];
+
+        $url = '/api/schedule_slot_templates' . ($item ? '/' . $slotId : '');
+        $this->client->request($method, $url, [], [], [
+            'HTTP_X-Club-Id' => $this->club->getId(),
+            'CONTENT_TYPE' => 'application/ld+json',
+        ], '{"scheduleId":"' . $schedule->getId() . '","teamId":"' . Uuid::v4()->toRfc4122() . '","venueId":"' . Uuid::v4()->toRfc4122() . '","dayOfWeek":1,"startTime":"18:00"}');
+
+        $status = $this->client->getResponse()->getStatusCode();
+        self::assertContains($status, [404, 405], \sprintf('%s %s doit être supprimé (404/405), reçu %d', $method, $url, $status));
     }
 
     protected function setUp(): void

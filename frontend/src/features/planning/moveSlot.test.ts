@@ -44,6 +44,29 @@ describe("moveSlot — sous le verdict moteur (F2b)", () => {
     expect((caught as MoveRejectedError).violations[0].message).toContain("Dupont");
   });
 
+  it("porte les ids du verdict (surlignage du conflit) — conflictingTeamId compris", async () => {
+    const violations = [
+      {
+        rule: "coach_double_booking",
+        message: "le coach Dupont a déjà les U15 à 20h.",
+        coachId: "coach-1",
+        dayOfWeek: 4,
+        startTime: "20:00",
+        conflictingTeamId: "team-u15",
+        teamId: null,
+        venueId: null,
+      },
+    ];
+    mockPost.mockReturnValue({ json: () => Promise.reject(httpError(422, { valid: false, violations })) } as never);
+
+    const caught = (await moveSlot("s1", { dayOfWeek: 4, startTime: "20:00", venueId: "v2" }).catch((e: unknown) => e)) as MoveRejectedError;
+    expect(caught).toBeInstanceOf(MoveRejectedError);
+    expect(caught.violations[0].conflictingTeamId).toBe("team-u15");
+    expect(caught.violations[0].coachId).toBe("coach-1");
+    expect(caught.violations[0].dayOfWeek).toBe(4);
+    expect(caught.violations[0].teamId).toBeNull();
+  });
+
   it("traduit un 409 generation_in_progress en GenerationInProgressError", async () => {
     mockPost.mockReturnValue({ json: () => Promise.reject(httpError(409, { code: "generation_in_progress" })) } as never);
     await expect(moveSlot("s1", { dayOfWeek: 4, startTime: "20:00", venueId: "v2" })).rejects.toBeInstanceOf(GenerationInProgressError);

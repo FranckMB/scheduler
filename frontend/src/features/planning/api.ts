@@ -326,11 +326,20 @@ export interface Constraint {
 export const lockSlot = (id: string, lockLevel: LockLevel): Promise<unknown> =>
   api.post(`schedule-slots/${id}/manual-edit/lock`, { json: { lockLevel } }).json();
 
-/** Une règle HARD cassée par un déplacement refusé : un code machine (pour brancher) + un
- *  message déjà humain (le moteur y nomme coach/gymnase/heure). */
+/** Une règle HARD cassée par un déplacement refusé : un code machine (pour brancher), un
+ *  message déjà humain (le moteur y nomme coach/gymnase/heure) ET les ids des entités
+ *  fautives, tels que le moteur les émet — pour surligner le conflit côté écran. Chaque id
+ *  est optionnel et nullable (absent du verdict → null). `conflictingTeamId` porte l'équipe
+ *  DÉJÀ en place qui bloque le candidat. Miroir de `AssignmentViolationSchema` (contrat 2.8). */
 export interface MoveViolation {
   rule: string;
   message: string;
+  teamId?: string | null;
+  coachId?: string | null;
+  venueId?: string | null;
+  dayOfWeek?: number | null;
+  startTime?: string | null;
+  conflictingTeamId?: string | null;
 }
 
 /** Le moteur a REFUSÉ le déplacement (422) : il n'a pas eu lieu, voici les règles violées. */

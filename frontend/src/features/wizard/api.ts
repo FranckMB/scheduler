@@ -488,15 +488,3 @@ export const generateSchedule = (id: string): Promise<unknown> => api.post(`sche
 
 export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
 export const getSchedule = (id: string): Promise<{ id: string; status: ScheduleStatus }> => api.get(`schedules/${id}`).json();
-
-export interface SlotTemplatePayload {
-  scheduleId: string;
-  teamId: string;
-  venueId: string;
-  dayOfWeek: number;
-  startTime: string;
-  durationMinutes: number;
-  lockLevel: "HARD";
-}
-
-export const createSlotTemplate = (body: SlotTemplatePayload): Promise<{ id: string }> => api.post("schedule_slot_templates", { json: body }).json();

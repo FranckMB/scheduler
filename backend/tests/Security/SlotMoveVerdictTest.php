@@ -62,7 +62,11 @@ final class SlotMoveVerdictTest extends KernelTestCase
 
     private const string ACCEPT = '{"valid":true,"violations":[],"metrics":{"solver_version":"cp-sat","nb_variables":0,"nb_constraints":0,"wall_time_ms":0}}';
 
-    private const string REFUSE = '{"valid":false,"violations":[{"rule":"coach_double_booking","message":"le coach Dupont a déjà les U15 à 20h dans un autre gymnase."}],"metrics":{"solver_version":"cp-sat","nb_variables":0,"nb_constraints":0,"wall_time_ms":0}}';
+    private const string CONFLICTING_TEAM_ID = '99999999-9999-4999-8999-999999999999';
+
+    private const string COACH_ID = '88888888-8888-4888-8888-888888888888';
+
+    private const string REFUSE = '{"valid":false,"violations":[{"rule":"coach_double_booking","message":"le coach Dupont a déjà les U15 à 20h dans un autre gymnase.","coachId":"88888888-8888-4888-8888-888888888888","dayOfWeek":4,"startTime":"20:00","conflictingTeamId":"99999999-9999-4999-8999-999999999999"}],"metrics":{"solver_version":"cp-sat","nb_variables":0,"nb_constraints":0,"wall_time_ms":0}}';
 
     private EntityManagerInterface $em;
 
@@ -81,6 +85,15 @@ final class SlotMoveVerdictTest extends KernelTestCase
         self::assertFalse($result['valid']);
         self::assertNotEmpty($result['violations']);
         self::assertSame('coach_double_booking', $result['violations'][0]['rule']);
+        // Les ids du verdict transitent vers l'UI (surlignage du conflit) — tels que le moteur
+        // les émet. conflictingTeamId nomme l'équipe DÉJÀ en place qui bloque le candidat.
+        self::assertSame(self::CONFLICTING_TEAM_ID, $result['violations'][0]['conflictingTeamId']);
+        self::assertSame(self::COACH_ID, $result['violations'][0]['coachId']);
+        self::assertSame(4, $result['violations'][0]['dayOfWeek']);
+        self::assertSame('20:00', $result['violations'][0]['startTime']);
+        // Absents du verdict → null-safe, jamais une clé manquante.
+        self::assertNull($result['violations'][0]['teamId']);
+        self::assertNull($result['violations'][0]['venueId']);
 
         $this->em->clear();
         $this->scopeGucToClub($ctx['clubId']);

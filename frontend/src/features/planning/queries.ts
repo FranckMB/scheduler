@@ -103,6 +103,9 @@ export function useLockSlot() {
   return useMutation({
     mutationFn: ({ id, lockLevel }: { id: string; lockLevel: LockLevel }) => planningApi.lockSlot(id, lockLevel),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["slots"] }),
+    // Un verrouillage qui échoue (moteur/réseau) restait MUET : le cadenas ne bougeait pas
+    // sans un mot. On remonte le motif du serveur (patron useReopenSchedule/useRegenerate).
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
   });
 }
 
@@ -111,11 +114,16 @@ export function useMoveSlot() {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: SlotMovePatch }) => planningApi.moveSlot(id, patch),
     // Un déplacement accepté change le placement (slots) ET pose le marqueur « score
-    // périmé » sur le planning (schedules) — on rafraîchit les deux. Un refus throw :
+    // périmé » sur le planning (schedules) — et le moteur a rejugé la légalité, donc les
+    // diagnostics du planning peuvent bouger : on rafraîchit les trois. Un refus throw :
     // onSuccess ne part pas, rien n'est réinvalidé (rien n'a bougé).
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["slots"] });
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      void queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
+      // Le geste PARLE : sans un mot, un déplacement accepté était indistinguable d'un refus
+      // silencieux (le créneau bougeait, mais rien ne confirmait que le moteur avait dit oui).
+      toast.success("Créneau déplacé.");
     },
   });
 }

@@ -1,6 +1,6 @@
 # Cycle de vie des plannings — le pointeur du plan (N3)
 
-Last verified @ 2026-08-11 (recalé ce jour par le lot fixtures : **le FakeClub d'onboarding (ARA00TEST) est supprimé du seed**, la fixture dev seede désormais le club BCCL PUIS le club de DÉMONSTRATION — les deux en état 1 ; sur le fond, aucune modification depuis le 2026-07-31 — ADR-0002 et ses amendements restent la source)
+Last verified @ 2026-08-16 (recalé ce jour par P4-102 : `schedule_slot_templates` devient read-only — §2 ligne « Chemins d'édition sans garde de statut » et §3.2 perdent le 4ᵉ chemin `ScheduleSlotTemplateStateProcessor`, retiré avec le CRUD brut qu'il gardait ; `manual-edit/one-time`, déjà mort depuis P4-86, cède la place à `move` dans les deux mêmes lignes) ; précédemment : 2026-08-11 (recalé ce jour par le lot fixtures : **le FakeClub d'onboarding (ARA00TEST) est supprimé du seed**, la fixture dev seede désormais le club BCCL PUIS le club de DÉMONSTRATION — les deux en état 1 ; sur le fond, aucune modification depuis le 2026-07-31 — ADR-0002 et ses amendements restent la source)
 
 > **Bascule 2026-07-16 (ADR-0002, `docs/architecture/adr-0002-pattern-plan.md`)** : le **plan de
 > type SEASON** (`schedule_plan`) et **la version qu'il pointe** (`chosen_schedule_id`) SONT le
@@ -52,7 +52,7 @@ Ancrages : `AuthGuard.tsx` (onboarding = `!seasonPlan.hasFinishedVersion`), `Coc
 | `Schedule` | `name` (`:40`, len 180), `status` (`enumType`, `:42-43`), `version` (optimistic `:24`), `seasonId` (`:36`) |
 | `/validate` actuel | `POST /api/schedules/{id}/validate` → **pose le baseline** (`season.setBaselineScheduleId`, `ValidateScheduleController.php:57`), garde `status==COMPLETED` sinon 409 (`:48`), garde tenant `resolveCurrentClubId` + 403 (`:43-46`, pattern `:63-78`) |
 | baseline auto | `assignBaselineIfFirst()` au 1er succès si `baselineScheduleId` null (`GenerateScheduleHandler.php:211-216`) |
-| Chemins d'édition **sans garde de statut** | `GenerateScheduleController` (regen `:46`) · `ManualEditController` (constraint `:27`, lock `:65`, one-time `:97`) · `ScheduleSlotTemplateStateProcessor` (CRUD slots) · `ScheduleStateProcessor` PUT (`name/status/solverSeed` `:48-61`) |
+| Chemins d'édition **sans garde de statut** | `GenerateScheduleController` (regen `:46`) · `ManualEditController` (constraint, lock, move) · `ScheduleStateProcessor` PUT (`name/status/solverSeed` `:48-61`) — `schedule_slot_templates` est **read-only depuis 2026-08-16** (P4-102), plus de CRUD brut à garder ici |
 | `ScheduleInput.status` | `Choice` = 5 statuts actuels (`Dto/ScheduleInput.php:17-19`) |
 | Contrat engine | `ScheduleInputSchema` **sans status** ; output engine = littéral `queued/generating/completed/failed` ≠ enum backend ; `ContractSchemaTest` le vérifie → **VALIDATED n'impacte pas l'engine** |
 | Front | unions `ScheduleStatus` (`planning/api.ts:43`, `wizard/api.ts:205`) · `validateSchedule()`+`useValidateSchedule()` **existent mais inutilisés** (`planning/queries.ts:91`) · `pickDefaultSchedule` ne matche que `COMPLETED` (`PlanningPage.tsx:21-27`) · `IN_FLIGHT` dupliqué (`PlanningPage:18`, `queries:6`) · `SlotDetail`/`WeekGrid` **sans conscience du statut** · badge statut = texte brut (`PlanningToolbar:73`) · badge Base/Secondaire (`:75-82`) |
@@ -73,12 +73,15 @@ Ancrages : `AuthGuard.tsx` (onboarding = `!seasonPlan.hasFinishedVersion`), `Coc
 - **Aucun pointage automatique** (inv. 2) : la génération ne pointe jamais.
 - **Tenant** : les deux endpoints de cycle de vie réutilisent le pattern `resolveCurrentClubId` (null → skip, RLS 404 ; mismatch → 403). Les deux exigent en plus le rôle management (SEC-07).
 
-### 3.2 Verrou lecture seule **côté serveur** (les 4 chemins)
+### 3.2 Verrou lecture seule **côté serveur** (les 3 chemins)
 Le verrou se dérive du **pointeur** : « verrouillé » = **le plan pointe cette version** (`SchedulePlanProvisioner::isChosen`), jamais un statut. Les mutations de **contenu** sont alors refusées (409 « planning en vigueur ») :
 - `GenerateScheduleController` : refuse la régénération de la version choisie — la rouvrir (dépointer) d'abord.
-- `ManualEditController` (constraint/lock/one-time) : refuse si le `schedule` du slot est la version choisie de son plan.
-- `ScheduleSlotTemplateStateProcessor` : refuse create/update/delete si le schedule parent est la version choisie.
+- `ManualEditController` (constraint/lock/move) : refuse si le `schedule` du slot est la version choisie de son plan.
 - `ScheduleStateProcessor` PUT : refuse **toute** modification si la version est choisie — le verrou est **total** (« read only means read only »). Le **nom du plan** se renomme, lui, par `PUT /api/schedule_plans/{id}` (inv. 12), indépendamment de ce verrou. Les transitions de statut passent par `generate`/`validate`/`reopen`, jamais via PUT : le champ `status` est **accepté mais tout changement → 409**. Fabriquer un `COMPLETED` sans génération est donc impossible.
+
+> `schedule_slot_templates` **n'a plus de rail d'écriture brut à garder** depuis que son CRUD est
+> devenu read-only (2026-08-16, P4-102) — l'ancien 4ᵉ chemin (`ScheduleSlotTemplateStateProcessor`,
+> qui refusait create/update/delete sur la version choisie) a disparu avec les routes qu'il gardait.
 - `ScheduleStateProcessor` DELETE : la **version choisie ne se supprime pas** (409 — la rouvrir d'abord) et une version en cours de génération non plus (409). Gardé par `ScheduleLifecycleGuardTest` (phase1).
 
 > Le verrou front seul serait une illusion (contrarian-review) : l'enforcement est **serveur**.

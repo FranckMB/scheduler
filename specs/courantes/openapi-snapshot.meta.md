@@ -1,6 +1,19 @@
-Last verified @ 2026-08-15 (JSON **régénéré** — P4-101 : `causes` est désormais un `$ref` vers le schéma **`DiagnosticCause`** au lieu d'un objet libre ; plus tôt le même jour, P4-99 PR 2 avait ajouté `causes` + `openCandidates` à `ScheduleDiagnosticResource`)
+Last verified @ 2026-08-16 (JSON **régénéré** — le rail de retouche `ScheduleSlotTemplate` devient READ-ONLY : `POST /api/schedule_slot_templates`, `PUT` et `DELETE /api/schedule_slot_templates/{id}` retirés, et le schéma `ScheduleSlotTemplate.ScheduleSlotTemplateInput` disparaît avec eux)
 
 Changements récents :
+- **Rail de retouche read-only — CRUD d'écriture des créneaux retiré (2026-08-16)** : le
+  déplacement d'un créneau passe sous le verdict moteur (`POST /api/schedule-slots/{id}/move`)
+  et les verrous/contraintes par `manual-edit` ; le CRUD API Platform brut des
+  `ScheduleSlotTemplate` (qui mutait `lockLevel`/`temporaryLock`/placement sans jamais consulter
+  le solveur) n'a plus de raison d'être. Set-diff : `POST /api/schedule_slot_templates`,
+  `PUT` et `DELETE /api/schedule_slot_templates/{id}` retirés (les `GET`/`GetCollection` restent) ;
+  schéma `ScheduleSlotTemplate.ScheduleSlotTemplateInput` retiré. Contrat backend⇄engine 2.8
+  INCHANGÉ.
+  Dans la MÊME PR, `MoveSlotService::namedViolations` (`/move`) gagne 6 champs
+  (`teamId`/`coachId`/`venueId`/`dayOfWeek`/`startTime`/`conflictingTeamId`, pour le surlignage
+  front) ; le schéma 422 déclaré dans `CustomRoutesOpenApiFactory.php` (chemin contrôleur custom,
+  pas dérivé d'un DTO) a été aligné sur `MoveSlotService` et le snapshot régénéré — les six
+  champs y figurent, nullable.
 - **P4-101 — le snapshot cesse de mentir sur `causes` (2026-08-15)** : la propriété était un
   `array` nu, donc décrite `items: {type: object, additionalProperties: {type: [string, null]}}` —
   **deux mensonges** : `count` est un **entier**, et les noms de champs disparaissaient. Qui aurait

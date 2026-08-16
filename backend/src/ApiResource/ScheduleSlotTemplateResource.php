@@ -7,27 +7,21 @@ namespace App\ApiResource;
 use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
 use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
-use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
 use ApiPlatform\Metadata\GetCollection;
-use ApiPlatform\Metadata\Post;
-use ApiPlatform\Metadata\Put;
-use App\Dto\ScheduleSlotTemplateInput;
 use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
 use App\Enum\LockOrigin;
-use App\State\Processor\ScheduleSlotTemplateStateProcessor;
 use App\State\Provider\ScheduleSlotTemplateStateProvider;
 use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
+// Rail de retouche read-only : le déplacement passe par POST /api/schedule-slots/{id}/move
+// (sous verdict moteur), verrous/contraintes par manual-edit — plus aucune écriture CRUD brute.
 #[ApiResource(shortName: 'ScheduleSlotTemplate', operations: [
     new GetCollection,
     new Get,
-    new Post,
-    new Put,
-    new Delete,
-], input: ScheduleSlotTemplateInput::class, paginationEnabled: true, paginationItemsPerPage: 30, provider: ScheduleSlotTemplateStateProvider::class, processor: ScheduleSlotTemplateStateProcessor::class)]
+], paginationEnabled: true, paginationItemsPerPage: 30, provider: ScheduleSlotTemplateStateProvider::class)]
 #[ApiFilter(SearchFilter::class, properties: ['scheduleId' => 'exact'])]
 class ScheduleSlotTemplateResource
 {
