@@ -135,8 +135,12 @@ final class ManualEditController extends AbstractController implements SeasonSco
             ? $data['evictSlotId']
             : null;
 
+        // P2-32 — `dryRun` : un ESSAI. Même chemin jusqu'au verdict (gardes pré-moteur comprises),
+        // puis retour SANS rien écrire. La réponse porte le verdict et ses compromis nommés.
+        $dryRun = isset($data['dryRun']) && true === $data['dryRun'];
+
         try {
-            $result = $this->moveSlotService->move($slot, $dayOfWeek, $startTime, $venueId, $evictSlotId);
+            $result = $this->moveSlotService->move($slot, $dayOfWeek, $startTime, $venueId, $evictSlotId, $dryRun);
         } catch (ScheduleGenerationInProgressException) {
             // Déplacer pendant qu'une génération réécrit le planning écraserait son résultat.
             return $this->json(['code' => 'generation_in_progress'], Response::HTTP_CONFLICT);
@@ -159,12 +163,29 @@ final class ManualEditController extends AbstractController implements SeasonSco
             return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
         }
 
+        if (isset($result['dryRun'])) {
+            // Un essai : 200, le verdict complet (valid + règles violées + compromis nommés),
+            // AUCUNE écriture. Le front (PR B) l'affiche avant de confirmer le geste.
+            $body = [
+                'valid' => $result['valid'],
+                'dryRun' => true,
+                'violations' => $result['violations'],
+                'compromises' => $result['compromises'],
+            ];
+            if (isset($result['evicted'])) {
+                // L'état qui SERAIT évincé (sans suppression).
+                $body['evicted'] = $result['evicted'];
+            }
+
+            return $this->json($body, Response::HTTP_OK);
+        }
+
         if (false === $result['valid']) {
             // Le moteur refuse : 422 + les règles violées, nommées pour l'UI.
             return $this->json(['valid' => false, 'violations' => $result['violations']], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $body = ['message' => 'Slot moved.', 'valid' => true];
+        $body = ['message' => 'Slot moved.', 'valid' => true, 'compromises' => $result['compromises']];
         if (isset($result['evicted'])) {
             // État de l'occupant AVANT sa suppression — le front s'en sert pour proposer un replacement.
             $body['evicted'] = $result['evicted'];
@@ -242,8 +263,11 @@ final class ManualEditController extends AbstractController implements SeasonSco
             return $this->json(['error' => 'Unknown team for this schedule.'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
+        // P2-32 — `dryRun` : essai sans écriture (même chemin jusqu'au verdict inclus).
+        $dryRun = isset($data['dryRun']) && true === $data['dryRun'];
+
         try {
-            $result = $this->moveSlotService->place($schedule, $teamId, $dayOfWeek, $startTime, $venueId, $durationMinutes);
+            $result = $this->moveSlotService->place($schedule, $teamId, $dayOfWeek, $startTime, $venueId, $durationMinutes, $dryRun);
         } catch (ScheduleGenerationInProgressException) {
             return $this->json(['code' => 'generation_in_progress'], Response::HTTP_CONFLICT);
         } catch (SlotUnavailableException) {
@@ -262,11 +286,21 @@ final class ManualEditController extends AbstractController implements SeasonSco
             return $this->json(['error' => 'The request could not be processed.'], Response::HTTP_BAD_REQUEST);
         }
 
+        if (isset($result['dryRun'])) {
+            // Essai : 200, verdict complet, AUCUNE ligne créée.
+            return $this->json([
+                'valid' => $result['valid'],
+                'dryRun' => true,
+                'violations' => $result['violations'],
+                'compromises' => $result['compromises'],
+            ], Response::HTTP_OK);
+        }
+
         if (false === $result['valid']) {
             return $this->json(['valid' => false, 'violations' => $result['violations']], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        return $this->json(['valid' => true, 'slotId' => $result['slotId'] ?? null], Response::HTTP_OK);
+        return $this->json(['valid' => true, 'slotId' => $result['slotId'] ?? null, 'compromises' => $result['compromises']], Response::HTTP_OK);
     }
 
     private function findSlot(string $id): ?ScheduleSlotTemplate

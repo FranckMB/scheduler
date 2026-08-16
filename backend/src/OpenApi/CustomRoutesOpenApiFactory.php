@@ -1892,6 +1892,36 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
             ]]]),
         );
 
+        // P2-32 — le DELTA de confort d'un candidat ACCEPTÉ (leçon P4-101 : forme COMPLÈTE, pas
+        // un tableau nu). Aucun identifiant interne dans les descriptions.
+        $compromises = [
+            'type' => 'array',
+            'description' => 'Named comfort trade-offs of an ACCEPTED candidate (empty on refusal): what the move BREAKS or GAINS, ready to display',
+            'items' => ['type' => 'object', 'properties' => [
+                'family' => ['type' => 'string', 'enum' => ['chaining', 'venue_preference', 'day_preference', 'time_preference', 'match_rest', 'spacing', 'coach_day_cap', 'implicit_rule'], 'description' => 'Which comfort family the trade-off belongs to'],
+                'effect' => ['type' => 'string', 'enum' => ['broken', 'gained'], 'description' => 'broken = a preference honored before no longer is; gained = the reverse'],
+                'message' => ['type' => 'string', 'description' => 'Ready-to-display sentence naming the team/coach/venue (no internal identifier)'],
+                'teamId' => ['type' => 'string', 'nullable' => true, 'description' => 'Team the trade-off is about (grid highlighting)'],
+                'coachId' => ['type' => 'string', 'nullable' => true, 'description' => 'Coach involved, when the family concerns one'],
+                'venueId' => ['type' => 'string', 'nullable' => true, 'description' => 'Venue involved, when the family concerns one'],
+                'dayOfWeek' => ['type' => 'integer', 'nullable' => true, 'description' => 'ISO day (1-7) involved, when relevant'],
+                'startTime' => ['type' => 'string', 'nullable' => true, 'description' => 'Start time (HH:MM) involved, when relevant'],
+            ]],
+        ];
+        // Les règles violées, telles que renvoyées dans l'essai (dryRun) d'un candidat refusé.
+        $dryViolations = ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+            'rule' => ['type' => 'string', 'description' => 'Machine code of the broken rule (UI branches on it)'],
+            'message' => ['type' => 'string', 'description' => 'Human sentence naming the coach/venue/time in conflict'],
+            'teamId' => ['type' => 'string', 'nullable' => true],
+            'coachId' => ['type' => 'string', 'nullable' => true],
+            'venueId' => ['type' => 'string', 'nullable' => true],
+            'dayOfWeek' => ['type' => 'integer', 'nullable' => true],
+            'startTime' => ['type' => 'string', 'nullable' => true],
+            'conflictingTeamId' => ['type' => 'string', 'nullable' => true],
+        ]]];
+        // `dryRun` : un ESSAI. Même chemin jusqu'au verdict inclus, mais RIEN écrit.
+        $dryRunProperty = ['type' => 'boolean', 'nullable' => true, 'description' => 'When true, run the full verdict (pre-engine guards included) but write NOTHING; the response carries the verdict and its named trade-offs'];
+
         return [
             '/api/schedule-slots/{id}/manual-edit/lock' => new PathItem(post: new Operation(
                 operationId: 'postManualEditLock',
@@ -1913,12 +1943,15 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 operationId: 'postScheduleSlotMove',
                 tags: ['ManualEdit'],
                 responses: [
-                    '200' => $this->jsonResponse('Move accepted by the solver and written; the schedule is flagged manually edited (its score is now stale)', [
+                    '200' => $this->jsonResponse('Move accepted by the solver and written (schedule flagged manually edited, score now stale) — OR a dryRun essai (valid may be false, nothing written). Both carry the named comfort trade-offs', [
                         'type' => 'object',
                         'properties' => [
                             'message' => ['type' => 'string'],
-                            'valid' => ['type' => 'boolean', 'enum' => [true]],
-                            'evicted' => ['type' => 'object', 'nullable' => true, 'description' => 'Present only when an occupant was evicted from the target: its state BEFORE deletion, so the UI can offer to re-place it', 'properties' => [
+                            'valid' => ['type' => 'boolean'],
+                            'dryRun' => $dryRunProperty,
+                            'violations' => array_merge($dryViolations, ['nullable' => true, 'description' => 'Present on a dryRun essai that the solver refused (valid=false); absent on a written move']),
+                            'compromises' => $compromises,
+                            'evicted' => ['type' => 'object', 'nullable' => true, 'description' => 'Present only when an occupant was evicted from the target (or WOULD be, on a dryRun): its state BEFORE deletion, so the UI can offer to re-place it', 'properties' => [
                                 'slotId' => ['type' => 'string'],
                                 'teamId' => ['type' => 'string'],
                                 'dayOfWeek' => ['type' => 'integer'],
@@ -1960,6 +1993,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'startTime' => ['type' => 'string', 'example' => '20:00'],
                         'venueId' => ['type' => 'string'],
                         'evictSlotId' => ['type' => 'string', 'nullable' => true, 'description' => 'Optional: id of the slot occupying the target, to evict (deleted in the same transaction) once the move is accepted'],
+                        'dryRun' => $dryRunProperty,
                     ],
                 ]),
             )),
@@ -1967,11 +2001,14 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 operationId: 'postSchedulePlaceSlot',
                 tags: ['ManualEdit'],
                 responses: [
-                    '200' => $this->jsonResponse('Placement accepted by the solver and written; the schedule is flagged manually edited (its score is now stale)', [
+                    '200' => $this->jsonResponse('Placement accepted by the solver and written (schedule flagged manually edited, score now stale) — OR a dryRun essai (valid may be false, nothing created). Both carry the named comfort trade-offs', [
                         'type' => 'object',
                         'properties' => [
-                            'valid' => ['type' => 'boolean', 'enum' => [true]],
-                            'slotId' => ['type' => 'string', 'description' => 'Id of the newly created (unlocked) slot'],
+                            'valid' => ['type' => 'boolean'],
+                            'dryRun' => $dryRunProperty,
+                            'slotId' => ['type' => 'string', 'nullable' => true, 'description' => 'Id of the newly created (unlocked) slot; absent on a dryRun essai'],
+                            'violations' => array_merge($dryViolations, ['nullable' => true, 'description' => 'Present on a dryRun essai that the solver refused (valid=false); absent on a written placement']),
+                            'compromises' => $compromises,
                         ],
                     ]),
                     '400' => new Response('Missing or invalid field (teamId, dayOfWeek, startTime, venueId; durationMinutes if present must be a positive integer)'),
@@ -2007,6 +2044,7 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         'startTime' => ['type' => 'string', 'example' => '20:00'],
                         'venueId' => ['type' => 'string'],
                         'durationMinutes' => ['type' => 'integer', 'minimum' => 1, 'example' => 90, 'description' => 'Optional assertion: the persisted duration is always the venue window\'s (resolved server-side). If provided and it differs from the window, the request is refused with code=duration_mismatch'],
+                        'dryRun' => $dryRunProperty,
                     ],
                 ]),
             )),

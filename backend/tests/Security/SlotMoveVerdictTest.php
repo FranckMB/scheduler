@@ -82,6 +82,9 @@ final class SlotMoveVerdictTest extends KernelTestCase
 
     private const string REFUSE = '{"valid":false,"violations":[{"rule":"coach_double_booking","message":"le coach Dupont a déjà les U15 à 20h dans un autre gymnase.","coachId":"88888888-8888-4888-8888-888888888888","dayOfWeek":4,"startTime":"20:00","conflictingTeamId":"99999999-9999-4999-8999-999999999999"}],"metrics":{"solver_version":"cp-sat","nb_variables":0,"nb_constraints":0,"wall_time_ms":0}}';
 
+    /** Accepté AVEC un compromis nommé (P2-32) : le déplacement casse une préférence de gymnase. */
+    private const string ACCEPT_WITH_COMPROMISES = '{"valid":true,"violations":[],"compromises":[{"family":"venue_preference","effect":"broken","message":"U13 ne s\'entraîne plus dans son gymnase préféré (Gymnase Un).","teamId":"team-u13","coachId":null,"venueId":"venue-un","dayOfWeek":null,"startTime":null}],"metrics":{"solver_version":"cp-sat","nb_variables":0,"nb_constraints":0,"wall_time_ms":0}}';
+
     private EntityManagerInterface $em;
 
     /** Verdict « non » : le créneau ne bouge PAS, et le marqueur reste à false. */
@@ -168,6 +171,95 @@ final class SlotMoveVerdictTest extends KernelTestCase
         self::assertArrayHasKey('slotTemplates', $captured);
         $ids = array_map(static fn (array $t): string => (string) ($t['id'] ?? ''), $captured['slotTemplates']);
         self::assertNotContains($slot->getId(), $ids, 'la SOURCE doit être retirée de la baseline avant le verdict');
+
+        // P2-32 — le payload porte `reference` = le placement d'ORIGINE de la source (état « avant »
+        // du DELTA de compromis), pas la cible du déplacement.
+        self::assertArrayHasKey('reference', $captured);
+        self::assertSame($slot->getTeamId(), $captured['reference']['teamId']);
+        self::assertSame($ctx['venue1'], $captured['reference']['venueId'], 'reference = le gymnase D\'ORIGINE');
+        self::assertSame(2, $captured['reference']['dayOfWeek'], 'reference = le jour D\'ORIGINE (mardi)');
+        self::assertSame('18:00', $captured['reference']['startTime']);
+    }
+
+    /**
+     * P2-32 — dryRun accepté : le verdict est rendu AVEC ses compromis, mais RIEN n'est écrit —
+     * le créneau ne bouge pas, le marqueur reste à false. État SONDÉ en base (pas juste le retour).
+     */
+    public function testDryRunAcceptedWritesNothingButReturnsCompromises(): void
+    {
+        $ctx = $this->seed();
+        $slot = $ctx['slot'];
+        $originalDay = $slot->getDayOfWeek();
+        $originalVenue = $slot->getVenueId();
+
+        $service = $this->service(new MockHttpClient(new MockResponse(self::ACCEPT_WITH_COMPROMISES, ['http_code' => 200])));
+        $result = $service->move($slot, 4, new DateTimeImmutable('20:00'), $ctx['venue2'], null, true);
+
+        self::assertTrue($result['valid']);
+        self::assertTrue($result['dryRun']);
+        self::assertNotEmpty($result['compromises'], 'un essai accepté doit rendre les compromis nommés');
+        self::assertSame('venue_preference', $result['compromises'][0]['family']);
+        self::assertSame('broken', $result['compromises'][0]['effect']);
+
+        $this->em->clear();
+        $this->scopeGucToClub($ctx['clubId']);
+        $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
+        self::assertInstanceOf(ScheduleSlotTemplate::class, $reloaded);
+        self::assertSame($originalDay, $reloaded->getDayOfWeek(), 'un essai ne déplace PAS le créneau');
+        self::assertSame($originalVenue, $reloaded->getVenueId());
+
+        $schedule = $this->em->getRepository(Schedule::class)->find($ctx['scheduleId']);
+        self::assertInstanceOf(Schedule::class, $schedule);
+        self::assertFalse($schedule->isManuallyEditedSinceGeneration(), 'un essai ne marque PAS le planning comme retouché');
+    }
+
+    /** P2-32 — dryRun refusé : rien écrit non plus, et le retour porte le verdict « non ». */
+    public function testDryRunRefusedWritesNothing(): void
+    {
+        $ctx = $this->seed();
+        $slot = $ctx['slot'];
+        $originalDay = $slot->getDayOfWeek();
+
+        $service = $this->service(new MockHttpClient(new MockResponse(self::REFUSE, ['http_code' => 200])));
+        $result = $service->move($slot, 4, new DateTimeImmutable('20:00'), $ctx['venue2'], null, true);
+
+        self::assertFalse($result['valid']);
+        self::assertTrue($result['dryRun']);
+        self::assertNotEmpty($result['violations']);
+
+        $this->em->clear();
+        $this->scopeGucToClub($ctx['clubId']);
+        $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
+        self::assertSame($originalDay, $reloaded?->getDayOfWeek(), 'un essai refusé ne déplace pas le créneau');
+        $schedule = $this->em->getRepository(Schedule::class)->find($ctx['scheduleId']);
+        self::assertFalse($schedule?->isManuallyEditedSinceGeneration());
+    }
+
+    /**
+     * P2-32 — dryRun avec éviction : le verrou reste souverain (D3) et l'occupant N'EST PAS
+     * supprimé ; le bloc `evicted` décrit ce qui SERAIT libéré.
+     */
+    public function testDryRunWithEvictionDeletesNothing(): void
+    {
+        $ctx = $this->seed();
+        $slot = $ctx['slot'];
+        $occupant = $this->seedOccupant($ctx, 4, '20:00', $ctx['venue2']);
+        $occupantId = $occupant->getId();
+
+        $service = $this->service(new MockHttpClient(new MockResponse(self::ACCEPT_WITH_COMPROMISES, ['http_code' => 200])));
+        $result = $service->move($slot, 4, new DateTimeImmutable('20:00'), $ctx['venue2'], $occupantId, true);
+
+        self::assertTrue($result['valid']);
+        self::assertTrue($result['dryRun']);
+        self::assertIsArray($result['evicted']);
+        self::assertSame($occupantId, $result['evicted']['slotId']);
+
+        $this->em->clear();
+        $this->scopeGucToClub($ctx['clubId']);
+        self::assertNotNull(
+            $this->em->getRepository(ScheduleSlotTemplate::class)->find($occupantId),
+            'un essai ne supprime PAS l\'occupant qui SERAIT évincé',
+        );
     }
 
     /** Une génération en cours → 409 (exception), et le moteur n'est jamais consulté. */

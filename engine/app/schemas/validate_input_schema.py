@@ -69,3 +69,9 @@ class ValidateAssignmentsInputSchema(SerializableModel):
         default_factory=list, alias="priorityTiers", max_length=MAX_PRIORITY_TIERS
     )
     candidate: CandidateAssignmentSchema
+    # P2-32 — l'état « AVANT » du candidat, pour le DELTA de compromis. Pour un DÉPLACEMENT le
+    # backend y pose le placement d'origine de la source (même forme que ``candidate``) : « avant »
+    # = baseline figée + ``reference``. Absent (une CRÉATION à la dérive) → « avant » = baseline
+    # nue. N'entre JAMAIS dans le verdict booléen (feasibility) : il ne sert qu'à la lecture des
+    # compromis post-acceptation.
+    reference: CandidateAssignmentSchema | None = None

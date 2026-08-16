@@ -43,13 +43,22 @@ use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 final class MoveSlotService
 {
     /** Contrat backend⇄engine du endpoint de validation (F2a). Un seul contrat, 3 endpoints. */
-    private const string CONTRACT_VERSION = '2.9';
+    private const string CONTRACT_VERSION = '2.10';
 
     /**
-     * Budget COURT : la baseline est entièrement figée, le moteur ne place qu'UN candidat
-     * déjà épinglé (cible UX 2-3 s). Le schéma engine plafonne à 10 s.
+     * Budget SOLVEUR court PAR solve : la baseline est entièrement figée, le moteur ne place
+     * qu'UN candidat déjà épinglé. C'est la valeur portée par `solverTimeoutSeconds` du payload.
      */
     private const int VALIDATE_TIMEOUT_SECONDS = 2;
+
+    /**
+     * Timeout HTTP de l'appel `/validate-assignments` — DISTINCT du budget solveur : depuis P2-32
+     * un candidat ACCEPTÉ déclenche JUSQU'À TROIS solves côté moteur (le verdict + les deux états
+     * figés « avant »/« après » du DELTA de compromis), chacun sous son budget de 2 s. Le timeout
+     * transport doit donc les couvrir tous — un `timeout` calé sur le seul verdict rendait un 502
+     * sur un dataset dense (ex. BCCL, 90 séances) alors que le moteur répondait juste après.
+     */
+    private const int VALIDATE_HTTP_TIMEOUT_SECONDS = 8;
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -68,9 +77,14 @@ final class MoveSlotService
      * @throws TransportExceptionInterface           le moteur n'a pas répondu (→ 502)
      * @throws InvalidArgumentException              le créneau n'a pas de planning parent (état incohérent)
      *
-     * @return array{valid: bool, violations: list<array{rule: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string, conflictingTeamId: ?string}>, evicted?: array{slotId: string, teamId: string, dayOfWeek: int, startTime: string, venueId: string, durationMinutes: int}}
+     * `$dryRun` (P2-32) : même chemin JUSQU'AU VERDICT INCLUS (gardes pré-moteur comprises — un
+     * verrou refuse l'essai, D3), puis retour AVANT toute écriture/flush/marqueur/Mercure. La
+     * réponse porte alors `dryRun => true` et, si une éviction était demandée, l'état qui SERAIT
+     * évincé (`evicted`, sans suppression).
+     *
+     * @return array{valid: bool, violations: list<array{rule: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string, conflictingTeamId: ?string}>, compromises: list<array{family: string, effect: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string}>, dryRun?: bool, evicted?: array{slotId: string, teamId: string, dayOfWeek: int, startTime: string, venueId: string, durationMinutes: int}}
      */
-    public function move(ScheduleSlotTemplate $slot, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId, ?string $evictSlotId = null): array
+    public function move(ScheduleSlotTemplate $slot, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId, ?string $evictSlotId = null, bool $dryRun = false): array
     {
         $schedule = $this->entityManager->getRepository(Schedule::class)->find($slot->getScheduleId());
         if (!$schedule instanceof Schedule) {
@@ -100,11 +114,40 @@ final class MoveSlotService
             // jamais du client.
             'durationMinutes' => $slot->getDurationMinutes(),
         ];
-        $result = $this->engineClient->validateAssignment($payload, self::VALIDATE_TIMEOUT_SECONDS);
+        // P2-32 — l'état « AVANT » du candidat pour le DELTA de compromis : le placement d'ORIGINE
+        // de la source (elle est retirée de la baseline, cf. buildBasePayload). Lu du slot AVANT
+        // toute mutation. Une CRÉATION (place()) n'en pose pas → « avant » = baseline nue.
+        $payload['reference'] = [
+            'teamId' => $slot->getTeamId(),
+            'venueId' => $slot->getVenueId(),
+            'dayOfWeek' => $slot->getDayOfWeek(),
+            'startTime' => $slot->getStartTime()->format('H:i'),
+            'durationMinutes' => $slot->getDurationMinutes(),
+        ];
+        $result = $this->engineClient->validateAssignment($payload, self::VALIDATE_HTTP_TIMEOUT_SECONDS);
 
         if (true !== ($result['valid'] ?? false)) {
             // (4) Le déplacement N'A PAS LIEU (ni l'éviction) — les règles violées sont rendues nommées.
-            return ['valid' => false, 'violations' => $this->namedViolations($result)];
+            $refused = ['valid' => false, 'violations' => $this->namedViolations($result), 'compromises' => []];
+            if ($dryRun) {
+                $refused['dryRun'] = true;
+            }
+
+            return $refused;
+        }
+
+        $compromises = $this->namedCompromises($result);
+
+        // (dryRun) Le verdict est rendu (compromis compris), MAIS rien n'est écrit : ni le
+        // déplacement, ni la suppression de l'occupant, ni le marqueur, ni Mercure. L'`evicted`
+        // décrit l'état qui SERAIT évincé (sans le supprimer).
+        if ($dryRun) {
+            $dryResponse = ['valid' => true, 'violations' => [], 'compromises' => $compromises, 'dryRun' => true];
+            if ($evicted instanceof ScheduleSlotTemplate) {
+                $dryResponse['evicted'] = $this->describeEvicted($evicted);
+            }
+
+            return $dryResponse;
         }
 
         // (5) Écrire le déplacement, supprimer l'occupant évincé (MÊME transaction), poser le
@@ -114,17 +157,10 @@ final class MoveSlotService
             ->setStartTime($startTime)
             ->setVenueId($venueId);
 
-        $response = ['valid' => true, 'violations' => []];
+        $response = ['valid' => true, 'violations' => [], 'compromises' => $compromises];
         if ($evicted instanceof ScheduleSlotTemplate) {
             // Capturer l'état d'AVANT suppression : le front s'en sert pour proposer de replacer.
-            $response['evicted'] = [
-                'slotId' => $evicted->getId(),
-                'teamId' => $evicted->getTeamId(),
-                'dayOfWeek' => $evicted->getDayOfWeek(),
-                'startTime' => $evicted->getStartTime()->format('H:i'),
-                'venueId' => $evicted->getVenueId(),
-                'durationMinutes' => $evicted->getDurationMinutes(),
-            ];
+            $response['evicted'] = $this->describeEvicted($evicted);
             $this->entityManager->remove($evicted);
         }
         $schedule->setManuallyEditedSinceGeneration(true);
@@ -156,9 +192,13 @@ final class MoveSlotService
      * @throws DurationMismatchException             la durée du client contredit la fenêtre (→ 422)
      * @throws TransportExceptionInterface           le moteur n'a pas répondu (→ 502)
      *
-     * @return array{valid: bool, violations: list<array{rule: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string, conflictingTeamId: ?string}>, slotId?: string}
+     * `$dryRun` (P2-32) : même chemin JUSQU'AU VERDICT INCLUS (résolution de durée/fenêtre
+     * comprise), puis retour AVANT toute écriture — aucune ligne créée, aucun marqueur, aucun
+     * Mercure ; la réponse porte le verdict, ses compromis et `dryRun => true`
+     *
+     * @return array{valid: bool, violations: list<array{rule: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string, conflictingTeamId: ?string}>, compromises: list<array{family: string, effect: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string}>, dryRun?: bool, slotId?: string}
      */
-    public function place(Schedule $schedule, string $teamId, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId, ?int $clientDurationMinutes = null): array
+    public function place(Schedule $schedule, string $teamId, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId, ?int $clientDurationMinutes = null, bool $dryRun = false): array
     {
         if ($this->clubGenerationLock->isGenerating($schedule->getClubId())) {
             throw new ScheduleGenerationInProgressException;
@@ -186,10 +226,22 @@ final class MoveSlotService
             'startTime' => $startTime->format('H:i'),
             'durationMinutes' => $durationMinutes,
         ];
-        $result = $this->engineClient->validateAssignment($payload, self::VALIDATE_TIMEOUT_SECONDS);
+        $result = $this->engineClient->validateAssignment($payload, self::VALIDATE_HTTP_TIMEOUT_SECONDS);
 
         if (true !== ($result['valid'] ?? false)) {
-            return ['valid' => false, 'violations' => $this->namedViolations($result)];
+            $refused = ['valid' => false, 'violations' => $this->namedViolations($result), 'compromises' => []];
+            if ($dryRun) {
+                $refused['dryRun'] = true;
+            }
+
+            return $refused;
+        }
+
+        $compromises = $this->namedCompromises($result);
+
+        // (dryRun) Verdict rendu, RIEN créé : aucune ligne, aucun marqueur, aucun Mercure.
+        if ($dryRun) {
+            return ['valid' => true, 'violations' => [], 'compromises' => $compromises, 'dryRun' => true];
         }
 
         $slot = (new ScheduleSlotTemplate)
@@ -210,7 +262,24 @@ final class MoveSlotService
 
         $this->progressPublisher->publishSafely($schedule, []);
 
-        return ['valid' => true, 'violations' => [], 'slotId' => $slot->getId()];
+        return ['valid' => true, 'violations' => [], 'compromises' => $compromises, 'slotId' => $slot->getId()];
+    }
+
+    /**
+     * L'état d'un occupant à évincer, tel que le front s'en sert pour proposer un replacement.
+     *
+     * @return array{slotId: string, teamId: string, dayOfWeek: int, startTime: string, venueId: string, durationMinutes: int}
+     */
+    private function describeEvicted(ScheduleSlotTemplate $evicted): array
+    {
+        return [
+            'slotId' => $evicted->getId(),
+            'teamId' => $evicted->getTeamId(),
+            'dayOfWeek' => $evicted->getDayOfWeek(),
+            'startTime' => $evicted->getStartTime()->format('H:i'),
+            'venueId' => $evicted->getVenueId(),
+            'durationMinutes' => $evicted->getDurationMinutes(),
+        ];
     }
 
     /**
@@ -423,6 +492,44 @@ final class MoveSlotService
         }
 
         return $violations;
+    }
+
+    /**
+     * Les COMPROMIS d'un candidat ACCEPTÉ (P2-32), réduits à ce que l'UI exploite (patron
+     * {@see namedViolations}) : la famille (pour brancher), l'effet (`broken`/`gained`), un
+     * message déjà humain (le moteur y nomme équipe/coach/gymnase, AUCUN identifiant interne) et
+     * les ids des entités concernées, pour le surlignage. Chaque champ est null-safe. Absent du
+     * verdict (refus, ou moteur muet) → liste vide, jamais une clé manquante.
+     *
+     * @param array<string, mixed> $result
+     *
+     * @return list<array{family: string, effect: string, message: string, teamId: ?string, coachId: ?string, venueId: ?string, dayOfWeek: ?int, startTime: ?string}>
+     */
+    private function namedCompromises(array $result): array
+    {
+        $raw = $result['compromises'] ?? null;
+        if (!\is_array($raw)) {
+            return [];
+        }
+
+        $compromises = [];
+        foreach ($raw as $entry) {
+            if (!\is_array($entry)) {
+                continue;
+            }
+            $compromises[] = [
+                'family' => (string) ($entry['family'] ?? ''),
+                'effect' => (string) ($entry['effect'] ?? ''),
+                'message' => (string) ($entry['message'] ?? ''),
+                'teamId' => $this->nullableString($entry['teamId'] ?? null),
+                'coachId' => $this->nullableString($entry['coachId'] ?? null),
+                'venueId' => $this->nullableString($entry['venueId'] ?? null),
+                'dayOfWeek' => isset($entry['dayOfWeek']) ? (int) $entry['dayOfWeek'] : null,
+                'startTime' => $this->nullableString($entry['startTime'] ?? null),
+            ];
+        }
+
+        return $compromises;
     }
 
     /** Passe l'id tel quel (string) ou null s'il est absent/null — jamais un cast d'array/objet. */

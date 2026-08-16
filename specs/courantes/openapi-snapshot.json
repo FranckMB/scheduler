@@ -9031,7 +9031,7 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Move accepted by the solver and written; the schedule is flagged manually edited (its score is now stale)",
+                        "description": "Move accepted by the solver and written (schedule flagged manually edited, score now stale) \u2014 OR a dryRun essai (valid may be false, nothing written). Both carry the named comfort trade-offs",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -9041,15 +9041,119 @@
                                             "type": "string"
                                         },
                                         "valid": {
+                                            "type": "boolean"
+                                        },
+                                        "dryRun": {
                                             "type": "boolean",
-                                            "enum": [
-                                                true
-                                            ]
+                                            "nullable": true,
+                                            "description": "When true, run the full verdict (pre-engine guards included) but write NOTHING; the response carries the verdict and its named trade-offs"
+                                        },
+                                        "violations": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "rule": {
+                                                        "type": "string",
+                                                        "description": "Machine code of the broken rule (UI branches on it)"
+                                                    },
+                                                    "message": {
+                                                        "type": "string",
+                                                        "description": "Human sentence naming the coach/venue/time in conflict"
+                                                    },
+                                                    "teamId": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "coachId": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "venueId": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "dayOfWeek": {
+                                                        "type": "integer",
+                                                        "nullable": true
+                                                    },
+                                                    "startTime": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "conflictingTeamId": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    }
+                                                }
+                                            },
+                                            "nullable": true,
+                                            "description": "Present on a dryRun essai that the solver refused (valid=false); absent on a written move"
+                                        },
+                                        "compromises": {
+                                            "type": "array",
+                                            "description": "Named comfort trade-offs of an ACCEPTED candidate (empty on refusal): what the move BREAKS or GAINS, ready to display",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "family": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "chaining",
+                                                            "venue_preference",
+                                                            "day_preference",
+                                                            "time_preference",
+                                                            "match_rest",
+                                                            "spacing",
+                                                            "coach_day_cap",
+                                                            "implicit_rule"
+                                                        ],
+                                                        "description": "Which comfort family the trade-off belongs to"
+                                                    },
+                                                    "effect": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "broken",
+                                                            "gained"
+                                                        ],
+                                                        "description": "broken = a preference honored before no longer is; gained = the reverse"
+                                                    },
+                                                    "message": {
+                                                        "type": "string",
+                                                        "description": "Ready-to-display sentence naming the team/coach/venue (no internal identifier)"
+                                                    },
+                                                    "teamId": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Team the trade-off is about (grid highlighting)"
+                                                    },
+                                                    "coachId": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Coach involved, when the family concerns one"
+                                                    },
+                                                    "venueId": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Venue involved, when the family concerns one"
+                                                    },
+                                                    "dayOfWeek": {
+                                                        "type": "integer",
+                                                        "nullable": true,
+                                                        "description": "ISO day (1-7) involved, when relevant"
+                                                    },
+                                                    "startTime": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Start time (HH:MM) involved, when relevant"
+                                                    }
+                                                }
+                                            }
                                         },
                                         "evicted": {
                                             "type": "object",
                                             "nullable": true,
-                                            "description": "Present only when an occupant was evicted from the target: its state BEFORE deletion, so the UI can offer to re-place it",
+                                            "description": "Present only when an occupant was evicted from the target (or WOULD be, on a dryRun): its state BEFORE deletion, so the UI can offer to re-place it",
                                             "properties": {
                                                 "slotId": {
                                                     "type": "string"
@@ -9192,6 +9296,11 @@
                                         "type": "string",
                                         "nullable": true,
                                         "description": "Optional: id of the slot occupying the target, to evict (deleted in the same transaction) once the move is accepted"
+                                    },
+                                    "dryRun": {
+                                        "type": "boolean",
+                                        "nullable": true,
+                                        "description": "When true, run the full verdict (pre-engine guards included) but write NOTHING; the response carries the verdict and its named trade-offs"
                                     }
                                 }
                             }
@@ -9209,21 +9318,126 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Placement accepted by the solver and written; the schedule is flagged manually edited (its score is now stale)",
+                        "description": "Placement accepted by the solver and written (schedule flagged manually edited, score now stale) \u2014 OR a dryRun essai (valid may be false, nothing created). Both carry the named comfort trade-offs",
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "type": "object",
                                     "properties": {
                                         "valid": {
+                                            "type": "boolean"
+                                        },
+                                        "dryRun": {
                                             "type": "boolean",
-                                            "enum": [
-                                                true
-                                            ]
+                                            "nullable": true,
+                                            "description": "When true, run the full verdict (pre-engine guards included) but write NOTHING; the response carries the verdict and its named trade-offs"
                                         },
                                         "slotId": {
                                             "type": "string",
-                                            "description": "Id of the newly created (unlocked) slot"
+                                            "nullable": true,
+                                            "description": "Id of the newly created (unlocked) slot; absent on a dryRun essai"
+                                        },
+                                        "violations": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "rule": {
+                                                        "type": "string",
+                                                        "description": "Machine code of the broken rule (UI branches on it)"
+                                                    },
+                                                    "message": {
+                                                        "type": "string",
+                                                        "description": "Human sentence naming the coach/venue/time in conflict"
+                                                    },
+                                                    "teamId": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "coachId": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "venueId": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "dayOfWeek": {
+                                                        "type": "integer",
+                                                        "nullable": true
+                                                    },
+                                                    "startTime": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    },
+                                                    "conflictingTeamId": {
+                                                        "type": "string",
+                                                        "nullable": true
+                                                    }
+                                                }
+                                            },
+                                            "nullable": true,
+                                            "description": "Present on a dryRun essai that the solver refused (valid=false); absent on a written placement"
+                                        },
+                                        "compromises": {
+                                            "type": "array",
+                                            "description": "Named comfort trade-offs of an ACCEPTED candidate (empty on refusal): what the move BREAKS or GAINS, ready to display",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "family": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "chaining",
+                                                            "venue_preference",
+                                                            "day_preference",
+                                                            "time_preference",
+                                                            "match_rest",
+                                                            "spacing",
+                                                            "coach_day_cap",
+                                                            "implicit_rule"
+                                                        ],
+                                                        "description": "Which comfort family the trade-off belongs to"
+                                                    },
+                                                    "effect": {
+                                                        "type": "string",
+                                                        "enum": [
+                                                            "broken",
+                                                            "gained"
+                                                        ],
+                                                        "description": "broken = a preference honored before no longer is; gained = the reverse"
+                                                    },
+                                                    "message": {
+                                                        "type": "string",
+                                                        "description": "Ready-to-display sentence naming the team/coach/venue (no internal identifier)"
+                                                    },
+                                                    "teamId": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Team the trade-off is about (grid highlighting)"
+                                                    },
+                                                    "coachId": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Coach involved, when the family concerns one"
+                                                    },
+                                                    "venueId": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Venue involved, when the family concerns one"
+                                                    },
+                                                    "dayOfWeek": {
+                                                        "type": "integer",
+                                                        "nullable": true,
+                                                        "description": "ISO day (1-7) involved, when relevant"
+                                                    },
+                                                    "startTime": {
+                                                        "type": "string",
+                                                        "nullable": true,
+                                                        "description": "Start time (HH:MM) involved, when relevant"
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -9344,6 +9558,11 @@
                                         "minimum": 1,
                                         "example": 90,
                                         "description": "Optional assertion: the persisted duration is always the venue window's (resolved server-side). If provided and it differs from the window, the request is refused with code=duration_mismatch"
+                                    },
+                                    "dryRun": {
+                                        "type": "boolean",
+                                        "nullable": true,
+                                        "description": "When true, run the full verdict (pre-engine guards included) but write NOTHING; the response carries the verdict and its named trade-offs"
                                     }
                                 }
                             }

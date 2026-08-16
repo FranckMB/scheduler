@@ -25,6 +25,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, TypedDict, cast
 
+from .compromise import (
+    FAMILY_IMPLICIT,
+    CompromiseTermInfo,
+)
 from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
 from .model import DEFAULT_SESSION_MINUTES, SLOT_MINUTES, _format_time, _time_to_minutes
 
@@ -233,6 +237,10 @@ class HardConstraintStats:
     # l'objectif : ``(literal, weight_name)``. Vide quand tout est HARD (défaut). Hors du
     # total : ce sont des termes d'objectif, pas des contraintes dures.
     implicit_soft_terms: list[tuple[BoolVarLike, str]] = field(default_factory=list)
+    # Métadonnée de nommage des compromis (P2-32), parallèle à ``implicit_soft_terms`` : une
+    # entrée par littéral de violation implicite quand un ``soft_term_info_out`` a été passé
+    # (chemin /generate : liste vide, aucun effet sur le solve).
+    implicit_soft_info: list[CompromiseTermInfo] = field(default_factory=list)
 
     @property
     def total_constraints_added(self) -> int:
@@ -310,6 +318,10 @@ def add_level_1_hard_constraints(
     stats = HardConstraintStats()
     rules = implicit_rules if implicit_rules is not None else ResolvedImplicitRules()
     soft_terms: list[tuple[BoolVarLike, str]] = stats.implicit_soft_terms
+    # Métadonnée de nommage des compromis (P2-32) : collectée en parallèle des littéraux soft.
+    # N'ajoute AUCUNE variable ni contrainte au modèle — le solve (et donc les goldens) est
+    # rigoureusement inchangé, qu'on la collecte ou non.
+    soft_info: list[CompromiseTermInfo] = stats.implicit_soft_info
 
     # 1. One venue hosts at most one team at a time.
     stats.room_at_most_one = add_room_at_most_one(model, assignment_list)
@@ -332,6 +344,7 @@ def add_level_1_hard_constraints(
         intensity=rules.coach_rest_day_intensity,
         min_rest_days=rules.min_rest_days,
         soft_terms_out=soft_terms,
+        soft_term_info_out=soft_info,
     )
 
     # 3c. At least one salarié coach must be present each Mon-Fri day.
@@ -343,6 +356,7 @@ def add_level_1_hard_constraints(
         team_player_map=team_player_map,
         intensity=rules.salarie_distribution_intensity,
         soft_terms_out=soft_terms,
+        soft_term_info_out=soft_info,
     )
 
     # 3d. A person may not be in ``max_consecutive`` back-to-back slots.
@@ -355,6 +369,7 @@ def add_level_1_hard_constraints(
         intensity=rules.max_consecutive_sessions_intensity,
         max_consecutive=rules.max_consecutive,
         soft_terms_out=soft_terms,
+        soft_term_info_out=soft_info,
     )
 
     # 4. A team cannot have two sessions at the same time slot.
@@ -395,6 +410,7 @@ def add_level_1_hard_constraints(
         teams=teams,
         intensity=rules.age_ascending_intensity,
         soft_terms_out=soft_terms,
+        soft_term_info_out=soft_info,
     )
 
     return stats
@@ -805,6 +821,7 @@ def add_coach_rest_day_constraints(
     intensity: str = HARD,
     min_rest_days: int = 1,
     soft_terms_out: list[tuple[BoolVarLike, str]] | None = None,
+    soft_term_info_out: list[CompromiseTermInfo] | None = None,
 ) -> int:
     """Constraint 3b: every coach must keep at least ``min_rest_days`` rest days Mon-Fri.
 
@@ -939,6 +956,17 @@ def add_coach_rest_day_constraints(
             cast(Any, model).Add(sum(free_is_working_vars) <= free_cap).OnlyEnforceIf(over.Not())
             if soft_terms_out is not None:
                 soft_terms_out.append((over, COACH_REST_VIOLATION_WEIGHT))
+            if soft_term_info_out is not None:
+                soft_term_info_out.append(
+                    CompromiseTermInfo(
+                        var=over,
+                        family=FAMILY_IMPLICIT,
+                        honored_when_active=False,
+                        key=(FAMILY_IMPLICIT, "coach_rest", coach_id_str),
+                        coach_id=coach_id_str,
+                        detail="coach_rest",
+                    )
+                )
         elif free_cap >= 0:
             # HARD : au plus ``free_cap`` jours LIBRES travaillés (le reste après crédit des
             # verrous). free_cap < 0 → rien à poser (verrou souverain, cf. commentaire ci-dessus).
@@ -957,6 +985,7 @@ def add_salarie_distribution_constraints(
     team_player_map: dict[str, list[str]] | None = None,
     intensity: str = HARD,
     soft_terms_out: list[tuple[BoolVarLike, str]] | None = None,
+    soft_term_info_out: list[CompromiseTermInfo] | None = None,
 ) -> int:
     """Constraint 3c: at least one salarié coach must be present each Mon-Fri day.
 
@@ -1054,6 +1083,17 @@ def add_salarie_distribution_constraints(
             # Un littéral de violation par jour ouvré : « aucun salarié ce jour-là ».
             if soft_terms_out is not None:
                 soft_terms_out.append((day_has_salarie.Not(), SALARIE_VIOLATION_WEIGHT))
+            if soft_term_info_out is not None:
+                soft_term_info_out.append(
+                    CompromiseTermInfo(
+                        var=day_has_salarie.Not(),
+                        family=FAMILY_IMPLICIT,
+                        honored_when_active=False,
+                        key=(FAMILY_IMPLICIT, "salarie", day),
+                        day_of_week=day,
+                        detail="salarie",
+                    )
+                )
         else:
             cast(Any, model).Add(day_has_salarie == 1)
         added += 1
@@ -1071,6 +1111,7 @@ def add_max_consecutive_sessions_constraints(
     intensity: str = HARD,
     max_consecutive: int = 3,
     soft_terms_out: list[tuple[BoolVarLike, str]] | None = None,
+    soft_term_info_out: list[CompromiseTermInfo] | None = None,
 ) -> int:
     """Constraint 3d: a person may not be in ``max_consecutive`` back-to-back slots.
 
@@ -1212,6 +1253,18 @@ def add_max_consecutive_sessions_constraints(
             cast(Any, model).Add(day_violated <= sum(chain_active_literals))
             if soft_terms_out is not None:
                 soft_terms_out.append((day_violated, CHAIN_VIOLATION_WEIGHT))
+            if soft_term_info_out is not None:
+                soft_term_info_out.append(
+                    CompromiseTermInfo(
+                        var=day_violated,
+                        family=FAMILY_IMPLICIT,
+                        honored_when_active=False,
+                        key=(FAMILY_IMPLICIT, "chain", str(person_id), day),
+                        coach_id=str(person_id),
+                        day_of_week=_to_day_int(day),
+                        detail="chain",
+                    )
+                )
             added += 1
 
     return added
@@ -2300,6 +2353,7 @@ def add_age_ascending_constraints(
     teams: Iterable[Any] = (),
     intensity: str = HARD,
     soft_terms_out: list[tuple[BoolVarLike, str]] | None = None,
+    soft_term_info_out: list[CompromiseTermInfo] | None = None,
 ) -> int:
     """Implicit rule 12: younger teams train earlier than older teams
     in the same venue on the same day.
@@ -2396,6 +2450,18 @@ def add_age_ascending_constraints(
             cast(Any, model).Add(gv_violated <= sum(pair_active_literals))
             if soft_terms_out is not None:
                 soft_terms_out.append((gv_violated, AGE_VIOLATION_WEIGHT))
+            if soft_term_info_out is not None:
+                soft_term_info_out.append(
+                    CompromiseTermInfo(
+                        var=gv_violated,
+                        family=FAMILY_IMPLICIT,
+                        honored_when_active=False,
+                        key=(FAMILY_IMPLICIT, "age", venue_id_str, day),
+                        venue_id=venue_id_str,
+                        day_of_week=_to_day_int(day),
+                        detail="age",
+                    )
+                )
             added += 1
 
     return added

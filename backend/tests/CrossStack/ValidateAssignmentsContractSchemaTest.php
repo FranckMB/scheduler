@@ -100,6 +100,10 @@ final class ValidateAssignmentsContractSchemaTest extends TestCase
         self::assertIsBool($data['valid']);
         self::assertArrayHasKey('violations', $data);
         self::assertIsArray($data['violations']);
+        // P2-32 — le verdict porte `compromises` (le DELTA de confort) ; forme = tableau, jamais
+        // absent (vide sur un refus). Le contrat = la présence + le type, pas un verdict précis.
+        self::assertArrayHasKey('compromises', $data);
+        self::assertIsArray($data['compromises']);
         self::assertArrayHasKey('metrics', $data);
     }
 
@@ -162,13 +166,24 @@ final class ValidateAssignmentsContractSchemaTest extends TestCase
         // Recalage sur le contrat du nouvel endpoint : version courante, budget
         // COURT (le défaut /generate dépasse le plafond du schéma validate), et le
         // candidat — la seule chose libre.
-        $payload['version'] = '2.7';
+        $payload['version'] = '2.10';
         $payload['solverTimeoutSeconds'] = 2;
         $payload['candidate'] = [
             'teamId' => 'team-1',
             'venueId' => 'venue-1',
             'dayOfWeek' => 4,
             'startTime' => '20:00',
+            'durationMinutes' => 90,
+        ];
+        // P2-32 — `reference` (l'état « avant » du candidat, même forme que `candidate`) fait
+        // partie du contrat de verdict : `MoveSlotService::move()` le pose pour le DELTA de
+        // compromis. Optionnel (une création n'en pose pas) ; ici on prouve que le moteur RÉEL
+        // l'accepte (schéma `extra="forbid"`).
+        $payload['reference'] = [
+            'teamId' => 'team-1',
+            'venueId' => 'venue-1',
+            'dayOfWeek' => 2,
+            'startTime' => '18:00',
             'durationMinutes' => 90,
         ];
 
@@ -180,7 +195,7 @@ final class ValidateAssignmentsContractSchemaTest extends TestCase
      */
     private function assertPayloadShape(array $payload): void
     {
-        self::assertSame('2.7', $payload['version']);
+        self::assertSame('2.10', $payload['version']);
         self::assertSame(self::CLUB_ID, $payload['clubId']);
         self::assertSame(self::SEASON_ID, $payload['seasonId']);
         self::assertLessThanOrEqual(10, $payload['solverTimeoutSeconds']);
@@ -197,6 +212,14 @@ final class ValidateAssignmentsContractSchemaTest extends TestCase
             self::assertArrayHasKey($key, $candidate);
         }
         self::assertSame('team-1', $candidate['teamId']);
+
+        // P2-32 — `reference` a la MÊME forme que `candidate` (l'état « avant » du candidat).
+        self::assertArrayHasKey('reference', $payload);
+        $reference = $payload['reference'];
+        self::assertIsArray($reference);
+        foreach (['teamId', 'venueId', 'dayOfWeek', 'startTime', 'durationMinutes'] as $key) {
+            self::assertArrayHasKey($key, $reference);
+        }
     }
 
     private function isEngineUnavailable(TransportExceptionInterface $exception): bool
