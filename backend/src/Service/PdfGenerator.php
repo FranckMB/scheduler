@@ -133,7 +133,6 @@ class PdfGenerator
         $slots = $data->slots;
         $teamNames = $data->teamNames;
         $venues = $data->venues;
-        $coachNames = $data->coachNames;
         $club = $this->entityManager->getRepository(Club::class)->find($schedule->getClubId());
 
         // Columns = ordered (day, venue) pairs that actually carry a slot, so the
@@ -156,6 +155,17 @@ class PdfGenerator
             foreach ($ids as $vId) {
                 $columns[] = ['day' => $day, 'venueId' => $vId];
             }
+        }
+        // Column indices that OPEN a new day, so a marked vertical band (black, distinct
+        // from the light grid line) draws the mon/tue/… frontier in header AND body — same
+        // "isolate a day at a glance" intent as the wizard grid's thick day border.
+        $dayStartCols = [];
+        $prevDay = null;
+        foreach ($columns as $colIndex => $col) {
+            if (0 !== $colIndex && $col['day'] !== $prevDay) {
+                $dayStartCols[$colIndex] = true;
+            }
+            $prevDay = $col['day'];
         }
 
         [$startMin, $endMin] = $this->timeBounds($slots, $data->emptySlots);
@@ -180,8 +190,8 @@ class PdfGenerator
         }
 
         $steps = max(1, intdiv($endMin - $startMin, self::STEP_MINUTES));
-        $rows = $this->buildRows($columns, $byColStep, $emptyByColStep, $startMin, $steps, $teamNames, $venues, $coachNames, $data->groupLabels, null !== $venueId);
-        $header = $this->buildHeader($columns, $venues);
+        $rows = $this->buildRows($columns, $byColStep, $emptyByColStep, $startMin, $steps, $teamNames, $venues, $data->groupLabels, $dayStartCols);
+        $header = $this->buildHeader($columns, $venues, $dayStartCols);
 
         $scopeLabel = null === $venueId ? 'Tous les gymnases' : ($venues[$venueId]['name'] ?? 'Gymnase');
         // P4-52 — le logo du club en tête de PDF, INLINÉ en data URI : le worker
@@ -221,21 +231,30 @@ class PdfGenerator
      * @param array<string, array<int, ExportEmptyWindow>>          $emptyByColStep
      * @param array<string, string>                                 $teamNames
      * @param array<string, array{name:string,color:?string}>       $venues
-     * @param array<string, string>                                 $coachNames
      * @param array<string, string>                                 $groupLabels    "venue|day|H:i" → label
+     * @param array<int, true>                                      $dayStartCols   column indices that open a new day
      */
-    private function buildRows(array $columns, array $byColStep, array $emptyByColStep, int $startMin, int $steps, array $teamNames, array $venues, array $coachNames, array $groupLabels, bool $singleVenue): string
+    private function buildRows(array $columns, array $byColStep, array $emptyByColStep, int $startMin, int $steps, array $teamNames, array $venues, array $groupLabels, array $dayStartCols): string
     {
         // covered[colIndex][step] = true when a rowspan from above occupies the cell.
         $covered = [];
         $rows = '';
         for ($step = 0; $step < $steps; ++$step) {
-            $timeLabel = $this->formatMinutes($startMin + $step * self::STEP_MINUTES);
+            $absMin = $startMin + $step * self::STEP_MINUTES;
+            $timeLabel = $this->formatMinutes($absMin);
+            // Midday break [12:00, 14:00) shaded on the empty cells + time gutter (a real
+            // placement keeps its venue colour and shows through, as on the wizard grid);
+            // the 12:00 and 14:00 edges get a marked top rule so the band reads as a zone.
+            $inNoon = $absMin >= 12 * 60 && $absMin < 14 * 60;
+            $noonEdge = 12 * 60 === $absMin || 14 * 60 === $absMin;
+            $trClass = $noonEdge ? ' class="noon-edge"' : '';
+            $timeClass = $inNoon ? 'time noon' : 'time';
             $cells = '';
             foreach ($columns as $colIndex => $col) {
                 if (isset($covered[$colIndex][$step])) {
                     continue;
                 }
+                $dayStart = isset($dayStartCols[$colIndex]);
                 $colKey = $col['day'] . '|' . $col['venueId'];
                 $bucket = $byColStep[$colKey][$step] ?? [];
                 if ([] === $bucket) {
@@ -254,11 +273,11 @@ class PdfGenerator
                         for ($k = 1; $k < $span; ++$k) {
                             $covered[$colIndex][$step + $k] = true;
                         }
-                        $cells .= \sprintf('<td class="cell empty" rowspan="%d">vide</td>', $span);
+                        $cells .= \sprintf('<td class="%s" rowspan="%d">vide</td>', $this->cellClasses('cell empty', $dayStart, $inNoon), $span);
 
                         continue;
                     }
-                    $cells .= '<td class="cell"></td>';
+                    $cells .= \sprintf('<td class="%s"></td>', $this->cellClasses('cell', $dayStart, $inNoon));
 
                     continue;
                 }
@@ -270,32 +289,51 @@ class PdfGenerator
                 for ($k = 1; $k < $span; ++$k) {
                     $covered[$colIndex][$step + $k] = true;
                 }
-                $cells .= $this->slotCell($bucket, $span, $teamNames, $venues, $coachNames, $groupLabels, $singleVenue);
+                $cells .= $this->slotCell($bucket, $span, $teamNames, $venues, $groupLabels, $dayStart);
             }
-            $rows .= \sprintf('<tr><th class="time">%s</th>%s</tr>', $timeLabel, $cells);
+            $rows .= \sprintf('<tr%s><th class="%s">%s</th>%s</tr>', $trClass, $timeClass, $timeLabel, $cells);
         }
 
         return $rows;
+    }
+
+    /** Base cell classes plus the day-boundary band and midday-break shade when applicable. */
+    private function cellClasses(string $base, bool $dayStart, bool $inNoon): string
+    {
+        if ($dayStart) {
+            $base .= ' day-start';
+        }
+        if ($inNoon) {
+            $base .= ' noon';
+        }
+
+        return $base;
     }
 
     /**
      * @param list<ScheduleSlotTemplate>                      $bucket      concurrent slots (≥1) in one cell
      * @param array<string, string>                           $teamNames
      * @param array<string, array{name:string,color:?string}> $venues
-     * @param array<string, string>                           $coachNames
      * @param array<string, string>                           $groupLabels "venue|day|H:i" → label
      */
-    private function slotCell(array $bucket, int $span, array $teamNames, array $venues, array $coachNames, array $groupLabels, bool $singleVenue): string
+    private function slotCell(array $bucket, int $span, array $teamNames, array $venues, array $groupLabels, bool $dayStart): string
     {
         // Colour the cell by the (shared) venue of the bucket; stack each team.
         $venue = $venues[$bucket[0]->getVenueId()] ?? ['name' => 'Salle', 'color' => null];
         $color = $venue['color'] ?? '#666666';
         $fg = $this->readableForeground($color);
 
+        // Cell composition (founder): start time on TOP, team name(s) centred below. The
+        // gym is NOT repeated here — it already IS the column header (adaptation of the
+        // "gym at the bottom" wish), and the coach is dropped from the grid entirely (it
+        // only cluttered the cell). A shared window stacks each team on its own line, one
+        // per row, WITHOUT splitting the cell into sub-cells.
+        $slot0 = $bucket[0];
+        $time = \sprintf('<div class="cell-time">%s</div>', htmlspecialchars($slot0->getStartTime()->format('H:i')));
+
         // Group label ("CEC3") of this cell's window, if any — titled above the stacked teams.
         // Keyed by the window identity (venue|day|start) all slots of the bucket share. It is user
         // content: escaped like everything else in the template.
-        $slot0 = $bucket[0];
         $groupKey = $slot0->getVenueId() . '|' . $slot0->getDayOfWeek() . '|' . $slot0->getStartTime()->format('H:i');
         $groupLabel = $groupLabels[$groupKey] ?? null;
         $title = null === $groupLabel ? '' : \sprintf('<div class="group-title">%s</div>', htmlspecialchars($groupLabel));
@@ -303,22 +341,16 @@ class PdfGenerator
         $entries = '';
         foreach ($bucket as $slot) {
             $teamName = $teamNames[$slot->getTeamId()] ?? 'Équipe inconnue';
-            $coachId = $slot->getCoachId();
-            $coachName = null !== $coachId ? ($coachNames[$coachId] ?? null) : null;
-            // In a single-venue export the venue name is redundant (it's in the title).
-            $sub = $singleVenue ? ($coachName ?? '') : trim($venue['name'] . (null !== $coachName ? ' · ' . $coachName : ''));
-            $entries .= \sprintf(
-                '<div class="entry"><span class="team">%s</span>%s</div>',
-                htmlspecialchars($teamName),
-                '' === $sub ? '' : \sprintf('<span class="sub">%s</span>', htmlspecialchars($sub)),
-            );
+            $entries .= \sprintf('<div class="entry"><span class="team">%s</span></div>', htmlspecialchars($teamName));
         }
 
         return \sprintf(
-            '<td class="cell filled" rowspan="%d" style="background:%s;color:%s">%s%s</td>',
+            '<td class="%s" rowspan="%d" style="background:%s;color:%s">%s%s%s</td>',
+            $dayStart ? 'cell filled day-start' : 'cell filled',
             $span,
             htmlspecialchars($color),
             htmlspecialchars($fg),
+            $time,
             $title,
             $entries,
         );
@@ -327,26 +359,31 @@ class PdfGenerator
     /**
      * @param list<array{day:int,venueId:string}>             $columns
      * @param array<string, array{name:string,color:?string}> $venues
+     * @param array<int, true>                                $dayStartCols column indices that open a new day
      */
-    private function buildHeader(array $columns, array $venues): string
+    private function buildHeader(array $columns, array $venues, array $dayStartCols): string
     {
-        // Row 1: day labels spanning their venue columns. Row 2: venue names.
+        // Row 1: day labels spanning their venue columns. Row 2: venue names. The marked
+        // day-boundary band (see $dayStartCols) runs down both rows so the mon/tue frontier
+        // reads at a glance.
         $dayGroups = [];
         foreach ($columns as $col) {
             $dayGroups[$col['day']] = ($dayGroups[$col['day']] ?? 0) + 1;
         }
         $dayRow = '<th class="corner"></th>';
+        $firstDay = true;
         foreach ($dayGroups as $day => $count) {
-            $dayRow .= \sprintf('<th class="day" colspan="%d">%s</th>', $count, htmlspecialchars(ScheduleExportData::DAY_LABELS[$day] ?? ''));
+            $dayRow .= \sprintf('<th class="%s" colspan="%d">%s</th>', $firstDay ? 'day' : 'day day-start', $count, htmlspecialchars(ScheduleExportData::DAY_LABELS[$day] ?? ''));
+            $firstDay = false;
         }
         $venueRow = '<th class="corner"></th>';
-        foreach ($columns as $col) {
+        foreach ($columns as $colIndex => $col) {
             // Colour each venue header with its own colour (same mapping as the
             // cells) instead of the flat grey; readable text on top.
             $venue = $venues[$col['venueId']] ?? ['name' => '', 'color' => null];
             $color = $venue['color'] ?? null;
             $style = null === $color ? '' : \sprintf(' style="background:%s;color:%s"', htmlspecialchars($color), htmlspecialchars($this->readableForeground($color)));
-            $venueRow .= \sprintf('<th class="venue"%s>%s</th>', $style, htmlspecialchars($venue['name']));
+            $venueRow .= \sprintf('<th class="%s"%s>%s</th>', isset($dayStartCols[$colIndex]) ? 'venue day-start' : 'venue', $style, htmlspecialchars($venue['name']));
         }
 
         return \sprintf('<tr>%s</tr><tr>%s</tr>', $dayRow, $venueRow);
@@ -493,17 +530,20 @@ class PdfGenerator
         foreach ($dayColumns as $day) {
             $entries = $matrix[$teamId][$day] ?? [];
             usort($entries, static fn (array $a, array $b): int => $a['start'] <=> $b['start']);
-            $chips = '';
+            // No pill/badge (founder): the venue colour FILLS the whole cell, text centred
+            // with a readable foreground. A day holding two sessions stacks two full-width
+            // colour blocks that together fill the cell (each keeps its own gym colour).
+            $fills = '';
             foreach ($entries as $entry) {
                 $color = $entry['color'];
-                $chips .= \sprintf(
-                    '<span class="chip" style="background:%s;color:%s">%s</span>',
+                $fills .= \sprintf(
+                    '<div class="fill" style="background:%s;color:%s">%s</div>',
                     htmlspecialchars($color),
                     htmlspecialchars($this->readableForeground($color)),
                     htmlspecialchars($entry['text']),
                 );
             }
-            $cells .= \sprintf('<td>%s</td>', $chips);
+            $cells .= \sprintf('<td>%s</td>', $fills);
         }
 
         return \sprintf('<tr>%s</tr>', $cells);
@@ -581,21 +621,34 @@ class PdfGenerator
                 th.corner { width: 34px; background: #fff; border: none; }
                 th.time { background: #fafafa; text-align: right; white-space: nowrap; font-weight: normal; color: #555; width: 34px; }
                 td.cell { height: 14px; }
+                /* Occupied cells: a stronger (near-black) border than the light #bbb grid line. */
+                td.filled { border: 2px solid #111; text-align: center; }
+                td.filled .cell-time { display: block; font-size: 8px; font-weight: 600; opacity: 0.9; line-height: 1.1; margin-bottom: 1px; }
                 td.filled .group-title { display: block; font-weight: bold; font-size: 8px; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.95; margin-bottom: 2px; padding-bottom: 1px; border-bottom: 1px solid rgba(255,255,255,0.55); }
                 td.filled .entry + .entry { margin-top: 2px; padding-top: 2px; border-top: 1px dashed rgba(255,255,255,0.45); }
                 td.filled .team { display: block; font-weight: bold; line-height: 1.1; }
-                td.filled .sub { display: block; font-size: 8px; opacity: 0.9; line-height: 1.1; }
                 .empty { color: #999; font-style: italic; }
                 td.cell.empty { text-align: center; vertical-align: middle; color: #999; font-style: italic; font-size: 8px; border: 1px dashed #ccc; }
+                /* Midday break [12:00, 14:00): a rosé band on empty cells + gutter, with a
+                   marked rule at its 12:00/14:00 edges — a real placement shows through in
+                   its venue colour, same intent as the wizard slot grid. */
+                td.cell.noon { background: #fdf2f4; }
+                th.time.noon { background: #fbe9ec; }
+                tr.noon-edge td, tr.noon-edge th { border-top: 2px solid #e3a7b1; }
+                /* Marked vertical band (black) at each mon/tue/… day frontier. */
+                .day-start { border-left: 2px solid #111; }
                 /* Section 2 — the team × day matrix, on its own page(s). */
                 .page-matrix { break-before: page; }
                 .matrix-title { font-size: 13px; margin: 0 0 8px; }
-                table.matrix td { text-align: left; height: 16px; }
+                table.matrix td { text-align: center; height: 16px; padding: 0; }
                 table.matrix .team-col { text-align: left; font-weight: bold; width: 92px; background: #fafafa; }
                 /* A whole rank group stays on one page — never split by landscape pagination. */
                 table.matrix tbody.rank-group { break-inside: avoid; }
                 table.matrix tr.rank-title th { text-align: left; background: #e9e9ee; color: #222; font-size: 10px; padding: 3px 4px; border-top: 2px solid #999; }
-                table.matrix .chip { display: inline-block; padding: 1px 4px; margin: 1px; border-radius: 3px; font-size: 8px; line-height: 1.3; white-space: nowrap; }
+                /* No badge: the venue colour FILLS the cell, text centred. Two sessions in a
+                   day stack two full-width blocks that together fill the cell. */
+                table.matrix td .fill { display: block; padding: 2px 4px; font-size: 8px; line-height: 1.3; }
+                table.matrix td .fill + .fill { border-top: 1px solid rgba(255,255,255,0.5); }
             </style></head><body>
                 <header>%s<h1>%s</h1><span class="scope">%s</span><span class="sched">%s</span></header>
                 %s

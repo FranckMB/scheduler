@@ -174,6 +174,65 @@ final class PdfTeamDayMatrixTest extends TestCase
         self::assertTrue($captured[1]['multiSection'] ?? null, 'multi-section : le drapeau est ajouté à true');
     }
 
+    /**
+     * Esthétique de la grille (section 1) — composition d'une cellule occupée : heure en
+     * tête, nom(s) d'équipe empilés en dessous, JAMAIS le coach ni le gymnase (ce dernier
+     * étant déjà l'en-tête de colonne). Un créneau partagé empile les noms, un par ligne,
+     * sans diviser la cellule en sous-cellules.
+     */
+    public function testGridCellShowsStartTimeThenStackedTeamsWithoutCoachOrRepeatedVenue(): void
+    {
+        $html = $this->slotCell(
+            [$this->slot('t-a', 'v-a', 2, '18:00', 'c-1'), $this->slot('t-b', 'v-a', 2, '18:00', 'c-1')],
+            6,
+            ['t-a' => 'U9F1', 't-b' => 'U9F2'],
+            ['v-a' => ['name' => 'Gymnase Municipal', 'color' => '#FFD700']],
+            [],
+            false,
+        );
+
+        // Heure de début en HAUT de la cellule.
+        self::assertStringContainsString('class="cell-time">18:00', $html);
+        // Les deux équipes empilées, une par ligne — jamais fondues en sous-cellules.
+        self::assertStringContainsString('U9F1', $html);
+        self::assertStringContainsString('U9F2', $html);
+        self::assertSame(2, substr_count($html, 'class="entry"'), 'un nom d’équipe par ligne (pile, pas de division de cellule)');
+        // Le gymnase n'est PAS répété dans la cellule (il EST l'en-tête de colonne).
+        self::assertStringNotContainsString('Gymnase Municipal', $html);
+        // Plus de sous-ligne gymnase/coach : le coach a quitté la grille (surcharge).
+        self::assertStringNotContainsString('class="sub"', $html, 'la sous-ligne gymnase/coach a disparu de la cellule');
+    }
+
+    /**
+     * Esthétique de la matrice (section 2) — plus de pastille : la couleur du gymnase
+     * REMPLIT la case (bloc plein), texte centré. Deux séances le même jour empilent deux
+     * blocs pleins qui, ensemble, remplissent la case.
+     */
+    public function testMatrixCellFillsWholeCellWithColourInsteadOfABadge(): void
+    {
+        $html = $this->buildMatrix($this->data([
+            $this->slot('t-a', 'v-a', 1, '18:30'),
+            $this->slot('t-b', 'v-b', 3, '20:00'),
+        ]));
+
+        // Plus de « chip » ; un bloc plein qui porte la couleur du gymnase en fond.
+        self::assertStringNotContainsString('class="chip"', $html, 'plus de pastille — la couleur remplit la case');
+        self::assertMatchesRegularExpression('/class="fill" style="background:#[0-9A-Fa-f]{6};color:/', $html, 'le bloc de la case porte la couleur du gymnase');
+    }
+
+    /**
+     * Le CSS enveloppant porte les marques esthétiques de la grille : bande verticale des
+     * jours, pause méridienne délimitée, bordure renforcée des cellules occupées.
+     */
+    public function testGridCssMarksDayBoundaryNoonBandAndOccupiedCells(): void
+    {
+        $document = $this->wrapDocument();
+
+        self::assertMatchesRegularExpression('/\.day-start\s*\{[^}]*border-left:\s*2px solid/', $document, 'une bande verticale marque la frontière des jours');
+        self::assertStringContainsString('td.cell.noon', $document, 'la pause méridienne est délimitée sur les cellules');
+        self::assertMatchesRegularExpression('/td\.filled\s*\{[^}]*border:\s*2px solid/', $document, 'les cellules occupées ont une bordure plus marquée que la grille de base');
+    }
+
     private function slot(string $teamId, string $venueId, int $day, string $time, ?string $coachId = null): ScheduleSlotTemplate
     {
         return new ScheduleSlotTemplate()
@@ -230,6 +289,19 @@ final class PdfTeamDayMatrixTest extends TestCase
         $generator = new ReflectionClass(PdfGenerator::class)->newInstanceWithoutConstructor();
 
         return (string) new ReflectionMethod(PdfGenerator::class, 'buildMatrixSection')->invoke($generator, $data);
+    }
+
+    /**
+     * @param list<ScheduleSlotTemplate>                      $bucket
+     * @param array<string, string>                           $teamNames
+     * @param array<string, array{name:string,color:?string}> $venues
+     * @param array<string, string>                           $groupLabels
+     */
+    private function slotCell(array $bucket, int $span, array $teamNames, array $venues, array $groupLabels, bool $dayStart): string
+    {
+        $generator = new ReflectionClass(PdfGenerator::class)->newInstanceWithoutConstructor();
+
+        return (string) new ReflectionMethod(PdfGenerator::class, 'slotCell')->invoke($generator, $bucket, $span, $teamNames, $venues, $groupLabels, $dayStart);
     }
 
     private function wrapDocument(): string

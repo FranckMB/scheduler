@@ -51,15 +51,6 @@ interface SlotDetailProps {
   onMove: (patch: SlotMovePatch) => void;
 }
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between gap-4 py-1 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="text-right font-medium">{value}</span>
-    </div>
-  );
-}
-
 /**
  * L'origine du verrou EN CLAIR (F1). ⚠ `UNKNOWN` se lit comme une IGNORANCE — le créneau EST
  * bien verrouillé, on ne sait simplement pas d'où vient le verrou : c'est cette nuance qui
@@ -75,25 +66,23 @@ function ConstraintList({ label, items, describe }: { label: string; items: Cons
   return (
     <div className="mt-2 first:mt-0">
       <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-muted-foreground/80">{label}</p>
-      <ul className="mt-1 flex flex-col gap-1">
+      <ul className="mt-1 divide-y divide-border/60">
         {items.map((c) => {
-          // Ce que la règle FAIT (dérivé de la config, vérifiable) en tête ; le nom LIBRE du
-          // gestionnaire reste en second — repère utile mais faillible (périmé/copié). Quand on
-          // ne sait pas décrire fidèlement (`null`), le nom redevient la seule ligne.
+          // B2 — UNE seule ligne de texte par contrainte : ce que la règle FAIT (dérivé de la
+          // config, vérifiable) ou, faute de description fidèle (`null`), son nom libre. Le nom
+          // libre ne double plus la description (doublon supprimé).
           const what = describe(c);
 
           return (
-            <li key={c.id} className="flex flex-col gap-0.5 text-sm">
+            <li key={c.id} className="flex flex-col gap-0.5 py-2 text-sm first:pt-0.5 last:pb-0.5">
               <div className="flex items-start justify-between gap-2">
-                <span className="min-w-0">
-                  <span className="block">{what ?? c.name}</span>
-                  {null !== what ? <span className="block truncate text-xs text-muted-foreground">{c.name}</span> : null}
-                </span>
+                <span className="min-w-0">{what ?? c.name}</span>
                 <span className="mt-0.5 shrink-0 rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{"HARD" === c.ruleType ? "obligatoire" : "préférence"}</span>
               </div>
               {/* P2-25 lien B — un problème DÉSIGNÉ (la règle qui contraint ce créneau) mène à son
-                  lieu de correction : l'éditeur du wizard, ouvert PRÉ-REMPLI sur elle. Retour nommé
-                  « ← Retour au planning ». */}
+                  lieu de correction : l'éditeur du wizard, ouvert PRÉ-REMPLI sur elle. Rattaché
+                  visuellement à SA règle (même bloc, sous sa ligne). Retour nommé « ← Retour au
+                  planning ». */}
               <WizardStepLink
                 step="constraints"
                 params={{ edit: c.id }}
@@ -154,9 +143,12 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
         </button>
       </CardHeader>
       <CardContent className="min-h-0 flex-1 overflow-y-auto pt-0">
-        <Row label="Catégorie" value={categoryLabel} />
-        <Row label="Coach" value={cell.coachLabel} />
-        <Row label="Durée" value={`${slot.durationMinutes} min`} />
+        {/* B1 — une seule ligne discrète sous le titre (au lieu de trois lignes étiquetées).
+            Séparateurs « · », aucun libellé sauf le préfixe « Coach » ; un segment vide est
+            omis sans « · » orphelin ; wrapping naturel (pas de troncature). */}
+        <p className="text-sm text-muted-foreground">
+          {[categoryLabel || null, `${slot.durationMinutes} min`, cell.coachLabel ? `Coach ${cell.coachLabel}` : null].filter(Boolean).join(" · ")}
+        </p>
 
         {null !== origin ? (
           <div className="mt-3 border-t border-border pt-3">
