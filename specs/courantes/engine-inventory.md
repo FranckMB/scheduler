@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 2026-08-16 (stamp posé ce jour, re-vérifié contre `engine/app/solver/objective.py` : **chaining bonus étendu** — il récompense désormais la présence d'une PERSONNE aux deux séances back-to-back (coach OU joueur de l'équipe, via `team_player_map`), plus seulement le coach ; plafond raisonné PAR PERSONNE, barème `CHAINING_TIER_WEIGHTS` inchangé (voir §Objectif) ; contenu recalé le 2026-08-15 par la livraison : **CONTRACT_VERSION 2.7 → 2.8** — le diagnostic `session_below_effective_min` porte désormais la cause STRUCTURÉE (`causes: DiagnosticCauseSchema[]` = `{kind, constraintId, label, count}`, `kind` Literal fermé) MESURÉE à la pose des contraintes, plus `openCandidates` (compte des créneaux restés ouverts, non fermés) — P4-99 PR-1 ; objectif **V10** inchangé — le remplissage prime sur le confort ; `missing_session` −1000/séance manquante. Diagnostic `session_below_effective_min` : message neutre CONSERVÉ quand aucune cause n'est mesurable. Golden d'acceptation `bccl_2026_08_15` (90 séances) inchangé. Recalé le 2026-08-16 : **CONTRACT_VERSION 2.8 → 2.9** — retrait des champs morts `temporaryLock`/`temporaryLockFor`/`temporaryMinSessionsOverride` (jamais lus par le solveur), golden rejoué à résultat identique ; énumérations `ScheduleSlotTemplateSchema`/`ScheduleSlotSchema` recalées en conséquence (les trois champs retirés du code étaient restés listés ici). **Dérive corrigée au passage** : la liste « Types valides » citait `coach_no_rest_day` (mort depuis le contrat 2.7) et omettait `implicit_rule_not_honored` et `unplaced_match` — recalée sur le `Literal` de `output_schema.py:42-54`, qui fait foi ; précédemment : 2026-08-15, CONTRACT_VERSION 2.7, objectif V10)
+Last verified @ 2026-08-16 (stamp posé ce jour, re-vérifié contre `engine/app/solver/compromise.py` + `engine/app/solver/validate_assignments.py` + `engine/app/schemas/validate_{input,output}_schema.py` : **CONTRACT_VERSION 2.9 → 2.10** — `/validate-assignments` gagne les **compromis nommés** sur un candidat ACCEPTÉ (P2-32 PR A). Un `compromise` est le delta de confort entre deux états FIGÉS évalués par LE SOLVEUR avec le MÊME objectif que `/generate` + `Maximize`, zéro recherche (tout est épinglé, la maximisation ne fait que résoudre les littéraux réifiés) : « avant » = baseline gelée + `reference` (nouveau champ d'entrée optionnel, posé par le backend pour un déplacement — le placement d'origine de la source ; absent pour une création à la dérive → baseline nue) épinglé, « après » = baseline gelée + candidat épinglé. 8 familles FERMÉES (`chaining`/`venue_preference`/`day_preference`/`time_preference`/`match_rest`/`spacing`/`coach_day_cap`/`implicit_rule` — étendre = décision fondateur), un `effect` `broken`/`gained`, un `message` français déjà humain et AUCUN identifiant interne (lookup manqué → libellé générique, jamais l'id brut — nit corrigé en revue de sécurité), jamais un poids ni une somme (P5-14b, « pas de score /100 »). Chemin REFUS byte-identique (`compromises: []`, zéro solve de plus). Un candidat ACCEPTÉ déclenche donc **jusqu'à trois solves** (verdict + état avant + état après), chacun sous le budget court existant (2 s par défaut, déterministe : mono-candidat, 1 worker). Nouveau module `compromise.py` (`CompromiseTermInfo`, `compute_compromises`) ; `add_venue_preference_bonus` **extrait** de l'assemblage inline de `main.build_schedule` vers `objective.py` (D-6, maison unique génération⇄évaluation) — comme les autres builders soft (`add_coach_rest_day_constraints`/`add_salarie_distribution_constraints`/`add_max_consecutive_sessions_constraints`/`add_age_ascending_constraints`), il prend un `info_out`/`soft_term_info_out` optionnel qui n'ajoute AUCUNE variable ni contrainte — défaut `None`, chemin `/generate` byte-identique, goldens inchangés. Contenu recalé le 2026-08-15 par la livraison : **CONTRACT_VERSION 2.7 → 2.8** — le diagnostic `session_below_effective_min` porte désormais la cause STRUCTURÉE (`causes: DiagnosticCauseSchema[]` = `{kind, constraintId, label, count}`, `kind` Literal fermé) MESURÉE à la pose des contraintes, plus `openCandidates` (compte des créneaux restés ouverts, non fermés) — P4-99 PR-1 ; objectif **V10** inchangé — le remplissage prime sur le confort ; `missing_session` −1000/séance manquante. Diagnostic `session_below_effective_min` : message neutre CONSERVÉ quand aucune cause n'est mesurable. Golden d'acceptation `bccl_2026_08_15` (90 séances) inchangé. Recalé le 2026-08-16 : **CONTRACT_VERSION 2.8 → 2.9** — retrait des champs morts `temporaryLock`/`temporaryLockFor`/`temporaryMinSessionsOverride` (jamais lus par le solveur), golden rejoué à résultat identique ; énumérations `ScheduleSlotTemplateSchema`/`ScheduleSlotSchema` recalées en conséquence (les trois champs retirés du code étaient restés listés ici). **Dérive corrigée au passage** : la liste « Types valides » citait `coach_no_rest_day` (mort depuis le contrat 2.7) et omettait `implicit_rule_not_honored` et `unplaced_match` — recalée sur le `Literal` de `output_schema.py:42-54`, qui fait foi ; précédemment : 2026-08-15, CONTRACT_VERSION 2.7, objectif V10)
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
@@ -14,7 +14,7 @@ Last verified @ 2026-08-16 (stamp posé ce jour, re-vérifié contre `engine/app
 - **Solver** : Google OR-Tools CP-SAT (`from ortools.sat.python import cp_model`).
 - **Validation** : Pydantic v2 (`BaseModel`, `ConfigDict`, `Field`, `populate_by_name=True`).
 - **Settings** : `pydantic-settings` (`engine/app/core/config.py`), prefix env `ENGINE_`, `.env` lu. Defaults : `app_name="engine"`, `app_version="1.0"`, `contract_version="2.0"`, `environment="dev"`, `log_level="info"`.
-- **Contract version** : lu depuis `engine/CONTRACT_VERSION` (**fichier = `2.10`** — source de vérité, `main.py:104-108`), fallback `settings.contract_version` (default `2.0`) si le fichier manque. Bumps depuis 2.0 : **2.1** = fenêtres horaires d'indisponibilité coach (lot C, #195) ; **2.2** = second problème `/place-matches` (P1-4 PR D, ADR-0003) ; **2.3** = retrait de `maxDaysOverrideConfirmed` (P4-51 : un drapeau que rien ne lisait, schéma `forbid` donc rupture de recevabilité) ; **2.4** = troisième endpoint `/validate-assignments` (P2-2 F2a : verdict moteur sur un candidat, baseline figée via `add_fixed_slots`) ; **2.5** = retrait de `allowMultipleSessionsPerDay` (P4-79 : jumeau de 2.3 — un levier de solveur que rien n'écrivait, schéma `forbid` donc rupture de recevabilité) ; **2.7** = bloc optionnel `implicitRules` (P2-28 PR 1 : intensité HARD/PREFERRED + seuils des 4 règles de bien-être, diagnostic `implicit_rule_not_honored` + `ruleKey`, retrait du type mort `coach_no_rest_day`) ; **2.8** = cause STRUCTURÉE d'une séance manquante (P4-99 PR-1 : `session_below_effective_min` porte `causes[]` = `{kind, constraintId, label, count}` MESURÉE à la pose + `openCandidates`) ; **2.9** = retrait des champs morts `temporaryLock`/`temporaryLockFor`/`temporaryMinSessionsOverride` (jamais lus par le solveur, schéma `forbid` → leur présence dans un vieux payload devient un 422 : bump requis). — **UN SEUL contrat pour les TROIS endpoints**, tous vérifient le même MAJOR.
+- **Contract version** : lu depuis `engine/CONTRACT_VERSION` (**fichier = `2.10`** — source de vérité, `main.py:104-108`), fallback `settings.contract_version` (default `2.0`) si le fichier manque. Bumps depuis 2.0 : **2.1** = fenêtres horaires d'indisponibilité coach (lot C, #195) ; **2.2** = second problème `/place-matches` (P1-4 PR D, ADR-0003) ; **2.3** = retrait de `maxDaysOverrideConfirmed` (P4-51 : un drapeau que rien ne lisait, schéma `forbid` donc rupture de recevabilité) ; **2.4** = troisième endpoint `/validate-assignments` (P2-2 F2a : verdict moteur sur un candidat, baseline figée via `add_fixed_slots`) ; **2.5** = retrait de `allowMultipleSessionsPerDay` (P4-79 : jumeau de 2.3 — un levier de solveur que rien n'écrivait, schéma `forbid` donc rupture de recevabilité) ; **2.7** = bloc optionnel `implicitRules` (P2-28 PR 1 : intensité HARD/PREFERRED + seuils des 4 règles de bien-être, diagnostic `implicit_rule_not_honored` + `ruleKey`, retrait du type mort `coach_no_rest_day`) ; **2.8** = cause STRUCTURÉE d'une séance manquante (P4-99 PR-1 : `session_below_effective_min` porte `causes[]` = `{kind, constraintId, label, count}` MESURÉE à la pose + `openCandidates`) ; **2.9** = retrait des champs morts `temporaryLock`/`temporaryLockFor`/`temporaryMinSessionsOverride` (jamais lus par le solveur, schéma `forbid` → leur présence dans un vieux payload devient un 422 : bump requis) ; **2.10** = compromis nommés sur `/validate-assignments` (P2-32 PR A : `reference` optionnel en entrée, `compromises[]` en sortie sur un candidat ACCEPTÉ — voir §POST /validate-assignments). — **UN SEUL contrat pour les TROIS endpoints**, tous vérifient le même MAJOR.
 - **Structure interne** :
   - `app/main.py` — endpoints FastAPI + pipeline solver.
   - `app/core/config.py` — settings.
@@ -41,7 +41,7 @@ Last verified @ 2026-08-16 (stamp posé ce jour, re-vérifié contre `engine/app
 | `/health` | GET | Health simple | `{"status":"ok"}` |
 | `/generate` | POST | **Principal** — résout un planning hebdomadaire | `ScheduleOutputSchema` |
 | `/place-matches` | POST | **Second problème** — place des matchs DATÉS (P1-4 PR D, ADR-0003) | `MatchPlacementOutputSchema` |
-| `/validate-assignments` | POST | **Verdict sur UN candidat** (P2-2 F2a) — « puis-je mettre cette équipe sur ce créneau ? ». Baseline **entièrement figée** via `add_fixed_slots`, candidat épinglé à part : le solve ne fait qu'un test de faisabilité. ⚠ **Le gel EST le verdict** — baseline non figée, le solveur déplace la séance en conflit et rend `valid=True` (falsifié). Mono-candidat ⇒ 1 worker ⇒ déterministe. Budget 2 s par défaut, plafond 10 s ; mesuré **~500 ms** sur 49 équipes (le build du modèle domine, pas le solve). Un « non » **nomme les règles cassées** (`diagnose_candidate_conflicts`) ; `baseline_infeasible` distingue une baseline déjà invalide d'un conflit non nommé | `ValidateAssignmentOutputSchema` |
+| `/validate-assignments` | POST | **Verdict sur UN candidat** (P2-2 F2a) — « puis-je mettre cette équipe sur ce créneau ? ». Baseline **entièrement figée** via `add_fixed_slots`, candidat épinglé à part : le solve du verdict ne fait qu'un test de faisabilité. ⚠ **Le gel EST le verdict** — baseline non figée, le solveur déplace la séance en conflit et rend `valid=True` (falsifié). Mono-candidat ⇒ 1 worker ⇒ déterministe. Budget 2 s par défaut, plafond 10 s ; mesuré **~500 ms** sur 49 équipes (le build du modèle domine, pas le solve). Un « non » **nomme les règles cassées** (`diagnose_candidate_conflicts`) ; `baseline_infeasible` distingue une baseline déjà invalide d'un conflit non nommé. Un « oui » (P2-32) déclenche **jusqu'à deux solves de plus** pour nommer les **compromis** — voir §POST /validate-assignments | `ValidateAssignmentOutputSchema` |
 | `/implicit-constraints` | POST | Sync règles implicites backend↔engine | `JSONResponse` (200 synchronized / 409 desynchronized) |
 
 ### POST /place-matches
@@ -85,6 +85,61 @@ Le **second problème CP-SAT**, distinct du solve hebdomadaire (ADR-0003 ; compo
   - **Phase 1 — placement** : `CpSolver` avec `max_time_in_seconds = timeout adaptatif`, `random_seed = input_data.solver_seed`, `num_search_workers = workers adaptatifs` (1 ou 8 selon la complexité, cf. §5). Objectif = placement uniquement (sans chaînage), pour ne pas polluer la preuve d'optimalité.
   - **Phase 2 — chaînage** (uniquement si phase 1 OPTIMAL/FEASIBLE et termes de chaînage présents) : verrouille la qualité de placement (`placement_expression >= optimum phase 1`), **warm-start** via `AddHint` sur la solution de phase 1, puis maximise `placement + chaining` sous un cap dur `CHAINING_PHASE_MAX_SECONDS = 10 s` (best-effort : si le cap tombe, le résultat de phase 1 est conservé).
 - **Pas de fallback de relaxation** : toutes les contraintes HARD restent actives dans les deux phases. Si INFEASIBLE, `build_result` produit `status="failed"` avec diagnostics de conflit — pas de relaxation silencieuse. Le message d'échec (`_infeasible_message`) compte les **places** (capacités dédupliquées par triplet, miroir de `model.slot_capacities`) et non les créneaux, et nomme le gymnase dont les « au moins » dépassent les places non verrouillées (`_saturated_venue_minimum`, PR A 2026-08-06).
+
+### POST /validate-assignments
+
+Le verdict F2a (§ci-dessus) plus, depuis **P2-32 PR A (2026-08-16, contrat 2.10)**, les
+**compromis nommés** d'un candidat ACCEPTÉ. Ce qui change, propre à l'engine (comportement
+produit côté backend/front : `backend-inventory.md` §route `move`/`place-slot`) :
+
+- **Périmètre** : un compromis est le delta de confort d'un déplacement, **jamais** un verdict —
+  le booléen `valid` continue de venir SEUL du test de faisabilité HARD (`_apply_hard` sur le
+  candidat épinglé). Les compromis ne sont calculés **qu'après** un `valid=True`, dans
+  `_compromises_for` (`validate_assignments.py`) ; le chemin refus n'appelle jamais le solveur une
+  deuxième fois.
+- **Deux états FIGÉS, évalués par LE SOLVEUR** (`_evaluate_state`) : le modèle est reconstruit à
+  chaque appel (mêmes builders HARD que `/generate`), **toutes** les variables hors des slots
+  épinglés sont forcées à 0 (`model.Add(var == 0)`) — sans quoi un `Maximize` placerait des
+  séances fantômes pour gonfler le score de confort — puis on ajoute les MÊMES termes soft que
+  `/generate` (préférences gymnase/jour/heure, repos après match, spacing, plafond de jours coach,
+  règles implicites, chaînage) et on **maximise**. Aucune recherche de placement : tout est déjà
+  épinglé, la maximisation ne fait que résoudre les littéraux réifiés (dont le littéral `chained`,
+  qui a besoin de l'objectif pour se réifier — cf. `objective.py`).
+  - **« avant »** = baseline gelée + `reference` épinglé (nouveau champ d'entrée optionnel,
+    `CandidateAssignmentSchema | None`) — le backend le pose au placement d'ORIGINE de la source
+    pour un déplacement ; absent pour une création à la dérive (`place()`), auquel cas « avant » =
+    baseline nue.
+  - **« après »** = baseline gelée + candidat épinglé.
+- **Le delta** (`compute_compromises`, `solver/compromise.py`) : pour chaque terme soft, replié par
+  clé LOGIQUE (équipe/gymnase/jour/coach — les familles per-slot s'agrègent PAR ÉQUIPE pour éviter
+  le double-compte d'un déplacement au sein des créneaux déjà préférés), on compte les termes
+  HONORÉS avant/après. Le compte baisse → `broken` ; monte → `gained` ; égal → silence (pas
+  d'entrée). **8 familles fermées** (étendre = décision fondateur) : `chaining`,
+  `venue_preference`, `day_preference`, `time_preference`, `match_rest`, `spacing`,
+  `coach_day_cap`, `implicit_rule` (sous-genre porté par `detail`, jamais exposé tel quel :
+  `coach_rest`/`salarie`/`chain`/`age`). `missing_session`, les tiers de priorité S/A/B/C/D et
+  **tout poids/somme en sont volontairement EXCLUS** (décision P5-14b, « jamais un score /100 »).
+- **Message français, zéro identifiant interne** : `_message()` résout équipe/coach/gymnase via
+  les tables de noms du club envoyées dans le payload — un lookup manqué retombe sur un libellé
+  générique (« une équipe », « un coach », « un gymnase »), **jamais l'id brut** (nit corrigé en
+  revue de sécurité avant merge, commit `187bb706`).
+- **Coût** : un candidat ACCEPTÉ passe de 1 à **3 solves** (verdict + avant + après), chacun sous
+  le même budget court que le verdict (`solverTimeoutSeconds`, 2 s par défaut) et le même régime
+  déterministe (mono-candidat, 1 worker). Le timeout **HTTP** côté backend est monté à 8 s en
+  conséquence (voir `backend-inventory.md`) — le budget **solveur** par solve, lui, ne change pas.
+- **Maison unique génération⇄évaluation (D-6)** : `add_venue_preference_bonus` (bonus `preferred`
+  + malus `avoided_venue`) était assemblé inline dans `main.build_schedule` — **extrait** tel quel
+  vers `objective.py` pour être appelé aussi par `_evaluate_state`, sans dupliquer la logique. Les
+  autres builders soft (`add_coach_rest_day_constraints`, `add_salarie_distribution_constraints`,
+  `add_max_consecutive_sessions_constraints`, `add_age_ascending_constraints`) gagnent un
+  paramètre `soft_term_info_out`/`info_out` du même patron : optionnel, défaut `None`, n'ajoute
+  **aucune** variable ni contrainte au modèle — le chemin `/generate` (qui ne le passe jamais) est
+  byte-identique, goldens inchangés.
+- **Tests** : falsification par famille + cas piège chaining (le littéral `chained` exige
+  `apply_chaining=True` dans `_evaluate_state`, sans quoi il ne se réifie jamais)
+  (`engine/tests/test_validate_compromises.py`), parité sémantique génération⇄évaluation
+  (`engine/tests/semantic/test_compromise_parity.py` — le même candidat honore/casse les mêmes
+  préférences qu'un `/generate` équivalent).
 
 ---
 
