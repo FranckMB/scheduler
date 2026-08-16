@@ -622,8 +622,11 @@ class PdfGenerator
                 th.time { background: #fafafa; text-align: right; white-space: nowrap; font-weight: normal; color: #555; width: 34px; }
                 td.cell { height: 14px; }
                 /* Occupied cells: a stronger (near-black) border than the light #bbb grid line. */
-                td.filled { border: 2px solid #111; text-align: center; }
-                td.filled .cell-time { display: block; font-size: 8px; font-weight: 600; opacity: 0.9; line-height: 1.1; margin-bottom: 1px; }
+                /* Heure épinglée en HAUT (absolue), bloc équipes centré dans la hauteur
+                   REELLE de la cellule fusionnée (vertical-align sur le td) — sinon tout
+                   s empile au sommet et une séance longue semble vide en bas. */
+                td.filled { border: 2px solid #111; text-align: center; position: relative; vertical-align: middle; }
+                td.filled .cell-time { position: absolute; top: 2px; left: 0; right: 0; font-size: 8px; font-weight: 600; opacity: 0.9; line-height: 1.1; }
                 td.filled .group-title { display: block; font-weight: bold; font-size: 8px; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.95; margin-bottom: 2px; padding-bottom: 1px; border-bottom: 1px solid rgba(255,255,255,0.55); }
                 td.filled .entry + .entry { margin-top: 2px; padding-top: 2px; border-top: 1px dashed rgba(255,255,255,0.45); }
                 td.filled .team { display: block; font-weight: bold; line-height: 1.1; }
