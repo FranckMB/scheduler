@@ -169,7 +169,7 @@ final class ValidateAssignmentsContractSchemaTest extends TestCase
         // La version se LIT du fichier source de vérité : un littéral y dérivait en
         // silence (le moteur ne compare que le MAJOR, le test restait vert à 2.10
         // alors que le contrat était passé à 2.11).
-        $payload['version'] = self::currentContractVersion();
+        $payload['version'] = $this->currentContractVersion();
         $payload['solverTimeoutSeconds'] = 2;
         $payload['candidate'] = [
             'teamId' => 'team-1',
@@ -194,7 +194,7 @@ final class ValidateAssignmentsContractSchemaTest extends TestCase
     }
 
     /** La source de vérité du contrat — le même fichier que `PayloadVersionMatchesContractVersionTest`. */
-    private static function currentContractVersion(): string
+    private function currentContractVersion(): string
     {
         $raw = file_get_contents(__DIR__ . '/../../../engine/CONTRACT_VERSION');
         self::assertIsString($raw, 'engine/CONTRACT_VERSION illisible');
@@ -207,7 +207,7 @@ final class ValidateAssignmentsContractSchemaTest extends TestCase
      */
     private function assertPayloadShape(array $payload): void
     {
-        self::assertSame(self::currentContractVersion(), $payload['version']);
+        self::assertSame($this->currentContractVersion(), $payload['version']);
         self::assertSame(self::CLUB_ID, $payload['clubId']);
         self::assertSame(self::SEASON_ID, $payload['seasonId']);
         self::assertLessThanOrEqual(10, $payload['solverTimeoutSeconds']);
