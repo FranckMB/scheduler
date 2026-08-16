@@ -47,14 +47,15 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
   const { columns, dayGroups, rows, cells } = model;
   const gridRef = useRef<HTMLDivElement>(null);
 
-  // Lentille : l'icône de catégorie (F1), coin haut-GAUCHE de la carte — à l'opposé du cadenas
-  // (coin haut-droit), pour ne pas se chevaucher. Décorative (aria-hidden) : la couleur ET la
-  // légende du panneau portent le sens ; le `data-lens` sert au repérage par les tests.
+  // Lentille : l'icône de catégorie (F1), coin bas-GAUCHE de la carte (retour fondateur : le
+  // haut-gauche empiétait sur le nom d'équipe ; le cadenas garde le haut-droit). Décorative
+  // (aria-hidden) : la couleur ET la légende du panneau portent le sens ; le `data-lens` sert
+  // au repérage par les tests.
   const renderLensBadge = (origin: LockOrigin) => {
     const meta = LOCK_LENS_META[origin];
     const Icon = meta.Icon;
     return (
-      <span data-lens={origin} aria-hidden="true" className={cn("pointer-events-none absolute left-0.5 top-0.5 z-20", meta.textClass)}>
+      <span data-lens={origin} aria-hidden="true" className={cn("pointer-events-none absolute bottom-0.5 left-0.5 z-20", meta.textClass)}>
         <Icon className="size-3" />
       </span>
     );
