@@ -151,6 +151,22 @@ export function useMoveSlot() {
 }
 
 /**
+ * P2-32 — un ESSAI (dry-run) d'un déplacement : le moteur juge (verdict + compromis) SANS rien
+ * écrire. Sert à remplir la modale d'éviction (D6) avant la confirmation. AUCUNE invalidation
+ * (rien n'a bougé). Le hook POSSÈDE son feedback (même règle que {@link useMoveSlot}) : il TAIT
+ * les erreurs métier (la page les affiche : verrou de cible, modale de refus) et ne parle que
+ * d'un vrai transport — sinon le filet global `MutationCache.onError` toasterait « Problème de
+ * connexion » sur un refus/verrou. ⚠ Un essai REFUSÉ arrive en 200 {valid:false} : il RÉSOUT
+ * (onSuccess), il ne lève pas — seul un verrou/une génération/un transport passe par onError.
+ */
+export function useMoveDryRun() {
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: SlotMovePatch }) => planningApi.moveSlot(id, { ...patch, dryRun: true }),
+    onError: ownSlotEditFeedback,
+  });
+}
+
+/**
  * P2-30 — PLACER une séance à la dérive sous le verdict moteur. Mêmes invalidations que
  * {@link useMoveSlot} : le placement crée un créneau (slots), périme le score (schedules) et
  * fait rejuger la légalité (diagnostics). Le toast/undo/raccourci vit côté page (contexte des

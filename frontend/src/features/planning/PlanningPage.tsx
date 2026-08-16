@@ -22,9 +22,11 @@ import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import { type EvictedSlot, GenerationInProgressError, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
+import { type Compromise, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
+import { CompromiseList } from "./CompromiseList";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { DriftBanner } from "./DriftBanner";
+import { EvictConfirmDialog, type EvictDialogPhase } from "./EvictConfirmDialog";
 import { LocksPanel } from "./LocksPanel";
 import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
@@ -35,7 +37,7 @@ import { computeEmptySlots, isEmptySlotId } from "./lib/emptySlots";
 import { violationHighlightSlotIds } from "./lib/violationHighlight";
 import { availableResourceGroups, buildGrid, DAYS, type Lookups, slotGroupKey, toHourMinute } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveSlot, usePlaceSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveDryRun, useMoveSlot, usePlaceSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
@@ -131,9 +133,18 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // consultation. Le geste 4 (undo, profondeur 1, session) et le raccourci d'éviction vivent
   // AUSSI en état de page — ils ont besoin des noms d'équipes et de l'issue exacte du verdict.
   const [targetMode, setTargetMode] = useState<{ kind: "move"; sourceSlotId: string } | { kind: "place"; teamId: string } | null>(null);
-  // La cible d'éviction en attente de CONFIRMATION (D6) : rien n'est appelé tant qu'on n'a pas
-  // confirmé. Porte la source + la séance occupante à évincer.
-  const [pendingEvict, setPendingEvict] = useState<{ sourceSlotId: string; targetSlot: Slot } | null>(null);
+  // P2-32 (D6) — la modale d'éviction, désormais alimentée par un ESSAI (dry-run). `checking`
+  // pendant que le moteur juge, `accepted` (compromis nommés) ou `refused` (motifs) ensuite.
+  // Rien n'est ÉCRIT tant qu'on n'a pas confirmé un état `accepted`.
+  const [evictDialog, setEvictDialog] = useState<
+    | { phase: "checking"; sourceSlotId: string; targetSlot: Slot }
+    | { phase: "accepted"; sourceSlotId: string; targetSlot: Slot; compromises: Compromise[] }
+    | { phase: "refused"; sourceSlotId: string; targetSlot: Slot; violations: MoveViolation[] }
+    | null
+  >(null);
+  // P2-32 (geste 3) — les compromis NOMMÉS du dernier geste ÉCRIT accepté (N>0), pour le bandeau
+  // dismissible. Null = aucun (pas de bandeau). Purgé au geste suivant / changement de version.
+  const [compromiseNotice, setCompromiseNotice] = useState<Compromise[] | null>(null);
   // Le dernier geste annulable (profondeur 1). `move` = déplacement simple (inverse = re-move) ;
   // `move-evict` = déplacement avec éviction (inverse = re-move PUIS replacement de l'évincée).
   const [undo, setUndo] = useState<
@@ -239,6 +250,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const navigate = useNavigate();
   const lockMutation = useLockSlot();
   const moveMutation = useMoveSlot();
+  const dryRunMutation = useMoveDryRun();
   const placeMutation = usePlaceSlot();
   const regenerateMutation = useRegenerate();
   const regenerateOverlayMutation = useRegenerateOverlay();
@@ -360,7 +372,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // PENDING schedule (nothing sets isGenerating), so its own restore must disable
   // the action here — else a second click double-runs the destructive restore.
   const actionBusy = validateMutation.isPending || reopenMutation.isPending || deleteMutation.isPending || regenerateFromMutation.isPending;
-  const busy = lockMutation.isPending || moveMutation.isPending || placeMutation.isPending;
+  const busy = lockMutation.isPending || moveMutation.isPending || dryRunMutation.isPending || placeMutation.isPending;
   const clubInitial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
   // When a running generation finishes, pull the fresh slots + diagnostics.
@@ -506,7 +518,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     setTargetMode(null);
     setUndo(null);
     setEvictionNotice(null);
-    setPendingEvict(null);
+    setEvictDialog(null);
+    setCompromiseNotice(null);
   }
 
   // Séances à la dérive (geste 3) : COMPLETED seulement, hors génération. Seuil = backend
@@ -556,20 +569,24 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       { id: sourceSlotId, patch: undefined === evictSlotId ? patch : { ...patch, evictSlotId } },
       {
         onSuccess: (result) => {
-          setPendingEvict(null);
+          setEvictDialog(null);
           setTargetMode(null);
+          // P2-32 — les compromis NOMMÉS du geste : bandeau (N>0) + suffixe de toast « — N compromis ».
+          const compromises = result.compromises ?? [];
+          setCompromiseNotice(compromises.length > 0 ? compromises : null);
+          const suffix = compromises.length > 0 ? ` — ${compromises.length} compromis` : "";
           if (undefined !== result.evicted) {
             setUndo({ kind: "move-evict", slotId: sourceSlotId, sourceTeamId, from, evicted: result.evicted });
             setEvictionNotice({ evicted: result.evicted, freed: from });
-            toast.success(`${teamNameOf(sourceTeamId)} déplacée — ${teamNameOf(result.evicted.teamId)} est à replacer.`);
+            toast.success(`${teamNameOf(sourceTeamId)} déplacée — ${teamNameOf(result.evicted.teamId)} est à replacer${compromises.length > 0 ? suffix : "."}`);
           } else {
             setUndo({ kind: "move", slotId: sourceSlotId, sourceTeamId, from });
             setEvictionNotice(null);
-            toast.success("Créneau déplacé.");
+            toast.success(`Créneau déplacé${compromises.length > 0 ? suffix : "."}`);
           }
         },
         onError: (error) => {
-          setPendingEvict(null);
+          setEvictDialog(null);
           // Verrou de cible / cible incohérente : message serveur propre, on RESTE en mode cible.
           if (error instanceof TargetLockedError || error instanceof SlotEditError) {
             toast.error(error.message);
@@ -589,12 +606,14 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     placeMutation.mutate(
       { scheduleId: validScheduleId, body: { teamId, ...position } },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           setTargetMode(null);
           setUndo(null); // un placement n'a pas d'inverse (aucun endpoint de suppression de créneau)
           setEvictionNotice(null);
           setHighlightSlotIds(new Set());
-          toast.success("Séance placée.");
+          const compromises = result.compromises ?? [];
+          setCompromiseNotice(compromises.length > 0 ? compromises : null);
+          toast.success(compromises.length > 0 ? `Séance placée — ${compromises.length} compromis` : "Séance placée.");
         },
         onError: (error) => {
           if (error instanceof MoveRejectedError) {
@@ -613,8 +632,49 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     );
   };
 
+  // P2-32 — l'ESSAI (dry-run) qui remplit la modale d'éviction : le moteur juge SANS écrire. Un
+  // essai REFUSÉ arrive en 200 {valid:false} → onSuccess (pas onError) ; seuls verrou/génération/
+  // transport passent par onError (la modale se ferme alors, le mode cible reste armé).
+  const runEvictDryRun = (sourceSlotId: string, targetSlot: Slot) => {
+    dryRunMutation.mutate(
+      { id: sourceSlotId, patch: { dayOfWeek: targetSlot.dayOfWeek, startTime: toHourMinute(targetSlot.startTime), venueId: targetSlot.venueId, evictSlotId: targetSlot.id } },
+      {
+        onSuccess: (result) => {
+          if (result.valid) {
+            setEvictDialog({ phase: "accepted", sourceSlotId, targetSlot, compromises: result.compromises ?? [] });
+          } else {
+            const violations = result.violations ?? [];
+            setEvictDialog({ phase: "refused", sourceSlotId, targetSlot, violations });
+            // Surligner le conflit nommé (présentation pure, même chemin qu'un placement refusé).
+            setHighlightSlotIds(violationHighlightSlotIds(violations, slots));
+          }
+        },
+        onError: (error) => {
+          // L'essai n'a pas pu aboutir (verrou D3, génération en cours, transport) : on ferme la
+          // modale et on garde le mode cible armé pour réessayer ailleurs. Un vrai transport est
+          // déjà toasté au niveau du hook ; ici on nomme les refus métier.
+          setEvictDialog(null);
+          if (error instanceof TargetLockedError || error instanceof SlotEditError) {
+            toast.error(error.message);
+          } else if (error instanceof GenerationInProgressError) {
+            toast.error("Une génération est en cours pour ce club — réessayez ensuite.");
+          }
+        },
+      },
+    );
+  };
+
+  // Confirmer l'éviction depuis la modale (état `accepted`) : le move RÉEL part (sans dryRun).
+  const confirmEvict = () => {
+    if (null === evictDialog) {
+      return;
+    }
+    const { sourceSlotId, targetSlot } = evictDialog;
+    doMove(sourceSlotId, { dayOfWeek: targetSlot.dayOfWeek, startTime: toHourMinute(targetSlot.startTime), venueId: targetSlot.venueId }, targetSlot.id);
+  };
+
   // Un clic sur une case de la grille EN mode cible (la grille route tout ici). La page décide :
-  // annuler (re-clic source), déplacer/placer sur une case libre, ou évincer (via confirmation).
+  // annuler (re-clic source), déplacer/placer sur une case libre, ou évincer (via l'essai).
   const onPickTarget = (cellSlotId: string) => {
     if (null === targetMode) {
       return;
@@ -642,8 +702,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       return;
     }
     if (targetMode.kind === "move") {
-      // D6 : confirmation AVANT tout appel — rien n'est écrit tant qu'on n'a pas confirmé.
-      setPendingEvict({ sourceSlotId: targetMode.sourceSlotId, targetSlot });
+      // D6 + P2-32 : la modale s'ouvre en VÉRIFICATION et un ESSAI (dry-run) part — rien n'est
+      // écrit. Le verdict (accepté avec compromis / refusé) remplira la modale.
+      setEvictDialog({ phase: "checking", sourceSlotId: targetMode.sourceSlotId, targetSlot });
+      runEvictDryRun(targetMode.sourceSlotId, targetSlot);
     } else {
       // Placement sur une case occupée : le moteur tranche (capacité). Pas d'éviction ici — le
       // rail /place-slot n'en porte pas (PR A) ; un refus se lit et on réessaie.
@@ -662,6 +724,8 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       { id: current.slotId, patch: current.from },
       {
         onSuccess: () => {
+          // Le geste est REVERTÉ : le bandeau de compromis qu'il avait produit n'a plus lieu d'être.
+          setCompromiseNotice(null);
           if (current.kind === "move") {
             setUndo(null);
             setEvictionNotice(null);
@@ -702,10 +766,12 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     placeMutation.mutate(
       { scheduleId: validScheduleId, body: { teamId: evicted.teamId, dayOfWeek: freed.dayOfWeek, startTime: freed.startTime, venueId: freed.venueId } },
       {
-        onSuccess: () => {
+        onSuccess: (result) => {
           setEvictionNotice(null);
           setUndo(null); // l'évincée est replacée ailleurs que par l'inverse : l'undo n'a plus de sens
-          toast.success(`${teamNameOf(evicted.teamId)} replacée.`);
+          const compromises = result.compromises ?? [];
+          setCompromiseNotice(compromises.length > 0 ? compromises : null);
+          toast.success(compromises.length > 0 ? `${teamNameOf(evicted.teamId)} replacée — ${compromises.length} compromis` : `${teamNameOf(evicted.teamId)} replacée.`);
         },
         onError: (error) => toast.error(error instanceof MoveRejectedError ? (error.violations[0]?.message ?? "Replacement refusé par le moteur.") : "Replacement impossible — réessayez."),
       },
@@ -1008,20 +1074,40 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             />
           ) : null}
 
-          {/* P2-30 (geste 2) — raccourci d'éviction : remettre l'évincée sur la case libérée par
-              la source. Le toast a déjà PARLÉ ; ce bandeau porte le BOUTON (le toast n'a pas
-              d'action). Il disparaît au geste suivant / changement de version. */}
-          {null !== evictionNotice ? (
-            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm" role="status">
-              <span className="text-foreground">
-                <span className="font-medium">{teamNameOf(evictionNotice.evicted.teamId)}</span> est à replacer.
-              </span>
-              <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={placeEvictedShortcut}>
-                Remettre {teamNameOf(evictionNotice.evicted.teamId)} sur {DAY_ABBR.get(evictionNotice.freed.dayOfWeek) ?? "?"} {evictionNotice.freed.startTime}
-              </Button>
-              <button type="button" onClick={() => setEvictionNotice(null)} aria-label="Ignorer" className="ml-auto rounded p-1 text-muted-foreground hover:text-foreground">
-                <X className="size-4" />
-              </button>
+          {/* P2-30 (geste 2) + P2-32 (geste 3) — UN SEUL bandeau combiné : en tête le raccourci
+              d'éviction (remettre l'évincée sur la case libérée — le toast n'a pas d'action), et
+              dessous les compromis NOMMÉS du dernier geste écrit. Le close efface les deux ; le
+              geste suivant / le changement de version les remplacent. */}
+          {null !== evictionNotice || null !== compromiseNotice ? (
+            <div className="mb-4 flex flex-col gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm" role="status">
+              <div className="flex flex-wrap items-center gap-3">
+                {null !== evictionNotice ? (
+                  <>
+                    <span className="text-foreground">
+                      <span className="font-medium">{teamNameOf(evictionNotice.evicted.teamId)}</span> est à replacer.
+                    </span>
+                    <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={placeEvictedShortcut}>
+                      Remettre {teamNameOf(evictionNotice.evicted.teamId)} sur {DAY_ABBR.get(evictionNotice.freed.dayOfWeek) ?? "?"} {evictionNotice.freed.startTime}
+                    </Button>
+                  </>
+                ) : (
+                  <span className="font-medium text-foreground">
+                    {compromiseNotice?.length} compromis sur ce geste
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEvictionNotice(null);
+                    setCompromiseNotice(null);
+                  }}
+                  aria-label="Ignorer"
+                  className="ml-auto rounded p-1 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+              {null !== compromiseNotice ? <CompromiseList compromises={compromiseNotice} /> : null}
             </div>
           ) : null}
 
@@ -1240,27 +1326,18 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         onCancel={() => setPendingUnlockSlotId(null)}
       />
 
-      {/* P2-30 (D6) — évincer un créneau occupé demande CONFIRMATION avant tout appel. */}
-      <ConfirmDialog
-        open={null !== pendingEvict}
-        destructive
-        title="Déplacer vers un créneau occupé ?"
-        description={
-          null !== pendingEvict
-            ? `Ce créneau est occupé par ${teamNameOf(pendingEvict.targetSlot.teamId)}. La déplacer d'ici ? Elle passera dans les séances à replacer.`
-            : ""
-        }
-        confirmLabel="Déplacer et évincer"
-        onConfirm={() => {
-          if (null !== pendingEvict) {
-            doMove(
-              pendingEvict.sourceSlotId,
-              { dayOfWeek: pendingEvict.targetSlot.dayOfWeek, startTime: toHourMinute(pendingEvict.targetSlot.startTime), venueId: pendingEvict.targetSlot.venueId },
-              pendingEvict.targetSlot.id,
-            );
-          }
-        }}
-        onCancel={() => setPendingEvict(null)}
+      {/* P2-30 (D6) + P2-32 — évincer un créneau occupé ouvre une modale alimentée par un ESSAI
+          (dry-run) : « Vérification… », puis le verdict (compromis nommés / motifs de refus)
+          AVANT toute écriture. Le déplacement réel ne part qu'à la confirmation d'un essai accepté. */}
+      <EvictConfirmDialog
+        open={null !== evictDialog}
+        phase={(evictDialog?.phase ?? "checking") as EvictDialogPhase}
+        occupantName={null !== evictDialog ? teamNameOf(evictDialog.targetSlot.teamId) : ""}
+        compromises={null !== evictDialog && "accepted" === evictDialog.phase ? evictDialog.compromises : []}
+        violations={null !== evictDialog && "refused" === evictDialog.phase ? evictDialog.violations : []}
+        busy={busy}
+        onConfirm={confirmEvict}
+        onClose={() => setEvictDialog(null)}
       />
 
       <ConfirmDialog

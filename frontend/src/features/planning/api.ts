@@ -305,6 +305,31 @@ export interface SlotMovePatch {
   /** P2-30 : éviction OPTIONNELLE — l'id du créneau occupant la cible, à retirer pour
    *  laisser la place. Absent = déplacement vers une cible libre. */
   evictSlotId?: string;
+  /** P2-32 : un ESSAI — le moteur juge (verdict + compromis) SANS rien écrire. Le déplacement
+   *  n'a pas lieu ; la réponse porte `dryRun: true`. `true` seul (jamais `false` : on n'envoie
+   *  le champ que pour un essai). */
+  dryRun?: true;
+}
+
+/**
+ * P2-32 — un COMPROMIS nommé d'un candidat ACCEPTÉ : une préférence SOUPLE que ce geste
+ * CASSE (`broken`) ou RÉTABLIT (`gained`). `family` = la famille de règle (regroupement) ;
+ * `effect` distingue recul et gain ; `message` est déjà HUMAIN (le moteur y nomme équipe/
+ * coach/gymnase, AUCUN identifiant interne) ; les ids sont optionnels/nullables (absent du
+ * verdict → null), pour un éventuel surlignage. Miroir de `CompromiseSchema` du contrat
+ * backend⇄engine (contrat 2.10). Le front l'AFFICHE (tri + pastille dérivés de `effect` =
+ * présentation), il ne re-dérive AUCUNE règle : le backend a déjà tranché ce qui est compromis.
+ */
+export type CompromiseEffect = "broken" | "gained";
+export interface Compromise {
+  family: string;
+  effect: CompromiseEffect;
+  message: string;
+  teamId?: string | null;
+  coachId?: string | null;
+  venueId?: string | null;
+  dayOfWeek?: number | null;
+  startTime?: string | null;
 }
 
 /**
@@ -321,11 +346,22 @@ export interface EvictedSlot {
   durationMinutes: number;
 }
 
-/** Réponse d'un déplacement ACCEPTÉ ; `evicted` renseigné seulement si une cible occupée
- *  a été libérée. */
+/**
+ * Réponse d'un déplacement. Un déplacement RÉEL accepté arrive `valid: true` (+ `compromises`,
+ * + `evicted` si une cible occupée a été libérée) ; un refus RÉEL est un 422 → {@link MoveRejectedError}.
+ *
+ * P2-32 — un ESSAI (`dryRun`) rend TOUJOURS un résultat (jamais un throw de légalité), en 200 :
+ *  - accepté  → `valid: true`, `dryRun: true`, `compromises` (peut être vide), `evicted` si éviction ;
+ *  - REFUSÉ   → `valid: false`, `dryRun: true`, `violations` NOMMÉES (le 200 {valid:false} n'est
+ *    PAS un 422 : le parsing le rend tel quel, il ne lève pas).
+ * `compromises` est normalisé à `[]` par le parseur — jamais absent à la lecture.
+ */
 export interface SlotMoveResult {
-  valid: true;
+  valid: boolean;
+  compromises: Compromise[];
+  violations?: MoveViolation[];
   evicted?: EvictedSlot;
+  dryRun?: boolean;
 }
 
 /** Corps d'un placement de séance à la dérive (P2-30). `durationMinutes` est OPTIONNEL :
@@ -336,12 +372,22 @@ export interface PlaceSlotBody {
   startTime: string;
   venueId: string;
   durationMinutes?: number;
+  /** P2-32 : un ESSAI — le moteur juge SANS créer de séance ; la réponse porte `dryRun: true`. */
+  dryRun?: true;
 }
 
-/** Réponse d'un placement ACCEPTÉ : l'id du créneau créé. */
+/**
+ * Réponse d'un placement. Accepté RÉEL → `valid: true` + `slotId` (créneau créé) + `compromises` ;
+ * refus RÉEL → 422 {@link MoveRejectedError}. Un ESSAI (`dryRun`) rend un résultat en 200 (jamais
+ * un throw de légalité) : accepté → `valid: true`, `dryRun: true`, `compromises` ; refusé →
+ * `valid: false`, `dryRun: true`, `violations`. `compromises` est normalisé à `[]` par le parseur.
+ */
 export interface PlaceSlotResult {
-  valid: true;
-  slotId: string | null;
+  valid: boolean;
+  slotId?: string | null;
+  compromises: Compromise[];
+  violations?: MoveViolation[];
+  dryRun?: boolean;
 }
 
 /**
@@ -443,7 +489,10 @@ export class SlotEditError extends Error {
  */
 export async function moveSlot(id: string, patch: SlotMovePatch): Promise<SlotMoveResult> {
   try {
-    return await api.post(`schedule-slots/${id}/move`, { json: patch }).json<SlotMoveResult>();
+    // Un 200 {valid:false} (essai REFUSÉ) résout ici SANS lever : seul un 422 (refus réel) devient
+    // un MoveRejectedError ci-dessous. `compromises` est normalisé à [] — jamais absent à la lecture.
+    const result = await api.post(`schedule-slots/${id}/move`, { json: patch }).json<SlotMoveResult>();
+    return { ...result, compromises: result.compromises ?? [] };
   } catch (error) {
     if (error instanceof HTTPError) {
       // ky 2.x parse le corps d'erreur sur error.data (re-lire la réponse throw).
@@ -475,7 +524,8 @@ export async function moveSlot(id: string, patch: SlotMovePatch): Promise<SlotMo
  */
 export async function placeSlot(scheduleId: string, body: PlaceSlotBody): Promise<PlaceSlotResult> {
   try {
-    return await api.post(`schedules/${scheduleId}/place-slot`, { json: body }).json<PlaceSlotResult>();
+    const result = await api.post(`schedules/${scheduleId}/place-slot`, { json: body }).json<PlaceSlotResult>();
+    return { ...result, compromises: result.compromises ?? [] };
   } catch (error) {
     if (error instanceof HTTPError) {
       const data = ((error as { data?: unknown }).data ?? {}) as { code?: string; error?: string; violations?: MoveViolation[] };
