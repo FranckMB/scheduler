@@ -43,6 +43,7 @@ from app.solver.objective import (
     add_preferred_day_bonus,
     add_preferred_time_bonus,
     add_spacing_penalty,
+    add_venue_preference_bonus,
     is_team_satisfied_by_hard_locks,
 )
 from app.solver.result_builder import build_result
@@ -592,26 +593,9 @@ def _solve(
             cast(Any, model).Add(sum(team_vars) <= remaining)
 
     # Add objective function.
-    # PR B — SET of preferred venues per team: the bonus fires when the session
-    # lands in ANY of them (same weight for each — no ranking between preferred).
-    preferred_venues: dict[str, set[str]] = parsed.get("preferred_venues", {})
-    # Soft "avoid this venue" rules (ENG-11): a TRUE MALUS on the avoided slot
-    # ("avoided_venue" < 0) — a complement bonus on every other venue would give
-    # the team a flat per-session advantage and bias cross-team allocation.
-    # Still soft: feasibility is never affected.
-    avoided_by_team: dict[str, set[str]] = {}
-    for avoided in parsed.get("avoided_venues", []):
-        avoided_by_team.setdefault(avoided["scope_target_id"], set()).add(avoided["venue_id"])
-    soft_terms = []
-    for slot_key, var in model.x.items():
-        team_id = str(slot_key[0])
-        venue_id = str(slot_key[1])
-        preferred_set = preferred_venues.get(team_id)
-        if preferred_set is not None and venue_id in preferred_set:
-            soft_terms.append((var, "preferred"))
-        avoided_set = avoided_by_team.get(team_id)
-        if avoided_set is not None and venue_id in avoided_set:
-            soft_terms.append((var, "avoided_venue"))
+    # PR B — SET of preferred venues per team + soft "avoid this venue" MALUS (ENG-11) : le sens
+    # vit désormais dans une MAISON UNIQUE (D-6, P2-32) partagée avec l'évaluation des compromis.
+    soft_terms = add_venue_preference_bonus(model.x, parsed)
 
     soft_terms.extend(add_preferred_day_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))
     soft_terms.extend(add_preferred_time_bonus(model, model.x, parsed["time_windows"], LEVEL_2_OBJECTIVE_WEIGHTS))

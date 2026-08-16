@@ -29,9 +29,34 @@ class AssignmentViolationSchema(SerializableModel):
     conflicting_team_id: str | None = Field(default=None, alias="conflictingTeamId")
 
 
+class CompromiseSchema(SerializableModel):
+    """UN compromis de confort qu'un déplacement ACCEPTÉ change (P2-32).
+
+    ``family`` est l'une des familles v1 (liste fermée) ; ``effect`` = ``broken`` (une
+    préférence honorée avant ne l'est plus) ou ``gained`` (l'inverse). ``message`` est la phrase
+    française prête à afficher — AUCUN identifiant interne. Les champs d'entité (tels que le
+    moteur les émet, ceux que le club possède déjà) servent au surlignage côté UI.
+    """
+
+    # chaining | venue_preference | day_preference | time_preference | match_rest |
+    # spacing | coach_day_cap | implicit_rule
+    family: str
+    # broken | gained
+    effect: str
+    message: str
+    team_id: str | None = Field(default=None, alias="teamId")
+    coach_id: str | None = Field(default=None, alias="coachId")
+    venue_id: str | None = Field(default=None, alias="venueId")
+    day_of_week: int | None = Field(default=None, alias="dayOfWeek")
+    start_time: str | None = Field(default=None, alias="startTime")
+
+
 class ValidateAssignmentsOutputSchema(SerializableModel):
     """Le verdict moteur sur le candidat : valide, et sinon POURQUOI (nomme)."""
 
     valid: bool
     violations: list[AssignmentViolationSchema] = Field(default_factory=list)
+    # Le DELTA de confort d'un candidat ACCEPTÉ (P2-32) — rempli SEULEMENT quand ``valid=true``.
+    # Sur un refus, la liste reste vide : le chemin REFUS du verdict est inchangé.
+    compromises: list[CompromiseSchema] = Field(default_factory=list)
     metrics: SolverMetricsSchema | None = None

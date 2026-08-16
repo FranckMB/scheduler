@@ -11,6 +11,15 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, cast
 
+from .compromise import (
+    FAMILY_COACH_DAY_CAP,
+    FAMILY_DAY,
+    FAMILY_MATCH_REST,
+    FAMILY_SPACING,
+    FAMILY_TIME,
+    FAMILY_VENUE,
+    CompromiseTermInfo,
+)
 from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
 from .model import _time_to_minutes
 
@@ -249,12 +258,71 @@ class Level2ObjectiveStats:
     chaining_terms: tuple[tuple[Any, int], ...] = ()
 
 
+def add_venue_preference_bonus(
+    x: Mapping[Any, BoolVarLike],
+    parsed: Mapping[str, Any],
+    *,
+    info_out: list[CompromiseTermInfo] | None = None,
+) -> list[tuple[BoolVarLike, str]]:
+    """Termes soft « gymnase préféré / à éviter » — maison unique génération ⇄ évaluation (D-6).
+
+    Extrait tel quel de l'assemblage inline de ``main.build_schedule`` : le bonus ``preferred``
+    tombe sur tout créneau d'un gymnase préféré de l'équipe, le MALUS ``avoided_venue`` sur tout
+    créneau d'un gymnase à éviter (un vrai malus, pas un bonus-complément qui biaiserait
+    l'allocation inter-équipes). ``info_out`` (défaut None → chemin /generate byte-identique)
+    récolte la métadonnée de nommage des compromis.
+    """
+    preferred_venues: dict[str, set[str]] = parsed.get("preferred_venues", {}) or {}
+    avoided_by_team: dict[str, set[str]] = {}
+    for avoided in parsed.get("avoided_venues", []) or []:
+        avoided_by_team.setdefault(avoided["scope_target_id"], set()).add(avoided["venue_id"])
+
+    soft_terms: list[tuple[BoolVarLike, str]] = []
+    for slot_key, var in x.items():
+        team_id = str(slot_key[0])
+        venue_id = str(slot_key[1])
+        preferred_set = preferred_venues.get(team_id)
+        if preferred_set is not None and venue_id in preferred_set:
+            soft_terms.append((var, "preferred"))
+            if info_out is not None:
+                info_out.append(
+                    CompromiseTermInfo(
+                        var=var,
+                        family=FAMILY_VENUE,
+                        honored_when_active=True,
+                        key=(FAMILY_VENUE, team_id, venue_id, "preferred"),
+                        team_id=team_id,
+                        venue_id=venue_id,
+                        detail="preferred",
+                    )
+                )
+        avoided_set = avoided_by_team.get(team_id)
+        if avoided_set is not None and venue_id in avoided_set:
+            soft_terms.append((var, "avoided_venue"))
+            if info_out is not None:
+                info_out.append(
+                    CompromiseTermInfo(
+                        var=var,
+                        family=FAMILY_VENUE,
+                        honored_when_active=False,
+                        key=(FAMILY_VENUE, team_id, venue_id, "avoided"),
+                        team_id=team_id,
+                        venue_id=venue_id,
+                        detail="avoided",
+                    )
+                )
+
+    return soft_terms
+
+
 def add_coach_day_cap_penalty(
     model: Any,
     x: Mapping[Any, BoolVarLike],
     coaches: Iterable[Any],
     team_coach_map: Mapping[str, list[str]] | None,
     weights: Mapping[str, int],
+    *,
+    info_out: list[CompromiseTermInfo] | None = None,
 ) -> list[tuple[BoolVarLike, str]]:
     """P4-51 — le plafond de jours d'un coach, en termes SOFT (arbitrage : préféré, pas dur).
 
@@ -314,6 +382,16 @@ def add_coach_day_cap_penalty(
             cast(Any, model).Add(total >= over).OnlyEnforceIf(literal)
             cast(Any, model).Add(total <= over - 1).OnlyEnforceIf(literal.Not())
             terms.append((literal, "overload_day"))
+            if info_out is not None:
+                info_out.append(
+                    CompromiseTermInfo(
+                        var=literal,
+                        family=FAMILY_COACH_DAY_CAP,
+                        honored_when_active=False,
+                        key=(FAMILY_COACH_DAY_CAP, coach_id),
+                        coach_id=coach_id,
+                    )
+                )
 
     return terms
 
@@ -376,6 +454,7 @@ def add_level_2_objective(
     score_formula_version: str = SCORE_FORMULA_VERSION,
     apply_chaining: bool = True,
     team_player_map: Mapping[str, list[str]] | None = None,
+    info_out: list[CompromiseTermInfo] | None = None,
 ) -> Level2ObjectiveStats:
     """Maximize the fixed T24 weighted score for candidate placements.
 
@@ -460,7 +539,9 @@ def add_level_2_objective(
     # objective now depends on apply_chaining: single-phase (default) folds them
     # into the one Maximize; two-phase (apply_chaining=False) maximises placement
     # only, then the caller locks placement and optimises chaining separately.
-    chaining_pairs = add_chaining_bonus(model, assignment_list, teams=teams, team_player_map=team_player_map)
+    chaining_pairs = add_chaining_bonus(
+        model, assignment_list, teams=teams, team_player_map=team_player_map, info_out=info_out
+    )
 
     if apply_chaining and chaining_pairs:
         model.Maximize(placement_expression + sum(weight * variable for variable, weight in chaining_pairs))
@@ -506,6 +587,8 @@ def _add_preferred_bonus(
     weight_name: str,
     criterion: Any,
     matches: Any,
+    info_out: list[CompromiseTermInfo] | None = None,
+    compromise_family: str | None = None,
 ) -> list[tuple[BoolVarLike, str]]:
     """Shared soft-bonus builder for PREFERRED+<family> windows.
 
@@ -514,6 +597,10 @@ def _add_preferred_bonus(
     bonus. This factors add_preferred_day_bonus / add_preferred_time_bonus into
     one place (audit review F3) — a fix to the slot-matching/dedup logic now
     lives once.
+
+    ``info_out``/``compromise_family`` (défaut None → chemin /generate byte-identique)
+    récoltent la métadonnée de nommage des compromis, AGRÉGÉE par équipe (une entrée par
+    (famille, équipe) : deux créneaux préférés d'une même équipe ne comptent qu'une préférence).
     """
     if weight_name not in weights:
         raise KeyError(weight_name)
@@ -541,6 +628,16 @@ def _add_preferred_bonus(
             if matches(day, start_min, crit):
                 soft_terms.append((variable, weight_name))
                 seen_keys.add(slot_key)
+                if info_out is not None and compromise_family is not None:
+                    info_out.append(
+                        CompromiseTermInfo(
+                            var=variable,
+                            family=compromise_family,
+                            honored_when_active=True,
+                            key=(compromise_family, str(team_id)),
+                            team_id=str(team_id),
+                        )
+                    )
 
     return soft_terms
 
@@ -550,6 +647,8 @@ def add_preferred_day_bonus(
     x: Mapping[Any, BoolVarLike],
     time_windows: Iterable[Any],
     weights: Mapping[str, int],
+    *,
+    info_out: list[CompromiseTermInfo] | None = None,
 ) -> list[tuple[BoolVarLike, str]]:
     """Return soft objective terms for preferred-day windows.
 
@@ -652,6 +751,8 @@ def add_preferred_day_bonus(
         weight_name="preferred_day",
         criterion=criterion,
         matches=matches,
+        info_out=info_out,
+        compromise_family=FAMILY_DAY,
     )
 
 
@@ -660,6 +761,8 @@ def add_preferred_time_bonus(
     x: Mapping[Any, BoolVarLike],
     time_windows: Iterable[Any],
     weights: Mapping[str, int],
+    *,
+    info_out: list[CompromiseTermInfo] | None = None,
 ) -> list[tuple[BoolVarLike, str]]:
     """Return soft objective terms for PREFERRED TIME windows.
 
@@ -691,6 +794,8 @@ def add_preferred_time_bonus(
         weight_name="preferred_time",
         criterion=criterion,
         matches=matches,
+        info_out=info_out,
+        compromise_family=FAMILY_TIME,
     )
 
 
@@ -708,6 +813,8 @@ def add_match_day_rest_bonus(
     x: Mapping[Any, BoolVarLike],
     teams: Iterable[Any],
     weights: Mapping[str, int],
+    *,
+    info_out: list[CompromiseTermInfo] | None = None,
 ) -> list[tuple[BoolVarLike, str]]:
     """Return soft objective terms rewarding a rest day AFTER a team's match day.
 
@@ -758,6 +865,16 @@ def add_match_day_rest_bonus(
         model.Add(sum(rest_day_vars) == 0).OnlyEnforceIf(rest_ok)
         model.Add(sum(rest_day_vars) >= 1).OnlyEnforceIf(rest_ok.Not())
         soft_terms.append((rest_ok, "rest"))
+        if info_out is not None:
+            info_out.append(
+                CompromiseTermInfo(
+                    var=rest_ok,
+                    family=FAMILY_MATCH_REST,
+                    honored_when_active=True,
+                    key=(FAMILY_MATCH_REST, str(team_id)),
+                    team_id=str(team_id),
+                )
+            )
 
     return soft_terms
 
@@ -767,6 +884,8 @@ def add_spacing_penalty(
     x: Mapping[Any, BoolVarLike],
     teams: Iterable[Any],
     weights: Mapping[str, int],
+    *,
+    info_out: list[CompromiseTermInfo] | None = None,
 ) -> list[tuple[BoolVarLike, str]]:
     """Implicit soft rule (ALIGN-06): gently discourage a team training on two
     CONSECUTIVE days (spacing). Malus only — never blocks feasibility; the low
@@ -808,6 +927,16 @@ def add_spacing_penalty(
             model.AddBoolAnd([present[day], present[day + 1]]).OnlyEnforceIf(both)
             model.AddBoolOr([present[day].Not(), present[day + 1].Not()]).OnlyEnforceIf(both.Not())
             soft_terms.append((both, "spacing"))
+            if info_out is not None:
+                info_out.append(
+                    CompromiseTermInfo(
+                        var=both,
+                        family=FAMILY_SPACING,
+                        honored_when_active=False,
+                        key=(FAMILY_SPACING, str(team_id)),
+                        team_id=str(team_id),
+                    )
+                )
 
     return soft_terms
 
@@ -818,6 +947,7 @@ def add_chaining_bonus(
     *,
     teams: Iterable[Any] = (),
     team_player_map: Mapping[str, list[str]] | None = None,
+    info_out: list[CompromiseTermInfo] | None = None,
 ) -> list[tuple[BoolVarLike, int]]:
     """Build SOFT bonus terms for same-venue back-to-back sessions.
 
@@ -923,6 +1053,21 @@ def add_chaining_bonus(
                     model.Add(chained <= var_b)
 
                     chaining_pairs.append((chained, int(weight)))
+                    if info_out is not None:
+                        try:
+                            day_int: int | None = int(day)
+                        except (TypeError, ValueError):
+                            day_int = None
+                        info_out.append(
+                            CompromiseTermInfo(
+                                var=chained,
+                                family="chaining",
+                                honored_when_active=True,
+                                key=("chaining", str(person_id), venue_id, day, pair_id_a, pair_id_b),
+                                venue_id=venue_id,
+                                day_of_week=day_int,
+                            )
+                        )
 
     return chaining_pairs
 
@@ -1150,5 +1295,6 @@ __all__ = [
     "add_level_2_objective",
     "add_missing_session_penalty",
     "add_preferred_day_bonus",
+    "add_venue_preference_bonus",
     "is_team_satisfied_by_hard_locks",
 ]
