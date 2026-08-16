@@ -4,7 +4,7 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-16 (re-vérifié contre `SlotDetail.tsx` : §6.2 recale le panneau de créneau compact — sous-ligne unique catégorie/durée/coach remplaçant les trois lignes étiquetées, liste de contraintes à une ligne par règle sans doublon nom/description) ; précédemment : 2026-08-15 (recalé ce jour par **P4-99 PR-3** : §6.2 gagne le diagnostic de séance manquante qui NOMME la règle en cause et y mène — vérifié contre `DiagnosticsPanel.tsx` (`causeSentence`, `CAUSE_KIND_LABELS`, le `WizardStepLink params={{edit}}`), `planning/api.ts` (types `DiagnosticCause`/`Diagnostic`) et `ConstraintsStep.tsx:520,546` (le rail `?edit=` consommateur) ; précédemment : 2026-08-14 (recalé une 2ᵉ fois ce jour-là par P4-94/P4-95 : §6.2 gagne le nommage de cible dans `describeConstraint`, le clic-diagnostic `conflict` qui ouvre le créneau exact, et l'atterrissage `?edit=` qui amène la ligne de contrainte à l'écran — re-vérifié contre `describeConstraint.ts`, `DiagnosticsPanel.tsx`, `lib/grid.ts` (`concernedSlots`), `WeekGrid.tsx`, `PlanningPage.tsx`, `ConstraintsStep.tsx` ; précédemment recalé ce jour par P2-17 PR 2 : §6.2 gagne la fusion de cellules par libellé de groupe, vue gymnase seulement ; précédemment : 2026-08-12 (recalé ce jour : panneau de créneau repliable/défilant, contraintes CLUB+tag filtrées ; précédemment : 2026-08-12 (recalé ce jour : bannière unique de péremption, contrainte modifiée après génération ; précédemment : 2026-08-12 (recalé ce jour par P2-2/F2b : le déplacement sous verdict moteur et la bannière de score périmé ; précédemment : 2026-08-12 (recalé ce jour par P2-2/F1 : le wrap de créneau dit l'origine du verrou ; précédemment : 2026-08-11 (recalé ce jour par P2-24 : la page publique de doléances passe en STEPPER par équipe — envoi unique, confirmation vide, sessionStorage ; précédemment : 2026-08-08 (stores re-vérifiés contre `frontend/src/shared/stores/` — la règle « `persist` pour le token » contredisait le tableau des stores depuis SEC-16, audit DOC-28 ; routes/stack/pagination/export re-vérifiés le 2026-07-29))))))))
+Last verified @ 2026-08-16 (re-vérifié contre `PlanningPage.tsx`/`queries.ts`/`api.ts`/`violationHighlight.ts` : §6.7 récrit — le CRUD `schedule_slot_templates` est read-only, `/move` remonte les ids du verdict moteur pour surligner le conflit, toast succès + invalidation `diagnostics` sur move accepté, toast d'erreur sur verrouillage échoué, `ConfirmDialog` avant de déverrouiller un `RESERVATION` ; §9 (endpoints consommés, table Édition manuelle) recalée — `manual-edit/one-time` (déjà mort depuis P4-86) cède la place à `/move`) ; précédemment : 2026-08-16 (re-vérifié contre `SlotDetail.tsx` : §6.2 recale le panneau de créneau compact — sous-ligne unique catégorie/durée/coach remplaçant les trois lignes étiquetées, liste de contraintes à une ligne par règle sans doublon nom/description) ; précédemment : 2026-08-15 (recalé ce jour par **P4-99 PR-3** : §6.2 gagne le diagnostic de séance manquante qui NOMME la règle en cause et y mène — vérifié contre `DiagnosticsPanel.tsx` (`causeSentence`, `CAUSE_KIND_LABELS`, le `WizardStepLink params={{edit}}`), `planning/api.ts` (types `DiagnosticCause`/`Diagnostic`) et `ConstraintsStep.tsx:520,546` (le rail `?edit=` consommateur) ; précédemment : 2026-08-14 (recalé une 2ᵉ fois ce jour-là par P4-94/P4-95 : §6.2 gagne le nommage de cible dans `describeConstraint`, le clic-diagnostic `conflict` qui ouvre le créneau exact, et l'atterrissage `?edit=` qui amène la ligne de contrainte à l'écran — re-vérifié contre `describeConstraint.ts`, `DiagnosticsPanel.tsx`, `lib/grid.ts` (`concernedSlots`), `WeekGrid.tsx`, `PlanningPage.tsx`, `ConstraintsStep.tsx` ; précédemment recalé ce jour par P2-17 PR 2 : §6.2 gagne la fusion de cellules par libellé de groupe, vue gymnase seulement ; précédemment : 2026-08-12 (recalé ce jour : panneau de créneau repliable/défilant, contraintes CLUB+tag filtrées ; précédemment : 2026-08-12 (recalé ce jour : bannière unique de péremption, contrainte modifiée après génération ; précédemment : 2026-08-12 (recalé ce jour par P2-2/F2b : le déplacement sous verdict moteur et la bannière de score périmé ; précédemment : 2026-08-12 (recalé ce jour par P2-2/F1 : le wrap de créneau dit l'origine du verrou ; précédemment : 2026-08-11 (recalé ce jour par P2-24 : la page publique de doléances passe en STEPPER par équipe — envoi unique, confirmation vide, sessionStorage ; précédemment : 2026-08-08 (stores re-vérifiés contre `frontend/src/shared/stores/` — la règle « `persist` pour le token » contredisait le tableau des stores depuis SEC-16, audit DOC-28 ; routes/stack/pagination/export re-vérifiés le 2026-07-29))))))))
 
 ---
 
@@ -348,14 +348,34 @@ depuis la fiche FFBB est prévu en lot C.
 > publiques de la fiche FFBB : nom, téléphone, email). **Aucune adresse de domicile** n'est stockée —
 > seule l'adresse du club et de la salle principale (lieux publics) le sont. Base légale actée avec P0-1 (DP1 soldé) — [`../../docs/security/rgpd.md`](../../docs/security/rgpd.md) §2.
 
-### 6.7 Optimistic updates pour édition manuelle
+### 6.7 Retouche manuelle — déplacer, verrouiller (rail read-only + verdict moteur, 2026-08-16)
 
-Quand le gestionnaire déplace un créneau dans la grille (`WeekGrid`) :
+`schedule_slot_templates` est **read-only côté API** (`GetCollection`/`Get` seulement — POST/PUT/
+DELETE et leur processor/DTO d'entrée ont disparu). Toute écriture passe par un rail dédié, jamais
+par un CRUD brut sur la ressource :
 
-1. UI se met à jour immédiatement (optimistic)
-2. Mutation `POST /api/schedule-slots/{id}/manual-edit/one-time` envoyée
-3. Si 409 (conflit) → rollback + message "Ce créneau est en conflit"
-4. Si succès → dialogue post-modification (contrainte permanente / lock / ponctuel)
+- **Déplacer** : `SlotDetail.onMove` appelle `POST /api/schedule-slots/{id}/move` (`useMoveSlot`).
+  **Pas d'optimistic update** — la grille attend le verdict du moteur (`MoveFeedback` :
+  `pending` pendant l'appel, ~500 ms).
+  - **Accepté (200)** : `slots`/`schedules`/`diagnostics` sont invalidés (le moteur a rejugé la
+    légalité, les diagnostics peuvent bouger) et un toast succès (« Créneau déplacé. ») confirme
+    le geste — sans lui, un déplacement accepté était indistinguable d'un refus silencieux.
+  - **Refusé (422)** : rien n'est écrit ; `moveState` passe `rejected` avec les règles violées
+    NOMMÉES (`SlotDetail`, déjà documenté §6.2 F2b). Chaque violation porte désormais aussi les
+    ids de l'entité fautive (`teamId`/`coachId`/`venueId`/`dayOfWeek`/`startTime`/
+    `conflictingTeamId`, null-safe — miroir de `AssignmentViolationSchema`, contrat 2.8) : la
+    grille **surligne** le créneau de l'équipe déjà en place que le moteur a nommée
+    (`violationHighlightSlotIds` — présentation pure, aucune redérivation de règle ; une équipe
+    absente du cache affiché n'ajoute aucun surlignage fantôme). Le surlignage s'efface au retour
+    à `idle`/`pending` (nouveau créneau sélectionné, nouvel essai) sans jamais écraser un
+    surlignage venu d'un diagnostic.
+  - Génération en cours (409) / moteur injoignable (502) : `blocked`/`error`, déjà documenté §6.2.
+- **Verrouiller/déverrouiller** : `onToggleLock` → `POST /api/schedule-slots/{id}/manual-edit/lock`
+  (`useLockSlot`). Un échec (moteur/réseau) pose un toast d'erreur avec le motif serveur — avant,
+  le cadenas restait muet en cas d'échec. **Déverrouiller un verrou `RESERVATION`** ouvre d'abord
+  `ConfirmDialog` (« Déverrouiller ce créneau réservé ? ») : c'est un engagement pris hors de
+  l'app (réservation de gymnase), à ne pas relâcher par inadvertance — verrouiller, et
+  déverrouiller un `MANUAL`/`UNKNOWN`, mutent directement sans confirmation.
 
 ### 6.8 Loading states et error boundaries
 
@@ -508,7 +528,7 @@ type AuthState = {
 | `/verify-email/:token` | `POST /api/register/verify` (émet le JWT → app) |
 | `/forgot-password`, `/reset-password/:token` | `POST /api/password/forgot`, `POST /api/password/reset` |
 | `/waiting` | `GET /api/me` (poll 5 s jusqu'à `membershipStatus === "active"`) |
-| `/planning` | `GET /api/me`, `GET /api/schedules` (poll 2,5 s si génération en vol), `GET /api/schedule_slot_templates?scheduleId={id}`, `GET /api/schedule_diagnostics?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/validate`, `POST /api/schedules/{id}/reopen`, `POST /api/schedules/{id}/export-pdf` (`ExportMenu`), `PUT /api/schedule_plans/{id}` (renommage du plan), `PUT /api/schedules/{id}` (renommage de la version), `DELETE /api/schedules/{id}` (suppression d'une version de travail), `POST /api/schedule-slots/{id}/manual-edit/lock`, `POST /api/schedule-slots/{id}/manual-edit/one-time`, collections référentiels (`teams`, `venues`, `coaches`, `sport_categories`, `team_coaches`, `coach_player_memberships`) |
+| `/planning` | `GET /api/me`, `GET /api/schedules` (poll 2,5 s si génération en vol), `GET /api/schedule_slot_templates?scheduleId={id}`, `GET /api/schedule_diagnostics?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/validate`, `POST /api/schedules/{id}/reopen`, `POST /api/schedules/{id}/export-pdf` (`ExportMenu`), `PUT /api/schedule_plans/{id}` (renommage du plan), `PUT /api/schedules/{id}` (renommage de la version), `DELETE /api/schedules/{id}` (suppression d'une version de travail), `POST /api/schedule-slots/{id}/move` (déplacer, sous verdict moteur — §6.7), `POST /api/schedule-slots/{id}/manual-edit/lock` (verrouiller/déverrouiller — §6.7), collections référentiels (`teams`, `venues`, `coaches`, `sport_categories`, `team_coaches`, `coach_player_memberships`) |
 | `/` (cockpit) | `GET /api/me`, `GET /api/schedules`, `GET /api/schedule_plans`, `GET /api/calendar_entries` (+ conflits d'entrée), campagnes de doléances (badge radar), `GET /api/venue_unavailabilities` + `venue-unavailability-impact` (carte radar « gymnase indisponible » — P4-68) |
 | `/wizard` | CRUD `teams`/`venues`/`coaches`/`constraints`/`venue_training_slots`…, `GET /api/priority_tiers`, `GET /api/sport_categories`, `POST /api/teams/reorder` (mode tri), `POST /api/constraints/validate`, `POST /api/schedules` + `generate` (étape Génération) |
 | `/club` | `PATCH /api/club/appearance`, `POST/DELETE /api/club/logo`, `GET /api/clubs/{clubId}/logo` (public, cache-buster sur l'URL après upload), `PATCH /api/club/info` (fiche FFBB, management-gated), `GET /api/memberships/pending`, `POST /api/memberships/{id}/approve`, `POST /api/memberships/{id}/reject` (section « Demandes » — l'ancienne route `/pending-members` a été repliée ici) |
@@ -558,8 +578,8 @@ Référence : `backend-inventory.md` §3 (GenerateScheduleController) + §5 (Mer
 | Endpoint | Méthode | Body | Réponse | Dialogue frontend |
 |----------|---------|------|---------|-------------------|
 | `/api/schedule-slots/{id}/manual-edit/constraint` | POST | `{ type, reason, createdBy }` | 201 `{ constraintId }` | "Créer contrainte permanente" |
-| `/api/schedule-slots/{id}/manual-edit/lock` | POST | `{ lockLevel }` | 200 | "Verrouiller SOFT/HARD" |
-| `/api/schedule-slots/{id}/manual-edit/one-time` | POST | `{ startTime? }` | 200 / 409 conflit | "Juste ponctuel" + rollback si 409 |
+| `/api/schedule-slots/{id}/manual-edit/lock` | POST | `{ lockLevel }` | 200 / erreur → toast | "Verrouiller SOFT/HARD" ; déverrouiller un `RESERVATION` passe d'abord par `ConfirmDialog` (§6.7) |
+| `/api/schedule-slots/{id}/move` | POST | `{ dayOfWeek, startTime, venueId }` | 200 (accepté, toast + invalidation `diagnostics`) / 422 `{valid:false, violations:[…]}` (refusé, surlignage du conflit) — voir §6.7 et `backend-inventory.md` §route `/move` | Remplace l'ancien rail `manual-edit/one-time` (retiré) — déplacement **sous verdict moteur** |
 
 Référence : `backend-inventory.md` §3 (ManualEditController).
 

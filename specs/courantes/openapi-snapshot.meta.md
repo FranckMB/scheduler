@@ -9,6 +9,14 @@ Changements récents :
   `PUT` et `DELETE /api/schedule_slot_templates/{id}` retirés (les `GET`/`GetCollection` restent) ;
   schéma `ScheduleSlotTemplate.ScheduleSlotTemplateInput` retiré. Contrat backend⇄engine 2.8
   INCHANGÉ.
+  ⚑ **Reste ouvert, tracé** : dans la MÊME PR, `MoveSlotService::namedViolations` (`/move`)
+  gagne 6 champs (`teamId`/`coachId`/`venueId`/`dayOfWeek`/`startTime`/`conflictingTeamId`, pour
+  le surlignage front) — mais le schéma 422 déclaré dans `CustomRoutesOpenApiFactory.php`
+  (`/api/schedule-slots/{id}/move`, ce chemin est un contrôleur custom, pas dérivé d'un DTO)
+  n'a PAS été mis à jour et ne décrit toujours que `{rule, message}`. Le snapshot régénéré
+  hérite donc de cette omission de source — décrit ici en documentant le comportement réel
+  (`backend-inventory.md` §route `/move`, `frontend-spec.md` §6.7) pendant qu'une PR de code
+  aligne le factory sur `MoveSlotService` et régénère.
 - **P4-101 — le snapshot cesse de mentir sur `causes` (2026-08-15)** : la propriété était un
   `array` nu, donc décrite `items: {type: object, additionalProperties: {type: [string, null]}}` —
   **deux mensonges** : `count` est un **entier**, et les noms de champs disparaissaient. Qui aurait
