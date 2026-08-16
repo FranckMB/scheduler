@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { Lock, LockOpen } from "lucide-react";
 import { type UIEvent, useRef } from "react";
 
 import { EmptyBlock } from "@/shared/components/ui/empty-hint";
@@ -18,6 +18,14 @@ interface WeekGridProps {
   selectedSlotId: string | null;
   onSelectSlot: (slotId: string) => void;
   highlightSlotIds?: Set<string>;
+  /**
+   * Verrouiller/déverrouiller un créneau depuis SA carte, en un clic (le cadenas est un
+   * bouton FRÈRE de la carte — un `<button>` ne peut pas en contenir un autre). Absent =
+   * lecture seule (planning validé/FAILED) : le cadenas d'un créneau verrouillé reste
+   * affiché en INDICATEUR passif, jamais actionnable. Le handler (ConfirmDialog RÉSERVATION
+   * compris) vit UNE fois côté page.
+   */
+  onToggleLock?: (slotId: string) => void;
 }
 
 /**
@@ -26,9 +34,36 @@ interface WeekGridProps {
  * a sticky grid item is clamped to its own cell, so it detaches once that narrow
  * cell scrolls out of view.
  */
-export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds }: WeekGridProps) {
+export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds, onToggleLock }: WeekGridProps) {
   const { columns, dayGroups, rows, cells } = model;
   const gridRef = useRef<HTMLDivElement>(null);
+
+  // Le cadenas d'une carte : un bouton FRÈRE, en surimpression coin haut-droit. Éditable
+  // (onToggleLock fourni) → bascule le verrou sans sélectionner (zone de clic ≥ 24px,
+  // aria-label nommant l'équipe, visible en permanence si verrouillé, sinon au survol/focus).
+  // Lecture seule → simple indicateur passif quand le créneau est verrouillé.
+  const renderLock = (slotId: string, teamLabel: string, locked: boolean) => {
+    if (undefined === onToggleLock) {
+      return locked ? <Lock aria-hidden="true" className="pointer-events-none absolute right-1 top-1 size-3 text-muted-foreground" /> : null;
+    }
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleLock(slotId);
+        }}
+        aria-label={`${locked ? "Déverrouiller" : "Verrouiller"} ${teamLabel}`}
+        title={`${locked ? "Déverrouiller" : "Verrouiller"} ${teamLabel}`}
+        className={cn(
+          "absolute right-0.5 top-0.5 z-20 flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent/20 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
+          locked ? "" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+        )}
+      >
+        {locked ? <Lock className="size-3" /> : <LockOpen className="size-3" />}
+      </button>
+    );
+  };
 
   if (0 === columns.length) {
     return <EmptyBlock>Aucun créneau à afficher pour cette sélection.</EmptyBlock>;
@@ -161,20 +196,23 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                 {cell.members.map((member) => {
                   const memberSelected = member.slotId === selectedSlotId;
                   return (
-                    <button
-                      key={member.slotId}
-                      type="button"
-                      data-slot-id={member.slotId}
-                      onClick={() => onSelectSlot(member.slotId)}
-                      title={`${member.teamLabel} · ${cell.groupLabel} · ${cell.venueLabel} · ${member.coachLabel} · ${cell.startLabel}–${cell.endLabel}`}
-                      className={cn(
-                        "flex w-full items-center gap-1 px-1 py-0.5 text-left font-medium hover:ring-1 hover:ring-accent",
-                        memberSelected ? "ring-1 ring-accent" : "",
-                      )}
-                    >
-                      <span className="truncate">{member.teamLabel}</span>
-                      {member.locked ? <Lock className="ml-auto size-3 shrink-0 text-muted-foreground" /> : null}
-                    </button>
+                    // Wrapper positionné : le cadenas est un bouton FRÈRE du bouton d'équipe
+                    // (jamais imbriqué). `group` scope le survol/focus au membre.
+                    <div key={member.slotId} className="group relative flex w-full items-center">
+                      <button
+                        type="button"
+                        data-slot-id={member.slotId}
+                        onClick={() => onSelectSlot(member.slotId)}
+                        title={`${member.teamLabel} · ${cell.groupLabel} · ${cell.venueLabel} · ${member.coachLabel} · ${cell.startLabel}–${cell.endLabel}`}
+                        className={cn(
+                          "flex w-full items-center gap-1 px-1 py-0.5 pr-6 text-left font-medium hover:ring-1 hover:ring-accent",
+                          memberSelected ? "ring-1 ring-accent" : "",
+                        )}
+                      >
+                        <span className="truncate">{member.teamLabel}</span>
+                      </button>
+                      {renderLock(member.slotId, member.teamLabel, member.locked)}
+                    </div>
                   );
                 })}
               </div>
@@ -182,14 +220,15 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
           }
           const selected = cell.slotId === selectedSlotId;
           return (
-            <button
+            // Wrapper positionné : la CARTE (bouton de sélection) et le CADENAS (bouton de
+            // verrou) sont deux boutons FRÈRES — jamais l'un dans l'autre (HTML invalide). Le
+            // `data-slot-id` + l'estompe portent sur le wrapper (cible du scroll/surlignage) ;
+            // `group` scope le survol/focus du cadenas à cette carte.
+            <div
               key={cell.key}
-              type="button"
               data-slot-id={cell.slotId}
-              onClick={() => onSelectSlot(cell.slotId)}
-              title={`${cell.teamLabel} · ${cell.venueLabel} · ${cell.coachLabel} · ${cell.startLabel}–${cell.endLabel}`}
               className={cn(
-                "z-10 m-px flex flex-col items-start overflow-hidden rounded border-l-4 px-1 py-0.5 text-left leading-tight transition",
+                "group relative z-10 m-px flex overflow-hidden rounded border-l-4 transition",
                 "hover:ring-1 hover:ring-accent",
                 selected ? "ring-2 ring-accent" : "",
                 dimmed ? "opacity-30" : "",
@@ -204,16 +243,23 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                 backgroundColor: tint(cell.venueColor) ?? "var(--muted)",
               }}
             >
-              <span className="flex w-full items-center gap-1 font-medium">
-                <span className="truncate">{cell.primaryLabel}</span>
-                {/* Opaque accent chip: the translucent bg-accent/20 was dark-on-dark
-                    in dark mode (sub-AA). Solid bg-accent reuses the AA-guaranteed
-                    accent↔accent-foreground pairing (A11Y-06). */}
-                {cell.roleTag ? <span className="shrink-0 rounded-sm bg-accent px-1 text-[10px] text-accent-foreground">{cell.roleTag}</span> : null}
-                {cell.locked ? <Lock className="ml-auto size-3 shrink-0 text-muted-foreground" /> : null}
-              </span>
-              <span className="truncate text-[10px] text-muted-foreground">{cell.secondaryLabel}</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => onSelectSlot(cell.slotId)}
+                title={`${cell.teamLabel} · ${cell.venueLabel} · ${cell.coachLabel} · ${cell.startLabel}–${cell.endLabel}`}
+                className="flex min-w-0 flex-1 flex-col items-start px-1 py-0.5 text-left leading-tight"
+              >
+                <span className="flex w-full items-center gap-1 pr-5 font-medium">
+                  <span className="truncate">{cell.primaryLabel}</span>
+                  {/* Opaque accent chip: the translucent bg-accent/20 was dark-on-dark
+                      in dark mode (sub-AA). Solid bg-accent reuses the AA-guaranteed
+                      accent↔accent-foreground pairing (A11Y-06). */}
+                  {cell.roleTag ? <span className="shrink-0 rounded-sm bg-accent px-1 text-[10px] text-accent-foreground">{cell.roleTag}</span> : null}
+                </span>
+                <span className="truncate text-[10px] text-muted-foreground">{cell.secondaryLabel}</span>
+              </button>
+              {renderLock(cell.slotId, cell.teamLabel, cell.locked)}
+            </div>
           );
           });
         })()}

@@ -111,8 +111,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     usePlanningStore();
   const [highlightSlotIds, setHighlightSlotIds] = useState<Set<string>>(new Set());
   // Déverrouiller un créneau né d'une RÉSERVATION de gymnase demande confirmation (F1) : c'est
-  // un engagement pris hors de l'app, à ne pas relâcher par inadvertance.
-  const [confirmUnlockReservation, setConfirmUnlockReservation] = useState(false);
+  // un engagement pris hors de l'app, à ne pas relâcher par inadvertance. On mémorise LE créneau
+  // visé (et non un booléen) : le cadenas de la grille (PR 2) peut viser un créneau NON
+  // sélectionné, la confirmation doit muter celui-là, pas le sélectionné.
+  const [pendingUnlockSlotId, setPendingUnlockSlotId] = useState<string | null>(null);
   // Source partagée avec le cockpit (radar/DayDialog) — une seule dérivation de
   // la saison de travail, plus de copie inline qui pourrait diverger.
   const workingSeason = useWorkingSeason();
@@ -339,6 +341,25 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   }, [selectedSchedule?.status, validScheduleId, queryClient]);
 
   const selectedSlot = slots.find((s) => s.id === selectedSlotId) ?? null;
+
+  // F1 (PR 2) — LE point d'entrée UNIQUE de la bascule de verrou, partagé par le panneau de
+  // détail ET le cadenas de la grille : la règle RÉSERVATION (déverrouiller → confirmation)
+  // s'écrit ainsi une seule fois. MANUAL/UNKNOWN et tout verrouillage mutent directement.
+  const requestToggleLock = useCallback(
+    (slotId: string) => {
+      const slot = slots.find((s) => s.id === slotId);
+      if (undefined === slot) {
+        return;
+      }
+      const locked = "NONE" !== slot.lockLevel;
+      if (locked && "RESERVATION" === slot.lockOrigin) {
+        setPendingUnlockSlotId(slotId);
+        return;
+      }
+      lockMutation.mutate({ id: slotId, lockLevel: locked ? "NONE" : "HARD" });
+    },
+    [slots, lockMutation],
+  );
 
   // F2b — le retour du dernier déplacement, dérivé de la mutation (verdict moteur). Un refus
   // (422) arrive en MoveRejectedError avec ses motifs ; une génération en cours en
@@ -781,7 +802,15 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                       </button>
                     ) : null}
                     <div className="relative min-h-0 min-w-0 flex-1">
-                      <WeekGrid model={model} selectedSlotId={selectedSlotId} onSelectSlot={setSelectedSlotId} highlightSlotIds={highlightSlotIds} />
+                      <WeekGrid
+                        model={model}
+                        selectedSlotId={selectedSlotId}
+                        onSelectSlot={setSelectedSlotId}
+                        highlightSlotIds={highlightSlotIds}
+                        // Lecture seule (validé) ou FAILED (pseudo-créneaux sans existence
+                        // serveur) → pas de bascule : le cadenas reste indicateur passif.
+                        onToggleLock={isReadOnly || isFailed ? undefined : requestToggleLock}
+                      />
                     </div>
                   </div>
                   {showAside ? (
@@ -808,16 +837,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           // côté serveur : déplacer/verrouiller le viserait dans le vide.
                           readOnly={isReadOnly || isFailed}
                           onClose={() => setSelectedSlotId(null)}
-                          onToggleLock={() => {
-                            // Déverrouiller une RÉSERVATION → confirmation d'abord (l'engagement
-                            // gymnase est pris hors de l'app). MANUAL/UNKNOWN, et tout
-                            // verrouillage, mutent directement.
-                            if (selectedCell.locked && "RESERVATION" === selectedSlot.lockOrigin) {
-                              setConfirmUnlockReservation(true);
-                              return;
-                            }
-                            lockMutation.mutate({ id: selectedSlot.id, lockLevel: selectedCell.locked ? "NONE" : "HARD" });
-                          }}
+                          // Même point d'entrée que le cadenas de la grille : la règle
+                          // RÉSERVATION (confirmation) vit dans `requestToggleLock`, pas ici.
+                          onToggleLock={() => requestToggleLock(selectedSlot.id)}
                           onMove={(patch) => moveMutation.mutate({ id: selectedSlot.id, patch })}
                         />
                       ) : null}
@@ -857,17 +879,17 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       />
 
       <ConfirmDialog
-        open={confirmUnlockReservation}
+        open={null !== pendingUnlockSlotId}
         title="Déverrouiller ce créneau réservé ?"
         description="Ce créneau vient d'une réservation de gymnase. En le déverrouillant, la prochaine génération pourra le déplacer ou le libérer — vérifiez auprès du gymnase avant de continuer."
         confirmLabel="Déverrouiller"
         onConfirm={() => {
-          if (null !== selectedSlot) {
-            lockMutation.mutate({ id: selectedSlot.id, lockLevel: "NONE" });
+          if (null !== pendingUnlockSlotId) {
+            lockMutation.mutate({ id: pendingUnlockSlotId, lockLevel: "NONE" });
           }
-          setConfirmUnlockReservation(false);
+          setPendingUnlockSlotId(null);
         }}
-        onCancel={() => setConfirmUnlockReservation(false)}
+        onCancel={() => setPendingUnlockSlotId(null)}
       />
 
       <ConfirmDialog

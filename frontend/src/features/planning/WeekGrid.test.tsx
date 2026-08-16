@@ -76,6 +76,74 @@ describe("WeekGrid", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  describe("cadenas sur la carte (toggle en un clic)", () => {
+    it("expose un cadenas nommant l'équipe qui bascule le verrou SANS ouvrir le panneau", async () => {
+      const onSelect = vi.fn();
+      const onToggleLock = vi.fn();
+      const model = buildGrid([slot], "gymnase", lookups);
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={onSelect} onToggleLock={onToggleLock} />);
+
+      const lock = screen.getByRole("button", { name: "Verrouiller U11" });
+      lock.click();
+      expect(onToggleLock).toHaveBeenCalledWith("a");
+      // Un clic sur le cadenas ne sélectionne PAS le créneau (le cadenas est un bouton frère,
+      // pas un bouton dans un bouton).
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(await axe(container)).toHaveNoViolations();
+    });
+
+    it("nomme « Déverrouiller <équipe> » quand le créneau est verrouillé", () => {
+      const onToggleLock = vi.fn();
+      const model = buildGrid([{ ...slot, lockLevel: "HARD" }], "gymnase", lookups);
+      render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} onToggleLock={onToggleLock} />);
+
+      expect(screen.getByRole("button", { name: "Déverrouiller U11" })).toBeInTheDocument();
+    });
+
+    it("cliquer la CARTE sélectionne le créneau, sans déclencher le verrou", () => {
+      const onSelect = vi.fn();
+      const onToggleLock = vi.fn();
+      const model = buildGrid([slot], "gymnase", lookups);
+      render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={onSelect} onToggleLock={onToggleLock} />);
+
+      screen.getByText("U11").click();
+      expect(onSelect).toHaveBeenCalledWith("a");
+      expect(onToggleLock).not.toHaveBeenCalled();
+    });
+
+    it("lecture seule (pas d'onToggleLock) : aucun cadenas cliquable, même verrouillé", () => {
+      const model = buildGrid([{ ...slot, lockLevel: "HARD" }], "gymnase", lookups);
+      render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} />);
+
+      expect(screen.queryByRole("button", { name: /Déverrouiller/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Verrouiller/ })).not.toBeInTheDocument();
+    });
+
+    it("carte fusionnée : un cadenas par membre, nommant SON équipe", () => {
+      const mergeLookups: Lookups = {
+        teams: new Map<string, Team>([
+          ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }],
+          ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0 }],
+        ]),
+        venues: new Map<string, Venue>([["v1", { id: "v1", name: "Gymnase Alpha", color: "#00aa00" }]]),
+        coaches: new Map<string, Coach>(),
+        teamCoach: new Map<string, string>(),
+        teamPlayerCoaches: new Map<string, string[]>(),
+        groupLabels: new Map<string, string>([["v1|1|1080", "CEC3"]]),
+      };
+      const slots: Slot[] = [
+        { ...slot, id: "s1", teamId: "t1" },
+        { ...slot, id: "s2", teamId: "t2" },
+      ];
+      const onToggleLock = vi.fn();
+      const model = buildGrid(slots, "gymnase", mergeLookups);
+      render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} onToggleLock={onToggleLock} />);
+
+      screen.getByRole("button", { name: "Verrouiller U13" }).click();
+      expect(onToggleLock).toHaveBeenCalledWith("s2");
+    });
+  });
+
   it("names the venue as TEXT in every view, not colour only (A11Y-01, WCAG 1.4.1)", async () => {
     // In the team ('equipe') view the venue is no longer a column header — it must
     // still be readable as text on the cell (not conveyed by the border/tint colour

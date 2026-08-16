@@ -200,16 +200,21 @@ export function PlanningToolbar({
           // Disabled during a "Charger" restore too (actionBusy) — but the busy
           // LABEL/spinner keys only on isGenerating, so a restore (no solve) does
           // not show a misleading "Génération…".
-          <Button
-            size="sm"
-            variant="default"
-            className="h-8"
-            disabled={isGenerating || actionBusy || disableRegenerate || null === selectedScheduleId || (null !== outputCredits && outputCredits.blocked)}
-            onClick={onRegenerate}
-          >
-            <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
-            {isGenerating ? "Génération…" : `Régénérer${null !== outputCredits ? ` (${outputCredits.count})` : ""}`}
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="default"
+              className="h-8"
+              disabled={isGenerating || actionBusy || disableRegenerate || null === selectedScheduleId || (null !== outputCredits && outputCredits.blocked)}
+              onClick={onRegenerate}
+            >
+              <RefreshCw className={cn("size-4", isGenerating ? "animate-spin" : "")} />
+              {isGenerating ? "Génération…" : `Régénérer${null !== outputCredits ? ` (${outputCredits.count})` : ""}`}
+            </Button>
+            {/* La garantie ne vivait qu'en commentaire de code (api.ts) : on la DIT ici, contre le
+                bouton qui la déclenche, sans modale ni ligne supplémentaire dans la toolbar. */}
+            <span className="text-xs text-muted-foreground">Vos créneaux verrouillés sont conservés à la régénération.</span>
+          </>
         )}
         {canRegenerateFrom ? (
           <Button

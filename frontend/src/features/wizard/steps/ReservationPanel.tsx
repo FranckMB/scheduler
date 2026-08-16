@@ -88,7 +88,7 @@ export function ReservationPanel({
 
   return (
     <div>
-      <p className="mb-3 text-xs text-muted-foreground">Cliquez un créneau pour y fixer une équipe (verrou HARD). Le récapitulatif des réservations est dans l'étape « Récap ».</p>
+      <p className="mb-3 text-xs text-muted-foreground">Cliquez un créneau pour y fixer une équipe (verrou HARD, conservé à chaque régénération). Le récapitulatif des réservations est dans l'étape « Récap ».</p>
 
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xs font-medium text-muted-foreground">Gymnase</span>
