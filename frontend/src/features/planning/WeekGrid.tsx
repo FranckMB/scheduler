@@ -214,12 +214,18 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
           // titre la carte, chaque équipe reste un bouton cliquable (mêmes interactions par
           // équipe que sur une carte séparée).
           if (null !== cell.groupLabel) {
+            // Lentille sur carte fusionnée (retour fondateur) : si TOUS les membres partagent
+            // le même type de verrou, UN SEUL picto au niveau de la carte (bas-gauche, comme
+            // une carte simple) ; sinon le picto ne vit que sur les rangées verrouillées.
+            const origins = cell.members.map((m) => m.lockOrigin);
+            const uniformOrigin = lensActive && origins.length > 0 && null !== origins[0] && origins.every((o) => o === origins[0]) ? origins[0] : null;
             return (
               <div
                 key={cell.key}
                 className={cn(
-                  "z-10 m-px flex flex-col overflow-hidden rounded border-l-4 text-left leading-tight transition",
+                  "relative z-10 m-px flex flex-col overflow-hidden rounded border-l-4 text-left leading-tight transition",
                   dimmed ? "opacity-30" : "",
+                  null !== uniformOrigin ? LOCK_LENS_META[uniformOrigin].ringClass : "",
                 )}
                 style={{
                   gridColumn: cell.gridColumn,
@@ -243,7 +249,8 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                       className={cn(
                         "group relative flex w-full items-center",
                         lensActive && null === member.lockOrigin ? "opacity-40" : "",
-                        lensActive && null !== member.lockOrigin ? LOCK_LENS_META[member.lockOrigin].ringClass : "",
+                        // Anneau par membre seulement en situation MIXTE — uniforme = anneau de carte.
+                        lensActive && null === uniformOrigin && null !== member.lockOrigin ? LOCK_LENS_META[member.lockOrigin].ringClass : "",
                       )}
                     >
                       <button
@@ -256,13 +263,14 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                           memberSelected ? "ring-1 ring-accent" : "",
                         )}
                       >
-                        {lensActive && null !== member.lockOrigin ? renderLensInline(member.lockOrigin) : null}
+                        {lensActive && null === uniformOrigin && null !== member.lockOrigin ? renderLensInline(member.lockOrigin) : null}
                         <span className="truncate">{member.teamLabel}</span>
                       </button>
                       {renderLock(member.slotId, member.teamLabel, member.locked)}
                     </div>
                   );
                 })}
+                {null !== uniformOrigin ? renderLensBadge(uniformOrigin) : null}
               </div>
             );
           }

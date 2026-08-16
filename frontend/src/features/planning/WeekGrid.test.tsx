@@ -205,6 +205,45 @@ describe("WeekGrid", () => {
       expect(container.querySelector('[data-slot-id="free"]')?.className).not.toContain("opacity-40");
       expect(container.querySelector('[data-lens="MANUAL"]')).toBeNull();
     });
+
+    // Cartes fusionnées (retour fondateur) : type UNIFORME → UN SEUL picto au niveau carte ;
+    // types MIXTES → picto seulement sur les rangées verrouillées.
+    const mergeLookups: Lookups = {
+      teams: new Map<string, Team>([
+        ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }],
+        ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0 }],
+      ]),
+      venues: new Map<string, Venue>([["v1", { id: "v1", name: "Gymnase Alpha", color: "#00aa00" }]]),
+      coaches: new Map<string, Coach>(),
+      teamCoach: new Map<string, string>(),
+      teamPlayerCoaches: new Map<string, string[]>(),
+      groupLabels: new Map<string, string>([["v1|1|1080", "CEC3"]]),
+    };
+
+    it("carte fusionnée UNIFORME : un seul picto de carte, pas un par rangée", () => {
+      const slots: Slot[] = [
+        { ...slot, id: "s1", teamId: "t1", lockLevel: "HARD", lockOrigin: "RESERVATION" },
+        { ...slot, id: "s2", teamId: "t2", lockLevel: "HARD", lockOrigin: "RESERVATION" },
+      ];
+      const model = buildGrid(slots, "gymnase", mergeLookups);
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} lockLens />);
+
+      expect(container.querySelectorAll('[data-lens="RESERVATION"]')).toHaveLength(1);
+    });
+
+    it("carte fusionnée MIXTE : un picto par rangée verrouillée uniquement", () => {
+      const slots: Slot[] = [
+        { ...slot, id: "s1", teamId: "t1", lockLevel: "HARD", lockOrigin: "RESERVATION" },
+        { ...slot, id: "s2", teamId: "t2", lockLevel: "NONE", lockOrigin: null },
+      ];
+      const model = buildGrid(slots, "gymnase", mergeLookups);
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} lockLens />);
+
+      // Une seule rangée verrouillée → un picto, porté PAR la rangée (dans le bouton du membre).
+      const badges = container.querySelectorAll("[data-lens]");
+      expect(badges).toHaveLength(1);
+      expect(badges[0]?.closest("button")).not.toBeNull();
+    });
   });
 
   it("names the venue as TEXT in every view, not colour only (A11Y-01, WCAG 1.4.1)", async () => {
