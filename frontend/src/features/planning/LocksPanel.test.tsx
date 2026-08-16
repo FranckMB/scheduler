@@ -8,8 +8,8 @@ import { LocksPanel } from "./LocksPanel";
 
 const lookups: Lookups = {
   teams: new Map<string, Team>([
-    ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }],
-    ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0 }],
+    ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }],
+    ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, sessionsPerWeek: 2 }],
   ]),
   venues: new Map<string, Venue>([
     ["v1", { id: "v1", name: "Gymnase Alpha", color: "#00aa00" }],

@@ -4,7 +4,7 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-16 (re-vérifié contre `WeekGrid.tsx`/`PlanningPage.tsx`/`LocksPanel.tsx`/`lib/lockLens.ts`/`lib/grid.ts` : §6.7 gagne le panneau latéral des verrous manuels + sa lentille (**P2-31 PR 3, lot SOLDÉ**) — bouton « Verrous manuels (n) » dans la barre compacte à côté de « Diagnostics du système » (même affordance, masqué à n=0, absent de la toolbar), `LocksPanel` liste les créneaux `lockOrigin === "MANUAL"` triés jour+heure avec sélection/défilement au clic, la lentille (`lib/lockLens.ts`, maison unique du mapping origine→icône/couleur) surligne la grille par origine — anneau+icône, jamais la couleur seule, le conflit prime et sa fermeture l'éteint —, uniforme/mixte sur carte fusionnée, et le cadenas de carte passe en bas-droit symétrique du badge de lentille en bas-gauche) ; précédemment : 2026-08-16 (re-vérifié contre `WeekGrid.tsx`/`PlanningPage.tsx`/`PlanningToolbar.tsx`/`ReservationPanel.tsx` : §6.7 gagne le cadenas en un clic sur la carte de la grille — bouton frère, entrée partagée `requestToggleLock`, `pendingUnlockSlotId` cible le créneau visé et non le sélectionné, absent en lecture seule — et la phrase de survie à la régénération, dite contre le bouton Régénérer ET dans l'intro du panneau Réserver, P2-31 PR 2) ; précédemment : 2026-08-16 (re-vérifié contre `planning/api.ts` : §9 (Édition manuelle) perd la ligne `manual-edit/constraint` — route placebo supprimée côté backend (contrat 2.9), déjà sans appelant frontend depuis toujours ; précédemment : 2026-08-16 (re-vérifié contre `PlanningPage.tsx`/`queries.ts`/`api.ts`/`violationHighlight.ts` : §6.7 récrit — le CRUD `schedule_slot_templates` est read-only, `/move` remonte les ids du verdict moteur pour surligner le conflit, toast succès + invalidation `diagnostics` sur move accepté, toast d'erreur sur verrouillage échoué, `ConfirmDialog` avant de déverrouiller un `RESERVATION` ; §9 (endpoints consommés, table Édition manuelle) recalée — `manual-edit/one-time` (déjà mort depuis P4-86) cède la place à `/move`) ; précédemment : 2026-08-16 (re-vérifié contre `SlotDetail.tsx` : §6.2 recale le panneau de créneau compact — sous-ligne unique catégorie/durée/coach remplaçant les trois lignes étiquetées, liste de contraintes à une ligne par règle sans doublon nom/description) ; précédemment : 2026-08-15 (recalé ce jour par **P4-99 PR-3** : §6.2 gagne le diagnostic de séance manquante qui NOMME la règle en cause et y mène — vérifié contre `DiagnosticsPanel.tsx` (`causeSentence`, `CAUSE_KIND_LABELS`, le `WizardStepLink params={{edit}}`), `planning/api.ts` (types `DiagnosticCause`/`Diagnostic`) et `ConstraintsStep.tsx:520,546` (le rail `?edit=` consommateur) ; précédemment : 2026-08-14 (recalé une 2ᵉ fois ce jour-là par P4-94/P4-95 : §6.2 gagne le nommage de cible dans `describeConstraint`, le clic-diagnostic `conflict` qui ouvre le créneau exact, et l'atterrissage `?edit=` qui amène la ligne de contrainte à l'écran — re-vérifié contre `describeConstraint.ts`, `DiagnosticsPanel.tsx`, `lib/grid.ts` (`concernedSlots`), `WeekGrid.tsx`, `PlanningPage.tsx`, `ConstraintsStep.tsx` ; précédemment recalé ce jour par P2-17 PR 2 : §6.2 gagne la fusion de cellules par libellé de groupe, vue gymnase seulement ; précédemment : 2026-08-12 (recalé ce jour : panneau de créneau repliable/défilant, contraintes CLUB+tag filtrées ; précédemment : 2026-08-12 (recalé ce jour : bannière unique de péremption, contrainte modifiée après génération ; précédemment : 2026-08-12 (recalé ce jour par P2-2/F2b : le déplacement sous verdict moteur et la bannière de score périmé ; précédemment : 2026-08-12 (recalé ce jour par P2-2/F1 : le wrap de créneau dit l'origine du verrou ; précédemment : 2026-08-11 (recalé ce jour par P2-24 : la page publique de doléances passe en STEPPER par équipe — envoi unique, confirmation vide, sessionStorage ; précédemment : 2026-08-08 (stores re-vérifiés contre `frontend/src/shared/stores/` — la règle « `persist` pour le token » contredisait le tableau des stores depuis SEC-16, audit DOC-28 ; routes/stack/pagination/export re-vérifiés le 2026-07-29)))))))))
+Last verified @ 2026-08-16 (re-vérifié contre `WeekGrid.tsx`/`PlanningPage.tsx`/`SlotDetail.tsx`/`DriftBanner.tsx`/`lib/drift.ts`/`api.ts`/`queries.ts` : §6.7 récrit — **P2-30 PR B, lot SOLDÉ** : le mode cible click-click remplace le geste « Déplacer » (le formulaire jour/heure/gymnase de `SlotDetail` est SUPPRIMÉ, décision D11 — jamais utilisé), l'éviction sur case occupée passe par `ConfirmDialog` AVANT tout appel (D6) puis `/move` + `evictSlotId`, `DriftBanner` arme le placement d'une équipe à la dérive (seuil = saison ou override de période, `COMPLETED` seulement) sur `POST /api/schedules/{id}/place-slot` — placer pose sur du LIBRE, jamais d'éviction au placement (décision fondateur, option a) —, un raccourci « remettre l'évincée » et « Annuler le dernier geste » (profondeur 1) complètent le rail, priorités visuelles conflit > mode cible > lentille, et `useMoveSlot`/`usePlaceSlot` possèdent désormais leur `onError` (le filet global `MutationCache` ne double plus un refus métier en « Problème de connexion » mensonger) ; §9 (endpoints) gagne `place-slot` et le body `evictSlotId` de `/move`) ; précédemment : 2026-08-16 (re-vérifié contre `WeekGrid.tsx`/`PlanningPage.tsx`/`LocksPanel.tsx`/`lib/lockLens.ts`/`lib/grid.ts` : §6.7 gagne le panneau latéral des verrous manuels + sa lentille (**P2-31 PR 3, lot SOLDÉ**) — bouton « Verrous manuels (n) » dans la barre compacte à côté de « Diagnostics du système » (même affordance, masqué à n=0, absent de la toolbar), `LocksPanel` liste les créneaux `lockOrigin === "MANUAL"` triés jour+heure avec sélection/défilement au clic, la lentille (`lib/lockLens.ts`, maison unique du mapping origine→icône/couleur) surligne la grille par origine — anneau+icône, jamais la couleur seule, le conflit prime et sa fermeture l'éteint —, uniforme/mixte sur carte fusionnée, et le cadenas de carte passe en bas-droit symétrique du badge de lentille en bas-gauche) ; précédemment : 2026-08-16 (re-vérifié contre `WeekGrid.tsx`/`PlanningPage.tsx`/`PlanningToolbar.tsx`/`ReservationPanel.tsx` : §6.7 gagne le cadenas en un clic sur la carte de la grille — bouton frère, entrée partagée `requestToggleLock`, `pendingUnlockSlotId` cible le créneau visé et non le sélectionné, absent en lecture seule — et la phrase de survie à la régénération, dite contre le bouton Régénérer ET dans l'intro du panneau Réserver, P2-31 PR 2) ; précédemment : 2026-08-16 (re-vérifié contre `planning/api.ts` : §9 (Édition manuelle) perd la ligne `manual-edit/constraint` — route placebo supprimée côté backend (contrat 2.9), déjà sans appelant frontend depuis toujours ; précédemment : 2026-08-16 (re-vérifié contre `PlanningPage.tsx`/`queries.ts`/`api.ts`/`violationHighlight.ts` : §6.7 récrit — le CRUD `schedule_slot_templates` est read-only, `/move` remonte les ids du verdict moteur pour surligner le conflit, toast succès + invalidation `diagnostics` sur move accepté, toast d'erreur sur verrouillage échoué, `ConfirmDialog` avant de déverrouiller un `RESERVATION` ; §9 (endpoints consommés, table Édition manuelle) recalée — `manual-edit/one-time` (déjà mort depuis P4-86) cède la place à `/move`) ; précédemment : 2026-08-16 (re-vérifié contre `SlotDetail.tsx` : §6.2 recale le panneau de créneau compact — sous-ligne unique catégorie/durée/coach remplaçant les trois lignes étiquetées, liste de contraintes à une ligne par règle sans doublon nom/description) ; précédemment : 2026-08-15 (recalé ce jour par **P4-99 PR-3** : §6.2 gagne le diagnostic de séance manquante qui NOMME la règle en cause et y mène — vérifié contre `DiagnosticsPanel.tsx` (`causeSentence`, `CAUSE_KIND_LABELS`, le `WizardStepLink params={{edit}}`), `planning/api.ts` (types `DiagnosticCause`/`Diagnostic`) et `ConstraintsStep.tsx:520,546` (le rail `?edit=` consommateur) ; précédemment : 2026-08-14 (recalé une 2ᵉ fois ce jour-là par P4-94/P4-95 : §6.2 gagne le nommage de cible dans `describeConstraint`, le clic-diagnostic `conflict` qui ouvre le créneau exact, et l'atterrissage `?edit=` qui amène la ligne de contrainte à l'écran — re-vérifié contre `describeConstraint.ts`, `DiagnosticsPanel.tsx`, `lib/grid.ts` (`concernedSlots`), `WeekGrid.tsx`, `PlanningPage.tsx`, `ConstraintsStep.tsx` ; précédemment recalé ce jour par P2-17 PR 2 : §6.2 gagne la fusion de cellules par libellé de groupe, vue gymnase seulement ; précédemment : 2026-08-12 (recalé ce jour : panneau de créneau repliable/défilant, contraintes CLUB+tag filtrées ; précédemment : 2026-08-12 (recalé ce jour : bannière unique de péremption, contrainte modifiée après génération ; précédemment : 2026-08-12 (recalé ce jour par P2-2/F2b : le déplacement sous verdict moteur et la bannière de score périmé ; précédemment : 2026-08-12 (recalé ce jour par P2-2/F1 : le wrap de créneau dit l'origine du verrou ; précédemment : 2026-08-11 (recalé ce jour par P2-24 : la page publique de doléances passe en STEPPER par équipe — envoi unique, confirmation vide, sessionStorage ; précédemment : 2026-08-08 (stores re-vérifiés contre `frontend/src/shared/stores/` — la règle « `persist` pour le token » contredisait le tableau des stores depuis SEC-16, audit DOC-28 ; routes/stack/pagination/export re-vérifiés le 2026-07-29)))))))))
 
 ---
 
@@ -348,28 +348,84 @@ depuis la fiche FFBB est prévu en lot C.
 > publiques de la fiche FFBB : nom, téléphone, email). **Aucune adresse de domicile** n'est stockée —
 > seule l'adresse du club et de la salle principale (lieux publics) le sont. Base légale actée avec P0-1 (DP1 soldé) — [`../../docs/security/rgpd.md`](../../docs/security/rgpd.md) §2.
 
-### 6.7 Retouche manuelle — déplacer, verrouiller (rail read-only + verdict moteur, 2026-08-16)
+### 6.7 Retouche manuelle — mode cible, éviction, dérive, verrouiller (rail read-only + verdict moteur, 2026-08-16)
 
 `schedule_slot_templates` est **read-only côté API** (`GetCollection`/`Get` seulement — POST/PUT/
 DELETE et leur processor/DTO d'entrée ont disparu). Toute écriture passe par un rail dédié, jamais
 par un CRUD brut sur la ressource :
 
-- **Déplacer** : `SlotDetail.onMove` appelle `POST /api/schedule-slots/{id}/move` (`useMoveSlot`).
-  **Pas d'optimistic update** — la grille attend le verdict du moteur (`MoveFeedback` :
-  `pending` pendant l'appel, ~500 ms).
-  - **Accepté (200)** : `slots`/`schedules`/`diagnostics` sont invalidés (le moteur a rejugé la
-    légalité, les diagnostics peuvent bouger) et un toast succès (« Créneau déplacé. ») confirme
-    le geste — sans lui, un déplacement accepté était indistinguable d'un refus silencieux.
-  - **Refusé (422)** : rien n'est écrit ; `moveState` passe `rejected` avec les règles violées
-    NOMMÉES (`SlotDetail`, déjà documenté §6.2 F2b). Chaque violation porte désormais aussi les
-    ids de l'entité fautive (`teamId`/`coachId`/`venueId`/`dayOfWeek`/`startTime`/
-    `conflictingTeamId`, null-safe — miroir de `AssignmentViolationSchema`, contrat 2.8) : la
-    grille **surligne** le créneau de l'équipe déjà en place que le moteur a nommée
-    (`violationHighlightSlotIds` — présentation pure, aucune redérivation de règle ; une équipe
-    absente du cache affiché n'ajoute aucun surlignage fantôme). Le surlignage s'efface au retour
-    à `idle`/`pending` (nouveau créneau sélectionné, nouvel essai) sans jamais écraser un
-    surlignage venu d'un diagnostic.
-  - Génération en cours (409) / moteur injoignable (502) : `blocked`/`error`, déjà documenté §6.2.
+- **Déplacer — mode cible click-click (P2-30 PR B, 2026-08-16, lot SOLDÉ)** : « Déplacer » sur le
+  panneau `SlotDetail` (`onArmMove`) **ARME** le mode cible au lieu d'ouvrir un formulaire — **la
+  décision fondateur D11 supprime le formulaire jour/heure/gymnase** (jamais utilisé, la grille
+  EST l'éditeur). Armée, la grille (`WeekGrid`) marque la SOURCE (anneau + pulsation), transforme
+  chaque case **vide** en un **vrai bouton focusable** « Placer ici — \<gymnase\>, \<jour\>
+  \<début\>–\<fin\> » (`aria-label`), et rend chaque carte **occupée** cliquable comme cible ; un
+  créneau **verrouillé** reste une cible refusée (tooltip « déverrouillez-le d'abord »), sauf la
+  source elle-même. **Échap** ou un re-clic sur la source sort du mode sans rien toucher (le focus
+  y revient). Le clic sur une case est routé par `WeekGrid.onPickTarget` — la PAGE décide (annuler,
+  déplacer, évincer, placer) : la grille ne fait que router.
+  - **Priorités visuelles** : surlignage **conflit** > **mode cible** > **lentille verrous** — la
+    lentille se tait tant qu'un conflit règne OU que le mode cible est armé (elle ne doit jamais
+    brouiller ni le rouge du conflit, ni la cible en cours de choix).
+  - **Case libre** : `POST /api/schedule-slots/{id}/move` (`useMoveSlot`, sans `evictSlotId`).
+    **Pas d'optimistic update** — la grille attend le verdict du moteur (`MoveFeedback` : `pending`
+    pendant l'appel, ~500 ms).
+    - **Accepté (200)** : `slots`/`schedules`/`diagnostics` sont invalidés (le moteur a rejugé la
+      légalité, les diagnostics peuvent bouger) et un toast succès (« Créneau déplacé. ») confirme
+      le geste — sans lui, un déplacement accepté était indistinguable d'un refus silencieux.
+    - **Refusé (422)** : rien n'est écrit ; `moveState` passe `rejected` avec les règles violées
+      NOMMÉES (`SlotDetail`, déjà documenté §6.2 F2b) — le **mode cible reste armé** pour
+      réessayer. Chaque violation porte aussi les ids de l'entité fautive
+      (`teamId`/`coachId`/`venueId`/`dayOfWeek`/`startTime`/`conflictingTeamId`, null-safe —
+      miroir de `AssignmentViolationSchema`, contrat 2.8) : la grille **surligne** le créneau de
+      l'équipe déjà en place que le moteur a nommée (`violationHighlightSlotIds` — présentation
+      pure, aucune redérivation de règle ; une équipe absente du cache affiché n'ajoute aucun
+      surlignage fantôme). Le surlignage s'efface au retour à `idle`/`pending` (nouveau créneau
+      sélectionné, nouvel essai) sans jamais écraser un surlignage venu d'un diagnostic.
+    - Génération en cours (409) / moteur injoignable (502) : `blocked`/`error`, déjà documenté
+      §6.2 — toastés sans rester en panneau (409/502 nomment un contexte transitoire, pas une
+      règle à corriger).
+  - **Case occupée → éviction (décision fermée D6)** : un clic sur une carte occupée ouvre d'abord
+    `ConfirmDialog` — **« Ce créneau est occupé par \<équipe\>. La déplacer d'ici ? Elle passera
+    dans les séances à replacer. »** — **rien n'est appelé avant confirmation**. Confirmé →
+    `/move` avec `evictSlotId` = l'occupant. 200 → toast nommé (« \<source\> déplacée — \<évincée\>
+    est à replacer. ») et une **barre d'éviction** apparaît sous la toolbar, portant le raccourci
+    **« Remettre \<évincée\> sur \<jour\> \<heure\> »** (= un `placeSlot` sur la case que la source
+    vient de libérer) ; elle disparaît au geste suivant ou au changement de version. Une carte
+    **verrouillée** n'est jamais une cible d'éviction (D3, verrou souverain) — désactivée avec un
+    tooltip. Un **verrou posé entre-temps par un autre gestionnaire** (422 `target_locked`,
+    concurrence) est **toasté** avec le message serveur, le mode cible reste armé.
+  - **Placer une séance à la dérive (geste 3)** : le bandeau « Séances à replacer » (voir
+    ci-dessous) arme le mode cible en **placement** — `POST /api/schedules/{id}/place-slot`
+    (`usePlaceSlot`). **Décision fondateur (option a) : placer pose sur du LIBRE, jamais
+    d'éviction au placement** — une case pleine se libère d'abord par un `/move` ; sur une case
+    **occupée**, `doPlace` appelle `place-slot` **directement** (le rail ne porte pas
+    `evictSlotId`) et laisse le **moteur trancher la capacité** (une case partagée type CEC peut
+    accepter à côté). *Option b (évincer au placement) reste délibérément hors scope — on
+    n'itère que si le terrain le réclame, décision fondateur.* Un refus toast la première
+    violation et surligne le conflit ; le mode placement reste armé.
+- **Bandeau « Séances à replacer » (`DriftBanner`, geste 3)** — présentation pure
+  (`lib/drift.ts`, module PUR) : les équipes qui ont **moins** de séances placées que le seuil
+  attendu, sur un planning **`COMPLETED`** seulement (hors génération). Un bouton par équipe
+  arme le mode placement pour elle. **Règle de seuil, selon la COUCHE affichée (ADR-0002)** :
+  sur le plan **SAISON**, le seuil est `Team.sessionsPerWeek` ; sur un plan de **PÉRIODE**, il
+  vient de l'override du plan — équipe **désactivée** pour la période → jamais en dérive (elle ne
+  joue pas la période), `sessionsPerWeek` overridé (non nul) → c'est LUI le seuil, sinon repli sur
+  le seuil de saison. **FAIL-CLOSED** : sur une période dont les overrides ne sont pas encore lus,
+  aucune dérive n'est affichée (pas de dérive fantôme devinée).
+- **Annuler le dernier geste (geste 4, profondeur 1, session)** — bouton dans la barre compacte
+  (à côté de « Diagnostics du système » / « Verrous manuels »), visible tant qu'un geste est
+  annulable. Un `move` simple s'annule par le move inverse ; un `move` avec éviction s'annule par
+  le move inverse **puis** un replacement de l'évincée (deux verdicts moteur) — un échec du
+  second est **dit honnêtement** (toast : « \<source\> est revenue, \<évincée\> reste à
+  replacer. »), jamais maquillé en succès. Le raccourci d'éviction et l'undo se réinitialisent au
+  changement de version affichée.
+- **Le hook POSSÈDE son feedback métier** (`useMoveSlot`/`usePlaceSlot`) : un `onError` de NIVEAU
+  HOOK **tait** les refus métier (`MoveRejectedError`/`TargetLockedError`/`SlotEditError`/
+  `GenerationInProgressError` — la page les affiche dans son contexte) et ne parle que d'un vrai
+  échec transport. Sans lui, le filet global `MutationCache.onError` (qui ne toaste QUE les
+  mutations SANS `onError` de niveau hook) doublait un refus 422 en **« Problème de connexion.
+  Vérifiez votre réseau. »** — mensonger, le réseau allait bien.
 - **Verrouiller/déverrouiller** : deux points d'entrée partagent désormais le même geste
   (**P2-31 PR 2, 2026-08-16**). Le panneau `SlotDetail.onToggleLock` **et** un **cadenas en un
   clic directement sur la carte de la grille** (`WeekGrid` : la carte devient un `<div>` wrapper,
@@ -578,7 +634,7 @@ type AuthState = {
 | `/verify-email/:token` | `POST /api/register/verify` (émet le JWT → app) |
 | `/forgot-password`, `/reset-password/:token` | `POST /api/password/forgot`, `POST /api/password/reset` |
 | `/waiting` | `GET /api/me` (poll 5 s jusqu'à `membershipStatus === "active"`) |
-| `/planning` | `GET /api/me`, `GET /api/schedules` (poll 2,5 s si génération en vol), `GET /api/schedule_slot_templates?scheduleId={id}`, `GET /api/schedule_diagnostics?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/validate`, `POST /api/schedules/{id}/reopen`, `POST /api/schedules/{id}/export-pdf` (`ExportMenu`), `PUT /api/schedule_plans/{id}` (renommage du plan), `PUT /api/schedules/{id}` (renommage de la version), `DELETE /api/schedules/{id}` (suppression d'une version de travail), `POST /api/schedule-slots/{id}/move` (déplacer, sous verdict moteur — §6.7), `POST /api/schedule-slots/{id}/manual-edit/lock` (verrouiller/déverrouiller — §6.7), collections référentiels (`teams`, `venues`, `coaches`, `sport_categories`, `team_coaches`, `coach_player_memberships`) |
+| `/planning` | `GET /api/me`, `GET /api/schedules` (poll 2,5 s si génération en vol), `GET /api/schedule_slot_templates?scheduleId={id}`, `GET /api/schedule_diagnostics?scheduleId={id}`, `POST /api/schedules/{id}/generate`, `POST /api/schedules/{id}/validate`, `POST /api/schedules/{id}/reopen`, `POST /api/schedules/{id}/export-pdf` (`ExportMenu`), `PUT /api/schedule_plans/{id}` (renommage du plan), `PUT /api/schedules/{id}` (renommage de la version), `DELETE /api/schedules/{id}` (suppression d'une version de travail), `POST /api/schedule-slots/{id}/move` (déplacer/évincer, mode cible sous verdict moteur — §6.7), `POST /api/schedules/{id}/place-slot` (placer une séance à la dérive — §6.7), `POST /api/schedule-slots/{id}/manual-edit/lock` (verrouiller/déverrouiller — §6.7), collections référentiels (`teams`, `venues`, `coaches`, `sport_categories`, `team_coaches`, `coach_player_memberships`) |
 | `/` (cockpit) | `GET /api/me`, `GET /api/schedules`, `GET /api/schedule_plans`, `GET /api/calendar_entries` (+ conflits d'entrée), campagnes de doléances (badge radar), `GET /api/venue_unavailabilities` + `venue-unavailability-impact` (carte radar « gymnase indisponible » — P4-68) |
 | `/wizard` | CRUD `teams`/`venues`/`coaches`/`constraints`/`venue_training_slots`…, `GET /api/priority_tiers`, `GET /api/sport_categories`, `POST /api/teams/reorder` (mode tri), `POST /api/constraints/validate`, `POST /api/schedules` + `generate` (étape Génération) |
 | `/club` | `PATCH /api/club/appearance`, `POST/DELETE /api/club/logo`, `GET /api/clubs/{clubId}/logo` (public, cache-buster sur l'URL après upload), `PATCH /api/club/info` (fiche FFBB, management-gated), `GET /api/memberships/pending`, `POST /api/memberships/{id}/approve`, `POST /api/memberships/{id}/reject` (section « Demandes » — l'ancienne route `/pending-members` a été repliée ici) |
@@ -628,7 +684,8 @@ Référence : `backend-inventory.md` §3 (GenerateScheduleController) + §5 (Mer
 | Endpoint | Méthode | Body | Réponse | Dialogue frontend |
 |----------|---------|------|---------|-------------------|
 | `/api/schedule-slots/{id}/manual-edit/lock` | POST | `{ lockLevel }` | 200 / erreur → toast | "Verrouiller SOFT/HARD" ; déverrouiller un `RESERVATION` passe d'abord par `ConfirmDialog` (§6.7) |
-| `/api/schedule-slots/{id}/move` | POST | `{ dayOfWeek, startTime, venueId }` | 200 (accepté, toast + invalidation `diagnostics`) / 422 `{valid:false, violations:[…]}` (refusé, surlignage du conflit) — voir §6.7 et `backend-inventory.md` §route `/move` | Remplace l'ancien rail `manual-edit/one-time` (retiré) — déplacement **sous verdict moteur** |
+| `/api/schedule-slots/{id}/move` | POST | `{ dayOfWeek, startTime, venueId, evictSlotId? }` | 200 (accepté, toast + invalidation `diagnostics`, `evicted` si éviction) / 422 `{valid:false, violations:[…]}` (refusé, surlignage du conflit) / 422 codé `target_locked`/`evict_target_mismatch` (toast) — voir §6.7 et `backend-inventory.md` §route `/move` | Remplace l'ancien rail `manual-edit/one-time` (retiré) — déplacement **sous verdict moteur**, mode cible click-click (P2-30) |
+| `/api/schedules/{id}/place-slot` | POST | `{ teamId, dayOfWeek, startTime, venueId, durationMinutes? }` | 200 `{valid:true, slotId}` (accepté, toast + invalidation `diagnostics`) / 422 `{valid:false, violations:[…]}` (refusé, surlignage du conflit) — voir §6.7 et `backend-inventory.md` §route `/place-slot` | Placer une séance à la dérive (P2-30, geste 3) — arme depuis `DriftBanner`, pose sur une case LIBRE (le moteur tranche la capacité sur une case occupée) |
 
 Référence : `backend-inventory.md` §3 (ManualEditController).
 

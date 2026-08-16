@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { axe } from "vitest-axe";
 
@@ -7,7 +7,7 @@ import { buildGrid, type Lookups } from "./lib/grid";
 import { WeekGrid } from "./WeekGrid";
 
 const lookups: Lookups = {
-  teams: new Map<string, Team>([["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }]]),
+  teams: new Map<string, Team>([["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]]),
   venues: new Map<string, Venue>([["v1", { id: "v1", name: "Gymnase Alpha", color: "#00aa00" }]]),
   coaches: new Map<string, Coach>(),
   teamCoach: new Map<string, string>(),
@@ -48,8 +48,8 @@ describe("WeekGrid", () => {
   it("fusionne un créneau mutualisé sous son libellé, chaque équipe restant cliquable (P2-17 D4)", async () => {
     const mergeLookups: Lookups = {
       teams: new Map<string, Team>([
-        ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }],
-        ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0 }],
+        ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }],
+        ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, sessionsPerWeek: 2 }],
       ]),
       venues: new Map<string, Venue>([["v1", { id: "v1", name: "Gymnase Alpha", color: "#00aa00" }]]),
       coaches: new Map<string, Coach>(),
@@ -122,8 +122,8 @@ describe("WeekGrid", () => {
     it("carte fusionnée : un cadenas par membre, nommant SON équipe", () => {
       const mergeLookups: Lookups = {
         teams: new Map<string, Team>([
-          ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }],
-          ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0 }],
+          ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }],
+          ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, sessionsPerWeek: 2 }],
         ]),
         venues: new Map<string, Venue>([["v1", { id: "v1", name: "Gymnase Alpha", color: "#00aa00" }]]),
         coaches: new Map<string, Coach>(),
@@ -210,8 +210,8 @@ describe("WeekGrid", () => {
     // types MIXTES → picto seulement sur les rangées verrouillées.
     const mergeLookups: Lookups = {
       teams: new Map<string, Team>([
-        ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0 }],
-        ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0 }],
+        ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }],
+        ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, sessionsPerWeek: 2 }],
       ]),
       venues: new Map<string, Venue>([["v1", { id: "v1", name: "Gymnase Alpha", color: "#00aa00" }]]),
       coaches: new Map<string, Coach>(),
@@ -243,6 +243,109 @@ describe("WeekGrid", () => {
       const badges = container.querySelectorAll("[data-lens]");
       expect(badges).toHaveLength(1);
       expect(badges[0]?.closest("button")).not.toBeNull();
+    });
+  });
+
+  describe("mode cible (targetMode, P2-30 PR B geste 1/2)", () => {
+    // Une séance placée (lundi) + une fenêtre VIDE (mardi) dans la même vue gymnase.
+    const occupied: Slot = { ...slot, id: "a", dayOfWeek: 1 };
+    const emptyWindow: Slot = { ...slot, id: "empty:w1", teamId: "", dayOfWeek: 2, startTime: "19:00:00" };
+    const buildTargetGrid = (extra: Slot[] = []) => buildGrid([occupied, emptyWindow, ...extra], "gymnase", lookups);
+
+    it("rend les cases VIDES comme des boutons focusables avec un aria-label « Placer ici »", () => {
+      const model = buildTargetGrid();
+      render(
+        <WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} targetMode={{ active: true, sourceSlotId: "a", variant: "move" }} onPickTarget={vi.fn()} onCancelTarget={vi.fn()} />,
+      );
+
+      const btn = screen.getByRole("button", { name: /Placer ici/ });
+      // L'aria-label nomme le gymnase et l'horaire (« Placer ici — Gymnase Alpha, … 19:00–20:30 »).
+      expect(btn.getAttribute("aria-label")).toMatch(/Gymnase Alpha/);
+      expect(btn.getAttribute("aria-label")).toMatch(/19:00/);
+    });
+
+    it("clic sur une case vide → onPickTarget avec l'id du créneau vide", () => {
+      const onPickTarget = vi.fn();
+      const model = buildTargetGrid();
+      render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} targetMode={{ active: true, sourceSlotId: "a", variant: "move" }} onPickTarget={onPickTarget} onCancelTarget={vi.fn()} />);
+
+      screen.getByRole("button", { name: /Placer ici/ }).click();
+      expect(onPickTarget).toHaveBeenCalledWith("empty:w1");
+    });
+
+    it("marque la SOURCE d'un déplacement (repère dédié)", () => {
+      const model = buildTargetGrid();
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} targetMode={{ active: true, sourceSlotId: "a", variant: "move" }} onPickTarget={vi.fn()} onCancelTarget={vi.fn()} />);
+
+      const source = container.querySelector('[data-target-source="true"]');
+      expect(source).not.toBeNull();
+      expect(source?.getAttribute("data-slot-id")).toBe("a");
+    });
+
+    it("clic sur une séance OCCUPÉE (non source) → onPickTarget (éviction déléguée à la page)", () => {
+      const onPickTarget = vi.fn();
+      const onSelectSlot = vi.fn();
+      // Une équipe distincte (U13) pour cibler SANS ambiguïté la carte occupée non-source.
+      const twoTeams: Lookups = {
+        ...lookups,
+        teams: new Map<string, Team>([
+          ["t1", { id: "t1", name: "U11", sportCategoryId: "c", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }],
+          ["t2", { id: "t2", name: "U13", sportCategoryId: "c", priorityTierId: 2, tierOrder: 0, sessionsPerWeek: 2 }],
+        ]),
+      };
+      const other: Slot = { ...slot, id: "b", teamId: "t2", dayOfWeek: 3 };
+      const model = buildGrid([occupied, emptyWindow, other], "gymnase", twoTeams);
+      render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={onSelectSlot} targetMode={{ active: true, sourceSlotId: "a", variant: "move" }} onPickTarget={onPickTarget} onCancelTarget={vi.fn()} />);
+
+      // La carte occupée « b » (U13) devient une cible (plus une simple sélection).
+      screen.getByRole("button", { name: /U13/ }).click();
+      expect(onPickTarget).toHaveBeenCalledWith("b");
+      expect(onSelectSlot).not.toHaveBeenCalled();
+    });
+
+    it("une séance occupée VERROUILLÉE n'est pas une cible d'éviction (clic inerte + info verrou)", () => {
+      const onPickTarget = vi.fn();
+      const locked: Slot = { ...slot, id: "b", dayOfWeek: 3, lockLevel: "HARD", lockOrigin: "RESERVATION" };
+      const model = buildTargetGrid([locked]);
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} targetMode={{ active: true, sourceSlotId: "a", variant: "move" }} onPickTarget={onPickTarget} onCancelTarget={vi.fn()} />);
+
+      const card = container.querySelector('[data-slot-id="b"]');
+      const button = card?.querySelector("button");
+      button?.click();
+      expect(onPickTarget).not.toHaveBeenCalled();
+      // Le motif du refus (verrou) est lisible en info-bulle.
+      expect(card?.querySelector('[title*="verrouill"]')).not.toBeNull();
+    });
+
+    it("Échap sort du mode cible (onCancelTarget)", () => {
+      const onCancelTarget = vi.fn();
+      const model = buildTargetGrid();
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} targetMode={{ active: true, sourceSlotId: "a", variant: "move" }} onPickTarget={vi.fn()} onCancelTarget={onCancelTarget} />);
+
+      fireEvent.keyDown(container.firstChild as Element, { key: "Escape" });
+      expect(onCancelTarget).toHaveBeenCalledTimes(1);
+    });
+
+    it("suspend la lentille tant que le mode cible est armé", () => {
+      const lensSlots: Slot[] = [
+        { ...slot, id: "a", dayOfWeek: 1, lockLevel: "HARD", lockOrigin: "MANUAL" },
+        { ...slot, id: "empty:w1", teamId: "", dayOfWeek: 2, startTime: "19:00:00" },
+      ];
+      const model = buildGrid(lensSlots, "gymnase", lookups);
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} lockLens targetMode={{ active: true, sourceSlotId: "a", variant: "move" }} onPickTarget={vi.fn()} onCancelTarget={vi.fn()} />);
+
+      // Lentille suffoquée : aucune icône de catégorie tant que le mode cible règne.
+      expect(container.querySelector('[data-lens]')).toBeNull();
+    });
+
+    it("mode PLACEMENT (dérive) : pas de source marquée, les cases vides restent des cibles", () => {
+      const onPickTarget = vi.fn();
+      const model = buildTargetGrid();
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} targetMode={{ active: true, sourceSlotId: null, variant: "place" }} onPickTarget={onPickTarget} onCancelTarget={vi.fn()} />);
+
+      expect(container.querySelector('[data-target-source="true"]')).toBeNull();
+      screen.getByRole("button", { name: /Placer ici/ }).click();
+      expect(onPickTarget).toHaveBeenCalledWith("empty:w1");
     });
   });
 

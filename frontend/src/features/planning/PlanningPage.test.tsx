@@ -6,7 +6,7 @@ import type { SchedulePlan } from "@/features/cockpit/api";
 import { useToastStore } from "@/shared/stores/toastStore";
 import { renderWithProviders } from "@/test/utils";
 
-import { getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, reopenSchedule } from "./api";
+import { getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -46,10 +46,28 @@ vi.mock("./api", () => {
       this.name = "GenerationInProgressError";
     }
   }
+  // P2-30 : verrou de cible / refus codé — classes RÉELLES pour que `instanceof` branche.
+  class TargetLockedError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "TargetLockedError";
+    }
+  }
+  class SlotEditError extends Error {
+    public code: string;
+
+    constructor(code: string, message: string) {
+      super(message);
+      this.name = "SlotEditError";
+      this.code = code;
+    }
+  }
   return {
   OverlaysExistError,
   MoveRejectedError,
   GenerationInProgressError,
+  TargetLockedError,
+  SlotEditError,
   reopenSchedule: vi.fn(),
   listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }])),
   getSlots: vi.fn(() =>
@@ -65,7 +83,7 @@ vi.mock("./api", () => {
       { id: "diag-unused-slot-venue-1-2-19:00", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, ruleKey: null, message: "Créneau disponible non utilisé : Gymnase Alpha (mardi de 19:00 à 20:30).", suggestions: [], causes: [], openCandidates: null },
     ]),
   ),
-  getTeams: vi.fn(() => Promise.resolve([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0 }])),
+  getTeams: vi.fn(() => Promise.resolve([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 1 }])),
   getVenues: vi.fn(() => Promise.resolve([{ id: "venue-1", name: "Gymnase Alpha", color: "#00aa00" }])),
   // ts-1 matches slot-1 (filled) ; ts-2 is a defined-but-unfilled window → "vide".
   getTrainingSlots: vi.fn(() =>
@@ -80,6 +98,7 @@ vi.mock("./api", () => {
   getCoachPlayers: vi.fn(() => Promise.resolve([])),
   lockSlot: vi.fn(),
   moveSlot: vi.fn(),
+  placeSlot: vi.fn(),
   generateSchedule: vi.fn(),
   validateSchedule: vi.fn(),
   STATUS_LABELS: { DRAFT: "Brouillon", PENDING: "En attente", GENERATING: "Génération…", COMPLETED: "Terminé", FAILED: "Échec" },
@@ -89,7 +108,7 @@ vi.mock("./api", () => {
 const navigate = vi.fn();
 vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
 
-const { meState, renameSpy, plansState, venueOverridesState, reservationsState } = vi.hoisted(() => ({
+const { meState, renameSpy, plansState, venueOverridesState, reservationsState, teamOverridesState } = vi.hoisted(() => ({
   meState: { chosenScheduleId: null as string | null },
   renameSpy: vi.fn(),
   // Typé sur le VRAI contrat : un type inline recopié laisserait passer un champ ajouté à
@@ -98,6 +117,8 @@ const { meState, renameSpy, plansState, venueOverridesState, reservationsState }
   venueOverridesState: { rows: [] as { id: string; venueId: string; mode: string }[], isError: false },
   // Réservations servies sur un planning FAILED (pseudo-créneaux lecture seule).
   reservationsState: { rows: [] as { id: string; schedulePlanId: string | null; teamId: string; venueId: string; dayOfWeek: number; startTime: string; durationMinutes: number }[] },
+  // P2-30 : les overrides d'équipe de la période (seuil/désactivation de dérive).
+  teamOverridesState: { rows: [] as { id: string; schedulePlanId: string; teamId: string; isActive: boolean; sessionsPerWeek: number | null }[] },
 }));
 
 // P2-15 : les réglages de gymnases de la période — un gymnase DÉSACTIVÉ garde ses
@@ -106,6 +127,8 @@ vi.mock("@/features/wizard/queries", async (orig) => ({
   ...(await orig<typeof import("@/features/wizard/queries")>()),
   useVenuePeriodOverrides: () => ({ data: venueOverridesState.rows, isError: venueOverridesState.isError }),
   useReservations: () => ({ data: reservationsState.rows }),
+  // P2-30 : overrides d'équipe de la période (seuil de dérive). `data` défini → readState ready.
+  useTeamPeriodOverrides: () => ({ data: teamOverridesState.rows, isError: false }),
   // Le wrap de créneau résout CLUB+tag via ces hooks (mêmes que le wizard) : mockés vides
   // ici, la résolution tag→équipes est gardée par applicableConstraints/SlotDetail.
   useWizardTeamTags: () => ({ data: [] }),
@@ -142,6 +165,7 @@ beforeEach(() => {
   venueOverridesState.rows = [];
   venueOverridesState.isError = false;
   reservationsState.rows = [];
+  teamOverridesState.rows = [];
   // Ré-armement explicite : ces trois-là sont réécrits par des cas (couche de période,
   // gymnase désactivé) et `mockResolvedValue` SURVIT au test suivant — une fuite qui
   // rendrait un échec ultérieur incompréhensible.
@@ -702,22 +726,24 @@ describe("PlanningPage (integration)", () => {
     beforeEach(() => {
       useToastStore.setState({ toasts: [] });
       vi.mocked(moveSlot).mockReset();
+      vi.mocked(placeSlot).mockReset();
       vi.mocked(lockSlot).mockReset();
     });
 
-    // Sélectionne le créneau, rend le formulaire de déplacement « dirty », déclenche « Déplacer ».
+    // P2-30 — mode cible click-click : sélectionne le créneau, ARME « Déplacer », puis clique la
+    // fenêtre VIDE (ts-2, Gymnase Alpha Mardi 19:00) comme cible.
     async function requestMove(user: ReturnType<typeof userEvent.setup>): Promise<void> {
       await user.click(await screen.findByText("U11"));
-      await user.selectOptions(await screen.findByLabelText("Jour"), "3");
       await user.click(screen.getByRole("button", { name: /Déplacer/ }));
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
     }
 
     it("un déplacement REFUSÉ surligne le créneau de l'équipe en conflit (conflictingTeamId)", async () => {
       const user = userEvent.setup();
       // Deux équipes placées : l'une est déplacée, l'autre (team-2) est nommée par le verdict.
       vi.mocked(getTeams).mockResolvedValue([
-        { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0 },
-        { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1 },
+        { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 1 },
+        { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1, sessionsPerWeek: 1 },
       ]);
       vi.mocked(getSlots).mockResolvedValue([
         { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null },
@@ -738,11 +764,13 @@ describe("PlanningPage (integration)", () => {
         expect(slot2?.className).not.toContain("opacity-30");
         expect(slot1?.className).toContain("opacity-30");
       });
+      // P2-30 — le mode cible RESTE armé pour réessayer (le panneau montre la consigne de choix).
+      expect(screen.getByRole("button", { name: /Choisir la case cible/ })).toBeInTheDocument();
     });
 
     it("un déplacement ACCEPTÉ affiche un toast de succès et rafraîchit les diagnostics", async () => {
       const user = userEvent.setup();
-      vi.mocked(moveSlot).mockResolvedValue({});
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true });
       renderWithProviders(<PlanningPage />);
       await screen.findByText("U11");
       const diagBefore = vi.mocked(getDiagnostics).mock.calls.length;
@@ -838,13 +866,166 @@ describe("PlanningPage (integration)", () => {
     });
   });
 
+  // P2-30 PR B — mode cible click-click, éviction (D6), bandeau dérive (placement), undo.
+  describe("P2-30 : mode cible, éviction, dérive, undo", () => {
+    const twoTeams = [
+      { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 1 },
+      { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1, sessionsPerWeek: 1 },
+    ];
+    // Source (slot-1, lundi 18:00) + occupant (slot-2, U13, mercredi 18:00) — cible d'éviction.
+    const twoSlots = [
+      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE" as const, lockOrigin: null },
+      { id: "slot-2", scheduleId: SID, teamId: "team-2", venueId: "venue-1", coachId: null, dayOfWeek: 3, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE" as const, lockOrigin: null },
+    ];
+    const evictedBlock = { slotId: "slot-2", teamId: "team-2", dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", durationMinutes: 90 };
+
+    beforeEach(() => {
+      useToastStore.setState({ toasts: [] });
+      vi.mocked(moveSlot).mockReset();
+      vi.mocked(placeSlot).mockReset();
+    });
+
+    async function armMoveFrom(user: ReturnType<typeof userEvent.setup>, label: string): Promise<void> {
+      await user.click(await screen.findByText(label));
+      await user.click(screen.getByRole("button", { name: /Déplacer/ }));
+    }
+
+    it("clic sur une case VIDE → moveSlot SANS evict", async () => {
+      const user = userEvent.setup();
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+
+      await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 2, startTime: "19:00", venueId: "venue-1" }));
+    });
+
+    it("clic sur une case OCCUPÉE → ConfirmDialog, puis moveSlot AVEC evictSlotId (mutation après confirmation SEULEMENT)", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, evicted: evictedBlock });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+      // D6 : un dialogue s'interpose, NOMMANT l'occupant — rien n'est muté avant confirmation.
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(/occupé par U13/i)).toBeInTheDocument();
+      expect(vi.mocked(moveSlot)).not.toHaveBeenCalled();
+
+      await user.click(within(dialog).getByRole("button", { name: /Déplacer et évincer/ }));
+      await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2" }));
+    });
+
+    it("après éviction, le raccourci REMET l'évincée sur la case libérée par la source (placeSlot)", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, evicted: evictedBlock });
+      vi.mocked(placeSlot).mockResolvedValue({ valid: true, slotId: "new" });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /Déplacer et évincer/ }));
+
+      // Le raccourci propose de remettre U13 sur l'ANCIENNE case de la source (lundi 18:00, venue-1).
+      const shortcut = await screen.findByRole("button", { name: /Remettre U13/ });
+      await user.click(shortcut);
+      await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-2", dayOfWeek: 1, startTime: "18:00", venueId: "venue-1" }));
+    });
+
+    it("cible verrouillée concurremment → 422 target_locked : message propre, mode cible ARMÉ", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      // La cible n'était pas verrouillée en cache (donc cliquable) mais l'est côté serveur.
+      vi.mocked(moveSlot).mockRejectedValue(new TargetLockedError("Ce créneau est verrouillé — déverrouillez-le d'abord."));
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /Déplacer et évincer/ }));
+
+      await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "error" === t.variant && /verrouill/i.test(t.message))).toBe(true));
+      // Le mode reste armé pour réessayer ailleurs.
+      expect(screen.getByRole("button", { name: /Choisir la case cible/ })).toBeInTheDocument();
+    });
+
+    it("bandeau dérive → arme le PLACEMENT → clic case vide → placeSlot pour l'équipe", async () => {
+      const user = userEvent.setup();
+      // U11 attend 2 séances, n'en a qu'une (slot-1) → dérive de 1.
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
+      vi.mocked(placeSlot).mockResolvedValue({ valid: true, slotId: "n" });
+      renderWithProviders(<PlanningPage />);
+
+      const banner = await screen.findByRole("region", { name: /séances à replacer/i });
+      // Un seul bouton dans le bandeau (U11) — il libelle « U11 · 1 séance à replacer ».
+      const driftButton = within(banner).getByRole("button");
+      expect(driftButton).toHaveTextContent(/U11 .* à replacer/);
+      await user.click(driftButton);
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+
+      await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-1", dayOfWeek: 2, startTime: "19:00", venueId: "venue-1" }));
+    });
+
+    it("le bandeau dérive n'apparaît PAS hors planning COMPLETED", async () => {
+      // Même sous-dotation (attendu 2, placé 1), mais la génération a ÉCHOUÉ → pas de dérive.
+      vi.mocked(listSchedules).mockResolvedValue([
+        { id: SID, name: "Planning A", status: "FAILED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+      ]);
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
+      vi.mocked(getSlots).mockResolvedValue([]);
+      renderWithProviders(<PlanningPage />);
+
+      expect(await screen.findByText("Génération en échec")).toBeInTheDocument();
+      expect(screen.queryByRole("region", { name: /séances à replacer/i })).not.toBeInTheDocument();
+    });
+
+    it("undo d'un move simple = move inverse (position d'origine)", async () => {
+      const user = userEvent.setup();
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+
+      // Le bouton d'annulation apparaît après un geste réussi.
+      const undoButton = await screen.findByRole("button", { name: /Annuler le dernier geste/ });
+      await user.click(undoButton);
+
+      // Le 2e appel remet slot-1 à SA position d'origine (lundi 18:00, venue-1).
+      await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledTimes(2));
+      expect(vi.mocked(moveSlot).mock.calls[1]).toEqual(["slot-1", { dayOfWeek: 1, startTime: "18:00", venueId: "venue-1" }]);
+    });
+
+    it("undo d'une éviction : move inverse PUIS replacement ; échec partiel = message honnête", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      // 1er move = éviction (porte `evicted`) ; 2e move = inverse (réussit).
+      vi.mocked(moveSlot).mockResolvedValueOnce({ valid: true, evicted: evictedBlock }).mockResolvedValueOnce({ valid: true });
+      // Le replacement de l'évincée ÉCHOUE → échec partiel.
+      vi.mocked(placeSlot).mockRejectedValue(new MoveRejectedError([{ rule: "coach_double_booking", message: "conflit." }]));
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /Déplacer et évincer/ }));
+
+      await user.click(await screen.findByRole("button", { name: /Annuler le dernier geste/ }));
+
+      // Inverse tenté, replacement tenté, et le message dit la vérité : la source est revenue,
+      // l'évincée reste à replacer.
+      await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-2", dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", durationMinutes: 90 }));
+      await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "error" === t.variant && /U11 est revenue/.test(t.message) && /U13 reste à replacer/.test(t.message))).toBe(true));
+    });
+  });
+
   // PR 3 — « Verrous lisibles » : compteur + panneau latéral des verrous MANUELS, et la
   // lentille (surbrillance de la grille par origine de verrou).
   describe("verrous lisibles : panneau + lentille", () => {
     beforeEach(() => {
       vi.mocked(getTeams).mockResolvedValue([
-        { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0 },
-        { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1 },
+        { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 1 },
+        { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1, sessionsPerWeek: 1 },
       ]);
       // Un verrou MANUEL, une RÉSERVATION : seul le MANUEL doit compter et peupler le panneau.
       vi.mocked(getSlots).mockResolvedValue([

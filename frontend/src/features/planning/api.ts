@@ -247,6 +247,10 @@ export interface Team {
    *  team ordering (see shared/lib/teamTiers). Exposed by TeamResource. */
   priorityTierId: number;
   tierOrder: number;
+  /** P2-30 : nombre de séances attendues par semaine (seuil de dérive). Exposé par
+   *  TeamResource ; le plan de PÉRIODE peut le surcharger (override). Le front l'AFFICHE
+   *  (compte des séances à replacer), il ne décide d'aucune règle. */
+  sessionsPerWeek: number;
 }
 
 export interface Venue {
@@ -298,6 +302,46 @@ export interface SlotMovePatch {
   dayOfWeek?: number;
   startTime?: string;
   venueId?: string;
+  /** P2-30 : éviction OPTIONNELLE — l'id du créneau occupant la cible, à retirer pour
+   *  laisser la place. Absent = déplacement vers une cible libre. */
+  evictSlotId?: string;
+}
+
+/**
+ * P2-30 — l'occupant ÉVINCÉ par un déplacement, tel qu'il était AVANT sa suppression. Le
+ * front s'en sert pour proposer de le REPLACER (raccourci du toast) et pour l'annuler.
+ * Miroir du bloc `evicted` du backend (200 de /move).
+ */
+export interface EvictedSlot {
+  slotId: string;
+  teamId: string;
+  dayOfWeek: number;
+  startTime: string;
+  venueId: string;
+  durationMinutes: number;
+}
+
+/** Réponse d'un déplacement ACCEPTÉ ; `evicted` renseigné seulement si une cible occupée
+ *  a été libérée. */
+export interface SlotMoveResult {
+  valid: true;
+  evicted?: EvictedSlot;
+}
+
+/** Corps d'un placement de séance à la dérive (P2-30). `durationMinutes` est OPTIONNEL :
+ *  la fenêtre de gymnase fait foi côté serveur, ce n'est qu'une assertion du client. */
+export interface PlaceSlotBody {
+  teamId: string;
+  dayOfWeek: number;
+  startTime: string;
+  venueId: string;
+  durationMinutes?: number;
+}
+
+/** Réponse d'un placement ACCEPTÉ : l'id du créneau créé. */
+export interface PlaceSlotResult {
+  valid: true;
+  slotId: string | null;
 }
 
 /**
@@ -361,6 +405,34 @@ export class GenerationInProgressError extends Error {
 }
 
 /**
+ * P2-30 D3 — la cible occupée à évincer est VERROUILLÉE (422 `target_locked`) : un verrou est
+ * souverain, on ne le libère pas. Le message serveur est déjà humain (« déverrouillez-le
+ * d'abord ») — l'écran le montre et RESTE en mode cible pour réessayer ailleurs.
+ */
+export class TargetLockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TargetLockedError";
+  }
+}
+
+/**
+ * P2-30 — un refus 422 CODÉ du rail de retouche autre qu'un verdict moteur ou un verrou :
+ * cible d'éviction incohérente (`evict_target_mismatch`), aucune fenêtre de gymnase
+ * (`slot_unavailable`), durée annoncée fausse (`duration_mismatch`). Le message serveur est
+ * déjà humain — on le montre tel quel. `code` permet de brancher sans re-dériver le message.
+ */
+export class SlotEditError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "SlotEditError";
+    this.code = code;
+  }
+}
+
+/**
  * Déplacer un créneau (jour / heure / gymnase) SOUS LE VERDICT DU MOTEUR (F2b).
  *
  * Remplace l'ancien rail `manual-edit/one-time` (chevauchements bruts, ni capacité ni
@@ -369,17 +441,51 @@ export class GenerationInProgressError extends Error {
  * génération en cours (409 `generation_in_progress`) un {@link GenerationInProgressError}.
  * Les trois champs sont obligatoires côté serveur (l'UI les envoie toujours ensemble).
  */
-export async function moveSlot(id: string, patch: SlotMovePatch): Promise<unknown> {
+export async function moveSlot(id: string, patch: SlotMovePatch): Promise<SlotMoveResult> {
   try {
-    return await api.post(`schedule-slots/${id}/move`, { json: patch }).json();
+    return await api.post(`schedule-slots/${id}/move`, { json: patch }).json<SlotMoveResult>();
   } catch (error) {
     if (error instanceof HTTPError) {
       // ky 2.x parse le corps d'erreur sur error.data (re-lire la réponse throw).
-      const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; violations?: MoveViolation[] };
+      const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; error?: string; violations?: MoveViolation[] };
       if (422 === error.response.status) {
+        // Un 422 CODÉ (verrou, cible incohérente) précède le verdict moteur : le verdict de
+        // légalité, lui, arrive SANS code, avec ses `violations`.
+        if ("target_locked" === body.code) {
+          throw new TargetLockedError(body.error ?? "Ce créneau est verrouillé — déverrouillez-le d'abord.");
+        }
+        if (undefined !== body.code) {
+          throw new SlotEditError(body.code, body.error ?? "Le déplacement n'a pas pu être appliqué.");
+        }
         throw new MoveRejectedError(body.violations ?? []);
       }
       if (409 === error.response.status && "generation_in_progress" === body.code) {
+        throw new GenerationInProgressError();
+      }
+    }
+    throw error;
+  }
+}
+
+/**
+ * PLACER une séance à la dérive (surnuméraire / rattrapage) SOUS LE VERDICT DU MOTEUR
+ * (P2-30). Même modèle d'erreurs que {@link moveSlot} : 422 avec `violations` → verdict
+ * refusé ({@link MoveRejectedError}) ; 422 codé (`slot_unavailable`/`duration_mismatch`) →
+ * {@link SlotEditError} ; 409 → {@link GenerationInProgressError}.
+ */
+export async function placeSlot(scheduleId: string, body: PlaceSlotBody): Promise<PlaceSlotResult> {
+  try {
+    return await api.post(`schedules/${scheduleId}/place-slot`, { json: body }).json<PlaceSlotResult>();
+  } catch (error) {
+    if (error instanceof HTTPError) {
+      const data = ((error as { data?: unknown }).data ?? {}) as { code?: string; error?: string; violations?: MoveViolation[] };
+      if (422 === error.response.status) {
+        if (undefined !== data.code) {
+          throw new SlotEditError(data.code, data.error ?? "Le placement n'a pas pu être appliqué.");
+        }
+        throw new MoveRejectedError(data.violations ?? []);
+      }
+      if (409 === error.response.status && "generation_in_progress" === data.code) {
         throw new GenerationInProgressError();
       }
     }

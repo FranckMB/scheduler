@@ -7,9 +7,28 @@ import { errorMessage } from "@/shared/lib/errorMessage";
 import { isScheduleStreamConnected, useScheduleStream } from "@/shared/lib/scheduleStream";
 import { toast } from "@/shared/stores/toastStore";
 
-import type { LockLevel, SlotMovePatch } from "./api";
-import { OverlaysExistError } from "./api";
+import type { LockLevel, PlaceSlotBody, SlotMovePatch } from "./api";
+import { GenerationInProgressError, MoveRejectedError, OverlaysExistError, SlotEditError, TargetLockedError } from "./api";
 import * as planningApi from "./api";
+
+/**
+ * P2-30 — le rail de retouche (move/place) délègue le feedback des refus au niveau `mutate()`
+ * de la page (toasts CONTEXTUELS : noms d'équipes, panneau, surlignage). Mais le filet global
+ * `MutationCache.onError` (queryClient) ne toaste QUE les mutations SANS onError de NIVEAU HOOK
+ * — un onError `mutate()` ne le désarme pas. Sans ce onError hook, un refus MÉTIER tombait donc
+ * dans le filet et devenait « Problème de connexion. Vérifiez votre réseau. » (mensonger : le
+ * réseau va bien). Ici le HOOK possède son feedback : il TAIT les erreurs métier (la page les
+ * affiche) et ne parle que d'un vrai échec transport — remplaçant le filet, jamais le doublant.
+ */
+const isBusinessSlotEditError = (error: unknown): boolean =>
+  error instanceof MoveRejectedError || error instanceof TargetLockedError || error instanceof SlotEditError || error instanceof GenerationInProgressError;
+
+function ownSlotEditFeedback(error: unknown): void {
+  if (isBusinessSlotEditError(error)) {
+    return; // la page possède l'affichage contextuel (noms d'équipes, panneau, surlignage)
+  }
+  void errorMessage(error).then((message) => toast.error(message));
+}
 
 // D-31 : la liste vit avec le type (`api.ts`) — elle était déclarée cinq fois.
 const IN_FLIGHT = IN_FLIGHT_STATUSES;
@@ -117,14 +136,37 @@ export function useMoveSlot() {
     // périmé » sur le planning (schedules) — et le moteur a rejugé la légalité, donc les
     // diagnostics du planning peuvent bouger : on rafraîchit les trois. Un refus throw :
     // onSuccess ne part pas, rien n'est réinvalidé (rien n'a bougé).
+    // ⚠ P2-30 : le TOAST vit désormais côté page (mutate-level) — l'éviction, l'annulation et
+    // le raccourci ont besoin des NOMS d'équipes et de l'issue exacte ; un toast générique ici
+    // en aurait fait deux. La page centralise donc tous les mots du geste.
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["slots"] });
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
       void queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
-      // Le geste PARLE : sans un mot, un déplacement accepté était indistinguable d'un refus
-      // silencieux (le créneau bougeait, mais rien ne confirmait que le moteur avait dit oui).
-      toast.success("Créneau déplacé.");
     },
+    // Le hook POSSÈDE son feedback (sinon le filet global toaste « Problème de connexion »
+    // sur un refus métier) : il tait le métier, ne parle que d'un vrai transport.
+    onError: ownSlotEditFeedback,
+  });
+}
+
+/**
+ * P2-30 — PLACER une séance à la dérive sous le verdict moteur. Mêmes invalidations que
+ * {@link useMoveSlot} : le placement crée un créneau (slots), périme le score (schedules) et
+ * fait rejuger la légalité (diagnostics). Le toast/undo/raccourci vit côté page (contexte des
+ * noms d'équipes) — un refus throw, onSuccess ne part pas.
+ */
+export function usePlaceSlot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ scheduleId, body }: { scheduleId: string; body: PlaceSlotBody }) => planningApi.placeSlot(scheduleId, body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["slots"] });
+      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      void queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
+    },
+    // Idem move : le hook possède son feedback, le filet global ne double plus (cf. useMoveSlot).
+    onError: ownSlotEditFeedback,
   });
 }
 

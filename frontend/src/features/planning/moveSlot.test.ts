@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "@/shared/api/client";
 
-import { GenerationInProgressError, MoveRejectedError, moveSlot } from "./api";
+import { GenerationInProgressError, MoveRejectedError, moveSlot, placeSlot, SlotEditError, TargetLockedError } from "./api";
 
 // F2b — le déplacement passe désormais par POST /move (verdict moteur), plus par
 // manual-edit/one-time (chevauchements bruts). Ce test garde le CHEMIN d'appel et la
@@ -70,5 +70,65 @@ describe("moveSlot — sous le verdict moteur (F2b)", () => {
   it("traduit un 409 generation_in_progress en GenerationInProgressError", async () => {
     mockPost.mockReturnValue({ json: () => Promise.reject(httpError(409, { code: "generation_in_progress" })) } as never);
     await expect(moveSlot("s1", { dayOfWeek: 4, startTime: "20:00", venueId: "v2" })).rejects.toBeInstanceOf(GenerationInProgressError);
+  });
+
+  // P2-30 PR B — éviction : le déplacement peut LIBÉRER une cible occupée.
+  it("porte evictSlotId dans le corps et rend le bloc `evicted` d'un 200", async () => {
+    const evicted = { slotId: "slot-y", teamId: "team-y", dayOfWeek: 2, startTime: "18:00", venueId: "v2", durationMinutes: 90 };
+    mockPost.mockReturnValueOnce({ json: async () => ({ valid: true, message: "Slot moved.", evicted }) } as never);
+
+    const result = await moveSlot("s1", { dayOfWeek: 4, startTime: "20:00", venueId: "v2", evictSlotId: "slot-y" });
+
+    expect(mockPost.mock.calls[0][1]).toMatchObject({ json: { evictSlotId: "slot-y" } });
+    expect(result.evicted).toEqual(evicted);
+  });
+
+  it("traduit un 422 target_locked en TargetLockedError PORTANT un message propre", async () => {
+    mockPost.mockReturnValue({ json: () => Promise.reject(httpError(422, { code: "target_locked", error: "Ce créneau est verrouillé — déverrouillez-le d'abord." })) } as never);
+    const caught = (await moveSlot("s1", { dayOfWeek: 4, startTime: "20:00", venueId: "v2", evictSlotId: "y" }).catch((e: unknown) => e)) as TargetLockedError;
+    expect(caught).toBeInstanceOf(TargetLockedError);
+    expect(caught.message).toMatch(/verrouill/i);
+  });
+
+  it("traduit un autre code 422 (evict_target_mismatch) en SlotEditError typée", async () => {
+    mockPost.mockReturnValue({ json: () => Promise.reject(httpError(422, { code: "evict_target_mismatch", error: "Le créneau à libérer ne correspond pas." })) } as never);
+    const caught = (await moveSlot("s1", { dayOfWeek: 4, startTime: "20:00", venueId: "v2", evictSlotId: "y" }).catch((e: unknown) => e)) as SlotEditError;
+    expect(caught).toBeInstanceOf(SlotEditError);
+    expect(caught.code).toBe("evict_target_mismatch");
+  });
+});
+
+describe("placeSlot — placer une séance à la dérive sous le verdict moteur (P2-30 PR B)", () => {
+  afterEach(() => mockPost.mockReset());
+
+  it("appelle POST schedules/{id}/place-slot et rend {valid, slotId}", async () => {
+    mockPost.mockReturnValueOnce({ json: async () => ({ valid: true, slotId: "new-slot" }) } as never);
+
+    const result = await placeSlot("sched-1", { teamId: "team-1", dayOfWeek: 3, startTime: "18:00", venueId: "v1" });
+
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(mockPost.mock.calls[0][0]).toBe("schedules/sched-1/place-slot");
+    expect(result.slotId).toBe("new-slot");
+  });
+
+  it("traduit un 422 avec violations en MoveRejectedError (parsing identique à moveSlot)", async () => {
+    const violations = [{ rule: "coach_double_booking", message: "le coach a déjà les U13 ici." }];
+    mockPost.mockReturnValue({ json: () => Promise.reject(httpError(422, { valid: false, violations })) } as never);
+
+    const caught = (await placeSlot("sched-1", { teamId: "team-1", dayOfWeek: 3, startTime: "18:00", venueId: "v1" }).catch((e: unknown) => e)) as MoveRejectedError;
+    expect(caught).toBeInstanceOf(MoveRejectedError);
+    expect(caught.violations[0].message).toContain("U13");
+  });
+
+  it("traduit un 422 code (slot_unavailable) en SlotEditError typée", async () => {
+    mockPost.mockReturnValue({ json: () => Promise.reject(httpError(422, { code: "slot_unavailable", error: "Aucun créneau de gymnase n'est ouvert à cet horaire." })) } as never);
+    const caught = (await placeSlot("sched-1", { teamId: "team-1", dayOfWeek: 3, startTime: "18:00", venueId: "v1" }).catch((e: unknown) => e)) as SlotEditError;
+    expect(caught).toBeInstanceOf(SlotEditError);
+    expect(caught.code).toBe("slot_unavailable");
+  });
+
+  it("traduit un 409 generation_in_progress en GenerationInProgressError", async () => {
+    mockPost.mockReturnValue({ json: () => Promise.reject(httpError(409, { code: "generation_in_progress" })) } as never);
+    await expect(placeSlot("sched-1", { teamId: "team-1", dayOfWeek: 3, startTime: "18:00", venueId: "v1" })).rejects.toBeInstanceOf(GenerationInProgressError);
   });
 });
