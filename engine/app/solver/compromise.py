@@ -93,9 +93,11 @@ def _message(family: str, effect: str, rep: CompromiseTermInfo, names: dict[str,
     Les noms viennent des tables d'entités du club (équipes/coachs/gymnases) : ce sont SES
     propres libellés, pas des identifiants moteur.
     """
-    team = names["teams"].get(rep.team_id or "", rep.team_id or "")
-    coach = names["coaches"].get(rep.coach_id or "", rep.coach_id or "")
-    venue = names["venues"].get(rep.venue_id or "", rep.venue_id or "")
+    # Lookup manqué → libellé générique, JAMAIS l'id brut (un person_id de coach-joueur
+    # peut manquer à la table des coachs — revue sécurité P2-32).
+    team = names["teams"].get(rep.team_id or "", "une équipe")
+    coach = names["coaches"].get(rep.coach_id or "", "un coach")
+    venue = names["venues"].get(rep.venue_id or "", "un gymnase")
     day = _day_name(rep.day_of_week)
     broken = effect == "broken"
 
