@@ -79,6 +79,9 @@ final class SlotPlacementVerdictTest extends WebTestCase
 
     private const string REFUSE = '{"valid":false,"violations":[{"rule":"venue_capacity","message":"le gymnase est déjà plein à cette heure.","venueId":null}],"metrics":{"solver_version":"cp-sat","nb_variables":0,"nb_constraints":0,"wall_time_ms":0}}';
 
+    /** Accepté AVEC un compromis nommé (P2-32) : la création gagne un jour préféré. */
+    private const string ACCEPT_WITH_COMPROMISES = '{"valid":true,"violations":[],"compromises":[{"family":"day_preference","effect":"gained","message":"U13 s\'entraîne désormais un jour qui lui convient.","teamId":"team-u13","coachId":null,"venueId":null,"dayOfWeek":null,"startTime":null}],"metrics":{"solver_version":"cp-sat","nb_variables":0,"nb_constraints":0,"wall_time_ms":0}}';
+
     /** La fenêtre de gymnase seedée sur venue2 : jour 4, 20:00, 90 min. La durée fait foi de LÀ. */
     private const int WINDOW_DURATION = 90;
 
@@ -138,6 +141,28 @@ final class SlotPlacementVerdictTest extends WebTestCase
 
         $schedule = $this->em->getRepository(Schedule::class)->find($ctx['scheduleId']);
         self::assertTrue($schedule?->isManuallyEditedSinceGeneration(), 'un placement accepté rend le score affiché périmé');
+    }
+
+    /** P2-32 — dryRun : le verdict est rendu (compromis compris), AUCUNE ligne créée. */
+    public function testDryRunPlacementCreatesNoRowButReturnsCompromises(): void
+    {
+        $ctx = $this->seed('SPV-dry');
+        $before = $this->countSlots($ctx['scheduleId']);
+
+        $service = $this->service(new MockHttpClient(new MockResponse(self::ACCEPT_WITH_COMPROMISES, ['http_code' => 200])));
+        $result = $service->place($ctx['schedule'], $ctx['teamId'], 4, new DateTimeImmutable('20:00'), $ctx['venue2'], null, true);
+
+        self::assertTrue($result['valid']);
+        self::assertTrue($result['dryRun']);
+        self::assertArrayNotHasKey('slotId', $result, 'un essai ne crée aucune ligne, donc aucun slotId');
+        self::assertNotEmpty($result['compromises'], 'un essai accepté rend les compromis nommés');
+        self::assertSame('day_preference', $result['compromises'][0]['family']);
+        self::assertSame('gained', $result['compromises'][0]['effect']);
+
+        self::assertSame($before, $this->countSlots($ctx['scheduleId']), 'un essai ne crée AUCUNE ligne');
+
+        $schedule = $this->em->getRepository(Schedule::class)->find($ctx['scheduleId']);
+        self::assertFalse($schedule?->isManuallyEditedSinceGeneration(), 'un essai ne marque pas le planning comme retouché');
     }
 
     /** La baseline envoyée au moteur est COMPLÈTE : les séances déjà en place de CE planning y figurent. */

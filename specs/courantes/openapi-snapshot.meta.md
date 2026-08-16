@@ -1,6 +1,20 @@
-Last verified @ 2026-08-16 (JSON **régénéré** — éviction + placement à la dérive : +1 path `POST /api/schedules/{id}/place-slot`, `POST /api/schedule-slots/{id}/move` enrichi ; contrat backend⇄engine **2.9 INCHANGÉ**)
+Last verified @ 2026-08-16 (JSON **régénéré** — compromis nommés + dryRun sur `/move` et `/place-slot` ; contrat backend⇄engine bumpé **2.9 → 2.10**)
 
 Changements récents :
+- **P2-32 PR A — compromis nommés + dryRun (2026-08-16)** : les 200 de
+  `POST /api/schedule-slots/{id}/move` et `POST /api/schedules/{id}/place-slot` portent désormais
+  un bloc `compromises` (forme COMPLÈTE, pas un tableau nu : `family` [liste fermée de 8],
+  `effect` `broken`/`gained`, `message` prêt à afficher SANS identifiant interne, + ids d'entités
+  null-safe pour le surlignage) — le DELTA de confort d'un candidat ACCEPTÉ. Les deux request
+  bodies gagnent `dryRun` (bool optionnel) : un ESSAI qui traverse le même chemin jusqu'au verdict
+  inclus (gardes pré-moteur comprises) mais n'écrit RIEN ; la réponse est alors un 200 portant le
+  verdict (`valid` peut être `false`), ses `violations` (si refusé) et `compromises`, `dryRun=true`,
+  et sur `/move` l'`evicted` qui SERAIT libéré (sans suppression). En conséquence, le `valid` du 200
+  n'est plus figé à `true` (un essai refusé rend `valid=false` en 200). Set-diff : **0 path ajouté /
+  retiré**, property-only sur les deux opérations (schémas inline du contrôleur custom). Contrat
+  backend⇄engine bumpé **2.9 → 2.10** : nouveau champ d'entrée `reference` du payload
+  `/validate-assignments` (état « avant » du candidat pour le DELTA) + sortie `compromises` du
+  verdict moteur.
 - **P2-30 PR A — éviction + placement sous verdict (2026-08-16)** : nouveau path
   `POST /api/schedules/{id}/place-slot` (créer une séance à la dérive — surnuméraire /
   rattrapage — SOUS le verdict moteur : 200 `{valid, slotId}` d'une ligne DÉVERROUILLÉE,
