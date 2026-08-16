@@ -74,15 +74,17 @@ function renderDetail(
     venues?: Venue[];
     teamName?: (id: string) => string | undefined;
     coachName?: (id: string) => string | undefined;
+    categoryLabel?: string;
+    cell?: Partial<ReturnType<typeof cell>>;
   } = {},
 ) {
   const s = slot(over.slot);
   renderWithProviders(
     <SlotDetail
-      cell={cell(s.lockLevel !== "NONE")}
+      cell={{ ...cell(s.lockLevel !== "NONE"), ...over.cell }}
       slot={s}
       venues={over.venues ?? []}
-      categoryLabel="U11"
+      categoryLabel={over.categoryLabel ?? "U11"}
       constraints={over.constraints ?? []}
       tagTeamIds={over.tagTeamIds}
       teamName={over.teamName}
@@ -98,6 +100,31 @@ function renderDetail(
 
 /** Le panneau des contraintes est REPLIÉ par défaut — on l'ouvre pour lire son contenu. */
 const openConstraints = () => userEvent.click(screen.getByRole("button", { name: /Contraintes applicables/ }));
+
+describe("SlotDetail — sous-ligne compacte (B1)", () => {
+  it("résume catégorie · durée · Coach sur une seule ligne discrète, sans labels", () => {
+    renderDetail({ slot: { durationMinutes: 90 } });
+    // Une seule ligne, séparateurs « · », aucun libellé sauf le préfixe « Coach ».
+    expect(screen.getByText("U11 · 90 min · Coach Jean Dupont")).toBeInTheDocument();
+    // Plus de lignes étiquetées « Catégorie »/« Durée ».
+    expect(screen.queryByText("Catégorie")).not.toBeInTheDocument();
+    expect(screen.queryByText("Durée")).not.toBeInTheDocument();
+  });
+
+  it("omet un segment vide sans « · » orphelin", () => {
+    renderDetail({ slot: { durationMinutes: 60 }, categoryLabel: "" });
+    // Catégorie vide → la ligne commence à la durée, jamais par un « · » orphelin.
+    expect(screen.getByText("60 min · Coach Jean Dupont")).toBeInTheDocument();
+  });
+
+  it("remplace le nom par une croix rouge quand l'équipe n'a pas de coach", () => {
+    renderDetail({ cell: { coachLabel: "Sans coach" } });
+    // Décision fondateur 2026-08-16 : jamais « Coach Sans coach » — le préfixe reste,
+    // le nom devient une croix rouge, lisible aussi au lecteur d'écran.
+    expect(screen.getByLabelText("Sans coach")).toBeInTheDocument();
+    expect(screen.queryByText(/Sans coach/)).not.toBeInTheDocument();
+  });
+});
 
 describe("SlotDetail — origine du verrou (F1)", () => {
   it.each<[LockOrigin, string]>([
@@ -220,8 +247,9 @@ describe("SlotDetail — le panneau dit ce que la règle FAIT, pas seulement son
     await openConstraints();
     // Ce que la règle FAIT, dérivé de la config — vérifiable sans confiance.
     expect(screen.getByText(/samedi/i)).toBeInTheDocument();
-    // Le nom libre reste, en second (repère du gestionnaire).
-    expect(screen.getByText("SM2 au moins 1 seance a Mateo")).toBeInTheDocument();
+    // B2 — une seule ligne par contrainte : le nom libre trompeur ne double plus la
+    // description dérivée (il ne s'affiche que faute de description fidèle).
+    expect(screen.queryByText("SM2 au moins 1 seance a Mateo")).not.toBeInTheDocument();
   });
 
   it("nomme le gymnase pour minAtVenueId et preferredVenueId", async () => {
@@ -240,7 +268,7 @@ describe("SlotDetail — le panneau dit ce que la règle FAIT, pas seulement son
     expect(screen.getByText("Toutes les équipes · préfère Matéo")).toBeInTheDocument();
   });
 
-  it("P4-94 — la 1re ligne NOMME la cible (équipe résolue) ; le nom libre reste en 2e ligne", async () => {
+  it("P4-94 / B2 — la ligne UNIQUE NOMME la cible (équipe résolue), sans doubler le nom libre", async () => {
     renderDetail({
       slot: { teamId: "team-A" },
       venues: [mateo],
@@ -250,10 +278,10 @@ describe("SlotDetail — le panneau dit ce que la règle FAIT, pas seulement son
       ],
     });
     await openConstraints();
-    // Dérivé, cible en tête (le bon objet corrigeable).
+    // Dérivé, cible en tête (le bon objet corrigeable) — désormais la SEULE ligne.
     expect(screen.getByText("U11 A · au moins 1 séance à Matéo")).toBeInTheDocument();
-    // Le nom LIBRE reste, inchangé, en seconde ligne (repère faillible du gestionnaire).
-    expect(screen.getByText("SM2 au moins 1 seance a Mateo")).toBeInTheDocument();
+    // B2 — le nom LIBRE ne double plus la description : une seule ligne par contrainte.
+    expect(screen.queryByText("SM2 au moins 1 seance a Mateo")).not.toBeInTheDocument();
   });
 
   it("retombe sur le NOM SEUL pour une combinaison qu'on ne sait pas décrire (pas d'invention)", async () => {

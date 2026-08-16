@@ -467,8 +467,8 @@ describe("PlanningPage (integration)", () => {
     renderWithProviders(<PlanningPage />);
     await user.click(await screen.findByText("U11"));
 
-    expect(await screen.findByText("Catégorie")).toBeInTheDocument();
-    expect(screen.getByText("90 min")).toBeInTheDocument();
+    // Le panneau ouvert affiche la sous-ligne compacte (B1) : catégorie · durée · Coach.
+    expect(await screen.findByText(/90 min/)).toBeInTheDocument();
   });
 
   // Retour fondateur : « quand je sélectionne un créneau, réduire automatiquement le panel de
@@ -489,7 +489,7 @@ describe("PlanningPage (integration)", () => {
 
     // Sélection d'un créneau → le PANNEAU se replie (plus de heading), le détail prend la place…
     await user.click(screen.getByText("U11"));
-    expect(await screen.findByText("Catégorie")).toBeInTheDocument();
+    expect(await screen.findByText(/90 min/)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Diagnostics du système" })).not.toBeInTheDocument();
     // …mais la BARRE repliée garde l'essentiel VISIBLE : le compte et la sévérité la plus haute.
     const bar = screen.getByRole("button", { name: /Diagnostics du système/ });
@@ -510,7 +510,7 @@ describe("PlanningPage (integration)", () => {
     expect(await screen.findByRole("heading", { name: "Diagnostics du système" })).toBeInTheDocument();
 
     await user.click(screen.getByText("U11"));
-    expect(await screen.findByText("Catégorie")).toBeInTheDocument();
+    expect(await screen.findByText(/90 min/)).toBeInTheDocument();
     // Plus d'exception : le panneau se replie même avec une ERREUR…
     expect(screen.queryByRole("heading", { name: "Diagnostics du système" })).not.toBeInTheDocument();
     // …mais l'erreur reste SIGNALÉE dans la barre (rien n'est enterré, elle reste atteignable).
@@ -549,7 +549,7 @@ describe("PlanningPage (integration)", () => {
     await user.click(screen.getByText("Conflit ciblé."));
 
     // Le créneau fautif est SÉLECTIONNÉ → SlotDetail s'ouvre…
-    expect(await screen.findByText("Catégorie")).toBeInTheDocument();
+    expect(await screen.findByText(/90 min/)).toBeInTheDocument();
     // …et sa cellule (data-slot-id) a été amenée à l'écran.
     expect(scrolled.some((el) => "slot-1" === el.getAttribute("data-slot-id"))).toBe(true);
 
