@@ -132,3 +132,60 @@ describe("placeSlot — placer une séance à la dérive sous le verdict moteur 
     await expect(placeSlot("sched-1", { teamId: "team-1", dayOfWeek: 3, startTime: "18:00", venueId: "v1" })).rejects.toBeInstanceOf(GenerationInProgressError);
   });
 });
+
+// P2-32 — un ESSAI (dryRun) : le moteur juge SANS écrire. Un refus d'essai arrive en 200
+// {valid:false} (PAS un 422) : le parsing doit RENDRE un résultat, jamais lever.
+describe("dry-run — essai sans écriture (P2-32)", () => {
+  afterEach(() => mockPost.mockReset());
+
+  it("porte dryRun:true dans le corps et rend un essai ACCEPTÉ avec ses compromis", async () => {
+    const compromises = [
+      { family: "coach_rest", effect: "broken", message: "le coach Martin enchaîne deux séances.", coachId: "coach-1" },
+      { family: "venue_pref", effect: "gained", message: "les U15 retrouvent leur gymnase habituel." },
+    ];
+    mockPost.mockReturnValueOnce({ json: async () => ({ valid: true, dryRun: true, violations: [], compromises }) } as never);
+
+    const result = await moveSlot("s1", { dayOfWeek: 4, startTime: "20:00", venueId: "v2", evictSlotId: "y", dryRun: true });
+
+    expect(mockPost.mock.calls[0][1]).toMatchObject({ json: { dryRun: true, evictSlotId: "y" } });
+    expect(result.valid).toBe(true);
+    expect(result.dryRun).toBe(true);
+    expect(result.compromises).toHaveLength(2);
+    expect(result.compromises[0].effect).toBe("broken");
+  });
+
+  it("un essai REFUSÉ arrive en 200 {valid:false} : RÉSULTAT (pas un throw) portant violations + dryRun", async () => {
+    const violations = [{ rule: "coach_double_booking", message: "le coach a déjà les U13 ici." }];
+    mockPost.mockReturnValueOnce({ json: async () => ({ valid: false, dryRun: true, violations, compromises: [] }) } as never);
+
+    // Ne lève PAS (contrairement au refus réel 422) — c'est un verdict d'essai, rendu tel quel.
+    const result = await moveSlot("s1", { dayOfWeek: 4, startTime: "20:00", venueId: "v2", dryRun: true });
+
+    expect(result.valid).toBe(false);
+    expect(result.dryRun).toBe(true);
+    expect(result.violations?.[0].message).toContain("U13");
+  });
+
+  it("porte les compromis d'un déplacement RÉEL accepté, et défaut [] si absent", async () => {
+    const compromises = [{ family: "coach_rest", effect: "broken", message: "repos raccourci." }];
+    mockPost.mockReturnValueOnce({ json: async () => ({ valid: true, message: "Slot moved.", compromises }) } as never);
+    const withCompromises = await moveSlot("s1", { dayOfWeek: 4, startTime: "20:00", venueId: "v2" });
+    expect(withCompromises.compromises).toHaveLength(1);
+
+    // Une réponse qui n'énumère aucun compromis se lit [] (jamais undefined).
+    mockPost.mockReturnValueOnce({ json: async () => ({ valid: true, message: "Slot moved." }) } as never);
+    const withoutCompromises = await moveSlot("s1", { dayOfWeek: 4, startTime: "20:00", venueId: "v2" });
+    expect(withoutCompromises.compromises).toEqual([]);
+  });
+
+  it("placeSlot : essai accepté porte ses compromis et dryRun:true", async () => {
+    const compromises = [{ family: "venue_pref", effect: "gained", message: "gymnase habituel retrouvé." }];
+    mockPost.mockReturnValueOnce({ json: async () => ({ valid: true, dryRun: true, violations: [], compromises }) } as never);
+
+    const result = await placeSlot("sched-1", { teamId: "team-1", dayOfWeek: 3, startTime: "18:00", venueId: "v1", dryRun: true });
+
+    expect(mockPost.mock.calls[0][1]).toMatchObject({ json: { dryRun: true } });
+    expect(result.dryRun).toBe(true);
+    expect(result.compromises).toHaveLength(1);
+  });
+});

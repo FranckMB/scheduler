@@ -770,7 +770,7 @@ describe("PlanningPage (integration)", () => {
 
     it("un déplacement ACCEPTÉ affiche un toast de succès et rafraîchit les diagnostics", async () => {
       const user = userEvent.setup();
-      vi.mocked(moveSlot).mockResolvedValue({ valid: true });
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, compromises: [] });
       renderWithProviders(<PlanningPage />);
       await screen.findByText("U11");
       const diagBefore = vi.mocked(getDiagnostics).mock.calls.length;
@@ -892,7 +892,7 @@ describe("PlanningPage (integration)", () => {
 
     it("clic sur une case VIDE → moveSlot SANS evict", async () => {
       const user = userEvent.setup();
-      vi.mocked(moveSlot).mockResolvedValue({ valid: true });
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, compromises: [] });
       renderWithProviders(<PlanningPage />);
       await armMoveFrom(user, "U11");
       await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
@@ -900,21 +900,27 @@ describe("PlanningPage (integration)", () => {
       await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 2, startTime: "19:00", venueId: "venue-1" }));
     });
 
-    it("clic sur une case OCCUPÉE → ConfirmDialog, puis moveSlot AVEC evictSlotId (mutation après confirmation SEULEMENT)", async () => {
+    it("clic sur une case OCCUPÉE → modale (essai dryRun), puis move RÉEL AVEC evictSlotId à la confirmation SEULEMENT", async () => {
       const user = userEvent.setup();
       vi.mocked(getTeams).mockResolvedValue(twoTeams);
       vi.mocked(getSlots).mockResolvedValue(twoSlots);
-      vi.mocked(moveSlot).mockResolvedValue({ valid: true, evicted: evictedBlock });
+      // Essai accepté puis move réel accepté (mêmes valeurs — l'essai a `dryRun`, le réel non).
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, dryRun: true, compromises: [], evicted: evictedBlock });
       renderWithProviders(<PlanningPage />);
       await armMoveFrom(user, "U11");
 
       await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
-      // D6 : un dialogue s'interpose, NOMMANT l'occupant — rien n'est muté avant confirmation.
+      // D6 : une modale s'interpose (VÉRIFICATION → verdict), NOMMANT l'occupant. Seul l'ESSAI
+      // (dryRun) part avant la confirmation.
       const dialog = await screen.findByRole("dialog");
-      expect(within(dialog).getByText(/occupé par U13/i)).toBeInTheDocument();
-      expect(vi.mocked(moveSlot)).not.toHaveBeenCalled();
+      // Le nom de l'occupant est mis en emphase (span) — on attend le libellé porteur.
+      expect(await within(dialog).findByText(/Ce créneau est occupé par/i)).toBeInTheDocument();
+      expect(within(dialog).getByText("U13")).toBeInTheDocument();
+      await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(moveSlot).mock.calls[0]).toEqual(["slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2", dryRun: true }]);
 
-      await user.click(within(dialog).getByRole("button", { name: /Déplacer et évincer/ }));
+      await user.click(await within(dialog).findByRole("button", { name: /Déplacer et évincer/ }));
+      // Le move réel (sans dryRun) n'a lieu qu'à la confirmation.
       await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2" }));
     });
 
@@ -922,12 +928,12 @@ describe("PlanningPage (integration)", () => {
       const user = userEvent.setup();
       vi.mocked(getTeams).mockResolvedValue(twoTeams);
       vi.mocked(getSlots).mockResolvedValue(twoSlots);
-      vi.mocked(moveSlot).mockResolvedValue({ valid: true, evicted: evictedBlock });
-      vi.mocked(placeSlot).mockResolvedValue({ valid: true, slotId: "new" });
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, compromises: [], evicted: evictedBlock });
+      vi.mocked(placeSlot).mockResolvedValue({ valid: true, slotId: "new", compromises: [] });
       renderWithProviders(<PlanningPage />);
       await armMoveFrom(user, "U11");
       await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
-      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /Déplacer et évincer/ }));
+      await user.click(await within(await screen.findByRole("dialog")).findByRole("button", { name: /Déplacer et évincer/ }));
 
       // Le raccourci propose de remettre U13 sur l'ANCIENNE case de la source (lundi 18:00, venue-1).
       const shortcut = await screen.findByRole("button", { name: /Remettre U13/ });
@@ -935,19 +941,20 @@ describe("PlanningPage (integration)", () => {
       await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-2", dayOfWeek: 1, startTime: "18:00", venueId: "venue-1" }));
     });
 
-    it("cible verrouillée concurremment → 422 target_locked : message propre, mode cible ARMÉ", async () => {
+    it("cible verrouillée concurremment → 422 target_locked pendant l'essai : message propre, modale fermée, mode cible ARMÉ", async () => {
       const user = userEvent.setup();
       vi.mocked(getTeams).mockResolvedValue(twoTeams);
       vi.mocked(getSlots).mockResolvedValue(twoSlots);
-      // La cible n'était pas verrouillée en cache (donc cliquable) mais l'est côté serveur.
+      // La cible n'était pas verrouillée en cache (donc cliquable) mais l'est côté serveur : le
+      // verrou (D3) est tranché AVANT le moteur, donc l'ESSAI lui-même échoue.
       vi.mocked(moveSlot).mockRejectedValue(new TargetLockedError("Ce créneau est verrouillé — déverrouillez-le d'abord."));
       renderWithProviders(<PlanningPage />);
       await armMoveFrom(user, "U11");
       await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
-      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /Déplacer et évincer/ }));
 
       await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "error" === t.variant && /verrouill/i.test(t.message))).toBe(true));
-      // Le mode reste armé pour réessayer ailleurs.
+      // La modale s'est fermée, aucun move réel, et le mode reste armé pour réessayer ailleurs.
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Choisir la case cible/ })).toBeInTheDocument();
     });
 
@@ -955,7 +962,7 @@ describe("PlanningPage (integration)", () => {
       const user = userEvent.setup();
       // U11 attend 2 séances, n'en a qu'une (slot-1) → dérive de 1.
       vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
-      vi.mocked(placeSlot).mockResolvedValue({ valid: true, slotId: "n" });
+      vi.mocked(placeSlot).mockResolvedValue({ valid: true, slotId: "n", compromises: [] });
       renderWithProviders(<PlanningPage />);
 
       const banner = await screen.findByRole("region", { name: /séances à replacer/i });
@@ -983,7 +990,7 @@ describe("PlanningPage (integration)", () => {
 
     it("undo d'un move simple = move inverse (position d'origine)", async () => {
       const user = userEvent.setup();
-      vi.mocked(moveSlot).mockResolvedValue({ valid: true });
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, compromises: [] });
       renderWithProviders(<PlanningPage />);
       await armMoveFrom(user, "U11");
       await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
@@ -1001,14 +1008,17 @@ describe("PlanningPage (integration)", () => {
       const user = userEvent.setup();
       vi.mocked(getTeams).mockResolvedValue(twoTeams);
       vi.mocked(getSlots).mockResolvedValue(twoSlots);
-      // 1er move = éviction (porte `evicted`) ; 2e move = inverse (réussit).
-      vi.mocked(moveSlot).mockResolvedValueOnce({ valid: true, evicted: evictedBlock }).mockResolvedValueOnce({ valid: true });
+      // 1er move = ESSAI (dryRun, porte `evicted`) ; 2e = move réel d'éviction ; 3e = inverse (undo).
+      vi.mocked(moveSlot)
+        .mockResolvedValueOnce({ valid: true, dryRun: true, compromises: [], evicted: evictedBlock })
+        .mockResolvedValueOnce({ valid: true, compromises: [], evicted: evictedBlock })
+        .mockResolvedValueOnce({ valid: true, compromises: [] });
       // Le replacement de l'évincée ÉCHOUE → échec partiel.
       vi.mocked(placeSlot).mockRejectedValue(new MoveRejectedError([{ rule: "coach_double_booking", message: "conflit." }]));
       renderWithProviders(<PlanningPage />);
       await armMoveFrom(user, "U11");
       await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
-      await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: /Déplacer et évincer/ }));
+      await user.click(await within(await screen.findByRole("dialog")).findByRole("button", { name: /Déplacer et évincer/ }));
 
       await user.click(await screen.findByRole("button", { name: /Annuler le dernier geste/ }));
 
@@ -1016,6 +1026,190 @@ describe("PlanningPage (integration)", () => {
       // l'évincée reste à replacer.
       await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-2", dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", durationMinutes: 90 }));
       await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "error" === t.variant && /U11 est revenue/.test(t.message) && /U13 reste à replacer/.test(t.message))).toBe(true));
+    });
+  });
+
+  // P2-32 — l'essai (dry-run) qui remplit la modale d'éviction, et les compromis nommés
+  // affichés après un geste ÉCRIT accepté (toast suffixé + bandeau dismissible).
+  describe("P2-32 : compromis nommés + essai (dry-run)", () => {
+    const twoTeams = [
+      { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 1 },
+      { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1, sessionsPerWeek: 1 },
+    ];
+    const twoSlots = [
+      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE" as const, lockOrigin: null },
+      { id: "slot-2", scheduleId: SID, teamId: "team-2", venueId: "venue-1", coachId: null, dayOfWeek: 3, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE" as const, lockOrigin: null },
+    ];
+    const evictedBlock = { slotId: "slot-2", teamId: "team-2", dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", durationMinutes: 90 };
+    const brokenGained = [
+      { family: "coach_rest", effect: "broken" as const, message: "le coach Martin enchaîne deux séances." },
+      { family: "venue_pref", effect: "gained" as const, message: "les U11 retrouvent leur gymnase habituel." },
+    ];
+
+    beforeEach(() => {
+      useToastStore.setState({ toasts: [] });
+      vi.mocked(moveSlot).mockReset();
+      vi.mocked(placeSlot).mockReset();
+    });
+
+    async function armMoveFrom(user: ReturnType<typeof userEvent.setup>, label: string): Promise<void> {
+      await user.click(await screen.findByText(label));
+      await user.click(screen.getByRole("button", { name: /Déplacer/ }));
+    }
+
+    it("clic occupé → la modale s'ouvre en VÉRIFICATION pendant l'essai (pas de bouton confirmer)", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      let resolveDry: (v: unknown) => void = () => {};
+      vi.mocked(moveSlot).mockReturnValueOnce(new Promise((r) => (resolveDry = r)) as never);
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(/Vérification/)).toBeInTheDocument();
+      expect(within(dialog).queryByRole("button", { name: /Déplacer et évincer/ })).not.toBeInTheDocument();
+
+      resolveDry({ valid: true, dryRun: true, compromises: [], evicted: evictedBlock });
+      await within(dialog).findByRole("button", { name: /Déplacer et évincer/ });
+    });
+
+    it("clic occupé → essai accepté LISTE les compromis → confirmer déclenche le move RÉEL sans dryRun", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      vi.mocked(moveSlot)
+        .mockResolvedValueOnce({ valid: true, dryRun: true, compromises: brokenGained, evicted: evictedBlock })
+        .mockResolvedValueOnce({ valid: true, compromises: brokenGained, evicted: evictedBlock });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+
+      // L'essai part AUSSITÔT, en dryRun.
+      await vi.waitFor(() =>
+        expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2", dryRun: true }),
+      );
+      const dialog = await screen.findByRole("dialog");
+      // Les compromis nommés s'affichent dans la modale (cassé ET rétabli).
+      expect(await within(dialog).findByText(/le coach Martin enchaîne deux séances/)).toBeInTheDocument();
+      expect(within(dialog).getByText(/les U11 retrouvent leur gymnase habituel/)).toBeInTheDocument();
+      // Rien d'écrit tant qu'on n'a pas confirmé : un seul appel (l'essai).
+      expect(vi.mocked(moveSlot)).toHaveBeenCalledTimes(1);
+
+      await user.click(within(dialog).getByRole("button", { name: /Déplacer et évincer/ }));
+      // Le move RÉEL part, SANS dryRun.
+      await vi.waitFor(() =>
+        expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2" }),
+      );
+    });
+
+    it("essai accepté SANS compromis → la modale le dit (« Aucun compromis détecté. »)", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, dryRun: true, compromises: [], evicted: evictedBlock });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+
+      const dialog = await screen.findByRole("dialog");
+      expect(await within(dialog).findByText(/Aucun compromis détecté/)).toBeInTheDocument();
+    });
+
+    it("essai REFUSÉ (200 valid:false) → modale de refus SANS bouton confirmer, mode cible ARMÉ", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      vi.mocked(moveSlot).mockResolvedValueOnce({
+        valid: false,
+        dryRun: true,
+        violations: [{ rule: "coach_double_booking", message: "le coach Dupont a déjà les U13 à 18h.", conflictingTeamId: "team-2" }],
+        compromises: [],
+      });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+
+      const dialog = await screen.findByRole("dialog");
+      expect(await within(dialog).findByText(/le coach Dupont a déjà les U13/)).toBeInTheDocument();
+      // Un refus n'a rien à confirmer.
+      expect(within(dialog).queryByRole("button", { name: /Déplacer et évincer/ })).not.toBeInTheDocument();
+      // Aucun move réel.
+      expect(vi.mocked(moveSlot)).toHaveBeenCalledTimes(1);
+
+      await user.click(within(dialog).getByRole("button", { name: /Fermer/ }));
+      // Le mode reste armé pour réessayer ailleurs.
+      expect(screen.getByRole("button", { name: /Choisir la case cible/ })).toBeInTheDocument();
+    });
+
+    it("erreur transport pendant l'essai → la modale se ferme, toast, mode armé", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      vi.mocked(moveSlot).mockRejectedValueOnce(new Error("boom"));
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+
+      await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "error" === t.variant)).toBe(true));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Choisir la case cible/ })).toBeInTheDocument();
+    });
+
+    it("case VIDE → AUCUN essai : moveSlot appelé une seule fois, SANS dryRun (D-8)", async () => {
+      const user = userEvent.setup();
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, compromises: [] });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+
+      await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(moveSlot).mock.calls[0][1]).not.toHaveProperty("dryRun");
+    });
+
+    it("geste écrit accepté avec compromis → toast suffixé « — N compromis » + bandeau nommé", async () => {
+      const user = userEvent.setup();
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, compromises: brokenGained });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+
+      await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "success" === t.variant && /2 compromis/.test(t.message))).toBe(true));
+      expect(await screen.findByText(/le coach Martin enchaîne deux séances/)).toBeInTheDocument();
+      expect(screen.getByText(/les U11 retrouvent leur gymnase habituel/)).toBeInTheDocument();
+    });
+
+    it("geste écrit accepté SANS compromis → toast simple, PAS de bandeau", async () => {
+      const user = userEvent.setup();
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, compromises: [] });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+
+      await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "success" === t.variant)).toBe(true));
+      const success = useToastStore.getState().toasts.find((t) => "success" === t.variant);
+      expect(success?.message).not.toMatch(/compromis/);
+      expect(screen.queryByText(/compromis/i)).not.toBeInTheDocument();
+    });
+
+    it("le bandeau de compromis est purgé au changement de version", async () => {
+      const user = userEvent.setup();
+      const OTHER = "22222222-2222-2222-2222-222222222222";
+      vi.mocked(listSchedules).mockResolvedValue([
+        { id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+        { id: OTHER, name: "Planning B", status: "COMPLETED", score: 9100, createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+      ]);
+      vi.mocked(moveSlot).mockResolvedValue({ valid: true, compromises: brokenGained });
+      usePlanningStore.setState({ selectedScheduleId: SID }); // partir de la version A, sans ambiguïté
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+      expect(await screen.findByText(/le coach Martin enchaîne deux séances/)).toBeInTheDocument();
+
+      // Changer de version affichée purge tout état éphémère de retouche, bandeau compris.
+      usePlanningStore.setState({ selectedScheduleId: OTHER });
+      await vi.waitFor(() => expect(screen.queryByText(/le coach Martin enchaîne deux séances/)).not.toBeInTheDocument());
     });
   });
 
