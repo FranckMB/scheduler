@@ -79,7 +79,7 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
   // Lecture seule → simple indicateur passif quand le créneau est verrouillé.
   const renderLock = (slotId: string, teamLabel: string, locked: boolean) => {
     if (undefined === onToggleLock) {
-      return locked ? <Lock aria-hidden="true" className="pointer-events-none absolute right-1 top-1 size-3 text-muted-foreground" /> : null;
+      return locked ? <Lock aria-hidden="true" className="pointer-events-none absolute bottom-1 right-1 size-3 text-muted-foreground" /> : null;
     }
     return (
       <button
@@ -91,7 +91,9 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
         aria-label={`${locked ? "Déverrouiller" : "Verrouiller"} ${teamLabel}`}
         title={`${locked ? "Déverrouiller" : "Verrouiller"} ${teamLabel}`}
         className={cn(
-          "absolute right-0.5 top-0.5 z-20 flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent/20 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
+          // Bas-droit (retour fondateur) : symétrique du badge de lentille (bas-gauche), le
+          // haut de carte reste au nom d'équipe.
+          "absolute bottom-0.5 right-0.5 z-20 flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-accent/20 hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
           locked ? "" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
         )}
       >
