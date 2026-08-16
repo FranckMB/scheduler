@@ -459,3 +459,23 @@ class TestGenerateContract:
             f"Solver returned 'failed' for 2 teams sharing a 4h venue window; "
             f"status={result.status}, unplaced={result.unplaced}"
         )
+
+    def test_previous_assignments_is_accepted_and_defaults_to_empty(self) -> None:
+        """P3-21 — le champ optionnel ``previousAssignments`` est recevable (défaut []),
+        et un payload sans le champ garde ``previous_assignments == []``."""
+        without = ScheduleInputSchema.model_validate({"clubId": "club-pa", "seasonId": "season-pa"})
+        assert without.previous_assignments == []
+
+        withfield = ScheduleInputSchema.model_validate(
+            {
+                "clubId": "club-pa",
+                "seasonId": "season-pa",
+                "previousAssignments": [
+                    {"teamId": "t1", "venueId": "v1", "dayOfWeek": 3, "startTime": "19:00"},
+                ],
+            }
+        )
+        previous = withfield.previous_assignments
+        assert len(previous) == 1
+        assert previous[0].team_id == "t1"
+        assert previous[0].day_of_week == 3

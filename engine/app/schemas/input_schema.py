@@ -158,6 +158,19 @@ class ImplicitRulesSchema(SerializableModel):
     age_ascending: IntensityRuleSchema | None = Field(default=None, alias="ageAscending")
 
 
+class PreviousAssignmentSchema(SerializableModel):
+    """P3-21 — un placement de la génération PRÉCÉDENTE, pour le terme de stabilité
+    (convergence moteur). Chaque entrée désigne un créneau ``(teamId, venueId, dayOfWeek,
+    startTime)`` que la régénération est encouragée à reproduire, en DÉPARTAGEANT les ex
+    æquo exacts de score — jamais en arbitrant. Le champ est INERTE tant que le backend ne
+    l'émet pas (patron ``implicitRules``) : absent/vide ⇒ chemin byte-identique."""
+
+    team_id: str = Field(alias="teamId")
+    venue_id: str = Field(alias="venueId")
+    day_of_week: int = Field(alias="dayOfWeek", ge=1, le=7)
+    start_time: str = Field(alias="startTime")  # "19:00"
+
+
 class ScheduleSlotTemplateSchema(SerializableModel):
     id: str
     team_id: str = Field(alias="teamId")
@@ -196,6 +209,12 @@ class ScheduleInputSchema(SerializableModel):
     # Réglage par club des 4 règles implicites (bien-être). None = tout HARD, seuils
     # historiques — un payload sans ce bloc est byte-identique à l'ancien contrat.
     implicit_rules: ImplicitRulesSchema | None = Field(default=None, alias="implicitRules")
+    # P3-21 — placements de la génération précédente pour le terme de stabilité. Absent/vide
+    # ⇒ chemin de code byte-identique (patron implicitRules) : goldens et score inchangés. Cap
+    # 2000 = miroir de MAX_SLOT_TEMPLATES (un placement par séance, même ordre de grandeur).
+    previous_assignments: list[PreviousAssignmentSchema] = Field(
+        default_factory=list, alias="previousAssignments", max_length=MAX_SLOT_TEMPLATES
+    )
 
     @model_validator(mode="after")
     def _bound_total_slots(self) -> ScheduleInputSchema:

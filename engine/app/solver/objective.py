@@ -21,7 +21,7 @@ from .compromise import (
     CompromiseTermInfo,
 )
 from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
-from .model import _time_to_minutes
+from .model import _format_time, _time_to_minutes
 
 AssignmentLike = Any
 BoolVarLike = Any
@@ -118,6 +118,69 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
 # V10, spw × |missing_session| (question « combien manque-t-il »). Deux questions distinctes :
 # l'ordre 0 placée < 1 placée < 2 placées reste STRICTEMENT décroissant en pénalité.
 UNPLACED_PENALTY = 100000
+
+# P3-21 — terme de STABILITÉ (convergence moteur). Chaque variable ``model.x[(team, venue,
+# day, start)]`` dont la clé figure dans ``previousAssignments`` porte +STABILITY_TERM_WEIGHT
+# dans l'objectif de PHASE 2 (placement déjà verrouillé). But : faire converger une
+# régénération vers son placement précédent en DÉPARTAGEANT les ex æquo exacts, jamais en
+# arbitrant.
+#
+# Un créneau HARD n'a PAS de variable (``model.build_model`` l.92-98 : ``continue`` avant le
+# ``NewBoolVar``), donc il est absent de ``model.x`` — le terme de stabilité ne peut JAMAIS
+# payer double un pin, il ne touche que des créneaux réellement choisis par le solveur.
+#
+# Séparation LEXICOGRAPHIQUE avec le chaînage — la phase 2 maximise
+#   placement + CHAINING_STABILITY_MULTIPLIER × chaînage + STABILITY_TERM_WEIGHT × stabilité.
+# Preuve d'empilement (même patron que les « ceilings » de CHAINING_TIER_WEIGHTS) :
+#   - masse MAX de stabilité = STABILITY_TERM_WEIGHT × cap(previousAssignments = 2000) = 2000 ;
+#   - plus petit incrément de chaînage = min(CHAINING_TIER_WEIGHTS) = 1 (tier D) ;
+#   - CHAINING_STABILITY_MULTIPLIER = 4096 > 2000 ⇒ UN SEUL point de chaînage prime TOUTE la
+#     stabilité empilée. La stabilité ne départage donc que les solutions à (placement,
+#     chaînage) IDENTIQUES — jamais un arbitrage de chaînage.
+#   - le placement est verrouillé (``placement_expression >= optimum``) AVANT la phase 2 : la
+#     stabilité ne peut pas non plus déplacer une séance (le placement reste optimal). Elle
+#     n'arbitre donc ni le score, ni le chaînage — seulement les ex æquo exacts.
+# Le score RAPPORTÉ recalcule placement + chaînage aux poids d'ORIGINE (stabilité exclue,
+# main._solve) : SCORE_FORMULA_VERSION est inchangé.
+STABILITY_TERM_WEIGHT = 1
+CHAINING_STABILITY_MULTIPLIER = 4096
+
+
+def build_stability_terms(
+    x: Mapping[Any, BoolVarLike],
+    previous_assignments: Iterable[Mapping[str, Any]] | None,
+) -> list[tuple[BoolVarLike, int]]:
+    """P3-21 — termes de stabilité : +STABILITY_TERM_WEIGHT par variable dont la clé
+    ``(team_id, venue_id, day_of_week, start)`` figure dans ``previous_assignments``.
+
+    La clé est normalisée EXACTEMENT comme ``model.x`` (start passé par
+    ``_format_time(_time_to_minutes(...))``). Un créneau HARD est absent de ``x`` (pas de
+    variable) → jamais compté : pas de double paiement d'un pin. Dédup par clé. Champ
+    vide/None → ``[]`` (aucun terme) : l'appelant garde alors le chemin phase-2 historique."""
+    terms: list[tuple[BoolVarLike, int]] = []
+    if not previous_assignments:
+        return terms
+
+    seen: set[tuple[str, str, int, str]] = set()
+    for prev in previous_assignments:
+        team_id = _scalar_id(_get(prev, "teamId", "team_id", default=None))
+        venue_id = _scalar_id(_get(prev, "venueId", "venue_id", default=None))
+        day = _get(prev, "dayOfWeek", "day_of_week", default=None)
+        start = _get(prev, "startTime", "start_time", default=None)
+        if team_id is None or venue_id is None or day is None or start is None:
+            continue
+        try:
+            slot_key = (str(team_id), str(venue_id), int(_scalar_id(day)), _format_time(_time_to_minutes(start)))
+        except (TypeError, ValueError):
+            continue
+        if slot_key in seen:
+            continue
+        seen.add(slot_key)
+        var = x.get(slot_key)
+        if var is not None:
+            terms.append((var, STABILITY_TERM_WEIGHT))
+
+    return terms
 
 
 def is_team_satisfied_by_hard_locks(
@@ -1285,9 +1348,11 @@ def _higher_tier(tier_a: str, tier_b: str) -> str:
 
 __all__ = [
     "BONUS_WEIGHT_NAMES",
+    "CHAINING_STABILITY_MULTIPLIER",
     "CHAINING_TIER_WEIGHTS",
     "LEVEL_2_OBJECTIVE_WEIGHTS",
     "SCORE_FORMULA_VERSION",
+    "STABILITY_TERM_WEIGHT",
     "TIER_WEIGHT_NAMES",
     "UNPLACED_PENALTY",
     "Level2ObjectiveStats",
@@ -1296,5 +1361,6 @@ __all__ = [
     "add_missing_session_penalty",
     "add_preferred_day_bonus",
     "add_venue_preference_bonus",
+    "build_stability_terms",
     "is_team_satisfied_by_hard_locks",
 ]

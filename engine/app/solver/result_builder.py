@@ -110,7 +110,12 @@ def build_result(
 
     score: int | None = None
     if solver_status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        score = int(solver.ObjectiveValue())
+        # P3-21 — quand la phase 2 a appliqué le terme de stabilité, `_solve` a recalculé le
+        # score aux poids d'ORIGINE (placement + chaînage naturel, stabilité exclue) car
+        # `ObjectiveValue()` porterait alors le multiplicateur de chaînage + la stabilité.
+        # Sans stabilité l'override reste None ⇒ `ObjectiveValue()` tel quel (byte-identique).
+        override = getattr(model, "reported_score_override", None)
+        score = override if override is not None else int(solver.ObjectiveValue())
 
     metrics = {
         "solver_version": version("ortools"),

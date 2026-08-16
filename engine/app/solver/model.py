@@ -50,6 +50,11 @@ class ScheduleCpModel(cp_model.CpModel):
         # (aucune signature publique de `constraints.py` ne change — le canal est le modèle).
         self.forced_venue_sources: dict[str, dict[str, Any]] = {}
         self.coach_unavailability_sources: dict[str, list[dict[str, Any]]] = {}
+        # P3-21 — score RAPPORTÉ recalculé aux poids d'ORIGINE (placement + chaînage naturel,
+        # stabilité EXCLUE) quand la phase 2 applique le terme de stabilité, posé par
+        # `main._solve`. None (défaut) ⇒ `result_builder` lit `ObjectiveValue()` tel quel :
+        # sans previousAssignments le chemin reste byte-identique.
+        self.reported_score_override: int | None = None
 
     def NumVariables(self) -> int:
         return len(self.Proto().variables)
