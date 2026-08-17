@@ -221,7 +221,7 @@ export function GenerationWaiting() {
             mini-grille 4×4 qui se remplit + ligne de balayage + les trois niveaux de texte.
             Overlay HTML (pas dans le SVG) : lisible par lecteur d'écran, contrairement au
             décor `role="img"`. Largeur bornée à 340 px, textes centrés (ils habillent). */}
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-6 px-4 text-center">
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-6 px-4 pt-[6%] text-center">
           {/* Mini-grille animée — décorative (le sens est porté par les textes ci-dessous). */}
           <div aria-hidden="true" data-testid="gen-minigrid" className="relative" style={{ width: 200, height: 140 }}>
             <div className="absolute inset-0 grid grid-cols-4 grid-rows-4 gap-[6px]">
