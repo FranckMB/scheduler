@@ -8,6 +8,7 @@ use App\Service\AdminAlertStateStore;
 use App\Service\AdminDataFreshnessService;
 use App\Service\AdminHealthService;
 use App\Service\HealthAlertEvaluator;
+use App\Service\MailFrom;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -32,9 +33,6 @@ use Symfony\Component\Mime\Email;
 )]
 final class HealthAlertCommand extends Command
 {
-    /** Même domaine expéditeur que tous les mails de l'app (SPF/DKIM alignés). */
-    private const FROM_ADDRESS = 'ClubScheduler <no-reply@clubscheduler.app>';
-
     public function __construct(
         private readonly AdminHealthService $healthService,
         private readonly AdminDataFreshnessService $freshnessService,
@@ -42,6 +40,8 @@ final class HealthAlertCommand extends Command
         private readonly AdminAlertStateStore $stateStore,
         private readonly MailerInterface $mailer,
         private readonly ManagerRegistry $registry,
+        // Même expéditeur que tous les mails de l'app (domaine vérifié, SPF/DKIM alignés).
+        private readonly MailFrom $mailFrom,
     ) {
         parent::__construct();
     }
@@ -124,7 +124,7 @@ final class HealthAlertCommand extends Command
     private function send(array $recipients, string $subject, string $body): void
     {
         $email = (new Email)
-            ->from(self::FROM_ADDRESS)
+            ->from($this->mailFrom->address())
             ->subject($subject)
             ->text($body . "\n\nConsole : /admin");
         foreach ($recipients as $recipient) {

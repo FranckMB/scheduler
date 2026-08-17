@@ -17,12 +17,12 @@ use Symfony\Component\Mime\Email;
  */
 final class FeedbackMailBuilder
 {
-    private const string FROM_ADDRESS = 'no-reply@clubscheduler.app';
-
     public function __construct(
         // Origine navigateur du lien vers le journal de nouveautés ; vide → lien
         // omis (patron PeriodReminderMailBuilder : mono-origine en dev/e2e).
         private readonly string $frontendBaseUrl = '',
+        // Expéditeur unique (P5-15) — le défaut ne sert qu'aux tests unitaires.
+        private readonly MailFrom $mailFrom = new MailFrom,
     ) {}
 
     public function build(string $to): Email
@@ -39,7 +39,7 @@ final class FeedbackMailBuilder
         ];
 
         return (new Email)
-            ->from(self::FROM_ADDRESS)
+            ->from($this->mailFrom->address())
             ->to($to)
             ->subject('Votre signalement a bien été reçu')
             ->text(implode("\n", $lines));
@@ -69,7 +69,7 @@ final class FeedbackMailBuilder
         $lines[] = 'L\'équipe ClubScheduler';
 
         return (new Email)
-            ->from(self::FROM_ADDRESS)
+            ->from($this->mailFrom->address())
             ->to($to)
             ->subject('Votre signalement a été traité')
             ->text(implode("\n", $lines));

@@ -21,7 +21,8 @@ final class PeriodReminderEmailTest extends TestCase
 
         self::assertSame('⏳ Gym Barros fermé dans 14 j — pas de plan de période', $email->getSubject());
         self::assertSame('admin@club.fr', $email->getTo()[0]->getAddress());
-        self::assertSame('no-reply@clubscheduler.app', $email->getFrom()[0]->getAddress());
+        self::assertSame('no-reply@amateo.app', $email->getFrom()[0]->getAddress());
+        self::assertSame('Amateo', $email->getFrom()[0]->getName());
         $body = (string) $email->getTextBody();
         self::assertStringContainsString('BCCL', $body);
         self::assertStringContainsString('Gym Barros fermé', $body);

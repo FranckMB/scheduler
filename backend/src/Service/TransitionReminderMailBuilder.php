@@ -14,11 +14,11 @@ use Symfony\Component\Mime\Email;
  */
 final class TransitionReminderMailBuilder
 {
-    private const FROM_ADDRESS = 'no-reply@clubscheduler.app';
-
     public function __construct(
         #[Autowire('%env(default::FRONTEND_BASE_URL)%')]
         private readonly string $frontendBaseUrl = '',
+        // Expéditeur unique (P5-15) — le défaut ne sert qu'aux tests unitaires.
+        private readonly MailFrom $mailFrom = new MailFrom,
     ) {}
 
     public function build(string $to, string $clubName, string $currentSeasonName, DateTimeImmutable $pivot, int $days): Email
@@ -40,7 +40,7 @@ final class TransitionReminderMailBuilder
         }
 
         return (new Email)
-            ->from(self::FROM_ADDRESS)
+            ->from($this->mailFrom->address())
             ->to($to)
             ->subject($subject)
             ->text(implode("\n", $lines));

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Command;
 
+use App\Service\MailFrom;
 use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
@@ -48,6 +49,7 @@ final class FeedbackDigestCommand extends Command
         // Destinataire du digest — bind global `$supportEmail` (%env(SUPPORT_EMAIL)%),
         // vide par défaut → no-op annoncé.
         private readonly string $supportEmail = '',
+        private readonly MailFrom $mailFrom = new MailFrom,
     ) {
         parent::__construct();
     }
@@ -143,7 +145,7 @@ final class FeedbackDigestCommand extends Command
         }
 
         return (new Email)
-            ->from('no-reply@clubscheduler.app')
+            ->from($this->mailFrom->address())
             ->to($this->supportEmail)
             ->subject(\sprintf('Signalements du %s (%d)', $day->format('d/m/Y'), \count($rows)))
             ->text(implode("\n", $lines));

@@ -20,6 +20,12 @@ parameters:
     # EnvHygieneTest) ; la sitekey est publique (servie au front par /api/register/config).
     env(TURNSTILE_SECRET): ''
     env(TURNSTILE_SITEKEY): ''
+    # P5-15 — l'expéditeur de TOUS les mails sortants (`MailFrom`). Le domaine doit
+    # être celui VÉRIFIÉ chez le fournisseur transactionnel (SPF/DKIM/DMARC posés) :
+    # un `from` hors domaine vérifié part en spam ou est refusé. Défauts = domaine
+    # produit ; un environnement qui envoie depuis un autre domaine les surcharge.
+    env(MAIL_FROM_ADDRESS): 'no-reply@amateo.app'
+    env(MAIL_FROM_NAME): 'Amateo'
     # SEC-16 (audit) — le cookie httpOnly qui porte le JWT applicatif. Nom et
     # chemin sont des PARAMÈTRES parce que trois écrivains doivent s'accorder :
     # le handler lexik (`set_cookies`, ci-dessous), `JwtCookieFactory`
@@ -57,6 +63,10 @@ services:
             # P5-3b — Turnstile : secret (verify serveur) + sitekey (publique, front).
             $turnstileSecret: '%env(TURNSTILE_SECRET)%'
             $turnstileSiteKey: '%env(TURNSTILE_SITEKEY)%'
+            # P5-15 — consommés par le SEUL service `MailFrom` ; les treize points
+            # d'envoi lui demandent l'expéditeur, ils ne connaissent plus d'adresse.
+            $mailFromAddress: '%env(MAIL_FROM_ADDRESS)%'
+            $mailFromName: '%env(MAIL_FROM_NAME)%'
 
     # makes classes in src/ available to be used as services
     # this creates a service per class whose id is the fully-qualified class name

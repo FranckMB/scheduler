@@ -25,6 +25,7 @@ use App\Service\ClubApprovalService;
 use App\Service\ClubProvisioner;
 use App\Service\EmailChangeVerifier;
 use App\Service\EmailVerifier;
+use App\Service\MailFrom;
 use App\Service\PasswordPolicy;
 use App\Service\PlanEntitlements;
 use App\Service\SchedulePlanProvisioner;
@@ -82,6 +83,7 @@ final class AuthController extends AbstractController
         private readonly PlanEntitlements $planEntitlements,
         private readonly TurnstileVerifier $turnstileVerifier,
         private readonly string $turnstileSiteKey,
+        private readonly MailFrom $mailFrom,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -765,7 +767,7 @@ final class AuthController extends AbstractController
         try {
             $this->mailer->send(
                 (new Email)
-                    ->from('no-reply@clubscheduler.app')
+                    ->from($this->mailFrom->address())
                     ->to($email)
                     ->subject('Confirmez votre adresse e-mail ClubScheduler')
                     ->text("Bienvenue sur ClubScheduler !\n\nPour activer votre compte, ouvrez ce lien :\n{$link}\n\nCe lien expire dans 24 heures."),
@@ -801,7 +803,7 @@ final class AuthController extends AbstractController
         try {
             $this->mailer->send(
                 (new Email)
-                    ->from('no-reply@clubscheduler.app')
+                    ->from($this->mailFrom->address())
                     ->to($email)
                     ->subject('Confirmez votre nouvelle adresse e-mail ClubScheduler')
                     ->text("Vous avez demandé à changer l'adresse e-mail de votre compte ClubScheduler.\n\nPour confirmer cette nouvelle adresse, ouvrez ce lien :\n{$link}\n\nVotre adresse actuelle reste active tant que vous n'avez pas confirmé.\n\nCe lien expire dans 24 heures. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message."),
@@ -832,7 +834,7 @@ final class AuthController extends AbstractController
         try {
             $this->mailer->send(
                 (new Email)
-                    ->from('no-reply@clubscheduler.app')
+                    ->from($this->mailFrom->address())
                     ->to($previousEmail)
                     ->subject($subject)
                     ->text($body),
@@ -850,7 +852,7 @@ final class AuthController extends AbstractController
         try {
             $this->mailer->send(
                 (new Email)
-                    ->from('no-reply@clubscheduler.app')
+                    ->from($this->mailFrom->address())
                     ->to($email)
                     ->subject('Tentative d’inscription sur ClubScheduler')
                     ->text("Une inscription vient d’être tentée avec cette adresse, mais un compte existe déjà.\n\nConnectez-vous, ou réinitialisez votre mot de passe si vous l’avez oublié."),
