@@ -21,7 +21,7 @@ from ortools.sat.python import cp_model
 from app.schemas.validate_input_schema import ValidateAssignmentsInputSchema
 from app.solver.constraints import AssignmentVariable, add_shared_training_constraints
 from app.solver.validate_assignments import validate_assignment
-from tests.support.pipeline import make_payload, make_team, make_venue, solve_payload
+from tests.support.pipeline import make_payload, make_team, make_venue, solve_payload, team_constraint
 
 
 def _shared_group(group_id: str, team_ids: list[str], common_sessions: int) -> dict[str, Any]:
@@ -69,29 +69,47 @@ class TestPose:
 
 
 class TestExactlyKLowerBound:
-    """K=1 sur 2+2 séances → EXACTEMENT une commune, l'autre séparée. Sans la borne
-    inférieure, le solveur poserait les deux équipes ensemble sur les DEUX cases (2 communes
-    réelles) en n'allumant qu'un seul ``y`` → ce test tomberait."""
+    """K=1 sur 2+2 séances → EXACTEMENT une commune, l'autre séparée. La borne INFÉRIEURE
+    (``y ≥ Σx − (N−1)``) FORCE ``y=1`` dès que tous les membres sont sur la case — elle COMPTE
+    chaque vraie co-présence. Pour la falsifier, il faut une INCITATION à co-localiser au-delà de
+    K : les deux équipes PRÉFÈRENT le même gymnase (vA). Grille : vA capacité 2 (jours 1 et 2) +
+    vB capacité 1 (jour 2, l'échappatoire qui rend K=1 atteignable).
 
-    def _payload(self) -> dict[str, Any]:
+    Avec la double réification : ``== 1`` interdit une 2ᵉ commune → une équipe part sur vB le jour
+    2, EXACTEMENT une séance commune. SANS la borne inférieure : le solveur pose les deux équipes
+    sur vA les DEUX jours (bonus de préférence ×2), n'allume qu'un ``y`` (``Σy = 1``) et croit
+    respecter K — alors qu'il y a 2 séances communes RÉELLES. Ce test tombe alors (2 ≠ 1)."""
+
+    def test_exactly_one_common_the_other_separate(self) -> None:
         teams = [make_team("t1", sessions_per_week=2), make_team("t2", sessions_per_week=2)]
         venues = [
-            # Deux cases partageables (capacité 2) + une échappatoire (venueB, jour 2) pour
-            # SÉPARER la seconde séance : sinon l'unique arrangement force 2 communes → infeasible.
             make_venue("vA", [(1, "18:00"), (2, "18:00")], capacity=2),
             make_venue("vB", [(2, "18:00")], capacity=1),
         ]
-        payload = make_payload(teams=teams, venues=venues)
+        # Les deux équipes PRÉFÈRENT vA : l'objectif VEUT les y co-localiser sur vA les deux jours.
+        # Seule la borne inférieure de la réification empêche de « cacher » la 2ᵉ commune.
+        constraints = [
+            team_constraint(
+                constraint_id="pv1",
+                team_id="t1",
+                family="FACILITY",
+                rule_type="PREFERRED",
+                config={"preferredVenueId": "vA"},
+            ),
+            team_constraint(
+                constraint_id="pv2",
+                team_id="t2",
+                family="FACILITY",
+                rule_type="PREFERRED",
+                config={"preferredVenueId": "vA"},
+            ),
+        ]
+        payload = make_payload(teams=teams, venues=venues, constraints=constraints)
         payload["sharedTrainings"] = [_shared_group("g", ["t1", "t2"], 1)]
-        return payload
-
-    def test_exactly_one_common_session(self) -> None:
-        out = self._payload()
-        result = solve_payload(out)
+        result = solve_payload(payload)
         assert result["status"] == "completed"
         common = _common_sessions(result, ["t1", "t2"])
         assert len(common) == 1, f"attendu EXACTEMENT 1 séance commune, obtenu {common}"
-        # Chaque équipe a bien ses 2 séances (une commune + une séparée).
         assert len(_slots_of_team(result, "t1")) == 2
         assert len(_slots_of_team(result, "t2")) == 2
 
