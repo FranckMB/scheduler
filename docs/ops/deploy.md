@@ -151,7 +151,10 @@ pré-migration (première fois, rien à sauver), pull, démarre, migre, sonde
 `/health`. À la fin :
 
 ⬜ Ouvrir `https://TON-DOMAINE` → créer TON compte (register + vérif email —
-le SMTP doit donc être bon dans `MAILER_DSN`).
+le SMTP doit donc être bon dans `MAILER_DSN`). L'**expéditeur** de ce mail, lui,
+vient de `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME` : ils doivent porter le domaine
+**vérifié** chez le fournisseur transactionnel (SPF/DKIM/DMARC posés pour CE
+domaine), sinon l'envoi part en spam ou est refusé.
 
 ⬜ Vérifications finales :
 - `https://TON-DOMAINE/api/health` → `{"status":"ok"}` ;

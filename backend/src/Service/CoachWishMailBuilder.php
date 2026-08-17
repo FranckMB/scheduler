@@ -18,11 +18,11 @@ use Symfony\Component\Mime\Email;
  */
 final class CoachWishMailBuilder
 {
-    private const FROM_ADDRESS = 'no-reply@clubscheduler.app';
-
     public function __construct(
         #[Autowire('%env(default::FRONTEND_BASE_URL)%')]
         private readonly string $frontendBaseUrl = '',
+        // Expéditeur unique (P5-15) — le défaut ne sert qu'aux tests unitaires.
+        private readonly MailFrom $mailFrom = new MailFrom,
     ) {}
 
     /** Le lien personnel du coach — envoi initial ou relance (même contenu, sujet dédié). */
@@ -126,7 +126,7 @@ final class CoachWishMailBuilder
     private function email(string $to, string $subject, array $lines): Email
     {
         return (new Email)
-            ->from(self::FROM_ADDRESS)
+            ->from($this->mailFrom->address())
             ->to($to)
             ->subject($subject)
             ->text(implode("\n", $lines));

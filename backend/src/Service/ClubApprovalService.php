@@ -40,8 +40,6 @@ use Throwable;
  */
 final class ClubApprovalService
 {
-    private const FROM = 'no-reply@clubscheduler.app';
-
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly ClubCreationRequestRepository $requests,
@@ -53,6 +51,7 @@ final class ClubApprovalService
         private readonly MessageBusInterface $messageBus,
         private readonly LoggerInterface $logger,
         private readonly string $frontendBaseUrl,
+        private readonly MailFrom $mailFrom,
     ) {}
 
     /**
@@ -93,7 +92,7 @@ final class ClubApprovalService
         try {
             $this->mailer->send(
                 (new Email)
-                    ->from(self::FROM)
+                    ->from($this->mailFrom->address())
                     ->to($clubEmail)
                     ->subject(($reminder ? 'Rappel — ' : '') . \sprintf('%s demande à créer l\'espace ClubScheduler de %s', $requesterName, $request->getClubName()))
                     ->text(\sprintf(
@@ -206,7 +205,7 @@ final class ClubApprovalService
         try {
             $this->mailer->send(
                 (new Email)
-                    ->from(self::FROM)
+                    ->from($this->mailFrom->address())
                     ->to($requester->getEmail())
                     ->subject($approved ? \sprintf('Votre espace %s est prêt', $request->getClubName()) : \sprintf('Demande refusée — %s', $request->getClubName()))
                     ->text($approved

@@ -21,7 +21,8 @@ final class TransitionReminderEmailTest extends TestCase
 
         self::assertSame('⏳ Préparez la saison suivante — bascule dans 56 j', $email->getSubject());
         self::assertSame('admin@club.fr', $email->getTo()[0]->getAddress());
-        self::assertSame('no-reply@clubscheduler.app', $email->getFrom()[0]->getAddress());
+        self::assertSame('no-reply@amateo.app', $email->getFrom()[0]->getAddress());
+        self::assertSame('Amateo', $email->getFrom()[0]->getName());
         $body = (string) $email->getTextBody();
         self::assertStringContainsString('BCCL', $body);
         self::assertStringContainsString('2025-2026', $body);

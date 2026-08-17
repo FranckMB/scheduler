@@ -14,11 +14,11 @@ use Symfony\Component\Mime\Email;
  */
 final class InactivityMailBuilder
 {
-    private const FROM_ADDRESS = 'no-reply@clubscheduler.app';
-
     public function __construct(
         #[Autowire('%env(default::FRONTEND_BASE_URL)%')]
         private readonly string $frontendBaseUrl = '',
+        // Expéditeur unique (P5-15) — le défaut ne sert qu'aux tests unitaires.
+        private readonly MailFrom $mailFrom = new MailFrom,
     ) {}
 
     public function build(string $to, string $firstName): Email
@@ -38,7 +38,7 @@ final class InactivityMailBuilder
         }
 
         return (new Email)
-            ->from(self::FROM_ADDRESS)
+            ->from($this->mailFrom->address())
             ->to($to)
             ->subject('⏳ Compte inactif — anonymisation dans un mois (RGPD)')
             ->text(implode("\n", $lines));
