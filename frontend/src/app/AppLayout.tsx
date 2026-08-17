@@ -48,7 +48,7 @@ export function AppLayout() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4">
+        <div className="flex h-14 items-center justify-between gap-4 px-4 lg:px-6 xl:px-8">
           {/* The club title IS the home link — everything else (planning,
               assistant) is reached from the cockpit, not the top bar. */}
           <div className="flex min-w-0 items-center gap-2">
@@ -110,7 +110,7 @@ export function AppLayout() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-8" aria-busy={navigating}>
+      <main className="px-4 py-8 lg:px-6 xl:px-8" aria-busy={navigating}>
         <ReadonlySeasonBanner />
         <SeasonTransitionBanner />
         <CreditsBanner />
