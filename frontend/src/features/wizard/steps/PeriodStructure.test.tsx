@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Closure } from "@/features/cockpit/api";
 
-import type { Constraint } from "../api";
+import type { Constraint, SharedTrainingGroup } from "../api";
 
 const createOverride = vi.fn();
 const updateOverride = vi.fn();
@@ -82,6 +82,8 @@ const teamsState: { data: Array<typeof T1> } = { data: [T1, T2] };
 const tiersState: { data: Array<{ id: number; label: string; name: string; color: string | null }> } = {
   data: [{ id: 1, label: "S", name: "Fanion", color: null }, { id: 2, label: "A", name: "Importante", color: null }],
 };
+// P2-27 — les groupes de mutualisation de la période (défaut vide : aucun repère).
+const sharedGroupsState: { data: SharedTrainingGroup[] } = { data: [] };
 
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: teamsState.data }),
@@ -143,6 +145,7 @@ vi.mock("../queries", () => ({
   useCreatePeriodConstraintOverride: () => ({ mutate: createConstraintOverride, isPending: false }),
   useUpdatePeriodConstraintOverride: () => ({ mutate: updateConstraintOverride, isPending: false }),
   useDeletePeriodConstraintOverride: () => ({ mutate: deleteConstraintOverride, isPending: false }),
+  useSharedTrainingGroups: () => ({ data: sharedGroupsState.data }),
 }));
 vi.mock("@/features/cockpit/queries", () => ({
   useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds, closures: conflictState.closures }, isError: false, refetch: vi.fn() }),
@@ -182,6 +185,7 @@ afterEach(() => {
   // un `toHaveBeenCalled` passe grâce à lui).
   vi.clearAllMocks();
   resetPeriodSeed();
+  sharedGroupsState.data = [];
   extraVenuesState.value = [];
   overridesState.data = [];
   constraintsState.data = [];
@@ -372,6 +376,21 @@ describe("PeriodTeams — default team selection (E3) + toggles", () => {
     await userEvent.click(screen.getByRole("button", { name: "Tout le club" }));
     // The deactivated U13 override is removed → back to seasonal (active).
     expect(deleteOverride).toHaveBeenCalledWith("o2");
+  });
+});
+
+describe("PeriodTeams — repère de mutualisation (P2-27)", () => {
+  it("marque une équipe mutualisée en période, en nommant sa co-équipière", () => {
+    // Défaut = closure (aucun seed) : le panneau rend les lignes telles quelles.
+    overridesState.data = [{ id: "o2", teamId: "t2", isActive: true, sessionsPerWeek: null, schedulePlanId: "plan-1" }];
+    sharedGroupsState.data = [
+      { id: "g1", version: 1, createdAt: "2026-08-17T00:00:00+00:00", updatedAt: "2026-08-17T00:00:00+00:00", schedulePlanId: "plan-1", teamIds: ["t1", "t2"], commonSessions: 1 },
+    ];
+    render(<PeriodTeams calendarEntryId="mutualise-marker" />);
+
+    // Sans ce repère EN PÉRIODE, la mutualisation mentirait par omission (elle n'apparaîtrait
+    // qu'en saison). SM1 (t1) est mutualisée avec U13 (t2).
+    expect(screen.getByText(/Mutualisée avec U13/)).toBeInTheDocument();
   });
 });
 

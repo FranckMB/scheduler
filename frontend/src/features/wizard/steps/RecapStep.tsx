@@ -16,7 +16,8 @@ import { BlockerList } from "./BlockerList";
 import { VenueSwatch } from "@/shared/components/ui/venue-swatch";
 
 import { SectionCountTitle, SummaryRow, TeamTierAccordion } from "./StructureSummary";
-import { useActiveTeams, useActiveVenues, useGridSlots, usePriorityTiers, useReservations, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags, useWizardVenues } from "../queries";
+import { useActiveTeams, useActiveVenues, useGridSlots, usePriorityTiers, useReservations, useSharedTrainingGroups, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamCoaches, useWizardTeams, useWizardTeamTags, useWizardVenues } from "../queries";
+import { sharedGroupLabel } from "../lib/sharedTraining";
 import { useWizardStore } from "../store";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
@@ -111,6 +112,10 @@ export function RecapStep() {
   // lues par l'entrée (elles décrivent le FAIT).
   // `ready` faux = plan pas encore résolu : ne PAS lire, sinon on sert le socle.
   const { data: reservations = [] } = useReservations(periodAnchorEarly.planId, anchorIsWritable(periodAnchorEarly));
+  // Mutualisation (P2-27) — même couche/garde que les réservations : en portée socle le provider
+  // renvoie socle ET périodes, on ne garde alors que le socle.
+  const { data: sharedGroupsAll = [] } = useSharedTrainingGroups(periodAnchorEarly.planId, anchorIsWritable(periodAnchorEarly));
+  const sharedGroups = null === layerPlanId ? sharedGroupsAll.filter((g) => null === g.schedulePlanId) : sharedGroupsAll;
   const { data: tiers = [] } = usePriorityTiers();
   const { data: tags = [] } = useWizardTeamTags();
   // Blockers live in useStepValidation("recap") so the footer "Continuer vers la
@@ -356,6 +361,11 @@ export function RecapStep() {
                   </>
                 );
               })()}
+        </AccordionSection>
+        <AccordionSection title={<SectionCountTitle label="Mutualisation" count={sharedGroups.length} />}>
+          {0 === sharedGroups.length
+            ? empty
+            : sharedGroups.map((g) => <SummaryRow key={g.id} label={sharedGroupLabel(g.teamIds, g.commonSessions, (id) => teamName.get(id) ?? "?")} />)}
         </AccordionSection>
       </div>
 

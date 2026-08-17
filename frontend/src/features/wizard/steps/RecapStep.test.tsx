@@ -4,7 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
+import type { SharedTrainingGroup } from "../api";
+
 const h = { reservations: [] as Array<Record<string, unknown>> };
+// P2-27 — les groupes de mutualisation affichés au récap.
+const sharedGroupsState: { data: SharedTrainingGroup[] } = { data: [] };
 
 type TeamRow = { id: string; name: string; sportCategoryId: string; priorityTierId: number; tierOrder: number; gender: null; level: null; sessionsPerWeek: number; isActive: boolean };
 const team = (id: string, name: string, tier: number): TeamRow => ({ id, name, sportCategoryId: "c", priorityTierId: tier, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true });
@@ -59,6 +63,7 @@ vi.mock("../queries", () => ({
   // P4-44 — le récap peut retirer une réservation orpheline (seul écran capable de la montrer).
   useDeleteReservation: () => ({ mutate: vi.fn(), isPending: false }),
   useReservations: () => ({ data: h.reservations }),
+  useSharedTrainingGroups: () => ({ data: sharedGroupsState.data }),
   usePriorityTiers: () => ({
     data: [
       { id: 1, label: "S", name: "Fanion", color: null },
@@ -74,6 +79,7 @@ import { RecapStep } from "./RecapStep";
 describe("RecapStep — read-only summary", () => {
   beforeEach(() => {
     h.reservations = [];
+    sharedGroupsState.data = [];
     // Défaut : la couche décrit les mêmes équipes que la liste de saison, aucune en pause.
     recapLayer.teams = [team("t1", "SM1", 3), team("t2", "Fanion", 1)];
     recapLayer.pausedIds = [];
@@ -294,5 +300,17 @@ describe("RecapStep — fermetures de gymnase et semaine enfant", () => {
     calendarEntryState.data = { parentEntryId: "mother-1" };
     renderWithProviders(<RecapStep />);
     expect(constraintsArg.value).toBe("mother-1");
+  });
+
+  // P2-27 — une section « Mutualisation » à côté des réservations : une ligne par groupe de la
+  // portée courante, nommée avec le libellé partagé.
+  it("liste les groupes de mutualisation de la portée courante", async () => {
+    sharedGroupsState.data = [
+      { id: "g1", version: 1, createdAt: "2026-08-17T00:00:00+00:00", updatedAt: "2026-08-17T00:00:00+00:00", schedulePlanId: "plan-1", teamIds: ["t1", "t2"], commonSessions: 1 },
+    ];
+    renderWithProviders(<RecapStep />);
+
+    await userEvent.click(screen.getByRole("button", { name: /Mutualisation/ }));
+    expect(screen.getByText("SM1 + Fanion — 1 séance commune")).toBeInTheDocument();
   });
 });

@@ -22,7 +22,7 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { Closure } from "@/features/cockpit/api";
 
-import type { Constraint, ConstraintRuleType, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
+import type { Constraint, ConstraintRuleType, SharedTrainingGroup, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
 import { DAYS, DURATIONS, durationOptions, hhmm } from "../lib/days";
 import { closuresByVenue, closurePeriodLabel } from "../lib/venueClosures";
 import { slotPlacementError } from "../lib/slotOverlap";
@@ -42,6 +42,7 @@ import {
   useReservations,
   useResetVenuePeriodGrid,
   useSetVenuePeriodMode,
+  useSharedTrainingGroups,
   useUpdatePeriodSlot,
   useVenuePeriodOverrides,
   useWizardTeamTagAssignments,
@@ -106,6 +107,23 @@ function PeriodTeamsPanel({ calendarEntryId, schedulePlanId }: { calendarEntryId
   const update = useUpdateTeamPeriodOverride(schedulePlanId);
   const del = useDeleteTeamPeriodOverride(schedulePlanId);
   const [busy, setBusy] = useState(false);
+  // P2-27 — le repère « mutualisée » DOIT figurer aussi en période, sinon il mentirait par
+  // omission : les groupes de CETTE période (schedulePlanId concret derrière PeriodAnchorGate).
+  const { data: sharedGroups = [] } = useSharedTrainingGroups(schedulePlanId);
+  const mutualiseGroupOfTeam = new Map<string, SharedTrainingGroup>();
+  for (const g of sharedGroups) {
+    for (const id of g.teamIds) {
+      mutualiseGroupOfTeam.set(id, g);
+    }
+  }
+  const mutualiseLabelOf = (teamId: string): string | null => {
+    const g = mutualiseGroupOfTeam.get(teamId);
+    if (undefined === g) {
+      return null;
+    }
+    const others = g.teamIds.filter((x) => x !== teamId).map((x) => teams.find((t) => t.id === x)?.name ?? "?");
+    return others.length > 0 ? `Mutualisée avec ${others.join(", ")}` : "Mutualisée";
+  };
 
   const groups = groupTeamsByTier(teams, tiers);
   const topTierId = groups[0]?.tier?.id ?? null;
@@ -294,6 +312,7 @@ function PeriodTeamsPanel({ calendarEntryId, schedulePlanId }: { calendarEntryId
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={active} disabled={busy} onChange={(e) => toggle(t, e.target.checked)} aria-label={`${t.name} active cette période`} />
                     <span className={cn(!active && "text-muted-foreground line-through")}>{t.name}</span>
+                    {mutualiseLabelOf(t.id) ? <span className="text-xs italic text-muted-foreground">· {mutualiseLabelOf(t.id)}</span> : null}
                   </label>
                   <label className={cn("flex items-center gap-1 text-xs text-muted-foreground", !active && "opacity-50")}>
                     séances
