@@ -20,7 +20,7 @@ use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 /**
- * P2-27 — mutualisation : N équipes déclarées s'entraînent ENSEMBLE, EXACTEMENT
+ * Mutualisation : déclarer que N équipes s'entraînent ENSEMBLE, avec EXACTEMENT
  * ``commonSessions`` séances communes. Scopé club+saison, filtrable par ``schedulePlanId``
  * (NULL = socle saison ; un UUID = plan de période). Écriture réservée au management.
  */

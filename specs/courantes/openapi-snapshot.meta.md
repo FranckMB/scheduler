@@ -1,6 +1,14 @@
-Last verified @ 2026-08-16 (JSON **régénéré** — compromis nommés + dryRun sur `/move` et `/place-slot` ; contrat backend⇄engine bumpé **2.9 → 2.10**)
+Last verified @ 2026-08-17 (JSON **régénéré** — nouvelle ressource `SharedTrainingGroup` (mutualisation, P2-27 PR A) ; contrat backend⇄engine bumpé **2.11 → 2.12**)
 
 Changements récents :
+- **P2-27 PR A — mutualisation (2026-08-17)** : nouvelle ressource API `SharedTrainingGroup`
+  (GET collection/item, POST, PUT, DELETE, scopée club+saison, filtre `schedulePlanId`) —
+  déclarer que N équipes s'entraînent ENSEMBLE (EXACTEMENT `commonSessions` séances communes).
+  Le DTO d'entrée porte `teamIds` (2..10), `commonSessions` (≥ 1), `schedulePlanId` (nullable =
+  socle/période). Set-diff : **5 paths ajoutés** (`/api/shared_training_groups`,
+  `/api/shared_training_groups/{id}` × méthodes). Contrat backend⇄engine bumpé **2.11 → 2.12** :
+  nouveau bloc d'entrée `sharedTrainings` du payload `/generate` + `/validate-assignments`,
+  diagnostic `shared_training_not_honored`.
 - **P2-32 PR A — compromis nommés + dryRun (2026-08-16)** : les 200 de
   `POST /api/schedule-slots/{id}/move` et `POST /api/schedules/{id}/place-slot` portent désormais
   un bloc `compromises` (forme COMPLÈTE, pas un tableau nu : `family` [liste fermée de 8],

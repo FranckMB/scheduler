@@ -8,7 +8,7 @@ use Symfony\Component\Serializer\Attribute\Groups;
 use Symfony\Component\Validator\Constraints as Assert;
 
 /**
- * P2-27 — déclaration de mutualisation : N équipes ensemble, EXACTEMENT K séances communes.
+ * Déclaration de mutualisation : N équipes ensemble, EXACTEMENT K séances communes.
  * Les bornes fines (équipe déjà dans un autre groupe du même plan, K > min sessionsPerWeek)
  * vivent dans le processor (elles exigent la base) ; ici les invariants purement de forme.
  */
