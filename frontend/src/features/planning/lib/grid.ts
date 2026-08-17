@@ -17,7 +17,7 @@ import type { ViewMode } from "../store";
  */
 // D-22 : les sept jours vivent en `shared/lib/days` — une copie de ce tableau
 // s'arrêtait au samedi et rendait un planning à six colonnes « complet ».
-import { DAYS } from "@/shared/lib/days";
+import { DAYS, dayLabelLong } from "@/shared/lib/days";
 
 export { DAYS };
 
@@ -156,9 +156,12 @@ function resourceLabel(id: string, viewMode: ViewMode, lookups: Lookups): string
     return id === NO_COACH ? NO_COACH_LABEL : coachName(lookups.coaches, id);
   }
   // P2-33 : la ressource « jour » a pour clé le numéro ISO ; son libellé est le nom du jour
-  // (même source `DAYS` que les en-têtes de super-colonnes de la grille).
+  // EN TOUTES LETTRES (retour fondateur) — `dayLabelLong`, maison unique des libellés longs.
+  // Les en-têtes de la grille gardent l'abrégé (`DAYS`), où la place manque.
   if ("jour" === viewMode) {
-    return DAYS.find((d) => d.n === Number(id))?.label ?? "?";
+    const long = dayLabelLong(Number(id));
+
+    return "" === long ? "?" : long;
   }
   return lookups.teams.get(id)?.name ?? "Équipe ?";
 }

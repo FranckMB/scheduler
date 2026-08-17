@@ -313,9 +313,11 @@ describe("vue « Par jour » (P2-33)", () => {
   it("liste les jours dans l'ordre lundi→dimanche, pas alphabétique", () => {
     // Dimanche AVANT lundi trierait « Dim » en tête en alphabétique — l'ordre doit rester ISO.
     const slots = [slot({ id: "sun", venueId: "v1", dayOfWeek: 7 }), slot({ id: "mon", venueId: "v2", dayOfWeek: 1 })];
+    // Libellés EN TOUTES LETTRES dans le filtre (retour fondateur) — l'abrégé reste
+    // aux en-têtes de la grille, où la place manque.
     expect(availableResources(slots, "jour", lookups)).toEqual([
-      { id: "1", label: "Lun" },
-      { id: "7", label: "Dim" },
+      { id: "1", label: "lundi" },
+      { id: "7", label: "dimanche" },
     ]);
   });
 
