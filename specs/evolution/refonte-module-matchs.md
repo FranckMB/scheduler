@@ -13,6 +13,10 @@
 > **Le palier A est LIVRÉ** — l'état courant du module vit dans
 > [`../courantes/module-matchs.md`](../courantes/module-matchs.md) ; le présent fichier ne décrit que
 > l'**ouvert**.
+> **Revue lot-par-lot du 2026-08-17 (2ᵉ passe, fondateur)** : FBI acquiert le statut de **source de données
+> de plein droit** (§4 fait 1, §5) · le **cas fondateur de la rotation A/B** est capturé (SM1/SM2 20h30 sous
+> dérogation, §8) · un **registre de défauts de lisibilité** entre au cadrage (§6bis) et fonde le nouveau
+> lot **RMM-0**.
 
 ---
 
@@ -86,13 +90,17 @@ Deux temps que l'écran actuel **écrase sur une seule page** :
 
 ## 4. Le challenge — quatre faits durs qui recadrent le besoin
 
-1. **« Import FBI par API » — impossible aujourd'hui.** L'API FFBB expose un index `rencontres` **vide pour
-   les vrais clubs** (documents de test uniquement au niveau national ; 0 hit pour un club réel) — mesuré deux
-   fois, cf. [`api-ffbb-app-reconnaissance.md`](api-ffbb-app-reconnaissance.md) et `backend/docs/ffbb-api.md`.
-   **Le seul chemin d'entrée des rencontres reste l'export Excel FBI manuel** (déjà implémenté). On ne peut
-   PAS supprimer le geste « télécharger le xlsx » ni la re-saisie manuelle dans FBI — ce sont des limites
-   **fédérales**, pas de notre code. On peut le rendre **indolore et sûr**, pas l'éliminer. → Ne rien
-   promettre d'automatique côté FBI.
+1. **« Import FBI par API » — impossible aujourd'hui, mais FBI est une SOURCE de plein droit.** L'API FFBB
+   expose un index `rencontres` **vide pour les vrais clubs** (documents de test uniquement au niveau
+   national ; 0 hit pour un club réel) — mesuré deux fois, cf.
+   [`api-ffbb-app-reconnaissance.md`](api-ffbb-app-reconnaissance.md) et `backend/docs/ffbb-api.md`.
+   **Le seul CANAL d'entrée des rencontres reste l'export Excel FBI manuel** (déjà implémenté) ; on ne peut
+   PAS supprimer le geste « télécharger le xlsx » ni la re-saisie manuelle dans FBI — limites **fédérales**,
+   pas de notre code. → Ne rien promettre d'automatique côté FBI. **Mais (décision fondateur 2026-08-17) le
+   STATUT du fichier est celui d'une source de données au même titre que l'API FFBB** : deux sources
+   officielles, un seul modèle — **API FFBB = le périmètre** (équipes, poules, adversaires), **FBI = les
+   rencontres** (dates, heures, salles, n°). Chaque dépôt de xlsx est une **ingestion datée** qui alimente
+   le diff, le radar et la fraîcheur (§7) — pas une corvée annexe.
 
 2. **« Le numéro de rencontre est unique » — faux au niveau global.** Le « 26 » existe en RMU18 Brassage
    *et* en DF2 (fact mesuré F6). Il est modélisé (`Fixture.externalRef`) mais l'unicité est **composite**
@@ -122,11 +130,18 @@ Deux temps que l'écran actuel **écrase sur une seule page** :
 - **Périmètre = large** : refonte UX (P2-26) **coordonnée avec** le programme palier B/C, **plus** les
   besoins net-neufs de l'entretien. Le tout se **livrera par lots** (§9), pas en une PR.
 - **Rotation A/B = vraie capacité de modèle à honorer** par le solveur (§8) — sort de la refonte UX pure.
-- **FBI reste manuel** (fait #4.1) : la réconciliation se fera par **diff au ré-import du xlsx**, pas par
-  API. Le geste « exporter FBI / re-saisir FBI » demeure ; l'outil le **sécurise** (alerte d'écart), il ne le
-  remplace pas.
+- **FBI = source de données de plein droit** (fondateur 2026-08-17) : même statut que l'API FFBB. Le canal
+  est un xlsx manuel (fait #1 du §4), mais chaque dépôt est une **ingestion datée** qui alimente le modèle,
+  le diff et le gardien. Deux sources, un modèle : **API FFBB = périmètre, FBI = rencontres**. La
+  réconciliation se fait par **diff au ré-import** — l'outil sécurise le geste FBI, il ne le remplace pas.
 - **Le radar existant devient le fil conducteur** du geste récurrent (« 3 litiges cette semaine → règle-les »),
   pas un pavé de plus dans une colonne pleine.
+- **Décisions de la revue lot-par-lot (fondateur 2026-08-17, 2ᵉ passe)** :
+  **RMM-0 prioritaire** (les 5 bloquants de lisibilité §6bis se corrigent en une PR courte AVANT la
+  refonte) · **écart FBI sur un domicile placé = CHOIX PAR ÉCART** (ni écrasement silencieux ni règle
+  figée : l'UI présente chaque écart, le gestionnaire tranche — garder l'app et corriger FBI, ou prendre le
+  fichier ; trace conservée) · **image A/B = idéal SOFT sur créneau partagé** (§8) · **séquencement validé**
+  (§9).
 - **On réutilise** : le stepper/rail du wizard (à extraire dans `shared/`), le composant `tabs`, la grille
   temporelle, `MatchConflictDetector`, tout le rail `/place-matches`. **Aucune ré-écriture du moteur.**
 
@@ -159,6 +174,41 @@ Ce que le wizard a et que le module matchs n'a pas, à transposer :
 
 ---
 
+## 6bis. Registre des défauts de lisibilité (audit code, 2026-08-17)
+
+> **Déclencheur** : le fondateur signale que la modale d'appariement tronque les libellés (« DF2 ou DF3 ?
+> je clique à l'aveugle »). Audit systématique de cette classe de défauts sur tout `features/matches/` :
+> **18 défauts — 5 bloquant-décision · 9 gênants · 4 cosmétiques.** Deux causes racines :
+> **R1** — la modale partagée n'a qu'UNE taille (`modal.tsx:51`, `max-w-md` = 448 px, aucun variant ;
+> aucun des 5 dialogues du module ne l'élargit) ; **R2** — la colonne gauche de la page est figée à
+> 320 px (`MatchesPage.tsx:240`).
+
+Les 5 **bloquant-décision** (un libellé nécessaire à une décision, tronqué sans `title` de secours) :
+
+| ID | Où | Ce qui devient illisible |
+|---|---|---|
+| B1 | `FfbbEngagementsDialog.tsx:62` | le nom de compétition (~194 px utiles) — le chiffre discriminant (« …Division 2 » vs « …Division 3 ») est en **queue de chaîne**, précisément la partie mangée. **Le cas signalé.** |
+| B2 | `FfbbEngagementsDialog.tsx:63-68` | poule · taille · catégorie · niveau · genre — ce qui désambiguïse deux engagements |
+| B3 | `ImportFbiDialog.tsx:110-116` | le nom de division FBI du mapping division→équipe + le `fbiTeamLabel` (qui n'existe QUE quand il est indispensable) — mapper à l'aveugle crée des matchs sur la **mauvaise équipe** |
+| B4 | `ImportFbiDialog.tsx:123` + `FfbbEngagementsDialog.tsx:72` | la valeur sélectionnée des `TeamSelect` (160-176 px) — vérifier un appariement pré-rempli exige d'ouvrir chaque select un à un |
+| B5 | `AwayList.tsx:50-58` | l'heure et le badge « heure estimée » des matchs extérieur — l'info qui porte les conflits de coach — en queue de troncature |
+
+Ironie mesurée : les libellés complets existent dans les `aria-label` — les lecteurs d'écran voient ce que
+l'œil ne voit pas. Les 9 gênants (rangées plus larges que la modale dans `HabitsLinksDialog`, selects
+d'équipe à 128 px, sélecteur de gymnase à ~90 px dans `PlacementPanel`, en-tête de `TypicalWeekendGrid`
+sans `title` alors que sa jumelle datée en a un, barre d'actions sans `flex-wrap`…) et les 4 cosmétiques
+sont détaillés dans l'audit du 2026-08-17 — à re-dérouler à l'implémentation de RMM-0/RMM-1.
+
+**Conséquences de cadrage :**
+- **RMM-0 (nouveau lot)** : corriger les 5 bloquants **sans attendre la refonte** (variant de taille de
+  `Modal`, `title` systématique sur libellé tronqué, selects lisibles).
+- **Critère d'acceptation de RMM-1** : *aucun libellé porteur de décision tronqué sans secours*, et R1/R2
+  traités à la racine (variants de taille, largeur de colonne).
+- Outillage à mobiliser pour que la classe ne revienne pas : passe de design `ui-ux-pro-max`
+  (`.claude/rules/frontend.md`) + patron e2e **témoin** (`tests/e2e/modal-reachability.spec.ts`).
+
+---
+
 ## 7. Le « gardien » — le cœur de l'angoisse du gestionnaire
 
 Le sous-jacent « il ne sait pas si les données reçues sont à jour, et il découvre les conflits **après coup** »
@@ -182,14 +232,30 @@ Le sous-jacent « il ne sait pas si les données reçues sont à jour, et il dé
 
 ## 8. Rotation A/B — le point modèle à creuser (décision : à honorer)
 
-Le gestionnaire raisonne en **alternance bimensuelle** (semaines A et B). Décision de session : **le modèle et
-le solveur doivent l'honorer**. À cadrer finement en session d'implémentation, mais les pistes :
+**Le cas fondateur (précisé 2026-08-17)** : gros club, **pas assez de créneaux** — l'alternance naît de la
+pénurie, pas d'un confort de visualisation. Exemple réel : SM1 joue à 20h30 ; une **dérogation obtenue
+auprès de la ligue** fait que SM2 joue **aussi toujours à 20h30**, en décalage — semaine A SM1 reçoit,
+semaine B SM2 reçoit, **sur le même créneau**. L'A/B est donc d'abord le **partage d'un créneau rare entre
+deux équipes**. À noter : la règle durable est née d'une **dérogation acceptée** — lien direct avec le
+tracker de dérogation (RMM-7).
 
-- **Modèle** : étendre l'« habitude » d'équipe pour porter une **parité de semaine** (A/B) — soit un champ sur
-  `TeamMatchHabit`, soit une entité « modèle de week-end type A/B ». À trancher au schéma.
-- **Ancrage calendaire** : définir ce qui fixe le rythme A/B sur le calendrier réel (numéro de semaine ISO ?
-  point d'ancrage saison ?). **Question ouverte** (§10).
-- **Solveur** : le payload `/place-matches` doit transporter la parité attendue par équipe → nouveau SOFT
+**Deux décisions fondateur (2026-08-17, revue lot-par-lot) :**
+
+1. **Statut : l'image A/B est un IDÉAL SOFT, jamais un HARD.** Verbatim : « c'est un cas parfait auquel on
+   se réfère, mais la réalité c'est qu'on ne va jamais l'avoir — ça permet d'avoir une **tendance et une
+   aide pour le solveur**, en plus des contraintes qu'on va indiquer. » Les contraintes déclarées (fenêtres
+   ligue/comité, accès gymnase, indispos) restent les seules HARD ; l'image A/B **pèse dans l'objectif** et
+   ne refuse jamais un placement — ni du solveur, ni manuel. Le radar peut signaler « hors image », il ne
+   bloque pas.
+2. **Modélisation : propriété du CRÉNEAU de match partagé** — N équipes déclarées sur un créneau, qui
+   alternent (SM1/SM2 sur le 20h30). Continuité naturelle avec la couche SOFT « habitudes » du solveur de
+   placement (`TeamMatchHabit` est déjà un SOFT protégé) : l'A/B en est l'**extension à parité**.
+
+Pistes d'implémentation restantes :
+
+- **Ancrage calendaire** : ce qui fixe le rythme A/B sur le calendrier réel (numéro de semaine ISO ?
+  point d'ancrage saison ? saisie manuelle). **Question ouverte** (§10).
+- **Solveur** : le payload `/place-matches` transporte l'alternance attendue par créneau → nouveau SOFT
   (« respecte l'image A/B ») **sans** casser les golden fixtures ni le déterminisme du worker unique. Axe
   **contrat backend↔engine** (§7.1) → NR obligatoire (contract test) + smoke-solver.
 - **UI** : le SET-UP doit permettre de **dessiner** les deux semaines (réemploi de `TypicalWeekendGrid` en
@@ -207,20 +273,22 @@ quel palier chaque lot appartient — **ne pas créer de doublon de vérité**.
 
 | ID | Lot | Type | Axe §7.1 → NR | Rattachement |
 |---|---|---|---|---|
-| **RMM-1** | **Refonte UX pure** : séparer SET-UP / geste récurrent, boucle semaine-par-semaine, hiérarchie d'actions, radar en fil conducteur, états vides, filtre par semaine, n° de rencontre affiché. **Zéro backend.** | Front | — (aucun comportement moteur touché) | **P2-26** (ce fichier = son détail) |
+| **RMM-0** | **Correctifs de lisibilité immédiats** : les 5 bloquant-décision du registre (§6bis) — variant de taille de `Modal`, `title` sur tout libellé tronqué, selects lisibles. **Une PR courte, AVANT la refonte** (la décision d'appariement est bloquée aujourd'hui). | Front | — | **P2-26** (correctif anticipé) |
+| **RMM-1** | **Refonte UX pure** : séparer SET-UP / geste récurrent, boucle semaine-par-semaine, hiérarchie d'actions, radar en fil conducteur, états vides, filtre par semaine, n° de rencontre affiché. Critère §6bis : aucun libellé décisionnel tronqué, R1/R2 traités à la racine. **Zéro backend.** | Front | — (aucun comportement moteur touché) | **P2-26** (ce fichier = son détail) |
 | **RMM-2** | Extraire le **stepper/rail du wizard** dans `shared/` + exploiter `tabs` ; mutualiser la grille temporelle. Prérequis technique de RMM-1. | Front | — | P2-26 |
 | **RMM-3** | **Gardien à l'ouverture** : recalcul radar + résumé « nouveaux conflits depuis la dernière visite ». Nécessite une **persistance légère** de l'état radar (le radar est stateless aujourd'hui). | Back + Front | contrainte sémantique (conflits) → NR | **net-neuf** (à porter en ligne roadmap) |
-| **RMM-4** | **Réconciliation FBI** : le ré-import xlsx **alerte** sur tout écart domicile (heure/salle/date) au lieu de mettre à jour en silence. Réutilise le diff de `FbiFixtureImporter`. | Back + Front | — | **net-neuf** (borné par fait #4.1) |
-| **RMM-5** | **Rotation A/B** : modèle (parité de semaine) + payload/solveur (SOFT « respecte A/B ») + UI SET-UP deux semaines. | Model + Engine + Front | **contrat backend↔engine** + **contrainte sémantique** → NR (contract test + smoke-solver) | **net-neuf** (§8) |
+| **RMM-4** | **FBI source de plein droit + réconciliation** : chaque dépôt xlsx = **ingestion datée** (fraîcheur affichée) ; le diff présente **chaque écart domicile** (heure/salle/date) au gestionnaire qui tranche — garder l'app (et corriger FBI) ou prendre le fichier — au lieu de mettre à jour en silence (décision §5). Réutilise le diff de `FbiFixtureImporter`. | Back + Front | — | **net-neuf** (canal manuel — fait #1 du §4) |
+| **RMM-5** | **Rotation A/B** : modèle (alternance sur **créneau partagé** — cas SM1/SM2, §8) + payload/solveur (SOFT « respecte l'image A/B ») + UI SET-UP deux semaines. | Model + Engine + Front | **contrat backend↔engine** + **contrainte sémantique** → NR (contract test + smoke-solver) | **net-neuf** (§8) |
 | **RMM-6** | **Échéances ligue/comité** : deadlines + rappel cockpit (radar matchs « deadline J-6 »). | Back + Front | — | **palier B** — [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) §8 |
-| **RMM-7** | **Workflow dérogation** : brouillon + suivi d'état + deadline (tracker + rédacteur, PAS connecteur ligue). | Back + Front | — | **palier B** — `gestion-matchs-ffbb.md` §8 |
+| **RMM-7** | **Workflow dérogation** : brouillon + suivi d'état + deadline (tracker + rédacteur, PAS connecteur ligue). Une dérogation **acceptée** peut fonder une règle durable (cas SM2 20h30 → alternance A/B, §8) : le tracker doit pouvoir la **graduer en règle du modèle**. | Back + Front | — | **palier B** — `gestion-matchs-ffbb.md` §8 |
 | **RMM-8** | **Matrice trajet** + conflits spatiaux (empreinte AWAY réelle). Infra partagée avec l'entraînement (FF#5). | Back + Engine | contrainte sémantique → NR | **palier B/vision** — `gestion-matchs-ffbb.md` §7 + roadmap « Matrice de temps de trajet » |
 | **RMM-9** | **Annuaire adverse global** (table hors tenant, publique-seulement, enrichie par l'usage) + effet réseau (auto-remplissage heures/positions extérieures). | Back | isolation tenant → **test d'isolation dédié obligatoire** | **palier B/C** — `gestion-matchs-ffbb.md` §5bis/§11 |
 | **RMM-10** | **DOC-2** : avertir avant qu'un match `SUBMITTED`/`VALIDATED` ne perde sa salle (suppression gymnase / restauration de version). | Back + Front | **périmètre engagé** → NR | **DOC-2** (roadmap) — traiter avec **P3-16** |
 
-**Séquencement conseillé** : RMM-2 → RMM-1 (livrable rapide, faible risque, valeur immédiate) ; puis RMM-3 +
-RMM-4 (le « gardien », cœur de l'angoisse) ; puis RMM-5 (A/B, plus lourd car moteur) ; le reste (RMM-6→10) au
-rythme du palier B déjà spécifié. **Chaque lot est une session d'implémentation à part**, avec sa propre
+**Séquencement — VALIDÉ fondateur 2026-08-17** : **RMM-0 immédiat** (débloque la décision d'appariement
+sans attendre la refonte) ; puis RMM-2 → RMM-1 (livrable rapide, faible risque, valeur immédiate) ; puis
+RMM-3 + RMM-4 (le « gardien », cœur de l'angoisse) ; puis RMM-5 (A/B, plus lourd car moteur) ; le reste
+(RMM-6→10) au rythme du palier B déjà spécifié. **Chaque lot est une session d'implémentation à part**, avec sa propre
 validation de besoin + `/plan` (CLAUDE.md §7).
 
 ---
@@ -228,13 +296,13 @@ validation de besoin + `/plan` (CLAUDE.md §7).
 ## 10. Ouvert — à trancher avec le gestionnaire avant de coder les lots concernés
 
 - **A/B (RMM-5)** : qu'est-ce qui **ancre** le rythme A/B sur le calendrier réel (n° de semaine ISO ? date
-  d'ancrage saison ? saisie manuelle par le gestionnaire) ? Une équipe est-elle A/B **par nature**, ou est-ce
-  une propriété du **créneau de gymnase partagé** ? Faut-il gérer des exceptions (une semaine où A et B
-  s'inversent) ?
+  d'ancrage saison ? saisie manuelle) ? Faut-il des exceptions (une semaine où A et B s'inversent, journées
+  FFBB irrégulières) ? *(La modélisation, elle, est tranchée : créneau partagé, statut SOFT — §8.)*
 - **Gardien (RMM-3)** : périmètre du « depuis la dernière visite » — au **login** global, ou à l'**ouverture
   du module** ? Quelle granularité de persistance (dernier hash de radar par saison ? horodatage de visite) ?
-- **Réconciliation FBI (RMM-4)** : que fait-on d'un écart détecté — simple alerte, ou proposer d'**aligner**
-  l'app sur FBI / FBI sur l'app ? (rappel fait #4.1 : on ne peut pas écrire dans FBI.)
+- **Réconciliation FBI (RMM-4)** : la règle de vérité est tranchée (**choix par écart**, §5) ; reste la
+  forme UI de la résolution (liste d'écarts avec choix un à un ? tout-garder / tout-prendre en raccourci ?)
+  et la trace à conserver. (Rappel fait #1 : on ne peut pas écrire dans FBI.)
 - **Échéances (RMM-6)** : d'où viennent les dates limites (saisie manuelle du gestionnaire ? déductibles du
   catalogue ligue ?) — l'API FFBB ne les fournit pas.
 - **Filtre par semaine (RMM-1)** : semaine calendaire ISO ou « journée » FFBB ? (les deux ne coïncident pas
@@ -261,4 +329,5 @@ Le module matchs est complet mais son écran est un fourre-tout ; on le **réorg
 (set-up guidé vs boucle hebdomadaire, radar en fil conducteur), on ajoute le **gardien** qui prévient le
 gestionnaire des conflits qu'il découvre aujourd'hui trop tard, on rend **honorable la rotation A/B** qu'il
 dessine à la main, et on branche progressivement le **palier B déjà spécifié** — sans jamais promettre ce que
-la FFBB ne permet pas (l'import et la saisie FBI restent manuels).
+la FFBB ne permet pas : le **canal** FBI reste manuel, mais son fichier est traité en **source de données de
+plein droit**, au même titre que l'API FFBB.
