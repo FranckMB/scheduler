@@ -4628,6 +4628,200 @@
                 ]
             }
         },
+        "/api/venue-usage-stats": {
+            "get": {
+                "operationId": "getVenueUsageStats",
+                "tags": [
+                    "Clubs"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Heures par gymnase et par niveau, ventil\u00e9es par jour de semaine, r\u00e9alis\u00e9es (\u2264 aujourd'hui) vs \u00e0 venir",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "range": {
+                                            "type": "object",
+                                            "properties": {
+                                                "from": {
+                                                    "type": "string",
+                                                    "format": "date"
+                                                },
+                                                "to": {
+                                                    "type": "string",
+                                                    "format": "date"
+                                                },
+                                                "today": {
+                                                    "type": "string",
+                                                    "format": "date"
+                                                }
+                                            }
+                                        },
+                                        "zone": {
+                                            "type": "string",
+                                            "nullable": true,
+                                            "description": "Zone scolaire du club (null \u2192 les vacances ne neutralisent rien)"
+                                        },
+                                        "venues": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "venueId": {
+                                                        "type": "string"
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "byDay": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "day": {
+                                                                    "type": "integer",
+                                                                    "description": "Jour ISO (1 = lundi)"
+                                                                },
+                                                                "real": {
+                                                                    "type": "number"
+                                                                },
+                                                                "projected": {
+                                                                    "type": "number"
+                                                                },
+                                                                "total": {
+                                                                    "type": "number"
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "real": {
+                                                        "type": "number"
+                                                    },
+                                                    "projected": {
+                                                        "type": "number"
+                                                    },
+                                                    "total": {
+                                                        "type": "number"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "totalByDay": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "day": {
+                                                        "type": "integer"
+                                                    },
+                                                    "real": {
+                                                        "type": "number"
+                                                    },
+                                                    "projected": {
+                                                        "type": "number"
+                                                    },
+                                                    "total": {
+                                                        "type": "number"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "byLevel": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "level": {
+                                                        "type": "string"
+                                                    },
+                                                    "label": {
+                                                        "type": "string"
+                                                    },
+                                                    "byDay": {
+                                                        "type": "array",
+                                                        "items": {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "day": {
+                                                                    "type": "integer"
+                                                                },
+                                                                "real": {
+                                                                    "type": "number"
+                                                                },
+                                                                "projected": {
+                                                                    "type": "number"
+                                                                },
+                                                                "total": {
+                                                                    "type": "number"
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "real": {
+                                                        "type": "number"
+                                                    },
+                                                    "projected": {
+                                                        "type": "number"
+                                                    },
+                                                    "total": {
+                                                        "type": "number"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "grandTotal": {
+                                            "type": "object",
+                                            "properties": {
+                                                "real": {
+                                                    "type": "number"
+                                                },
+                                                "projected": {
+                                                    "type": "number"
+                                                },
+                                                "total": {
+                                                    "type": "number"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "No club in context, or invalid from/to, or no window (no active season)"
+                    },
+                    "401": {
+                        "description": "Unauthorized (missing/expired JWT)"
+                    }
+                },
+                "summary": "Heures d'utilisation des gymnases par jour (r\u00e9alis\u00e9es vs \u00e0 venir), et par niveau",
+                "parameters": [
+                    {
+                        "name": "from",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "Window start (YYYY-MM-DD) \u2014 defaults to the active season start"
+                    },
+                    {
+                        "name": "to",
+                        "in": "query",
+                        "required": false,
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        },
+                        "description": "Window end (YYYY-MM-DD) \u2014 defaults to the active season end"
+                    }
+                ]
+            }
+        },
         "/api/coaches": {
             "get": {
                 "operationId": "api_coaches_get_collection",
