@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -168,5 +168,107 @@ describe("ImplicitRulesPanel — atterrissage ciblé (ruleTarget)", () => {
 
     expect(container.querySelector('[data-rule-key="maxConsecutiveSessions"]')?.className).not.toContain("ring-accent");
     expect(scrolled).toEqual([]);
+  });
+});
+
+/**
+ * PR2 — « les règles bien-être réglables PAR PÉRIODE ». En période, le MÊME panneau porte sur la
+ * COPIE du plan (`schedulePlanId`) : la portée entre dans le GET, le PUT (corps) et le DELETE, et
+ * chaque portée a sa propre clé de cache. En repère, la valeur de la SAISON s'affiche à côté de
+ * chaque règle. Hors période : rien de tout ça (non-régression du panneau saison).
+ *
+ * SEASON et PERIOD divergent volontairement sur coachRestDay : c'est ce qui rend observable qu'on
+ * lit la bonne couche (et que les deux caches ne se contaminent pas).
+ */
+const SEASON = (): ImplicitRuleSetting[] => [
+  { ruleKey: "coachRestDay", intensity: "PREFERRED", minRestDays: 2, maxConsecutive: null, isDefault: true },
+  { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+  { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, isDefault: true },
+  { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+];
+const PERIOD = (): ImplicitRuleSetting[] => [
+  { ruleKey: "coachRestDay", intensity: "HARD", minRestDays: 4, maxConsecutive: null, isDefault: false },
+  { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+  { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, isDefault: true },
+  { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+];
+
+describe("ImplicitRulesPanel — portée par période", () => {
+  beforeEach(() => {
+    // Le mock HONORE la portée : rows du plan pour un uuid, socle saison pour null (le repère).
+    vi.mocked(wizardApi.listImplicitRuleSettings).mockImplementation((planId?: string | null) => Promise.resolve(planId ? PERIOD() : SEASON()));
+    vi.mocked(wizardApi.updateImplicitRuleSetting).mockClear().mockResolvedValue({} as ImplicitRuleSetting);
+    vi.mocked(wizardApi.resetImplicitRuleSetting).mockClear().mockResolvedValue(undefined);
+    workingSeason.value = { isReadonly: false };
+  });
+  afterEach(() => vi.mocked(wizardApi.listImplicitRuleSettings).mockReset());
+
+  it("mode période : phrase de portée + repère « Saison : … » par règle", async () => {
+    renderPanel(<WellbeingRulesPanel schedulePlanId="plan-1" />);
+    await screen.findByRole("group", { name: `Intensité — ${REST_TITLE}` });
+
+    expect(screen.getByText(/Ces réglages ne valent que pour cette période/)).toBeInTheDocument();
+    // La règle affiche l'état de la PÉRIODE (HARD → « Obligatoire » enfoncé)…
+    expect(screen.getByRole("button", { name: `Obligatoire — ${REST_TITLE}` })).toHaveAttribute("aria-pressed", "true");
+    // …et en repère la valeur de la SAISON (PREFERRED, 2 jours), jamais celle de la période.
+    expect(screen.getByText(/Saison : Objectif, 2 jours/)).toBeInTheDocument();
+  });
+
+  it("mode saison (schedulePlanId absent) : NI phrase de portée NI repère « Saison : … »", async () => {
+    renderPanel(<WellbeingRulesPanel />);
+    await screen.findByRole("group", { name: `Intensité — ${REST_TITLE}` });
+
+    expect(screen.queryByText(/Ces réglages ne valent que pour cette période/)).toBeNull();
+    expect(screen.queryByText(/^Saison :/)).toBeNull();
+  });
+
+  it("le GET part avec la portée du plan", async () => {
+    renderPanel(<WellbeingRulesPanel schedulePlanId="plan-1" />);
+    await screen.findByRole("group", { name: `Intensité — ${REST_TITLE}` });
+
+    await waitFor(() => expect(vi.mocked(wizardApi.listImplicitRuleSettings).mock.calls.some((c) => "plan-1" === c[0])).toBe(true));
+  });
+
+  it("le PUT porte schedulePlanId dans le corps + refetch de la portée", async () => {
+    const user = userEvent.setup();
+    renderPanel(<WellbeingRulesPanel schedulePlanId="plan-1" />);
+    await screen.findByRole("group", { name: `Intensité — ${REST_TITLE}` });
+
+    await user.click(screen.getByRole("button", { name: `Objectif — ${REST_TITLE}` }));
+
+    await waitFor(() => expect(wizardApi.updateImplicitRuleSetting).toHaveBeenCalledWith("coachRestDay", { intensity: "PREFERRED", minRestDays: 4, schedulePlanId: "plan-1" }));
+    await waitFor(() => expect(vi.mocked(wizardApi.listImplicitRuleSettings).mock.calls.filter((c) => "plan-1" === c[0]).length).toBeGreaterThanOrEqual(2));
+  });
+
+  it("le DELETE (Réinitialiser) part avec la portée du plan", async () => {
+    const user = userEvent.setup();
+    renderPanel(<WellbeingRulesPanel schedulePlanId="plan-1" />);
+    await screen.findByRole("group", { name: `Intensité — ${REST_TITLE}` });
+
+    // coachRestDay est hors défaut côté période → « Réinitialiser » visible.
+    await user.click(screen.getAllByRole("button", { name: "Réinitialiser" })[0]);
+    await waitFor(() => expect(wizardApi.resetImplicitRuleSetting).toHaveBeenCalledWith("coachRestDay", "plan-1"));
+  });
+
+  it("les deux portées ne partagent PAS leur cache (saison ↔ période)", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const season = render(
+      <QueryClientProvider client={client}>
+        <WellbeingRulesPanel schedulePlanId={null} />
+      </QueryClientProvider>,
+    );
+    const period = render(
+      <QueryClientProvider client={client}>
+        <WellbeingRulesPanel schedulePlanId="plan-1" />
+      </QueryClientProvider>,
+    );
+
+    await within(season.container).findByRole("group", { name: `Intensité — ${REST_TITLE}` });
+    await within(period.container).findByRole("group", { name: `Intensité — ${REST_TITLE}` });
+
+    // Chaque écran affiche SA couche : saison → PREFERRED (Objectif), période → HARD (Obligatoire).
+    // Un cache partagé ferait afficher à l'un les valeurs de l'autre.
+    expect(within(season.container).getByRole("button", { name: `Objectif — ${REST_TITLE}` })).toHaveAttribute("aria-pressed", "true");
+    expect(within(period.container).getByRole("button", { name: `Obligatoire — ${REST_TITLE}` })).toHaveAttribute("aria-pressed", "true");
   });
 });

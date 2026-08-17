@@ -164,12 +164,16 @@ Schedule (= Version)                    ← existant, recentré
    reprise sans que le gestionnaire l'ait choisi. La copie l'isole : une reprise démarre de la
    valeur saison du jour, puis devient LA SIENNE.
 
-   **PR1 (backend, ce lot) livre le modèle et l'API** (portée dans le corps/la query
-   `schedulePlanId`, GET résolu par portée, PUT/DELETE par portée). **PR2 (front, à suivre)**
-   rendra l'onglet Bien-être du wizard conscient de la période — tant qu'elle n'est pas livrée,
-   l'écran ne règle et n'affiche QUE la portée saison (`schedulePlanId` jamais envoyé), même en
-   mode période : aucune régression, mais aucun gestionnaire ne peut encore régler une reprise
-   depuis l'écran.
+   **PR1 (backend) livre le modèle et l'API** (portée dans le corps/la query `schedulePlanId`,
+   GET résolu par portée, PUT/DELETE par portée). **PR2 (front, même jour) rend l'onglet Bien-être
+   du wizard conscient de la période** : en mode période, le panneau règle et affiche la COPIE du
+   plan, derrière le même ancrage que « Réserver »/« Mutualisation » (`PeriodAnchorGate`) ; la
+   portée voyage dans les trois appels (GET query, PUT corps, DELETE query) et dans la clé de
+   cache react-query, pour que saison et période ne partagent jamais leurs valeurs affichées. Une
+   phrase de portée et, sous chaque règle, la valeur de SAISON en repère accompagnent l'écran —
+   décision fondateur : en période, exactement le même choix qu'en saison (dur par défaut ou
+   soft), sans bouton « revenir à la saison » ni indicateur calculé serveur (proposés puis
+   explicitement écartés). Un gestionnaire peut désormais régler une reprise depuis l'écran.
 6. **La structure (équipes/gymnases/coachs/contraintes permanentes) reste PARTAGÉE**
    (état vivant du club par saison) — **pas de duplication par version**. L'indépendance
    des versions passe par la **photo** (JSON, D2, existante) : chaque version COMPLETED
@@ -563,13 +567,13 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   changement de socle avec une grille copiée périmée. NR : `VenueTrainingSlotApiTest` (chevauchement
   borné à une couche), `CascadeDeleteApiTest` / `ValidateScheduleTest` / `ReopenScheduleTest` (portée
   élargie de la destruction, survie des périodes en cours et passées).
-- **Lot bien-être-par-période — une période possède ses 4 règles (PR1 backend livrée 2026-08-18)**,
-  hors de la numérotation A→D (post-ADR), même patron que le Lot #8 (copie plutôt qu'union) —
-  voir l'amendement de l'inv. 5 ci-dessus (`ImplicitRuleSetting.schedulePlanId`,
-  `SchedulePlanProvisioner::materializeForPlan`, DELETE en portée plan = re-copie). Modèle et API
-  seuls : **PR2 (front) reste à livrer** — tant qu'elle ne l'est pas, l'onglet Bien-être du wizard
-  n'exerce que la portée saison, en mode socle comme en mode période (aucune régression, geste de
-  reprise pas encore atteignable depuis l'écran). NR : `Security/PeriodPlanBirthTest`,
+- **Lot bien-être-par-période — une période possède ses 4 règles (LOT SOLDÉ 2026-08-18, PR1
+  backend + PR2 front)**, hors de la numérotation A→D (post-ADR), même patron que le Lot #8
+  (copie plutôt qu'union) — voir l'amendement de l'inv. 5 ci-dessus (`ImplicitRuleSetting.schedulePlanId`,
+  `SchedulePlanProvisioner::materializeForPlan`, DELETE en portée plan = re-copie). **PR2 (front)**
+  rend l'onglet Bien-être du wizard conscient de la période (`PeriodAnchorGate`, portée dans les
+  trois appels + la clé de cache react-query) : un gestionnaire règle désormais SES règles de
+  reprise depuis l'écran, en mode socle comme en mode période. NR : `Security/PeriodPlanBirthTest`,
   `CrossStack/ImplicitRulePayloadParityTest` (invariant RETOURNÉ — l'un et l'autre gardaient
   jusque-là l'ancien invariant « même bloc season-scopé », desormais falsifié dans les deux sens
   sur la copie ET le repli legacy), `Integration/Service/ResourceChangeStaleScheduleTest` (péremption

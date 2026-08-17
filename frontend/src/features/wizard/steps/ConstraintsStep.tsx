@@ -789,7 +789,19 @@ export function ConstraintsStep() {
       {"base" === mode ? (
         <ProductRulesPanel />
       ) : "wellbeing" === mode ? (
-        <WellbeingRulesPanel ruleTarget={ruleTarget} />
+        // Même ancrage que « Réserver »/« Mutualisation » : en période le panneau règle la COPIE
+        // du plan (schedulePlanId), jamais le socle du club ; hors période, la saison (null).
+        periodMode ? (
+          <PeriodAnchorGate
+            anchor={anchor}
+            loadingLabel="Chargement du planning de la période…"
+            errorLabel="Impossible de charger le planning de la période."
+          >
+            {(schedulePlanId) => <WellbeingRulesPanel ruleTarget={ruleTarget} schedulePlanId={schedulePlanId} />}
+          </PeriodAnchorGate>
+        ) : (
+          <WellbeingRulesPanel ruleTarget={ruleTarget} schedulePlanId={null} />
+        )
       ) : "reserve" === mode ? (
         // Une seule échelle d'états pour l'ancre — la PORTE. Le premier jet
         // re-implémentait ses quatre cas en ternaire imbriqué : les libellés

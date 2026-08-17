@@ -444,15 +444,26 @@ export interface ImplicitRuleSettingPayload {
   intensity: ImplicitRuleIntensity;
   minRestDays?: number;
   maxConsecutive?: number;
+  /**
+   * ADR-0002 inv. 5 — la PORTÉE, lue du CORPS par le PUT : null/absent = saison ; un UUID = la
+   * copie d'un plan de période. Le GET la lit en query, le DELETE aussi ; le PUT dans le corps.
+   */
+  schedulePlanId?: string | null;
 }
 
-/** Collection RÉSOLUE (toujours 4, non paginée). */
-export const listImplicitRuleSettings = (): Promise<ImplicitRuleSetting[]> => collection<ImplicitRuleSetting>("implicit_rule_settings");
-/** Upsert d'un réglage par sa clé (crée la ligne au premier réglage). */
+/** Collection RÉSOLUE (toujours 4, non paginée) — portée saison (null) ou plan de période (uuid). */
+export const listImplicitRuleSettings = (schedulePlanId?: string | null): Promise<ImplicitRuleSetting[]> =>
+  collection<ImplicitRuleSetting>("implicit_rule_settings", schedulePlanId ? { schedulePlanId } : undefined);
+/** Upsert d'un réglage par sa clé (crée la ligne au premier réglage) ; la portée voyage dans le corps. */
 export const updateImplicitRuleSetting = (ruleKey: string, body: ImplicitRuleSettingPayload): Promise<ImplicitRuleSetting> =>
   api.put(`implicit_rule_settings/${ruleKey}`, { json: body }).json();
-/** Réinitialiser = supprimer la ligne → retour au défaut. */
-export const resetImplicitRuleSetting = (ruleKey: string): Promise<void> => api.delete(`implicit_rule_settings/${ruleKey}`).then(() => undefined);
+/**
+ * Réinitialiser une règle. Portée saison (planId absent) : le serveur supprime la ligne → retour
+ * au défaut. Portée période (`?schedulePlanId=`) : le serveur RE-COPIE la valeur de saison courante
+ * dans la copie du plan (il ne supprime pas — l'invariant 4 lignes tient).
+ */
+export const resetImplicitRuleSetting = (ruleKey: string, schedulePlanId?: string | null): Promise<void> =>
+  api.delete(`implicit_rule_settings/${ruleKey}`, schedulePlanId ? { searchParams: { schedulePlanId } } : undefined).then(() => undefined);
 
 // --- Recap + generate (W5) ---
 

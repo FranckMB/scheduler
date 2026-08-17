@@ -836,6 +836,22 @@ describe("ConstraintsStep — inherited section lives inside the family tabs (pe
     expect(screen.getByText(/Chargement du planning de la période/)).toBeInTheDocument();
   });
 
+  // PR2 — l'onglet Bien-être passe sous la MÊME porte d'ancre que « Réserver » : tant que le plan
+  // de la période n'est pas résolu, le panneau n'écrit pas sur le socle du club.
+  it("Bien-être attend le plan de la période avant d'offrir le panneau (jamais le socle)", async () => {
+    periodAnchorReady.value = false;
+    renderWithProviders(<ConstraintsStep />);
+    await userEvent.click(screen.getByRole("button", { name: "Bien-être" }));
+    expect(screen.getByText(/Chargement du planning de la période/)).toBeInTheDocument();
+  });
+
+  it("Bien-être : plan résolu → les règles réglables sont rendues", async () => {
+    periodAnchorReady.value = true;
+    renderWithProviders(<ConstraintsStep />);
+    await userEvent.click(screen.getByRole("button", { name: "Bien-être" }));
+    expect(screen.getByRole("group", { name: "Intensité — Chaque coach garde un jour de repos" })).toBeInTheDocument();
+  });
+
   it("renders NO inherited section outside period mode", () => {
     useWizardStore.getState().exitPeriodMode();
     renderWithProviders(<ConstraintsStep />);
