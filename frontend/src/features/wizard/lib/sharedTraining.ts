@@ -13,8 +13,9 @@ import type { Gender, SharedTrainingGroup, Team, TeamPeriodOverride } from "../a
  * ⚠ Le CLASSEMENT des candidats (`rankCandidates`) est un ORDRE D'AFFICHAGE, jamais une
  * permission : « équipes proches » remonte des candidats plausibles, rien n'est interdit, tout
  * reste cochable en un clic. C'est de la présentation (cf. `matches/lib/diagnostic.ts`), pas une
- * décision de comportement sur un enum de contrainte — donc hors du périmètre de
- * `FrontRederivationRegistryTest`.
+ * décision de comportement sur un enum de contrainte : ce module n'est donc PAS un miroir
+ * déclaré, et il ne doit pas se déclarer comme tel (le registre des miroirs se repère au NOM de
+ * son test de garde écrit en source — le citer ici enrôlerait ce module par accident).
  *
  * ⚠ AUCUN ordre d'âge entre catégories : `SportCategory` n'a pas de champ d'ordre, le déduire du
  * nom serait faux dès qu'un club nomme ses catégories autrement. Deux équipes « proches » le sont
