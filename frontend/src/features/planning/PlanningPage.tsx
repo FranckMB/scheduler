@@ -1150,6 +1150,17 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           ) : 0 === slots.length ? (
             isFailed ? (
               <EmptyState title="Génération en échec" description="Aucun créneau n'a été placé, et ce planning n'a aucune réservation à afficher. Corrigez les contraintes signalées puis régénérez." />
+            ) : slotsBusy ? (
+              // PREMIER chargement d'une version (aucune donnée précédente à voiler) : « Planning
+              // vide » MENTIRAIT tant que la requête n'a pas répondu. On affiche l'état de
+              // chargement — même indicateur que le voile de la grille — jusqu'au verdict. Une
+              // fois la réponse arrivée et RÉELLEMENT vide, `slotsBusy` retombe → « Planning vide ».
+              <div className="flex h-64 items-center justify-center rounded-lg border border-border bg-card" role="status" aria-busy="true" aria-live="polite">
+                <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  Chargement des créneaux…
+                </span>
+              </div>
             ) : (
               <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
             )

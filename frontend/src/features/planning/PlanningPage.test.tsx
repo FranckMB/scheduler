@@ -342,6 +342,28 @@ describe("PlanningPage (integration)", () => {
     expect(screen.queryByText(/chargement des créneaux/i)).not.toBeInTheDocument();
   });
 
+  // Retour coordinateur : au PREMIER chargement d'une version (aucune donnée précédente),
+  // l'écran affichait « Planning vide » PENDANT le fetch — un message FAUX. Tant que les
+  // créneaux sont en vol sans données, on montre l'état de chargement, jamais « vide ».
+  it("premier chargement (créneaux en vol, aucune donnée) : état de chargement, PAS « Planning vide »", async () => {
+    vi.mocked(getSlots).mockImplementation(() => new Promise(() => {}));
+
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText(/chargement des créneaux/i)).toBeInTheDocument();
+    expect(screen.queryByText(/planning vide/i)).not.toBeInTheDocument();
+  });
+
+  // Une fois la réponse arrivée et RÉELLEMENT vide, « Planning vide » revient (le vrai vide).
+  it("réponse arrivée réellement vide → « Planning vide »", async () => {
+    vi.mocked(getSlots).mockResolvedValue([]);
+
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText(/planning vide/i)).toBeInTheDocument();
+    expect(screen.queryByText(/chargement des créneaux/i)).not.toBeInTheDocument();
+  });
+
   // Revue #339 : un club qui n'a JAMAIS généré n'a aucune version, donc aucun plan
   // « affiché » — l'en-tête perdait le nom du planning de saison ET son stylo, si bien que
   // le gestionnaire ne pouvait plus le nommer avant d'avoir généré. Le contexte par défaut
