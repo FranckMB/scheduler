@@ -1,4 +1,4 @@
-# Déployer ClubScheduler en production — runbook fondateur
+# Déployer Amateo en production — runbook fondateur
 
 > Écrit pour être suivi seul, étape par étape, sans connaissance Docker/GitHub
 > Actions préalable. Partie 1 = une seule fois (première mise en prod).

@@ -1,6 +1,6 @@
 # FORWARD Components Spec — Pages & Shared Components (hors wizard)
 
-Last verified @ 2026-08-13 (stamp recalé — le commit du contenu du 2026-08-12 a franchi minuit : PR #536 mergée à 00:03 ; contenu inchangé depuis) (recalé ce jour : le champ `allowMultipleSessionsPerDay` quitte Team — levier mort retiré de bout en bout, P4-79 ; précédemment : 2026-08-08 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-01 par les livraisons : grille Gymnases qui montre tout ce qui existe P4-37 · modale « Solliciter les coachs » P3-15 a/b))
+Last verified @ 2026-08-17 (re-vérifié contre `AuthLayout.tsx` : le produit s'appelle **Amateo** — P5-15 ; §4.1 recalée sur le rendu réel (icône `CalendarCheck2` + libellé texte, jamais un `<img>`), §Concept (planning) renommé) ; précédemment : 2026-08-13 (stamp recalé — le commit du contenu du 2026-08-12 a franchi minuit : PR #536 mergée à 00:03 ; contenu inchangé depuis) (recalé ce jour : le champ `allowMultipleSessionsPerDay` quitte Team — levier mort retiré de bout en bout, P4-79 ; précédemment : 2026-08-08 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-01 par les livraisons : grille Gymnases qui montre tout ce qui existe P4-37 · modale « Solliciter les coachs » P3-15 a/b))
 
 > 🛑 **Ce document est SUPERSEDED. Il ne décrit pas le frontend livré.**
 >
@@ -599,7 +599,7 @@ sidebar.
 ```
 ┌─────────────────────────────────────┐
 │                                     │
-│         [Logo ClubScheduler]        │
+│      [Icône + nom produit]          │
 │                                     │
 │      ┌─────────────────────┐        │
 │      │                     │        │
@@ -616,7 +616,7 @@ sidebar.
 |---------|------|--------|
 | `AuthLayout` | Wrapper plein écran, fond gradient subtil | `<main role="main">` |
 | `AuthCard` | Card centrée, max-width 480px | `<div>` avec ombre légère |
-| Logo | Logo ClubScheduler en haut | `<img alt="ClubScheduler">` |
+| Marque | Icône `CalendarCheck2` + nom produit en haut | `<span>{PRODUCT_NAME}</span>` (« Amateo », `shared/lib/product.ts` — pas un `<img>`) |
 
 ### 4.2 AppLayout
 
@@ -840,7 +840,7 @@ sans le verrouiller de façon permanente :
 
 ### Concept
 
-Le planning ClubScheduler est une **semaine type** de **sept jours** (lundi à
+Le planning Amateo est une **semaine type** de **sept jours** (lundi à
 dimanche, depuis P4-37 / 2026-08-01 — la semaine s'arrêtait au samedi côté écran
 alors que l'API acceptait `dayOfWeek` jusqu'à 7 et que l'export l'imprimait). Le
 "jour de référence" (reference day) est le point d'ancrage qui définit le début

@@ -1,6 +1,9 @@
 Last verified @ 2026-08-17 (JSON **régénéré** — le 504 `engine_timeout` des deux routes de retouche entre au document ; plus tôt le même jour : nouvelle ressource `SharedTrainingGroup` (mutualisation, P2-27 PR A) et contrat backend⇄engine bumpé **2.11 → 2.12**)
 
 Changements récents :
+- **Renommage produit (2026-08-17)** : le titre du document passe de « ClubScheduler API » à
+  **« Amateo API »** (`config/packages/api_platform.yaml`). Set-diff : aucun path, aucun schéma —
+  un seul champ `info.title`.
 - **504 `engine_timeout` sur le rail de retouche (2026-08-17)** : `POST /api/schedule-slots/{id}/move`
   et `POST /api/schedules/{id}/place-slot` documentent un **504** distinct du 502 — le moteur
   fonctionne, il a simplement dépassé le plafond transport ; rien n'est écrit et réessayer est le

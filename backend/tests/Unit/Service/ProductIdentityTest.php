@@ -51,6 +51,19 @@ final class ProductIdentityTest extends TestCase
         'clubscheduler_',          // noms de base / identifiants SQL (infra)
     ];
 
+    /**
+     * Fichiers de CONFIGURATION d'infrastructure qui nomment le rôle SQL admin
+     * `clubscheduler` — un identifiant de base, pas un nom de produit : le renommer
+     * demanderait de recréer le rôle en production. Exclus par FICHIER (et non par
+     * sous-chaîne) pour qu'aucun titre affiché ne se glisse derrière l'exception.
+     *
+     * @var list<string>
+     */
+    private const array INFRA_CONFIG_FILES = [
+        'config/packages/doctrine.yaml',
+        'config/packages/doctrine_migrations.yaml',
+    ];
+
     public function testIdentityCarriesTheConfiguredNames(): void
     {
         $identity = new ProductIdentity('Marque', 'Éditeur');
@@ -62,28 +75,40 @@ final class ProductIdentityTest extends TestCase
     public function testOldProductNameIsNotHardCodedInSource(): void
     {
         $offenders = [];
-        $root = \dirname(__DIR__, 3) . '/src';
-        /** @var iterable<string, SplFileInfo> $files */
-        $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS));
+        $backend = \dirname(__DIR__, 3);
 
-        foreach ($files as $path => $file) {
-            if (!$file->isFile() || 'php' !== $file->getExtension()) {
-                continue;
-            }
+        // `src/` ET `config/` : le titre exposé par `/api/docs` vivait dans
+        // `config/packages/api_platform.yaml` et a survécu au renommage parce que
+        // le balayage s'arrêtait à `src/`. Un angle mort de garde EST une régression
+        // en attente — le texte lu par un humain ne vit pas que dans du PHP.
+        foreach ([$backend . '/src', $backend . '/config'] as $root) {
+            /** @var iterable<string, SplFileInfo> $files */
+            $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS));
 
-            $contents = file_get_contents($path);
-            self::assertIsString($contents);
-
-            foreach (explode("\n", $contents) as $number => $line) {
-                if (false === stripos($line, 'clubscheduler')) {
+            foreach ($files as $path => $file) {
+                if (!$file->isFile() || !\in_array($file->getExtension(), ['php', 'yaml', 'yml'], true)) {
                     continue;
                 }
-                foreach (self::TECHNICAL_EXCEPTIONS as $allowed) {
-                    if (str_contains($line, $allowed)) {
-                        continue 2;
-                    }
+
+                $relative = str_replace($backend . '/', '', $path);
+                if (\in_array($relative, self::INFRA_CONFIG_FILES, true)) {
+                    continue;
                 }
-                $offenders[] = \sprintf('%s:%d', str_replace($root . '/', '', $path), $number + 1);
+
+                $contents = file_get_contents($path);
+                self::assertIsString($contents);
+
+                foreach (explode("\n", $contents) as $number => $line) {
+                    if (false === stripos($line, 'clubscheduler')) {
+                        continue;
+                    }
+                    foreach (self::TECHNICAL_EXCEPTIONS as $allowed) {
+                        if (str_contains($line, $allowed)) {
+                            continue 2;
+                        }
+                    }
+                    $offenders[] = \sprintf('%s:%d', str_replace($backend . '/', '', $path), $number + 1);
+                }
             }
         }
 
