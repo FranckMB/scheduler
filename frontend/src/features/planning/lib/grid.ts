@@ -17,7 +17,7 @@ import type { ViewMode } from "../store";
  */
 // D-22 : les sept jours vivent en `shared/lib/days` — une copie de ce tableau
 // s'arrêtait au samedi et rendait un planning à six colonnes « complet ».
-import { DAYS } from "@/shared/lib/days";
+import { DAYS, dayLabelLong } from "@/shared/lib/days";
 
 export { DAYS };
 
@@ -119,6 +119,11 @@ export function resourceKeysForSlot(slot: Slot, viewMode: ViewMode, lookups: Loo
   if ("equipe" === viewMode) {
     return [slot.teamId];
   }
+  // P2-33 : en vue « jour », la ressource FILTRABLE est le jour ISO (les colonnes de grille,
+  // elles, restent les gymnases — cf. `buildGrid`/`columnView`).
+  if ("jour" === viewMode) {
+    return [String(slot.dayOfWeek)];
+  }
   const keys = new Set<string>();
   const main = slotCoachId(slot, lookups);
   if (null !== main) {
@@ -150,6 +155,14 @@ function resourceLabel(id: string, viewMode: ViewMode, lookups: Lookups): string
   if ("coach" === viewMode) {
     return id === NO_COACH ? NO_COACH_LABEL : coachName(lookups.coaches, id);
   }
+  // P2-33 : la ressource « jour » a pour clé le numéro ISO ; son libellé est le nom du jour
+  // EN TOUTES LETTRES (retour fondateur) — `dayLabelLong`, maison unique des libellés longs.
+  // Les en-têtes de la grille gardent l'abrégé (`DAYS`), où la place manque.
+  if ("jour" === viewMode) {
+    const long = dayLabelLong(Number(id));
+
+    return "" === long ? "?" : long;
+  }
   return lookups.teams.get(id)?.name ?? "Équipe ?";
 }
 
@@ -165,6 +178,11 @@ export interface GridResource {
  * so the team selector and the equipe grid stay in the order managers expect.
  */
 function resourceComparator(viewMode: ViewMode, lookups: Lookups): (a: GridResource, b: GridResource) => number {
+  // P2-33 : les jours se rangent en ordre ISO (lundi→dimanche), jamais alphabétique — sinon
+  // « Dim/Jeu/Lun… » sortirait le dimanche en tête. La clé EST le numéro ISO.
+  if ("jour" === viewMode) {
+    return (a, b) => Number(a.id) - Number(b.id);
+  }
   if ("equipe" !== viewMode) {
     return (a, b) => a.label.localeCompare(b.label, "fr");
   }
@@ -313,6 +331,13 @@ export interface GridModel {
  * view only changes which resource forms the sub-columns (same slots, re-grouped).
  */
 export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, filter: Set<string> = new Set(), stepMin = 15): GridModel {
+  // P2-33 — vue « jour » : l'axe FILTRABLE est le jour (`viewMode`, via `resourceKeysForSlot`),
+  // mais l'axe des COLONNES reste le gymnase. On n'écrit PAS un second moteur de layout : on
+  // aiguille toute la composition colonnes / libellés / couleurs / fusion (P2-17) sur
+  // `columnView` = "gymnase", tandis que le FILTRE seul lit `viewMode` (= le jour). Les autres
+  // vues gardent `columnView === viewMode`, comportement inchangé.
+  const columnView: ViewMode = "jour" === viewMode ? "gymnase" : viewMode;
+
   const visible = slots.filter(
     (s) => s.dayOfWeek >= 1 && s.dayOfWeek <= 7 && (0 === filter.size || resourceKeysForSlot(s, viewMode, lookups).some((k) => filter.has(k))),
   );
@@ -320,9 +345,11 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
   // When a filter is active, a slot shows ONLY under the selected columns — not
   // under every coach it concerns. Looking at Mara, SF2 stays under Mara and does
   // not drag in the other coach-players of SF2.
+  // ⚠ En vue « jour » le filtre porte sur le JOUR, pas sur la colonne (gymnase) : on ne
+  // rétrécit donc PAS les colonnes par lui (le jour a déjà filtré `visible` ci-dessus).
   const keysFor = (slot: Slot): string[] => {
-    const keys = resourceKeysForSlot(slot, viewMode, lookups);
-    return filter.size > 0 ? keys.filter((k) => filter.has(k)) : keys;
+    const keys = resourceKeysForSlot(slot, columnView, lookups);
+    return "jour" !== viewMode && filter.size > 0 ? keys.filter((k) => filter.has(k)) : keys;
   };
 
   const bounds = computeTimeBounds(visible);
@@ -337,7 +364,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
       continue; // hide days with no slot
     }
     const idSet = new Set(daySlots.flatMap((s) => keysFor(s)));
-    const resourceIds = [...idSet].map((id) => ({ id, label: resourceLabel(id, viewMode, lookups) })).sort(resourceComparator(viewMode, lookups));
+    const resourceIds = [...idSet].map((id) => ({ id, label: resourceLabel(id, columnView, lookups) })).sort(resourceComparator(columnView, lookups));
 
     dayGroups.push({ day: day.n, label: day.label, startColumn: cssColumn, span: resourceIds.length });
     for (const { id, label } of resourceIds) {
@@ -346,7 +373,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
         day: day.n,
         resourceId: id,
         label,
-        color: "gymnase" === viewMode ? (lookups.venues.get(id)?.color ?? null) : null,
+        color: "gymnase" === columnView ? (lookups.venues.get(id)?.color ?? null) : null,
       });
       cssColumn += 1;
     }
@@ -358,7 +385,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
   // séance non vide seulement). Le backend possède la règle (capacité ≥ 2, trim, vide→null) ;
   // le front l'AFFICHE, il ne la re-dérive pas.
   const labelOf = (s: Slot): string =>
-    "gymnase" === viewMode && "" !== s.teamId ? (lookups.groupLabels?.get(slotGroupKey(s.venueId, s.dayOfWeek, s.startTime)) ?? "").trim() : "";
+    "gymnase" === columnView && "" !== s.teamId ? (lookups.groupLabels?.get(slotGroupKey(s.venueId, s.dayOfWeek, s.startTime)) ?? "").trim() : "";
   const mergeKeyOf = (s: Slot, key: string, label: string): string => `${s.dayOfWeek}:${key}:${parseTimeToMinutes(s.startTime)}:${label}`;
 
   // Une carte fusionnée n'existe qu'à partir de DEUX équipes (« plusieurs partagent » —
@@ -449,11 +476,11 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
       let primaryLabel = teamLabel;
       let secondaryLabel = coachLabel;
       let roleTag: string | null = null;
-      if ("coach" === viewMode) {
+      if ("coach" === columnView) {
         primaryLabel = teamLabel;
         secondaryLabel = venueLabel;
         roleTag = key !== mainCoachId ? "joueur" : null;
-      } else if ("equipe" === viewMode) {
+      } else if ("equipe" === columnView) {
         primaryLabel = venueLabel;
         secondaryLabel = coachLabel;
       }

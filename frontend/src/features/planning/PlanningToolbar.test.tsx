@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Schedule, ScheduleCapabilities } from "./api";
 import { PlanningToolbar } from "./PlanningToolbar";
@@ -75,6 +76,40 @@ describe("PlanningToolbar — où vivent le filtre et l'export (P4-43)", () => {
     expect(filter.compareDocumentPosition(regenerate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // L'export, lui, reste après les actions.
     expect(regenerate.compareDocumentPosition(exported) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("PlanningToolbar — 4e vue « Par jour » (P2-33)", () => {
+  it("offre un 4e bouton « Par jour » à côté des trois vues existantes", () => {
+    renderToolbar(schedule("COMPLETED"));
+    expect(screen.getByRole("button", { name: "Par gymnase" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Par coach" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Par équipe" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Par jour" })).toBeInTheDocument();
+  });
+
+  it("le clic sur « Par jour » bascule la vue vers jour", async () => {
+    const user = userEvent.setup();
+    const onViewMode = vi.fn();
+    render(
+      <PlanningToolbar
+        schedules={[schedule("COMPLETED")]}
+        selectedScheduleId="s1"
+        onSelectSchedule={noop}
+        viewMode="gymnase"
+        onViewMode={onViewMode}
+        onRegenerate={noop}
+        onValidate={noop}
+        onReopen={noop}
+        onDelete={noop}
+        onRegenerateFrom={noop}
+        isGenerating={false}
+        actionBusy={false}
+        embedded
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Par jour" }));
+    expect(onViewMode).toHaveBeenCalledWith("jour");
   });
 });
 

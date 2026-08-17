@@ -10,6 +10,19 @@ export function useSubscriptionPlans() {
   return useQuery({ queryKey: ["subscription_plans"], queryFn: clubApi.listSubscriptionPlans, staleTime: 300_000 });
 }
 
+/**
+ * P3-22 — stats d'utilisation des gymnases sur [from, to] (défaut = saison). Le
+ * calcul est SERVEUR ; on ne requête que si un planning est en vigueur (`enabled`).
+ */
+export function useVenueUsageStats(from?: string, to?: string, enabled = true) {
+  return useQuery({
+    queryKey: ["venue-usage-stats", from ?? null, to ?? null],
+    queryFn: () => clubApi.getVenueUsageStats(from, to),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
 /** Save the club accent; refetch /me so the theme re-applies live. */
 export function useUpdateAppearance() {
   const queryClient = useQueryClient();

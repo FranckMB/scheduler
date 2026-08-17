@@ -10,6 +10,7 @@ const LABELS: Record<ViewMode, string> = {
   gymnase: "Gymnases",
   coach: "Coachs",
   equipe: "Équipes",
+  jour: "Jours",
 };
 
 interface ResourceFilterProps {

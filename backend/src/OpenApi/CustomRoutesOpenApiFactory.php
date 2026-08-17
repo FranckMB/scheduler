@@ -1565,6 +1565,67 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
         ];
 
         return [
+            // Statistiques d'utilisation des gymnases : lecture pure, agrégée SERVEUR (le front
+            // n'agrège aucune règle métier). Le total par JOUR est le chiffre que le gestionnaire
+            // porte devant sa mairie pour négocier ses créneaux.
+            '/api/venue-usage-stats' => new PathItem(get: new Operation(
+                operationId: 'getVenueUsageStats',
+                tags: ['Clubs'],
+                responses: [
+                    '200' => $this->jsonResponse('Heures par gymnase et par niveau, ventilées par jour de semaine, réalisées (≤ aujourd\'hui) vs à venir', [
+                        'type' => 'object',
+                        'properties' => [
+                            'range' => ['type' => 'object', 'properties' => [
+                                'from' => ['type' => 'string', 'format' => 'date'],
+                                'to' => ['type' => 'string', 'format' => 'date'],
+                                'today' => ['type' => 'string', 'format' => 'date'],
+                            ]],
+                            'zone' => ['type' => 'string', 'nullable' => true, 'description' => 'Zone scolaire du club (null → les vacances ne neutralisent rien)'],
+                            'venues' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'venueId' => ['type' => 'string'],
+                                'name' => ['type' => 'string'],
+                                'byDay' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                    'day' => ['type' => 'integer', 'description' => 'Jour ISO (1 = lundi)'],
+                                    'real' => ['type' => 'number'],
+                                    'projected' => ['type' => 'number'],
+                                    'total' => ['type' => 'number'],
+                                ]]],
+                                'real' => ['type' => 'number'],
+                                'projected' => ['type' => 'number'],
+                                'total' => ['type' => 'number'],
+                            ]]],
+                            'totalByDay' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'day' => ['type' => 'integer'],
+                                'real' => ['type' => 'number'],
+                                'projected' => ['type' => 'number'],
+                                'total' => ['type' => 'number'],
+                            ]]],
+                            'byLevel' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                'level' => ['type' => 'string'],
+                                'label' => ['type' => 'string'],
+                                'byDay' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
+                                    'day' => ['type' => 'integer'],
+                                    'real' => ['type' => 'number'],
+                                    'projected' => ['type' => 'number'],
+                                    'total' => ['type' => 'number'],
+                                ]]],
+                                'real' => ['type' => 'number'],
+                                'projected' => ['type' => 'number'],
+                                'total' => ['type' => 'number'],
+                            ]]],
+                            'grandTotal' => ['type' => 'object', 'properties' => [
+                                'real' => ['type' => 'number'],
+                                'projected' => ['type' => 'number'],
+                                'total' => ['type' => 'number'],
+                            ]],
+                        ],
+                    ]),
+                    '400' => new Response('No club in context, or invalid from/to, or no window (no active season)'),
+                    '401' => new Response('Unauthorized (missing/expired JWT)'),
+                ],
+                summary: 'Heures d\'utilisation des gymnases par jour (réalisées vs à venir), et par niveau',
+                parameters: $windowParameters,
+            )),
             '/api/school-holidays' => new PathItem(get: new Operation(
                 operationId: 'getSchoolHolidays',
                 tags: ['Calendars'],

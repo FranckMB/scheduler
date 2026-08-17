@@ -504,7 +504,14 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // réglage pour la PROCHAINE génération. Cacher le fait ne le supprime pas : on l'annonce
   // (`staleVenueSessions`) et on invite à régénérer.
   const emptySlots = useMemo(() => computeEmptySlots(layerSlots, slots, validScheduleId ?? ""), [layerSlots, slots, validScheduleId]);
-  const gridSlots = useMemo(() => ("gymnase" === viewMode ? [...slots, ...emptySlots] : slots), [viewMode, slots, emptySlots]);
+  // P2-33 : la vue « jour » réutilise le layout gymnase (colonnes = gymnases) ; elle montre
+  // donc aussi les fenêtres libres (mode cible P2-30), sinon passer en « Par jour · tous les
+  // jours » escamoterait silencieusement les cases vides — une « surprise à l'arrivée » que la
+  // décision fondateur (défaut = le rendu actuel) proscrit. Le filtre jour les rétrécit ensuite.
+  const gridSlots = useMemo(
+    () => ("gymnase" === viewMode || "jour" === viewMode ? [...slots, ...emptySlots] : slots),
+    [viewMode, slots, emptySlots],
+  );
 
   // --- P2-30 : mode cible, éviction, dérive, undo -----------------------------------------
   const teamNameOf = (teamId: string): string => lookups.teams.get(teamId)?.name ?? "une équipe";

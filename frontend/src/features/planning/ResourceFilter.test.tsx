@@ -30,6 +30,17 @@ describe("ResourceFilter — un filtre posé doit se voir", () => {
     expect(screen.getByRole("button", { expanded: false })).toHaveClass("text-accent");
   });
 
+  it("le libellé SUIT la vue « jour » — « Jours : … » (P2-33)", () => {
+    // En 4e vue, le filtre accolé porte sur les jours : son libellé doit le dire, comme
+    // « Gymnases : … » / « Équipes : … » suivent leurs vues respectives.
+    render(<ResourceFilter viewMode="jour" groups={[{ label: null, resources: [{ id: "1", label: "Lun" }] }]} selected={[]} onToggle={noop} onClear={noop} />);
+    const trigger = screen.getByRole("button", { expanded: false });
+    // Le libellé nomme les JOURS (pas « Gymnases » / « Équipes ») ; « tous » = aucun jour coché.
+    expect(trigger).toHaveTextContent(/Jours\s*:/);
+    expect(trigger).toHaveTextContent("tous");
+    expect(trigger).not.toHaveTextContent("Gymnases");
+  });
+
   it("annonce le nombre sélectionné plutôt que « tous »", () => {
     render(<ResourceFilter viewMode="gymnase" groups={groups} selected={["v1", "v2"]} onToggle={noop} onClear={noop} />);
     expect(screen.getByRole("button", { expanded: false })).toHaveTextContent("2 sélectionnés");

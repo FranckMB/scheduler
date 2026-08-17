@@ -301,6 +301,54 @@ describe("buildGrid — libellé de groupe / fusion (P2-17 D4)", () => {
   });
 });
 
+describe("vue « Par jour » (P2-33)", () => {
+  // La 4ᵉ vue : l'axe FILTRABLE est le jour (clé = numéro ISO, libellé = nom du jour),
+  // mais les COLONNES de la grille restent les gymnases — filtrer sur lundi ramène les
+  // ~5 gymnases de ce jour au lieu des ~40 colonnes jour×gymnase.
+  it("expose le JOUR comme ressource (clé = ISO, libellé = nom du jour)", () => {
+    expect(resourceKeysForSlot(slot({ dayOfWeek: 1 }), "jour", lookups)).toEqual(["1"]);
+    expect(resourceKeysForSlot(slot({ dayOfWeek: 7 }), "jour", lookups)).toEqual(["7"]);
+  });
+
+  it("liste les jours dans l'ordre lundi→dimanche, pas alphabétique", () => {
+    // Dimanche AVANT lundi trierait « Dim » en tête en alphabétique — l'ordre doit rester ISO.
+    const slots = [slot({ id: "sun", venueId: "v1", dayOfWeek: 7 }), slot({ id: "mon", venueId: "v2", dayOfWeek: 1 })];
+    // Libellés EN TOUTES LETTRES dans le filtre (retour fondateur) — l'abrégé reste
+    // aux en-têtes de la grille, où la place manque.
+    expect(availableResources(slots, "jour", lookups)).toEqual([
+      { id: "1", label: "lundi" },
+      { id: "7", label: "dimanche" },
+    ]);
+  });
+
+  it("garde les GYMNASES en colonnes (le layout n'est pas réécrit sur le jour)", () => {
+    const slots = [
+      slot({ id: "a", venueId: "v1", dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90 }),
+      slot({ id: "b", venueId: "v2", dayOfWeek: 2, startTime: "18:00:00", durationMinutes: 90 }),
+    ];
+    const model = buildGrid(slots, "jour", lookups);
+    // Colonnes = gymnases (pas des jours) ; les jours restent les super-colonnes.
+    expect(model.columns.map((c) => c.resourceId)).toEqual(["v1", "v2"]);
+    expect(model.columns.map((c) => c.label)).toEqual(["Alpha", "Beta"]);
+    expect(model.dayGroups.map((g) => g.label)).toEqual(["Lun", "Mar"]);
+    // La couleur de gymnase transite comme en vue gymnase (colonnes = gymnases).
+    expect(model.columns.find((c) => c.resourceId === "v1")?.color).toBe("#ff0000");
+  });
+
+  it("un filtre sur un jour ne garde QUE ce jour — tous ses gymnases", () => {
+    const slots = [
+      slot({ id: "a", venueId: "v1", dayOfWeek: 1, startTime: "18:00:00" }),
+      slot({ id: "b", venueId: "v2", dayOfWeek: 1, startTime: "18:00:00" }),
+      slot({ id: "c", venueId: "v1", dayOfWeek: 2, startTime: "18:00:00" }),
+    ];
+    const model = buildGrid(slots, "jour", lookups, new Set(["1"]));
+    // Lundi seul : ses deux gymnases restent, mardi disparaît.
+    expect(model.dayGroups.map((g) => g.label)).toEqual(["Lun"]);
+    expect(model.columns.map((c) => c.resourceId).sort()).toEqual(["v1", "v2"]);
+    expect(model.cells.map((c) => c.slotId).sort()).toEqual(["a", "b"]);
+  });
+});
+
 describe("availableResources", () => {
   it("lists distinct resources for the view, sorted", () => {
     const slots = [slot({ venueId: "v2" }), slot({ venueId: "v1" }), slot({ venueId: "v1" })];
