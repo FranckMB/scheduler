@@ -29,23 +29,29 @@ export function GenerationWaiting() {
     return () => clearInterval(t);
   }, []);
   return (
-    <div className="flex flex-col items-center gap-6 py-12 text-center">
-      <svg
-        viewBox="0 0 800 500"
-        className="h-auto w-full max-w-[800px]"
-        role="img"
-        aria-label="Des créneaux se placent un à un sur la grille du planning"
-      >
+    <div className="flex flex-col items-center gap-6 py-8 text-center">
+      {/* Cadre : surface distincte du fond de page (bg-card), bordure + arrondi, overflow
+          masqué. `max-w-[560px]` borne la hauteur (~350 px, ratio 8:5) pour que scène + titre
+          + phrase + note tiennent dans 720 px de haut sans scroller. */}
+      <div className="w-full max-w-[560px] overflow-hidden rounded-[14px] border border-border bg-card">
+        <svg
+          viewBox="0 0 800 500"
+          className="block h-auto w-full"
+          role="img"
+          aria-label="Des créneaux se placent un à un sur la grille du planning"
+        >
         <defs>
           <clipPath id="gw-bands">
             <rect x="0" y="0" width="230" height="500" />
             <rect x="570" y="0" width="230" height="500" />
           </clipPath>
         </defs>
-        <rect width="800" height="500" fill="var(--background)" />
+        <rect width="800" height="500" fill="var(--card)" />
 
-        {/* Terrain en filigrane sur les deux bandes latérales */}
-        <g clipPath="url(#gw-bands)" fill="none" stroke="var(--border)" strokeWidth="2" opacity=".7">
+        {/* Terrain en filigrane sur les deux bandes latérales. Tracé en `muted-foreground`
+            (et non `border`, trop proche de la surface pour se lire) à faible opacité : un
+            filigrane VISIBLE mais en retrait des créneaux qui se remplissent. */}
+        <g clipPath="url(#gw-bands)" fill="none" stroke="var(--muted-foreground)" strokeWidth="2" opacity=".4">
           <rect x="16" y="16" width="768" height="468" rx="3" />
           <path d="M16 90h124a94 94 0 0 1 0 320H16" />
           <path d="M784 90H660a94 94 0 0 0 0 320h124" />
@@ -199,7 +205,8 @@ export function GenerationWaiting() {
           <rect x="694" y="414" width="30" height="5" rx="2.5" fill="var(--muted-foreground)" opacity=".45" />
           <rect x="694" y="434" width="54" height="12" rx="4" fill="var(--muted-foreground)" opacity=".18" />
         </g>
-      </svg>
+        </svg>
+      </div>
 
       <div className="space-y-1">
         <p className="text-lg font-medium">Génération du planning…</p>
