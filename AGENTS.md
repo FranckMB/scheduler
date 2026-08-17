@@ -1,4 +1,4 @@
-# ClubScheduler — Agent Context
+# Amateo — Agent Context
 
 > **The canonical operational index has moved to [`CLAUDE.md`](CLAUDE.md).**
 > This file is kept as a pointer so non-Claude agents still find their way in.

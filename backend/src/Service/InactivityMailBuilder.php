@@ -19,14 +19,17 @@ final class InactivityMailBuilder
         private readonly string $frontendBaseUrl = '',
         // Expéditeur unique (P5-15) — le défaut ne sert qu'aux tests unitaires.
         private readonly MailFrom $mailFrom = new MailFrom,
+        // Nom produit unique (P5-15) — le défaut ne sert qu'aux tests unitaires.
+        private readonly ProductIdentity $productIdentity = new ProductIdentity,
     ) {}
 
     public function build(string $to, string $firstName): Email
     {
+        $product = $this->productIdentity->name();
         $lines = [
             \sprintf('Bonjour %s,', $firstName),
             '',
-            'Votre compte ClubScheduler est inactif depuis presque deux ans.',
+            "Votre compte {$product} est inactif depuis presque deux ans.",
             'Conformément à notre politique de conservation des données (RGPD), il sera',
             'anonymisé définitivement dans un mois si vous ne vous reconnectez pas d\'ici là.',
             '',

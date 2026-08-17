@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { PRODUCT_NAME } from "@/shared/lib/product";
 import { useThemeStore } from "@/shared/stores/themeStore";
 
 interface AuthLayoutProps {
@@ -23,7 +24,7 @@ export function AuthLayout({ title, description, children, footer }: AuthLayoutP
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CalendarCheck2 className="size-6 text-accent" />
-            <span className="text-lg font-semibold">ClubScheduler</span>
+            <span className="text-lg font-semibold">{PRODUCT_NAME}</span>
           </div>
           <Button variant="ghost" size="icon" aria-label="Basculer le thème" onClick={toggleMode}>
             {mode === "dark" ? <Sun /> : <Moon />}

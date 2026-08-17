@@ -7,6 +7,7 @@ namespace App\Controller;
 use App\Entity\User;
 use App\Service\MailFrom;
 use App\Service\PasswordPolicy;
+use App\Service\ProductIdentity;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -37,6 +38,7 @@ final class PasswordController extends AbstractController
         private readonly string $frontendBaseUrl,
         private readonly PasswordPolicy $passwordPolicy,
         private readonly MailFrom $mailFrom,
+        private readonly ProductIdentity $productIdentity,
     ) {}
 
     #[Route('/api/password/forgot', name: 'api_password_forgot', methods: ['POST'])]
@@ -65,7 +67,7 @@ final class PasswordController extends AbstractController
                     (new Email)
                         ->from($this->mailFrom->address())
                         ->to($user->getEmail())
-                        ->subject('Réinitialisation de votre mot de passe ClubScheduler')
+                        ->subject(\sprintf('Réinitialisation de votre mot de passe %s', $this->productIdentity->name()))
                         ->text("Pour réinitialiser votre mot de passe, ouvrez ce lien :\n{$link}\n\nCe lien expire dans 1 heure."),
                 );
             } catch (Throwable) {

@@ -1,5 +1,7 @@
 import { Link } from "react-router";
 
+import { PRODUCT_NAME, PUBLISHER_NAME } from "@/shared/lib/product";
+
 import { TERMS_VERSION } from "./terms";
 
 /**
@@ -31,10 +33,11 @@ export function PrivacyPage() {
 
       <Section title="1. Qui sommes-nous (responsable de traitement)">
         <p>
-          ClubScheduler édite un service de planification d'entraînements pour clubs sportifs. Pour les données de
-          votre <strong>compte</strong> (identité, email), ClubScheduler est responsable de traitement. Pour les
-          données que votre <strong>club</strong> saisit (coachs, équipes, plannings), le club est responsable de
-          traitement et ClubScheduler agit comme sous-traitant.
+          <strong>{PRODUCT_NAME}</strong>, édité par <strong>{PUBLISHER_NAME}</strong>, est un service de
+          planification d'entraînements pour clubs sportifs. Pour les données de votre <strong>compte</strong>{" "}
+          (identité, email), {PUBLISHER_NAME} est responsable de traitement. Pour les données que votre{" "}
+          <strong>club</strong> saisit (coachs, équipes, plannings), le club est responsable de traitement et{" "}
+          {PUBLISHER_NAME} agit comme sous-traitant.
         </p>
         <p>{PLACEHOLDER}</p>
       </Section>

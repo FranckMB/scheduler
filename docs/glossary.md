@@ -1,4 +1,4 @@
-# Glossaire ClubScheduler — termes métier & clés de payload
+# Glossaire Amateo — termes métier & clés de payload
 
 > **Un concept = un mot.** Glossaire transverse (les termes traversent les zones — le payload est
 > le contrat). Référencé depuis `CLAUDE.md` §Pointers ; vocabulaire contraintes exhaustif :

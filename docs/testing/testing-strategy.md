@@ -1,6 +1,6 @@
-# Testing Strategy — ClubScheduler
+# Testing Strategy — Amateo
 
-Last verified @ 2026-08-11 (recalé ce jour : spec `modal-reachability` + socle superadmin e2e, préflight en DEUX endroits — Makefile et step CI ; précédemment 2026-08-08 : graphe des jobs + `needs` re-vérifiés contre `.github/workflows/ci.yml` ; la liste des blocking-tests a été **retirée d'ici** — elle vit en `CLAUDE.md` §4, ses deux copies ayant dérivé, audit DOC-26)
+Last verified @ 2026-08-17 (statut posé ce jour : titre recalé ClubScheduler → Amateo, P5-15 — aucune autre vérification de fond faite ce passage) ; précédemment 2026-08-11 (recalé ce jour : spec `modal-reachability` + socle superadmin e2e, préflight en DEUX endroits — Makefile et step CI ; précédemment 2026-08-08 : graphe des jobs + `needs` re-vérifiés contre `.github/workflows/ci.yml` ; la liste des blocking-tests a été **retirée d'ici** — elle vit en `CLAUDE.md` §4, ses deux copies ayant dérivé, audit DOC-26)
 
 Scope: backend + engine. The rebuilt frontend has its own tests (Vitest + RTL unit/integration with `vi.mock`, Playwright e2e in `frontend/tests/e2e`, and the container screenshot pipelines). Companion to [`/CLAUDE.md`](../../CLAUDE.md) §4 and [`../project-map.md`](../project-map.md).
 

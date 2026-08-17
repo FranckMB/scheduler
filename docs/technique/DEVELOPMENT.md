@@ -1,4 +1,4 @@
-# ClubScheduler — Development Guide
+# Amateo — Development Guide
 
 ## Quick Start
 
@@ -24,7 +24,7 @@ that brings new migrations, run `make bootstrap` — `make start` never migrates
 
 ## Architecture
 
-ClubScheduler is a monorepo with three main stacks:
+Amateo is a monorepo with three main stacks:
 
 - **backend/** — Symfony 7 + API Platform 4 (PHP 8.4)
 - **engine/** — Python 3.12 + FastAPI + OR-Tools CP-SAT

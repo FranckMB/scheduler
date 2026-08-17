@@ -1,4 +1,4 @@
-# ClubScheduler — Operational Index
+# Amateo — Operational Index
 
 > Canonical agent cheat-sheet. **Règles toujours actives seulement** — le détail vit dans `docs/`,
 > les conventions par zone dans `.claude/rules/` (chargées quand la zone est touchée), les
@@ -9,7 +9,9 @@
 
 ## 1. What this is
 
-ClubScheduler generates per-club, per-season training schedules for basketball clubs (FFBB).
+Amateo (edited by Maratech — product/publisher name is a single variable, never a literal:
+`App\Service\ProductIdentity` backend, `shared/lib/product.ts` frontend, P5-15) generates
+per-club, per-season training schedules for basketball clubs (FFBB).
 A constraint solver (OR-Tools CP-SAT) places teams into venue time-slots under hard rules + a soft
 scoring objective. **Backend** orchestrates/persists/exposes the API, **engine** solves,
 **frontend** renders (wizard to enter data → generate → work-loop to adjust/regenerate).

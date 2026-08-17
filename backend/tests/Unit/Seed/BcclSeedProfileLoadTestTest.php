@@ -48,7 +48,7 @@ final class BcclSeedProfileLoadTestTest extends TestCase
         $profile = BcclSeedProfile::loadTest(7);
         self::assertSame('Club Charge 7', $profile->clubName);
         self::assertSame('club-charge-7', $profile->clubSlug);
-        self::assertSame('charge-7@clubscheduler.local', $profile->managerEmail);
+        self::assertSame('charge-7@amateo.local', $profile->managerEmail);
     }
 
     public function testDisjointFromDevAndDemoProfiles(): void

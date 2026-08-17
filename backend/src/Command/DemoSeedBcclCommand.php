@@ -50,7 +50,7 @@ final class DemoSeedBcclCommand extends Command
     protected function configure(): void
     {
         $this->addOption('password', null, InputOption::VALUE_REQUIRED, 'Password of the demo manager account (min 12 chars). Required at first creation, optional on reset.');
-        $this->addOption('email', null, InputOption::VALUE_REQUIRED, 'Demo manager login.', 'demo-bccl@clubscheduler.fr');
+        $this->addOption('email', null, InputOption::VALUE_REQUIRED, 'Demo manager login.', 'demo-bccl@amateo.fr');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int

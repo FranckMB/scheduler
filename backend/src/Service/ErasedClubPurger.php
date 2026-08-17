@@ -27,7 +27,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * que publiés par la FFBB (source FfbbClubPopulator, base légale intérêt
  * légitime — organisation des rencontres, futur annuaire adverse, win-back).
  * Les comptes User des membres NE sont PAS touchés : ils appartiennent à leurs
- * titulaires (responsable de traitement = ClubScheduler), qui peuvent les
+ * titulaires (responsable de traitement = Maratech), qui peuvent les
  * effacer eux-mêmes via DELETE /api/me.
  *
  * Tourne sous le GUC du club (posé par l'appelant, pattern PurgeSeasonsCommand).

@@ -9,6 +9,7 @@ use App\Service\AdminDataFreshnessService;
 use App\Service\AdminHealthService;
 use App\Service\HealthAlertEvaluator;
 use App\Service\MailFrom;
+use App\Service\ProductIdentity;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -42,6 +43,8 @@ final class HealthAlertCommand extends Command
         private readonly ManagerRegistry $registry,
         // Même expéditeur que tous les mails de l'app (domaine vérifié, SPF/DKIM alignés).
         private readonly MailFrom $mailFrom,
+        // Nom produit unique (P5-15) — préfixe des sujets d'alerte superadmin.
+        private readonly ProductIdentity $productIdentity,
     ) {
         parent::__construct();
     }
@@ -78,9 +81,10 @@ final class HealthAlertCommand extends Command
             if ([] !== $diff['recovered']) {
                 $sections[] = "De nouveau au vert :\n" . implode("\n", array_map(static fn (string $key): string => '• ' . $key, $diff['recovered']));
             }
+            $product = $this->productIdentity->name();
             $subject = [] !== $diff['fired']
-                ? \sprintf('🔴 ClubScheduler — %d alerte(s)', \count($diff['fired']))
-                : \sprintf('🟢 ClubScheduler — %d check(s) rétabli(s)', \count($diff['recovered']));
+                ? \sprintf('🔴 %s — %d alerte(s)', $product, \count($diff['fired']))
+                : \sprintf('🟢 %s — %d check(s) rétabli(s)', $product, \count($diff['recovered']));
             $this->send($recipients, $subject, implode("\n\n", $sections));
             $io->writeln(\sprintf('Transition email sent (%d fired, %d recovered).', \count($diff['fired']), \count($diff['recovered'])));
         } else {

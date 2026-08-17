@@ -162,7 +162,7 @@ externe.
 # PROMPT PRÊT À COLLER (pour un designer, humain ou IA)
 
 ```
-Tu es directeur artistique pour « amateo » (ClubScheduler), un SaaS qui génère les plannings
+Tu es directeur artistique pour « Amateo », un SaaS qui génère les plannings
 d'entraînement de clubs sportifs amateurs (basketball actif aujourd'hui ; football et rugby
 arrivent). Utilisateurs : bénévoles de clubs, sur desktop ET mobile, thème sombre et clair.
 

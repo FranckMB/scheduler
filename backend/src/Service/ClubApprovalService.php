@@ -52,6 +52,7 @@ final class ClubApprovalService
         private readonly LoggerInterface $logger,
         private readonly string $frontendBaseUrl,
         private readonly MailFrom $mailFrom,
+        private readonly ProductIdentity $productIdentity,
     ) {}
 
     /**
@@ -89,14 +90,15 @@ final class ClubApprovalService
         }
         $link = rtrim($this->frontendBaseUrl, '/') . '/club-approval/' . $request->getToken();
         $requesterName = trim($requester->getFirstName() . ' ' . $requester->getLastName());
+        $product = $this->productIdentity->name();
         try {
             $this->mailer->send(
                 (new Email)
                     ->from($this->mailFrom->address())
                     ->to($clubEmail)
-                    ->subject(($reminder ? 'Rappel — ' : '') . \sprintf('%s demande à créer l\'espace ClubScheduler de %s', $requesterName, $request->getClubName()))
+                    ->subject(($reminder ? 'Rappel — ' : '') . \sprintf('%s demande à créer l\'espace %s de %s', $requesterName, $product, $request->getClubName()))
                     ->text(\sprintf(
-                        "Bonjour,\n\n%s (%s) demande à créer et gérer l'espace ClubScheduler du club %s (code FFBB %s).\n\nSi cette personne est bien un gestionnaire de votre club, approuvez sa demande :\n%s\n\nSinon, refusez-la depuis la même page. Sans réponse, la demande expire le %s.\n\nClubScheduler",
+                        "Bonjour,\n\n%s (%s) demande à créer et gérer l'espace {$product} du club %s (code FFBB %s).\n\nSi cette personne est bien un gestionnaire de votre club, approuvez sa demande :\n%s\n\nSinon, refusez-la depuis la même page. Sans réponse, la demande expire le %s.\n\n{$product}",
                         $requesterName,
                         $requester->getEmail(),
                         $request->getClubName(),
@@ -202,6 +204,7 @@ final class ClubApprovalService
         if (!$requester instanceof User) {
             return;
         }
+        $product = $this->productIdentity->name();
         try {
             $this->mailer->send(
                 (new Email)
@@ -209,8 +212,8 @@ final class ClubApprovalService
                     ->to($requester->getEmail())
                     ->subject($approved ? \sprintf('Votre espace %s est prêt', $request->getClubName()) : \sprintf('Demande refusée — %s', $request->getClubName()))
                     ->text($approved
-                        ? \sprintf("Bonjour,\n\nVotre demande a été approuvée : l'espace ClubScheduler de %s est créé et vous en êtes gestionnaire.\n\nConnectez-vous : %s\n\nClubScheduler", $request->getClubName(), rtrim($this->frontendBaseUrl, '/') . '/login')
-                        : \sprintf("Bonjour,\n\nVotre demande de création de l'espace %s a été refusée par le club.\n\nSi vous pensez qu'il s'agit d'une erreur, rapprochez-vous de votre club.\n\nClubScheduler", $request->getClubName())),
+                        ? \sprintf("Bonjour,\n\nVotre demande a été approuvée : l'espace {$product} de %s est créé et vous en êtes gestionnaire.\n\nConnectez-vous : %s\n\n{$product}", $request->getClubName(), rtrim($this->frontendBaseUrl, '/') . '/login')
+                        : \sprintf("Bonjour,\n\nVotre demande de création de l'espace %s a été refusée par le club.\n\nSi vous pensez qu'il s'agit d'une erreur, rapprochez-vous de votre club.\n\n{$product}", $request->getClubName())),
             );
         } catch (Throwable $e) {
             $this->logger->warning('Club approval requester notification failed', ['requestId' => $request->getId(), 'error' => $e->getMessage()]);

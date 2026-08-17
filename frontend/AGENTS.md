@@ -1,4 +1,4 @@
-# ClubScheduler — Frontend Agent Context
+# Amateo — Frontend Agent Context
 
 > React 19 · Vite 8 · TypeScript ~6.0 · Tailwind 4. The web UI of the club-scheduling
 > platform. Rebuilt from scratch and **active** — every path below exists in `src/`.
