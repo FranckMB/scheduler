@@ -682,6 +682,24 @@ Frontend (React)          Backend (Symfony)           Engine (Python)
 | **Redis** | Redis 7 | File d'attente des messages + verrous distribués |
 | **PostgreSQL** | PostgreSQL 16 | Stockage des entités (schedules, créneaux, diagnostics) |
 
+### Injection du placement précédent (après le hash de snapshot)
+
+Entre l'étape « 1. Construit le payload » et l'appel au moteur, `GenerateScheduleHandler` greffe
+un bloc `previousAssignments` (terme de **stabilité** moteur, contrat 2.11 : à score égal, le
+solveur garde une équipe sur son créneau précédent plutôt que d'en tirer un autre au hasard) —
+**après** avoir figé `snapshotData`/`snapshotHash`, jamais avant :
+
+1. Le payload est construit et **caché** par club+saison (`ScheduleConstraintBuilder::buildForClubSeason`/`buildForPeriodPlan`) et son hash (`snapshotHash`, comparé à `currentStructureHash` pour griser « Régénérer ») est calculé.
+2. **Ensuite seulement**, `GenerateScheduleHandler::resolvePreviousAssignmentSlots()` retrouve la source : la version explicitement **regardée** (`GenerateScheduleMessage::sourceScheduleId`, posé par `RegenerateController` — « Régénérer » depuis une version précise) sinon la dernière version `COMPLETED` du **même** plan (`/generate` initial, qui ne connaît pas de source), sinon rien (première génération). La source est toujours de la même lignée que `schedule.schedulePlanId` (ADR-0002 — jamais le socle sous un overlay).
+3. `ScheduleConstraintBuilder::withPreviousAssignments()` sérialise les créneaux de la source (`{teamId, venueId, dayOfWeek, startTime}`, HARD compris — un créneau HARD n'a pas de variable côté solveur, le terme de stabilité le saute sans double paiement) et les ajoute au payload **déjà construit**, sans toucher `snapshotData`/`snapshotHash`.
+
+Pourquoi cet ordre est **la seule option correcte** : le précédent est une préférence de
+**convergence**, pas une donnée de **structure**. L'inclure dans `snapshotHash` (recalculé par
+`SchedulePlanProvisioner` comme `currentStructureHash` — SANS le précédent) le ferait diverger à
+chaque régénération, dé-grisant le bouton « Régénérer » en permanence et affichant une fausse
+« structure modifiée ». Une liste de placements source vide n'ajoute pas la clé au payload
+(chemin byte-identique à l'historique).
+
 ---
 
 ## 11. Récapitulatif des endpoints

@@ -136,10 +136,17 @@ reported_score_override`, read by `result_builder.build_result` in place of
 `solver.ObjectiveValue()` when stability terms were used) so that
 `SCORE_FORMULA_VERSION` stays meaningful and unchanged.
 
-`previousAssignments` absent or empty (the default, and the only path reachable in
-production until the backend PR that feeds it — see `specs/evolution/roadmap.md`
-P3-21) takes the historical phase-2 objective (`placement + chaining`) byte-for-byte —
-this amendment adds a **dormant** third tier, exactly as A10 (2026-07-10) added a
-dormant-until-tripped input bound: neither relaxes a HARD constraint nor changes the
-no-relaxation decision above. Detail: `specs/courantes/engine-inventory.md` §POST
-/generate, §5 Solver.
+`previousAssignments` absent or empty takes the historical phase-2 objective (`placement
++ chaining`) byte-for-byte — this amendment adds a third tier that stays inert on any
+first generation, exactly as A10 (2026-07-10) added a dormant-until-tripped input bound:
+neither relaxes a HARD constraint nor changes the no-relaxation decision above.
+
+The backend PR that feeds this field (P3-21 PR B, same day) emits `previousAssignments`
+from the version the manager is *looking at* when they regenerate — `sourceScheduleId`
+on `GenerateScheduleMessage`, set by `RegenerateController` to `$source->getId()`, never
+to the plan's latest version. `GenerateScheduleHandler` resolves it (explicit source of
+the same lineage, else the plan's latest `COMPLETED` version, else none) and injects it
+into the solver payload *after* `snapshotHash` is computed — the previous placement is a
+convergence preference, not a structure fact, so it must never enter the hash that gates
+the "structure changed" signal. Detail: `specs/courantes/backend-inventory.md` §route
+`regenerate`, `specs/courantes/engine-inventory.md` §POST /generate, §5 Solver.
