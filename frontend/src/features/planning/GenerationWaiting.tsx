@@ -258,14 +258,17 @@ export function GenerationWaiting() {
             />
           </div>
 
-          {/* Titre + phrase tournante — région live (annoncée poliment au lecteur d'écran). */}
-          <div role="status" aria-live="polite" className="flex flex-col gap-1">
+          {/* Titre + phrase tournante — région live (annoncée poliment au lecteur d'écran).
+              Largeur en POURCENTAGE du cadre (42 % ≈ 340/800 du viewBox) : le décor se met à
+              l'échelle avec le cadre, pas un `max-w` en px — d'où le débordement sur les
+              créneaux latéraux quand le cadre rétrécissait. Le texte habille sur 2-3 lignes. */}
+          <div role="status" aria-live="polite" className="flex w-[42%] min-w-[180px] flex-col gap-1">
             <p className="text-lg font-medium text-foreground">Génération du planning…</p>
             <p key={i} className="animate-in fade-in text-sm text-muted-foreground">
               {PHRASES[i]}
             </p>
           </div>
-          <p className="max-w-[320px] text-xs leading-relaxed text-muted-foreground">La génération peut prendre 1 à 3 min selon la taille du club. Vous pouvez laisser cet écran ouvert.</p>
+          <p className="w-[42%] min-w-[180px] text-xs leading-relaxed text-muted-foreground">La génération peut prendre 1 à 3 min selon la taille du club. Vous pouvez laisser cet écran ouvert.</p>
         </div>
       </div>
     </div>
