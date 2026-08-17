@@ -17,6 +17,7 @@ use App\Enum\LockLevel;
 use App\Enum\LockOrigin;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
+use App\Exception\EngineTimeoutException;
 use App\Exception\EvictTargetLockedException;
 use App\Exception\EvictTargetMismatchException;
 use App\Exception\ScheduleGenerationInProgressException;
@@ -34,6 +35,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
 use Psr\Log\NullLogger;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
+use Symfony\Component\HttpClient\Exception\TimeoutException;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
 use Symfony\Component\Mercure\HubInterface;
@@ -422,6 +424,45 @@ final class SlotMoveVerdictTest extends KernelTestCase
         $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
         self::assertSame($slot->getDayOfWeek(), $reloaded?->getDayOfWeek());
         self::assertNotNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($occupantId));
+    }
+
+    /**
+     * Le moteur est TROP LENT (délai transport dépassé) : le service NE DOIT NI écrire, NI
+     * inventer un verdict — il traduit le timeout en {@see EngineTimeoutException} PORTANT son
+     * code machine (`engine_timeout`), que le contrôleur mappe en 504. Falsification : avaler le
+     * timeout en « oui » (écrire) ou en « non » nu (verdict inventé) rougit ici. Régression
+     * fondateur : sur un club dense, le déplacement était LÉGAL mais le backend abandonnait ~0,7 s
+     * avant la réponse du moteur et rendait un 502 muet.
+     */
+    public function testEngineTimeoutIsNotWrittenAndCarriesItsCode(): void
+    {
+        $ctx = $this->seed();
+        $slot = $ctx['slot'];
+        $originalDay = $slot->getDayOfWeek();
+
+        // Le client HTTP dépasse le délai : un TimeoutException (TimeoutExceptionInterface) — le
+        // MÊME type que « Idle timeout reached » observé en production locale.
+        $client = new MockHttpClient(static function (): MockResponse {
+            throw new TimeoutException('Idle timeout reached for "http://engine:8000/validate-assignments".');
+        });
+
+        try {
+            $this->service($client)->move($slot, 4, new DateTimeImmutable('20:00'), $ctx['venue2']);
+            self::fail('un timeout moteur doit lever, jamais rendre un verdict');
+        } catch (EngineTimeoutException $e) {
+            // Le service NOMME la cause pour le contrôleur (→ 504 + code), il ne devine pas.
+            self::assertSame('engine_timeout', $e->errorCode());
+        }
+
+        $this->em->clear();
+        $this->scopeGucToClub($ctx['clubId']);
+        $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($slot->getId());
+        self::assertInstanceOf(ScheduleSlotTemplate::class, $reloaded);
+        self::assertSame($originalDay, $reloaded->getDayOfWeek(), 'un timeout ne doit PAS déplacer le créneau');
+
+        $schedule = $this->em->getRepository(Schedule::class)->find($ctx['scheduleId']);
+        self::assertInstanceOf(Schedule::class, $schedule);
+        self::assertFalse($schedule->isManuallyEditedSinceGeneration(), 'un timeout ne marque pas le planning comme retouché');
     }
 
     protected function setUp(): void

@@ -6,7 +6,7 @@ import type { SchedulePlan } from "@/features/cockpit/api";
 import { useToastStore } from "@/shared/stores/toastStore";
 import { renderWithProviders } from "@/test/utils";
 
-import { getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError } from "./api";
+import { EngineTimeoutError, getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -62,12 +62,21 @@ vi.mock("./api", () => {
       this.code = code;
     }
   }
+  // Le timeout moteur (504) : classe RÉELLE pour que `error instanceof EngineTimeoutError` branche
+  // vers l'état d'échec de la modale d'essai (et le toast nommé du geste réel).
+  class EngineTimeoutError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "EngineTimeoutError";
+    }
+  }
   return {
   OverlaysExistError,
   MoveRejectedError,
   GenerationInProgressError,
   TargetLockedError,
   SlotEditError,
+  EngineTimeoutError,
   reopenSchedule: vi.fn(),
   listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }])),
   getSlots: vi.fn(() =>
@@ -1250,18 +1259,44 @@ describe("PlanningPage (integration)", () => {
       expect(screen.getByRole("button", { name: /Choisir la case cible/ })).toBeInTheDocument();
     });
 
-    it("erreur transport pendant l'essai → la modale se ferme, toast, mode armé", async () => {
+    it("timeout moteur pendant l'essai → la modale RESTE ouverte et NOMME l'échec (pas un numéro nu), avec Réessayer", async () => {
       const user = userEvent.setup();
       vi.mocked(getTeams).mockResolvedValue(twoTeams);
       vi.mocked(getSlots).mockResolvedValue(twoSlots);
-      vi.mocked(moveSlot).mockRejectedValueOnce(new Error("boom"));
+      // Le moteur a été trop lent : le geste était peut-être légal, mais le backend a abandonné.
+      vi.mocked(moveSlot).mockRejectedValueOnce(new EngineTimeoutError("Le moteur n'a pas répondu à temps — réessayez."));
       renderWithProviders(<PlanningPage />);
       await armMoveFrom(user, "U11");
       await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
 
-      await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "error" === t.variant)).toBe(true));
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Choisir la case cible/ })).toBeInTheDocument();
+      // La modale NE se ferme PAS : elle dit ce qui s'est passé (demande fondateur).
+      const dialog = await screen.findByRole("dialog");
+      expect(await within(dialog).findByRole("button", { name: /Réessayer/ })).toBeInTheDocument();
+      // Le message NOMME la cause (pas un numéro nu) — phrase unique au corps, pas au titre.
+      expect(within(dialog).getByText(/n'a pas répondu à temps/i)).toBeInTheDocument();
+      // Un échec n'est ni un « oui » (pas de [Déplacer et évincer]) ni un refus métier.
+      expect(within(dialog).queryByRole("button", { name: /Déplacer et évincer/ })).not.toBeInTheDocument();
+    });
+
+    it("Réessayer depuis l'état d'échec REJOUE l'essai sur la MÊME cible → verdict rendu", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      // 1er essai : timeout ; 2e essai (Réessayer) : accepté.
+      vi.mocked(moveSlot)
+        .mockRejectedValueOnce(new EngineTimeoutError("Le moteur n'a pas répondu à temps — réessayez."))
+        .mockResolvedValueOnce({ valid: true, dryRun: true, compromises: [], evicted: evictedBlock });
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+
+      const dialog = await screen.findByRole("dialog");
+      await user.click(await within(dialog).findByRole("button", { name: /Réessayer/ }));
+
+      // Le second essai porte le MÊME dryRun sur la MÊME cible, et le verdict s'affiche.
+      await within(dialog).findByRole("button", { name: /Déplacer et évincer/ });
+      expect(vi.mocked(moveSlot)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(moveSlot).mock.calls[1]).toEqual(["slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2", dryRun: true }]);
     });
 
     it("case VIDE → AUCUN essai : moveSlot appelé une seule fois, SANS dryRun (D-8)", async () => {

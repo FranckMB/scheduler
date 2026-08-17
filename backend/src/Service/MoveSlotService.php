@@ -9,6 +9,7 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Enum\LockLevel;
 use App\Exception\DurationMismatchException;
+use App\Exception\EngineTimeoutException;
 use App\Exception\EvictTargetLockedException;
 use App\Exception\EvictTargetMismatchException;
 use App\Exception\ScheduleGenerationInProgressException;
@@ -17,6 +18,7 @@ use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
+use Symfony\Contracts\HttpClient\Exception\TimeoutExceptionInterface;
 use Symfony\Contracts\HttpClient\Exception\TransportExceptionInterface;
 
 /**
@@ -57,8 +59,14 @@ final class MoveSlotService
      * figés « avant »/« après » du DELTA de compromis), chacun sous son budget de 2 s. Le timeout
      * transport doit donc les couvrir tous — un `timeout` calé sur le seul verdict rendait un 502
      * sur un dataset dense (ex. BCCL, 90 séances) alors que le moteur répondait juste après.
+     *
+     * MAISON UNIQUE des DEUX rails de retouche (`move()` ET `place()`) : ils partagent le sujet
+     * (même endpoint, même profil de coût), ils partagent donc la valeur. Calé sur MESURE : 9 à
+     * 9,6 s de calcul réel constatés sur le club réel (49 équipes, 90 séances) — 20 s laisse la
+     * marge d'un club plus gros ou d'une machine plus lente sans transformer une lenteur bénigne
+     * en 502. Au-delà, un vrai dépassement remonte NOMMÉ (504 `engine_timeout`), jamais avalé.
      */
-    private const int VALIDATE_HTTP_TIMEOUT_SECONDS = 8;
+    private const int VALIDATE_HTTP_TIMEOUT_SECONDS = 20;
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -74,7 +82,8 @@ final class MoveSlotService
      * @throws ScheduleGenerationInProgressException une génération tourne pour ce club (→ 409)
      * @throws EvictTargetMismatchException          l'occupant à évincer ne siège pas à la cible (→ 422)
      * @throws EvictTargetLockedException            l'occupant à évincer est verrouillé, D3 (→ 422)
-     * @throws TransportExceptionInterface           le moteur n'a pas répondu (→ 502)
+     * @throws EngineTimeoutException                le moteur a été trop lent (→ 504 `engine_timeout`)
+     * @throws TransportExceptionInterface           le moteur est injoignable/cassé (→ 502)
      * @throws InvalidArgumentException              le créneau n'a pas de planning parent (état incohérent)
      *
      * `$dryRun` (P2-32) : même chemin JUSQU'AU VERDICT INCLUS (gardes pré-moteur comprises — un
@@ -124,7 +133,7 @@ final class MoveSlotService
             'startTime' => $slot->getStartTime()->format('H:i'),
             'durationMinutes' => $slot->getDurationMinutes(),
         ];
-        $result = $this->engineClient->validateAssignment($payload, self::VALIDATE_HTTP_TIMEOUT_SECONDS);
+        $result = $this->validateUnderTimeout($payload);
 
         if (true !== ($result['valid'] ?? false)) {
             // (4) Le déplacement N'A PAS LIEU (ni l'éviction) — les règles violées sont rendues nommées.
@@ -190,7 +199,8 @@ final class MoveSlotService
      * @throws ScheduleGenerationInProgressException une génération tourne pour ce club (→ 409)
      * @throws SlotUnavailableException              aucune fenêtre de gymnase à ce créneau (→ 422)
      * @throws DurationMismatchException             la durée du client contredit la fenêtre (→ 422)
-     * @throws TransportExceptionInterface           le moteur n'a pas répondu (→ 502)
+     * @throws EngineTimeoutException                le moteur a été trop lent (→ 504 `engine_timeout`)
+     * @throws TransportExceptionInterface           le moteur est injoignable/cassé (→ 502)
      *
      * `$dryRun` (P2-32) : même chemin JUSQU'AU VERDICT INCLUS (résolution de durée/fenêtre
      * comprise), puis retour AVANT toute écriture — aucune ligne créée, aucun marqueur, aucun
@@ -226,7 +236,7 @@ final class MoveSlotService
             'startTime' => $startTime->format('H:i'),
             'durationMinutes' => $durationMinutes,
         ];
-        $result = $this->engineClient->validateAssignment($payload, self::VALIDATE_HTTP_TIMEOUT_SECONDS);
+        $result = $this->validateUnderTimeout($payload);
 
         if (true !== ($result['valid'] ?? false)) {
             $refused = ['valid' => false, 'violations' => $this->namedViolations($result), 'compromises' => []];
@@ -263,6 +273,26 @@ final class MoveSlotService
         $this->progressPublisher->publishSafely($schedule, []);
 
         return ['valid' => true, 'violations' => [], 'compromises' => $compromises, 'slotId' => $slot->getId()];
+    }
+
+    /**
+     * Le verdict moteur sous le délai transport commun (`move` ET `place`), avec la traduction du
+     * timeout : un moteur TROP LENT lève un {@see EngineTimeoutException} PORTANT son code (→ 504
+     * `engine_timeout`), DISTINCT d'un moteur injoignable/cassé qui reste un `TransportException`
+     * nu (→ 502). Rien n'est écrit dans les deux cas — l'appel précède toute mutation. On ne
+     * traduit QUE le timeout : les autres pannes transport gardent leur mapping historique.
+     *
+     * @param array<string, mixed> $payload
+     *
+     * @return array<string, mixed>
+     */
+    private function validateUnderTimeout(array $payload): array
+    {
+        try {
+            return $this->engineClient->validateAssignment($payload, self::VALIDATE_HTTP_TIMEOUT_SECONDS);
+        } catch (TimeoutExceptionInterface $e) {
+            throw new EngineTimeoutException('The engine did not answer in time.', 0, $e);
+        }
     }
 
     /**

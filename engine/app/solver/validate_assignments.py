@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, cast
 
 from ortools.sat.python import cp_model
@@ -37,6 +38,14 @@ from app.solver.objective import (
 )
 
 logger = logging.getLogger("engine.validate_assignments")
+
+# Au-delà de ce temps DÉJÀ consommé par le verdict, on n'entame pas le calcul des compromis :
+# le verdict est tranché, l'habillage explicatif est un bonus, et le backend coupe le transport
+# à 20 s (`MoveSlotService::VALIDATE_HTTP_TIMEOUT_SECONDS`). Sans ce garde-fou, un club qui
+# grossit rallonge silencieusement la réponse jusqu'à re-toucher le plafond — le geste échouerait
+# de nouveau alors qu'il est LÉGAL (incident du 2026-08-17). Ici il dégrade : réponse honnête,
+# compromis vides.
+COMPROMISE_ELAPSED_BUDGET_SECONDS = 8.0
 
 
 def _coach_label(coach: dict[str, Any]) -> str:
@@ -341,6 +350,7 @@ def validate_assignment(
     cassees sont ensuite NOMMEES pour l'UI. Sans le gel de baseline, le solveur
     pourrait tout redeplacer et le verdict ne voudrait plus rien dire.
     """
+    started = time.monotonic()
     data: dict[str, Any] = input_data.model_dump(by_alias=True)
     parsed = parse_v2_constraints(data.get("constraints", []))
     team_coach_map: dict[str, list[str]] = parsed.get("team_coach_map", {})
@@ -502,20 +512,44 @@ def validate_assignment(
     # P2-32 — SEULEMENT sur un candidat accepté : le DELTA de confort (compromis nommés). Le
     # chemin REFUS ci-dessus reste byte-identique (compromis vide). Deux solves entièrement
     # figés, sous le même budget court, en réutilisant les MÊMES builders que /generate.
+    #
+    # AU MIEUX : ces deux solves ajoutent JUSQU'À deux constructions de modèle + budgets par-dessus
+    # le verdict — sur un club dense, ils dominent le coût total et peuvent dépasser le délai
+    # transport côté backend. Or le verdict, lui, est DÉJÀ tranché : un candidat accepté ne doit
+    # jamais mourir de son habillage explicatif. Si le calcul échoue (budget épuisé → aucune
+    # solution à lire, ou toute autre panne du solveur), on répond quand même le verdict, avec des
+    # compromis vides. La FORME de la réponse ne change pas (contrat inchangé) — seul le contenu.
     compromises: list[dict[str, Any]] = []
-    if valid:
-        compromises = _compromises_for(
-            data,
-            parsed,
-            team_coach_map,
-            team_player_map,
-            frozen_keys,
-            candidate_key,
-            input_data.reference,
-            {"teams": team_names, "coaches": coach_names, "venues": venue_names},
-            timeout_seconds=input_data.solver_timeout_seconds,
-            seed=input_data.solver_seed,
+    elapsed = time.monotonic() - started
+    if valid and elapsed > COMPROMISE_ELAPSED_BUDGET_SECONDS:
+        logger.warning(
+            "verdict took %.1fs for club=%s team=%s; skipping compromises to answer in time",
+            elapsed,
+            input_data.club_id,
+            c_team,
         )
+    elif valid:
+        try:
+            compromises = _compromises_for(
+                data,
+                parsed,
+                team_coach_map,
+                team_player_map,
+                frozen_keys,
+                candidate_key,
+                input_data.reference,
+                {"teams": team_names, "coaches": coach_names, "venues": venue_names},
+                timeout_seconds=input_data.solver_timeout_seconds,
+                seed=input_data.solver_seed,
+            )
+        except Exception:
+            logger.warning(
+                "compromise computation failed for club=%s team=%s; returning the verdict without compromises",
+                input_data.club_id,
+                c_team,
+                exc_info=True,
+            )
+            compromises = []
 
     logger.info(
         "validate club=%s team=%s -> %s valid=%s violations=%d compromises=%d",

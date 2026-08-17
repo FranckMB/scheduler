@@ -2044,6 +2044,13 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         ],
                     ]),
                     '502' => new Response('Engine unreachable — nothing was written, retry'),
+                    '504' => $this->jsonResponse('The engine answered too slowly and the verdict was dropped — nothing was written. Distinct from 502: the engine works, it merely exceeded the transport ceiling. Retrying is the right move (body carries code=engine_timeout)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'code' => ['type' => 'string', 'enum' => ['engine_timeout']],
+                            'error' => ['type' => 'string', 'description' => 'Human message naming the timeout'],
+                        ],
+                    ]),
                 ],
                 summary: 'Move a slot (day / time / venue) under the solver verdict: written only if the engine accepts it, otherwise refused with the named broken rules. Optional evictSlotId frees an occupied target (a locked occupant refuses eviction before any engine call)',
                 requestBody: $this->jsonBody([
@@ -2094,6 +2101,13 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                         ],
                     ]),
                     '502' => new Response('Engine unreachable — nothing was written, retry'),
+                    '504' => $this->jsonResponse('The engine answered too slowly and the verdict was dropped — nothing was written. Distinct from 502: the engine works, it merely exceeded the transport ceiling. Retrying is the right move (body carries code=engine_timeout)', [
+                        'type' => 'object',
+                        'properties' => [
+                            'code' => ['type' => 'string', 'enum' => ['engine_timeout']],
+                            'error' => ['type' => 'string', 'description' => 'Human message naming the timeout'],
+                        ],
+                    ]),
                 ],
                 summary: 'Place a NEW slot (a drift session, e.g. a make-up) under the solver verdict: created only if the engine accepts it. No count guard — the verdict is the sole judge; the slot is created unlocked. Its duration is the venue window\'s, resolved server-side; durationMinutes in the body is only an assertion',
                 requestBody: $this->jsonBody([
