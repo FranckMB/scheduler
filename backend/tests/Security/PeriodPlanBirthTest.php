@@ -7,6 +7,7 @@ namespace App\Tests\Security;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Constraint;
+use App\Entity\ImplicitRuleSetting;
 use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
 use App\Entity\Season;
@@ -16,6 +17,8 @@ use App\Entity\VenueTrainingSlot;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Enum\ImplicitRuleIntensity;
+use App\Enum\ImplicitRuleKey;
 use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
@@ -86,6 +89,52 @@ final class PeriodPlanBirthTest extends WebTestCase
         self::assertSame(SchedulePlanType::HOLIDAY, $plan->getType());
         self::assertFalse($plan->isTeamSelectionInitialized(), 'Un plan neuf n’est pas encore configuré (garde de seed).');
         self::assertSame(0, $this->scheduleCount($club->getId()), 'Aucune génération ne doit être nécessaire.');
+    }
+
+    /**
+     * NR bien-être PAR PÉRIODE — inv. 5 : NAÎTRE = PORTER SES 4 LIGNES COPIÉES.
+     *
+     * À la naissance du plan, les 4 règles bien-être sont MATÉRIALISÉES (copie totale, jamais
+     * sparse) : la valeur de la portée SAISON s'il y a une déviation, sinon le défaut. Copie
+     * totale = un plan « tout au défaut » garde ses 4 lignes, donc reste distinguable d'un plan
+     * legacy sans copie (dont la lecture retombe sur la saison).
+     */
+    public function testTheAdaptGestureCopiesTheFourWellbeingRulesOntoThePlan(): void
+    {
+        [$user, $club, $season] = $this->createClubWithSeason();
+
+        // Une règle SAISON déviée du défaut AVANT le geste : la copie doit la refléter.
+        $this->scopeGucToClub($club->getId());
+        $seasonSetting = (new ImplicitRuleSetting)
+            ->setClubId($club->getId())
+            ->setSeasonId($season->getId())
+            ->setRuleKey(ImplicitRuleKey::COACH_REST_DAY)
+            ->setIntensity(ImplicitRuleIntensity::PREFERRED)
+            ->setParams(['minRestDays' => 3]);
+        $this->em->persist($seasonSetting);
+        $this->em->flush();
+
+        $entryId = $this->postPeriod($user, 'holiday', 'Vacances');
+        $planId = $this->adaptPeriod($user, $entryId);
+
+        $this->scopeGucToClub($club->getId());
+        $this->em->clear();
+        $copies = $this->em->getRepository(ImplicitRuleSetting::class)->findBy(['schedulePlanId' => $planId]);
+        self::assertCount(4, $copies, 'un plan naît avec SA copie des 4 règles bien-être (copie totale)');
+
+        $byKey = [];
+        foreach ($copies as $copy) {
+            $byKey[$copy->getRuleKey()->value] = $copy;
+        }
+        $keys = array_keys($byKey);
+        sort($keys);
+        self::assertSame(['ageAscending', 'coachRestDay', 'maxConsecutiveSessions', 'salarieDistribution'], $keys);
+
+        // La déviation de saison est COPIÉE ; une règle au défaut copie HARD / params null.
+        self::assertSame(ImplicitRuleIntensity::PREFERRED, $byKey['coachRestDay']->getIntensity());
+        self::assertSame(['minRestDays' => 3], $byKey['coachRestDay']->getParams());
+        self::assertSame(ImplicitRuleIntensity::HARD, $byKey['ageAscending']->getIntensity());
+        self::assertNull($byKey['ageAscending']->getParams());
     }
 
     public function testAdaptGestureBirthsAClosurePlan(): void

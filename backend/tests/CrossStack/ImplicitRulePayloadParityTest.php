@@ -27,17 +27,23 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 /**
  * NR BLOQUANT — axes backend↔engine contract + sémantique de contrainte (§7.1).
  *
- * Les 4 règles implicites « bien-être » sont réglables par club/saison (intensité HARD/PREFERRED
- * + seuils, contrat 2.7). Ce que le gestionnaire STOCKE doit être EXACTEMENT le bloc
- * `implicitRules` que le payload émet au solveur — DÉFAUTS RÉSOLUS compris (une règle sans ligne
- * = HARD, seuil historique). Le résolveur (`ImplicitRuleResolver`) est la maison unique dont
- * DÉRIVENT et la collection GET et le payload, ce qui rend « stocké == émis » vrai par
- * construction — ce test le PROUVE, dans les deux sens, sur le chemin base ET le chemin overlay
- * de période (season-scopé, ADR-0002 : pas de calendarEntryId).
+ * Les 4 règles implicites « bien-être » sont réglables PAR PORTÉE (ADR-0002 inv. 5 — intensité
+ * HARD/PREFERRED + seuils, contrat 2.7). Ce que le gestionnaire STOCKE doit être EXACTEMENT le
+ * bloc `implicitRules` que le payload émet au solveur — DÉFAUTS RÉSOLUS compris. Le résolveur
+ * (`ImplicitRuleResolver`) est la maison unique dont DÉRIVENT la collection GET et le payload.
  *
- * Falsifié dans les deux sens : un réglage stocké DOIT apparaître dans le payload (un builder qui
- * émettrait toujours les défauts échouerait), et une règle NON stockée DOIT valoir le défaut (un
- * builder qui inventerait une valeur échouerait).
+ * ⚠ INVARIANT RETOURNÉ (bien-être PAR PÉRIODE) — ce test gardait l'inverse (« l'overlay émet le
+ * MÊME bloc season-scopé que la base »). Il l'ÉPINGLE désormais dans l'autre sens :
+ *  - chemin BASE (plan null) : le payload émet la portée SAISON résolue ;
+ *  - un plan né APRÈS la fonctionnalité émet SA COPIE — une modification de la SAISON postérieure
+ *    à la naissance NE REDESCEND PAS dans son payload (la copie est matérialisée à la naissance) ;
+ *  - un plan LEGACY (zéro ligne) émet le bloc SAISON — le repli vivant est ÉPINGLÉ ici.
+ *
+ * Falsifié dans les deux sens : un réglage stocké DOIT apparaître (un builder qui émettrait
+ * toujours les défauts échoue), une règle non stockée DOIT valoir le défaut (un builder qui
+ * inventerait échoue), la copie de période NE DOIT PAS suivre la saison (un builder resté
+ * season-scopé pour les périodes échoue), et un plan legacy DOIT suivre la saison (un builder
+ * qui lirait aveuglément les lignes du plan émettrait des défauts et échoue).
  */
 #[Group('phase1')]
 #[Group('integration')]
@@ -84,27 +90,80 @@ final class ImplicitRulePayloadParityTest extends KernelTestCase
     }
 
     /**
-     * Chemin overlay de période : MÊME bloc season-scopé (ADR-0002) — un réglage vaut aussi pour
-     * les périodes, sans calendarEntryId propre.
+     * Chemin overlay de période : le plan né APRÈS la fonctionnalité émet SA COPIE, matérialisée
+     * à la naissance — une modification de la SAISON postérieure NE REDESCEND PAS.
      */
-    public function testPeriodOverlayPayloadEmitsTheSameSeasonScopedBlock(): void
+    public function testPeriodPlanEmitsItsOwnCopyAndASeasonChangeDoesNotCascade(): void
     {
         [$club, $season] = $this->seed();
 
+        // Réglage SAISON au moment de la naissance du plan : PREFERRED, maxConsecutive 5.
         $this->store($club, $season, ImplicitRuleKey::MAX_CONSECUTIVE_SESSIONS, ImplicitRuleIntensity::PREFERRED, ['maxConsecutive' => 5]);
         $this->em->flush();
 
         $entry = $this->holidayPeriod($club, $season);
+        // planIdOf → provisionPeriodPlan → matérialise les 4 lignes de CE plan (copie de la saison
+        // à cet instant : maxConsecutive PREFERRED 5, le reste au défaut).
         $planId = $this->planIdOf($entry);
+
+        // APRÈS la naissance, la SAISON change : maxConsecutive redevient HARD, seuil par défaut.
+        $seasonRow = $this->em->getRepository(ImplicitRuleSetting::class)->findOneBy([
+            'clubId' => $club->getId(),
+            'seasonId' => $season->getId(),
+            'schedulePlanId' => null,
+            'ruleKey' => ImplicitRuleKey::MAX_CONSECUTIVE_SESSIONS,
+        ]);
+        self::assertInstanceOf(ImplicitRuleSetting::class, $seasonRow);
+        $seasonRow->setIntensity(ImplicitRuleIntensity::HARD);
+        $seasonRow->setParams(null);
+        $this->em->flush();
+        $this->em->clear();
+
+        $payload = $this->builder->buildForPeriodPlan($club->getId(), $season->getId(), $planId, $entry);
+
+        // Le payload de période garde la COPIE de naissance…
+        self::assertSame(['intensity' => 'PREFERRED', 'maxConsecutive' => 5], $payload['implicitRules']['maxConsecutiveSessions']);
+        self::assertSame(
+            $this->resolver->resolveForPlan($club->getId(), $season->getId(), $planId),
+            $payload['implicitRules'],
+            'le payload de période émet EXACTEMENT la copie résolue de son plan',
+        );
+        // …et ne suit PAS la saison, qui vaut désormais le défaut HARD.
+        self::assertNotSame(
+            $this->resolver->resolve($club->getId(), $season->getId())['maxConsecutiveSessions'],
+            $payload['implicitRules']['maxConsecutiveSessions'],
+            'une modification de la saison postérieure à la naissance du plan ne redescend pas dans sa copie',
+        );
+    }
+
+    /**
+     * Un plan LEGACY (zéro ligne, né avant la fonctionnalité) émet le bloc SAISON — repli vivant.
+     */
+    public function testALegacyPlanWithoutCopyEmitsTheSeasonBlock(): void
+    {
+        [$club, $season] = $this->seed();
+
+        $this->store($club, $season, ImplicitRuleKey::COACH_REST_DAY, ImplicitRuleIntensity::PREFERRED, ['minRestDays' => 3]);
+        $this->em->flush();
+
+        $entry = $this->holidayPeriod($club, $season);
+        $planId = $this->planIdOf($entry);
+
+        // On simule un plan d'AVANT la fonctionnalité : ses 4 lignes copiées sont supprimées.
+        foreach ($this->em->getRepository(ImplicitRuleSetting::class)->findBy(['schedulePlanId' => $planId]) as $copied) {
+            $this->em->remove($copied);
+        }
+        $this->em->flush();
+        $this->em->clear();
 
         $payload = $this->builder->buildForPeriodPlan($club->getId(), $season->getId(), $planId, $entry);
 
         self::assertSame(
             $this->resolver->resolve($club->getId(), $season->getId()),
             $payload['implicitRules'],
-            'l\'overlay de période émet le MÊME bloc season-scopé que la base',
+            'un plan legacy (zéro ligne) retombe sur la portée saison — repli vivant, byte-identique à l\'avant-fonctionnalité',
         );
-        self::assertSame(['intensity' => 'PREFERRED', 'maxConsecutive' => 5], $payload['implicitRules']['maxConsecutiveSessions']);
+        self::assertSame(['intensity' => 'PREFERRED', 'minRestDays' => 3], $payload['implicitRules']['coachRestDay']);
     }
 
     /**

@@ -17,7 +17,9 @@ use App\Service\ImplicitRuleResolver;
 use App\Service\ManagementAccessGuard;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
+use App\State\Provider\ReadsUuidQueryParamTrait;
 use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
@@ -34,6 +36,9 @@ use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
  */
 final class ImplicitRuleSettingStateProcessor implements ProcessorInterface
 {
+    use AssertsSchedulePlanExistsTrait;
+    use ReadsUuidQueryParamTrait;
+
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
@@ -63,37 +68,75 @@ final class ImplicitRuleSettingStateProcessor implements ProcessorInterface
         }
 
         if ($operation instanceof DeleteOperationInterface) {
-            $this->reset($clubId, $seasonId, $ruleKey);
+            // ADR-0002 inv. 5 — la portée d'un DELETE se lit en QUERY (`?schedulePlanId=`).
+            $planId = $request instanceof Request ? $this->uuidQueryParam($request, 'schedulePlanId') : null;
+            $this->assertSchedulePlanExists($this->entityManager, $planId);
+            $this->reset($clubId, $seasonId, $planId, $ruleKey);
 
             return null;
         }
 
         \assert($data instanceof ImplicitRuleSettingInput);
 
-        return $this->upsert($clubId, $seasonId, $ruleKey, $data);
+        // La portée d'un PUT se lit dans le CORPS (`schedulePlanId`) — jamais mélanger les deux.
+        $planId = $data->schedulePlanId;
+        $this->assertSchedulePlanExists($this->entityManager, $planId);
+
+        return $this->upsert($clubId, $seasonId, $planId, $ruleKey, $data);
     }
 
-    private function reset(string $clubId, string $seasonId, ImplicitRuleKey $ruleKey): void
+    /**
+     * Réinitialiser une règle. Portée SAISON (plan NULL) : SUPPRIMER la ligne → retour au défaut
+     * (comportement historique). Portée PLAN : on GARDE l'invariant 4 lignes — on RE-COPIE la
+     * valeur SAISON courante (résolue : stockée saison, sinon défaut) dans la ligne du plan, on
+     * ne la supprime pas.
+     */
+    private function reset(string $clubId, string $seasonId, ?string $planId, ImplicitRuleKey $ruleKey): void
     {
-        // Idempotent : réinitialiser une règle déjà au défaut n'a rien à supprimer.
-        $existing = $this->repository->findOneByClubSeasonKey($clubId, $seasonId, $ruleKey);
-        if ($existing instanceof ImplicitRuleSetting) {
-            $this->entityManager->remove($existing);
-            $this->entityManager->flush();
+        if (null === $planId) {
+            // Idempotent : réinitialiser une règle de saison déjà au défaut n'a rien à supprimer.
+            $existing = $this->repository->findOneByScopeKey($clubId, $seasonId, null, $ruleKey);
+            if ($existing instanceof ImplicitRuleSetting) {
+                $this->entityManager->remove($existing);
+                $this->entityManager->flush();
+            }
+
+            return;
         }
+
+        // Un plan legacy sans copie : la matérialiser AVANT (la copie totale vaut déjà la
+        // valeur saison, donc « réinitialiser » y est un no-op — mais l'invariant 4 lignes tient).
+        $this->repository->materializeForPlan($clubId, $seasonId, $planId);
+
+        $planRow = $this->repository->findOneByScopeKey($clubId, $seasonId, $planId, $ruleKey);
+        if (!$planRow instanceof ImplicitRuleSetting) {
+            return; // matérialisation impossible (plan hors club/saison) — rien à réinitialiser
+        }
+        $seasonRow = $this->repository->findOneByScopeKey($clubId, $seasonId, null, $ruleKey);
+        $planRow->setIntensity($seasonRow instanceof ImplicitRuleSetting ? $seasonRow->getIntensity() : ImplicitRuleIntensity::HARD);
+        $planRow->setParams($seasonRow instanceof ImplicitRuleSetting ? $seasonRow->getParams() : null);
+        $this->entityManager->flush();
     }
 
-    private function upsert(string $clubId, string $seasonId, ImplicitRuleKey $ruleKey, ImplicitRuleSettingInput $input): ImplicitRuleSettingResource
+    private function upsert(string $clubId, string $seasonId, ?string $planId, ImplicitRuleKey $ruleKey, ImplicitRuleSettingInput $input): ImplicitRuleSettingResource
     {
         $intensity = ImplicitRuleIntensity::tryFrom($input->intensity ?? '')
             ?? throw new UnprocessableEntityHttpException(\sprintf('« %s » n\'est pas une intensité connue. Valeurs acceptées : %s.', $input->intensity ?? '(absente)', implode(', ', ImplicitRuleIntensity::values())));
 
         $params = $this->validateAndBuildParams($ruleKey, $input);
 
-        $entity = $this->repository->findOneByClubSeasonKey($clubId, $seasonId, $ruleKey)
+        // Portée PLAN : matérialiser la copie totale au PREMIER réglage (un plan legacy passe de
+        // 0 à 4 lignes ; un plan déjà matérialisé est inchangé — NOT EXISTS). La lecture, elle,
+        // ne matérialise JAMAIS (le build overlay n'écrit pas).
+        if (null !== $planId) {
+            $this->repository->materializeForPlan($clubId, $seasonId, $planId);
+        }
+
+        $entity = $this->repository->findOneByScopeKey($clubId, $seasonId, $planId, $ruleKey)
             ?? (new ImplicitRuleSetting)
                 ->setClubId($clubId)
                 ->setSeasonId($seasonId)
+                ->setSchedulePlanId($planId)
                 ->setRuleKey($ruleKey);
 
         $entity->setIntensity($intensity);
@@ -102,11 +145,11 @@ final class ImplicitRuleSettingStateProcessor implements ProcessorInterface
         $this->entityManager->persist($entity);
         $this->entityManager->flush();
 
-        return ImplicitRuleSettingResource::fromResolved(
-            $ruleKey,
-            $this->resolver->resolve($clubId, $seasonId)[$ruleKey->value],
-            false,
-        );
+        $resolved = null === $planId
+            ? $this->resolver->resolve($clubId, $seasonId)
+            : $this->resolver->resolveForPlan($clubId, $seasonId, $planId);
+
+        return ImplicitRuleSettingResource::fromResolved($ruleKey, $resolved[$ruleKey->value], false);
     }
 
     /**

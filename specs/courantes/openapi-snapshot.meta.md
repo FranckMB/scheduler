@@ -1,6 +1,12 @@
-Last verified @ 2026-08-17 (JSON **régénéré** — le 504 `engine_timeout` des deux routes de retouche entre au document ; plus tôt le même jour : nouvelle ressource `SharedTrainingGroup` (mutualisation, P2-27 PR A) et contrat backend⇄engine bumpé **2.11 → 2.12**)
+Last verified @ 2026-08-18 (JSON **régénéré** — bien-être PAR PÉRIODE, PR1 backend : `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId`)
 
 Changements récents :
+- **Bien-être par période — PR1 backend (2026-08-18)** : le DTO d'entrée
+  `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId` (uuid nullable, absent =
+  la saison) — la portée du réglage (PUT dans le corps, DELETE en query `?schedulePlanId=`, GET en
+  query). ADR-0002 inv. 5 : un plan de période reçoit sa COPIE des 4 règles à sa naissance, ne
+  suit plus la saison ensuite. Set-diff : **0 path ajouté/retiré**, property-only sur le DTO
+  d'entrée (`required` reste `intensity` seul). Contrat backend⇄engine **inchangé** (2.12).
 - **Renommage produit (2026-08-17)** : le titre du document passe de « ClubScheduler API » à
   **« Amateo API »** (`config/packages/api_platform.yaml`). Set-diff : aucun path, aucun schéma —
   un seul champ `info.title`.

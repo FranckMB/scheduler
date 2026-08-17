@@ -110,6 +110,74 @@ final class ImplicitRuleSettingApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(404);
     }
 
+    /**
+     * ADR-0002 inv. 5 — un réglage de PLAN de période est cloisonné de la portée SAISON : chacun
+     * se lit et s'écrit par SA portée, l'un ne voit jamais l'autre.
+     */
+    public function testPlanScopeIsIsolatedFromSeasonScope(): void
+    {
+        [$user] = $this->seed();
+        $auth = $this->authHeaders($user);
+        $planId = $this->adaptHolidayPlan($user);
+
+        // Écriture PAR PLAN (schedulePlanId dans le corps).
+        $this->client->request('PUT', '/api/implicit_rule_settings/maxConsecutiveSessions', [], [], $auth + ['CONTENT_TYPE' => 'application/json'], json_encode(['schedulePlanId' => $planId, 'intensity' => 'PREFERRED', 'maxConsecutive' => 5], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        // Lecture PAR PLAN : le réglage est là.
+        $this->client->request('GET', '/api/implicit_rule_settings?schedulePlanId=' . $planId, [], [], $auth);
+        $planRule = $this->member('maxConsecutiveSessions');
+        self::assertSame('PREFERRED', $planRule['intensity']);
+        self::assertSame(5, $planRule['maxConsecutive']);
+
+        // Lecture PAR SAISON (sans portée) : intacte, au défaut.
+        $this->client->request('GET', '/api/implicit_rule_settings', [], [], $auth);
+        $seasonRule = $this->member('maxConsecutiveSessions');
+        self::assertSame('HARD', $seasonRule['intensity'], 'la portée saison ne voit pas le réglage du plan');
+        self::assertSame(3, $seasonRule['maxConsecutive']);
+        self::assertTrue($seasonRule['isDefault']);
+    }
+
+    /**
+     * DELETE en portée PLAN = RE-COPIER la valeur SAISON courante dans la ligne du plan (invariant
+     * 4 lignes conservé) — surtout PAS revenir au défaut du moteur ni supprimer la ligne.
+     */
+    public function testPlanScopeDeleteRecopiesTheSeasonValue(): void
+    {
+        [$user] = $this->seed();
+        $auth = $this->authHeaders($user);
+
+        // La SAISON dévie du défaut : coachRestDay PREFERRED, minRestDays 2.
+        $this->client->request('PUT', '/api/implicit_rule_settings/coachRestDay', [], [], $auth + ['CONTENT_TYPE' => 'application/json'], json_encode(['intensity' => 'PREFERRED', 'minRestDays' => 2], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        $planId = $this->adaptHolidayPlan($user);
+
+        // Le PLAN dévie à son tour : HARD, minRestDays 4.
+        $this->client->request('PUT', '/api/implicit_rule_settings/coachRestDay', [], [], $auth + ['CONTENT_TYPE' => 'application/json'], json_encode(['schedulePlanId' => $planId, 'intensity' => 'HARD', 'minRestDays' => 4], \JSON_THROW_ON_ERROR));
+        self::assertResponseIsSuccessful();
+
+        // DELETE en portée plan : re-copie la valeur SAISON (PREFERRED 2), pas le défaut moteur.
+        $this->client->request('DELETE', '/api/implicit_rule_settings/coachRestDay?schedulePlanId=' . $planId, [], [], $auth);
+        self::assertResponseStatusCodeSame(204);
+
+        $this->client->request('GET', '/api/implicit_rule_settings?schedulePlanId=' . $planId, [], [], $auth);
+        $rules = $this->members();
+        self::assertCount(4, $rules, 'la portée plan garde TOUJOURS ses 4 règles (invariant 4 lignes)');
+        $planRule = $this->member('coachRestDay');
+        self::assertSame('PREFERRED', $planRule['intensity'], 'DELETE re-copie la valeur SAISON, pas le défaut moteur');
+        self::assertSame(2, $planRule['minRestDays']);
+    }
+
+    public function testAnUnknownPlanScopeIs422(): void
+    {
+        [$user] = $this->seed();
+
+        $unknownPlanId = '11111111-1111-4111-8111-111111111111';
+        $this->client->request('PUT', '/api/implicit_rule_settings/ageAscending', [], [], $this->authHeaders($user) + ['CONTENT_TYPE' => 'application/json'], json_encode(['schedulePlanId' => $unknownPlanId, 'intensity' => 'PREFERRED'], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -194,6 +262,33 @@ final class ImplicitRuleSettingApiTest extends WebTestCase
         sort($keys);
 
         return $keys;
+    }
+
+    /**
+     * Le geste réel : POST d'une période vacances puis « Adapter » (POST /api/schedule_plans) —
+     * le plan naît AVEC sa copie des 4 règles. Rend l'id du plan.
+     */
+    private function adaptHolidayPlan(User $user): string
+    {
+        $auth = $this->authHeaders($user);
+        $this->client->request('POST', '/api/calendar_entries', [], [], $auth + ['CONTENT_TYPE' => 'application/json'], json_encode([
+            'kind' => 'period',
+            'title' => 'Vacances',
+            'startDate' => '2026-10-19',
+            'endDate' => '2026-11-02',
+            'periodType' => 'holiday',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $entry = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($entry);
+
+        $this->client->request('POST', '/api/schedule_plans', [], [], $auth + ['CONTENT_TYPE' => 'application/json'], json_encode(['calendarEntryId' => $entry['id']], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+        $plan = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($plan);
+        self::assertIsString($plan['id']);
+
+        return $plan['id'];
     }
 
     /** @return array{HTTP_AUTHORIZATION: string} */

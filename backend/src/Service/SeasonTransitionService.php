@@ -390,12 +390,14 @@ final class SeasonTransitionService
             ++$constraints;
         }
 
-        // Réglages des règles implicites (bien-être) : recopiés tels quels — aucune référence
-        // d'entité à remapper, une règle est un cran d'intensité + un seuil. Une saison N+1
-        // hérite donc des assouplissements décidés en N (au lieu de repartir tout HARD). Pas
-        // comptabilisé dans `$counts` : la clé y ferait diverger un miroir exact ailleurs, et
-        // la copie n'a pas de conflit à diagnostiquer.
-        foreach ($this->rows(ImplicitRuleSetting::class, $clubId, $sourceId) as $setting) {
+        // Réglages des règles implicites (bien-être) de la portée SAISON UNIQUEMENT (plan NULL) :
+        // recopiés tels quels — aucune référence d'entité à remapper, une règle est un cran
+        // d'intensité + un seuil. Une saison N+1 hérite donc des assouplissements décidés en N
+        // (au lieu de repartir tout HARD). Les COPIES de période (plan non-NULL) sont exclues :
+        // leurs plans N n'existent pas en N+1 (les entrées de calendrier ne sont pas recopiées) —
+        // les copier avec plan NULL en ferait de faux réglages de SAISON. La copie n'ancre donc
+        // jamais de plan (schedulePlanId reste NULL). Pas comptabilisé dans `$counts`.
+        foreach ($this->entityManager->getRepository(ImplicitRuleSetting::class)->findBy(['clubId' => $clubId, 'seasonId' => $sourceId, 'schedulePlanId' => null]) as $setting) {
             $copy = new ImplicitRuleSetting;
             $copy->setClubId($clubId);
             $copy->setSeasonId($target->getId());

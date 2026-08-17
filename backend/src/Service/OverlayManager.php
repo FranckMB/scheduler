@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\CalendarEntry;
 use App\Entity\ConstraintConflict;
 use App\Entity\ConstraintPeriodOverride;
+use App\Entity\ImplicitRuleSetting;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
@@ -95,15 +96,16 @@ final class OverlayManager
 
     /**
      * Les réglages ancrés à un plan de période (inv. 5, lots C2-C3) : overrides
-     * d'équipes et de contraintes, créneaux du plan, réservations, modes gymnase.
-     * Partagé par la suppression d'une période, la découpe en semaines (qui emporte le
-     * plan-bloc de la mère) et la reprise du socle. L'appelant flush.
+     * d'équipes et de contraintes, créneaux du plan, réservations, modes gymnase, copie des
+     * règles implicites bien-être. Partagé par la suppression d'une période, la découpe en
+     * semaines (qui emporte le plan-bloc de la mère) et la reprise du socle. L'appelant flush.
      */
     public function purgePlanAnchoredSettings(string $schedulePlanId): void
     {
         // P2-27 — SharedTrainingGroupTeam (membres) avant SharedTrainingGroup (parent) : les deux
         // portent schedulePlanId (dénormalisé côté membre), la déclaration de période part avec le plan.
-        foreach ([TeamPeriodOverride::class, ConstraintPeriodOverride::class, VenueTrainingSlot::class, Reservation::class, VenuePeriodOverride::class, SharedTrainingGroupTeam::class, SharedTrainingGroup::class] as $class) {
+        // ImplicitRuleSetting : la copie des 4 règles bien-être matérialisée à la naissance du plan.
+        foreach ([TeamPeriodOverride::class, ConstraintPeriodOverride::class, VenueTrainingSlot::class, Reservation::class, VenuePeriodOverride::class, SharedTrainingGroupTeam::class, SharedTrainingGroup::class, ImplicitRuleSetting::class] as $class) {
             foreach ($this->entityManager->getRepository($class)->findBy(['schedulePlanId' => $schedulePlanId]) as $row) {
                 $this->entityManager->remove($row);
             }

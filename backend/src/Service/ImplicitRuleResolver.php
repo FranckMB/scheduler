@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Entity\ImplicitRuleSetting;
 use App\Enum\ImplicitRuleIntensity;
 use App\Enum\ImplicitRuleKey;
 use App\Repository\ImplicitRuleSettingRepository;
@@ -74,8 +75,36 @@ final class ImplicitRuleResolver
      */
     public function resolve(string $clubId, string $seasonId): array
     {
-        $stored = $this->repository->findByClubSeasonIndexed($clubId, $seasonId);
+        return $this->resolveFromIndexed($this->repository->findByClubSeasonIndexed($clubId, $seasonId));
+    }
 
+    /**
+     * Le bloc RÉSOLU des 4 règles pour un PLAN de période (ADR-0002 inv. 5).
+     *
+     * Un plan né après la fonctionnalité porte ses 4 lignes (copie prise à la naissance) : on
+     * les résout. Un plan LEGACY (aucune ligne) retombe sur la portée SAISON — repli VIVANT,
+     * byte-identique au comportement d'avant la fonctionnalité (décisif : rien ne change sous
+     * les pieds d'une reprise déjà en cours de travail).
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    public function resolveForPlan(string $clubId, string $seasonId, string $schedulePlanId): array
+    {
+        $stored = $this->repository->findByPlanIndexed($clubId, $seasonId, $schedulePlanId);
+        if ([] === $stored) {
+            return $this->resolve($clubId, $seasonId);
+        }
+
+        return $this->resolveFromIndexed($stored);
+    }
+
+    /**
+     * @param array<string, ImplicitRuleSetting> $stored
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function resolveFromIndexed(array $stored): array
+    {
         $resolved = [];
         foreach (ImplicitRuleKey::cases() as $ruleKey) {
             $setting = $stored[$ruleKey->value] ?? null;

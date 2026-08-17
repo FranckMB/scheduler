@@ -64,7 +64,7 @@ use Doctrine\ORM\Events;
  *   coach                       | club_id + season_id         | club + saison
  *   team                        | club_id + season_id         | club + saison  (cf. structureDiverged)
  *   team_tag_assignment         | club_id + season_id         | club + saison
- *   implicit_rule_setting       | club_id + season_id         | club + saison
+ *   implicit_rule_setting       | schedule_plan_id (nullable) | plan si non-NULL, sinon club+saison (**)
  *   calendar_entry              | club_id + season_id (*)     | club + saison  (repli, cf. (*))
  *   team_tag                    | club_id (pas de saison) (*) | club entier    (repli, cf. (*))
  *
@@ -76,6 +76,13 @@ use Doctrine\ORM\Events;
  *   - `team_tag` : la table ne porte PAS de `season_id` (un tag est club-level, partagé entre
  *     saisons). On ne peut donc pas mécaniquement le scoper à une saison : on marque le club
  *     entier. `team_tag_assignment`, elle, porte la saison → club+saison.
+ *
+ * (**) `implicit_rule_setting` : une ligne de PÉRIODE (plan non-NULL) est une COPIE matérialisée
+ *   → elle ne périme QUE son plan (patron override de période). Une ligne de SAISON (plan NULL)
+ *   est le REPLI VIVANT des plans legacy sans copie : tant que `resolveForPlan` retombe sur la
+ *   saison, ces plans la suivent VRAIMENT → on marque club+saison (et non seasonPlan). Cela
+ *   sur-marque un peu les plans de période nés après la fonctionnalité (qui ont leur copie) :
+ *   choix conservateur assumé — un faux « régénérez » coûte moins qu'un planning périmé ignoré.
  *
  * `structureDiverged` (Team) : le marquage ci-dessus RECOUVRE la bannière `structureDiverged`
  * (qui compare `generatedTeamCount` aux équipes du jour). Les deux coexistent volontairement :
@@ -225,9 +232,20 @@ final class ResourceChangeStaleScheduleListener
 
     public function implicitRuleSettingTouched(ImplicitRuleSetting $entity): void
     {
-        // Un réglage de règle implicite est season-scopé (ADR-0002 : il vaut pour la base ET
-        // les périodes de la saison). Modifier l'intensité ou un seuil change ce que le
-        // solveur applique → tout planning COMPLETED du club+saison est périmé.
+        $planId = $entity->getSchedulePlanId();
+        if (null !== $planId) {
+            // Réglage de PÉRIODE (copie matérialisée, ADR-0002) : il ne vaut que pour SON plan —
+            // marquer CE plan seulement (patron venue_period_override).
+            $this->markPlan($planId);
+
+            return;
+        }
+
+        // Réglage de SAISON (plan NULL) : REPLI VIVANT des plans legacy sans copie. Tant que ce
+        // repli existe (resolveForPlan retombe sur la saison), un plan legacy suit RÉELLEMENT la
+        // saison → on marque club+saison, PAS seulement le plan SEASON (à la différence de la
+        // grille, dont la période est toujours une copie franche). Sur-marque légèrement les plans
+        // de période nés APRÈS la fonctionnalité (qui ont leur copie) : conservateur assumé.
         $this->markClubSeason($entity->getClubId(), $entity->getSeasonId());
     }
 

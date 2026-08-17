@@ -11,17 +11,27 @@ use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
 /**
- * Le réglage d'UNE règle implicite « bien-être » pour un club+saison (contrat moteur 2.7).
+ * Le réglage d'UNE règle implicite « bien-être », par PORTÉE (contrat moteur 2.7).
  *
- * ⚠ ABSENCE DE LIGNE = DÉFAUT (HARD, seuils historiques) — aucun seeding. Une ligne n'existe
- * que quand le gestionnaire a CHOISI de dévier du défaut (assouplir en PREFERRED, ou changer
- * un seuil). Le payload est donc RÉSOLU à la lecture (`ImplicitRuleResolver`) : les 4 clés y
- * sont toujours, la ligne stockée l'emportant sur le défaut. Unicité (club, saison, règle).
+ * La portée est le couple club+saison PLUS `schedulePlanId` (ADR-0002 inv. 5) : NULL = la
+ * SAISON (base et repli des plans legacy), un UUID = un plan de période, qui possède SA COPIE
+ * des 4 règles prise à la naissance du plan (`SchedulePlanProvisioner`).
+ *
+ * ⚠ Portée SAISON (plan NULL) : ABSENCE DE LIGNE = DÉFAUT (HARD, seuils historiques) — aucun
+ * seeding, une ligne n'existe que quand le gestionnaire a dévié du défaut. Portée PLAN : les 4
+ * lignes sont MATÉRIALISÉES (copie totale, jamais sparse), pour qu'un plan « tout au défaut »
+ * reste distinguable d'un plan legacy sans copie. Le payload est RÉSOLU à la lecture
+ * (`ImplicitRuleResolver` : `resolve` pour la saison, `resolveForPlan` pour un plan). Unicité
+ * (club, saison, plan, règle) avec NULLS NOT DISTINCT (la migration porte le prédicat exact).
  */
 #[ORM\Entity(repositoryClass: ImplicitRuleSettingRepository::class)]
 #[ORM\Table(name: 'implicit_rule_setting')]
-#[ORM\UniqueConstraint(name: 'uniq_implicit_rule_club_season_key', columns: ['club_id', 'season_id', 'rule_key'])]
+// Colonnes de l'unicité seulement — le NULLS NOT DISTINCT (indispensable pour que deux réglages
+// de SAISON, plan NULL, ne se voient pas comme distincts) vit dans la migration : Doctrine ne
+// sait pas l'exprimer en attribut, et aucun gate schema:validate ne lit cet attribut.
+#[ORM\UniqueConstraint(name: 'uniq_implicit_rule_club_season_plan_key', columns: ['club_id', 'season_id', 'schedule_plan_id', 'rule_key'])]
 #[ORM\Index(name: 'idx_implicit_rule_club_season', columns: ['club_id', 'season_id'])]
+#[ORM\Index(name: 'idx_implicit_rule_plan', columns: ['schedule_plan_id'])]
 #[ORM\HasLifecycleCallbacks]
 class ImplicitRuleSetting implements TenantOwnedInterface
 {
@@ -44,6 +54,15 @@ class ImplicitRuleSetting implements TenantOwnedInterface
 
     #[ORM\Column(type: 'guid')]
     private string $seasonId;
+
+    /**
+     * L'ancre de portée (ADR-0002 inv. 5). NULL = réglage de SAISON (base + repli legacy) ;
+     * un UUID = réglage d'un plan de période (sa copie matérialisée). Colonne guid nue, PAS de
+     * FK (patron `venue_training_slot`/`reservation`/`shared_training_group`) : un plan supprimé
+     * emporte ses lignes par la purge applicative, pas par une cascade base.
+     */
+    #[ORM\Column(type: 'guid', nullable: true)]
+    private ?string $schedulePlanId = null;
 
     #[ORM\Column(length: 40, enumType: ImplicitRuleKey::class)]
     private ImplicitRuleKey $ruleKey;
@@ -136,6 +155,18 @@ class ImplicitRuleSetting implements TenantOwnedInterface
     public function setSeasonId(string $seasonId): self
     {
         $this->seasonId = $seasonId;
+
+        return $this;
+    }
+
+    public function getSchedulePlanId(): ?string
+    {
+        return $this->schedulePlanId;
+    }
+
+    public function setSchedulePlanId(?string $schedulePlanId): self
+    {
+        $this->schedulePlanId = $schedulePlanId;
 
         return $this;
     }
