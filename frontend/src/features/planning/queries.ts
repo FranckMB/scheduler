@@ -64,6 +64,10 @@ export function useSlots(scheduleId: string | null) {
     queryFn: () => planningApi.getSlots(scheduleId as string),
     enabled: null !== scheduleId,
     staleTime: 30_000,
+    // Changer de version/période garde la grille précédente à l'écran le temps que les
+    // nouveaux créneaux arrivent (au lieu de la vider) — l'écran la VOILE alors pour dire
+    // que ça travaille (cf. `slotsBusy` dans PlanningPage). Patron `admin/queries`.
+    placeholderData: (previous) => previous,
   });
 }
 

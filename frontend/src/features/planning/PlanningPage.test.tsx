@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -107,6 +107,13 @@ vi.mock("./api", () => {
 
 const navigate = vi.fn();
 vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
+
+// Le flux Mercure ouvre un `EventSource` (absent de jsdom) dès qu'une génération est
+// en vol : on le neutralise pour éprouver GenerationWaiting sans toucher au réseau.
+vi.mock("@/shared/lib/scheduleStream", () => ({
+  useScheduleStream: () => false,
+  isScheduleStreamConnected: () => false,
+}));
 
 const { meState, renameSpy, plansState, venueOverridesState, reservationsState, teamOverridesState } = vi.hoisted(() => ({
   meState: { chosenScheduleId: null as string | null },
@@ -275,6 +282,86 @@ describe("PlanningPage (integration)", () => {
     await userEvent.type(screen.getByRole("textbox", { name: /nom du planning/i }), "Saison 26-27{Enter}");
 
     expect(renameSpy).toHaveBeenCalledWith({ planId: "plan-1", name: "Saison 26-27" });
+  });
+
+  // Retour fondateur : « quand l'écran charge pour le planning overlay il y a une
+  // application qui mouline » — la grille restait affichée telle quelle, rien ne disait
+  // que ça travaillait. On bascule d'une version à l'autre : les créneaux de la 2e sont
+  // EN VOL (promesse non résolue), la grille reste visible mais VOILÉE (indicateur +
+  // aria-busy), puis nette une fois les créneaux arrivés.
+  it("voile la zone de grille pendant le (re)chargement des créneaux d'une version, puis le retire", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+      { id: "sched-2", name: "Toussaint V1", status: "COMPLETED", score: 8000, createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "toussaint-plan" },
+    ]);
+    let releaseSecond: (rows: unknown[]) => void = () => {};
+    const secondSlots = new Promise<unknown[]>((resolve) => {
+      releaseSecond = resolve;
+    });
+    vi.mocked(getSlots).mockImplementation((id: string) =>
+      "sched-2" === id
+        ? (secondSlots as Promise<Awaited<ReturnType<typeof getSlots>>>)
+        : Promise.resolve([{ id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null }]),
+    );
+
+    renderWithProviders(<PlanningPage />);
+    // La version initiale est affichée : la grille montre l'équipe.
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    // Rien ne mouline au repos.
+    expect(screen.queryByText(/chargement des créneaux/i)).not.toBeInTheDocument();
+
+    // Bascule vers la 2e version : ses créneaux sont en vol.
+    act(() => usePlanningStore.setState({ selectedScheduleId: "sched-2" }));
+
+    // La grille reste affichée (ancien contenu) MAIS voilée : indicateur + aria-busy.
+    expect(await screen.findByText(/chargement des créneaux/i)).toBeInTheDocument();
+    expect(screen.getByText("U11")).toBeInTheDocument();
+    expect(document.querySelector('[aria-busy="true"]')).not.toBeNull();
+
+    // Les créneaux arrivent : le voile disparaît, la grille redevient nette.
+    await act(async () => {
+      releaseSecond([{ id: "slot-2", scheduleId: "sched-2", teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 3, startTime: "17:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null }]);
+      await secondSlots;
+    });
+    await waitFor(() => expect(screen.queryByText(/chargement des créneaux/i)).not.toBeInTheDocument());
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  // L'écran d'attente de génération a son propre rendu : le voile de chargement des
+  // créneaux (qui, lui, s'attache à la GRILLE) ne doit pas s'y superposer.
+  it("n'ajoute PAS le voile de chargement par-dessus l'écran d'attente de génération", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Planning A", status: "PENDING", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+    ]);
+    // Les créneaux d'un planning en génération sont en vol : sans garde, le voile s'y collerait.
+    vi.mocked(getSlots).mockImplementation(() => new Promise(() => {}));
+
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText(/génération du planning/i)).toBeInTheDocument();
+    expect(screen.queryByText(/chargement des créneaux/i)).not.toBeInTheDocument();
+  });
+
+  // Retour coordinateur : au PREMIER chargement d'une version (aucune donnée précédente),
+  // l'écran affichait « Planning vide » PENDANT le fetch — un message FAUX. Tant que les
+  // créneaux sont en vol sans données, on montre l'état de chargement, jamais « vide ».
+  it("premier chargement (créneaux en vol, aucune donnée) : état de chargement, PAS « Planning vide »", async () => {
+    vi.mocked(getSlots).mockImplementation(() => new Promise(() => {}));
+
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText(/chargement des créneaux/i)).toBeInTheDocument();
+    expect(screen.queryByText(/planning vide/i)).not.toBeInTheDocument();
+  });
+
+  // Une fois la réponse arrivée et RÉELLEMENT vide, « Planning vide » revient (le vrai vide).
+  it("réponse arrivée réellement vide → « Planning vide »", async () => {
+    vi.mocked(getSlots).mockResolvedValue([]);
+
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText(/planning vide/i)).toBeInTheDocument();
+    expect(screen.queryByText(/chargement des créneaux/i)).not.toBeInTheDocument();
   });
 
   // Revue #339 : un club qui n'a JAMAIS généré n'a aucune version, donc aucun plan

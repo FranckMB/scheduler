@@ -1,7 +1,14 @@
 # Écrans à designer — spécification (fonds d'écran & écrans statiques par sport)
 
 > **Statut** : cadrage design vérifié contre le code le 2026-08-16 — rien n'est encore livré, aucun
-> asset n'existe. Rattachement roadmap : **P5-16** (habillage + câblage) — distinct de
+> asset n'existe. ⚠ **A1 a bougé sous le pied de ce cadrage le 2026-08-17** : le fondateur a fait
+> livrer une scène pour `GenerationWaiting.tsx` directement en code (motif basketball codé en dur,
+> **sans logo au centre** — l'« élément imposé » ci-dessous ne tient plus, voir la note dans A1).
+> Ce cadrage reste utile si on veut un jour remplacer cette scène par des assets DÉSIGNÉS, par
+> sport ; ce n'est plus le point de départ « aucune scène ». Comportement livré :
+> `specs/courantes/frontend-spec.md` §6.2, décision de retrait du logo :
+> `specs/courantes/identite-visuelle-club.md`.
+> Rattachement roadmap : **P5-16** (habillage + câblage) — distinct de
 > [`roadmap.md`](roadmap.md) **P5-14** qui arrête QUELS écrans système existent et sous quelle
 > forme (page/bandeau/inline/toast) : P5-14 est le catalogue d'états, cette spec est l'HABILLAGE
 > visuel de certains d'entre eux et le prompt prêt à donner au designer.
@@ -38,14 +45,21 @@
   doit rassurer (ça travaille), occuper l'attente, incarner le sport du club.
 - **⚠ Limitation n° 3 — ENCAPSULÉ, pas un wallpaper** : composant `GenerationWaiting.tsx`
   (`frontend/src/features/planning/`) rendu DANS la zone de contenu (wizard ou page planning),
-  colonne centrée. **Élément IMPOSÉ au centre : le logo du club** dans un cercle qui pulse (96 px,
-  `size-24`), avec 2 lignes de texte dessous (titre + phrase tournante) et une note. Aujourd'hui le
-  composant n'a AUCUNE scène autour — colonne nue sur le fond de page. Le design est une **scène
-  périphérique** autour de ce centre.
+  cadre centré.
+- **⚠ PÉRIMÉ depuis le 2026-08-17 — conservé pour mémoire du cadrage d'origine, PAS l'état actuel** :
+  ce paragraphe décrivait « aujourd'hui » (2026-08-16) un centre imposé (le logo du club dans un
+  cercle qui pulse, 96 px) sans aucune scène autour. **Depuis le 2026-08-17, une scène EST livrée**
+  (motif basketball codé en dur — mini-grille 4×4 qui se remplit, ballon qui rebondit, terrain
+  filigrané) et le centre imposé a changé de nature : **décision fondateur, plus AUCUN logo/initiale
+  du club** — le centre porte désormais la mini-grille + le titre/phrase tournante/note, tous pilotés
+  par les tokens de thème et l'accent du club (jamais un littéral). Détail :
+  `specs/courantes/frontend-spec.md` §6.2. Si ce cadrage sert un jour à commander des assets
+  DÉSIGNÉS par sport, ils remplaceraient ce motif basketball codé en dur — **pas** un logo à
+  ménager une place pour.
 - **Cadre de composition** : scène **800 × 500** (16:10), redimensionnée fluide entre ~560 px
   (mobile) et ~900 px de large.
-- **Zone protégée** : rectangle central **340 × 440** (logo + textes) — fond quasi vide à cet
-  endroit.
+- **Zone protégée** : rectangle central **340 × 440** (mini-grille + textes, plus de logo depuis le
+  2026-08-17 — voir ci-dessus) — fond quasi vide à cet endroit.
 - **Par sport : OUI** (basketball d'abord). Idée directrice : l'animation raconte « on place les
   créneaux » (ballon qui rebondit de case en case, terrain stylisé en filigrane, sifflet, chrono…).
 - **Livrables** : `generation-{sport}-{light|dark}.svg` + `generation-generic-*.svg`. Animation en
@@ -133,8 +147,8 @@ ne déclarent aucun `error_page` ; une panne rend la page blanche par défaut de
 1. **Accent par club** → assets neutres, jamais dépendants d'un bleu précis.
 2. **Sport connu seulement connecté** → pré-auth = générique ; fallback générique obligatoire
    partout.
-3. **Attente de génération = scène ENCAPSULÉE** autour d'un centre imposé (logo club qui pulse),
-   pas un fond plein écran.
+3. **Attente de génération = scène ENCAPSULÉE**, pas un fond plein écran — le centre porte
+   désormais la mini-grille + les textes (**plus de logo imposé depuis le 2026-08-17**, voir A1).
 4. **Crash/erreurs = génériques** (peuvent survenir avant auth).
 5. **Pages nginx = un fichier autonome**, zéro JS, zéro requête, pas de sport, thème par
    `prefers-color-scheme` seul.
@@ -171,11 +185,14 @@ Contraintes techniques NON NÉGOCIABLES :
 Livrables, par priorité :
 
 1. ATTENTE DE GÉNÉRATION (le plus important) — scène 800×500 affichée pendant que le
-   solveur calcule (30 s à 10 min). ATTENTION : au centre vit un élément IMPOSÉ par l'app
-   (le logo du club dans un cercle de 96 px qui pulse + 3 lignes de texte) — réserve un
-   rectangle central de 340×440 quasi vide. Ta scène vit AUTOUR : raconte « les créneaux
-   se placent » (ballon qui rebondit de case en case d'une grille, terrain en filigrane,
-   chrono). Variantes : basketball-light, basketball-dark, generic-light, generic-dark
+   solveur calcule (30 s à 10 min). ⚠ Une scène GÉNÉRIQUE (motif basketball codé en dur,
+   pas un asset désigné) existe déjà dans l'app : réserve un rectangle central de 340×440
+   quasi vide — il porte une mini-grille de créneaux qui se remplit + 3 lignes de texte
+   (PAS de logo). Ta scène vit AUTOUR de ce rectangle, comme la scène existante : raconte
+   « les créneaux se placent » (ballon qui rebondit de case en case d'une grille, terrain
+   en filigrane, chrono). Livrable attendu : une DÉCLINAISON par sport de cette même idée
+   (le motif basketball existant sert de référence), pas une scène différente dans son
+   principe. Variantes : basketball-light, basketball-dark, generic-light, generic-dark
    (+ football, rugby si tu peux). < 150 Ko chacune.
 
 2. PAGE INTROUVABLE (404 in-app) — illustration centrale 480×360, ton léger, clin d'œil

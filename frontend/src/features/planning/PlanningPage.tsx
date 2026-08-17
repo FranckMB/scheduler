@@ -1,6 +1,6 @@
 import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarX2, CheckCircle2, Lock, Pencil, Star, Undo2, X } from "lucide-react";
+import { AlertTriangle, CalendarX2, CheckCircle2, Loader2, Lock, Pencil, Star, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
@@ -175,7 +175,16 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const displayed = schedules.find((s) => s.id === validScheduleId) ?? null;
   const slotLayerId = null !== displayed && !isSeasonPlanType(displayed.planType) ? (displayed.schedulePlanId ?? null) : null;
 
-  const { data: generatedSlots = [] } = useSlots(validScheduleId);
+  // Requête des créneaux de la version affichée. On garde la requête ENTIÈRE (pas juste
+  // `data`) : son `isFetching` voile la grille pendant qu'elle (re)charge — sinon, en
+  // changeant de version/période, la grille gardait l'ancien contenu (placeholderData)
+  // sans qu'aucun signe ne dise que ça travaillait (retour fondateur : « ça mouline »).
+  const slotsQuery = useSlots(validScheduleId);
+  const generatedSlots = useMemo(() => slotsQuery.data ?? [], [slotsQuery.data]);
+  // Chargement ÉVIDENT : dès qu'une requête de créneaux est en vol pour la version
+  // affichée. Le voile lui-même vit dans la branche grille (jamais par-dessus
+  // GenerationWaiting, qui a son propre rendu).
+  const slotsBusy = null !== validScheduleId && slotsQuery.isFetching;
 
   // Génération en ÉCHEC : aucun créneau généré, mais les réservations (verrous HARD
   // posés par le gestionnaire) existent indépendamment du résultat — « par défaut il y
@@ -373,7 +382,6 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // the action here — else a second click double-runs the destructive restore.
   const actionBusy = validateMutation.isPending || reopenMutation.isPending || deleteMutation.isPending || regenerateFromMutation.isPending;
   const busy = lockMutation.isPending || moveMutation.isPending || dryRunMutation.isPending || placeMutation.isPending;
-  const clubInitial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
   // When a running generation finishes, pull the fresh slots + diagnostics.
   const prevStatus = useRef<string | null>(null);
@@ -1137,10 +1145,21 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           ) : null}
 
           {isGenerating ? (
-            <GenerationWaiting initial={clubInitial} logoUrl={me?.club?.logoUrl ?? null} />
+            <GenerationWaiting />
           ) : 0 === slots.length ? (
             isFailed ? (
               <EmptyState title="Génération en échec" description="Aucun créneau n'a été placé, et ce planning n'a aucune réservation à afficher. Corrigez les contraintes signalées puis régénérez." />
+            ) : slotsBusy ? (
+              // PREMIER chargement d'une version (aucune donnée précédente à voiler) : « Planning
+              // vide » MENTIRAIT tant que la requête n'a pas répondu. On affiche l'état de
+              // chargement — même indicateur que le voile de la grille — jusqu'au verdict. Une
+              // fois la réponse arrivée et RÉELLEMENT vide, `slotsBusy` retombe → « Planning vide ».
+              <div className="flex h-64 items-center justify-center rounded-lg border border-border bg-card" role="status" aria-busy="true" aria-live="polite">
+                <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  Chargement des créneaux…
+                </span>
+              </div>
             ) : (
               <EmptyState title="Planning vide" description="Ce planning ne contient aucun créneau placé pour le moment." />
             )
@@ -1215,25 +1234,39 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                         </button>
                       ) : null}
                     </div>
-                    <div className="relative min-h-0 min-w-0 flex-1">
-                      <WeekGrid
-                        model={model}
-                        selectedSlotId={selectedSlotId}
-                        onSelectSlot={setSelectedSlotId}
-                        highlightSlotIds={highlightSlotIds}
-                        // Lecture seule (validé) ou FAILED (pseudo-créneaux sans existence
-                        // serveur) → pas de bascule : le cadenas reste indicateur passif.
-                        onToggleLock={isReadOnly || isFailed ? undefined : requestToggleLock}
-                        lockLens={lockLens}
-                        // P2-30 — mode cible click-click (jamais sur un planning lecture seule/FAILED).
-                        targetMode={
-                          null !== targetMode && !isReadOnly && !isFailed
-                            ? { active: true, sourceSlotId: targetMode.kind === "move" ? targetMode.sourceSlotId : null, variant: targetMode.kind === "move" ? "move" : "place" }
-                            : undefined
-                        }
-                        onPickTarget={onPickTarget}
-                        onCancelTarget={cancelTarget}
-                      />
+                    <div className="relative min-h-0 min-w-0 flex-1" aria-busy={slotsBusy}>
+                      {/* Chargement des créneaux : la grille reste en place mais VOILÉE
+                          (opacité + voile qui CAPTE les clics — `pointer-events-none` sur
+                          le contenu voilé, le voile lui-même intercepte) + indicateur
+                          centré. Rien ne « passe au travers » vers une grille périmée. */}
+                      <div className={slotsBusy ? "pointer-events-none h-full opacity-40 transition-opacity" : "h-full"}>
+                        <WeekGrid
+                          model={model}
+                          selectedSlotId={selectedSlotId}
+                          onSelectSlot={setSelectedSlotId}
+                          highlightSlotIds={highlightSlotIds}
+                          // Lecture seule (validé) ou FAILED (pseudo-créneaux sans existence
+                          // serveur) → pas de bascule : le cadenas reste indicateur passif.
+                          onToggleLock={isReadOnly || isFailed ? undefined : requestToggleLock}
+                          lockLens={lockLens}
+                          // P2-30 — mode cible click-click (jamais sur un planning lecture seule/FAILED).
+                          targetMode={
+                            null !== targetMode && !isReadOnly && !isFailed
+                              ? { active: true, sourceSlotId: targetMode.kind === "move" ? targetMode.sourceSlotId : null, variant: targetMode.kind === "move" ? "move" : "place" }
+                              : undefined
+                          }
+                          onPickTarget={onPickTarget}
+                          onCancelTarget={cancelTarget}
+                        />
+                      </div>
+                      {slotsBusy ? (
+                        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-background/50" role="status" aria-live="polite">
+                          <span className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-muted-foreground shadow-lg">
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                            Chargement des créneaux…
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   {showAside ? (
