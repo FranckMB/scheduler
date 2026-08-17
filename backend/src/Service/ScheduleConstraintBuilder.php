@@ -551,6 +551,48 @@ final class ScheduleConstraintBuilder
     }
 
     /**
+     * P3-21 — greffe le bloc `previousAssignments` (terme de STABILITÉ moteur : faire
+     * CONVERGER une régénération vers son placement précédent, en départageant les ex æquo
+     * exacts de score, jamais en arbitrant) sur un payload DÉJÀ construit.
+     *
+     * ⚠ Ce bloc n'entre PAS dans le payload construit/caché par `buildForClubSeason`
+     * (`buildPayload`) : le payload y est caché par club+saison, sa clé ne connaît pas la
+     * version source. Le handler l'injecte donc APRÈS coup — et, décision B, APRÈS le hash
+     * de snapshot : le précédent est une préférence de CONVERGENCE, pas une donnée de
+     * STRUCTURE. L'inclure dans `snapshotHash` le ferait diverger de `currentStructureHash`
+     * (recalculé sans lui) à chaque régénération.
+     *
+     * Chaque placement = `{teamId, venueId, dayOfWeek, startTime}` (H:i:s — l'engine
+     * normalise via `_time_to_minutes`, H:i et H:i:s convergent). TOUS les placements de la
+     * source, HARD compris : un créneau HARD n'a pas de variable côté solveur (il est
+     * épinglé), le terme de stabilité le saute donc naturellement — aucun double paiement.
+     * Liste vide ⇒ clé absente : chemin byte-identique à l'historique (première génération).
+     *
+     * @param array<string, mixed>        $payload
+     * @param array<ScheduleSlotTemplate> $sourceSlots placements de la version source
+     *
+     * @return array<string, mixed>
+     */
+    public function withPreviousAssignments(array $payload, array $sourceSlots): array
+    {
+        if ([] === $sourceSlots) {
+            return $payload;
+        }
+
+        $payload['previousAssignments'] = array_map(
+            static fn (ScheduleSlotTemplate $slot): array => [
+                'teamId' => $slot->getTeamId(),
+                'venueId' => $slot->getVenueId(),
+                'dayOfWeek' => $slot->getDayOfWeek(),
+                'startTime' => $slot->getStartTime()->format('H:i:s'),
+            ],
+            array_values($sourceSlots),
+        );
+
+        return $payload;
+    }
+
+    /**
      * @template T of object
      *
      * @param class-string<T> $className
