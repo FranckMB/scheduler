@@ -11,6 +11,10 @@ const PHRASES = [
   "Recherche du meilleur planning possible…",
 ];
 
+// Mini-grille centrale : cases (1-indexées, grille 4×4) qui se remplissent à l'accent,
+// avec les positions et délais échelonnés du design (drop 6 s en boucle).
+const FILLED_CELL_DELAYS: Record<number, string> = { 1: ".2s", 3: "1.1s", 6: "1.9s", 8: "3.4s", 9: "2.6s", 15: "4.2s" };
+
 /**
  * Écran d'attente affiché pendant une génération (premier run et régénérations).
  *
@@ -29,11 +33,17 @@ export function GenerationWaiting() {
     return () => clearInterval(t);
   }, []);
   return (
-    <div className="flex flex-col items-center gap-6 py-8 text-center">
+    <div className="flex justify-center py-8">
       {/* Cadre : surface distincte du fond de page (bg-card), bordure + arrondi, overflow
-          masqué. `max-w-[560px]` borne la hauteur (~350 px, ratio 8:5) pour que scène + titre
-          + phrase + note tiennent dans 720 px de haut sans scroller. */}
-      <div className="w-full max-w-[560px] overflow-hidden rounded-[14px] border border-border bg-card">
+          masqué. `max-w-[640px]` → scène ~400 px de haut ; comme titre/phrase/note vivent
+          DÉSORMAIS au centre de la scène (plus aucun frère sous le cadre), tout tient dans
+          720 px de haut avec le chrome de page. `relative` : le centre se superpose au SVG. */}
+      <div
+        data-testid="gen-scene-frame"
+        className="relative w-full max-w-[640px] overflow-hidden rounded-[14px] border border-border bg-card"
+      >
+        {/* Décor (bandes latérales, ballon, grilles, chrono) — purement décoratif : une
+            seule image pour le lecteur d'écran, le sens vit dans les textes du centre. */}
         <svg
           viewBox="0 0 800 500"
           className="block h-auto w-full"
@@ -206,15 +216,58 @@ export function GenerationWaiting() {
           <rect x="694" y="434" width="54" height="12" rx="4" fill="var(--muted-foreground)" opacity=".18" />
         </g>
         </svg>
-      </div>
 
-      <div className="space-y-1">
-        <p className="text-lg font-medium">Génération du planning…</p>
-        <p key={i} className="animate-in fade-in text-sm text-muted-foreground">
-          {PHRASES[i]}
-        </p>
+        {/* CENTRE de la scène (zone protégée 340 px du design), superposé au décor :
+            mini-grille 4×4 qui se remplit + ligne de balayage + les trois niveaux de texte.
+            Overlay HTML (pas dans le SVG) : lisible par lecteur d'écran, contrairement au
+            décor `role="img"`. Largeur bornée à 340 px, textes centrés (ils habillent). */}
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-6 px-4 text-center">
+          {/* Mini-grille animée — décorative (le sens est porté par les textes ci-dessous). */}
+          <div aria-hidden="true" data-testid="gen-minigrid" className="relative" style={{ width: 200, height: 140 }}>
+            <div className="absolute inset-0 grid grid-cols-4 grid-rows-4 gap-[6px]">
+              {Array.from({ length: 16 }, (_, k) => (
+                <span key={k} className="rounded-[5px] border border-border bg-muted" />
+              ))}
+            </div>
+            <div className="absolute inset-0 grid grid-cols-4 grid-rows-4 gap-[6px]">
+              {Array.from({ length: 16 }, (_, k) => {
+                // Cases remplies à l'accent du club (positions et délais du design).
+                const delay = FILLED_CELL_DELAYS[k + 1];
+                return void 0 !== delay ? (
+                  <span
+                    key={k}
+                    className="gw-anim rounded-[5px]"
+                    style={{
+                      background: "color-mix(in oklch, var(--accent) 22%, transparent)",
+                      border: "1px solid color-mix(in oklch, var(--accent) 65%, transparent)",
+                      opacity: 0,
+                      animation: `gw-drop 6s ease-out ${delay} infinite`,
+                    }}
+                  />
+                ) : (
+                  <span key={k} />
+                );
+              })}
+            </div>
+            <div
+              className="gw-anim absolute inset-x-0 top-0 h-[2px]"
+              style={{
+                background: "linear-gradient(90deg, transparent, var(--accent), transparent)",
+                animation: "gw-scanline 6s linear infinite",
+              }}
+            />
+          </div>
+
+          {/* Titre + phrase tournante — région live (annoncée poliment au lecteur d'écran). */}
+          <div role="status" aria-live="polite" className="flex flex-col gap-1">
+            <p className="text-lg font-medium text-foreground">Génération du planning…</p>
+            <p key={i} className="animate-in fade-in text-sm text-muted-foreground">
+              {PHRASES[i]}
+            </p>
+          </div>
+          <p className="max-w-[320px] text-xs leading-relaxed text-muted-foreground">La génération peut prendre 1 à 3 min selon la taille du club. Vous pouvez laisser cet écran ouvert.</p>
+        </div>
       </div>
-      <p className="max-w-sm text-xs text-muted-foreground">La génération peut prendre 1 à 3 min selon la taille du club. Vous pouvez laisser cet écran ouvert.</p>
     </div>
   );
 }

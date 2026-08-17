@@ -51,6 +51,20 @@
 @keyframes gw-spin {
   to { transform: rotate(360deg); }
 }
+/* Mini-grille centrale : une case se « pose » (drop) puis s'efface, en boucle. */
+@keyframes gw-drop {
+  0% { opacity: 0; transform: translateY(-10px); }
+  12% { opacity: 1; transform: translateY(0); }
+  88% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(0); }
+}
+/* Ligne de balayage qui descend sur la mini-grille (140 px de haut). */
+@keyframes gw-scanline {
+  0% { transform: translateY(0); opacity: 0; }
+  8% { opacity: 0.9; }
+  92% { opacity: 0.9; }
+  100% { transform: translateY(126px); opacity: 0; }
+}
 
 /* prefers-reduced-motion : animations coupées, ballon figé sur sa dernière case,
    créneaux tous remplis. Comportement CONSERVÉ du design d'origine. */

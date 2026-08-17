@@ -1,4 +1,4 @@
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GenerationWaiting } from "./GenerationWaiting";
@@ -18,11 +18,21 @@ describe("GenerationWaiting", () => {
     expect(scene.tagName.toLowerCase()).toBe("svg");
   });
 
-  it("garde le titre, la première phrase et la note de durée", () => {
+  it("rend la mini-grille animée au centre de la scène", () => {
     render(<GenerationWaiting />);
-    expect(screen.getByText(/génération du planning/i)).toBeInTheDocument();
-    expect(screen.getByText("Placement des équipes prioritaires…")).toBeInTheDocument();
-    expect(screen.getByText(/1 à 3 min/i)).toBeInTheDocument();
+    expect(screen.getByTestId("gen-minigrid")).toBeInTheDocument();
+  });
+
+  it("place titre, phrase et note DANS la scène — pas des frères sous le cadre", () => {
+    render(<GenerationWaiting />);
+    const frame = screen.getByTestId("gen-scene-frame");
+    // Décor (role img) ET textes vivent dans le MÊME cadre : le centre est superposé.
+    expect(within(frame).getByRole("img", { name: /créneaux|planning/i })).toBeInTheDocument();
+    expect(within(frame).getByText(/génération du planning/i)).toBeInTheDocument();
+    expect(within(frame).getByText("Placement des équipes prioritaires…")).toBeInTheDocument();
+    expect(within(frame).getByText(/1 à 3 min/i)).toBeInTheDocument();
+    // Aucun contenu rejeté sous le cadre : le conteneur externe n'a que le cadre pour enfant.
+    expect(frame.parentElement?.childElementCount).toBe(1);
   });
 
   it("fait tourner les phrases toutes les 3 s", () => {
@@ -35,11 +45,9 @@ describe("GenerationWaiting", () => {
     expect(screen.queryByText("Placement des équipes prioritaires…")).not.toBeInTheDocument();
   });
 
-  // Décision fondateur (2026-08-17) : la scène EST le contenu, aucun logo de club
-  // ni initiale de repli ne se superpose. Un <img> réintroduit signalerait la régression.
-  it("ne rend AUCUN logo de club par-dessus la scène", () => {
+  // Décision fondateur : la scène EST le contenu, aucun logo de club ni initiale par-dessus.
+  it("ne rend AUCUN logo de club", () => {
     render(<GenerationWaiting />);
-    expect(screen.queryByRole("img", { name: "" })).not.toBeInTheDocument();
     expect(document.querySelector("img")).toBeNull();
     expect(screen.queryByTestId("generation-club-logo")).not.toBeInTheDocument();
   });
