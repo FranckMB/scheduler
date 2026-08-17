@@ -5,12 +5,14 @@ from datetime import time
 from pydantic import Field
 
 from app.schemas.input_schema import (
+    MAX_SHARED_TRAINING_GROUPS,
     CoachSchema,
     ConstraintV2Schema,
     ImplicitRulesSchema,
     PriorityTierSchema,
     ScheduleSlotTemplateSchema,
     SerializableModel,
+    SharedTrainingGroupSchema,
     TeamSchema,
     VenueSchema,
 )
@@ -67,6 +69,12 @@ class ValidateAssignmentsInputSchema(SerializableModel):
     )
     priority_tiers: list[PriorityTierSchema] = Field(
         default_factory=list, alias="priorityTiers", max_length=MAX_PRIORITY_TIERS
+    )
+    # P2-27 — parité génération ⇄ verdict : la déclaration de mutualisation entre AUSSI ici.
+    # Un déplacement qui sort une équipe d'une case commune (EXACTEMENT K rompue) est refusé,
+    # motif nommé. Absent/vide ⇒ aucun effet (rétro-compat).
+    shared_trainings: list[SharedTrainingGroupSchema] = Field(
+        default_factory=list, alias="sharedTrainings", max_length=MAX_SHARED_TRAINING_GROUPS
     )
     candidate: CandidateAssignmentSchema
     # P2-32 — l'état « AVANT » du candidat, pour le DELTA de compromis. Pour un DÉPLACEMENT le

@@ -66,6 +66,7 @@ class DiagnosticSchema(SerializableModel):
         "day_constraint_conflict",
         "implicit_rule_not_honored",
         "session_below_effective_min",
+        "shared_training_not_honored",
         "soft_lock_moved",
         "unplaced",
         "unplaced_match",

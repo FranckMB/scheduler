@@ -10,6 +10,8 @@ use App\Entity\ImplicitRuleSetting;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
+use App\Entity\SharedTrainingGroup;
+use App\Entity\SharedTrainingGroupTeam;
 use App\Entity\Team;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTag;
@@ -137,6 +139,11 @@ use Doctrine\ORM\Events;
 #[AsEntityListener(event: Events::postPersist, method: 'teamTagTouched', entity: TeamTag::class)]
 #[AsEntityListener(event: Events::postUpdate, method: 'teamTagTouched', entity: TeamTag::class)]
 #[AsEntityListener(event: Events::postRemove, method: 'teamTagTouched', entity: TeamTag::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'sharedTrainingGroupTouched', entity: SharedTrainingGroup::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'sharedTrainingGroupTouched', entity: SharedTrainingGroup::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'sharedTrainingGroupTouched', entity: SharedTrainingGroup::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'sharedTrainingGroupTeamTouched', entity: SharedTrainingGroupTeam::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'sharedTrainingGroupTeamTouched', entity: SharedTrainingGroupTeam::class)]
 #[AsDoctrineListener(event: Events::postFlush)]
 final class ResourceChangeStaleScheduleListener
 {
@@ -232,6 +239,28 @@ final class ResourceChangeStaleScheduleListener
     public function teamTagTouched(TeamTag $entity): void
     {
         $this->markClub($entity->getClubId());
+    }
+
+    public function sharedTrainingGroupTouched(SharedTrainingGroup $entity): void
+    {
+        // P2-27 — schedule_plan_id NULLABLE (patron reservation/venue_training_slot) : plan si
+        // non-NULL, sinon le plan SEASON du club+saison (jamais les copies de période, ADR-0002).
+        $clubId = $entity->getClubId();
+        if (null === $clubId) {
+            return;
+        }
+        $this->markPlanScoped($entity->getSchedulePlanId(), $clubId, $entity->getSeasonId());
+    }
+
+    public function sharedTrainingGroupTeamTouched(SharedTrainingGroupTeam $entity): void
+    {
+        // Ajouter/retirer un membre change la composition du groupe → même périmètre que le parent
+        // (colonnes dénormalisées : le listener n'a pas à joindre).
+        $clubId = $entity->getClubId();
+        if (null === $clubId) {
+            return;
+        }
+        $this->markPlanScoped($entity->getSchedulePlanId(), $clubId, $entity->getSeasonId());
     }
 
     public function postFlush(PostFlushEventArgs $args): void

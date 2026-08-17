@@ -550,6 +550,7 @@ def _solve(
         implicit_rules=resolved_implicit_rules,
         team_coach_map=team_coach_map,
         team_player_map=team_player_map,
+        shared_trainings=data.get("sharedTrainings", []),
     )
 
     _time_window_added, conflicts = add_time_window_constraints(model, model.x, parsed["time_windows"])

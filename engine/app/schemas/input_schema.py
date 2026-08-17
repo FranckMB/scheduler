@@ -22,6 +22,12 @@ MAX_PRIORITY_TIERS = 20
 MAX_SLOTS_PER_VENUE = 1000
 MAX_SLOTS_TOTAL = 3000
 MAX_TAGS_PER_TEAM = 50
+# P2-27 — mutualisation : plafonds du bloc `sharedTrainings`. 50 groupes (~10x un gros club
+# FFBB), 2..10 équipes par groupe (cap technique fondateur, minimum métier 2). Défense en
+# profondeur : le backend borne déjà à la saisie (422), ceci est la dernière ligne au bord.
+MAX_SHARED_TRAINING_GROUPS = 50
+MIN_TEAMS_PER_SHARED_GROUP = 2
+MAX_TEAMS_PER_SHARED_GROUP = 10
 
 
 class SerializableModel(BaseModel):
@@ -171,6 +177,26 @@ class PreviousAssignmentSchema(SerializableModel):
     start_time: str = Field(alias="startTime")  # "19:00"
 
 
+class SharedTrainingGroupSchema(SerializableModel):
+    """P2-27 — mutualisation : N équipes déclarées s'entraîner ENSEMBLE.
+
+    ``common_sessions`` = le nombre EXACT de séances partagées (même gymnase, même jour,
+    même heure) — ni « au moins » ni « au plus » : la déclaration dit combien de séances sont
+    communes, le solveur les réifie DANS LES DEUX SENS (chaque membre présent ⇔ séance
+    comptée) puis pose l'égalité. ``team_ids`` : de 2 (minimum métier) à 10 équipes (cap
+    technique). Un bloc ``sharedTrainings`` absent/vide ⇒ chemin de code byte-identique
+    (patron ``implicitRules``/``previousAssignments``) : aucun ``y`` posé, goldens inchangés.
+    """
+
+    id: str
+    team_ids: list[str] = Field(
+        alias="teamIds",
+        min_length=MIN_TEAMS_PER_SHARED_GROUP,
+        max_length=MAX_TEAMS_PER_SHARED_GROUP,
+    )
+    common_sessions: int = Field(alias="commonSessions", ge=1)
+
+
 class ScheduleSlotTemplateSchema(SerializableModel):
     id: str
     team_id: str = Field(alias="teamId")
@@ -214,6 +240,12 @@ class ScheduleInputSchema(SerializableModel):
     # 2000 = miroir de MAX_SLOT_TEMPLATES (un placement par séance, même ordre de grandeur).
     previous_assignments: list[PreviousAssignmentSchema] = Field(
         default_factory=list, alias="previousAssignments", max_length=MAX_SLOT_TEMPLATES
+    )
+    # P2-27 — mutualisation : groupes d'équipes déclarées ensemble (EXACTEMENT K séances
+    # communes chacun). Absent/vide ⇒ chemin byte-identique (patron implicitRules). Cap 50
+    # groupes = défense en profondeur au bord (le backend borne déjà à la saisie).
+    shared_trainings: list[SharedTrainingGroupSchema] = Field(
+        default_factory=list, alias="sharedTrainings", max_length=MAX_SHARED_TRAINING_GROUPS
     )
 
     @model_validator(mode="after")

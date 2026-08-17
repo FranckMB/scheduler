@@ -233,6 +233,9 @@ class HardConstraintStats:
     coach_rest_day: int = 0
     salarie_distribution: int = 0
     max_consecutive_sessions: int = 0
+    # P2-27 — contraintes de mutualisation (réification + égalité EXACTE) posées. 0 quand le
+    # bloc ``sharedTrainings`` est absent/vide (chemin byte-identique, goldens inchangés).
+    shared_training: int = 0
     # Littéraux de violation AGRÉGÉS des règles implicites passées en PREFERRED, prêts pour
     # l'objectif : ``(literal, weight_name)``. Vide quand tout est HARD (défaut). Hors du
     # total : ce sont des termes d'objectif, pas des contraintes dures.
@@ -263,6 +266,7 @@ class HardConstraintStats:
             + self.coach_rest_day
             + self.salarie_distribution
             + self.max_consecutive_sessions
+            + self.shared_training
         )
 
 
@@ -280,6 +284,7 @@ def add_level_1_hard_constraints(
     implicit_rules: ResolvedImplicitRules | None = None,
     team_coach_map: dict[str, list[str]] | None = None,
     team_player_map: dict[str, list[str]] | None = None,
+    shared_trainings: Iterable[Any] = (),
 ) -> HardConstraintStats:
     """Add the implicit + derived + new-implicit level-1 hard constraints to a CP-SAT model.
 
@@ -412,6 +417,10 @@ def add_level_1_hard_constraints(
         soft_terms_out=soft_terms,
         soft_term_info_out=soft_info,
     )
+
+    # 13. P2-27 — mutualisation : chaque groupe déclaré partage EXACTEMENT K séances. Vide ⇒
+    # aucune pose (chemin byte-identique, goldens inchangés).
+    stats.shared_training = add_shared_training_constraints(model, assignment_list, shared_trainings=shared_trainings)
 
     return stats
 
@@ -2462,6 +2471,124 @@ def add_age_ascending_constraints(
                         detail="age",
                     )
                 )
+            added += 1
+
+    return added
+
+
+def add_shared_training_constraints(
+    model: Any,
+    assignments: Sequence[AssignmentVariable],
+    *,
+    shared_trainings: Iterable[Any] = (),
+) -> int:
+    """P2-27 — mutualisation : chaque groupe déclaré partage EXACTEMENT ``commonSessions`` séances.
+
+    Une « séance commune » d'un groupe = une case ``(gymnase, jour, heure)`` où TOUTES les
+    équipes du groupe sont présentes. Pour chaque case candidate ``s`` on réifie un littéral
+    ``y_s`` ⇔ « tous les membres sont sur ``s`` », DANS LES DEUX SENS (décision fondateur) :
+
+      * ``y_s ≤ x[tᵢ, s]`` pour chaque membre (présence de tous ⇐ y),
+      * ``y_s ≥ Σᵢ x[tᵢ, s] − (m−1)`` (y ⇐ présence de tous),
+
+    où ``m`` est le nombre de membres à VARIABLE sur ``s`` (les membres VERROUILLÉS sur ``s``
+    comptent comme constante 1 — leur séance est pré-placée hors solveur, ``model.py`` ne leur
+    crée pas de variable ; sans ce crédit, une séance pourtant commune ne serait « pas comptée »
+    et l'exactitude serait fausse, leçon P4-97). Puis ``Σ_s y_s == K``.
+
+    Un membre SANS variable et NON verrouillé sur ``s`` (place bloquée par un verrou d'une autre
+    équipe) ne peut y être : ``y_s`` est alors impossible → la case n'est pas candidate.
+
+    ⚠ ``shared_trainings`` vide ⇒ retour immédiat, AUCUNE variable ni contrainte posée : le
+    chemin de code reste byte-identique (goldens inchangés). Défensif comme les autres poseurs :
+    un modèle nu sans ``hard_slot_keys`` dégrade proprement (``getattr`` avec défaut).
+    """
+    groups = list(shared_trainings)
+    if not groups:
+        return 0
+
+    # (team_id, venue_id, slot_id) -> var  — slot_id == "day:start" (idiome des assignments).
+    var_by_team_slot: dict[tuple[str, str, str], BoolVarLike] = {}
+    for assignment in assignments:
+        team_id = assignment.team_id
+        venue_id = assignment.venue_id
+        slot_id = assignment.slot_id
+        if team_id is None or venue_id is None or slot_id is None:
+            continue
+        var_by_team_slot[(str(team_id), str(venue_id), str(slot_id))] = assignment.var
+
+    # (team_id, venue_id, slot_id) des séances VERROUILLÉES : présence constante 1. Source =
+    # ``model.locked_slots`` (UNE entrée par séance verrouillée, à son DÉBUT réel) et NON
+    # ``hard_slot_keys`` (qui éclate chaque séance en sous-créneaux de 15 min — les compter tous
+    # gonflerait faussement le nombre de séances communes). Le début du verrou coïncide avec le
+    # début de la fenêtre d'entraînement, donc la case candidate est bien ``"day:start"``.
+    locked_team_slots: set[tuple[str, str, str]] = set()
+    for locked in getattr(model, "locked_slots", ()) or ():
+        team_id_l = _get(locked, "team_id", "teamId", default=None)
+        venue_id_l = _get(locked, "venue_id", "venueId", default=None)
+        day_l = _get(locked, "day_of_week", "dayOfWeek", default=None)
+        start_l = _get(locked, "start_time", "startTime", default=None)
+        if team_id_l is None or venue_id_l is None or day_l is None or start_l is None:
+            continue
+        slot_id_l = f"{int(day_l)}:{_format_time(_time_to_minutes(start_l))}"
+        locked_team_slots.add((str(team_id_l), str(venue_id_l), slot_id_l))
+
+    added = 0
+    for group_index, group in enumerate(groups):
+        member_ids = [str(t) for t in (_get(group, "teamIds", "team_ids", default=()) or ())]
+        common_sessions = int(_get(group, "commonSessions", "common_sessions", default=0) or 0)
+        group_id = str(_get(group, "id", default=group_index) or group_index)
+        if len(member_ids) < 2:
+            continue
+
+        # Cases candidates = union, par membre, des cases à variable ET des cases verrouillées.
+        candidate_slots: set[tuple[str, str]] = set()
+        for team_id, venue_id, slot_id in var_by_team_slot:
+            if team_id in member_ids:
+                candidate_slots.add((venue_id, slot_id))
+        for team_id, venue_id, slot_id in locked_team_slots:
+            if team_id in member_ids:
+                candidate_slots.add((venue_id, slot_id))
+
+        y_list: list[BoolVarLike] = []
+        for venue_id, slot_id in sorted(candidate_slots):
+            var_terms: list[BoolVarLike] = []
+            const_present = 0
+            feasible = True
+            for team_id in member_ids:
+                key = (team_id, venue_id, slot_id)
+                if key in var_by_team_slot:
+                    var_terms.append(var_by_team_slot[key])
+                elif key in locked_team_slots:
+                    const_present += 1
+                else:
+                    feasible = False
+                    break
+            if not feasible:
+                continue
+
+            y = cast(Any, model).NewBoolVar(f"shared_{group_id}_{venue_id}_{slot_id}".replace(":", "_"))
+            for term in var_terms:
+                cast(Any, model).Add(y <= term)
+            m = len(var_terms)
+            if m == 0:
+                # Tous les membres verrouillés sur cette case : présence commune constante.
+                cast(Any, model).Add(y == 1)
+            else:
+                cast(Any, model).Add(y >= sum(cast(Any, v) for v in var_terms) - (m - 1))
+            y_list.append(y)
+            added += 1
+
+        if y_list:
+            cast(Any, model).Add(sum(cast(Any, v) for v in y_list) == common_sessions)
+            added += 1
+        elif common_sessions >= 1:
+            # Aucune case où le groupe peut être ensemble et K≥1 séances exigées → déclaration
+            # insatisfiable. On pose une contradiction propre (jamais un `Add(0 == K)` fragile) ;
+            # la génération sort INFEASIBLE, le diagnostic `shared_training_not_honored` nomme le groupe.
+            infeasible = cast(Any, model).NewBoolVar(f"shared_{group_id}_infeasible")
+            cast(Any, model).Add(infeasible == 1)
+            cast(Any, model).Add(infeasible == 0)
             added += 1
 
     return added

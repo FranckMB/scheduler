@@ -16,6 +16,8 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\SharedTrainingGroup;
+use App\Entity\SharedTrainingGroupTeam;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\TeamLink;
@@ -89,6 +91,9 @@ final class EntityCascadeDeleter
             // #10 — sans équipe, une doléance n'a plus de sens : elle part.
             $this->deleteByField(CoachWish::class, 'teamId', $teamId, $clubId, $seasonId);
             $this->deleteScopedConstraint(ConstraintScope::TEAM, $teamId, $clubId, $seasonId);
+            // P2-27 — la mutualisation : retirer l'équipe des groupes ; un groupe qui tombe
+            // sous 2 membres n'a plus de sens et part avec ses lignes restantes.
+            $this->pruneSharedTrainingGroupsForTeam($teamId, $clubId, $seasonId);
             $this->clearParentRef(Team::class, 'parentTeamId', $teamId, $clubId, $seasonId);
         });
     }
@@ -358,6 +363,58 @@ final class EntityCascadeDeleter
             static fn (SchedulePlan $p): string => $p->getId(),
             $this->entityManager->getRepository(SchedulePlan::class)->findBy(['seasonId' => $seasonId, 'type' => SchedulePlanType::SEASON]),
         );
+    }
+
+    /**
+     * P2-27 — retire une équipe supprimée de tous ses groupes de mutualisation, puis élague les
+     * groupes tombés sous 2 membres (le moteur exige ≥ 2 : un groupe à 1 est mort). Les lignes
+     * membres restantes du groupe élagué partent avec lui — aucun orphelin.
+     */
+    private function pruneSharedTrainingGroupsForTeam(string $teamId, string $clubId, string $seasonId): void
+    {
+        /** @var list<string> $affectedGroupIds */
+        $affectedGroupIds = $this->entityManager->createQueryBuilder()
+            ->select('DISTINCT t.groupId')
+            ->from(SharedTrainingGroupTeam::class, 't')
+            ->where('t.teamId = :teamId')
+            ->andWhere('t.clubId = :clubId')
+            ->andWhere('t.seasonId = :seasonId')
+            ->setParameter('teamId', $teamId)
+            ->setParameter('clubId', $clubId)
+            ->setParameter('seasonId', $seasonId)
+            ->getQuery()
+            ->getSingleColumnResult();
+
+        if ([] === $affectedGroupIds) {
+            return;
+        }
+
+        $this->deleteByField(SharedTrainingGroupTeam::class, 'teamId', $teamId, $clubId, $seasonId);
+
+        foreach ($affectedGroupIds as $groupId) {
+            $remaining = (int) $this->entityManager->createQueryBuilder()
+                ->select('COUNT(t.id)')
+                ->from(SharedTrainingGroupTeam::class, 't')
+                ->where('t.groupId = :groupId')
+                ->setParameter('groupId', $groupId)
+                ->getQuery()
+                ->getSingleScalarResult();
+            if ($remaining >= 2) {
+                continue;
+            }
+            $this->entityManager->createQueryBuilder()
+                ->delete(SharedTrainingGroupTeam::class, 't')
+                ->where('t.groupId = :groupId')
+                ->setParameter('groupId', $groupId)
+                ->getQuery()
+                ->execute();
+            $this->entityManager->createQueryBuilder()
+                ->delete(SharedTrainingGroup::class, 'g')
+                ->where('g.id = :groupId')
+                ->setParameter('groupId', $groupId)
+                ->getQuery()
+                ->execute();
+        }
     }
 
     private function deleteByField(string $entityClass, string $field, string $value, ?string $clubId, string $seasonId): void
