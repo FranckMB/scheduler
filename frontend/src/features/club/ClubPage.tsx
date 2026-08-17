@@ -17,12 +17,10 @@ import { readFailed, readLoading } from "@/shared/lib/readState";
 import { cn } from "@/shared/lib/utils";
 import { extractPalette } from "@/shared/lib/palette";
 
-import { useSlots, useVenues } from "@/features/planning/queries";
-
-import type { SubscriptionPlan } from "./api";
+import type { SubscriptionPlan, UsageDayHours } from "./api";
 import { LogoCropper } from "./LogoCropper";
-import { computeVenueStats, formatHours, seasonWeeks } from "./lib/venueStats";
-import { useDeleteLogo, useDownloadClubExport, useFfbbImport, useResetClub, useSubscriptionPlans, useUpdateAppearance, useUploadLogo } from "./queries";
+import { formatHours } from "./lib/venueStats";
+import { useDeleteLogo, useDownloadClubExport, useFfbbImport, useResetClub, useSubscriptionPlans, useUpdateAppearance, useUploadLogo, useVenueUsageStats } from "./queries";
 import { isManagementRole } from "@/shared/lib/roles";
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
@@ -394,66 +392,142 @@ function ContactsFfbbSection({ club }: { club: NonNullable<MeResponse["club"]> }
   );
 }
 
+const DAY_LABELS: Record<number, string> = { 1: "Lundi", 2: "Mardi", 3: "Mercredi", 4: "Jeudi", 5: "Vendredi", 6: "Samedi", 7: "Dimanche" };
+const DAY_SHORT: Record<number, string> = { 1: "Lun", 2: "Mar", 3: "Mer", 4: "Jeu", 5: "Ven", 6: "Sam", 7: "Dim" };
+
+/** Le total d'heures d'un jour dans une liste byDay (0 si le jour n'y figure pas). */
+function dayTotal(byDay: UsageDayHours[], day: number): number {
+  return byDay.find((d) => d.day === day)?.total ?? 0;
+}
+
+/** « 01/09/2026 » depuis une date ISO, sans passer par Date (aucun décalage de fuseau). */
+function frDate(iso: string): string {
+  return iso.split("-").reverse().join("/");
+}
+
+/** Une cellule d'heures : « — » à zéro, pour que l'œil accroche l'usage réel. */
+function HoursCell({ hours, strong }: { hours: number; strong?: boolean }) {
+  return (
+    <td className={cn("py-1.5 text-right tabular-nums", strong ? "font-semibold" : "")}>
+      {hours > 0 ? formatHours(hours) : <span className="text-muted-foreground">—</span>}
+    </td>
+  );
+}
+
+interface UsageTableRow {
+  key: string;
+  label: string;
+  byDay: UsageDayHours[];
+  real: number;
+  projected: number;
+  total: number;
+}
+
 /**
- * Statistiques par gymnase (demande fondateur 2026-08-04) : heures et équipes
- * du planning EN VIGUEUR, hebdo + projection annuelle. Sans socle pointé, la
- * section DIT pourquoi elle est vide au lieu d'afficher des zéros.
+ * Un tableau d'usage : lignes (gymnases ou niveaux), colonnes = jours + Réalisé /
+ * À venir / Total, et une ligne TOTAL par jour visuellement marquée — le chiffre
+ * qu'on pose sur la table de la mairie (« le lundi, on a 8 h »).
+ */
+function UsageTable({ caption, firstColHeader, rows, totalByDay, grandTotal, days }: {
+  caption: string;
+  firstColHeader: string;
+  rows: UsageTableRow[];
+  totalByDay: UsageDayHours[];
+  grandTotal: { real: number; projected: number; total: number };
+  days: number[];
+}) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold">{caption}</h3>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[36rem] text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs text-muted-foreground">
+              <th className="py-1.5 font-medium">{firstColHeader}</th>
+              {days.map((d) => (
+                <th key={d} className="py-1.5 text-right font-medium" title={DAY_LABELS[d]}>{DAY_SHORT[d]}</th>
+              ))}
+              <th className="py-1.5 text-right font-medium">Réalisé</th>
+              <th className="py-1.5 text-right font-medium">À venir</th>
+              <th className="py-1.5 text-right font-medium">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-b border-border/50">
+                <td className="py-1.5">{r.label}</td>
+                {days.map((d) => <HoursCell key={d} hours={dayTotal(r.byDay, d)} />)}
+                <HoursCell hours={r.real} />
+                <HoursCell hours={r.projected} />
+                <HoursCell hours={r.total} strong />
+              </tr>
+            ))}
+            <tr className="border-t-2 border-border font-semibold">
+              <td className="py-1.5">TOTAL</td>
+              {days.map((d) => <HoursCell key={d} hours={dayTotal(totalByDay, d)} strong />)}
+              <HoursCell hours={grandTotal.real} strong />
+              <HoursCell hours={grandTotal.projected} strong />
+              <HoursCell hours={grandTotal.total} strong />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Statistiques d'utilisation des gymnases (P3-22) : deux tableaux (par gymnase,
+ * par niveau) des heures ventilées PAR JOUR — Réalisé / À venir — pour NÉGOCIER
+ * les créneaux avec la mairie. TOUT est calculé serveur (heures, ventilation,
+ * libellés de niveau) ; le front n'agrège rien de métier. Sans planning en
+ * vigueur, la section DIT pourquoi elle est vide.
  */
 function VenueStatsSection({ me }: { me: MeResponse }) {
   const chosenId = me.seasonPlan?.chosenScheduleId ?? null;
-  const slotsQuery = useSlots(chosenId);
-  const venuesQuery = useVenues();
-  const season = me.club ? me.seasons.find((s) => s.id === me.currentSeasonId) : undefined;
-  const weeks = season ? seasonWeeks(season.startDate, season.endDate) : null;
+  const season = me.seasons.find((s) => s.id === me.currentSeasonId);
+  const [from, setFrom] = useState(season?.startDate ?? "");
+  const [to, setTo] = useState(season?.endDate ?? "");
+  const statsQuery = useVenueUsageStats(from || undefined, to || undefined, null !== chosenId);
 
   if (null === chosenId) {
     return <p className="text-sm text-muted-foreground">Les statistiques se calculent sur le planning en vigueur — validez d'abord le planning principal de la saison.</p>;
   }
-  if (slotsQuery.isLoading || venuesQuery.isLoading) {
+  if (statsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Chargement des statistiques…</p>;
   }
-  if (slotsQuery.isError || venuesQuery.isError) {
+  if (statsQuery.isError || undefined === statsQuery.data) {
     return <p className="text-sm text-destructive">Les statistiques n'ont pas pu être chargées.</p>;
   }
-  const rows = computeVenueStats(slotsQuery.data ?? [], venuesQuery.data ?? []);
-  if (0 === rows.length) {
-    return <p className="text-sm text-muted-foreground">Le planning en vigueur ne place aucune séance.</p>;
-  }
-  const totalHours = rows.reduce((sum, r) => sum + r.hoursPerWeek, 0);
+
+  const data = statsQuery.data;
+  // Colonnes lundi→samedi ; dimanche seulement s'il porte des heures.
+  const days = data.totalByDay.some((d) => d.day === 7) ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5, 6];
+  const venueRows: UsageTableRow[] = data.venues.map((v) => ({ key: v.venueId, label: v.name, byDay: v.byDay, real: v.real, projected: v.projected, total: v.total }));
+  const levelRows: UsageTableRow[] = data.byLevel.map((l) => ({ key: l.level ?? "__none__", label: l.label, byDay: l.byDay, real: l.real, projected: l.projected, total: l.total }));
 
   return (
-    <div className="space-y-3">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-xs text-muted-foreground">
-            <th className="py-1.5 font-medium">Gymnase</th>
-            <th className="py-1.5 text-right font-medium">Équipes</th>
-            <th className="py-1.5 text-right font-medium">Heures / semaine</th>
-            {null !== weeks ? <th className="py-1.5 text-right font-medium">Heures / saison</th> : null}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.venueId} className="border-b border-border/50">
-              <td className="py-1.5">{r.name}</td>
-              <td className="py-1.5 text-right">{r.teamCount}</td>
-              <td className="py-1.5 text-right">{formatHours(r.hoursPerWeek)}</td>
-              {null !== weeks ? <td className="py-1.5 text-right">{formatHours(r.hoursPerWeek * weeks)}</td> : null}
-            </tr>
-          ))}
-          <tr className="font-medium">
-            <td className="py-1.5">Total</td>
-            <td className="py-1.5 text-right">—</td>
-            <td className="py-1.5 text-right">{formatHours(totalHours)}</td>
-            {null !== weeks ? <td className="py-1.5 text-right">{formatHours(totalHours * weeks)}</td> : null}
-          </tr>
-        </tbody>
-      </table>
-      {null !== weeks ? (
-        <p className="text-xs text-muted-foreground">
-          Heures / saison = projection sur les {weeks} semaines de la saison (semaine type × {weeks}) — vacances et périodes adaptées non déduites.
-        </p>
-      ) : null}
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label htmlFor="vus-from" className="mb-1 block text-xs text-muted-foreground">Du</label>
+          <input id="vus-from" type="date" className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={from} min={season?.startDate} max={to || season?.endDate} onChange={(e) => setFrom(e.target.value)} />
+        </div>
+        <div>
+          <label htmlFor="vus-to" className="mb-1 block text-xs text-muted-foreground">Au</label>
+          <input id="vus-to" type="date" className="h-9 rounded-md border border-border bg-background px-2 text-sm" value={to} min={from || season?.startDate} max={season?.endDate} onChange={(e) => setTo(e.target.value)} />
+        </div>
+        <p className="text-xs text-muted-foreground">Plage analysée : du {frDate(data.range.from)} au {frDate(data.range.to)}.</p>
+      </div>
+
+      {0 === venueRows.length ? (
+        <p className="text-sm text-muted-foreground">Le planning en vigueur ne place aucune séance sur cette plage.</p>
+      ) : (
+        <>
+          <UsageTable caption="Par gymnase" firstColHeader="Gymnase" rows={venueRows} totalByDay={data.totalByDay} grandTotal={data.grandTotal} days={days} />
+          <UsageTable caption="Par niveau" firstColHeader="Niveau" rows={levelRows} totalByDay={data.totalByDay} grandTotal={data.grandTotal} days={days} />
+        </>
+      )}
     </div>
   );
 }

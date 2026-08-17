@@ -74,3 +74,40 @@ export interface SubscriptionPlan {
 }
 
 export const listSubscriptionPlans = (): Promise<SubscriptionPlan[]> => collection<SubscriptionPlan>("subscription_plans");
+
+/**
+ * P3-22 — stats d'utilisation des gymnases (`GET /api/venue-usage-stats`). TOUT
+ * est calculé serveur (heures par jour, Réalisé/À venir, ventilation par niveau,
+ * libellés compris) : le front ne fait qu'AFFICHER. Sans from/to, le backend
+ * borne à la saison entière.
+ */
+export interface UsageDayHours {
+  day: number;
+  real: number;
+  projected: number;
+  total: number;
+}
+
+export interface UsageRow {
+  /** venueId (par gymnase) ou level enum|null (par niveau). */
+  venueId?: string;
+  level?: string | null;
+  name?: string;
+  label?: string;
+  byDay: UsageDayHours[];
+  real: number;
+  projected: number;
+  total: number;
+}
+
+export interface VenueUsageStats {
+  range: { from: string; to: string; today: string };
+  zone: string | null;
+  venues: (UsageRow & { venueId: string; name: string })[];
+  totalByDay: UsageDayHours[];
+  byLevel: (UsageRow & { level: string | null; label: string })[];
+  grandTotal: { real: number; projected: number; total: number };
+}
+
+export const getVenueUsageStats = (from?: string, to?: string): Promise<VenueUsageStats> =>
+  api.get("venue-usage-stats", from && to ? { searchParams: { from, to } } : undefined).json();

@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MeResponse } from "@/features/auth/api";
 
 type ClubMock = (Partial<NonNullable<MeResponse["club"]>> & { name: string }) | null;
-const me: { data: { role: string; club: ClubMock }; isLoading: boolean } = {
-  data: { role: "admin", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } },
+type MeData = { role: string; club: ClubMock; seasonPlan?: MeResponse["seasonPlan"]; seasons?: MeResponse["seasons"]; currentSeasonId?: string | null };
+const me: { data: MeData; isLoading: boolean } = {
+  data: { role: "admin", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null }, seasons: [], currentSeasonId: null },
   isLoading: false,
 };
 
@@ -34,6 +35,9 @@ const plans: { data: unknown[] | undefined; isError: boolean } = {
   isError: false,
 };
 
+// Stats d'utilisation des gymnases (P3-22) — mutable pour piloter par test.
+const venueStats: { data: unknown; isLoading: boolean; isError: boolean } = { data: undefined, isLoading: false, isError: false };
+
 vi.mock("./queries", () => ({
   useUpdateAppearance: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useUploadLogo: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -42,13 +46,17 @@ vi.mock("./queries", () => ({
   useResetClub: () => ({ mutate: vi.fn(), isPending: false }),
   useDownloadClubExport: () => ({ mutate: vi.fn(), isPending: false }),
   useSubscriptionPlans: () => plans,
+  useVenueUsageStats: () => venueStats,
 }));
 
 import { ClubPage } from "./ClubPage";
 
 describe("ClubPage", () => {
   beforeEach(() => {
-    me.data = { role: "admin", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } };
+    me.data = { role: "admin", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null }, seasons: [], currentSeasonId: null };
+    venueStats.data = undefined;
+    venueStats.isLoading = false;
+    venueStats.isError = false;
     plans.data = [
       { id: "p-dec", code: "decouverte", name: "Découverte", maxTeams: 0, maxVenues: 0, maxGenerations: 10 },
       { id: "p-ess", code: "essentiel", name: "Essentiel", maxTeams: 20, maxVenues: 0, maxGenerations: 0 },
@@ -218,5 +226,62 @@ describe("ClubPage", () => {
     me.data = { role: "member", club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null } };
     render(<ClubPage />);
     expect(screen.queryByRole("button", { name: /^Offre$/ })).toBeNull();
+  });
+
+  // --- P3-22 — stats d'utilisation des gymnases -----------------------------
+
+  /** Un `me` avec un planning en vigueur + une saison courante (déverrouille la section). */
+  const withSeasonPlan = (): void => {
+    me.data = {
+      role: "admin",
+      club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null },
+      seasonPlan: { id: "sp", name: "Plan", chosenScheduleId: "sched", hasFinishedVersion: true, currentStructureHash: null },
+      seasons: [{ id: "s1", name: "2026-2027", startDate: "2026-09-01", endDate: "2027-06-30", isCurrent: true, isReadonly: false }],
+      currentSeasonId: "s1",
+    };
+  };
+
+  it("Stats gymnases : deux tableaux (gymnase, niveau) + ligne TOTAL de négociation, tout venant du serveur", async () => {
+    withSeasonPlan();
+    venueStats.data = {
+      range: { from: "2026-09-01", to: "2027-06-30", today: "2026-08-17" },
+      zone: "A",
+      venues: [{ venueId: "v1", name: "Gymnase Mateo", byDay: [{ day: 1, real: 0, projected: 8, total: 8 }], real: 0, projected: 8, total: 8 }],
+      totalByDay: [{ day: 1, real: 0, projected: 8, total: 8 }],
+      byLevel: [{ level: "REGIONAL", label: "Régional", byDay: [{ day: 1, real: 0, projected: 8, total: 8 }], real: 0, projected: 8, total: 8 }],
+      grandTotal: { real: 0, projected: 8, total: 8 },
+    };
+    const user = userEvent.setup();
+    render(<ClubPage />);
+    await user.click(screen.getByRole("button", { name: /Statistiques des gymnases/ }));
+
+    // Les deux tableaux et leurs lignes.
+    expect(screen.getByText("Par gymnase")).toBeInTheDocument();
+    expect(screen.getByText("Par niveau")).toBeInTheDocument();
+    expect(screen.getByText("Gymnase Mateo")).toBeInTheDocument();
+    // Le libellé de niveau vient du SERVEUR (le front ne l'invente pas).
+    expect(screen.getByText("Régional")).toBeInTheDocument();
+    // La ligne TOTAL (le chiffre de négociation) existe dans chaque tableau.
+    expect(screen.getAllByText("TOTAL").length).toBe(2);
+    // Colonne jour + heures serveur affichées (8 h le lundi).
+    expect(screen.getAllByText("Lun").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("8 h").length).toBeGreaterThanOrEqual(1);
+    // Plage utilisée affichée.
+    expect(screen.getByText(/du 01\/09\/2026 au 30\/06\/2027/)).toBeInTheDocument();
+  });
+
+  it("Stats gymnases : sans planning en vigueur, la section explique au lieu d'afficher des zéros", async () => {
+    me.data = {
+      role: "admin",
+      club: { name: "BC Test", accentColor: null, accentColorDark: null, accentPalette: null, logoUrl: null },
+      seasonPlan: { id: "sp", name: "Plan", chosenScheduleId: null, hasFinishedVersion: false, currentStructureHash: null },
+      seasons: [{ id: "s1", name: "2026-2027", startDate: "2026-09-01", endDate: "2027-06-30", isCurrent: true, isReadonly: false }],
+      currentSeasonId: "s1",
+    };
+    const user = userEvent.setup();
+    render(<ClubPage />);
+    await user.click(screen.getByRole("button", { name: /Statistiques des gymnases/ }));
+    expect(screen.getByText(/validez d'abord le planning principal/)).toBeInTheDocument();
+    expect(screen.queryByText("Par gymnase")).toBeNull();
   });
 });
