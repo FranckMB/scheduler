@@ -13,6 +13,8 @@ use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\SharedTrainingGroup;
+use App\Entity\SharedTrainingGroupTeam;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
@@ -51,7 +53,7 @@ final class ScheduleConstraintBuilder
      * Elle DOIT valoir exactement la valeur du fichier — gardé par
      * `PayloadVersionMatchesContractVersionTest`.
      */
-    public const string CONTRACT_VERSION = '2.11';
+    public const string CONTRACT_VERSION = '2.12';
     private const CACHE_TTL_SECONDS = 14_400;
     private const DEFAULT_SOLVER_SEED = 42;
     /**
@@ -189,6 +191,8 @@ final class ScheduleConstraintBuilder
             constraints: $constraints,
             // Base-plan reservations (schedulePlanId IS NULL) — durable HARD pins.
             reservations: $em->getRepository(Reservation::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null], ['id' => 'ASC']),
+            // Base-plan mutualisation groups (schedulePlanId IS NULL, P2-27).
+            sharedTrainingGroups: $em->getRepository(SharedTrainingGroup::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null], ['id' => 'ASC']),
         );
 
         $this->currentAvailabilitiesByVenue = [];
@@ -378,6 +382,9 @@ final class ScheduleConstraintBuilder
                 $em->getRepository(Reservation::class)->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
                 static fn (Reservation $reservation): bool => !isset($disabledVenueIds[$reservation->getVenueId()]),
             )),
+            // Period mutualisation groups: this plan's own (schedulePlanId = planId, P2-27). Un
+            // membre désactivé pour la période est filtré au roster dans serializeSharedTrainings.
+            sharedTrainingGroups: $em->getRepository(SharedTrainingGroup::class)->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
         );
 
         $this->currentAvailabilitiesByVenue = [];
@@ -492,6 +499,7 @@ final class ScheduleConstraintBuilder
      * @param array<PriorityTier>          $priorityTiers
      * @param array<Constraint>            $constraints
      * @param array<Reservation>           $reservations           persistent team→slot HARD pins (base/overlay)
+     * @param array<SharedTrainingGroup>   $sharedTrainingGroups   P2-27 mutualisation groups (base: plan NULL / period: = planId)
      *
      * @return array<string, mixed>
      */
@@ -508,6 +516,7 @@ final class ScheduleConstraintBuilder
         int $solverSeed = self::DEFAULT_SOLVER_SEED,
         array $constraints = [],
         array $reservations = [],
+        array $sharedTrainingGroups = [],
     ): array {
         $serializedConstraints = array_merge(
             $this->serializeTeamCoachConstraints($teamCoaches),
@@ -547,6 +556,10 @@ final class ScheduleConstraintBuilder
             'constraints' => $serializedConstraints,
             'slotTemplates' => array_values($serializedSlots),
             'implicitRules' => $implicitRules,
+            // P2-27 — mutualisation : ce que le STOCKE le club (groupes du bon plan) devient le
+            // bloc `sharedTrainings` du payload. Vide (aucun groupe) ⇒ [] : chemin byte-identique
+            // côté moteur (default_factory=list). Gardé par SharedTrainingPayloadParityTest.
+            'sharedTrainings' => $this->serializeSharedTrainings($sharedTrainingGroups, $teams),
         ];
     }
 
@@ -590,6 +603,52 @@ final class ScheduleConstraintBuilder
         );
 
         return $payload;
+    }
+
+    /**
+     * Sérialise les groupes de mutualisation en `{id, teamIds, commonSessions}`. Les membres
+     * sont filtrés au ROSTER du payload (une équipe désactivée pour la période sort du payload,
+     * son id serait fantôme dans le groupe) ; un groupe qui tombe sous 2 membres est ABANDONNÉ
+     * (le moteur exige ≥ 2). teamIds triés = déterminisme du hash de snapshot.
+     *
+     * @param array<SharedTrainingGroup> $groups
+     * @param array<Team>                $teams
+     *
+     * @return array<int, array{id: string, teamIds: list<string>, commonSessions: int}>
+     */
+    private function serializeSharedTrainings(array $groups, array $teams): array
+    {
+        if ([] === $groups || !$this->entityManager instanceof EntityManagerInterface) {
+            return [];
+        }
+
+        $rosterIds = [];
+        foreach ($teams as $team) {
+            $rosterIds[$team->getId()] = true;
+        }
+
+        $result = [];
+        foreach ($groups as $group) {
+            $rows = $this->entityManager->getRepository(SharedTrainingGroupTeam::class)
+                ->findBy(['groupId' => $group->getId()], ['teamId' => 'ASC']);
+            $teamIds = [];
+            foreach ($rows as $row) {
+                if (isset($rosterIds[$row->getTeamId()])) {
+                    $teamIds[] = $row->getTeamId();
+                }
+            }
+            sort($teamIds);
+            if (\count($teamIds) < 2) {
+                continue; // moins de 2 membres actifs : la déclaration n'a plus de sens
+            }
+            $result[] = [
+                'id' => $group->getId(),
+                'teamIds' => $teamIds,
+                'commonSessions' => $group->getCommonSessions(),
+            ];
+        }
+
+        return $result;
     }
 
     /**

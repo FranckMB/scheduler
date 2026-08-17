@@ -23,6 +23,8 @@ use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\ScheduleStructureSnapshot;
 use App\Entity\Season;
+use App\Entity\SharedTrainingGroup;
+use App\Entity\SharedTrainingGroupTeam;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
 use App\Entity\TeamLink;
@@ -109,6 +111,10 @@ final class SeasonDataPurger
             TeamPeriodOverride::class,
             ConstraintPeriodOverride::class,
             VenuePeriodOverride::class,
+            // P2-27 — mutualisation : les lignes membres avant le parent (aucune FK, ordre
+            // cosmétique). Deux tables club_id+season_id, purgées avec la saison.
+            SharedTrainingGroupTeam::class,
+            SharedTrainingGroup::class,
             // Module matchs (ajouté après ce purger — gap RGPD constaté PR-1) :
             // Fixture avant Competition (competitionId y pointe). Changement
             // ASSUMÉ pour ResetSeasonController aussi : « réinitialiser la

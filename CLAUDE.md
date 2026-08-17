@@ -100,7 +100,8 @@ Ce qu'il faut retenir en toute session :
 `Security/PasswordResetEnumerationTest` (parité anti-énumération du rail mot de passe : hash factice, mail par le bus, 429 reset) ·
 `Security/RegisterTurnstileTest` (Turnstile sur le register : inerte sans secret configuré, 403 fail-closed sur verdict Cloudflare, fail-open sur panne transport, 403 identique email frais vs connu, rate-limit register intact et prioritaire) ·
 `CrossStack/ImplicitRulePayloadParityTest` (règles implicites bien-être : ce qui est STOCKÉ == le bloc `implicitRules` que le payload émet, défauts compris — falsifié dans les deux sens, base ET overlay de période) ·
-`CrossStack/PreviousAssignmentsPayloadParityTest` (placement précédent ÉMIS au moteur == placements de la version source en base — falsifié dans les deux sens ; source explicite / repli dernière COMPLETED / première génération = pas de bloc / overlay = sa propre lignée jamais le socle / HARD inclus ; ET le précédent n'entre pas dans le hash de snapshot — pas de dérive `snapshotHash` ⇄ `currentStructureHash`).
+`CrossStack/PreviousAssignmentsPayloadParityTest` (placement précédent ÉMIS au moteur == placements de la version source en base — falsifié dans les deux sens ; source explicite / repli dernière COMPLETED / première génération = pas de bloc / overlay = sa propre lignée jamais le socle / HARD inclus ; ET le précédent n'entre pas dans le hash de snapshot — pas de dérive `snapshotHash` ⇄ `currentStructureHash`) ·
+`CrossStack/SharedTrainingPayloadParityTest` (mutualisation : ce qui est STOCKÉ — groupes {équipes, K} ancrés au plan — == le bloc `sharedTrainings` émis au moteur, socle ET période, portée dérivée du plan ; falsifié dans les deux sens — un groupe stocké apparaît, un groupe d'une autre portée ne fuit pas).
 Detail: `docs/testing/testing-strategy.md`.
 
 ## 5. Conventions (core — détail par zone dans `.claude/rules/`)
