@@ -100,6 +100,79 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
         }
     }
 
+    /**
+     * P5-17 — après le seed dev, le plan SEASON du club POINTE (chosen) une version
+     * COMPLETED : la transcription littérale du planning réel (90 créneaux), marquée
+     * `seed-transcription`. Le club dev n'est donc plus « avant première génération » —
+     * il ouvre sur le planning réel, sans jamais appeler le solveur.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDevSeedPointsSeasonPlanAtCompletedTranscription(): void
+    {
+        $club = $this->seeder->run($this->em, BcclSeedProfile::dev());
+
+        $row = $this->connection->fetchAssociative(
+            'SELECT s.status, s.solver_version, '
+            . '(SELECT COUNT(*) FROM schedule_slot_template t WHERE t.schedule_id = s.id) AS slot_count '
+            . 'FROM schedule_plan sp JOIN schedule s ON s.id = sp.chosen_schedule_id '
+            . 'WHERE sp.season_id = (SELECT id FROM season WHERE club_id = ? AND name = \'2026-2027\') '
+            . 'AND sp.type = \'SEASON\'',
+            [$club->getId()],
+        );
+
+        self::assertNotFalse($row, 'le plan SEASON du club dev pointe une version choisie');
+        self::assertSame('COMPLETED', (string) $row['status'], 'la version pointée est COMPLETED');
+        self::assertSame('seed-transcription', (string) $row['solver_version'], 'la provenance est la transcription du seed');
+        self::assertSame(90, (int) $row['slot_count'], 'la transcription pose exactement 90 créneaux (lundi→samedi)');
+    }
+
+    /**
+     * P5-17 — chaque RÉSERVATION seedée (pin durable HARD) retrouve son créneau dans la
+     * transcription pointée, verrouillé HARD (exactement ce qu'un import de résultat solveur
+     * produirait). Une réservation ORPHELINE — sans créneau transcrit apparié — trahit une
+     * transcription incomplète, et ce test la nomme.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testEverySeededReservationHasMatchingTranscribedSlot(): void
+    {
+        $club = $this->seeder->run($this->em, BcclSeedProfile::dev());
+
+        $orphans = $this->connection->fetchAllAssociative(
+            'SELECT r.team_id, r.venue_id, r.day_of_week, r.start_time FROM reservation r '
+            . 'WHERE r.club_id = ? AND NOT EXISTS ( '
+            . 'SELECT 1 FROM schedule_slot_template t '
+            . 'JOIN schedule_plan sp ON sp.chosen_schedule_id = t.schedule_id '
+            . 'WHERE sp.type = \'SEASON\' AND sp.club_id = r.club_id '
+            . 'AND t.team_id = r.team_id AND t.venue_id = r.venue_id '
+            . 'AND t.day_of_week = r.day_of_week AND t.start_time = r.start_time '
+            . 'AND t.lock_level = \'HARD\' )',
+            [$club->getId()],
+        );
+
+        self::assertSame([], $orphans, 'chaque réservation seedée est appariée à un créneau transcrit verrouillé HARD');
+    }
+
+    /**
+     * P5-17 — la transcription ne vise QUE le profil dev : le club de DÉMONSTRATION reste
+     * « avant première génération » (plan SEASON sans pointeur), l'écran de démo part sur le
+     * wizard/Récap comme avant.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDemoSeedLeavesSeasonPlanUnpointed(): void
+    {
+        $club = $this->seeder->run($this->em, BcclSeedProfile::demo('demo-pass-transcription'));
+
+        $chosen = $this->connection->fetchOne(
+            'SELECT chosen_schedule_id FROM schedule_plan WHERE club_id = ? AND type = \'SEASON\'',
+            [$club->getId()],
+        );
+
+        self::assertNull(false === $chosen ? null : $chosen, 'le club de démonstration ne pointe aucun planning');
+    }
+
     protected function setUp(): void
     {
         $adminUrl = $_SERVER['DATABASE_ADMIN_URL'] ?? getenv('DATABASE_ADMIN_URL');
@@ -129,7 +202,7 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
         parent::tearDown();
     }
 
-    /** @return array{clubs:int, teams:int, slots:int, reservations:int} */
+    /** @return array{clubs:int, teams:int, slots:int, reservations:int, schedules:int, slotTemplates:int} */
     private function counts(): array
     {
         return [
@@ -137,6 +210,11 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
             'teams' => $this->rowsIn('team'),
             'slots' => $this->rowsIn('venue_training_slot'),
             'reservations' => $this->rowsIn('reservation'),
+            // P5-17 : la version transcrite et ses créneaux entrent dans la mesure
+            // d'idempotence — un second seed ne doit ni dupliquer la version (find-or-create
+            // par plan+provenance) ni doubler ses 90 créneaux (purge l.853 + réinsertion).
+            'schedules' => $this->rowsIn('schedule'),
+            'slotTemplates' => $this->rowsIn('schedule_slot_template'),
         ];
     }
 

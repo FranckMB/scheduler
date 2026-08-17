@@ -57,7 +57,12 @@ final readonly class BcclSeedProfile
         ['firstName' => 'Jade', 'lastName' => ''],
     ];
 
-    /** @param list<array{firstName: string, lastName: string}>|null $coachNames remplacement 1-à-1, null = noms du seed */
+    /**
+     * @param list<array{firstName: string, lastName: string}>|null $coachNames             remplacement 1-à-1, null = noms du seed
+     * @param bool                                                  $transcribeRealSchedule P5-17 : à `true`, le plan SEASON pointe une
+     *                                                                                      version COMPLETED transcrivant le planning réel
+     *                                                                                      (dev SEULEMENT — la démo reste avant génération)
+     */
     private function __construct(
         public string $clubName,
         public string $clubSlug,
@@ -69,6 +74,7 @@ final readonly class BcclSeedProfile
         public bool $seedLogo,
         public bool $isDemo,
         public ?array $coachNames,
+        public bool $transcribeRealSchedule,
     ) {}
 
     public static function dev(): self
@@ -84,6 +90,7 @@ final readonly class BcclSeedProfile
             seedLogo: true,
             isDemo: false,
             coachNames: null,
+            transcribeRealSchedule: true,
         );
     }
 
@@ -117,6 +124,8 @@ final readonly class BcclSeedProfile
             seedLogo: false,
             isDemo: false,
             coachNames: self::FICTIONAL_COACHES,
+            // Charge à jeter : on mesure la GÉNÉRATION, pas un planning pré-transcrit.
+            transcribeRealSchedule: false,
         );
     }
 
@@ -136,6 +145,9 @@ final readonly class BcclSeedProfile
             seedLogo: false,
             isDemo: true,
             coachNames: self::FICTIONAL_COACHES,
+            // La démo reste « avant première génération » : l'écran de démonstration part
+            // sur le wizard/Récap, sans planning pré-pointé.
+            transcribeRealSchedule: false,
         );
     }
 }

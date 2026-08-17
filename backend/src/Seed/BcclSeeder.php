@@ -12,6 +12,7 @@ use App\Entity\Constraint;
 use App\Entity\ImplicitRuleSetting;
 use App\Entity\PriorityTier;
 use App\Entity\Reservation;
+use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\Sport;
@@ -31,11 +32,14 @@ use App\Enum\Gender;
 use App\Enum\ImplicitRuleIntensity;
 use App\Enum\ImplicitRuleKey;
 use App\Enum\LockLevel;
+use App\Enum\LockOrigin;
+use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
 use App\Service\Basketball\CategoryCatalog;
 use App\Service\LeagueResolver;
+use App\Service\ScheduleConstraintBuilder;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SchoolZoneResolver;
 use App\Service\SeasonResolver;
@@ -59,6 +63,12 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
  */
 final class BcclSeeder
 {
+    /**
+     * Provenance de la version transcrite (P5-17) : marqueur de solverVersion, aussi la
+     * clé de find-or-create du Schedule. Une transcription du planning réel, pas un solve.
+     */
+    private const string SEED_TRANSCRIPTION_MARKER = 'seed-transcription';
+
     /** Optional default logo for the seeded club (drop a PNG here to ship one). */
     private const string BCCL_LOGO_PATH = __DIR__ . '/../DataFixtures/assets/bccl-logo.png';
     private const int LOGO_MAX_BYTES = 512_000; // 500 KB — same as ClubLogoController
@@ -70,6 +80,7 @@ final class BcclSeeder
         private readonly LeagueResolver $leagueResolver,
         private readonly LogoStorage $logoStorage,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly ScheduleConstraintBuilder $constraintBuilder,
     ) {}
 
     public function run(EntityManagerInterface $manager, BcclSeedProfile $profile): Club
@@ -250,10 +261,13 @@ final class BcclSeeder
         // ADR-0002 Lot A: seed the season's empty SEASON plan (idempotent).
         $this->schedulePlanProvisioner->ensureSeasonPlan($season);
 
-        // BCCL is seeded as an INCOMPLETE onboarding (cockpit state 1): all the
-        // data is entered but NO plan has been generated yet, so the club lands on
-        // the wizard (Récap) before its first generation — the realistic demo of a
-        // freshly-onboarding club. No baseline / no validated socle is stamped.
+        // Le socle (baseline/socle validé) n'est PAS stampé ici. Deux visages ensuite
+        // (P5-17, tout en fin de run() sous le drapeau `transcribeRealSchedule`) :
+        // - profil dev : le plan SEASON POINTE une version COMPLETED transcrivant le
+        //   planning réel — le club dev ouvre sur son planning, pas sur le wizard ;
+        // - profils démo/charge : rien n'est pointé (cockpit state 1) — toute la donnée
+        //   est saisie mais AUCUN planning généré, le club atterrit sur le wizard (Récap)
+        //   avant sa première génération, la démo réaliste d'un club en cours d'onboarding.
 
         // --- User ---
         $existingUser = $manager->getRepository(User::class)->findOneBy(['email' => $profile->managerEmail]);
@@ -1194,7 +1208,218 @@ final class BcclSeeder
 
         $manager->flush();
 
+        // ============================================================
+        // SECTION 11 — TRANSCRIPTION DU PLANNING RÉEL (P5-17, profil dev)
+        // ============================================================
+        // Le plan SEASON pointe une version COMPLETED transcrivant, à la lettre, le
+        // planning réel du club (samedi compris), sans jamais appeler le solveur. Démo et
+        // charge restent avant première génération (drapeau à false).
+        if ($profile->transcribeRealSchedule) {
+            $this->pointSeasonPlanAtRealSchedule($manager, $season, $clubId, $teams, $venues, $additionalSlots);
+        }
+
         return $club;
+    }
+
+    /**
+     * P5-17 — le plan SEASON pointe une version COMPLETED qui TRANSCRIT le planning réel
+     * du club (business/5-donnees/plannings-bccl/planning-saison.txt), sans solveur. Rien
+     * du seed n'est touché : on AJOUTE une version + son pointeur, par les primitives de
+     * l'app (linkSchedule puis choose). Idempotent : find-or-create de la version par
+     * (plan SEASON, provenance), et les créneaux sont réinsérés après la purge (l.853).
+     *
+     * @param array<string, Team>                                                                                 $teams
+     * @param array<string, Venue>                                                                                $venues
+     * @param list<array{team: Team, venue: string, day: int, startTime: string, duration: int, lock: LockLevel}> $reservations
+     */
+    private function pointSeasonPlanAtRealSchedule(
+        EntityManagerInterface $manager,
+        Season $season,
+        string $clubId,
+        array $teams,
+        array $venues,
+        array $reservations,
+    ): void {
+        // Clé de placement d'un créneau (équipe:gymnase:jour:HH:MM) — même identité que
+        // l'importer (ScheduleResultImporter::placementKey), pour dériver les verrous.
+        $placementKey = static fn (string $teamId, string $venueId, int $day, string $start): string => \sprintf('%s:%s:%d:%s', $teamId, $venueId, $day, substr($start, 0, 5));
+
+        // Placements des RÉSERVATIONS seedées : un créneau transcrit qui coïncide porte un
+        // verrou HARD/RESERVATION (exactement ce qu'un import de résultat solveur produit) ;
+        // tous les autres NONE/null.
+        $reservationPlacements = [];
+        foreach ($reservations as $reservation) {
+            $reservationPlacements[$placementKey($reservation['team']->getId(), $venues[$reservation['venue']]->getId(), $reservation['day'], $reservation['startTime'])] = true;
+        }
+
+        // Transcription de business/5-donnees/plannings-bccl/planning-saison.txt, état au
+        // 2026-08-17. [équipe, gymnase, jour ISO, 'HH:MM', durée]. Un créneau partagé
+        // (« U9F1 + U9F2 ») donne UNE entrée PAR équipe (même gymnase/heure/durée) — le
+        // regroupement d'affichage vient du groupLabel des VenueTrainingSlot, pas d'ici.
+        // « Vétérans » du fichier = l'équipe seed « Veterans ». Lignes transcrites TELLES
+        // QU'ÉCRITES (les « échangements de créneau » du fichier décrivent l'état corrigé).
+        /** @var list<array{string, string, int, string, int}> $transcription */
+        $transcription = [
+            // LUNDI
+            ['Section J.Macé', 'vMateo', 1, '16:00', 90],
+            ['U9F1', 'vMateo', 1, '17:30', 90],
+            ['U9F2', 'vMateo', 1, '17:30', 90],
+            ['U15F1', 'vMateo', 1, '19:00', 90],
+            ['SM2', 'vMateo', 1, '20:30', 120],
+            ['U13M1', 'vArmand', 1, '17:30', 90],
+            ['U13M2', 'vArmand', 1, '17:30', 90],
+            ['U18M1', 'vArmand', 1, '19:00', 90],
+            ['Training Individuel', 'vArmand', 1, '20:30', 120],
+            ['U13F2', 'vTonkin', 1, '19:00', 90],
+            ['U13F1', 'vDebarros', 1, '17:30', 90],
+            ['U18F1', 'vDebarros', 1, '19:00', 90],
+            ['SF3', 'vDebarrosAnnexe', 1, '20:30', 120],
+            // MARDI
+            ['U11M1', 'vArmand', 2, '17:30', 90],
+            ['U18M2', 'vArmand', 2, '19:00', 90],
+            ['U11F2', 'vDebarros', 2, '17:30', 90],
+            ['U15F3', 'vDebarros', 2, '19:00', 90],
+            ['SF1', 'vDebarros', 2, '20:30', 120],
+            ['U15F2', 'vDebarrosAnnexe', 2, '19:00', 90],
+            ['Loisir 1', 'vCamus', 2, '20:00', 150],
+            ['U13F2', 'vJdr', 2, '17:30', 90],
+            ['U13F3', 'vJdr', 2, '17:30', 90],
+            ['U18F2', 'vJdr', 2, '19:00', 90],
+            ['U18F3', 'vJdr', 2, '20:30', 120],
+            ['U15M1', 'vMateo', 2, '17:30', 90],
+            ['U21M1', 'vMateo', 2, '19:00', 105],
+            ['SM1', 'vMateo', 2, '20:45', 105],
+            ['U15M2', 'vJeanVilar', 2, '18:45', 105],
+            ['SM4', 'vJeanVilar', 2, '20:30', 120],
+            // MERCREDI
+            ['U9F1', 'vAdn', 3, '17:30', 90],
+            ['U9F2', 'vAdn', 3, '17:30', 90],
+            ['U9M2', 'vAdn', 3, '17:30', 90],
+            ['U18F1', 'vAdn', 3, '19:00', 90],
+            ['Mercredi Shark U9-U11', 'vMateo', 3, '09:30', 75],
+            ['U11F2', 'vMateo', 3, '16:00', 90],
+            ['U9M1', 'vMateo', 3, '16:00', 90],
+            ['U11F1', 'vMateo', 3, '17:30', 90],
+            ['U11M2', 'vMateo', 3, '17:30', 90],
+            ['U15F1', 'vMateo', 3, '19:00', 90],
+            ['SF1', 'vMateo', 3, '20:30', 120],
+            ['U13F1', 'vArmand', 3, '14:00', 105],
+            ['U13F2', 'vArmand', 3, '14:00', 105],
+            ['U13M1', 'vArmand', 3, '15:45', 90],
+            ['U15M1', 'vArmand', 3, '17:15', 90],
+            ['U18M1', 'vArmand', 3, '18:45', 90],
+            ['SM3', 'vArmand', 3, '20:15', 135],
+            ['U13F3', 'vTonkin', 3, '16:00', 90],
+            ['U13M2', 'vTonkin', 3, '17:30', 90],
+            ['U18F2', 'vTonkin', 3, '19:00', 90],
+            ['SF2', 'vTonkin', 3, '20:30', 120],
+            ['Basket Santé', 'vDebarrosAnnexe', 3, '10:45', 75],
+            ['U11M1', 'vDebarrosAnnexe', 3, '17:30', 90],
+            ['U15F3', 'vDebarrosAnnexe', 3, '19:00', 90],
+            ['SF3', 'vDebarrosAnnexe', 3, '20:30', 120],
+            ['3x3', 'vAdn', 3, '20:30', 120],
+            // JEUDI
+            ['U11M2', 'vArmand', 4, '17:30', 90],
+            ['U18F Fays', 'vDebarros', 4, '16:00', 90],
+            ['U15M1', 'vDebarros', 4, '17:30', 90],
+            ['U21M1', 'vDebarros', 4, '19:00', 90],
+            ['Loisir Feminine', 'vDebarros', 4, '20:30', 120],
+            ['Loisir 3', 'vCamus', 4, '20:00', 150],
+            ['U9M1', 'vJdr', 4, '17:30', 90],
+            ['U9M2', 'vJdr', 4, '17:30', 90],
+            ['SM2', 'vJdr', 4, '19:00', 90],
+            ['SF2', 'vJdr', 4, '20:30', 120],
+            ['Section J.Macé', 'vMateo', 4, '16:00', 90],
+            ['U13F1', 'vMateo', 4, '17:30', 90],
+            ['U18F1', 'vMateo', 4, '19:00', 90],
+            ['SM1', 'vMateo', 4, '20:30', 120],
+            ['U18M2', 'vJeanVilar', 4, '19:00', 90],
+            ['U21M2', 'vJeanVilar', 4, '20:30', 120],
+            // VENDREDI
+            ['Section J.Macé', 'vMateo', 5, '16:00', 90],
+            ['U13M1', 'vMateo', 5, '17:30', 90],
+            ['U18M1', 'vMateo', 5, '19:00', 90],
+            ['Veterans', 'vMateo', 5, '20:30', 120],
+            ['U11F1', 'vArmand', 5, '17:30', 90],
+            ['U15M2', 'vArmand', 5, '19:00', 90],
+            ['U18F3', 'vArmand', 5, '20:30', 120],
+            ['U18M Fays', 'vDebarros', 5, '16:00', 90],
+            ['U13M2', 'vDebarros', 5, '17:30', 90],
+            ['U15F1', 'vDebarros', 5, '19:00', 90],
+            ['U21M2', 'vDebarros', 5, '20:30', 120],
+            ['U15F2', 'vDebarrosAnnexe', 5, '19:00', 90],
+            ['Loisir 2', 'vCamus', 5, '20:00', 150],
+            // SAMEDI
+            ['Micro Basket', 'vMateo', 6, '09:00', 45],
+            ['Baby 1', 'vMateo', 6, '09:45', 60],
+            ['Baby 2', 'vMateo', 6, '10:45', 60],
+            ['Academie U9-U11', 'vJdr', 6, '09:00', 75],
+            ['Academie U13-U15', 'vJdr', 6, '10:15', 75],
+            ['Academie U18', 'vJdr', 6, '11:30', 75],
+        ];
+
+        // Find-or-create de la version transcrite : clé (plan SEASON, provenance) — idempotent.
+        $seasonPlanId = $this->schedulePlanProvisioner->ensureSeasonPlan($season)->getId();
+        $schedule = $manager->getRepository(Schedule::class)->findOneBy([
+            'schedulePlanId' => $seasonPlanId,
+            'solverVersion' => self::SEED_TRANSCRIPTION_MARKER,
+        ]);
+        if (!$schedule instanceof Schedule) {
+            $schedule = new Schedule;
+            $schedule->setClubId($clubId);
+            $schedule->setSeasonId($season->getId());
+            $schedule->setSchedulePlanId($seasonPlanId);
+            $schedule->setName($this->schedulePlanProvisioner->versionNameFor($seasonPlanId));
+            $schedule->setStatus(ScheduleStatus::COMPLETED);
+            $schedule->setSolverVersion(self::SEED_TRANSCRIPTION_MARKER);
+            $manager->persist($schedule);
+            // Primitive de l'app : NUMÉROTE la version dans son plan (V1), sous verrou (idempotent).
+            $this->schedulePlanProvisioner->linkSchedule($schedule);
+        }
+
+        // Snapshot = la STRUCTURE courante (même recette que GenerateScheduleHandler et
+        // currentStructureHash), pour que « Régénérer » soit honnêtement grisé (structure
+        // inchangée depuis la « génération »).
+        $payload = $this->constraintBuilder->buildForClubSeason($clubId, $season->getId());
+        $schedule->setSnapshotData($payload);
+        $schedule->setSnapshotHash(hash('sha256', json_encode($payload, \JSON_THROW_ON_ERROR)));
+        $schedule->setStatus(ScheduleStatus::COMPLETED);
+        $manager->flush();
+
+        // VALIDER = POINTER (primitive de l'app) : le plan SEASON nomme cette version sa choisie.
+        $this->schedulePlanProvisioner->choose($schedule);
+
+        // Les créneaux : coachId null ; verrou DÉRIVÉ des réservations seedées (HARD/RESERVATION
+        // sur coïncidence, NONE/null sinon) — l'état exact qu'un import de résultat solveur pose.
+        // La purge l.853 a déjà vidé les créneaux du club/saison : réinsertion franche, idempotente.
+        foreach ($transcription as [$teamName, $venueVar, $day, $startTime, $duration]) {
+            $team = $teams[$teamName];
+            $venueId = $venues[$venueVar]->getId();
+            $isReserved = isset($reservationPlacements[$placementKey($team->getId(), $venueId, $day, $startTime)]);
+
+            $slot = new ScheduleSlotTemplate;
+            $slot->setClubId($clubId);
+            $slot->setSeasonId($season->getId());
+            $slot->setScheduleId($schedule->getId());
+            $slot->setTeamId($team->getId());
+            $slot->setVenueId($venueId);
+            $slot->setCoachId(null);
+            $slot->setDayOfWeek($day);
+            $slot->setStartTime(new DateTimeImmutable($startTime));
+            $slot->setDurationMinutes($duration);
+            $slot->setLockLevel($isReserved ? LockLevel::HARD : LockLevel::NONE);
+            $slot->setLockOrigin($isReserved ? LockOrigin::RESERVATION : null);
+            $manager->persist($slot);
+        }
+        $manager->flush();
+
+        // Miroir de ScheduleResultImporter (remise à zéro des 3 marqueurs) : un résultat
+        // fraîchement transcrit n'est pas périmé — sinon un 2e make fixtures afficherait
+        // « planning périmé » sans raison.
+        $schedule->setManuallyEditedSinceGeneration(false);
+        $schedule->setConstraintsChangedSinceGeneration(false);
+        $schedule->setResourcesChangedSinceGeneration(false);
+        $manager->flush();
     }
 
     /**
