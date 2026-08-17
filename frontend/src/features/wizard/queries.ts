@@ -629,27 +629,45 @@ export function useDeleteConstraint() {
   });
 }
 
-// --- Implicit "well-being" rules, adjustable (P2-28) ---
+// --- Implicit "well-being" rules, adjustable (P2-28) — scoped season / period (PR2) ---
 
-/** Les 4 règles bien-être RÉSOLUES (défauts inclus) pour le club/saison courant. */
-export function useImplicitRuleSettings() {
-  return useQuery({ queryKey: ["wizard", "implicit_rule_settings"], queryFn: wizardApi.listImplicitRuleSettings, staleTime: 30_000 });
-}
-
-export function useUpdateImplicitRuleSetting() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ ruleKey, body }: { ruleKey: string; body: wizardApi.ImplicitRuleSettingPayload }) => wizardApi.updateImplicitRuleSetting(ruleKey, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "implicit_rule_settings"] }),
+/**
+ * Les 4 règles bien-être RÉSOLUES (défauts inclus) pour la PORTÉE courante : saison (`null`) ou la
+ * copie d'un plan de période (un UUID).
+ *
+ * ⚠ La portée entre dans la CLÉ DE CACHE (`… ?? "season"`) — sans quoi le cache de saison et celui
+ * d'une période se contamineraient l'un l'autre (le panneau afficherait les valeurs de l'autre en
+ * basculant). Même patron que `useReservations`/`useSharedTrainingGroups`.
+ */
+export function useImplicitRuleSettings(schedulePlanId: string | null = null) {
+  return useQuery({
+    queryKey: ["wizard", "implicit_rule_settings", schedulePlanId ?? "season"],
+    queryFn: () => wizardApi.listImplicitRuleSettings(schedulePlanId),
+    staleTime: 30_000,
   });
 }
 
-/** « Réinitialiser » une règle : DELETE par clé → retour au défaut. */
-export function useResetImplicitRuleSetting() {
+/** PUT d'un réglage. La portée voyage dans le CORPS (uniquement en période — corps saison inchangé). */
+export function useUpdateImplicitRuleSetting(schedulePlanId: string | null = null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (ruleKey: string) => wizardApi.resetImplicitRuleSetting(ruleKey),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "implicit_rule_settings"] }),
+    mutationFn: ({ ruleKey, body }: { ruleKey: string; body: wizardApi.ImplicitRuleSettingPayload }) =>
+      wizardApi.updateImplicitRuleSetting(ruleKey, null === schedulePlanId ? body : { ...body, schedulePlanId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "implicit_rule_settings", schedulePlanId ?? "season"] }),
+  });
+}
+
+/**
+ * « Réinitialiser » une règle : DELETE par clé. Portée saison → suppression (retour au défaut) ;
+ * portée période (`?schedulePlanId=`) → le serveur RE-COPIE la valeur de saison. On garde l'appel
+ * saison à UN seul argument (corps de requête inchangé hors période).
+ */
+export function useResetImplicitRuleSetting(schedulePlanId: string | null = null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (ruleKey: string) =>
+      null === schedulePlanId ? wizardApi.resetImplicitRuleSetting(ruleKey) : wizardApi.resetImplicitRuleSetting(ruleKey, schedulePlanId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wizard", "implicit_rule_settings", schedulePlanId ?? "season"] }),
   });
 }
 

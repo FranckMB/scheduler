@@ -107,6 +107,12 @@ const THRESHOLD_BOUNDS: Record<"minRestDays" | "maxConsecutive", { min: number; 
   maxConsecutive: { min: 2, max: 6, label: "Créneaux consécutifs maximum" },
 };
 
+/** Unité humaine du seuil, pour le repère « Saison : … » (PR2). Pure présentation. */
+const THRESHOLD_UNIT: Record<"minRestDays" | "maxConsecutive", (n: number) => string> = {
+  minRestDays: (n) => (n > 1 ? "jours" : "jour"),
+  maxConsecutive: (n) => (n > 1 ? "créneaux" : "créneau"),
+};
+
 /** Le seuil d'une règle est celui que le serveur a RÉSOLU (non-null) — on ne le devine pas. */
 function thresholdOf(setting: ImplicitRuleSetting): { field: "minRestDays" | "maxConsecutive"; value: number } | null {
   if (null !== setting.minRestDays) {
@@ -136,6 +142,18 @@ export function isWellbeingKey(ruleKey: string | null): ruleKey is ImplicitRuleK
   return null !== ruleKey && WELLBEING_RULES.some((r) => r.ruleKey === ruleKey);
 }
 
+/**
+ * Le REPÈRE « Saison : … » d'une règle en mode période (PR2) : d'où part la copie du plan. Décision
+ * fondateur : la valeur de la saison affichée en repère, rien de plus (pas de bouton « revenir à la
+ * saison », pas d'indicateur calculé). Reprend les libellés d'intensité du panneau (jamais l'enum).
+ */
+function seasonReference(setting: ImplicitRuleSetting): string {
+  const intensity = INTENSITY_CRANS.find((cran) => cran.value === setting.intensity)?.label ?? setting.intensity;
+  const threshold = thresholdOf(setting);
+
+  return null === threshold ? `Saison : ${intensity}` : `Saison : ${intensity}, ${threshold.value} ${THRESHOLD_UNIT[threshold.field](threshold.value)}`;
+}
+
 function range(min: number, max: number): number[] {
   return Array.from({ length: max - min + 1 }, (_, i) => min + i);
 }
@@ -148,6 +166,7 @@ function range(min: number, max: number): number[] {
 function WellbeingRuleRow({
   meta,
   setting,
+  seasonSetting,
   readOnly,
   highlighted,
   onIntensity,
@@ -156,6 +175,8 @@ function WellbeingRuleRow({
 }: {
   meta: { ruleKey: ImplicitRuleKey; title: string; detail: string };
   setting: ImplicitRuleSetting;
+  /** La valeur de saison, en repère — non-null UNIQUEMENT en mode période (d'où part la copie). */
+  seasonSetting: ImplicitRuleSetting | null;
   readOnly: boolean;
   highlighted: boolean;
   onIntensity: (setting: ImplicitRuleSetting, intensity: ImplicitRuleIntensity) => void;
@@ -172,6 +193,7 @@ function WellbeingRuleRow({
       <div>
         <p className="text-sm font-medium text-foreground">{meta.title}</p>
         <p className="text-xs text-muted-foreground">{meta.detail}</p>
+        {null !== seasonSetting ? <p className="text-xs italic text-muted-foreground">{seasonReference(seasonSetting)}</p> : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <div role="group" aria-label={`Intensité — ${meta.title}`} className="inline-flex overflow-hidden rounded-md border border-border">
@@ -254,14 +276,22 @@ export function ProductRulesPanel() {
  * un diagnostic du planning) ouvre cet onglet — géré par `ConstraintsStep` —, surligne la règle
  * visée et l'amène à l'écran. Pas de titre de section : l'onglet le porte déjà.
  */
-export function WellbeingRulesPanel({ ruleTarget = null }: { ruleTarget?: string | null }) {
-  const settingsQuery = useImplicitRuleSettings();
-  const update = useUpdateImplicitRuleSetting();
-  const reset = useResetImplicitRuleSetting();
+export function WellbeingRulesPanel({ ruleTarget = null, schedulePlanId = null }: { ruleTarget?: string | null; schedulePlanId?: string | null }) {
+  // PR2 — en période (`schedulePlanId` non-null) le panneau règle la COPIE du plan ; sinon la
+  // saison (comportement historique). La portée entre dans les trois appels et dans le cache.
+  const periodMode = null !== schedulePlanId;
+  const settingsQuery = useImplicitRuleSettings(schedulePlanId);
+  // La valeur de SAISON, en repère (« Saison : … ») quand on règle une période. En portée saison,
+  // même clé de cache que `settingsQuery` (react-query dédoublonne) — donc aucun appel réseau en
+  // plus ; on ne la LIT que `periodMode`.
+  const seasonQuery = useImplicitRuleSettings(null);
+  const update = useUpdateImplicitRuleSetting(schedulePlanId);
+  const reset = useResetImplicitRuleSetting(schedulePlanId);
   const readOnly = true === useWorkingSeason()?.isReadonly;
 
   const settings = settingsQuery.data ?? [];
   const byKey = new Map(settings.map((s) => [s.ruleKey, s]));
+  const seasonByKey = new Map((seasonQuery.data ?? []).map((s) => [s.ruleKey, s]));
   const state = readState(settingsQuery);
 
   // Amène la LIGNE ciblée à l'écran (centrée), une seule fois. La ligne n'existe qu'une fois les
@@ -294,6 +324,11 @@ export function WellbeingRulesPanel({ ruleTarget = null }: { ruleTarget?: string
 
   return (
     <div>
+      {periodMode ? (
+        <p className="mb-3 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-foreground">
+          Ces réglages ne valent que pour cette période — copiés du planning de saison à sa création.
+        </p>
+      ) : null}
       <p className="mb-3 text-xs text-muted-foreground">
         Réglez chacune sur « Obligatoire » (toujours respectée) ou « Objectif » (respectée quand c'est possible). Une règle en Objectif peut être dépassée — chaque dépassement est signalé
         au planning (« assouplie par vous »).
@@ -312,6 +347,7 @@ export function WellbeingRulesPanel({ ruleTarget = null }: { ruleTarget?: string
                 key={meta.ruleKey}
                 meta={meta}
                 setting={setting}
+                seasonSetting={periodMode ? (seasonByKey.get(meta.ruleKey) ?? null) : null}
                 readOnly={readOnly}
                 highlighted={ruleTarget === meta.ruleKey}
                 onIntensity={applyIntensity}
