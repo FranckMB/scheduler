@@ -46,10 +46,14 @@ final class ImplicitRuleSettingRepository extends ServiceEntityRepository
      *
      * @return array<string, ImplicitRuleSetting>
      */
-    public function findByPlanIndexed(string $schedulePlanId): array
+    public function findByPlanIndexed(string $clubId, string $seasonId, string $schedulePlanId): array
     {
+        // Le club et la saison sont RÉPÉTÉS ici alors que le filtre Doctrine et RLS les
+        // ajoutent déjà : c'est la 3e couche du modèle tenant (le provider scope
+        // explicitement), et la seule qui survit à un contexte où les deux autres sont
+        // relâchées — un id de plan ne se devine pas, mais on ne s'en remet pas à ça.
         $indexed = [];
-        foreach ($this->findBy(['schedulePlanId' => $schedulePlanId]) as $setting) {
+        foreach ($this->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => $schedulePlanId]) as $setting) {
             $indexed[$setting->getRuleKey()->value] = $setting;
         }
 

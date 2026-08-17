@@ -134,6 +134,42 @@ Schedule (= Version)                    ← existant, recentré
    épinglage (verrou HARD ou réservation) qui ne retombe plus sur aucun créneau de cette
    grille **bloque la génération en 422** avec un message nommant le gymnase et le jour
    (`OrphanPinGuard`, appelé par `GenerateScheduleController`) — jamais filtré en silence.
+
+   ⚠️ **Amendement bien-être-par-période (décision fondateur, 2026-08-18) — une période
+   POSSÈDE aussi ses 4 règles de bien-être** : `ImplicitRuleSetting` (les 4 règles réglables du
+   contrat moteur — repos coach, distribution salariés, enchaînements, âge croissant, §backend
+   `docs/architecture/constraint-matrix.md`) était jusque-là **club+saison seul**. Même patron
+   que la grille (#8, copie totale plutôt qu'union) : à la naissance du plan, `ImplicitRuleSetting`
+   gagne l'ancre `schedulePlanId` (NULL = saison ; un UUID = un plan de période) et
+   `SchedulePlanProvisioner` matérialise, à la naissance, une **copie totale** des 4 lignes
+   (valeur saison si déviée, sinon défaut) — jamais sparse, pour qu'un plan « tout au défaut »
+   reste distinguable d'un plan **legacy** (né avant cette fonctionnalité, zéro ligne, qui
+   **retombe sur la saison** — repli vivant, comportement d'avant au bit près, aucune migration
+   de données). Une fois copiée, la ligne du plan **vit sa vie** : une modification ultérieure de
+   la saison ne redescend plus. Le DELETE en portée plan **re-copie la valeur saison courante**
+   au lieu de supprimer la ligne (l'invariant « une période porte SES 4 règles » ne se brise
+   jamais). NR : `Security/PeriodPlanBirthTest` (naître = porter ses 4 lignes copiées),
+   `CrossStack/ImplicitRulePayloadParityTest` (stocké par portée == payload de sa portée, le
+   repli legacy compris) — les deux **steps de `blocking-tests`**.
+
+   **Le raisonnement du fondateur, verbatim (pourquoi copie et pas héritage vivant)** : le
+   planning de saison du BCCL a été construit **hors de l'application**, donc ses règles de
+   bien-être n'y sont **pas appliquées** — mais pour une période de reprise, le gestionnaire
+   **peut enfin** appliquer ses règles ; pourquoi lui faire payer de ne pas avoir pu le faire en
+   début de saison ? Preuve à l'appui côté seed : les 4 règles sont posées en `PREFERRED` au
+   niveau SAISON pour le club BCCL (`backend/src/Seed/BcclSeeder.php`, section « Les 4 règles de
+   bien-être en PRÉFÉRÉ ») **uniquement pour rendre transcriptible** un planning réel construit en
+   violation de ces règles — un **artifice de transcription**, pas une politique de club. Avec un
+   héritage vivant (la période SUIT la saison), cet artifice aurait **fui** dans chaque période de
+   reprise sans que le gestionnaire l'ait choisi. La copie l'isole : une reprise démarre de la
+   valeur saison du jour, puis devient LA SIENNE.
+
+   **PR1 (backend, ce lot) livre le modèle et l'API** (portée dans le corps/la query
+   `schedulePlanId`, GET résolu par portée, PUT/DELETE par portée). **PR2 (front, à suivre)**
+   rendra l'onglet Bien-être du wizard conscient de la période — tant qu'elle n'est pas livrée,
+   l'écran ne règle et n'affiche QUE la portée saison (`schedulePlanId` jamais envoyé), même en
+   mode période : aucune régression, mais aucun gestionnaire ne peut encore régler une reprise
+   depuis l'écran.
 6. **La structure (équipes/gymnases/coachs/contraintes permanentes) reste PARTAGÉE**
    (état vivant du club par saison) — **pas de duplication par version**. L'indépendance
    des versions passe par la **photo** (JSON, D2, existante) : chaque version COMPLETED
@@ -186,7 +222,7 @@ puis le gestionnaire décide » : le fait existe avant tout plan, et parfois san
 | **Version choisie** | Celle que pointe le plan (= validée). |
 | **Espace de travail** | Plan au pointeur null : on génère/compare des versions. |
 | **★ / photo chargée** | La version dont la photo de structure est chargée dans le wizard. |
-| **Réglages de période** | Coches équipes/contraintes + grille de gymnases (copie, #8) + modes de gymnase d'un plan CLOSURE/HOLIDAY. |
+| **Réglages de période** | Coches équipes/contraintes + grille de gymnases (copie, #8) + modes de gymnase d'un plan CLOSURE/HOLIDAY + copie des 4 règles bien-être (lot bien-être-par-période, ci-dessous). |
 | **Termes bannis** | *baseline*, *planningName*, *overlayScheduleId*, *liveContext*, statuts *VALIDATED/ARCHIVED*. |
 
 ### Règles inter-plans & consommateurs (complétées après sweep exhaustif des ~320 usages)
@@ -527,6 +563,19 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   changement de socle avec une grille copiée périmée. NR : `VenueTrainingSlotApiTest` (chevauchement
   borné à une couche), `CascadeDeleteApiTest` / `ValidateScheduleTest` / `ReopenScheduleTest` (portée
   élargie de la destruction, survie des périodes en cours et passées).
+- **Lot bien-être-par-période — une période possède ses 4 règles (PR1 backend livrée 2026-08-18)**,
+  hors de la numérotation A→D (post-ADR), même patron que le Lot #8 (copie plutôt qu'union) —
+  voir l'amendement de l'inv. 5 ci-dessus (`ImplicitRuleSetting.schedulePlanId`,
+  `SchedulePlanProvisioner::materializeForPlan`, DELETE en portée plan = re-copie). Modèle et API
+  seuls : **PR2 (front) reste à livrer** — tant qu'elle ne l'est pas, l'onglet Bien-être du wizard
+  n'exerce que la portée saison, en mode socle comme en mode période (aucune régression, geste de
+  reprise pas encore atteignable depuis l'écran). NR : `Security/PeriodPlanBirthTest`,
+  `CrossStack/ImplicitRulePayloadParityTest` (invariant RETOURNÉ — l'un et l'autre gardaient
+  jusque-là l'ancien invariant « même bloc season-scopé », desormais falsifié dans les deux sens
+  sur la copie ET le repli legacy), `Integration/Service/ResourceChangeStaleScheduleTest` (péremption
+  resserrée : un réglage de PLAN ne périme que SON plan ; un réglage de SAISON garde club+saison
+  tant que le repli legacy existe quelque part — surmarquage conservateur assumé, dette notée en
+  roadmap).
 
 ### Note de nommage (résolution de collision)
 

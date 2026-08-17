@@ -45,7 +45,7 @@ final class ImplicitRuleSettingStateProvider implements ProviderInterface
 
         [$resolved, $stored] = null === $schedulePlanId
             ? [$this->resolver->resolve($clubId, $seasonId), $this->repository->findByClubSeasonIndexed($clubId, $seasonId)]
-            : [$this->resolver->resolveForPlan($clubId, $seasonId, $schedulePlanId), $this->repository->findByPlanIndexed($schedulePlanId)];
+            : [$this->resolver->resolveForPlan($clubId, $seasonId, $schedulePlanId), $this->repository->findByPlanIndexed($clubId, $seasonId, $schedulePlanId)];
 
         if ($operation instanceof CollectionOperationInterface) {
             $out = [];

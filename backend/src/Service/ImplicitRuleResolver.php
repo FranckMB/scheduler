@@ -90,7 +90,7 @@ final class ImplicitRuleResolver
      */
     public function resolveForPlan(string $clubId, string $seasonId, string $schedulePlanId): array
     {
-        $stored = $this->repository->findByPlanIndexed($schedulePlanId);
+        $stored = $this->repository->findByPlanIndexed($clubId, $seasonId, $schedulePlanId);
         if ([] === $stored) {
             return $this->resolve($clubId, $seasonId);
         }

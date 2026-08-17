@@ -157,7 +157,7 @@ une séance JOUÉE ; deux coachs-joueurs sont présents les 5 soirs).
 
 - **Règles du produit — immuables** (rien à régler) : capacité, coach mono-gymnase (D-14),
   coach-joueur non simultané, équipe non dédoublée, une séance/jour. Le modèle lui-même.
-- **Règles de bien-être — RÉGLABLES par club+saison** (bloc **introduit au contrat 2.7** — la
+- **Règles de bien-être — RÉGLABLES PAR PORTÉE** (bloc **introduit au contrat 2.7** — la
   version COURANTE se lit dans `engine/CONTRACT_VERSION`, jamais ici ; bloc optionnel
   `implicitRules` ; entité `ImplicitRuleSetting`, absence de ligne = défaut) : **jour de repos
   coach** (`coachRestDay`, seuil `minRestDays` 1-4, défaut 1), **distribution des salariés**
@@ -167,6 +167,12 @@ une séance JOUÉE ; deux coachs-joueurs sont présents les 5 soirs).
   la règle via un littéral de violation AGRÉGÉ par entité, poids −6, preuve d'empilement dans
   `objective.py` — jamais un terme par occurrence, qui pouvait supprimer des séances). Un cran
   DÉSACTIVÉE est une **extension future**, coupée du lot sur contrarian-review.
+  ⚠ **Corrigé le 2026-08-18 (bien-être PAR PÉRIODE, PR1 backend)** : ce bloc était décrit
+  « réglable par club+saison » sans nuance — depuis `schedule_plan_id` sur `ImplicitRuleSetting`
+  (ADR-0002 inv. 5), la portée réelle est **le plan** : NULL = la saison (base + repli des plans
+  nés avant la fonctionnalité), un plan de période reçoit à sa NAISSANCE une **copie
+  matérialisée** de ses 4 lignes — patron de la copie de grille (#8) — et une modification de la
+  saison POSTÉRIEURE à la naissance ne redescend plus dans sa copie. Détail : ADR-0002.
 - **Violation TOUJOURS diagnostiquée**, quel que soit le cran (exigence fondateur) : type
   `implicit_rule_not_honored` + `ruleKey`, détection post-solve inconditionnelle au **même grain
   que la pose** (coach MAIN — les ASSISTANT ne comptent pas — + séances jouées), textes
