@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\ApiResource;
 
-use ApiPlatform\Doctrine\Orm\Filter\SearchFilter;
-use ApiPlatform\Metadata\ApiFilter;
 use ApiPlatform\Metadata\ApiResource;
 use ApiPlatform\Metadata\Delete;
 use ApiPlatform\Metadata\Get;
@@ -24,6 +22,9 @@ use Symfony\Component\Serializer\Attribute\Groups;
  * ``commonSessions`` séances communes. Scopé club+saison, filtrable par ``schedulePlanId``
  * (NULL = socle saison ; un UUID = plan de période). Écriture réservée au management.
  */
+// `?schedulePlanId=` est lu DANS le state provider, pas par un `ApiFilter` Doctrine :
+// la ressource a son propre provider, l'extension Doctrine ne tourne jamais (le filtre
+// posé ici à l'origine était inerte — retiré pour ne pas laisser croire l'inverse).
 #[ApiResource(shortName: 'SharedTrainingGroup', operations: [
     new GetCollection,
     new Get,
@@ -31,7 +32,6 @@ use Symfony\Component\Serializer\Attribute\Groups;
     new Put,
     new Delete,
 ], input: SharedTrainingGroupInput::class, paginationEnabled: false, provider: SharedTrainingGroupStateProvider::class, processor: SharedTrainingGroupStateProcessor::class)]
-#[ApiFilter(SearchFilter::class, properties: ['schedulePlanId' => 'exact'])]
 class SharedTrainingGroupResource
 {
     #[Groups(['read'])]
