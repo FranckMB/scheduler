@@ -450,6 +450,12 @@ jobs:
       - name: ImplicitRulePayloadParityTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/CrossStack/ImplicitRulePayloadParityTest.php --group phase1'
 
+      # P3-21 PR B — le placement précédent ÉMIS au moteur (terme de stabilité) doit être
+      # EXACTEMENT les placements de la version source en base, et NE PAS entrer dans le hash
+      # de snapshot (sinon snapshotHash diverge de currentStructureHash à chaque régénération).
+      - name: PreviousAssignmentsPayloadParityTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/CrossStack/PreviousAssignmentsPayloadParityTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest

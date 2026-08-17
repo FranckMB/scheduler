@@ -7,6 +7,7 @@ namespace App\MessageHandler;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\Schedule;
+use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
@@ -216,6 +217,19 @@ final class GenerateScheduleHandler
             ->setSnapshotData($scheduleInput)
             ->setSnapshotHash(hash('sha256', $encodedSnapshot));
 
+        // P3-21 — le placement PRÉCÉDENT (terme de stabilité moteur) est greffé sur l'entrée
+        // du solveur APRÈS le snapshot (data + hash), jamais avant : le précédent est une
+        // préférence de CONVERGENCE, pas une donnée de STRUCTURE. L'inclure dans
+        // `snapshotHash` (ou dans `snapshotData`, gardée alignée sur le hash) le ferait
+        // diverger de `currentStructureHash` — recalculé SANS lui par SchedulePlanProvisioner
+        // — à CHAQUE régénération, cassant en silence le garde « structure inchangée »
+        // (bouton Régénérer grisé, signal « structure modifiée » du cockpit). Seul
+        // `$scheduleInput`, l'entrée réelle envoyée au moteur, le porte.
+        $scheduleInput = $this->constraintBuilder->withPreviousAssignments(
+            $scheduleInput,
+            $this->resolvePreviousAssignmentSlots($schedule, $message),
+        );
+
         $this->diagnosticsRecorder->purgePrevious($schedule);
         $this->entityManager->flush();
 
@@ -322,6 +336,63 @@ final class GenerateScheduleHandler
             $schedule->getClubId(),
             $schedule->getSeasonId(),
         );
+    }
+
+    /**
+     * P3-21 — les placements de la version « précédente » à faire converger (terme de
+     * stabilité). Source EXPLICITE d'abord (`sourceScheduleId` = la version que le
+     * gestionnaire REGARDE en régénérant) ; à défaut, repli sur la dernière version
+     * COMPLETED du MÊME plan. Aucune ⇒ première génération : bloc vide.
+     *
+     * La source est TOUJOURS de la MÊME lignée (le même `schedulePlanId`) : ADR-0002 —
+     * jamais le socle pour un overlay, ni l'inverse. Pour une source explicite, on le VÉRIFIE
+     * (défense en profondeur contre un id incohérent) ; pour le repli, la requête est déjà
+     * bornée au plan.
+     *
+     * @return array<ScheduleSlotTemplate>
+     */
+    private function resolvePreviousAssignmentSlots(Schedule $schedule, GenerateScheduleMessage $message): array
+    {
+        $sourceId = $message->getSourceScheduleId();
+        if (null === $sourceId) {
+            $source = $this->latestCompletedOfPlan($schedule);
+        } else {
+            $source = $this->findSchedule($sourceId);
+            // Même lignée obligatoire : une source d'un autre plan (le socle sous un overlay,
+            // p.ex.) donnerait un précédent hors sujet. Incohérence ⇒ pas de précédent.
+            if (!$source instanceof Schedule || $source->getSchedulePlanId() !== $schedule->getSchedulePlanId()) {
+                $source = null;
+            }
+        }
+
+        if (!$source instanceof Schedule) {
+            return [];
+        }
+
+        return $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy(
+            ['scheduleId' => $source->getId()],
+            ['id' => 'ASC'],
+        );
+    }
+
+    /**
+     * La dernière version COMPLETED du plan de `$schedule`, hors la version en cours de
+     * génération (numérotation linéaire `versionNumber` — la V la plus haute finie).
+     */
+    private function latestCompletedOfPlan(Schedule $schedule): ?Schedule
+    {
+        $candidates = $this->entityManager->getRepository(Schedule::class)->findBy(
+            ['schedulePlanId' => $schedule->getSchedulePlanId(), 'status' => ScheduleStatus::COMPLETED],
+            ['versionNumber' => 'DESC'],
+        );
+
+        foreach ($candidates as $candidate) {
+            if ($candidate->getId() !== $schedule->getId()) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 
     /** @param array<string, mixed> $result */

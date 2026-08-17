@@ -140,6 +140,11 @@ final class RegenerateController extends AbstractController implements SeasonSco
         $this->messageBus->dispatch(new GenerateScheduleMessage(
             scheduleId: $newSchedule->getId(),
             clubId: $newSchedule->getClubId(),
+            // P3-21 — la source de `previousAssignments` est la version que le gestionnaire
+            // REGARDE ($source), pas la dernière du plan : je regarde V2 alors que V5 existe,
+            // la convergence se mesure à V2. Le repli « dernière COMPLETED » n'a lieu que
+            // faute de source explicite (première génération wizard).
+            sourceScheduleId: $source->getId(),
         ));
 
         return $this->json(['id' => $newSchedule->getId(), 'status' => ScheduleStatus::PENDING->value], Response::HTTP_ACCEPTED);
