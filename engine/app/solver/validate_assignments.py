@@ -46,6 +46,67 @@ def _coach_label(coach: dict[str, Any]) -> str:
     return full or str(coach.get("id"))
 
 
+def _shared_training_move_violation(
+    shared_trainings: list[dict[str, Any]],
+    baseline_slots: list[dict[str, Any]],
+    candidate: dict[str, Any],
+    team_names: dict[str, str],
+) -> dict[str, Any] | None:
+    """P2-27 — refus NOMMÉ quand le candidat sort une équipe d'une case commune.
+
+    Le verdict du solveur ne peut PAS produire ce refus tout seul : la baseline retire la
+    source mais le modèle laisse la variable de l'ancienne case LIBRE ; sans plafond de séances,
+    le solveur remet l'équipe sur son ancienne case pour tenir ``== K`` et conclut « oui » à
+    tort. On juge donc l'ÉTAT CONCRET proposé (baseline sans la source + candidat), de façon
+    déterministe : c'est le miroir de la contrainte ``add_shared_training_constraints``.
+
+    On n'évalue QUE les groupes dont l'équipe DÉPLACÉE est membre (déplacer une équipe hors
+    d'un groupe ne doit jamais être refusé au prétexte qu'un AUTRE groupe serait déjà rompu —
+    ex. déclaration ajoutée après génération). Le résultat != K pour un tel groupe → refus.
+
+    Message français nommant les équipes (jamais d'identifiant interne). ``None`` si rien à dire.
+    """
+    if not shared_trainings:
+        return None
+
+    c_team = str(candidate["team_id"])
+    # équipe -> ensemble des cases (gymnase, jour, heure) occupées dans l'état proposé
+    occupancy: dict[str, set[tuple[str, int, str]]] = {}
+    for slot in baseline_slots:
+        occupancy.setdefault(str(slot["team_id"]), set()).add(
+            (str(slot["venue_id"]), int(slot["day"]), str(slot["start_time"]))
+        )
+    occupancy.setdefault(c_team, set()).add(
+        (str(candidate["venue_id"]), int(candidate["day"]), str(candidate["start_time"]))
+    )
+
+    def _team_name(team_id: str) -> str:
+        return team_names.get(team_id) or team_id
+
+    for group in shared_trainings:
+        members = [str(t) for t in (group.get("teamIds") or group.get("team_ids") or [])]
+        if len(members) < 2 or c_team not in members:
+            continue
+        common_sessions = int(group.get("commonSessions") or group.get("common_sessions") or 0)
+        member_sets = [occupancy.get(member, set()) for member in members]
+        common = set.intersection(*member_sets) if member_sets else set()
+        if len(common) != common_sessions:
+            named = ", ".join(_team_name(member) for member in members)
+            return {
+                "rule": "shared_training_broken",
+                "message": (
+                    f"Ce déplacement rompt la mutualisation déclarée : les équipes {named} doivent "
+                    f"partager exactement {common_sessions} séance(s) commune(s), or ce placement en "
+                    f"laisse {len(common)}."
+                ),
+                "team_id": c_team,
+                "venue_id": str(candidate["venue_id"]),
+                "day_of_week": int(candidate["day"]),
+                "start_time": str(candidate["start_time"]),
+            }
+    return None
+
+
 def _build_assignments(
     model: ScheduleCpModel,
     team_coach_map: dict[str, list[str]],
@@ -106,6 +167,7 @@ def _apply_hard(
         implicit_rules=resolve_implicit_rules(data.get("implicitRules")),
         team_coach_map=team_coach_map,
         team_player_map=team_player_map,
+        shared_trainings=data.get("sharedTrainings", []),
     )
     add_time_window_constraints(model, model.x, parsed["time_windows"])
     return stats
@@ -359,6 +421,18 @@ def validate_assignment(
             "compromises": [],
             "metrics": metrics,
         }
+
+    # P2-27 — miroir déterministe de la mutualisation : le solveur ne peut pas refuser à lui
+    # seul un déplacement qui SORT une équipe d'une case commune (il remettrait l'équipe sur son
+    # ancienne case, faute de plafond de séances). On juge l'état concret proposé.
+    shared_violation = _shared_training_move_violation(
+        data.get("sharedTrainings", []) or [],
+        baseline_slots,
+        {"team_id": c_team, "venue_id": c_venue, "day": c_day, "start_time": c_start_text},
+        team_names,
+    )
+    if shared_violation is not None:
+        return {"valid": False, "violations": [shared_violation], "compromises": [], "metrics": metrics}
 
     assignments = _build_assignments(model, team_coach_map, frozen_keys)
     # Le candidat est epingle SEPAREMENT du gel de baseline (model.Add, pas

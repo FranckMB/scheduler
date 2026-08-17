@@ -300,6 +300,7 @@ def _generate_diagnostics(
         )
         diagnostics.extend(_diagnose_unused_slots(model_data, slots))
     diagnostics.extend(_diagnose_conflicts(model_data, solver_status, slots, slot_capacities=slot_capacities))
+    diagnostics.extend(_diagnose_shared_trainings(model_data, solver_status, slots))
     return diagnostics
 
 
@@ -931,6 +932,103 @@ def _diagnose_conflicts(
                     }
                 )
 
+    return diagnostics
+
+
+def _diagnose_shared_trainings(
+    model_data: Mapping[str, Any] | Any,
+    solver_status: int,
+    slots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """P2-27 — mutualisation : nommer la déclaration quand elle n'est pas honorée.
+
+    Deux régimes, un seul code de diagnostic ``shared_training_not_honored`` (severity ERROR) :
+
+      * INFEASIBLE — cause CERTAINE : aucune fenêtre de gymnase n'a une capacité ≥ la taille du
+        groupe, donc ces N équipes ne pourront JAMAIS partager une case. On nomme le groupe (le
+        message ``diag-infeasible`` générique reste, celui-ci l'attribue). On reste PRUDENT : on
+        ne prétend PAS que le groupe est la cause dès qu'il y a un autre motif — seulement quand
+        la capacité l'exclut de façon prouvée.
+      * OPTIMAL/FEASIBLE — défense en profondeur : la contrainte est dure, un solve abouti devrait
+        l'honorer ; si le nombre RÉEL de séances communes du groupe (dans les slots finaux) diffère
+        du K déclaré, on le signale (patron ``_diagnose_implicit_rule_violations``).
+
+    Message français nommant les équipes réelles ; aucun identifiant interne.
+    """
+    groups = _collection(model_data, "sharedTrainings", "shared_trainings")
+    if not groups:
+        return []
+
+    team_names = _team_name_map(model_data)
+    diagnostics: list[dict[str, Any]] = []
+
+    if solver_status == cp_model.INFEASIBLE:
+        max_capacity = 0
+        for venue in _collection(model_data, "venues"):
+            for slot in _collection(venue, "training_slots", "trainingSlots"):
+                raw = _get(slot, "capacity", default=1)
+                try:
+                    cap = int(raw) if raw is not None else 1
+                except (TypeError, ValueError):
+                    cap = 1
+                max_capacity = max(max_capacity, cap)
+        for index, group in enumerate(groups):
+            members = [str(t) for t in (_get(group, "teamIds", "team_ids", default=[]) or [])]
+            if len(members) < 2:
+                continue
+            if max_capacity < len(members):
+                diagnostics.append(
+                    {
+                        "id": f"shared-training-infeasible-{_get(group, 'id', default=index)}",
+                        "type": "shared_training_not_honored",
+                        "severity": "ERROR",
+                        "message": (
+                            f"Les équipes déclarées ensemble ({_named_list(members, team_names)}) ne peuvent "
+                            f"pas partager de séance : aucun créneau de gymnase n'accueille {len(members)} équipes "
+                            "en même temps. Augmentez la capacité d'un créneau ou réduisez le groupe."
+                        ),
+                        "suggestions": [
+                            "Augmentez la capacité d'un créneau de gymnase (gymnase divisible).",
+                            "Retirez une équipe du groupe mutualisé.",
+                        ],
+                        "createdAt": datetime.now(UTC).isoformat(),
+                    }
+                )
+        return diagnostics
+
+    if solver_status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return []
+
+    # Défense en profondeur : compter les séances communes RÉELLES dans les slots finaux.
+    occupancy: dict[str, set[tuple[str, int, str]]] = defaultdict(set)
+    for slot in slots:
+        day = _slot_day(slot)
+        if day is None:
+            continue
+        occupancy[str(slot["teamId"])].add((str(slot["venueId"]), day, str(slot["startTime"])[:5]))
+
+    for index, group in enumerate(groups):
+        members = [str(t) for t in (_get(group, "teamIds", "team_ids", default=[]) or [])]
+        if len(members) < 2:
+            continue
+        common_sessions = int(_get(group, "commonSessions", "common_sessions", default=0) or 0)
+        member_sets = [occupancy.get(member, set()) for member in members]
+        common = set.intersection(*member_sets) if member_sets else set()
+        if len(common) != common_sessions:
+            diagnostics.append(
+                {
+                    "id": f"shared-training-not-honored-{_get(group, 'id', default=index)}",
+                    "type": "shared_training_not_honored",
+                    "severity": "ERROR",
+                    "message": (
+                        f"La mutualisation déclarée n'est pas respectée : les équipes "
+                        f"{_named_list(members, team_names)} devraient partager {common_sessions} séance(s) "
+                        f"commune(s) mais en partagent {len(common)}."
+                    ),
+                    "suggestions": ["Vérifiez les disponibilités communes de ces équipes ou ajustez la déclaration."],
+                    "createdAt": datetime.now(UTC).isoformat(),
+                }
+            )
     return diagnostics
 
 

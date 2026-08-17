@@ -136,7 +136,7 @@ Detail: `docs/testing/testing-strategy.md`.
   **copie** prise à la naissance du plan — jamais d'union avec la saison ; overrides sparse ;
   pin orphelin → 422 (`OrphanPinGuard`).
 - **Contrat backend⇄engine** : schemas Pydantic ⇄ payload, version `engine/CONTRACT_VERSION`
-  (**2.11**, un seul contrat pour les 3 endpoints `/generate` · `/place-matches` · `/validate-assignments`),
+  (**2.12**, un seul contrat pour les 3 endpoints `/generate` · `/place-matches` · `/validate-assignments`),
   **sync manuelle, pas de codegen** — gardé par `ContractSchemaTest` +
   `MatchPlacementContractSchemaTest` + `ValidateAssignmentsContractSchemaTest`.
 - **FFBB outbound** : hosts hard-codés (SSRF-safe), best-effort, le frontend n'appelle jamais FFBB.
