@@ -11,18 +11,29 @@ import { CompromiseList } from "./CompromiseList";
 /**
  * P2-32 (D6) — la modale qui s'interpose quand on déplace une équipe vers un créneau OCCUPÉ.
  * Elle remplace la confirmation statique : un ESSAI (dry-run) part pendant qu'elle s'ouvre, et
- * elle RESTITUE le verdict du moteur AVANT d'écrire quoi que ce soit. Trois états :
+ * elle RESTITUE le verdict du moteur AVANT d'écrire quoi que ce soit. Quatre états :
  *  - `checking` : l'essai délibère (« Vérification… ») — aucun bouton de confirmation ;
  *  - `accepted` : le déplacement est légal — on nomme l'occupant, on liste les compromis (ou
  *    « Aucun compromis détecté. »), et [Déplacer et évincer] déclenche le move RÉEL ;
- *  - `refused`  : le moteur refuse — les motifs NOMMÉS, PAS de confirmation, [Fermer] seul.
+ *  - `refused`  : le moteur refuse — les motifs NOMMÉS, PAS de confirmation, [Fermer] seul ;
+ *  - `failed`   : l'essai n'a PAS ABOUTI (moteur trop lent / indisponible) — DISTINCT d'un refus :
+ *    rien n'est tranché, la modale RESTE ouverte, DIT ce qui s'est passé et propose [Réessayer].
+ *    C'est la demande fondateur : ne jamais fermer en silence sur un échec de la vérification.
  *
  * Markup calqué sur `ConfirmDialog` (portail + overlay + focus-trap partagé) : celui-ci ne sait
  * pas rendre un état de chargement ni un refus sans bouton, d'où une modale dédiée à la zone
  * planning plutôt qu'une extension du composant partagé.
  */
 
-export type EvictDialogPhase = "checking" | "accepted" | "refused";
+export type EvictDialogPhase = "checking" | "accepted" | "refused" | "failed";
+
+/** Pourquoi l'essai a échoué (état `failed`) : le moteur a été trop lent, ou il est indisponible. */
+export type EvictFailureKind = "timeout" | "unreachable";
+
+const FAILURE_MESSAGE: Record<EvictFailureKind, string> = {
+  timeout: "La vérification n'a pas abouti — le moteur n'a pas répondu à temps. Réessayez.",
+  unreachable: "La vérification n'a pas abouti — le moteur est indisponible. Réessayez.",
+};
 
 interface EvictConfirmDialogProps {
   open: boolean;
@@ -33,13 +44,17 @@ interface EvictConfirmDialogProps {
   compromises: Compromise[];
   /** Motifs du refus (état `refused`). */
   violations: MoveViolation[];
+  /** Cause de l'échec (état `failed`) — pilote le message affiché. */
+  failureKind: EvictFailureKind;
   /** Le move RÉEL est en vol (confirmation cliquée) : geler la confirmation. */
   busy: boolean;
   onConfirm: () => void;
+  /** Relancer l'essai (état `failed`). */
+  onRetry: () => void;
   onClose: () => void;
 }
 
-export function EvictConfirmDialog({ open, phase, occupantName, compromises, violations, busy, onConfirm, onClose }: EvictConfirmDialogProps) {
+export function EvictConfirmDialog({ open, phase, occupantName, compromises, violations, failureKind, busy, onConfirm, onRetry, onClose }: EvictConfirmDialogProps) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   useModalA11y({ ref: panelRef, onClose, active: open });
@@ -48,7 +63,7 @@ export function EvictConfirmDialog({ open, phase, occupantName, compromises, vio
     return null;
   }
 
-  const title = "refused" === phase ? "Déplacement impossible" : "Déplacer vers un créneau occupé ?";
+  const title = "refused" === phase ? "Déplacement impossible" : "failed" === phase ? "La vérification n'a pas abouti" : "Déplacer vers un créneau occupé ?";
 
   return createPortal(
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">
@@ -95,6 +110,13 @@ export function EvictConfirmDialog({ open, phase, occupantName, compromises, vio
               </ul>
             </div>
           ) : null}
+
+          {"failed" === phase ? (
+            <div className="flex items-center gap-2 font-medium text-destructive" role="alert">
+              <AlertTriangle className="size-4" aria-hidden="true" />
+              <span>{FAILURE_MESSAGE[failureKind]}</span>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-6 flex shrink-0 justify-end gap-2">
@@ -104,6 +126,11 @@ export function EvictConfirmDialog({ open, phase, occupantName, compromises, vio
           {"accepted" === phase ? (
             <Button variant="destructive" disabled={busy} onClick={onConfirm}>
               Déplacer et évincer
+            </Button>
+          ) : null}
+          {"failed" === phase ? (
+            <Button variant="default" onClick={onRetry}>
+              Réessayer
             </Button>
           ) : null}
         </div>

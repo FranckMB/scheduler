@@ -22,11 +22,11 @@ import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import { type Compromise, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
+import { type Compromise, EngineTimeoutError, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
 import { CompromiseList } from "./CompromiseList";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { DriftBanner } from "./DriftBanner";
-import { EvictConfirmDialog, type EvictDialogPhase } from "./EvictConfirmDialog";
+import { EvictConfirmDialog, type EvictDialogPhase, type EvictFailureKind } from "./EvictConfirmDialog";
 import { LocksPanel } from "./LocksPanel";
 import { ExportMenu } from "./ExportMenu";
 import { GenerationWaiting } from "./GenerationWaiting";
@@ -140,6 +140,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     | { phase: "checking"; sourceSlotId: string; targetSlot: Slot }
     | { phase: "accepted"; sourceSlotId: string; targetSlot: Slot; compromises: Compromise[] }
     | { phase: "refused"; sourceSlotId: string; targetSlot: Slot; violations: MoveViolation[] }
+    | { phase: "failed"; sourceSlotId: string; targetSlot: Slot; failureKind: EvictFailureKind }
     | null
   >(null);
   // P2-32 (geste 3) — les compromis NOMMÉS du dernier geste ÉCRIT accepté (N>0), pour le bandeau
@@ -602,8 +603,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         },
         onError: (error) => {
           setEvictDialog(null);
-          // Verrou de cible / cible incohérente : message serveur propre, on RESTE en mode cible.
-          if (error instanceof TargetLockedError || error instanceof SlotEditError) {
+          // Verrou de cible / cible incohérente / moteur trop lent : message serveur propre (le
+          // timeout est NOMMÉ, pas un numéro nu), on RESTE en mode cible.
+          if (error instanceof TargetLockedError || error instanceof SlotEditError || error instanceof EngineTimeoutError) {
             toast.error(error.message);
           }
           // Un refus de légalité (MoveRejectedError) s'affiche dans le panneau (moveState) et
@@ -636,7 +638,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             setHighlightSlotIds(violationHighlightSlotIds(error.violations, slots));
           } else if (error instanceof GenerationInProgressError) {
             toast.error("Une génération est en cours pour ce club — réessayez ensuite.");
-          } else if (error instanceof TargetLockedError || error instanceof SlotEditError) {
+          } else if (error instanceof TargetLockedError || error instanceof SlotEditError || error instanceof EngineTimeoutError) {
             toast.error(error.message);
           } else {
             toast.error("Le moteur n'a pas répondu — réessayez.");
@@ -665,18 +667,36 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           }
         },
         onError: (error) => {
-          // L'essai n'a pas pu aboutir (verrou D3, génération en cours, transport) : on ferme la
-          // modale et on garde le mode cible armé pour réessayer ailleurs. Un vrai transport est
-          // déjà toasté au niveau du hook ; ici on nomme les refus métier.
-          setEvictDialog(null);
+          // Refus MÉTIER (verrou D3, cible incohérente, génération en cours) : comportement
+          // inchangé — la modale se ferme, le motif est toasté, le mode cible reste armé.
           if (error instanceof TargetLockedError || error instanceof SlotEditError) {
+            setEvictDialog(null);
             toast.error(error.message);
-          } else if (error instanceof GenerationInProgressError) {
-            toast.error("Une génération est en cours pour ce club — réessayez ensuite.");
+            return;
           }
+          if (error instanceof GenerationInProgressError) {
+            setEvictDialog(null);
+            toast.error("Une génération est en cours pour ce club — réessayez ensuite.");
+            return;
+          }
+          // ÉCHEC de l'essai lui-même (moteur trop lent → EngineTimeoutError, ou indisponible) :
+          // la modale RESTE ouverte et NOMME la cause, avec [Réessayer]. Rien n'est tranché —
+          // demande fondateur : ne jamais se fermer en silence sur un échec de la vérification.
+          setEvictDialog({ phase: "failed", sourceSlotId, targetSlot, failureKind: error instanceof EngineTimeoutError ? "timeout" : "unreachable" });
         },
       },
     );
+  };
+
+  // Relancer l'essai depuis l'état `failed` de la modale : on repasse en « Vérification… » et on
+  // rejoue le dry-run sur la MÊME cible.
+  const retryEvictDryRun = () => {
+    if (null === evictDialog) {
+      return;
+    }
+    const { sourceSlotId, targetSlot } = evictDialog;
+    setEvictDialog({ phase: "checking", sourceSlotId, targetSlot });
+    runEvictDryRun(sourceSlotId, targetSlot);
   };
 
   // Confirmer l'éviction depuis la modale (état `accepted`) : le move RÉEL part (sans dryRun).
@@ -1375,8 +1395,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
         occupantName={null !== evictDialog ? teamNameOf(evictDialog.targetSlot.teamId) : ""}
         compromises={null !== evictDialog && "accepted" === evictDialog.phase ? evictDialog.compromises : []}
         violations={null !== evictDialog && "refused" === evictDialog.phase ? evictDialog.violations : []}
+        failureKind={null !== evictDialog && "failed" === evictDialog.phase ? evictDialog.failureKind : "timeout"}
         busy={busy}
         onConfirm={confirmEvict}
+        onRetry={retryEvictDryRun}
         onClose={() => setEvictDialog(null)}
       />
 

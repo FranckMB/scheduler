@@ -9,6 +9,7 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Enum\LockLevel;
 use App\Exception\DurationMismatchException;
+use App\Exception\EngineTimeoutException;
 use App\Exception\EvictTargetLockedException;
 use App\Exception\EvictTargetMismatchException;
 use App\Exception\ScheduleGenerationInProgressException;
@@ -151,8 +152,14 @@ final class ManualEditController extends AbstractController implements SeasonSco
         } catch (EvictTargetLockedException) {
             // D3 : un verrou est souverain — on ne libère pas un créneau verrouillé.
             return $this->json(['code' => 'target_locked', 'error' => 'Ce créneau est verrouillé — déverrouillez-le d\'abord.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (EngineTimeoutException $e) {
+            // Le moteur a été TROP LENT (l'amont a répondu trop tard) : 504, PAS 502 — rien n'est
+            // écrit. Le code NOMME la cause pour que le front l'affiche et propose de réessayer.
+            $this->logger->error('Move validation timed out on the engine.', ['exception' => $e]);
+
+            return $this->json(['code' => EngineTimeoutException::CODE, 'error' => 'The engine did not answer in time — please retry.'], Response::HTTP_GATEWAY_TIMEOUT);
         } catch (TransportExceptionInterface $e) {
-            // Le moteur n'a pas répondu — RIEN n'est écrit, le gestionnaire réessaie.
+            // Le moteur est injoignable/cassé — RIEN n'est écrit, le gestionnaire réessaie.
             $this->logger->error('Move validation could not reach the engine.', ['exception' => $e]);
 
             return $this->json(['error' => 'The engine did not respond — please retry.'], Response::HTTP_BAD_GATEWAY);
@@ -276,6 +283,11 @@ final class ManualEditController extends AbstractController implements SeasonSco
         } catch (DurationMismatchException) {
             // La durée annoncée contredit la fenêtre : c'est la fenêtre qui fait foi.
             return $this->json(['code' => 'duration_mismatch', 'error' => 'La durée indiquée ne correspond pas au créneau de gymnase.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        } catch (EngineTimeoutException $e) {
+            // Trop lent (504, pas 502) : rien créé, le code nomme la cause pour le front.
+            $this->logger->error('Placement validation timed out on the engine.', ['exception' => $e]);
+
+            return $this->json(['code' => EngineTimeoutException::CODE, 'error' => 'The engine did not answer in time — please retry.'], Response::HTTP_GATEWAY_TIMEOUT);
         } catch (TransportExceptionInterface $e) {
             $this->logger->error('Placement validation could not reach the engine.', ['exception' => $e]);
 

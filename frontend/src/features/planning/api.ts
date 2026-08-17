@@ -451,6 +451,20 @@ export class GenerationInProgressError extends Error {
 }
 
 /**
+ * Le moteur a été TROP LENT à rendre son verdict (504 `engine_timeout`) — DISTINCT d'un moteur
+ * injoignable/cassé (502). RIEN n'a été écrit. Le geste était peut-être parfaitement LÉGAL : le
+ * backend a simplement abandonné avant la réponse (régression fondateur, club dense). Le message
+ * serveur est déjà humain ; l'écran le NOMME (modale d'essai en échec, ou toast) et propose de
+ * réessayer, au lieu d'afficher un numéro nu que personne ne peut interpréter.
+ */
+export class EngineTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EngineTimeoutError";
+  }
+}
+
+/**
  * P2-30 D3 — la cible occupée à évincer est VERROUILLÉE (422 `target_locked`) : un verrou est
  * souverain, on ne le libère pas. Le message serveur est déjà humain (« déverrouillez-le
  * d'abord ») — l'écran le montre et RESTE en mode cible pour réessayer ailleurs.
@@ -511,6 +525,10 @@ export async function moveSlot(id: string, patch: SlotMovePatch): Promise<SlotMo
       if (409 === error.response.status && "generation_in_progress" === body.code) {
         throw new GenerationInProgressError();
       }
+      // 504 `engine_timeout` : le moteur a été trop lent (rien écrit). NOMMÉ pour l'écran.
+      if (504 === error.response.status && "engine_timeout" === body.code) {
+        throw new EngineTimeoutError(body.error ?? "Le moteur n'a pas répondu à temps — réessayez.");
+      }
     }
     throw error;
   }
@@ -537,6 +555,9 @@ export async function placeSlot(scheduleId: string, body: PlaceSlotBody): Promis
       }
       if (409 === error.response.status && "generation_in_progress" === data.code) {
         throw new GenerationInProgressError();
+      }
+      if (504 === error.response.status && "engine_timeout" === data.code) {
+        throw new EngineTimeoutError(data.error ?? "Le moteur n'a pas répondu à temps — réessayez.");
       }
     }
     throw error;

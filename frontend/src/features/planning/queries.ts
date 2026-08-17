@@ -8,7 +8,7 @@ import { isScheduleStreamConnected, useScheduleStream } from "@/shared/lib/sched
 import { toast } from "@/shared/stores/toastStore";
 
 import type { LockLevel, PlaceSlotBody, SlotMovePatch } from "./api";
-import { GenerationInProgressError, MoveRejectedError, OverlaysExistError, SlotEditError, TargetLockedError } from "./api";
+import { EngineTimeoutError, GenerationInProgressError, MoveRejectedError, OverlaysExistError, SlotEditError, TargetLockedError } from "./api";
 import * as planningApi from "./api";
 
 /**
@@ -21,7 +21,13 @@ import * as planningApi from "./api";
  * affiche) et ne parle que d'un vrai échec transport — remplaçant le filet, jamais le doublant.
  */
 const isBusinessSlotEditError = (error: unknown): boolean =>
-  error instanceof MoveRejectedError || error instanceof TargetLockedError || error instanceof SlotEditError || error instanceof GenerationInProgressError;
+  error instanceof MoveRejectedError ||
+  error instanceof TargetLockedError ||
+  error instanceof SlotEditError ||
+  error instanceof GenerationInProgressError ||
+  // Le timeout moteur (504) est NOMMÉ par la page (toast du geste réel, ou modale d'essai en
+  // échec) : le hook se tait, sinon le message générique du filet le doublerait.
+  error instanceof EngineTimeoutError;
 
 function ownSlotEditFeedback(error: unknown): void {
   if (isBusinessSlotEditError(error)) {
@@ -166,7 +172,11 @@ export function useMoveSlot() {
 export function useMoveDryRun() {
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: SlotMovePatch }) => planningApi.moveSlot(id, { ...patch, dryRun: true }),
-    onError: ownSlotEditFeedback,
+    // La page possède TOUT le feedback de l'essai : un refus métier ferme la modale et le toast
+    // contextuel, un ÉCHEC de l'essai (timeout, moteur indisponible) laisse la modale ouverte en
+    // état d'échec qui NOMME la cause. Le hook se tait donc (mais désarme le filet global, qui
+    // sinon toasterait « Problème de connexion » par-dessus la modale) — cf. useMoveSlot.
+    onError: () => {},
   });
 }
 

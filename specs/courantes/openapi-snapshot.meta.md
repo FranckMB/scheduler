@@ -1,6 +1,11 @@
-Last verified @ 2026-08-17 (JSON **régénéré** — nouvelle ressource `SharedTrainingGroup` (mutualisation, P2-27 PR A) ; contrat backend⇄engine bumpé **2.11 → 2.12**)
+Last verified @ 2026-08-17 (JSON **régénéré** — le 504 `engine_timeout` des deux routes de retouche entre au document ; plus tôt le même jour : nouvelle ressource `SharedTrainingGroup` (mutualisation, P2-27 PR A) et contrat backend⇄engine bumpé **2.11 → 2.12**)
 
 Changements récents :
+- **504 `engine_timeout` sur le rail de retouche (2026-08-17)** : `POST /api/schedule-slots/{id}/move`
+  et `POST /api/schedules/{id}/place-slot` documentent un **504** distinct du 502 — le moteur
+  fonctionne, il a simplement dépassé le plafond transport ; rien n'est écrit et réessayer est le
+  bon geste. Le corps porte `code=engine_timeout`, que le front nomme au lieu d'afficher un
+  nombre. Set-diff : **aucun path ajouté**, une réponse ajoutée sur chacune des 2 routes.
 - **P2-27 PR A — mutualisation (2026-08-17)** : nouvelle ressource API `SharedTrainingGroup`
   (GET collection/item, POST, PUT, DELETE, scopée club+saison, filtre `schedulePlanId`) —
   déclarer que N équipes s'entraînent ENSEMBLE (EXACTEMENT `commonSessions` séances communes).
