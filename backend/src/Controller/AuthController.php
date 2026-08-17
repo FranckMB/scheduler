@@ -28,6 +28,7 @@ use App\Service\EmailVerifier;
 use App\Service\MailFrom;
 use App\Service\PasswordPolicy;
 use App\Service\PlanEntitlements;
+use App\Service\ProductIdentity;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
 use App\Service\TenantConnectionContext;
@@ -84,6 +85,7 @@ final class AuthController extends AbstractController
         private readonly TurnstileVerifier $turnstileVerifier,
         private readonly string $turnstileSiteKey,
         private readonly MailFrom $mailFrom,
+        private readonly ProductIdentity $productIdentity,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -759,6 +761,7 @@ final class AuthController extends AbstractController
         // request host in dev/e2e (single origin via the Vite proxy). Prod sets it.
         $base = '' !== $this->frontendBaseUrl ? rtrim($this->frontendBaseUrl, '/') : $request->getSchemeAndHttpHost();
         $link = $base . '/verify-email/' . $rawToken;
+        $product = $this->productIdentity->name();
 
         // mailer->send only ENQUEUES a SendEmailMessage on the bus now; an SMTP failure
         // surfaces at the worker, where the failure transport retains it. Only a DISPATCH
@@ -769,8 +772,8 @@ final class AuthController extends AbstractController
                 (new Email)
                     ->from($this->mailFrom->address())
                     ->to($email)
-                    ->subject('Confirmez votre adresse e-mail ClubScheduler')
-                    ->text("Bienvenue sur ClubScheduler !\n\nPour activer votre compte, ouvrez ce lien :\n{$link}\n\nCe lien expire dans 24 heures."),
+                    ->subject(\sprintf('Confirmez votre adresse e-mail %s', $product))
+                    ->text("Bienvenue sur {$product} !\n\nPour activer votre compte, ouvrez ce lien :\n{$link}\n\nCe lien expire dans 24 heures."),
             );
         } catch (Throwable) {
         }
@@ -795,6 +798,7 @@ final class AuthController extends AbstractController
         // (origine unique via le proxy Vite) — même patron que la vérification.
         $base = '' !== $this->frontendBaseUrl ? rtrim($this->frontendBaseUrl, '/') : $request->getSchemeAndHttpHost();
         $link = $base . '/confirm-email/' . $rawToken;
+        $product = $this->productIdentity->name();
 
         // mailer->send ne fait plus qu'ENFILER un SendEmailMessage sur le bus ; un échec
         // SMTP surgit chez le worker (le failure transport le retient). Seul un échec de
@@ -805,8 +809,8 @@ final class AuthController extends AbstractController
                 (new Email)
                     ->from($this->mailFrom->address())
                     ->to($email)
-                    ->subject('Confirmez votre nouvelle adresse e-mail ClubScheduler')
-                    ->text("Vous avez demandé à changer l'adresse e-mail de votre compte ClubScheduler.\n\nPour confirmer cette nouvelle adresse, ouvrez ce lien :\n{$link}\n\nVotre adresse actuelle reste active tant que vous n'avez pas confirmé.\n\nCe lien expire dans 24 heures. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message."),
+                    ->subject(\sprintf('Confirmez votre nouvelle adresse e-mail %s', $product))
+                    ->text("Vous avez demandé à changer l'adresse e-mail de votre compte {$product}.\n\nPour confirmer cette nouvelle adresse, ouvrez ce lien :\n{$link}\n\nVotre adresse actuelle reste active tant que vous n'avez pas confirmé.\n\nCe lien expire dans 24 heures. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message."),
             );
         } catch (Throwable) {
         }
@@ -820,12 +824,13 @@ final class AuthController extends AbstractController
      */
     private function notifyPreviousAddress(string $previousEmail, string $newEmail, bool $switched): void
     {
+        $product = $this->productIdentity->name();
         $subject = $switched
-            ? 'Votre adresse e-mail ClubScheduler a été modifiée'
-            : 'Demande de changement d’adresse e-mail sur ClubScheduler';
+            ? \sprintf('Votre adresse e-mail %s a été modifiée', $product)
+            : \sprintf('Demande de changement d’adresse e-mail sur %s', $product);
         $body = $switched
-            ? "L'adresse e-mail de votre compte ClubScheduler est désormais {$newEmail}.\n\nSi vous n'êtes pas à l'origine de ce changement, contactez-nous immédiatement : votre compte a pu être compromis."
-            : "Une demande de changement d'adresse vers {$newEmail} vient d'être faite sur votre compte ClubScheduler.\n\nVotre adresse actuelle reste active tant que la nouvelle n'est pas confirmée.\n\nSi vous n'êtes pas à l'origine de cette demande, changez votre mot de passe : quelqu'un a accès à votre session.";
+            ? "L'adresse e-mail de votre compte {$product} est désormais {$newEmail}.\n\nSi vous n'êtes pas à l'origine de ce changement, contactez-nous immédiatement : votre compte a pu être compromis."
+            : "Une demande de changement d'adresse vers {$newEmail} vient d'être faite sur votre compte {$product}.\n\nVotre adresse actuelle reste active tant que la nouvelle n'est pas confirmée.\n\nSi vous n'êtes pas à l'origine de cette demande, changez votre mot de passe : quelqu'un a accès à votre session.";
 
         // mailer->send ne fait plus qu'ENFILER un SendEmailMessage sur le bus ; un échec
         // SMTP surgit chez le worker (le failure transport le retient). Seul un échec de
@@ -854,7 +859,7 @@ final class AuthController extends AbstractController
                 (new Email)
                     ->from($this->mailFrom->address())
                     ->to($email)
-                    ->subject('Tentative d’inscription sur ClubScheduler')
+                    ->subject(\sprintf('Tentative d’inscription sur %s', $this->productIdentity->name()))
                     ->text("Une inscription vient d’être tentée avec cette adresse, mais un compte existe déjà.\n\nConnectez-vous, ou réinitialisez votre mot de passe si vous l’avez oublié."),
             );
         } catch (Throwable) {

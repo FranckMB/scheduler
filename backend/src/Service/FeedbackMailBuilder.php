@@ -23,19 +23,22 @@ final class FeedbackMailBuilder
         private readonly string $frontendBaseUrl = '',
         // Expéditeur unique (P5-15) — le défaut ne sert qu'aux tests unitaires.
         private readonly MailFrom $mailFrom = new MailFrom,
+        // Nom produit unique (P5-15) — le défaut ne sert qu'aux tests unitaires.
+        private readonly ProductIdentity $productIdentity = new ProductIdentity,
     ) {}
 
     public function build(string $to): Email
     {
+        $product = $this->productIdentity->name();
         $lines = [
             'Bonjour,',
             '',
             'Votre signalement est bien enregistré et sera traité.',
-            'Merci de nous aider à améliorer ClubScheduler.',
+            "Merci de nous aider à améliorer {$product}.",
             '',
             'Inutile de répondre à ce message.',
             '',
-            'L\'équipe ClubScheduler',
+            "L'équipe {$product}",
         ];
 
         return (new Email)
@@ -52,6 +55,7 @@ final class FeedbackMailBuilder
      */
     public function buildTreated(string $to): Email
     {
+        $product = $this->productIdentity->name();
         $lines = [
             'Bonjour,',
             '',
@@ -66,7 +70,7 @@ final class FeedbackMailBuilder
         $lines[] = '';
         $lines[] = 'Inutile de répondre à ce message.';
         $lines[] = '';
-        $lines[] = 'L\'équipe ClubScheduler';
+        $lines[] = "L'équipe {$product}";
 
         return (new Email)
             ->from($this->mailFrom->address())

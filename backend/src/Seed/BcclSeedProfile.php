@@ -117,7 +117,7 @@ final readonly class BcclSeedProfile
             // ARA9999001..ARA9999099 : préfixe ARA (ligue/zone se résolvent) mais
             // numéro hors plage réelle, distinct du ARA9999999 de demo().
             ffbbCode: \sprintf('ARA99990%02d', $index),
-            managerEmail: \sprintf('charge-%d@clubscheduler.local', $index),
+            managerEmail: \sprintf('charge-%d@amateo.local', $index),
             managerFirstName: 'Charge',
             managerLastName: \sprintf('Manager %d', $index),
             managerPassword: 'charge-load-test-pwd',
@@ -129,7 +129,7 @@ final readonly class BcclSeedProfile
         );
     }
 
-    public static function demo(string $managerPassword, string $managerEmail = 'demo-bccl@clubscheduler.fr'): self
+    public static function demo(string $managerPassword, string $managerEmail = 'demo-bccl@amateo.fr'): self
     {
         return new self(
             clubName: 'Démo Basket Club',
@@ -140,7 +140,7 @@ final readonly class BcclSeedProfile
             ffbbCode: 'ARA9999999',
             managerEmail: $managerEmail,
             managerFirstName: 'Démo',
-            managerLastName: 'ClubScheduler',
+            managerLastName: 'Amateo',
             managerPassword: $managerPassword,
             seedLogo: false,
             isDemo: true,

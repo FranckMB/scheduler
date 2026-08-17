@@ -11,6 +11,7 @@ import { CreditBadge } from "@/shared/credits/CreditBadge";
 import { CreditsBanner } from "@/shared/credits/CreditsBanner";
 import { useApplyClubTheme } from "@/shared/hooks/useApplyClubTheme";
 import { useApplyDemoClock } from "@/shared/hooks/useApplyDemoClock";
+import { PRODUCT_NAME } from "@/shared/lib/product";
 import { cn } from "@/shared/lib/utils";
 import { useThemeStore } from "@/shared/stores/themeStore";
 
@@ -57,7 +58,7 @@ export function AppLayout() {
               ) : (
                 <CalendarCheck2 className="size-5 text-accent" />
               )}
-              <span className="truncate text-sm font-semibold">{data?.club?.name ?? "ClubScheduler"}</span>
+              <span className="truncate text-sm font-semibold">{data?.club?.name ?? PRODUCT_NAME}</span>
             </NavLink>
             {import.meta.env.DEV ? <DevClock /> : null}
           </div>

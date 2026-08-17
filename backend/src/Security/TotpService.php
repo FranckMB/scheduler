@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Security;
 
+use App\Service\ProductIdentity;
 use RuntimeException;
 
 /** RFC 6238 SHA-1 TOTP compatible with Google Authenticator. */
@@ -11,7 +12,11 @@ final class TotpService
 {
     private const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
-    public function __construct(private readonly string $appSecret) {}
+    public function __construct(
+        private readonly string $appSecret,
+        // Nom produit unique (P5-15) — sert de label/issuer dans l'URI otpauth.
+        private readonly ProductIdentity $productIdentity = new ProductIdentity,
+    ) {}
 
     public function generateSecret(): string
     {
@@ -70,11 +75,22 @@ final class TotpService
         return base64_encode($iv . $tag . $cipher);
     }
 
+    /**
+     * L'URI otpauth encodée dans le QR code d'enrôlement. Le label et l'issuer
+     * portent le nom produit — c'est ce que le superadmin VOIT dans son
+     * application d'authentification.
+     *
+     * ⚠ Label et issuer sont COSMÉTIQUES dans l'URI : seul le `secret` pilote le
+     * code TOTP (RFC 6238). Renommer le produit (P5-15) ne casse donc AUCUN
+     * secret déjà enrôlé — les authenticators existants continuent de générer des
+     * codes valides ; seuls les NOUVEAUX QR codes affichent le nouveau nom.
+     */
     public function provisioningUri(string $email, string $secret): string
     {
-        $label = rawurlencode('ClubScheduler:' . strtolower($email));
+        $product = $this->productIdentity->name();
+        $label = rawurlencode($product . ':' . strtolower($email));
 
-        return "otpauth://totp/{$label}?secret={$secret}&issuer=ClubScheduler&algorithm=SHA1&digits=6&period=30";
+        return "otpauth://totp/{$label}?secret={$secret}&issuer={$product}&algorithm=SHA1&digits=6&period=30";
     }
 
     private function decrypt(string $payload): string

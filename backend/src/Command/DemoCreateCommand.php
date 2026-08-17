@@ -47,7 +47,7 @@ use Throwable;
 )]
 final class DemoCreateCommand extends Command
 {
-    private const string DEFAULT_ANIMATOR_EMAIL = 'demo@clubscheduler.fr';
+    private const string DEFAULT_ANIMATOR_EMAIL = 'demo@amateo.fr';
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
@@ -96,7 +96,7 @@ final class DemoCreateCommand extends Command
             $animator = new User;
             $animator->setEmail($email);
             $animator->setFirstName('Démo');
-            $animator->setLastName('ClubScheduler');
+            $animator->setLastName('Amateo');
             $animator->setPasswordHash($this->passwordHasher->hashPassword($animator, $password));
             // Compte INTERNE : jamais passé par register, on matérialise ce que le
             // flux d'inscription aurait posé (login refusé sans email vérifié).

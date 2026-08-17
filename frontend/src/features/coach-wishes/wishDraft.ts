@@ -15,11 +15,19 @@ export interface WishDraft {
   stepIndex: number;
 }
 
-const key = (token: string): string => `clubscheduler:wish-draft:${token}`;
+const key = (token: string): string => `amateo:wish-draft:${token}`;
+
+/**
+ * L'ancienne clé, du temps où le produit s'appelait autrement (P5-15). Elle n'est plus ÉCRITE,
+ * seulement LUE en repli : un coach qui remplissait ses vœux au moment du déploiement garde son
+ * brouillon. La fenêtre est étroite (sessionStorage meurt avec l'onglet), mais perdre la saisie
+ * d'un bénévole pour une question de nom serait un mauvais échange. À retirer après une saison.
+ */
+const legacyKey = (token: string): string => `clubscheduler:wish-draft:${token}`;
 
 export function loadDraft(token: string): WishDraft | null {
   try {
-    const raw = sessionStorage.getItem(key(token));
+    const raw = sessionStorage.getItem(key(token)) ?? sessionStorage.getItem(legacyKey(token));
     if (null === raw) {
       return null;
     }
@@ -50,6 +58,7 @@ export function saveDraft(token: string, sections: Map<string, SectionState>, st
 export function clearDraft(token: string): void {
   try {
     sessionStorage.removeItem(key(token));
+    sessionStorage.removeItem(legacyKey(token));
   } catch {
     // Idem : best-effort.
   }

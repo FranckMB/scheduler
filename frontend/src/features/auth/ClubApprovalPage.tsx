@@ -5,6 +5,7 @@ import { useParams } from "react-router";
 
 import { Button } from "@/shared/components/ui/button";
 import { Spinner } from "@/shared/components/ui/spinner";
+import { PRODUCT_NAME } from "@/shared/lib/product";
 
 import { AuthLayout } from "./AuthLayout";
 import { decideClubApproval, getClubApproval } from "./api";
@@ -51,7 +52,7 @@ export function ClubApprovalPage() {
   return (
     <AuthLayout
       title="Demande de création d'espace"
-      description="Un gestionnaire demande à créer l'espace ClubScheduler de votre club."
+      description={`Un gestionnaire demande à créer l'espace ${PRODUCT_NAME} de votre club.`}
     >
       {info.isPending ? (
         <p className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
@@ -64,7 +65,7 @@ export function ClubApprovalPage() {
           </span>
           <p className="text-sm text-muted-foreground">
             {410 === httpStatus
-              ? "Cette demande a expiré (7 jours sans réponse). Le demandeur peut se rapprocher du support ClubScheduler."
+              ? `Cette demande a expiré (7 jours sans réponse). Le demandeur peut se rapprocher du support ${PRODUCT_NAME}.`
               : "Ce lien est invalide — ou la demande a déjà été traitée."}
           </p>
         </div>

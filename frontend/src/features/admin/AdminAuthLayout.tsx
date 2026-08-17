@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { useThemeStore } from "@/shared/stores/themeStore";
 import { Button } from "@/shared/components/ui/button";
+import { PRODUCT_NAME } from "@/shared/lib/product";
 
 interface AdminAuthLayoutProps {
   title: string;
@@ -25,7 +26,7 @@ export function AdminAuthLayout({ title, description, children }: AdminAuthLayou
               <ShieldCheck className="size-5" aria-hidden="true" />
             </div>
             <div>
-              <p className="text-sm font-semibold tracking-wide text-white">ClubScheduler</p>
+              <p className="text-sm font-semibold tracking-wide text-white">{PRODUCT_NAME}</p>
               <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Console sécurisée</p>
             </div>
           </div>

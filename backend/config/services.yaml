@@ -26,6 +26,12 @@ parameters:
     # produit ; un environnement qui envoie depuis un autre domaine les surcharge.
     env(MAIL_FROM_ADDRESS): 'no-reply@amateo.app'
     env(MAIL_FROM_NAME): 'Amateo'
+    # P5-15 — l'identité produit LUE PAR UN HUMAIN (`ProductIdentity`) : nom
+    # commercial + éditeur. Variables pour qu'un renommage se fasse en UN point
+    # (sujets d'e-mail, libellés d'écran, URI TOTP), jamais par une chasse aux
+    # littéraux. `APP_PUBLISHER_NAME` est le responsable de traitement RGPD.
+    env(APP_PRODUCT_NAME): 'Amateo'
+    env(APP_PUBLISHER_NAME): 'Maratech'
     # SEC-16 (audit) — le cookie httpOnly qui porte le JWT applicatif. Nom et
     # chemin sont des PARAMÈTRES parce que trois écrivains doivent s'accorder :
     # le handler lexik (`set_cookies`, ci-dessous), `JwtCookieFactory`
@@ -67,6 +73,10 @@ services:
             # d'envoi lui demandent l'expéditeur, ils ne connaissent plus d'adresse.
             $mailFromAddress: '%env(MAIL_FROM_ADDRESS)%'
             $mailFromName: '%env(MAIL_FROM_NAME)%'
+            # P5-15 — consommés par le SEUL service `ProductIdentity` ; les points
+            # d'appel lui demandent le nom, ils ne portent plus de littéral.
+            $productName: '%env(APP_PRODUCT_NAME)%'
+            $publisherName: '%env(APP_PUBLISHER_NAME)%'
 
     # makes classes in src/ available to be used as services
     # this creates a service per class whose id is the fully-qualified class name
