@@ -382,7 +382,6 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // the action here — else a second click double-runs the destructive restore.
   const actionBusy = validateMutation.isPending || reopenMutation.isPending || deleteMutation.isPending || regenerateFromMutation.isPending;
   const busy = lockMutation.isPending || moveMutation.isPending || dryRunMutation.isPending || placeMutation.isPending;
-  const clubInitial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
 
   // When a running generation finishes, pull the fresh slots + diagnostics.
   const prevStatus = useRef<string | null>(null);
@@ -1146,7 +1145,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
           ) : null}
 
           {isGenerating ? (
-            <GenerationWaiting initial={clubInitial} logoUrl={me?.club?.logoUrl ?? null} />
+            <GenerationWaiting />
           ) : 0 === slots.length ? (
             isFailed ? (
               <EmptyState title="Génération en échec" description="Aucun créneau n'a été placé, et ce planning n'a aucune réservation à afficher. Corrigez les contraintes signalées puis régénérez." />

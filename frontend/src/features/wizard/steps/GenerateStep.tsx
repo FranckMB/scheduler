@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Rocket } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { useMe } from "@/features/auth/queries";
 import { anchorIsWritable, useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
 import { isSeasonPlanType } from "@/features/planning/lib/versions";
 import { GenerationWaiting } from "@/features/planning/GenerationWaiting";
@@ -33,7 +32,6 @@ const TIMEOUT_MS = 20 * 60 * 1000;
 
 export function GenerateStep() {
   const queryClient = useQueryClient();
-  const { data: me } = useMe();
   // §4bis pts 2/4 — le coût au point d'action : le solde s'affiche sur le bouton
   // de sortie, désactivé à 0 (Découverte bridée ; null = payant/bêta/démo). Si une
   // requête part quand même, le 403 serveur s'affiche via `launchReason`.
@@ -136,8 +134,6 @@ export function GenerateStep() {
   const failureSuggestions = failureExplanations.flatMap((d) => (Array.isArray(d.suggestions) ? d.suggestions.filter((x): x is string => "string" === typeof x) : []));
   const waiting = !showPlanning && (launching || (null !== scheduleId && "FAILED" !== status && !timedOut));
 
-  const initial = (me?.club?.name ?? "C").trim().charAt(0).toUpperCase();
-
   const start = async () => {
     // Garde anti-course : en mode période, ne jamais lancer sans le plan résolu — sinon le POST
     // omettrait schedulePlanId et créerait une version de SAISON au lieu de l'overlay. Le bouton
@@ -222,7 +218,7 @@ export function GenerateStep() {
           </Button>
         </div>
       ) : waiting ? (
-        <GenerationWaiting initial={initial} logoUrl={me?.club?.logoUrl ?? null} />
+        <GenerationWaiting />
       ) : (
         <div className="flex flex-col items-center gap-4 py-12 text-center">
           <Rocket className="size-12 text-accent" />
