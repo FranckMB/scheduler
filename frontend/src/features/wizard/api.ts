@@ -266,6 +266,43 @@ export const listReservations = (params?: Record<string, string>): Promise<Reser
 export const createReservation = (body: ReservationPayload): Promise<Reservation> => api.post("reservations", { json: body }).json();
 export const deleteReservation = (id: string): Promise<void> => api.delete(`reservations/${id}`).then(() => undefined);
 
+// --- Shared training groups (P2-27) : N teams train TOGETHER, K common sessions ---
+
+/**
+ * A mutualisation declaration: N teams (2..10) train together with EXACTLY
+ * `commonSessions` common sessions. Club+season scoped, filtered by
+ * `schedulePlanId` (null = season socle, a UUID = a period plan). Server-backed;
+ * the server is the sole judge of validity (see the DTO + processor).
+ */
+export interface SharedTrainingGroup {
+  id: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  schedulePlanId: string | null;
+  teamIds: string[];
+  commonSessions: number;
+}
+
+/** POST carries the scope (`schedulePlanId`); PUT never remaps it (the plan is fixed at creation). */
+export interface SharedTrainingGroupPayload {
+  teamIds: string[];
+  commonSessions: number;
+  schedulePlanId?: string | null;
+}
+
+/**
+ * Sans `schedulePlanId`, le provider renvoie le socle ET les périodes (le front trie) :
+ * pour la portée socle on liste sans param puis on filtre `null === schedulePlanId`.
+ */
+export const listSharedTrainingGroups = (params?: Record<string, string>): Promise<SharedTrainingGroup[]> =>
+  collectionAll<SharedTrainingGroup>("shared_training_groups", params);
+export const createSharedTrainingGroup = (body: SharedTrainingGroupPayload): Promise<SharedTrainingGroup> =>
+  api.post("shared_training_groups", { json: body }).json();
+export const updateSharedTrainingGroup = (id: string, body: { teamIds: string[]; commonSessions: number }): Promise<SharedTrainingGroup> =>
+  api.put(`shared_training_groups/${id}`, { json: body }).json();
+export const deleteSharedTrainingGroup = (id: string): Promise<void> => api.delete(`shared_training_groups/${id}`).then(() => undefined);
+
 // --- Coaches + links (W3) ---
 
 export type TeamCoachRole = "MAIN" | "ASSISTANT";

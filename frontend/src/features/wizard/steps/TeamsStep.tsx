@@ -14,10 +14,10 @@ import { Select } from "@/shared/components/ui/select";
 import { groupTeamsByTier, TIER_MEANING, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
-import type { Gender, PriorityTier, SportCategory, Team, TeamLevel, TeamPayload } from "../api";
+import type { Gender, PriorityTier, SharedTrainingGroup, SportCategory, Team, TeamLevel, TeamPayload } from "../api";
 import { useWizardFooter } from "../lib/footerSlot";
 import { orderedTeams, teamsOfTier } from "../lib/ranking";
-import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useReservations, useSportCategories, useUpdateTeam, useWizardCoachPlayers, useWizardTeamCoaches, useWizardTeams } from "../queries";
+import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useReservations, useSharedTrainingGroups, useSportCategories, useUpdateTeam, useWizardCoachPlayers, useWizardTeamCoaches, useWizardTeams } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodTeams } from "./PeriodStructure";
 
@@ -91,9 +91,11 @@ interface RowProps {
   onMove?: (dir: -1 | 1) => void;
   canUp?: boolean;
   canDown?: boolean;
+  /** P2-27 — repère « mutualisée » : l'équipe s'entraîne avec d'autres. null = aucun groupe. */
+  mutualiseLabel?: string | null;
 }
 
-function TeamRow({ team, number, categories, tiers, onField, onDelete, rankLabel, canUp, canDown, onMove }: RowProps) {
+function TeamRow({ team, number, categories, tiers, onField, onDelete, rankLabel, canUp, canDown, onMove, mutualiseLabel }: RowProps) {
   // Local edit buffers (saved on blur). name/sessions only change through this row.
   const [name, setName] = useState(team.name);
   const [sessions, setSessions] = useState(String(team.sessionsPerWeek));
@@ -183,6 +185,7 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete, rankLabel
         // sans la moindre raison. Le POURQUOI est dit une fois au-dessus de la liste.
         <p className="ml-8 mt-1 text-xs text-muted-foreground">Engagée en compétition — niveau et suppression verrouillés.</p>
       )}
+      {mutualiseLabel ? <p className="ml-8 mt-1 text-xs text-muted-foreground">{mutualiseLabel}</p> : null}
       {bonusCompetitionWarning && (
         <p role="alert" className="ml-8 mt-1 text-xs text-warning">
           Équipe en compétition classée Bonus (D) — elle passera en dernier ; vérifiez le rang.
@@ -352,6 +355,9 @@ function TeamsEditor() {
   const { data: reservations = [] } = useReservations();
   const { data: teamCoaches = [] } = useWizardTeamCoaches();
   const { data: coachPlayers = [] } = useWizardCoachPlayers();
+  // P2-27 — le repère « mutualisée » sur chaque ligne : les groupes du SOCLE (l'éditeur de saison
+  // ne travaille jamais une période). Sans param le provider renvoie socle ET périodes → on filtre.
+  const { data: sharedGroups = [] } = useSharedTrainingGroups(null);
   const create = useCreateTeam();
   const update = useUpdateTeam();
   const del = useDeleteTeam();
@@ -422,6 +428,23 @@ function TeamsEditor() {
     const tier = tiers.find((t) => t.id === team.priorityTierId) ?? null;
 
     return { short: tier?.label ?? "?", full: tierGroupLabel(tier ?? null) };
+  };
+  // Repère « mutualisée avec … » par équipe — nommer les co-équipières, jamais un simple pictogramme.
+  const baseGroups = sharedGroups.filter((g) => null === g.schedulePlanId);
+  const groupOfTeam = new Map<string, SharedTrainingGroup>();
+  for (const g of baseGroups) {
+    for (const id of g.teamIds) {
+      groupOfTeam.set(id, g);
+    }
+  }
+  const teamNameById = new Map(teams.map((t) => [t.id, t.name]));
+  const mutualiseLabelOf = (teamId: string): string | null => {
+    const g = groupOfTeam.get(teamId);
+    if (undefined === g) {
+      return null;
+    }
+    const others = g.teamIds.filter((x) => x !== teamId).map((x) => teamNameById.get(x) ?? "?");
+    return others.length > 0 ? `Mutualisée avec ${others.join(", ")}` : "Mutualisée";
   };
   const categoryRank = new Map(categories.map((c, index) => [c.id, index]));
   const flatTeams = [...teams].sort((a, b) => sort.dir * compareOn(sort.column, a, b, categoryRank));
@@ -815,6 +838,7 @@ function TeamsEditor() {
                           canUp={index > 0 && !reorderBusy}
                           canDown={index < group.length - 1 && !reorderBusy}
                           onMove={null === tier ? undefined : (dir) => moveInTier(team, dir)}
+                          mutualiseLabel={mutualiseLabelOf(team.id)}
                         />
                       ))}
                     </div>
@@ -825,7 +849,7 @@ function TeamsEditor() {
                 // et le badge de rang par ligne porte l'information qu'elles donnaient.
                 <div className="rounded-lg border border-border bg-card px-2">
                   {flatTeams.map((team) => (
-                    <TeamRow key={team.id} team={team} categories={categories} tiers={tiers} onField={onField} onDelete={setToDelete} rankLabel={rankLabelOf(team)} />
+                    <TeamRow key={team.id} team={team} categories={categories} tiers={tiers} onField={onField} onDelete={setToDelete} rankLabel={rankLabelOf(team)} mutualiseLabel={mutualiseLabelOf(team.id)} />
                   ))}
                 </div>
               )}

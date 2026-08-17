@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
-import type { Constraint, ImplicitRuleSetting } from "../api";
+import type { Constraint, ImplicitRuleSetting, SharedTrainingGroup } from "../api";
 import { PRODUCT_RULES, WELLBEING_RULES } from "./ImplicitRulesPanel";
 
 const RESOLVED_IMPLICIT_RULES: ImplicitRuleSetting[] = [
@@ -27,6 +27,11 @@ const h = vi.hoisted(() => ({
   tags: [] as { id: string; name: string; color: string | null; isSystem: boolean; axis: "GENRE" | "NIVEAU" | "AGE" | null }[],
   tagAssignments: [] as { id: string; teamId: string; tagId: string; seasonId: string }[],
   implicitRules: [] as ImplicitRuleSetting[],
+  // P2-27 — les groupes de mutualisation + leurs mutations (portée courante).
+  sharedGroups: [] as SharedTrainingGroup[],
+  stgCreate: vi.fn(),
+  stgUpdate: vi.fn(),
+  stgDelete: vi.fn(),
 }));
 
 const SEASON_TEAMS = [
@@ -94,6 +99,13 @@ vi.mock("../queries", () => ({
   useWizardTeamCoaches: () => ({ data: h.teamCoaches, isPending: h.coachesPending, isError: h.coachesFailed, refetch: vi.fn() }),
   useCreateReservation: () => ({ mutateAsync: h.resCreate, isPending: false }),
   useDeleteReservation: () => ({ mutateAsync: h.resDelete, isPending: false }),
+  // P2-27 — la mutualisation. Le mock HONORE `enabled` (comme useReservations) : une période
+  // non résolue ne doit pas servir les groupes du SOCLE.
+  useSharedTrainingGroups: (_planId?: string | null, enabled?: boolean) => ({ data: false === enabled ? [] : h.sharedGroups }),
+  useCreateSharedTrainingGroup: () => ({ mutateAsync: h.stgCreate, isPending: false }),
+  useUpdateSharedTrainingGroup: () => ({ mutateAsync: h.stgUpdate, isPending: false }),
+  useDeleteSharedTrainingGroup: () => ({ mutate: h.stgDelete }),
+  useTeamPeriodOverrides: () => ({ data: [] }),
   // P2-28 — les 4 règles bien-être résolues + leurs mutations (le détail du panneau est
   // couvert par ImplicitRulesPanel.test ; ici on ne garde que le CÂBLAGE dans l'étape).
   useImplicitRuleSettings: () => ({ data: h.implicitRules, isError: false }),
@@ -1391,5 +1403,63 @@ describe("ConstraintsStep — affiner un groupe (targetTags / excludeTags)", () 
     const body = (h.updateMut.mock.calls[0][0] as { body: Constraint }).body;
     expect(body.config).toMatchObject({ targetTag: "ADULTE" });
     expect(body.config).not.toHaveProperty("targetTags");
+  });
+});
+
+/**
+ * P2-27 PR B — l'onglet « Mutualisation » : son PLACEMENT (à côté de « Réserver ») et son
+ * ANCRAGE (socle en saison via `schedulePlanId` null ; plan de la période derrière
+ * `PeriodAnchorGate` en mode période). Le comportement interne du panneau est gardé par
+ * MutualisationPanel.test ; ici on garde le câblage dans l'étape.
+ */
+describe("ConstraintsStep — onglet Mutualisation", () => {
+  beforeEach(() => {
+    h.list = [];
+    h.sharedGroups = [];
+    h.stgCreate.mockClear();
+    periodAnchorReady.value = true;
+    activeTeamsState.pausedIds = new Set();
+    useWizardStore.getState().exitPeriodMode();
+  });
+  afterEach(() => useWizardStore.getState().exitPeriodMode());
+
+  it("crée un groupe sur le SOCLE en mode saison (schedulePlanId null)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Mutualisation" }));
+    // Le panneau du socle : on coche deux équipes puis on crée.
+    await user.click(screen.getByRole("checkbox", { name: "SM1" }));
+    await user.click(screen.getByRole("checkbox", { name: "Fanion" }));
+    await user.click(screen.getByRole("button", { name: "Créer le groupe" }));
+
+    expect(h.stgCreate).toHaveBeenCalledOnce();
+    const arg = h.stgCreate.mock.calls[0][0] as { schedulePlanId: string | null; teamIds: string[]; commonSessions: number };
+    expect(arg.schedulePlanId).toBeNull();
+    expect([...arg.teamIds].sort()).toEqual(["t1", "t2"]);
+    expect(arg.commonSessions).toBe(1);
+  });
+
+  it("en mode période, passe par la porte d'ancre puis écrit sur le plan de la période", async () => {
+    const user = userEvent.setup();
+    useWizardStore.getState().startPeriodMode("entry-27");
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getByRole("button", { name: "Mutualisation" }));
+    await user.click(screen.getByRole("checkbox", { name: "SM1" }));
+    await user.click(screen.getByRole("checkbox", { name: "Fanion" }));
+    await user.click(screen.getByRole("button", { name: "Créer le groupe" }));
+
+    expect(h.stgCreate.mock.calls[0][0]).toMatchObject({ schedulePlanId: "plan-1" });
+  });
+
+  it("en mode période, attend l'ancre avant d'offrir le panneau (pas d'écriture sur le socle)", async () => {
+    periodAnchorReady.value = false;
+    useWizardStore.getState().startPeriodMode("entry-27");
+    renderWithProviders(<ConstraintsStep />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Mutualisation" }));
+    expect(screen.getByText(/Chargement du planning de la période/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Créer le groupe" })).toBeNull();
   });
 });

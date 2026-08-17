@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
-import type { Team } from "../api";
+import type { SharedTrainingGroup, Team } from "../api";
 
 const baseTeam: Team = {
   id: "t1", name: "SM3", sportCategoryId: "cat1", priorityTierId: 5, tierOrder: 0,
@@ -21,6 +21,8 @@ const CATEGORIES = [
   { id: "catU11", name: "U11", sortOrder: 6 },
 ];
 
+// P2-27 — les groupes de mutualisation (repère « Mutualisée avec … » par ligne).
+const sharedGroupsState: { data: SharedTrainingGroup[] } = { data: [] };
 const createMut = vi.fn();
 const updateMut = vi.fn();
 const reorderMut = vi.fn();
@@ -45,6 +47,7 @@ vi.mock("../queries", () => ({
   useReservations: () => ({ data: [{ id: "r1", teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "20:30", durationMinutes: 90, calendarEntryId: null }] }),
   useWizardTeamCoaches: () => ({ data: [] }),
   useWizardCoachPlayers: () => ({ data: [] }),
+  useSharedTrainingGroups: () => ({ data: sharedGroupsState.data }),
 }));
 
 import { TeamsStep } from "./TeamsStep";
@@ -53,6 +56,7 @@ describe("TeamsStep", () => {
   beforeEach(() => {
     team = baseTeam;
     teamsState.data = null;
+    sharedGroupsState.data = [];
     reorderMut.mockClear();
     reorderPending.value = false;
     createMut.mockClear();
@@ -107,6 +111,23 @@ describe("TeamsStep", () => {
     expect(within(row).getByRole("combobox", { name: "Niveau de jeu" })).toBeEnabled();
     expect(screen.queryByText(/joue en compétition/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Engagée en compétition/)).not.toBeInTheDocument();
+  });
+
+  // P2-27 — le repère « mutualisée » sur la ligne, nommant les co-équipières (jamais un simple
+  // pictogramme). Les groupes du SOCLE (l'éditeur de saison ne travaille jamais une période).
+  it("marks a team that is mutualised, naming the co-teams", () => {
+    teamsState.data = [baseTeam, { ...baseTeam, id: "t2", name: "SM4" }];
+    sharedGroupsState.data = [
+      { id: "g1", version: 1, createdAt: "2026-08-17T00:00:00+00:00", updatedAt: "2026-08-17T00:00:00+00:00", schedulePlanId: null, teamIds: ["t1", "t2"], commonSessions: 1 },
+    ];
+    renderWithProviders(<TeamsStep />);
+
+    expect(screen.getByText(/Mutualisée avec SM4/)).toBeInTheDocument();
+  });
+
+  it("leaves a non-mutualised team unmarked", () => {
+    renderWithProviders(<TeamsStep />);
+    expect(screen.queryByText(/Mutualisée/)).not.toBeInTheDocument();
   });
 
   it("shows a play-level select and no redundant inner heading", () => {
