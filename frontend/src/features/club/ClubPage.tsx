@@ -406,13 +406,16 @@ function frDate(iso: string): string {
 }
 
 /** Une cellule d'heures : « — » à zéro, pour que l'œil accroche l'usage réel. */
-function HoursCell({ hours, strong }: { hours: number; strong?: boolean }) {
+function HoursCell({ hours, strong, className }: { hours: number; strong?: boolean; className?: string }) {
   return (
-    <td className={cn("py-1.5 text-right tabular-nums", strong ? "font-semibold" : "")}>
+    <td className={cn("py-1.5 text-right tabular-nums", strong ? "font-semibold" : "", className)}>
       {hours > 0 ? formatHours(hours) : <span className="text-muted-foreground">—</span>}
     </td>
   );
 }
+
+/** Trait de séparation après DIMANCHE : les jours d'un côté, les cumuls de l'autre. */
+const SEPARATOR = "border-r-2 border-border pr-3";
 
 interface UsageTableRow {
   key: string;
@@ -445,9 +448,9 @@ function UsageTable({ caption, firstColHeader, rows, totalByDay, grandTotal, day
             <tr className="border-b border-border text-left text-xs text-muted-foreground">
               <th className="py-1.5 font-medium">{firstColHeader}</th>
               {days.map((d) => (
-                <th key={d} className="py-1.5 text-right font-medium" title={DAY_LABELS[d]}>{DAY_SHORT[d]}</th>
+                <th key={d} className={cn("py-1.5 text-right font-medium", 7 === d ? SEPARATOR : "")} title={DAY_LABELS[d]}>{DAY_SHORT[d]}</th>
               ))}
-              <th className="py-1.5 text-right font-medium">Réalisé</th>
+              <th className="py-1.5 pl-3 text-right font-medium">Réalisé</th>
               <th className="py-1.5 text-right font-medium">À venir</th>
               <th className="py-1.5 text-right font-medium">Total</th>
             </tr>
@@ -456,16 +459,16 @@ function UsageTable({ caption, firstColHeader, rows, totalByDay, grandTotal, day
             {rows.map((r) => (
               <tr key={r.key} className="border-b border-border/50">
                 <td className="py-1.5">{r.label}</td>
-                {days.map((d) => <HoursCell key={d} hours={dayTotal(r.byDay, d)} />)}
-                <HoursCell hours={r.real} />
+                {days.map((d) => <HoursCell key={d} hours={dayTotal(r.byDay, d)} className={7 === d ? SEPARATOR : ""} />)}
+                <HoursCell hours={r.real} className="pl-3" />
                 <HoursCell hours={r.projected} />
                 <HoursCell hours={r.total} strong />
               </tr>
             ))}
             <tr className="border-t-2 border-border font-semibold">
               <td className="py-1.5">TOTAL</td>
-              {days.map((d) => <HoursCell key={d} hours={dayTotal(totalByDay, d)} strong />)}
-              <HoursCell hours={grandTotal.real} strong />
+              {days.map((d) => <HoursCell key={d} hours={dayTotal(totalByDay, d)} strong className={7 === d ? SEPARATOR : ""} />)}
+              <HoursCell hours={grandTotal.real} strong className="pl-3" />
               <HoursCell hours={grandTotal.projected} strong />
               <HoursCell hours={grandTotal.total} strong />
             </tr>
@@ -501,8 +504,10 @@ function VenueStatsSection({ me }: { me: MeResponse }) {
   }
 
   const data = statsQuery.data;
-  // Colonnes lundi→samedi ; dimanche seulement s'il porte des heures.
-  const days = data.totalByDay.some((d) => d.day === 7) ? [1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5, 6];
+  // Colonnes lundi→DIMANCHE, toujours les sept (retour fondateur) : le dimanche reste
+  // vide aujourd'hui mais les horaires de MATCH viendront l'occuper — une colonne qui
+  // apparaît/disparaît selon les données déplacerait le tableau sous les yeux du lecteur.
+  const days = [1, 2, 3, 4, 5, 6, 7];
   const venueRows: UsageTableRow[] = data.venues.map((v) => ({ key: v.venueId, label: v.name, byDay: v.byDay, real: v.real, projected: v.projected, total: v.total }));
   const levelRows: UsageTableRow[] = data.byLevel.map((l) => ({ key: l.level ?? "__none__", label: l.label, byDay: l.byDay, real: l.real, projected: l.projected, total: l.total }));
 
