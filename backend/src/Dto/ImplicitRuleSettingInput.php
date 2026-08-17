@@ -15,6 +15,15 @@ use Symfony\Component\Validator\Constraints as Assert;
  */
 class ImplicitRuleSettingInput
 {
+    /**
+     * La portée du réglage : NULL = la saison (base, et repli des plans qui n'ont pas leur propre
+     * copie), un UUID = un plan de période. Le serveur vérifie que le plan existe (422 sinon) et
+     * matérialise ses 4 règles au premier réglage porté.
+     */
+    #[Assert\Uuid]
+    #[Groups(['write'])]
+    public ?string $schedulePlanId = null;
+
     #[Assert\NotBlank]
     #[Assert\Choice(callback: [ImplicitRuleIntensity::class, 'values'])]
     #[Groups(['write'])]

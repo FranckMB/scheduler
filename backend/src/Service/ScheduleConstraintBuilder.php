@@ -385,6 +385,10 @@ final class ScheduleConstraintBuilder
             // Period mutualisation groups: this plan's own (schedulePlanId = planId, P2-27). Un
             // membre désactivé pour la période est filtré au roster dans serializeSharedTrainings.
             sharedTrainingGroups: $em->getRepository(SharedTrainingGroup::class)->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
+            // ADR-0002 inv. 5 — le bloc `implicitRules` résout la COPIE de CE plan (repli saison
+            // si legacy), jamais la portée saison directement : c'est ce que buildForClubSeason
+            // (plan null) fait, ici on porte la période.
+            schedulePlanId: $schedulePlanId,
         );
 
         $this->currentAvailabilitiesByVenue = [];
@@ -517,6 +521,7 @@ final class ScheduleConstraintBuilder
         array $constraints = [],
         array $reservations = [],
         array $sharedTrainingGroups = [],
+        ?string $schedulePlanId = null,
     ): array {
         $serializedConstraints = array_merge(
             $this->serializeTeamCoachConstraints($teamCoaches),
@@ -537,11 +542,15 @@ final class ScheduleConstraintBuilder
         );
 
         // Règles implicites « bien-être » (contrat 2.7) : le bloc RÉSOLU des 4 clés, réglages
-        // stockés par-dessus les défauts. Season-scopé (ADR-0002 : PAS de calendarEntryId — un
-        // réglage vaut pour toute la saison, base comme périodes). Sans résolveur (mode léger
-        // sans DB) ou sans club/saison → défauts (tout HARD), payload d'absence de PR 1.
+        // stockés par-dessus les défauts. PORTÉE (ADR-0002 inv. 5) : un build de PÉRIODE
+        // (`schedulePlanId` non-null) résout la COPIE du plan (`resolveForPlan`, repli saison si
+        // le plan est legacy) ; un build de BASE (null) résout la portée saison (`resolve`). Sans
+        // résolveur (mode léger sans DB) ou sans club/saison → défauts (tout HARD), payload
+        // d'absence de PR 1.
         $implicitRules = ($this->implicitRuleResolver instanceof ImplicitRuleResolver && '' !== $clubId && '' !== $seasonId)
-            ? $this->implicitRuleResolver->resolve($clubId, $seasonId)
+            ? (null !== $schedulePlanId
+                ? $this->implicitRuleResolver->resolveForPlan($clubId, $seasonId, $schedulePlanId)
+                : $this->implicitRuleResolver->resolve($clubId, $seasonId))
             : ImplicitRuleResolver::defaults();
 
         return [

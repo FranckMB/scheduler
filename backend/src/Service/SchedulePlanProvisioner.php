@@ -9,6 +9,7 @@ use App\Entity\SchedulePlan;
 use App\Entity\Season;
 use App\Enum\ConstraintFamily;
 use App\Enum\SchedulePlanType;
+use App\Repository\ImplicitRuleSettingRepository;
 use DateTimeImmutable;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\Types\Types;
@@ -57,6 +58,7 @@ final class SchedulePlanProvisioner
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly ScheduleConstraintBuilder $constraintBuilder,
+        private readonly ImplicitRuleSettingRepository $implicitRuleSettingRepository,
     ) {}
 
     /**
@@ -753,8 +755,12 @@ final class SchedulePlanProvisioner
             ->setEndDate(new DateTimeImmutable((string) $row['end_date']))
             ->setCalendarEntryId($calendarEntryId);
         $this->entityManager->persist($plan);
-        $this->entityManager->flush(); // l'id du plan doit exister avant la copie ci-dessous
+        $this->entityManager->flush(); // l'id du plan doit exister avant les copies ci-dessous
         $this->copySeasonalSlots($plan);
+        // ADR-0002 inv. 5 — le plan reçoit AUSSI sa copie des 4 règles bien-être (valeur saison
+        // ou défaut). Copie TOTALE : un plan « tout au défaut » garde ses 4 lignes, donc reste
+        // distinguable d'un plan legacy sans copie (dont la lecture retombe sur la saison).
+        $this->implicitRuleSettingRepository->materializeForPlan((string) $plan->getClubId(), $plan->getSeasonId(), $plan->getId());
 
         return $plan->getId();
     }

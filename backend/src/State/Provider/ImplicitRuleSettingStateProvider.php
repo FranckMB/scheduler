@@ -12,6 +12,7 @@ use App\Enum\ImplicitRuleKey;
 use App\Repository\ImplicitRuleSettingRepository;
 use App\Service\ImplicitRuleResolver;
 use App\Service\SeasonResolver;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 /**
@@ -21,6 +22,8 @@ use Symfony\Component\HttpFoundation\RequestStack;
  */
 final class ImplicitRuleSettingStateProvider implements ProviderInterface
 {
+    use ReadsUuidQueryParamTrait;
+
     public function __construct(
         private readonly RequestStack $requestStack,
         private readonly ImplicitRuleResolver $resolver,
@@ -35,8 +38,14 @@ final class ImplicitRuleSettingStateProvider implements ProviderInterface
             return $operation instanceof CollectionOperationInterface ? [] : null;
         }
 
-        $resolved = $this->resolver->resolve($clubId, $seasonId);
-        $stored = $this->repository->findByClubSeasonIndexed($clubId, $seasonId);
+        // ADR-0002 inv. 5 — la PORTÉE : `?schedulePlanId=` cible un plan de période (sa copie),
+        // son absence la portée SAISON. Un uuid mal formé rend 400 (jamais un 500 de cast pg).
+        $request = $this->requestStack->getCurrentRequest();
+        $schedulePlanId = $request instanceof Request ? $this->uuidQueryParam($request, 'schedulePlanId') : null;
+
+        [$resolved, $stored] = null === $schedulePlanId
+            ? [$this->resolver->resolve($clubId, $seasonId), $this->repository->findByClubSeasonIndexed($clubId, $seasonId)]
+            : [$this->resolver->resolveForPlan($clubId, $seasonId, $schedulePlanId), $this->repository->findByPlanIndexed($schedulePlanId)];
 
         if ($operation instanceof CollectionOperationInterface) {
             $out = [];

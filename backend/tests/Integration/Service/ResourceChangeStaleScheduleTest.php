@@ -300,6 +300,31 @@ final class ResourceChangeStaleScheduleTest extends KernelTestCase
         );
     }
 
+    public function testAPeriodScopedImplicitRuleMarksThatPlanOnly(): void
+    {
+        [$club, $season] = $this->seed();
+        $seasonSchedule = $this->seasonSchedule($club, $season);
+        $periodSchedule = $this->periodSchedule($club, $season);
+        $periodPlanId = $periodSchedule->getSchedulePlanId();
+        $this->em->flush();
+        // La naissance du plan a matérialisé ses 4 règles (SQL brut, sans listener) : on repart
+        // d'une ardoise propre pour ne mesurer QUE la mutation d'une de ces copies.
+        $this->resetMarkers($seasonSchedule, $periodSchedule);
+
+        // Régler une règle bien-être de PÉRIODE (sa copie matérialisée) ne vaut que pour SON plan
+        // → il ne périme QUE ce plan, jamais le socle (l'« et inversement » d'ADR-0002).
+        $this->mutatePlanImplicitRule($periodPlanId, ImplicitRuleKey::COACH_REST_DAY, ImplicitRuleIntensity::PREFERRED);
+
+        self::assertTrue(
+            $this->reload($periodSchedule)->isResourcesChangedSinceGeneration(),
+            'Un réglage bien-être de période périme le plan de sa période.',
+        );
+        self::assertFalse(
+            $this->reload($seasonSchedule)->isResourcesChangedSinceGeneration(),
+            'ADR-0002 : un réglage bien-être de période ne périme PAS le socle de saison (sa copie lui est propre).',
+        );
+    }
+
     public function testAnImportClearsTheMarkerAfterAnImplicitRuleChange(): void
     {
         [$club, $season] = $this->seed();
@@ -495,6 +520,20 @@ final class ResourceChangeStaleScheduleTest extends KernelTestCase
             ->setRuleKey($ruleKey)
             ->setIntensity($intensity);
         $this->em->persist($setting);
+        $this->em->flush();
+        $this->em->clear();
+    }
+
+    /**
+     * Mute une des 4 règles bien-être MATÉRIALISÉES d'un plan de période (postUpdate → markPlan).
+     * On ne persiste PAS une nouvelle ligne : le plan porte déjà sa copie (née avec lui), un
+     * INSERT de même portée+règle violerait l'unicité. C'est bien la MODIFICATION qu'on mesure.
+     */
+    private function mutatePlanImplicitRule(string $schedulePlanId, ImplicitRuleKey $ruleKey, ImplicitRuleIntensity $intensity): void
+    {
+        $row = $this->em->getRepository(ImplicitRuleSetting::class)->findOneBy(['schedulePlanId' => $schedulePlanId, 'ruleKey' => $ruleKey]);
+        self::assertInstanceOf(ImplicitRuleSetting::class, $row, 'le plan doit porter sa copie de la règle (matérialisée à la naissance)');
+        $row->setIntensity($intensity);
         $this->em->flush();
         $this->em->clear();
     }
