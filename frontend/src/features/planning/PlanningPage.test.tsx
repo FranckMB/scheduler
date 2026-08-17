@@ -487,6 +487,26 @@ describe("PlanningPage (integration)", () => {
     expect(await screen.findByText("Gymnase Alpha")).toBeInTheDocument();
   });
 
+  // P2-33 — la 4e vue « Par jour » : les gymnases restent en colonnes, et le changement de
+  // vue applique la RÈGLE COMMUNE (setViewMode remet selectedSlotId + resourceFilter à zéro,
+  // exactement comme gymnase/coach/équipe) — le détail ouvert se referme, ce n'est pas une
+  // incohérence propre à cette vue.
+  it("bascule en vue « Par jour » : grille conservée, et le créneau sélectionné se referme (règle commune)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<PlanningPage />);
+    // Ouvrir le détail d'un créneau…
+    await user.click(await screen.findByText("U11"));
+    expect(await screen.findByText(/90 min/)).toBeInTheDocument();
+
+    // …puis passer en vue jour : le détail se referme (selectedSlotId remis à zéro par
+    // setViewMode, comme pour tout changement de vue), la grille reste affichée.
+    await user.click(screen.getByRole("button", { name: "Par jour" }));
+    expect(screen.queryByText(/90 min/)).not.toBeInTheDocument();
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    // Les gymnases restent en colonnes (au moins un en-tête « Gymnase Alpha »).
+    expect((await screen.findAllByText("Gymnase Alpha")).length).toBeGreaterThan(0);
+  });
+
   it("opens the slot detail on click", async () => {
     const user = userEvent.setup();
     renderWithProviders(<PlanningPage />);

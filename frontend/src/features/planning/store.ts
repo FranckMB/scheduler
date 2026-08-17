@@ -1,8 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-/** Which resource axis drives the grid sub-columns. Same data, different display. */
-export type ViewMode = "gymnase" | "coach" | "equipe";
+/**
+ * Which resource axis drives the grid sub-columns. Same data, different display.
+ *
+ * P2-33 : « jour » est une quatrième vue dont l'axe filtrable est le JOUR de la semaine,
+ * mais dont les colonnes de grille RESTENT les gymnases — sur un club à 8 gymnases, filtrer
+ * sur lundi ramène ~5 colonnes au lieu de ~40 (fin du scroll horizontal permanent). Le
+ * `buildGrid` aiguille cet axe vers le layout gymnase (`columnView`), il ne le réécrit pas.
+ */
+export type ViewMode = "gymnase" | "coach" | "equipe" | "jour";
 
 interface PlanningState {
   viewMode: ViewMode;

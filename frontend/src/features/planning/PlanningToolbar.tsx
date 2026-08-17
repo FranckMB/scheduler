@@ -13,6 +13,8 @@ const VIEWS: { key: ViewMode; label: string }[] = [
   { key: "gymnase", label: "Par gymnase" },
   { key: "coach", label: "Par coach" },
   { key: "equipe", label: "Par équipe" },
+  // P2-33 : 4e vue — tous les gymnases, filtrés sur le/les jour(s) de la semaine.
+  { key: "jour", label: "Par jour" },
 ];
 
 interface PlanningToolbarProps {
