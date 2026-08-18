@@ -1103,6 +1103,13 @@ final class BcclSeeder
         // Tonkin mercredi, zéro Armand ; voir la purge dans $staleNames.)
         $addConstraint('U18M2 · préfère ' . $venues['vArmand']->getName(), ConstraintScope::TEAM, $u18m2->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vArmand']->getId()]);
 
+        // Préférences de gymnase saisies par le gestionnaire dans l'app le 2026-08-18 (relevé de
+        // la base réelle). PREFERRED : le solveur s'y tient quand il peut, et signale l'écart
+        // quand il ne peut pas — aucun risque d'infaisabilité, contrairement aux règles de jour.
+        foreach ([['Baby 1', 'vMateo'], ['Baby 2', 'vMateo'], ['Section J.Macé', 'vMateo'], ['3x3', 'vAdn']] as [$teamName, $venueVar]) {
+            $addConstraint($teamName . ' · préfère ' . $venues[$venueVar]->getName(), ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues[$venueVar]->getId()]);
+        }
+
         // --- COACH_AVAILABILITY (indisponibilités ; 5 = vendredi, 4 = jeudi) ---
         // Variables coach déjà résolues (l.618+) : un coach manquant lève une erreur PHP au lieu de disparaître en silence.
         foreach ([[$coachLionel, 5], [$coachThomas, 5], [$coachEnzo, 5], [$coachJordan, 5], [$coachEmerick, 4], [$coachNicolasBarilleau, 4]] as [$coach, $day]) {
