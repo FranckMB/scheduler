@@ -17,6 +17,11 @@ final readonly class ExportPdfMessage
         private ?string $clubId = null,
         // Export scope: null = all venues, else a single venue id.
         private ?string $venueId = null,
+        // P3-20 — which VIEW the PNG is shot from: null/'grid' = the manager grid
+        // (historical behaviour, byte-identical), 'club' = the team x day matrix.
+        // Nullable for the same reason as clubId: a payload queued before this field
+        // existed must still deserialize and take the historical path.
+        private ?string $view = null,
     ) {}
 
     public function getScheduleId(): string
@@ -33,5 +38,10 @@ final readonly class ExportPdfMessage
     public function getVenueId(): ?string
     {
         return $this->venueId ?? null;
+    }
+
+    public function getView(): ?string
+    {
+        return $this->view ?? null;
     }
 }

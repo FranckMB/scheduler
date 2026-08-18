@@ -246,6 +246,21 @@ final class PdfTeamDayMatrixTest extends TestCase
         self::assertMatchesRegularExpression('/td\.filled\s*\{[^}]*border:\s*2px solid/', $document, 'les cellules occupées ont une bordure plus marquée que la grille de base');
     }
 
+    public function testAVenueScopedMatrixDropsTeamsThatTrainElsewhere(): void
+    {
+        // Deux équipes, deux gymnases — mais l'export est limité à « v-a ». P3-20 : depuis que la
+        // vue « club » peut DEMANDER la matrice, elle peut s'ouvrir sur une portée réduite ; y
+        // lister l'équipe de l'autre gymnase la ferait passer pour une équipe sans entraînement.
+        $data = $this->data([$this->slot('t-a', 'v-a', 1, '18:30')]);
+
+        $scoped = $this->buildMatrix($data, 'v-a');
+        self::assertStringContainsString('U13 F', $scoped);
+        self::assertStringNotContainsString('U15 M', $scoped, 'une équipe qui s’entraîne ailleurs n’a pas de ligne vide sur un export scopé');
+
+        // Portée complète : l'équipe sans séance GARDE sa ligne — c'est le trou à voir.
+        self::assertStringContainsString('U15 M', $this->buildMatrix($data));
+    }
+
     private function slot(string $teamId, string $venueId, int $day, string $time, ?string $coachId = null): ScheduleSlotTemplate
     {
         return new ScheduleSlotTemplate()
@@ -297,11 +312,11 @@ final class PdfTeamDayMatrixTest extends TestCase
         return (bool) new ReflectionMethod(PdfGenerator::class, 'hasMatrix')->invoke($generator, $data);
     }
 
-    private function buildMatrix(ScheduleExportData $data): string
+    private function buildMatrix(ScheduleExportData $data, ?string $venueId = null): string
     {
         $generator = new ReflectionClass(PdfGenerator::class)->newInstanceWithoutConstructor();
 
-        return (string) new ReflectionMethod(PdfGenerator::class, 'buildMatrixSection')->invoke($generator, $data);
+        return (string) new ReflectionMethod(PdfGenerator::class, 'buildMatrixSection')->invoke($generator, $data, $venueId);
     }
 
     /**

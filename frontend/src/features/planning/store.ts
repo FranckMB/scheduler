@@ -8,8 +8,13 @@ import { persist } from "zustand/middleware";
  * mais dont les colonnes de grille RESTENT les gymnases — sur un club à 8 gymnases, filtrer
  * sur lundi ramène ~5 colonnes au lieu de ~40 (fin du scroll horizontal permanent). Le
  * `buildGrid` aiguille cet axe vers le layout gymnase (`columnView`), il ne le réécrit pas.
+ *
+ * P3-20 : « club » est une CINQUIÈME vue — la matrice équipes × jours que seuls les exports
+ * PDF/XLS savaient produire. Elle a son propre rendu (`ClubViewTable` sur `lib/clubView.ts`),
+ * pas de colonnes temporelles : `buildGrid` ne la connaît donc pas. Son axe FILTRABLE est
+ * l'équipe, exactement comme la vue « équipe ».
  */
-export type ViewMode = "gymnase" | "coach" | "equipe" | "jour";
+export type ViewMode = "gymnase" | "coach" | "equipe" | "jour" | "club";
 
 interface PlanningState {
   viewMode: ViewMode;

@@ -35,6 +35,8 @@ import { topSeveritySummary } from "./lib/diagnosticsSummary";
 import { computeDrift } from "./lib/drift";
 import { computeEmptySlots, isEmptySlotId } from "./lib/emptySlots";
 import { violationHighlightSlotIds } from "./lib/violationHighlight";
+import { buildClubView } from "./lib/clubView";
+import { ClubViewTable } from "./ClubViewTable";
 import { availableResourceGroups, buildGrid, DAYS, type Lookups, slotGroupKey, toHourMinute } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
 import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveDryRun, useMoveSlot, usePlaceSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
@@ -827,7 +829,14 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // empty slots still appears in the ResourceFilter picker — otherwise focusVenue
   // could filter to a venue the picker cannot show/clear.
   const resourceGroups = useMemo(() => availableResourceGroups(gridSlots, viewMode, lookups, tiers), [gridSlots, viewMode, lookups, tiers]);
-  const model = useMemo(() => buildGrid(gridSlots, viewMode, lookups, new Set(resourceFilter)), [gridSlots, viewMode, lookups, resourceFilter]);
+  // P3-20 — la vue « club » a son propre rendu (matrice équipes × jours) : on ne paie pas un
+  // layout temporel que personne n'affiche (d'où les créneaux vidés en entrée de `buildGrid`).
+  const isClubView = "club" === viewMode;
+  const model = useMemo(() => buildGrid(isClubView ? [] : gridSlots, viewMode, lookups, new Set(resourceFilter)), [isClubView, gridSlots, viewMode, lookups, resourceFilter]);
+  const clubModel = useMemo(
+    () => (isClubView ? buildClubView(gridSlots, lookups, new Set(resourceFilter), tiers) : null),
+    [isClubView, gridSlots, lookups, resourceFilter, tiers],
+  );
 
   // Un diagnostic qui NOMME une colonne absente de l'écran proposerait un focus vers rien —
   // un clic qui vide la grille (revue #342). Seul sort le diagnostic d'un gymnase désactivé
@@ -1260,6 +1269,25 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           le contenu voilé, le voile lui-même intercepte) + indicateur
                           centré. Rien ne « passe au travers » vers une grille périmée. */}
                       <div className={slotsBusy ? "pointer-events-none h-full opacity-40 transition-opacity" : "h-full"}>
+                        {null !== clubModel ? (
+                          // Une vue différente, les MÊMES gestes : la page passe exactement les
+                          // mêmes handlers qu'à la grille (P3-20, décision fondateur).
+                          <ClubViewTable
+                            model={clubModel}
+                            selectedSlotId={selectedSlotId}
+                            onSelectSlot={setSelectedSlotId}
+                            highlightSlotIds={highlightSlotIds}
+                            onToggleLock={isReadOnly || isFailed ? undefined : requestToggleLock}
+                            lockLens={lockLens}
+                            targetMode={
+                              null !== targetMode && !isReadOnly && !isFailed
+                                ? { active: true, sourceSlotId: targetMode.kind === "move" ? targetMode.sourceSlotId : null, variant: targetMode.kind === "move" ? "move" : "place" }
+                                : undefined
+                            }
+                            onPickTarget={onPickTarget}
+                            onCancelTarget={cancelTarget}
+                          />
+                        ) : (
                         <WeekGrid
                           model={model}
                           selectedSlotId={selectedSlotId}
@@ -1278,6 +1306,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           onPickTarget={onPickTarget}
                           onCancelTarget={cancelTarget}
                         />
+                        )}
                       </div>
                       {slotsBusy ? (
                         <div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-background/50" role="status" aria-live="polite">

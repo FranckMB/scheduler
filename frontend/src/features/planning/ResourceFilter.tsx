@@ -11,6 +11,8 @@ const LABELS: Record<ViewMode, string> = {
   coach: "Coachs",
   equipe: "Équipes",
   jour: "Jours",
+  // P3-20 : la vue « club » se filtre par ÉQUIPE — le libellé le dit.
+  club: "Équipes",
 };
 
 interface ResourceFilterProps {

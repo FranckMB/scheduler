@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Export\ExportEmptyWindow;
+use App\Export\ExportView;
 use App\Export\ScheduleExportData;
 use App\Export\ScheduleExportDataProvider;
 use App\Storage\LogoStorage;
@@ -70,17 +71,29 @@ class PdfGenerator
     /**
      * @return array{pdf: string, png: ?string}
      */
-    public function generate(Schedule $schedule, ?string $venueId = null): array
+    public function generate(Schedule $schedule, ?string $venueId = null, ?string $view = null): array
     {
         $data = $this->exportData->load($schedule, $venueId);
-        // A "team × day" matrix is appended as a second section only on a genuinely
-        // multi-venue export (see hasMatrix). That is exactly when the PDF becomes
-        // multi-page, so the two facts are the same flag: it drives both the HTML
-        // and the worker's multi-section paging.
-        $multiSection = $this->hasMatrix($data);
+        // P3-20 — la vue « club » (matrice équipes × jours) est ce que le gestionnaire veut
+        // EN IMAGE. On ne fabrique pas une 5ᵉ mise en forme pour ça : c'est la section 2 déjà
+        // rendue ici qui est photographiée, le worker choisissant simplement quelle section
+        // il garde à l'écran avant le screenshot.
+        $clubView = ExportView::CLUB === $view;
+        // A "team × day" matrix is appended as a second section on a genuinely multi-venue
+        // export (see hasMatrix) — OR whenever the club view is explicitly requested: un
+        // gestionnaire qui demande cette vue doit la recevoir, même sur un club mono-gymnase
+        // où elle n'apparaîtrait pas d'elle-même. That is exactly when the PDF becomes
+        // multi-page, so the two facts are the same flag: it drives both the HTML and the
+        // worker's multi-section paging.
+        $multiSection = $this->hasMatrix($data) || $clubView;
         $html = $this->buildHtml($schedule, $data, $venueId, $multiSection);
-        // Scope suffix keeps the all-venues and per-venue exports as distinct files.
+        // Scope suffix keeps the all-venues and per-venue exports as distinct files. Le jeton
+        // de VUE compte autant : la page qui attend l'export compare ce suffixe pour ne pas
+        // saisir le fichier d'une autre demande — sans lui, une image « par club » servirait
+        // la grille rendue une seconde plus tôt. La vue « grid » ne porte AUCUN jeton : son
+        // nom de fichier reste byte-identique à l'historique.
         $scope = null === $venueId ? 'all' : substr($venueId, 0, 8);
+        $scope .= $clubView ? '-club' : '';
         $pdfFilename = \sprintf('schedule-%s-%s.pdf', $schedule->getId(), $scope);
         $pngFilename = \sprintf('schedule-%s-%s.png', $schedule->getId(), $scope);
 
@@ -90,7 +103,7 @@ class PdfGenerator
         // the worker, and forced a world-writable chmod).
 
         try {
-            $this->callWorker($html, $pdfFilename, $multiSection);
+            $this->callWorker($html, $pdfFilename, $multiSection, $clubView);
         } catch (TransportExceptionInterface $e) {
             throw new RuntimeException('PDF worker unreachable: ' . $e->getMessage(), $e->getCode(), $e);
         }
@@ -103,7 +116,7 @@ class PdfGenerator
         ];
     }
 
-    private function callWorker(string $html, string $filename, bool $multiSection = false): void
+    private function callWorker(string $html, string $filename, bool $multiSection = false, bool $clubView = false): void
     {
         // Single-section exports keep the EXACT historical payload (no extra key), so the
         // worker takes its unchanged one-page path and produces the same file as before.
@@ -115,6 +128,11 @@ class PdfGenerator
         ];
         if ($multiSection) {
             $json['multiSection'] = true;
+        }
+        // P3-20 — quelle section l'IMAGE photographie. Absent = la grille (page 1), le
+        // comportement historique : un worker qui ignorerait la clé rendrait le même PNG.
+        if ($clubView) {
+            $json['pngSection'] = 'matrix';
         }
 
         $response = $this->httpClient->request('POST', self::PDF_WORKER_URL, [
@@ -220,7 +238,7 @@ class PdfGenerator
         // Section 2 = the "team × day" matrix, on its own page(s). Only present on a
         // multi-venue export — the same condition that set $multiSection.
         if ($multiSection) {
-            $body .= $this->buildMatrixSection($data);
+            $body .= $this->buildMatrixSection($data, $venueId);
         }
 
         return $this->wrapDocument($title, htmlspecialchars($scopeLabel), htmlspecialchars($planningName), $body, $logoImg);
@@ -420,9 +438,21 @@ class PdfGenerator
      * sheet sorts by category then name. ⚠ Le rang ORDONNE mais ne s'AFFICHE PLUS (P4-106) :
      * l'export part au gymnase et aux familles, la priorisation interne reste au gestionnaire.
      *
-     * Assumes hasMatrix($data) is true (caller-guarded): it still renders every season team.
+     * ⚠ **Les LIGNES dépendent de la PORTÉE** (P3-20). Sur un export « tous les gymnases », ce
+     * sont TOUTES les équipes de la saison : une équipe sans séance est un trou du planning, la
+     * première chose que le gestionnaire doit voir, jamais une ligne masquée. Sur un export
+     * limité à UN gymnase, seules les équipes qui y ont une séance : `ScheduleExportData` porte
+     * toujours les équipes du club+saison quelle que soit la portée, donc les lister toutes
+     * afficherait des lignes vides MENSONGÈRES — une équipe qui s'entraîne dans un autre
+     * gymnase passerait pour une équipe sans entraînement, sur un document remis aux familles.
+     * Le cas n'existait pas avant P3-20 (la matrice ne s'ouvrait qu'en multi-gymnases, donc
+     * jamais sur un export scopé) ; il existe depuis qu'on peut la DEMANDER par la vue « club ».
      */
-    private function buildMatrixSection(ScheduleExportData $data): string
+    // ⚠ Le paramètre s'appelle `$scopeVenueId`, PAS `$venueId` : le corps de cette méthode
+    // réutilise déjà `$venueId` comme variable de boucle sur les placements — un paramètre
+    // homonyme y était ÉCRASÉ par le dernier gymnase parcouru, et la portée lue plus bas
+    // n'était plus celle de l'appelant (attrapé par les tests, jamais visible à l'œil).
+    private function buildMatrixSection(ScheduleExportData $data, ?string $scopeVenueId = null): string
     {
         $venueName = static fn (string $id): string => $data->venues[$id]['name'] ?? '';
         $venueColor = static fn (string $id): string => $data->venues[$id]['color'] ?? '#666666';
@@ -450,7 +480,10 @@ class PdfGenerator
         // plus any placement whose team is missing from teamNames (anomaly) so no slot vanishes.
         /** @var array<string, array{name:string, tierRank:int, tierOrder:int}> $teams */
         $teams = [];
-        $teamIds = array_keys($data->teamNames + $matrix);
+        // Portée réduite → seules les équipes RÉELLEMENT placées ici (cf. docblock) ; portée
+        // complète → toutes celles de la saison, plus toute équipe placée mais absente de la
+        // liste (anomalie), pour qu'aucun placement ne s'évapore.
+        $teamIds = null === $scopeVenueId ? array_keys($data->teamNames + $matrix) : array_keys($matrix);
         foreach ($teamIds as $teamId) {
             $rank = $data->teamRanks[$teamId] ?? ['label' => '', 'name' => '', 'tierRank' => \PHP_INT_MAX, 'tierOrder' => \PHP_INT_MAX];
             // Le rang ne sert plus qu'à ORDONNER (P4-106) : ni label ni sous-titre ne sont
