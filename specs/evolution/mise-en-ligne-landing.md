@@ -77,19 +77,27 @@ courante, et elle sert P5-5 : ce qu'on vend mérite l'adresse qu'on écrit sur u
 double-clic sur le fichier). La landing et l'app **ne se parlent jamais** — le seul lien entre
 elles est un lien hypertexte. Il n'y a rien à relier à un nginx local, et il n'y en aura jamais.
 
-**Dans le dépôt** (petit, réversible, faisable sans machine) :
-- pointer `appUrl` sur l'URL réelle de l'app ;
-- **déposer la landing sur la VM au déploiement** (décision fondateur du 2026-08-18, cf. §5) ;
-- écrire le `Caddyfile` à deux blocs, versionné en modèle, et la procédure dans
-  [`../../docs/ops/deploy.md`](../../docs/ops/deploy.md) ;
-- relire le texte à voix haute maintenant que le nom est tranché.
+**Dans le dépôt : FAIT le 2026-08-18.**
+- `appUrl` pointe `https://app.amateo.app` — sans slash final, les CTA concatènent ;
+- le **workflow de déploiement dépose `landing/`** sous `$DEPLOY_PATH/landing` (§5) ;
+- le `Caddyfile` est versionné en modèle ([`../../docs/ops/Caddyfile.example`](../../docs/ops/Caddyfile.example))
+  et la procédure réécrite dans [`../../docs/ops/deploy.md`](../../docs/ops/deploy.md) §1.5 ;
+- texte relu : aucune trace de l'ancien nom, la FAQ « où sont hébergées nos données » reste
+  vraie pour une VM européenne.
 
 **Sur la VM** (elle n'existe pas encore) : tout le §1 de `deploy.md` — créer la machine, Docker,
 lancer la stack — puis l'enregistrement DNS, puis Caddy avec ses deux blocs.
 
-⚑ **Personne ne peut cocher P5-5 tant que la machine n'existe pas.** Une PR peut préparer tout le
-reste ; la mise en ligne restera un geste du fondateur sur sa VM. Le dire évite une PR qui se
-donnerait pour « publié ».
+⚑ **Personne ne peut cocher P5-5 tant que la machine n'existe pas.** La partie dépôt est faite ;
+la mise en ligne reste un geste du fondateur sur sa VM. Le dire évite une PR qui se donnerait pour
+« publié ».
+
+**Ce qu'il reste à faire, le jour J**, dans cet ordre : créer la VM (§1 de `deploy.md`) → poser les
+enregistrements DNS → copier `Caddyfile.example` dans `/etc/caddy/Caddyfile` → armer
+`DEPLOY_ENABLED` + les secrets → **déployer une première fois** (c'est ce déploiement qui crée
+`$DEPLOY_PATH/landing`) → ouvrir les droits de lecture pour `caddy` (`deploy.md` §1.5) →
+`systemctl reload caddy`. ⚠ Avant le premier déploiement, le domaine nu répond **404** : c'est
+attendu, le dossier n'existe pas encore.
 
 ## 5. Comment la landing arrive sur la VM — tranché
 

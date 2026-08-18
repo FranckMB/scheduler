@@ -5,9 +5,11 @@
 // Changer le nom = changer UNE ligne, recharger, publier.
 window.LANDING_CONFIG = {
   brand: "Amateo",
-  // L'URL de l'app (register/login). À pointer sur le vrai domaine au moment
-  // de la mise en ligne — d'ici là, les CTA restent fonctionnels en relatif.
-  appUrl: "https://app.example.fr",
+  // L'URL de l'app (register/login). Convention retenue le 2026-08-18 : le domaine
+  // NU est la vitrine (cette page), le sous-domaine `app.` est l'application —
+  // ce qu'on vend mérite l'adresse qu'on écrit sur une plaquette.
+  // ⚠ SANS slash final : les CTA concatènent (`appUrl + "/register"`).
+  appUrl: "https://app.amateo.app",
   // Contact démo / questions — adresse pro du domaine produit (décision fondateur
   // 2026-08-17). Règle business tenue : jamais un Gmail perso sur la page.
   contactEmail: "contact@amateo.app",
