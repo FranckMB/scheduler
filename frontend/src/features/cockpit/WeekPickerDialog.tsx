@@ -1,12 +1,28 @@
 import { useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
+import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Modal } from "@/shared/components/ui/modal";
 import { Spinner } from "@/shared/components/ui/spinner";
 
 import { frDateShort, isWithin, type WeekWindow } from "./lib/date";
-import type { WindowConflict } from "./lib/useWeekAdapt";
+import type { WeekPickerState, WindowConflict } from "./lib/useWeekAdapt";
 import { WindowAlreadyPlannedNotice } from "./WindowAlreadyPlannedNotice";
+
+/** Ce que le picker doit dire de l'état « bloc déjà généré » + la découpe destructive à câbler. */
+export interface WeekPickerBlock {
+  versionCount: number;
+  /** Bloc VALIDÉ (version choisie) : la découpe destructive n'est PAS offerte (chaîne non atomique). */
+  validated: boolean;
+  /** Une version est EN GÉNÉRATION : la découpe est désactivée avec sa raison. */
+  generationInFlight: boolean;
+  /** La suppression des versions est en cours. */
+  deleting: boolean;
+  /** Un échec PARTIEL a laissé des versions : on le dit, on reste dans l'état bloqué. */
+  deleteFailed: boolean;
+  /** Confirmé : supprime les versions puis laisse le picker rebasculer en « choix des semaines ». */
+  onDeleteVersions: () => void;
+}
 
 interface WeekPickerDialogProps {
   /** Libellé de la période mère (matérialisée OU vacance pas encore créée — P2-5 E1). */
@@ -17,6 +33,14 @@ interface WeekPickerDialogProps {
   /** Semaines lun→dim couvrant la fenêtre de la mère, clampées à la saison (weeksCovering). */
   weeks: WeekWindow[];
   busy: boolean;
+  /**
+   * P2-36 — état NOMMÉ du picker : `weeks` (choix, l'existant), `loading` (plans/plannings/
+   * enfants pas résolus — le dialogue s'ouvre et le DIT au lieu de partir en bloc en silence),
+   * `block` (une adaptation d'un bloc porte déjà des versions). Défaut `weeks`.
+   */
+  state?: WeekPickerState;
+  /** Requis en état `block` : les faits + la découpe destructive à proposer. */
+  block?: WeekPickerBlock;
   /** Semaines cochées → création des plans de semaine. */
   onPickWeeks: (weeks: WeekWindow[]) => void;
   /** Chemin « d'un bloc » : adapter toute la période sur son plan (comportement historique). */
@@ -34,9 +58,17 @@ interface WeekPickerDialogProps {
  * devient un plan indépendant. Précochées : les semaines que l'événement touche
  * (toutes ici, par construction de weeksCovering). Le chemin « d'un bloc » reste
  * offert (décision fondateur — période courte ou gestionnaire pressé).
+ *
+ * P2-36 : le dialogue s'OUVRE toujours, même quand le choix des semaines n'est pas
+ * (encore) possible — il nomme alors la raison (`state`), au lieu de basculer en bloc
+ * sans un mot. Chaque raison est distincte : « en chargement » ≠ « déjà générée d'un
+ * bloc » — un message générique recréerait le défaut.
  */
-export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, onPickWeeks, onAdaptWhole, onClose, conflict, onOpenConflict }: WeekPickerDialogProps) {
+export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state = "weeks", block, onPickWeeks, onAdaptWhole, onClose, conflict, onOpenConflict }: WeekPickerDialogProps) {
   const [checked, setChecked] = useState<Set<string>>(new Set(weeks.map((w) => w.monday)));
+  // Confirmation de la découpe destructive (état `block`) : réutilise le patron d'avertissement
+  // existant (ConfirmDialog destructif) plutôt qu'une deuxième maison du danger.
+  const [confirmingSplit, setConfirmingSplit] = useState(false);
 
   const toggle = (monday: string) =>
     setChecked((prev) => {
@@ -50,42 +82,121 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, onPic
     });
 
   const picked = weeks.filter((w) => checked.has(w.monday));
+  const versionCount = block?.versionCount ?? 0;
+  const versionLabel = `${versionCount} version${versionCount > 1 ? "s" : ""}`;
 
   return (
     <Modal label="Choisir les semaines" title="Quelles semaines ajuster ?" onClose={onClose} className="max-w-md">
-      <p className="mt-2 text-sm text-muted-foreground">
-        « {title} » couvre plusieurs semaines. Chaque semaine cochée devient un planning indépendant, ajustable à son rythme.
-      </p>
-      <ul className="mt-4 space-y-2">
-        {weeks.map((week) => {
-          const touched = isWithin(startDate, week.startDate, week.endDate) || isWithin(week.startDate, startDate, endDate);
-          return (
-            <li key={week.monday}>
-              <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={checked.has(week.monday)} onChange={() => toggle(week.monday)} />
-                <span>
-                  Semaine du {frDateShort(week.startDate)} au {frDateShort(week.endDate)}
-                  {touched ? null : <span className="text-muted-foreground"> · hors événement</span>}
-                </span>
-              </label>
-            </li>
-          );
-        })}
-      </ul>
+      {"weeks" === state ? (
+        <>
+          <p className="mt-2 text-sm text-muted-foreground">« {title} » couvre plusieurs semaines. Chaque semaine cochée devient un planning indépendant, ajustable à son rythme.</p>
+          <ul className="mt-4 space-y-2">
+            {weeks.map((week) => {
+              const touched = isWithin(startDate, week.startDate, week.endDate) || isWithin(week.startDate, startDate, endDate);
+              return (
+                <li key={week.monday}>
+                  <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                    <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={checked.has(week.monday)} onChange={() => toggle(week.monday)} />
+                    <span>
+                      Semaine du {frDateShort(week.startDate)} au {frDateShort(week.endDate)}
+                      {touched ? null : <span className="text-muted-foreground"> · hors événement</span>}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : null}
+
+      {/* ÉTAT « chargement » : on ne connaît pas encore l'état des plans/plannings/enfants — le
+          dialogue le DIT (au lieu de partir en bloc en silence) ; il ne prétend PAS que le choix
+          des semaines n'existe pas. Le chemin « d'un bloc » reste offert, il marche toujours. */}
+      {"loading" === state ? (
+        <div className="mt-2 flex items-start gap-2 text-sm text-muted-foreground">
+          <Spinner className="mt-0.5 size-4 shrink-0" />
+          <p>On vérifie l'état de « {title} »… Le choix « semaine par semaine ou d'un bloc » s'affiche dès que c'est chargé.</p>
+        </div>
+      ) : null}
+
+      {/* ÉTAT « déjà générée d'un bloc » : NOMMER le fait (≠ « en chargement », ≠ « une seule
+          semaine ») — un message générique recréerait le défaut. « Continuer d'un bloc » ne se
+          perd jamais ; la découpe destructive n'apparaît QUE si le bloc n'est pas validé. */}
+      {"block" === state ? (
+        <div className="mt-2 space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            « {title} » a déjà été adaptée d'un bloc — {versionLabel}. Continuez sur ce planning, ou repartez de zéro en le découpant en semaines.
+          </p>
+          {block?.validated ? (
+            // Décision fondateur : bloc VALIDÉ → pas de découpe destructive ici (la chaîne
+            // rouvrir→supprimer n'est pas atomique, un échec après réouverture laisserait un
+            // planning validé dépointé). On renvoie vers les gestes qui existent.
+            <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-muted-foreground">
+              Ce planning de bloc est validé. Pour le découper en semaines, rouvrez-le puis supprimez-le d'abord (depuis « Voir le planning »), puis revenez adapter.
+            </p>
+          ) : (
+            <>
+              {block?.deleteFailed ? (
+                <p role="alert" className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-foreground">
+                  Certaines versions n'ont pas pu être supprimées — réessayez.
+                </p>
+              ) : null}
+              <div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={busy || block?.deleting || block?.generationInFlight}
+                  title={block?.generationInFlight ? "Une génération est en cours — attendez qu'elle finisse." : undefined}
+                  onClick={() => setConfirmingSplit(true)}
+                >
+                  {block?.deleting ? <Spinner className="size-4" /> : null}
+                  Supprimer les versions et découper en semaines
+                </Button>
+                {block?.generationInFlight ? <p className="mt-1 text-xs text-muted-foreground">Une génération est en cours — la découpe sera possible ensuite.</p> : null}
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
+
       {conflict && onOpenConflict ? (
         <div className="mt-4">
           <WindowAlreadyPlannedNotice message={conflict.message} onOpen={() => onOpenConflict(conflict.entryId)} />
         </div>
       ) : null}
+
       <div className="mt-6 flex flex-wrap justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onAdaptWhole} disabled={busy}>
-          Adapter toute la période d'un bloc
+        <Button variant="ghost" size="sm" onClick={onAdaptWhole} disabled={busy || block?.deleting}>
+          {"block" === state ? "Continuer d'un bloc" : "Adapter toute la période d'un bloc"}
         </Button>
-        <Button size="sm" onClick={() => onPickWeeks(picked)} disabled={busy || 0 === picked.length}>
-          {busy ? <Spinner className="size-4" /> : null}
-          Créer {picked.length > 1 ? `les ${picked.length} plannings de semaine` : "le planning de la semaine"}
-        </Button>
+        {"weeks" === state ? (
+          <Button size="sm" onClick={() => onPickWeeks(picked)} disabled={busy || 0 === picked.length}>
+            {busy ? <Spinner className="size-4" /> : null}
+            Créer {picked.length > 1 ? `les ${picked.length} plannings de semaine` : "le planning de la semaine"}
+          </Button>
+        ) : null}
       </div>
+
+      {/* Confirmation destructive : NOMME la portée (nombre de versions + réglages qui repartent
+          de la saison — ce que fait la découpe côté serveur). Patron ConfirmDialog réutilisé. */}
+      {block ? (
+        <ConfirmDialog
+          open={confirmingSplit}
+          title="Découper cette période en semaines ?"
+          description={
+            <>
+              Cela supprime {versionLabel} déjà générée{versionCount > 1 ? "s" : ""} d'un bloc pour « {title} », puis permet de la découper. Les réglages de cette période repartiront de la saison. Action définitive.
+            </>
+          }
+          confirmLabel="Supprimer et découper"
+          destructive
+          onConfirm={() => {
+            setConfirmingSplit(false);
+            block.onDeleteVersions();
+          }}
+          onCancel={() => setConfirmingSplit(false)}
+        />
+      ) : null}
     </Modal>
   );
 }

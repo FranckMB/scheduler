@@ -14,6 +14,9 @@ vi.mock("./queries", () => ({
   useCreateVenueClosure: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateCutoff: () => ({ mutate: vi.fn(), isPending: false }),
   useDeleteEntry: () => ({ mutate: vi.fn(), isPending: false }),
+  // P2-36 tranche 2 — DayList passe par useWeekAdapt (sélecteur de semaines), qui lit ces hooks.
+  useCreateHolidayPeriod: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useCreateWeekChildren: () => ({ mutate: vi.fn(), isPending: false }),
   // DayDialog (ouvert au clic) dérive « overlay validé » du plan de la période (lot D-b).
   useSchedulePlanForEntry: () => ({ data: null, isSuccess: true }),
   // DayList liste les plannings couvrants (AJUSTER/Consulter) via les plans (B1).
@@ -24,6 +27,8 @@ vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [] }),
   // DayDialog (ouvert au clic) lit les versions du plan pour la garde de suppression (lot D-b).
   useSchedules: () => ({ data: [], isSuccess: true }),
+  // P2-36 tranche 2 — useWeekAdapt (dans DayList) lit useDeleteSchedule pour la découpe destructive.
+  useDeleteSchedule: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 // Pin "today" to mid-May 2026 so the past/future split is deterministic
 // (real-clock today would make the whole rendered month past). Only todayISO

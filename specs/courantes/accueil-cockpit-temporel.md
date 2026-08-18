@@ -1,6 +1,13 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-18 (recalé ce jour : **P2-38 PR3 front, LOT SOLDÉ (3 PR)** — §5bis gagne le
+Last verified @ 2026-08-18 (recalé ce jour : **P2-36 livré (les deux tranches, une seule PR) —
+retiré de la roadmap**, `etat-des-lieux.md` §3 — §5bis gagne le détail de la décision d'ouverture
+du sélecteur de semaines : `decideWeekAdapt` (`lib/useWeekAdapt.ts`) devient la maison unique, à
+cinq branches nommées (`single-week`/`already-split`/`loading`/`block-generated`/`weeks`), et son
+extension aux deux surfaces qui bypassaient jusque-là le picker (« Ajuster »/« Adapter » depuis la
+liste du jour, `DayDialog`, et la carte d'indisponibilité du radar, `RadarPanel`) — re-vérifié
+contre `lib/useWeekAdapt.ts`, `WeekPickerDialog.tsx`, `DayDialog.tsx`, `RadarPanel.tsx` et leurs
+témoins. Précédemment ce même jour : **P2-38 PR3 front, LOT SOLDÉ (3 PR)** — §5bis gagne le
 paragraphe « Refus de chevauchement sur « Adapter » » : le 409 `window_already_planned`
 (`PeriodWindowUniquenessGuard`, PR2 backend) s'affiche désormais À L'ENDROIT DU GESTE au lieu
 d'être avalé par le filet global — re-vérifié contre `DayDialog.tsx`, `RadarPanel.tsx`,
@@ -425,8 +432,33 @@ l'horloge. Le **serveur** garde l'heure réelle (P4-16 reste ouverte pour lui).
   - Si la période couvre **plusieurs semaines calendaires**, un **choix des semaines**
     (`WeekPickerDialog`) s'interpose avant le wizard : chaque semaine cochée devient une entrée
     **enfant** (`parentEntryId`) avec **son propre plan** (P2-5 E1) ; une seule semaine → wizard
-    direct. Même règle au radar et dans la modale, pour ne pas offrir deux comportements au même
+    direct. Même règle partout où le geste existe, pour ne pas offrir deux comportements au même
     geste.
+  - **La décision d'ouvrir ce picker (P2-36, 2026-08-18)** vit dans une seule fonction pure,
+    `decideWeekAdapt` (`lib/useWeekAdapt.ts`) — le radar et le DayDialog la dupliquaient avec des
+    entrées différentes, corriger un seul côté garantissait un écart, et le défaut qu'elle ferme :
+    quand la condition tombait, l'écran **basculait en bloc sans un mot** (le serveur, lui,
+    refusait déjà le 422 avec sa raison). Cinq branches NOMMÉES, deux issues : `single-week` et
+    `already-split` (bloc direct, comportement conservé — une seule semaine calendaire, ou une
+    mère déjà découpée dont la carte de couverture gouverne) ; `loading` (plans/plannings/enfants
+    pas encore résolus — le picker s'**ouvre et le dit**, plutôt que de partir en bloc en
+    silence) ; `block-generated` (le plan de bloc porte déjà ≥ 1 version — le picker **nomme** le
+    fait, garde « Continuer d'un bloc », et — si ce bloc n'est **pas validé** — propose une
+    découpe destructive confirmée qui **nomme sa portée** : N versions supprimées, réglages qui
+    repartent de la saison ; un bloc **validé** n'offre pas ce bouton et renvoie vers
+    Rouvrir→Supprimer ; le bouton est désactivé, avec sa raison, pendant une génération en vol) ;
+    `weeks` (cas nominal, l'existant). Les **deux surfaces qui ne consultaient jamais ce picker**
+    y passent désormais : « Ajuster »/« Adapter » une fermeture depuis la liste du jour
+    (`DayDialog`) et la carte d'indisponibilité du gymnase du radar (`RadarPanel`) — leur chemin
+    « entrée pas encore née » (matérialiser SEULEMENT à la confirmation, annuler ne laisse aucun
+    fantôme) est généralisé de `PendingHoliday` à `PendingMother`, portant un `create()` fourni
+    par la surface (vacance → `createHolidayPeriod`, indisponibilité de gymnase →
+    `createVenueClosure`) — la carte du radar n'écrit **rien** tant que le gestionnaire n'a pas
+    tranché. Écart déclaré : « Ajuster » (liste du jour) devient **asynchrone** — un POST
+    `createPeriodPlan` idempotent avant de naviguer. Aucune règle serveur ne change (le 409
+    `window_already_planned` de P2-38 et le refus 422 de découper une mère déjà générée restent
+    ceux du serveur) — ce lot rend un **choix déjà permis** visible côté UI, il ne déplace aucune
+    frontière métier.
   - **L'été s'adapte comme les autres vacances** (E2, 2026-07-18) : l'exclusion `ete` a été
     **levée** (`isAdaptableHoliday` supprimé) et les dates sont **clampées à la saison**. Seul cas
     restant sans « Adapter » : une fenêtre **entièrement hors** de la saison de travail — la

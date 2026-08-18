@@ -82,6 +82,14 @@ describe("weeksCovering (P2-5 E1 — la semaine est l'unité hors socle)", () =>
   it("a single-week window yields exactly one week", () => {
     expect(weeksCovering("2026-10-20", "2026-10-22", season)).toHaveLength(1);
   });
+
+  // P2-36 (témoin) — décision fondateur : une semaine créée reste PLEINE (lun→dim), JAMAIS
+  // bornée à la fenêtre de l'incident. Ce test échoue si quelqu'un « optimise » weeksCovering
+  // en rognant la semaine sur [start, end] : ici l'incident ne dure que mardi→jeudi (20–22),
+  // et la semaine rendue doit quand même courir du lundi 19 au dimanche 25.
+  it("rend une semaine PLEINE lun→dim, jamais rognée sur la fenêtre de l'incident", () => {
+    expect(weeksCovering("2026-10-20", "2026-10-22", season)).toEqual([{ startDate: "2026-10-19", endDate: "2026-10-25", monday: "2026-10-19" }]);
+  });
 });
 
 describe("periodAdjustWeeks — vacances démarrant Ven/Sam/Dim (PR C)", () => {

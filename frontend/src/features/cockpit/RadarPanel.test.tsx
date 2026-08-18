@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,7 +29,10 @@ let seasonSlotsData: Array<{ id: string; dayOfWeek: number }> = [];
 const plansState = { failed: false };
 // Versions existantes par plan (retour fondateur 2026-07-18 : « planning en cours »
 // = plan avec versions mais sans version validée → carte toujours visible).
-let schedulesData: { schedulePlanId: string }[] | undefined = [];
+let schedulesData: { id?: string; schedulePlanId: string; status?: string }[] | undefined = [];
+// P2-36 — la découpe destructive (état « bloc » du picker) supprime les versions via
+// useDeleteSchedule, une par une. Spy partagé : les tests dédiés vérifient les ids supprimés.
+const deleteScheduleMutateAsync = vi.fn().mockResolvedValue(undefined);
 // #10 C2 — les campagnes de doléances, indexées par période. Mockées ici parce qu'une
 // vacance qui en porte une ÉCHAPPE à l'horizon 60 j (revue #344 : cette carte est la seule
 // surface qui rende le badge « x à traiter »).
@@ -37,6 +40,22 @@ let campaignsData: unknown[] | undefined = [];
 // P4-68 — indispos gymnase (carte du radar) + leur impact serveur. Vides par défaut :
 // les cas existants ne doivent voir aucune carte de plus.
 const createVenueClosureMutate = vi.fn();
+// P2-36 (tranche 2) — une indispo MULTI-SEMAINES matérialise la fermeture SEULEMENT à la
+// confirmation du picker (chemin « entrée pas encore née », partagé avec les vacances) : la
+// création passe alors par mutateAsync, qui résout l'entrée créée pour enchaîner adaptBlock.
+const createVenueClosureMutateAsync = vi.fn().mockResolvedValue({
+  id: "created-closure",
+  kind: "period",
+  periodType: "closure",
+  title: "Armand indisponible (travaux)",
+  startDate: "2999-01-05",
+  endDate: "2999-01-18",
+  isDisruptive: false,
+  schoolHolidayId: null,
+  parentEntryId: null,
+  status: "active",
+  createdBy: null,
+});
 let unavailabilitiesData: { id: string; venueId: string; startDate: string; endDate: string; label: string | null }[] | undefined = [];
 let impactItemsData: { unavailabilityId: string; trainingSlotCount: number }[] = [];
 
@@ -49,7 +68,7 @@ vi.mock("./queries", () => ({
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
   useEntryConflictsList: (ids: string[]) => ids.map(() => ({ data: conflictsData, isPending: conflictsPending })),
   useSchedulePlans: () => ({ data: plansState.failed ? undefined : plansData, isError: plansState.failed }),
-  useCreateVenueClosure: () => ({ mutate: createVenueClosureMutate, isPending: false }),
+  useCreateVenueClosure: () => ({ mutate: createVenueClosureMutate, mutateAsync: createVenueClosureMutateAsync, isPending: false }),
 }));
 // P4-68 — les indispos gymnase alimentent une carte du radar. Les trois lectures sont
 // simulées ici : une liste VIDE par défaut, chaque cas qui en veut une la pose lui-même.
@@ -58,7 +77,11 @@ vi.mock("@/features/matches/queries", () => ({
   useVenues: () => ({ data: [{ id: "gym-1", name: "Armand" }] }),
   useUnavailabilityImpact: () => ({ data: { clubId: "c", seasonId: "sn1", items: impactItemsData } }),
 }));
-vi.mock("@/features/planning/queries", () => ({ useSchedules: () => ({ data: schedulesData }), useSlots: () => ({ data: seasonSlotsData, isLoading: false }) }));
+vi.mock("@/features/planning/queries", () => ({
+  useSchedules: () => ({ data: schedulesData }),
+  useSlots: () => ({ data: seasonSlotsData, isLoading: false }),
+  useDeleteSchedule: () => ({ mutateAsync: deleteScheduleMutateAsync, isPending: false }),
+}));
 vi.mock("@/features/coach-wishes/campaignQueries", () => ({ useCoachWishCampaigns: () => ({ data: campaignsData, isError: false }) }));
 // Saison de travail couvrant les fixtures FUTURE (2999) : le clamp saison des
 // créations de vacances (revue #260 round 1) laisse passer les dates de test.
@@ -137,8 +160,10 @@ describe("RadarPanel", () => {
     campaignsData = [];
     plansState.failed = false;
     createVenueClosureMutate.mockReset();
+    createVenueClosureMutateAsync.mockClear();
     unavailabilitiesData = [];
     impactItemsData = [];
+    deleteScheduleMutateAsync.mockClear();
   });
   afterEach(() => setTodayOverride(null));
 
@@ -751,7 +776,12 @@ describe("RadarPanel", () => {
   // P4-68 (recadrage fondateur 2026-08-06) — « le gestionnaire est responsable et on
   // fait le nécessaire pour qu'il soit ALERTÉ » : l'indispo gymnase entre au radar au
   // moment d'agir, avec le geste qui ouvre le chemin (créer la fermeture → adapter).
-  it("alerte sur une indisponibilité gymnase à venir, chiffre l'impact, et « Adapter » crée la fermeture", async () => {
+  //
+  // P2-36 (tranche 2) — cette indispo couvre PLUSIEURS semaines : « Adapter » passe désormais
+  // par la maison unique et OUVRE le choix des semaines AVANT toute création (l'entrée n'est
+  // pas encore née) ; « d'un bloc » matérialise ALORS la fermeture par le geste EXISTANT
+  // (createVenueClosure), sans réinventer de chemin parallèle.
+  it("alerte sur une indisponibilité MULTI-SEMAINES, chiffre l'impact, et « Adapter » ouvre le choix des semaines SANS rien créer", async () => {
     const user = userEvent.setup();
     const today = todayISO();
     unavailabilitiesData = [{ id: "u1", venueId: "gym-1", startDate: addDays(today, 12), endDate: addDays(today, 20), label: "travaux" }];
@@ -763,10 +793,34 @@ describe("RadarPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "Adapter" }));
 
-    // Le geste EXISTANT (période de fermeture + contrainte datée « gymnase fermé »),
-    // aux dates de l'indispo : le radar ne réinvente pas un chemin parallèle.
+    // Le picker s'ouvre — l'entrée n'est PAS encore née (rien créé tant que non tranché).
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    expect(createVenueClosureMutate).not.toHaveBeenCalled();
+    expect(createVenueClosureMutateAsync).not.toHaveBeenCalled();
+
+    // « d'un bloc » matérialise ALORS la fermeture, par le geste EXISTANT (createVenueClosure).
+    await user.click(screen.getByRole("button", { name: /Adapter toute la période d'un bloc/i }));
+    await waitFor(() =>
+      expect(createVenueClosureMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ venueId: "gym-1", startDate: addDays(today, 12), endDate: addDays(today, 20) }),
+      ),
+    );
+  });
+
+  // Témoin : une indispo d'UNE SEULE semaine calendaire n'a rien à choisir → création directe
+  // par le geste existant (mutate + adaptBlock), sans picker (comportement conservé).
+  it("témoin : une indisponibilité d'UNE seule semaine crée la fermeture directement (pas de picker)", async () => {
+    const user = userEvent.setup();
+    const today = todayISO();
+    const mon = mondayOf(addDays(today, 30));
+    unavailabilitiesData = [{ id: "u1", venueId: "gym-1", startDate: mon, endDate: addDays(mon, 2), label: null }];
+    renderRadar();
+
+    await user.click(screen.getByRole("button", { name: "Adapter" }));
+
+    expect(screen.queryByText("Quelles semaines ajuster ?")).not.toBeInTheDocument();
     expect(createVenueClosureMutate).toHaveBeenCalledWith(
-      expect.objectContaining({ venueId: "gym-1", startDate: addDays(today, 12), endDate: addDays(today, 20) }),
+      expect.objectContaining({ venueId: "gym-1", startDate: mon, endDate: addDays(mon, 2) }),
       expect.anything(),
     );
   });
@@ -801,5 +855,71 @@ describe("RadarPanel", () => {
     renderRadar({ publicHolidays: [{ id: "ph1", date: nearDate, label: "Férié sans séance", national: true }] });
 
     expect(screen.queryByText("Férié sans séance")).not.toBeInTheDocument();
+  });
+
+  // ── P2-36 : plus de bascule silencieuse en bloc ; le picker s'ouvre et NOMME l'état ──
+
+  // Une fermeture multi-semaines dont le plan de bloc porte déjà une version : AVANT, cliquer
+  // « Reprendre » repartait en bloc SANS un mot ; MAINTENANT le picker s'ouvre et nomme le fait.
+  it("ne bascule plus en bloc en silence : une fermeture déjà générée d'un bloc ouvre le picker qui le NOMME", async () => {
+    const user = userEvent.setup();
+    plansData = [{ id: "pl-c1", type: "CLOSURE", name: "Plan", startDate: FUTURE, calendarEntryId: "c1", chosenScheduleId: null, teamSelectionInitialized: false }];
+    schedulesData = [{ id: "sv1", schedulePlanId: "pl-c1", status: "COMPLETED" }];
+    conflictsData = { conflicts: [{ dates: [FUTURE] }], seasonPlanChosen: true };
+    renderRadar({ entries: [closure({})] });
+
+    await user.click(screen.getByRole("button", { name: "Reprendre" }));
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    expect(screen.getByText(/déjà été adaptée d'un bloc — 1 version/)).toBeInTheDocument();
+    // Le repli « d'un bloc » reste offert.
+    expect(screen.getByRole("button", { name: /Continuer d'un bloc/i })).toBeInTheDocument();
+  });
+
+  // La chaîne destructive n'orchestre que des DELETE de version, une par une (jamais le plan).
+  it("découpe destructive : supprime chaque version du plan de bloc, une par une", async () => {
+    const user = userEvent.setup();
+    plansData = [{ id: "pl-c1", type: "CLOSURE", name: "Plan", startDate: FUTURE, calendarEntryId: "c1", chosenScheduleId: null, teamSelectionInitialized: false }];
+    schedulesData = [
+      { id: "sv1", schedulePlanId: "pl-c1", status: "COMPLETED" },
+      { id: "sv2", schedulePlanId: "pl-c1", status: "COMPLETED" },
+    ];
+    conflictsData = { conflicts: [{ dates: [FUTURE] }], seasonPlanChosen: true };
+    renderRadar({ entries: [closure({})] });
+
+    await user.click(screen.getByRole("button", { name: "Reprendre" }));
+    await user.click(screen.getByRole("button", { name: /Supprimer les versions et découper en semaines/i }));
+    // La confirmation nomme la portée.
+    expect(screen.getByText(/supprime 2 versions déjà générées/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Supprimer et découper" }));
+
+    expect(deleteScheduleMutateAsync).toHaveBeenCalledWith("sv1");
+    expect(deleteScheduleMutateAsync).toHaveBeenCalledWith("sv2");
+    expect(deleteScheduleMutateAsync).toHaveBeenCalledTimes(2);
+  });
+
+  // Bloc VALIDÉ : pas de découpe destructive ici (chaîne non atomique) — la raison est dite.
+  it("bloc VALIDÉ : le picker n'offre PAS la découpe destructive, il renvoie aux gestes existants", async () => {
+    const user = userEvent.setup();
+    plansData = [validatedPlan("c1", "sv1")]; // chosenScheduleId non-null → validé
+    schedulesData = [{ id: "sv1", schedulePlanId: "pl-c1", status: "COMPLETED" }];
+    conflictsData = { conflicts: [{ dates: [FUTURE] }], seasonPlanChosen: true };
+    renderRadar({ entries: [closure({})] });
+
+    await user.click(screen.getByRole("button", { name: "Ajuster" }));
+    expect(screen.getByText(/déjà été adaptée d'un bloc/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Supprimer les versions et découper/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/validé.*rouvrez-le puis supprimez-le/i)).toBeInTheDocument();
+  });
+
+  // Une version EN GÉNÉRATION : la découpe est désactivée avec sa raison.
+  it("génération en vol : la découpe destructive est désactivée", async () => {
+    const user = userEvent.setup();
+    plansData = [{ id: "pl-c1", type: "CLOSURE", name: "Plan", startDate: FUTURE, calendarEntryId: "c1", chosenScheduleId: null, teamSelectionInitialized: false }];
+    schedulesData = [{ id: "sv1", schedulePlanId: "pl-c1", status: "GENERATING" }];
+    conflictsData = { conflicts: [{ dates: [FUTURE] }], seasonPlanChosen: true };
+    renderRadar({ entries: [closure({})] });
+
+    await user.click(screen.getByRole("button", { name: "Reprendre" }));
+    expect(screen.getByRole("button", { name: /Supprimer les versions et découper/i })).toBeDisabled();
   });
 });
