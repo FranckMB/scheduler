@@ -6,7 +6,7 @@ import { IN_FLIGHT_STATUSES } from "@/features/planning/lib/scheduleStatus";
 import { useDeleteSchedule, useSchedules } from "@/features/planning/queries";
 import { toast } from "@/shared/stores/toastStore";
 
-import type { CalendarEntry, SchedulePlan } from "../api";
+import type { CalendarEntry, CalendarEntryPeriodType, SchedulePlan } from "../api";
 import { WindowAlreadyPlannedError } from "../api";
 import { useCreateHolidayPeriod, useCreatePeriodPlan, useCreateWeekChildren, useSchedulePlans, type WeekChildrenResult } from "../queries";
 import { periodWeeksToAdjust, todayISO, type WeekWindow } from "./date";
@@ -17,12 +17,24 @@ export interface WindowConflict {
   entryId: string;
 }
 
-/** Vacance scolaire pas encore matérialisée en période mère (P2-5 E1). */
-export interface PendingHoliday {
-  schoolHolidayId: string;
+/**
+ * Une période mère PAS encore matérialisée (P2-5 E1, généralisée P2-36 tranche 2). Le picker
+ * s'ouvre sur cette référence SANS rien créer ; la mère naît à la confirmation via `create`.
+ * Deux surfaces l'utilisent avec leur propre créateur — une vacance scolaire
+ * (`createHolidayPeriod`) et une indisponibilité de gymnase (`createVenueClosure`) — mais le
+ * CHEMIN (créer à la confirmation, puis découper en semaines ou adapter d'un bloc) est unique.
+ */
+export interface PendingMother {
+  /** Libellé affiché dans le picker tant que la mère n'existe pas encore. */
   label: string;
   startDate: string;
   endDate: string;
+  /** Pilote le calcul des semaines à offrir (holiday écarte la semaine partielle Ven/Sam/Dim ;
+   *  closure garde weeksCovering). */
+  periodType: CalendarEntryPeriodType;
+  /** Matérialise la mère À la confirmation (jamais avant — annuler ne laisse aucun fantôme).
+   *  Résout l'entrée créée pour enchaîner la découpe/adaptation. */
+  create: () => Promise<CalendarEntry>;
 }
 
 /**
@@ -119,10 +131,10 @@ export interface BlockVersionsInfo {
  */
 export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved = true) {
   const [pickerFor, setPickerFor] = useState<CalendarEntry | null>(null);
-  // Vacance PAS encore créée : le picker s'ouvre sur cette référence SANS
-  // matérialiser la mère — annuler ne doit rien laisser. La mère naît à la
-  // confirmation (pickWeeksPending / adaptWholePending).
-  const [pendingHoliday, setPendingHoliday] = useState<PendingHoliday | null>(null);
+  // Mère PAS encore créée : le picker s'ouvre sur cette référence SANS la
+  // matérialiser — annuler ne doit rien laisser. La mère naît à la confirmation
+  // (pickWeeksPending / adaptWholePending), par le `create` que la surface fournit.
+  const [pendingMother, setPendingMother] = useState<PendingMother | null>(null);
   const createWeekChildren = useCreateWeekChildren();
   const createHoliday = useCreateHolidayPeriod();
   const createPeriodPlan = useCreatePeriodPlan();
@@ -220,17 +232,17 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
     );
   };
 
-  const openPendingPicker = (holiday: PendingHoliday): void => setPendingHoliday(holiday);
+  const openPendingPicker = (mother: PendingMother): void => setPendingMother(mother);
 
-  // Confirmation du picker pour une vacance PAS encore créée : la mère naît ICI,
-  // puis ses semaines. mutateAsync (pas d'onSuccess portée) : navigation/toasts
-  // doivent partir même si la modale se referme pendant le POST. Erreur relevée
-  // par le filet global des mutations (queryClient.ts).
-  const pickWeeksPending = async (holiday: PendingHoliday, weeks: WeekWindow[]): Promise<void> => {
+  // Confirmation du picker pour une mère PAS encore créée : elle naît ICI (via son
+  // `create`), puis ses semaines. Le créateur est un mutateAsync (pas d'onSuccess
+  // portée) : navigation/toasts doivent partir même si la modale se referme pendant
+  // le POST. Erreur relevée par le filet global des mutations (queryClient.ts).
+  const pickWeeksPending = async (pending: PendingMother, weeks: WeekWindow[]): Promise<void> => {
     setWindowConflict(null);
     try {
-      const mother = await createHoliday.mutateAsync(holiday);
-      setPendingHoliday(null);
+      const mother = await pending.create();
+      setPendingMother(null);
       createWeekChildren.mutate({ mother, weeks }, { onSuccess: finishChildren, onError: noteWindowConflict });
     } catch (error) {
       // La création de la mère elle-même ne heurte pas la garde (entrée racine, sans plan) ;
@@ -239,12 +251,12 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
     }
   };
 
-  // Chemin « d'un bloc » d'une vacance PAS encore créée : mère née SANS plan
+  // Chemin « d'un bloc » d'une mère PAS encore créée : elle naît SANS plan
   // (amendement 2026-07-24), puis le geste adaptBlock le crée et ouvre le wizard.
-  const adaptWholePending = async (holiday: PendingHoliday): Promise<void> => {
+  const adaptWholePending = async (pending: PendingMother): Promise<void> => {
     try {
-      const mother = await createHoliday.mutateAsync(holiday);
-      setPendingHoliday(null);
+      const mother = await pending.create();
+      setPendingMother(null);
       await adaptBlock(mother.id);
     } catch {
       /* relevé par le filet global des mutations */
@@ -341,8 +353,8 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
     deleteBlockVersionsAndSplit,
     pickerFor,
     setPickerFor,
-    pendingHoliday,
-    setPendingHoliday,
+    pendingMother,
+    setPendingMother,
     openPendingPicker,
     createWeekChildren,
     createHoliday,

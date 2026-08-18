@@ -441,7 +441,9 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     ]);
 
     await userEvent.click(screen.getByRole("button", { name: "Ajuster" }));
-    expect(startPeriodMode).toHaveBeenCalledWith("cl1");
+    // P2-36 tranche 2 : « Ajuster » passe par la maison unique — cl1 est sur une seule semaine,
+    // donc pas de dialogue, on file au wizard (le plan de bloc naît idempotent, comme au radar).
+    await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("cl1"));
     expect(navigate).toHaveBeenCalledWith("/wizard");
 
     await userEvent.click(screen.getByRole("button", { name: "Consulter" }));
@@ -664,5 +666,81 @@ describe("DayDialog — P2-36 : le picker nomme l'état « bloc déjà généré
     expect(deleteScheduleMutateAsync).toHaveBeenCalledWith("sv1");
     expect(deleteScheduleMutateAsync).toHaveBeenCalledWith("sv2");
     expect(deleteMutate).not.toHaveBeenCalled(); // jamais l'entrée (DELETE calendar_entry)
+  });
+});
+
+// ── P2-36 (tranche 2) : la LISTE DU JOUR passe elle aussi par la maison unique ──
+// Deux gestes créaient jusqu'ici le plan de bloc SANS consulter le sélecteur, même sur une
+// période de plusieurs semaines : « Adapter » une fermeture RACINE et « Ajuster » une fermeture
+// qui a déjà un plan. Ils passent désormais par requestAdapt (useWeekAdapt), avec les mêmes états
+// nommés que le radar. Témoins : une seule semaine va droit au bloc, et « Ajuster » une période
+// déjà découpée mène au wizard sans dialogue.
+describe("DayDialog — P2-36 tranche 2 : la liste du jour passe par le sélecteur de semaines", () => {
+  beforeEach(() => {
+    periodPlanMutateAsync.mockReset();
+    periodPlanMutateAsync.mockResolvedValue({});
+    startPeriodMode.mockClear();
+    navigate.mockClear();
+    weekChildrenMutate.mockReset();
+    deleteScheduleMutateAsync.mockClear();
+    meData = { seasonPlan: { chosenScheduleId: "s-season" } };
+    allPlansMock = [];
+    plansByEntry = {};
+    schedulesData = [];
+    queriesNoData = false;
+    childEntriesData = [];
+  });
+
+  // Fermeture RACINE couvrant plusieurs semaines calendaires (10 → 20 mai, today = 12 mai).
+  const multiWeekClosure = (over: Partial<CalendarEntry> = {}): CalendarEntry =>
+    entry({ id: "clm", kind: "period", periodType: "closure", title: "Gymnase A — travaux", startDate: "2026-05-10", endDate: "2026-05-20", ...over });
+
+  it("« Adapter » une fermeture RACINE multi-semaines OUVRE le choix des semaines au lieu de créer le plan de bloc", async () => {
+    renderDialog([multiWeekClosure()]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    // Le plan de bloc N'EST PAS créé tant que le gestionnaire n'a pas tranché.
+    expect(periodPlanMutateAsync).not.toHaveBeenCalled();
+    expect(startPeriodMode).not.toHaveBeenCalled();
+  });
+
+  it("témoin : une fermeture d'UNE seule semaine va droit au bloc (création + wizard, sans picker)", async () => {
+    renderDialog([entry({ id: "cl1", kind: "period", periodType: "closure", title: "Gym fermé", startDate: "2026-05-12", endDate: "2026-05-12" })]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+
+    await waitFor(() => expect(periodPlanMutateAsync).toHaveBeenCalledWith("cl1"));
+    await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("cl1"));
+    expect(screen.queryByText("Quelles semaines ajuster ?")).not.toBeInTheDocument();
+    expect(navigate).toHaveBeenCalledWith("/wizard");
+  });
+
+  it("« Ajuster » une fermeture déjà générée d'un bloc (multi-semaines) ouvre le picker qui NOMME le bloc", async () => {
+    allPlansMock = [{ id: "pg", calendarEntryId: "clg", chosenScheduleId: null }];
+    schedulesData = [{ id: "v1", schedulePlanId: "pg", status: "COMPLETED" }];
+    renderDialog([multiWeekClosure({ id: "clg" })]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Ajuster" }));
+
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    expect(screen.getByText(/déjà été adaptée d'un bloc — 1 version/)).toBeInTheDocument();
+    // Rien n'a été navigué en silence — le picker attend la décision.
+    expect(startPeriodMode).not.toHaveBeenCalled();
+  });
+
+  it("témoin : « Ajuster » une période DÉJÀ DÉCOUPÉE mène au wizard sans dialogue (rien à choisir)", async () => {
+    allPlansMock = [{ id: "ps", calendarEntryId: "cls", chosenScheduleId: null }];
+    renderDialog([
+      multiWeekClosure({ id: "cls" }),
+      entry({ id: "cls-w1", kind: "period", periodType: "closure", title: "Gymnase A — travaux — semaine du 11 mai", parentEntryId: "cls", startDate: "2026-05-11", endDate: "2026-05-17" }),
+    ]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Ajuster" }));
+
+    expect(screen.queryByText("Quelles semaines ajuster ?")).not.toBeInTheDocument();
+    await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("cls"));
+    expect(navigate).toHaveBeenCalledWith("/wizard");
   });
 });
