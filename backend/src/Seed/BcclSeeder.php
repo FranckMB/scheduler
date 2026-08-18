@@ -641,28 +641,28 @@ final class BcclSeeder
             ['firstName' => 'Mara', 'lastName' => ''],
             ['firstName' => 'Emerick', 'lastName' => 'Creantor'],
             ['firstName' => 'Nico', 'lastName' => 'Patin'],
-            ['firstName' => 'Enzo', 'lastName' => ''],
-            ['firstName' => 'Thomas', 'lastName' => ''],
-            ['firstName' => 'Flo', 'lastName' => 'Tapaunat'],
-            ['firstName' => 'Chris', 'lastName' => ''],
-            ['firstName' => 'Marlon', 'lastName' => ''],
+            ['firstName' => 'Enzo', 'lastName' => 'Camerino'],
+            ['firstName' => 'Thomas', 'lastName' => 'Francon'],
+            ['firstName' => 'Florian', 'lastName' => 'Tapaunat'],
+            ['firstName' => 'Christophe', 'lastName' => 'Renaud'],
+            ['firstName' => 'Marlon', 'lastName' => 'Depierre'],
             ['firstName' => 'Lionel', 'lastName' => 'Lacroute'],
             ['firstName' => 'Nicolas', 'lastName' => 'Barilleau'],
             ['firstName' => 'Ines', 'lastName' => ''],
             ['firstName' => 'Florian', 'lastName' => ''],
             ['firstName' => 'Luca', 'lastName' => 'Blanchini'],
-            ['firstName' => 'Thalie', 'lastName' => ''],
-            ['firstName' => 'Cyril', 'lastName' => ''],
-            ['firstName' => 'Mathis', 'lastName' => 'Bideaux'],
-            ['firstName' => 'Anna', 'lastName' => ''],
+            ['firstName' => 'Thalie', 'lastName' => 'Charpenet'],
+            ['firstName' => 'Cyril', 'lastName' => 'Benveniste'],
+            ['firstName' => 'Mathis', 'lastName' => 'Bidaux'],
+            ['firstName' => 'Anna', 'lastName' => 'Textoris'],
             ['firstName' => 'Pierre', 'lastName' => 'Chauvin'],
-            ['firstName' => 'Maeleen', 'lastName' => ''],
-            ['firstName' => 'Jordan', 'lastName' => ''],
-            ['firstName' => 'Ethan', 'lastName' => ''],
-            ['firstName' => 'Ambrine', 'lastName' => ''],
-            ['firstName' => 'Aela', 'lastName' => ''],
-            ['firstName' => 'Charlie', 'lastName' => ''],
-            ['firstName' => 'Julia', 'lastName' => ''],
+            ['firstName' => 'Maeleen', 'lastName' => 'Creantor'],
+            ['firstName' => 'Jordan', 'lastName' => 'Rabeuf'],
+            ['firstName' => 'Ethan', 'lastName' => 'Barale-Reghellin'],
+            ['firstName' => 'Ambrine', 'lastName' => 'Azizi'],
+            ['firstName' => 'Aela', 'lastName' => 'Desplanque'],
+            ['firstName' => 'Charlie', 'lastName' => 'Lefort'],
+            ['firstName' => 'Julia', 'lastName' => 'Patin'],
         ];
 
         foreach ($newCoachesData as $coachData) {
@@ -722,28 +722,28 @@ final class BcclSeeder
         $coachMara = $coaches['Mara'];
         $coachEmerick = $coaches['Emerick Creantor'];
         $coachNicoPatin = $coaches['Nico Patin'];
-        $coachEnzo = $coaches['Enzo'];
-        $coachThomas = $coaches['Thomas'];
-        $coachFlo = $coaches['Flo Tapaunat'];
-        $coachChris = $coaches['Chris'];
-        $coachMarlon = $coaches['Marlon'];
+        $coachEnzo = $coaches['Enzo Camerino'];
+        $coachThomas = $coaches['Thomas Francon'];
+        $coachFlo = $coaches['Florian Tapaunat'];
+        $coachChris = $coaches['Christophe Renaud'];
+        $coachMarlon = $coaches['Marlon Depierre'];
         $coachLionel = $coaches['Lionel Lacroute'];
         $coachNicolasBarilleau = $coaches['Nicolas Barilleau'];
         $coachInes = $coaches['Ines'];
         $coachFlorian = $coaches['Florian'];
         $coachLuca = $coaches['Luca Blanchini'];
-        $coachThalie = $coaches['Thalie'];
-        $coachJordan = $coaches['Jordan'];
-        $coachEthan = $coaches['Ethan'];
-        $coachCyril = $coaches['Cyril'];
-        $coachMathis = $coaches['Mathis Bideaux'];
-        $coachAnna = $coaches['Anna'];
-        $coachMaeleen = $coaches['Maeleen'];
+        $coachThalie = $coaches['Thalie Charpenet'];
+        $coachJordan = $coaches['Jordan Rabeuf'];
+        $coachEthan = $coaches['Ethan Barale-Reghellin'];
+        $coachCyril = $coaches['Cyril Benveniste'];
+        $coachMathis = $coaches['Mathis Bidaux'];
+        $coachAnna = $coaches['Anna Textoris'];
+        $coachMaeleen = $coaches['Maeleen Creantor'];
         $coachPierreChauvin = $coaches['Pierre Chauvin'];
-        $coachAmbrine = $coaches['Ambrine'];
-        $coachAela = $coaches['Aela'];
-        $coachCharlie = $coaches['Charlie'];
-        $coachJulia = $coaches['Julia'];
+        $coachAmbrine = $coaches['Ambrine Azizi'];
+        $coachAela = $coaches['Aela Desplanque'];
+        $coachCharlie = $coaches['Charlie Lefort'];
+        $coachJulia = $coaches['Julia Patin'];
 
         $coachNicolasBarilleau->setIsEmployee(true);
         $coachNicoPatin->setIsEmployee(true);
