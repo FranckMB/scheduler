@@ -21,4 +21,17 @@ return RectorConfig::configure()
     // `eraseCredentials`, ce n'est plus un skip mais deux NR : le stack reste
     // en 7.4 (`SymfonyStackAlignmentTest`) et la méthode reste présente
     // (`UserInterfaceContractTest`).
+    // ⚑ Rector RÉÉCRIT en noms pleinement qualifiés par défaut ; CS-Fixer, lui, les
+    // IMPORTE (`fully_qualified_strict_types` + `import_symbols`). Tant que Rector n'avait
+    // rien à réécrire, les deux gates ne se croisaient jamais. Rector 2.6 a apporté une
+    // nouvelle règle, donc des réécritures — et les deux outils se sont mis à se défaire
+    // l'un l'autre sur les fichiers concernés (`Cookie::SAMESITE_STRICT` ↔
+    // `\Symfony\Component\HttpFoundation\Cookie::SAMESITE_STRICT`), chacun rouge dans son
+    // propre gate. On les ALIGNE une fois pour toutes plutôt que de trancher au cas par cas :
+    // Rector importe désormais, comme CS-Fixer.
+    // Bornée au strict nécessaire : on veut qu'il IMPORTE au lieu d'expanser, pas qu'il
+    // fasse le ménage des imports au passage — `removeUnusedImports` touchait 8 fichiers
+    // sans rapport avec la montée, et supprimer un import n'est jamais anodin quand un
+    // docblock le référence encore.
+    ->withImportNames(removeUnusedImports: false)
     ->withComposerBased(symfony: true);

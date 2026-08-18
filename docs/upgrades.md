@@ -40,6 +40,17 @@ des noms de classes en entier là où le dépôt veut un import.
 FAÇON dont une valeur de configuration arrive, jamais ce qu'on en fait. Vérifié par le miroir
 complet de la CI : **1591 tests, 9223 assertions**, dont les tests bloquants de sécurité.
 
+**Et un réglage d'outillage, qui est le vrai enseignement du lot.** Nos deux gardiens de style se
+sont mis à se contredire : Rector réécrit en noms de classes ENTIERS
+(`\Symfony\Component\HttpFoundation\Cookie::…`), CS-Fixer les IMPORTE (`Cookie::…`) — chacun
+défaisant l'autre, chacun rouge dans son propre contrôle. Ce n'est pas nouveau : c'est que jusqu'ici
+Rector n'avait **rien à réécrire**, donc les deux ne se croisaient jamais. La première règle qui le
+fait travailler a révélé le désaccord. `backend/rector.php` gagne donc `withImportNames()` — Rector
+importe désormais, comme CS-Fixer — **borné à `removeUnusedImports: false`** : on voulait aligner
+les deux outils, pas déclencher un ménage d'imports sur 8 fichiers étrangers à la montée (supprimer
+un import n'est jamais anodin quand un docblock le référence encore). Effet réel : 2 fichiers, un
+import de fonction Sentry.
+
 ## 2026-08-15 — lot Dependabot
 
 ### Groupe frontend-npm — Vite, Storybook, Lucide (PR #550)
