@@ -61,6 +61,7 @@ et recharger, sans rien recompiler.
    │                                                      │
    │   Caddy  (écoute 443, gère le certificat HTTPS)      │
    │     ├─ amateo.app       → file_server   → les FICHIERS de landing/
+   │     ├─ www.amateo.app   → redirection permanente → amateo.app
    │     └─ app.amateo.app   → reverse_proxy → 127.0.0.1:8081
    │                                                │     │
    │   Docker (la stack)                            ▼     │
@@ -86,7 +87,8 @@ elles est un lien hypertexte. Il n'y a rien à relier à un nginx local, et il n
   vraie pour une VM européenne.
 
 **Sur la VM** (elle n'existe pas encore) : tout le §1 de `deploy.md` — créer la machine, Docker,
-lancer la stack — puis l'enregistrement DNS, puis Caddy avec ses deux blocs.
+lancer la stack — puis les enregistrements DNS (nu, `www`, `app.`), puis Caddy avec ses trois
+blocs (`docs/ops/Caddyfile.example`).
 
 ⚑ **Personne ne peut cocher P5-5 tant que la machine n'existe pas.** La partie dépôt est faite ;
 la mise en ligne reste un geste du fondateur sur sa VM. Le dire évite une PR qui se donnerait pour
