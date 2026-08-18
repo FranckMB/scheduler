@@ -1,6 +1,13 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-18 (recalé ce jour : **indisponibilité de gymnase informative, PR2 front
+Last verified @ 2026-08-18 (recalé ce jour : **P2-40 livré — le picker de semaines EXCLUT les
+semaines gouvernées par des vacances, retiré de la roadmap** — §5bis gagne le détail : fonctions
+pures `holidayWindows`/`closureWeeksOffer` (`lib/date.ts`), le fait `holidayCovered` de
+`decideWeekAdapt` (retire le chemin « d'un bloc », ouvre toujours le picker), l'état `holiday` de
+`WeekPickerDialog` (ligne d'info, semaines hors vacances, bouton « Consigner l'indisponibilité »
+sur le chemin pending sans semaine offerte) — re-vérifié contre `lib/date.ts`,
+`lib/useWeekAdapt.ts`, `WeekPickerDialog.tsx`, `RadarPanel.tsx`, `DayDialog.tsx` et leurs témoins.
+Précédemment ce même jour : **indisponibilité de gymnase informative, PR2 front
 — lot P2-37 SOLDÉ, retiré de la roadmap** — le §Gymnases (tableau §6bis) rattrape l'écran : rangée
 de 7 coches jour par gymnase (état EFFECTIF servi + provenance en info-bulle), l'écriture de la
 coche (helpers purs `wizard/lib/venueDays.ts` — jamais de recomposition front), les gestes
@@ -482,6 +489,32 @@ l'horloge. Le **serveur** garde l'heure réelle (P4-16 reste ouverte pour lui).
     `window_already_planned` de P2-38 et le refus 422 de découper une mère déjà générée restent
     ceux du serveur) — ce lot rend un **choix déjà permis** visible côté UI, il ne déplace aucune
     frontière métier.
+  - **Le picker EXCLUT les semaines gouvernées par des vacances (P2-40, 2026-08-18).** Décision
+    fondateur (3 cas validés sur exemples) : quand une **indisponibilité de gymnase** (`closure`)
+    chevauche des vacances, `WeekPickerDialog` n'offre plus ces semaines-là — **exclues, pas
+    grisées** — avec une ligne d'info renvoyant au planning de vacances (« Semaines du X au Y
+    couvertes par [vacances] — le rappel vous attend dans son planning »). Deux fonctions pures
+    dans `lib/date.ts` portent la règle : `holidayWindows` (union du feed vacances scolaires ∪ des
+    entrées calendrier `holiday` non ignorées, clampée à la saison) et `closureWeeksOffer` — foyer
+    UNIQUE de l'offre d'une fermeture, une semaine est exclue **ssi son lundi est offert par**
+    `periodAdjustWeeks(fenêtre vacances, "holiday")` (la règle dropFirst Ven/Sam/Dim continue de
+    jouer : des vacances démarrant vendredi n'excluent pas leur semaine d'entame, qui reste offerte
+    par la fermeture). `decideWeekAdapt` (P2-36) gagne le fait `holidayCovered` : dès qu'une
+    exclusion existe, le picker s'ouvre **toujours** (jamais `single-week`/`already-split` en
+    bloc direct) et **le chemin « adapter d'un bloc » disparaît** — un plan de bloc gouvernerait
+    la fenêtre des vacances, ce que P2-38 refuse par ailleurs. Sans chevauchement : comportement
+    strictement inchangé. Cas **100 % sous vacances** (aucune semaine offerte) : ligne d'info
+    seule ; sur le chemin `pendingMother` (l'indispo n'est pas encore en base), un bouton
+    **« Consigner l'indisponibilité »** crée le FAIT sans plan ni navigation — nécessaire, sinon
+    le rappel promis par la ligne d'info n'existerait nulle part ; une entrée **déjà en base**
+    n'a rien à consigner, le bouton n'apparaît pas. **Écart assumé** (§2 de `etat-des-lieux.md`) :
+    la règle vit côté FRONT, sur les données SERVIES (`useSchoolHolidays` + `useCalendarEntries`)
+    — c'est une règle d'**OFFRE** de présentation, pas un miroir d'un calcul backend (aucun calcul
+    serveur « semaines offertes » n'existe à mirorer, `FrontRederivationRegistryTest` reste vert).
+    Par API directe, une semaine peut donc encore naître sous des vacances SANS plan — le filet
+    reste la garde P2-38 (409 `window_already_planned`, dans les deux sens) dès qu'un PLAN existe ;
+    la garde serveur n'est **pas** étendue (sa doctrine : « on ne borne que le PLAN, jamais le
+    FAIT »).
   - **L'été s'adapte comme les autres vacances** (E2, 2026-07-18) : l'exclusion `ete` a été
     **levée** (`isAdaptableHoliday` supprimé) et les dates sont **clampées à la saison**. Seul cas
     restant sans « Adapter » : une fenêtre **entièrement hors** de la saison de travail — la
