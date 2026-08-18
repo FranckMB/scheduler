@@ -1058,6 +1058,13 @@ final class BcclSeeder
         // SM2 / SF2 : pas de séance le vendredi (nom auto-généré par le wizard « … · pas vendredi »).
         $addConstraint(\sprintf('SM2 · pas %s', $dayLong(5)), ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
         $addConstraint(\sprintf('SF2 · pas %s', $dayLong(5)), ConstraintScope::TEAM, $teams['SF2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
+        // Ajoutées dans l'app par le gestionnaire le 2026-08-18 (relevé de la base réelle) :
+        // SM1 ne s'entraîne que le mardi et le jeudi, l'école de basket du mercredi que le
+        // mercredi. Même forme que « Veterans · uniquement vendredi » : une whitelist de jours
+        // (`allowedDays`), donc le nom auto-généré par le wizard énumère les jours permis.
+        $addConstraint(\sprintf('SM1 · uniquement %s, %s', $dayLong(2), $dayLong(4)), ConstraintScope::TEAM, $sm1->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['allowedDays' => [2, 4]]);
+        $addConstraint(\sprintf('Mercredi Shark U9-U11 · uniquement %s', $dayLong(3)), ConstraintScope::TEAM, $teams['Mercredi Shark U9-U11']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['allowedDays' => [3]]);
+
         // Aucune séance le week-end pour les équipes EN COMPÉTITION (samedi ET dimanche) —
         // décision fondateur 2026-08-12. Le builder éclate cette règle CLUB en une contrainte
         // par équipe ; les réservations HARD du samedi (académies, Baby) restent posées.
