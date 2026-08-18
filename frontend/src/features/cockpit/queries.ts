@@ -8,7 +8,7 @@ import { toast } from "@/shared/stores/toastStore";
 import * as cockpitApi from "./api";
 import type { CalendarEntry, CreateClosurePayload, CreateCutoffPayload, CreateEventPayload } from "./api";
 import { asWindowAlreadyPlanned, WindowAlreadyPlannedError } from "./api";
-import { frDateShort } from "./lib/date";
+import { frDateShort, segmentWeekCount, type WeekSegment } from "./lib/date";
 
 /**
  * ADR-0002 inv. 4 (P2-38 PR3) — LE HOOK POSSÈDE SON FEEDBACK (patron `ownSlotEditFeedback`,
@@ -344,33 +344,38 @@ export interface WeekChildrenResult {
 }
 
 /**
- * P2-5 E1 — découpe une période mère en SEMAINES : une entrée ENFANT par semaine
- * cochée (parentEntryId), type hérité, titre E6 (« {mère} — semaine du {lundi} »).
- * Chaque enfant naît avec son plan (rail 1 entrée = 1 plan).
+ * P2-5 E1 / P2-41 — découpe une période mère en SEGMENTS : une entrée ENFANT par segment coché
+ * (parentEntryId), type hérité, fenêtre = bornes du segment (clamp saison conservé). Un segment de
+ * taille 1 garde le titre E6 historique (« {mère} — semaine du {lundi} ») ; un segment multi-semaines
+ * prend « {mère} — semaines du {X} au {Y} ». Chaque enfant naît avec son plan (rail 1 entrée = 1 plan).
  *
  * Reprenable (revue #262) : seul le 422 « chevauche une semaine déjà découpée »
  * est sauté (l'état visé existe — un retry ne meurt plus dessus) ; toute autre
  * erreur est comptée (failedCount) et relevée si RIEN n'a été créé. Invalidation
  * en onSettled : même un échec partiel rafraîchit le cache (les enfants créés
  * apparaissent, les chips « à créer » listent les manquantes). Titre borné à 180
- * (colonne title) — un titre de mère long ne fait plus 422 chaque semaine.
+ * (colonne title) — un titre de mère long ne fait plus 422 chaque segment.
  */
 export function useCreateWeekChildren() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { mother: CalendarEntry; weeks: { startDate: string; endDate: string; monday: string }[] }): Promise<WeekChildrenResult> => {
+    mutationFn: async (payload: { mother: CalendarEntry; segments: WeekSegment[] }): Promise<WeekChildrenResult> => {
       const created: CalendarEntry[] = [];
       let failedCount = 0;
       let firstHardError: unknown = null;
-      for (const week of payload.weeks) {
+      for (const segment of payload.segments) {
+        const title =
+          segmentWeekCount(segment) > 1
+            ? `${payload.mother.title} — semaines du ${frDateShort(segment.monday)} au ${frDateShort(segment.endDate)}`
+            : `${payload.mother.title} — semaine du ${frDateShort(segment.monday)}`;
         try {
           created.push(
             await cockpitApi.createCalendarEntry({
               kind: "period",
               periodType: payload.mother.periodType,
-              title: `${payload.mother.title} — semaine du ${frDateShort(week.monday)}`.slice(0, 180),
-              startDate: week.startDate,
-              endDate: week.endDate,
+              title: title.slice(0, 180),
+              startDate: segment.startDate,
+              endDate: segment.endDate,
               parentEntryId: payload.mother.id,
             }),
           );
