@@ -9,6 +9,7 @@ use App\Dto\CreatePeriodPlanInput;
 use App\Dto\SchedulePlanInput;
 use App\Entity\SchedulePlan;
 use App\Service\ManagementAccessGuard;
+use App\Service\PeriodWindowUniquenessGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
@@ -36,6 +37,7 @@ class SchedulePlanStateProcessor extends AbstractStateProcessor
         SeasonAccessGuard $seasonAccessGuard,
         ManagementAccessGuard $managementAccessGuard,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly PeriodWindowUniquenessGuard $windowUniquenessGuard,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -75,9 +77,9 @@ class SchedulePlanStateProcessor extends AbstractStateProcessor
         $entryId = $input->calendarEntryId;
         $resolvedSeasonId = $this->resolveSeasonId($clubId, $seasonId);
 
-        /** @var array{club_id: string, season_id: string, kind: string, period_type: ?string}|false $entry */
+        /** @var array{club_id: string, season_id: string, kind: string, period_type: ?string, start_date: string, end_date: string, parent_entry_id: ?string}|false $entry */
         $entry = $this->entityManager->getConnection()->fetchAssociative(
-            'SELECT club_id, season_id, kind, period_type FROM calendar_entry WHERE id = :eid',
+            'SELECT club_id, season_id, kind, period_type, start_date, end_date, parent_entry_id FROM calendar_entry WHERE id = :eid',
             ['eid' => $entryId],
         );
         if (false === $entry
@@ -89,7 +91,7 @@ class SchedulePlanStateProcessor extends AbstractStateProcessor
             throw new UnprocessableEntityHttpException('Seule une période de fermeture ou de vacances porte un planning.');
         }
 
-        return $this->entityManager->wrapInTransaction(function () use ($entryId): SchedulePlanResource {
+        return $this->entityManager->wrapInTransaction(function () use ($entry, $entryId): SchedulePlanResource {
             // Verrou AVANT la lecture des enfants : un POST de semaine concurrent
             // (même scope) est sérialisé — pas de plan-bloc minté pendant une découpe.
             $this->schedulePlanProvisioner->lockPlanScope($entryId);
@@ -101,6 +103,18 @@ class SchedulePlanStateProcessor extends AbstractStateProcessor
             if ($hasChildren) {
                 throw new UnprocessableEntityHttpException('Cette période est découpée en semaines : adaptez chaque semaine.');
             }
+
+            // ADR-0002 inv. 4 (P2-38) — une seule planification par fenêtre. DANS le verrou :
+            // deux gestes « Adapter » concurrents sur des fenêtres qui se recoupent seraient
+            // sinon tous deux passés par un contrôle vide. La famille (même ancêtre racine) est
+            // exclue par la garde : ré-adapter la MÊME entrée reste idempotent.
+            $this->windowUniquenessGuard->assertWindowFree(
+                $entry['club_id'],
+                $entry['season_id'],
+                $entry['parent_entry_id'] ?? $entryId,
+                mb_substr($entry['start_date'], 0, 10),
+                mb_substr($entry['end_date'], 0, 10),
+            );
 
             $planId = $this->schedulePlanProvisioner->provisionPeriodPlan($entryId);
             if (null === $planId) {

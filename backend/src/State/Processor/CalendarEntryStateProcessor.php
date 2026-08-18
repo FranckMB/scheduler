@@ -16,6 +16,7 @@ use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
 use App\Service\ManagementAccessGuard;
 use App\Service\OverlayManager;
+use App\Service\PeriodWindowUniquenessGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
@@ -43,6 +44,7 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         ManagementAccessGuard $managementAccessGuard,
         private readonly OverlayManager $overlayManager,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly PeriodWindowUniquenessGuard $windowUniquenessGuard,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -202,6 +204,7 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             if (null !== $input->parentEntryId) {
                 $this->schedulePlanProvisioner->lockPlanScope($input->parentEntryId);
                 $this->assertValidWeekChild($input, $clubId, $seasonId);
+                $this->assertWindowNotAlreadyPlanned($input);
             }
 
             $output = parent::processPost($input, $clubId, $seasonId);
@@ -356,6 +359,33 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
      * deux SELECT pour s'entendre répondre « pas de plan ». Le provisioner reste
      * défensif de son côté — c'est lui qui fait autorité sur le mapping type → plan.
      */
+    /**
+     * ADR-0002 inv. 4 (P2-38) — une semaine qui naît AVEC son plan ne doit pas atterrir dans une
+     * fenêtre qu'un AUTRE plan gouverne déjà (règle fondateur : « un overlay d'incident ne touche
+     * jamais une semaine de vacances », refusée dans les deux sens).
+     *
+     * La racine passée est la MÈRE : le plan-bloc de la mère — supprimé quelques lignes plus bas
+     * par la découpe — et les semaines sœurs partagent cette racine, donc ne déclenchent jamais la
+     * garde. Leur non-chevauchement mutuel reste gardé par {@see assertValidWeekChild}, qu'on ne
+     * double pas ici.
+     */
+    private function assertWindowNotAlreadyPlanned(CalendarEntryInput $input): void
+    {
+        $parentId = (string) $input->parentEntryId;
+        $parent = $this->entityManager->getRepository(CalendarEntry::class)->find($parentId);
+        if (!$parent instanceof CalendarEntry || null === $input->startDate || null === $input->endDate) {
+            return; // déjà refusé par assertValidWeekChild — on ne double pas son message.
+        }
+
+        $this->windowUniquenessGuard->assertWindowFree(
+            $parent->getClubId(),
+            $parent->getSeasonId(),
+            $parentId,
+            $input->startDate,
+            $input->endDate,
+        );
+    }
+
     private function provisionIfPlanBearing(CalendarEntryResource $output): void
     {
         if (\in_array($output->periodType, ['closure', 'holiday'], true)) {
