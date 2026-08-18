@@ -31,7 +31,7 @@ final class DevSeasonPaymentController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
         private readonly ClockInterface $clock,
-        #[Autowire('%kernel.debug%')]
+        #[Autowire(param: 'kernel.debug')]
         private readonly bool $debug,
     ) {}
 

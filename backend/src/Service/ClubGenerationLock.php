@@ -13,7 +13,7 @@ class ClubGenerationLock
     private const KEY_PREFIX = 'schedule_generation:club:';
 
     public function __construct(
-        #[Autowire('%env(REDIS_URL)%')]
+        #[Autowire(env: 'REDIS_URL')]
         private readonly string $redisUrl,
     ) {}
 

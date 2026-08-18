@@ -34,7 +34,7 @@ final readonly class AdminHealthService
         private TransportInterface $failedTransport,
         #[Autowire(service: 'cache.app')]
         private CacheItemPoolInterface $cache,
-        #[Autowire('%env(REDIS_URL)%')]
+        #[Autowire(env: 'REDIS_URL')]
         private string $redisUrl,
         #[Autowire('%env(default::MERCURE_URL)%')]
         private string $mercureUrl,
@@ -45,7 +45,7 @@ final readonly class AdminHealthService
         // fail-closed : l'environnement n'est pas la prod ET le DSN pointe
         // effectivement mailpit — un `.env.prod` incomplet retomberait sinon sur
         // le défaut mailpit committé dans backend/.env et on re-sonderait.
-        #[Autowire('%kernel.environment%')]
+        #[Autowire(param: 'kernel.environment')]
         private string $appEnv = 'dev',
         #[Autowire('%env(default::MAILER_DSN)%')]
         private string $mailerDsn = '',

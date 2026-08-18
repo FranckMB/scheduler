@@ -27,7 +27,7 @@ final class DevClubApprovalController extends AbstractController
     public function __construct(
         private readonly ClubCreationRequestRepository $requests,
         private readonly ClubApprovalService $approvalService,
-        #[Autowire('%kernel.debug%')]
+        #[Autowire(param: 'kernel.debug')]
         private readonly bool $debug,
     ) {}
 

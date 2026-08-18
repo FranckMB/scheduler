@@ -30,7 +30,7 @@ final class DevClockController extends AbstractController
     public function __construct(
         private readonly DevClockStore $store,
         private readonly ClockInterface $clock,
-        #[Autowire('%kernel.debug%')]
+        #[Autowire(param: 'kernel.debug')]
         private readonly bool $debug,
     ) {}
 
