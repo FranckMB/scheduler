@@ -173,6 +173,71 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
         self::assertNull(false === $chosen ? null : $chosen, 'le club de démonstration ne pointe aucun planning');
     }
 
+    /**
+     * NR — LE PLANNING RÉEL TRANSCRIT RESPECTE LES RÈGLES DURES QUE LE SEED DÉCLARE.
+     *
+     * Le seed fait deux choses qui peuvent se contredire : il transcrit le planning RÉEL du club
+     * (P5-17, 90 créneaux relevés sur le terrain) et il déclare les contraintes du club. Ajouter
+     * une règle DURE qui interdit ce que le planning réel fait rendrait la génération infaisable
+     * — et on ne s'en apercevrait qu'au premier `make fixtures` suivi d'une génération, donc
+     * potentiellement des jours plus tard, sur une base neuve.
+     *
+     * Ce test le dit tout de suite, sans moteur ni solve : pour chaque contrainte HARD de portée
+     * ÉQUIPE (jour ou horaire), chaque séance transcrite de cette équipe doit la satisfaire.
+     *
+     * PORTÉE ASSUMÉE : les contraintes de portée CLUB (par tag) ne sont pas couvertes ici — leur
+     * résolution en équipes vit dans le builder, pas dans le seed, et la garder ici dupliquerait
+     * cette algèbre. Le risque que ce test cible est celui qui s'est présenté : une règle TEAM
+     * ajoutée au seed d'après ce que le gestionnaire a saisi dans l'app.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testTheTranscribedRealScheduleSatisfiesEveryHardTeamRule(): void
+    {
+        $this->seeder->run($this->em, BcclSeedProfile::dev());
+
+        /** @var list<array{team: string, day: int, start: string, name: string, family: string, config: string}> $rows */
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT t.name AS team, s.day_of_week AS day, to_char(s.start_time, \'HH24:MI\') AS start, '
+            . 'c.name AS name, c.family AS family, c.config::text AS config '
+            . 'FROM "constraint" c '
+            . 'JOIN team t ON t.id = c.scope_target_id '
+            . 'JOIN schedule_slot_template s ON s.team_id = t.id '
+            . 'JOIN schedule sc ON sc.id = s.schedule_id '
+            . 'JOIN schedule_plan p ON p.id = sc.schedule_plan_id AND p.type = \'SEASON\' '
+            . 'WHERE c.calendar_entry_id IS NULL AND c.scope = \'TEAM\' AND c.rule_type = \'HARD\' '
+            . 'AND c.family IN (\'DAY\', \'TIME\')',
+        );
+        self::assertNotSame([], $rows, 'le seed doit produire des règles dures d\'équipe ET un planning transcrit — sinon ce test ne garde rien');
+
+        $violations = [];
+        foreach ($rows as $row) {
+            /** @var array<string, mixed> $config */
+            $config = json_decode($row['config'], true, 512, \JSON_THROW_ON_ERROR);
+            $day = (int) $row['day'];
+            $start = (string) $row['start'];
+
+            $allowed = $config['allowedDays'] ?? null;
+            if (\is_array($allowed) && !\in_array($day, array_map('intval', $allowed), true)) {
+                $violations[] = \sprintf('%s le jour %d — « %s »', $row['team'], $day, $row['name']);
+            }
+            $forbidden = $config['forbiddenDays'] ?? null;
+            if (\is_array($forbidden) && \in_array($day, array_map('intval', $forbidden), true)) {
+                $violations[] = \sprintf('%s le jour %d — « %s »', $row['team'], $day, $row['name']);
+            }
+            $min = $config['minStartTime'] ?? null;
+            if (\is_string($min) && $start < $min) {
+                $violations[] = \sprintf('%s à %s — « %s »', $row['team'], $start, $row['name']);
+            }
+            $max = $config['maxStartTime'] ?? null;
+            if (\is_string($max) && $start > $max) {
+                $violations[] = \sprintf('%s à %s — « %s »', $row['team'], $start, $row['name']);
+            }
+        }
+
+        self::assertSame([], array_values(array_unique($violations)), 'une règle dure du seed contredit le planning réel qu\'il transcrit');
+    }
+
     protected function setUp(): void
     {
         $adminUrl = $_SERVER['DATABASE_ADMIN_URL'] ?? getenv('DATABASE_ADMIN_URL');

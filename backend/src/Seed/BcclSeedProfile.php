@@ -55,6 +55,13 @@ final readonly class BcclSeedProfile
         ['firstName' => 'Azou', 'lastName' => ''],
         ['firstName' => 'Charlie', 'lastName' => ''],
         ['firstName' => 'Jade', 'lastName' => ''],
+        // 2026-08-18 — quatre identités de plus : le seed a gagné quatre coachs (relevé de la
+        // base réelle du club). La liste doit rester AU MOINS aussi longue que celle du seed,
+        // sinon la démo refuse de partir — garde volontaire : jamais d'anonymisation partielle.
+        ['firstName' => 'Nathan', 'lastName' => 'Perrot'],
+        ['firstName' => 'Soraya', 'lastName' => ''],
+        ['firstName' => 'Kenza', 'lastName' => ''],
+        ['firstName' => 'Victor', 'lastName' => 'Delaunay'],
     ];
 
     /**

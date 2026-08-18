@@ -641,28 +641,34 @@ final class BcclSeeder
             ['firstName' => 'Mara', 'lastName' => ''],
             ['firstName' => 'Emerick', 'lastName' => 'Creantor'],
             ['firstName' => 'Nico', 'lastName' => 'Patin'],
-            ['firstName' => 'Enzo', 'lastName' => ''],
-            ['firstName' => 'Thomas', 'lastName' => ''],
-            ['firstName' => 'Flo', 'lastName' => 'Tapaunat'],
-            ['firstName' => 'Chris', 'lastName' => ''],
-            ['firstName' => 'Marlon', 'lastName' => ''],
+            ['firstName' => 'Enzo', 'lastName' => 'Camerino'],
+            ['firstName' => 'Thomas', 'lastName' => 'Francon'],
+            ['firstName' => 'Florian', 'lastName' => 'Tapaunat'],
+            ['firstName' => 'Christophe', 'lastName' => 'Renaud'],
+            ['firstName' => 'Marlon', 'lastName' => 'Depierre'],
             ['firstName' => 'Lionel', 'lastName' => 'Lacroute'],
             ['firstName' => 'Nicolas', 'lastName' => 'Barilleau'],
             ['firstName' => 'Ines', 'lastName' => ''],
             ['firstName' => 'Florian', 'lastName' => ''],
             ['firstName' => 'Luca', 'lastName' => 'Blanchini'],
-            ['firstName' => 'Thalie', 'lastName' => ''],
-            ['firstName' => 'Cyril', 'lastName' => ''],
-            ['firstName' => 'Mathis', 'lastName' => 'Bideaux'],
-            ['firstName' => 'Anna', 'lastName' => ''],
+            ['firstName' => 'Thalie', 'lastName' => 'Charpenet'],
+            ['firstName' => 'Cyril', 'lastName' => 'Benveniste'],
+            ['firstName' => 'Mathis', 'lastName' => 'Bidaux'],
+            ['firstName' => 'Anna', 'lastName' => 'Textoris'],
             ['firstName' => 'Pierre', 'lastName' => 'Chauvin'],
-            ['firstName' => 'Maeleen', 'lastName' => ''],
-            ['firstName' => 'Jordan', 'lastName' => ''],
-            ['firstName' => 'Ethan', 'lastName' => ''],
-            ['firstName' => 'Ambrine', 'lastName' => ''],
-            ['firstName' => 'Aela', 'lastName' => ''],
-            ['firstName' => 'Charlie', 'lastName' => ''],
-            ['firstName' => 'Julia', 'lastName' => ''],
+            ['firstName' => 'Maeleen', 'lastName' => 'Creantor'],
+            ['firstName' => 'Jordan', 'lastName' => 'Rabeuf'],
+            ['firstName' => 'Ethan', 'lastName' => 'Barale-Reghellin'],
+            ['firstName' => 'Ambrine', 'lastName' => 'Azizi'],
+            ['firstName' => 'Aela', 'lastName' => 'Desplanque'],
+            ['firstName' => 'Charlie', 'lastName' => 'Lefort'],
+            ['firstName' => 'Julia', 'lastName' => 'Patin'],
+            // Ajoutés par le gestionnaire dans l'app le 2026-08-18 (relevé de la base réelle) :
+            // le seed les ignorait, un environnement neuf repartait donc sans eux.
+            ['firstName' => 'Alexis', 'lastName' => 'Kuriyan'],
+            ['firstName' => 'Ambrine', 'lastName' => 'Hamani'],
+            ['firstName' => 'Chaima', 'lastName' => 'Othmane'],
+            ['firstName' => 'Joseph', 'lastName' => 'Enama'],
         ];
 
         foreach ($newCoachesData as $coachData) {
@@ -722,28 +728,32 @@ final class BcclSeeder
         $coachMara = $coaches['Mara'];
         $coachEmerick = $coaches['Emerick Creantor'];
         $coachNicoPatin = $coaches['Nico Patin'];
-        $coachEnzo = $coaches['Enzo'];
-        $coachThomas = $coaches['Thomas'];
-        $coachFlo = $coaches['Flo Tapaunat'];
-        $coachChris = $coaches['Chris'];
-        $coachMarlon = $coaches['Marlon'];
+        $coachEnzo = $coaches['Enzo Camerino'];
+        $coachThomas = $coaches['Thomas Francon'];
+        $coachFlo = $coaches['Florian Tapaunat'];
+        $coachChris = $coaches['Christophe Renaud'];
+        $coachMarlon = $coaches['Marlon Depierre'];
         $coachLionel = $coaches['Lionel Lacroute'];
         $coachNicolasBarilleau = $coaches['Nicolas Barilleau'];
         $coachInes = $coaches['Ines'];
         $coachFlorian = $coaches['Florian'];
         $coachLuca = $coaches['Luca Blanchini'];
-        $coachThalie = $coaches['Thalie'];
-        $coachJordan = $coaches['Jordan'];
-        $coachEthan = $coaches['Ethan'];
-        $coachCyril = $coaches['Cyril'];
-        $coachMathis = $coaches['Mathis Bideaux'];
-        $coachAnna = $coaches['Anna'];
-        $coachMaeleen = $coaches['Maeleen'];
+        $coachThalie = $coaches['Thalie Charpenet'];
+        $coachJordan = $coaches['Jordan Rabeuf'];
+        $coachEthan = $coaches['Ethan Barale-Reghellin'];
+        $coachCyril = $coaches['Cyril Benveniste'];
+        $coachMathis = $coaches['Mathis Bidaux'];
+        $coachAnna = $coaches['Anna Textoris'];
+        $coachAlexis = $coaches['Alexis Kuriyan'];
+        $coachAmbrineHamani = $coaches['Ambrine Hamani'];
+        $coachChaima = $coaches['Chaima Othmane'];
+        $coachJoseph = $coaches['Joseph Enama'];
+        $coachMaeleen = $coaches['Maeleen Creantor'];
         $coachPierreChauvin = $coaches['Pierre Chauvin'];
-        $coachAmbrine = $coaches['Ambrine'];
-        $coachAela = $coaches['Aela'];
-        $coachCharlie = $coaches['Charlie'];
-        $coachJulia = $coaches['Julia'];
+        $coachAmbrine = $coaches['Ambrine Azizi'];
+        $coachAela = $coaches['Aela Desplanque'];
+        $coachCharlie = $coaches['Charlie Lefort'];
+        $coachJulia = $coaches['Julia Patin'];
 
         $coachNicolasBarilleau->setIsEmployee(true);
         $coachNicoPatin->setIsEmployee(true);
@@ -781,7 +791,13 @@ final class BcclSeeder
             ['coach' => $coachJordan, 'team' => $teams['U13F2'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachEthan, 'team' => $teams['U13F3'], 'role' => TeamCoachRole::MAIN],
             //            ['coach' => $coachEnzo, 'team' => $teams['U11M1'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachAnna, 'team' => $teams['U11M2'], 'role' => TeamCoachRole::MAIN],
+            // Correction 2026-08-18 (fondateur) : Anna est sur U11M1, pas U11M2 — l'erreur
+            // venait du seed lui-même, d'où deux coachs principaux sur U11M2 et U11M1 sans coach.
+            ['coach' => $coachAnna, 'team' => $teams['U11M1'], 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachJoseph, 'team' => $teams['U11M2'], 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachAlexis, 'team' => $teams['U18M2'], 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachAmbrineHamani, 'team' => $teams['Baby 1'], 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachChaima, 'team' => $teams['Baby 2'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachPierreChauvin, 'team' => $teams['U11F1'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachMaeleen, 'team' => $teams['U11F2'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachJordan, 'team' => $teams['U9M1'], 'role' => TeamCoachRole::MAIN],
@@ -1042,6 +1058,13 @@ final class BcclSeeder
         // SM2 / SF2 : pas de séance le vendredi (nom auto-généré par le wizard « … · pas vendredi »).
         $addConstraint(\sprintf('SM2 · pas %s', $dayLong(5)), ConstraintScope::TEAM, $teams['SM2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
         $addConstraint(\sprintf('SF2 · pas %s', $dayLong(5)), ConstraintScope::TEAM, $teams['SF2']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['forbiddenDays' => [5]]);
+        // Ajoutées dans l'app par le gestionnaire le 2026-08-18 (relevé de la base réelle) :
+        // SM1 ne s'entraîne que le mardi et le jeudi, l'école de basket du mercredi que le
+        // mercredi. Même forme que « Veterans · uniquement vendredi » : une whitelist de jours
+        // (`allowedDays`), donc le nom auto-généré par le wizard énumère les jours permis.
+        $addConstraint(\sprintf('SM1 · uniquement %s, %s', $dayLong(2), $dayLong(4)), ConstraintScope::TEAM, $sm1->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['allowedDays' => [2, 4]]);
+        $addConstraint(\sprintf('Mercredi Shark U9-U11 · uniquement %s', $dayLong(3)), ConstraintScope::TEAM, $teams['Mercredi Shark U9-U11']->getId(), ConstraintFamily::DAY, ConstraintRuleType::HARD, ['allowedDays' => [3]]);
+
         // Aucune séance le week-end pour les équipes EN COMPÉTITION (samedi ET dimanche) —
         // décision fondateur 2026-08-12. Le builder éclate cette règle CLUB en une contrainte
         // par équipe ; les réservations HARD du samedi (académies, Baby) restent posées.
@@ -1079,6 +1102,13 @@ final class BcclSeeder
         // U18M2 : Armand préféré. (U18F2 retirée le 2026-08-15 — terrain réel = JDR mardi +
         // Tonkin mercredi, zéro Armand ; voir la purge dans $staleNames.)
         $addConstraint('U18M2 · préfère ' . $venues['vArmand']->getName(), ConstraintScope::TEAM, $u18m2->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues['vArmand']->getId()]);
+
+        // Préférences de gymnase saisies par le gestionnaire dans l'app le 2026-08-18 (relevé de
+        // la base réelle). PREFERRED : le solveur s'y tient quand il peut, et signale l'écart
+        // quand il ne peut pas — aucun risque d'infaisabilité, contrairement aux règles de jour.
+        foreach ([['Baby 1', 'vMateo'], ['Baby 2', 'vMateo'], ['Section J.Macé', 'vMateo'], ['3x3', 'vAdn']] as [$teamName, $venueVar]) {
+            $addConstraint($teamName . ' · préfère ' . $venues[$venueVar]->getName(), ConstraintScope::TEAM, $teams[$teamName]->getId(), ConstraintFamily::FACILITY, ConstraintRuleType::PREFERRED, ['preferredVenueId' => $venues[$venueVar]->getId()]);
+        }
 
         // --- COACH_AVAILABILITY (indisponibilités ; 5 = vendredi, 4 = jeudi) ---
         // Variables coach déjà résolues (l.618+) : un coach manquant lève une erreur PHP au lieu de disparaître en silence.
