@@ -73,7 +73,25 @@ final class CalendarEntryConflictsController extends AbstractController
         // An IGNORED entry was explicitly dismissed by the manager: it must not
         // keep raising conflicts (the radar would resurrect it as a to-do).
         if (CalendarEntryKind::PERIOD !== $entry->getKind() || CalendarEntryStatus::IGNORED === $entry->getStatus()) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'closures' => [], 'fullyClosedVenueIds' => [], 'seasonPlanChosen' => $planChosen]);
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'closures' => [], 'fullyClosedVenueIds' => [], 'effectiveClosedWeekdays' => [], 'disabledVenueIds' => [], 'seasonPlanChosen' => $planChosen]);
+        }
+
+        // Indispo INFORMATIVE (décision fondateur 2026-08-18) — l'ÉTAT EFFECTIF jour par jour
+        // (incident × masque manuel du plan), AVEC provenance, servi tel quel : le front ne
+        // redérive JAMAIS la composition (elle vit dans la MAISON UNIQUE `PlanVenueClosures`).
+        // Une entrée sans plan de période n'a pas de masque — l'état effectif y est vide.
+        $effectiveClosedWeekdays = [];
+        $disabledVenueIds = [];
+        $periodPlanId = $this->schedulePlanProvisioner->periodPlanId($entry->getId());
+        if (null !== $periodPlanId) {
+            $state = $this->planVenueClosures->effectiveStateForPlan($periodPlanId);
+            $disabledVenueIds = array_keys($state['disabledVenueIds']);
+            foreach ($state['effectiveClosedWeekdaysByVenue'] as $venueId => $weekdays) {
+                foreach (array_keys($weekdays) as $weekday) {
+                    // Provenance : décoché À LA MAIN (masque CLOSED) ou hérité de l'indisponibilité déclarée.
+                    $effectiveClosedWeekdays[$venueId][(string) $weekday] = isset($state['manualClosedWeekdaysByVenue'][$venueId][$weekday]) ? 'manual' : 'default-incident';
+                }
+            }
         }
 
         // Les gymnases fermés dans cette fenêtre + leurs dates + leurs résumés.
@@ -111,7 +129,7 @@ final class CalendarEntryConflictsController extends AbstractController
         $venueIds = array_keys($closedDatesByVenue);
 
         if ([] === $venueIds) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'closures' => $closures, 'fullyClosedVenueIds' => $fullyClosedVenueIds, 'seasonPlanChosen' => $planChosen]);
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'closures' => $closures, 'fullyClosedVenueIds' => $fullyClosedVenueIds, 'effectiveClosedWeekdays' => $effectiveClosedWeekdays, 'disabledVenueIds' => $disabledVenueIds, 'seasonPlanChosen' => $planChosen]);
         }
 
         // The entry's OWN season baseline (not the active season) — an entry may
@@ -126,7 +144,7 @@ final class CalendarEntryConflictsController extends AbstractController
         // gymnase, lisait que tout allait bien, et n'adaptait rien — alors que le radar
         // n'avait simplement rien regardé. Un silence qui ment est pire qu'un blanc.
         if (null === $seasonScheduleId) {
-            return $this->json(['entryId' => $entry->getId(), 'venueIds' => $venueIds, 'conflicts' => [], 'closures' => $closures, 'fullyClosedVenueIds' => $fullyClosedVenueIds, 'seasonPlanChosen' => false]);
+            return $this->json(['entryId' => $entry->getId(), 'venueIds' => $venueIds, 'conflicts' => [], 'closures' => $closures, 'fullyClosedVenueIds' => $fullyClosedVenueIds, 'effectiveClosedWeekdays' => $effectiveClosedWeekdays, 'disabledVenueIds' => $disabledVenueIds, 'seasonPlanChosen' => false]);
         }
 
         /** @var list<ScheduleSlotTemplate> $slots */
@@ -171,6 +189,8 @@ final class CalendarEntryConflictsController extends AbstractController
             'conflicts' => $conflicts,
             'closures' => $closures,
             'fullyClosedVenueIds' => $fullyClosedVenueIds,
+            'effectiveClosedWeekdays' => $effectiveClosedWeekdays,
+            'disabledVenueIds' => $disabledVenueIds,
             'seasonPlanChosen' => $planChosen,
         ]);
     }

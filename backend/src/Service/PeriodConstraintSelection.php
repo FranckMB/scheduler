@@ -31,6 +31,8 @@ final readonly class PeriodConstraintSelection
      *                                                                                               (transversale, toutes entrées confondues) — ce champ reste le jeu daté de
      *                                                                                               CETTE entrée, à disposition des consommateurs de la sélection
      * @param array<string, true>                                  $disabledVenueIds                 gymnases DISABLED pour ce plan (sparse)
+     * @param array<string, array<int, true>>                      $effectiveClosedWeekdaysByVenue   jours ISO effectivement fermés par gymnase (incident × masque) — la
+     *                                                                                               MAISON UNIQUE `PlanVenueClosures` compose, gate et payload la partagent
      * @param array<string, true>                                  $deactivatedTeamIds               équipes désactivées pour ce plan (sparse)
      * @param array<string, int>                                   $sessionOverrides                 teamId → séances/semaine surchargées pour la période
      */
@@ -42,6 +44,7 @@ final readonly class PeriodConstraintSelection
         public array $partiallyAppliedForDisabledVenue,
         public array $dated,
         public array $disabledVenueIds,
+        public array $effectiveClosedWeekdaysByVenue,
         public array $deactivatedTeamIds,
         public array $sessionOverrides,
     ) {}

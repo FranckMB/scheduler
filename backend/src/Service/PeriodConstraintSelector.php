@@ -9,11 +9,9 @@ use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Team;
 use App\Entity\TeamPeriodOverride;
-use App\Entity\VenuePeriodOverride;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
-use App\Enum\VenuePeriodMode;
 use App\Repository\ConstraintRepository;
 use App\Repository\TeamRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -54,6 +52,7 @@ final class PeriodConstraintSelector
         private readonly ConstraintRepository $constraintRepository,
         private readonly TeamRepository $teamRepository,
         private readonly TeamTagResolver $tagResolver,
+        private readonly PlanVenueClosures $planVenueClosures,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -90,12 +89,13 @@ final class PeriodConstraintSelector
             }
         }
 
-        $disabledVenueIds = [];
-        foreach ($this->entityManager->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $venueOverride) {
-            if (VenuePeriodMode::DISABLED === $venueOverride->getMode()) {
-                $disabledVenueIds[$venueOverride->getVenueId()] = true;
-            }
-        }
+        // L'ÉTAT EFFECTIF (gymnases désactivés + jours effectivement fermés) vient de la MAISON
+        // UNIQUE `PlanVenueClosures` : le gate et le payload le partagent PAR CONSTRUCTION via la
+        // sélection, jamais deux calculs. `disabledVenueIds` (mode DISABLED) reste ce qui SORT un
+        // gymnase entier ; les jours fermés composés (incident × masque) servent au filtre créneaux.
+        $effectiveState = $this->planVenueClosures->effectiveStateForEntry($entry, $schedulePlanId);
+        $disabledVenueIds = $effectiveState['disabledVenueIds'];
+        $effectiveClosedWeekdaysByVenue = $effectiveState['effectiveClosedWeekdaysByVenue'];
 
         $activeTeamIds = [];
         $allSeasonTeamIds = [];
@@ -190,6 +190,7 @@ final class PeriodConstraintSelector
             partiallyAppliedForDisabledVenue: $partiallyAppliedForDisabledVenue,
             dated: $dated,
             disabledVenueIds: $disabledVenueIds,
+            effectiveClosedWeekdaysByVenue: $effectiveClosedWeekdaysByVenue,
             deactivatedTeamIds: $deactivatedTeamIds,
             sessionOverrides: $sessionOverrides,
         );
