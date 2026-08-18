@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Repository;
 
 use App\Entity\Constraint;
+use App\Enum\ConstraintFamily;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
 use Doctrine\Persistence\ManagerRegistry;
 
@@ -47,6 +48,31 @@ final class ConstraintRepository extends ServiceEntityRepository
             ->andWhere('c.calendarEntryId IS NULL')
             ->setParameter('clubId', $clubId)
             ->setParameter('seasonId', $seasonId)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * P2-38 — TOUTES les fermetures datées (`FACILITY`, portées par une entrée de calendrier)
+     * du club+saison, quelle que soit l'entrée porteuse. C'est la source de la transversalité
+     * des fermetures (service `PlanVenueClosures`) : une fermeture déclarée sur une entrée
+     * s'applique à tout plan de période dont la fenêtre la recoupe. Le tri déterministe
+     * (createdAt, id) fixe l'ordre des résumés quand plusieurs fermetures se recoupent.
+     *
+     * @return list<Constraint>
+     */
+    public function findDatedFacilityByClubSeason(string $clubId, string $seasonId): array
+    {
+        return $this->createQueryBuilder('c')
+            ->andWhere('c.clubId = :clubId')
+            ->andWhere('c.seasonId = :seasonId')
+            ->andWhere('c.calendarEntryId IS NOT NULL')
+            ->andWhere('c.family = :family')
+            ->setParameter('clubId', $clubId)
+            ->setParameter('seasonId', $seasonId)
+            ->setParameter('family', ConstraintFamily::FACILITY)
+            ->orderBy('c.createdAt', 'ASC')
+            ->addOrderBy('c.id', 'ASC')
             ->getQuery()
             ->getResult();
     }

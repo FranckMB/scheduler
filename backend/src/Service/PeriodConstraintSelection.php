@@ -26,9 +26,10 @@ final readonly class PeriodConstraintSelection
      *                                                                                               explicite du gestionnaire POUR la période ne disparaît jamais en silence (#8)
      * @param list<array{constraint: Constraint, venueId: string}> $partiallyAppliedForDisabledVenue CLUB+tag GARDÉES dont les lignes PAR ÉQUIPE meurent (clé de config sur gymnase
      *                                                                                               désactivé) : seule l'exclusivité du gymnase dédié survit — annoncé, pas muet
-     * @param list<Constraint>                                     $dated                            les datées BRUTES de la période (avant sélection) — la granularité JOUR des
-     *                                                                                               fermetures (`VenueClosureDays`) se calcule dessus, drops compris : une datée
-     *                                                                                               `venue_closed` ne produit aucune ligne payload mais ferme des jours
+     * @param list<Constraint>                                     $dated                            les datées BRUTES de la période (avant sélection). P2-38 : la granularité
+     *                                                                                               JOUR des fermetures ne se calcule PLUS ici mais dans `PlanVenueClosures`
+     *                                                                                               (transversale, toutes entrées confondues) — ce champ reste le jeu daté de
+     *                                                                                               CETTE entrée, à disposition des consommateurs de la sélection
      * @param array<string, true>                                  $disabledVenueIds                 gymnases DISABLED pour ce plan (sparse)
      * @param array<string, true>                                  $deactivatedTeamIds               équipes désactivées pour ce plan (sparse)
      * @param array<string, int>                                   $sessionOverrides                 teamId → séances/semaine surchargées pour la période

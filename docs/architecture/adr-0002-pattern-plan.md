@@ -100,6 +100,17 @@ Schedule (= Version)                    ← existant, recentré
 3. **1 Plan de type SEASON par saison.** Créé avec la saison (onboarding / transition N+1).
 4. **Deux plans ne se chevauchent jamais** (dates d'application), hors plan SEASON qui
    couvre tout par nature.
+
+   ⚠ **Amendement P2-38 (constat fondateur, 2026-08-18)** : cet invariant n'est **pas encore
+   tenu par le code** entre deux périodes RACINES — `CalendarEntryInput` ne valide que la
+   FORME des dates (`Assert\Date`), aucune garde de chevauchement n'existe à la création d'une
+   entrée ou d'un plan. La **PR1** de P2-38 (livrée, ci-dessous) ferme la conséquence la plus
+   dangereuse d'un tel chevauchement — une fermeture de gymnase datée s'applique désormais à
+   TOUT plan dont la fenêtre la recoupe, quelle que soit l'entrée qui la porte (priorité au
+   **périmètre le plus fin** : la reprise gouverne, l'incident y entre) — mais ne pose **aucune**
+   garde à la création. C'est l'objet de la **PR2 — « une seule planification par fenêtre »**,
+   qui reste ouverte (`specs/evolution/roadmap.md` P2-38) et s'appuiera sur le découpage
+   semaine/bloc déjà existant (`CalendarEntryStateProcessor`, `parent_entry_id` — P2-36).
 5. **Les réglages de période s'accrochent au Plan** (pas au déclencheur calendrier) :
    coches équipes (`TeamPeriodOverride`), contraintes gardées/enlevées
    (`ConstraintPeriodOverride`), sa grille de gymnases (`VenueTrainingSlot` scopé période —
@@ -614,6 +625,40 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   `UnprocessableEntityHttpException` (pas `ValidationException` d'API Platform, qui ne remonte pas
   son message dans le corps de la réponse — même patron que `AssertsSchedulePlanExistsTrait`,
   déjà en vigueur). Zéro migration, zéro moteur, `CONTRACT_VERSION` inchangé.
+- **Lot P2-38 — une fermeture de gymnase est un FAIT TRANSVERSAL (PR1 backend livrée 2026-08-18 ;
+  PR2 « une seule planification par fenêtre » et PR3 front restent ouvertes, roadmap)**, hors de
+  la numérotation A→D (post-ADR), une couche au-dessus de P2-37 : P2-37 dérivait correctement le
+  fermé-total d'un plan à partir des SEULES datées de SA PROPRE entrée porteuse
+  (`CalendarEntry::datedConstraintSourceId`) — insuffisant dès qu'une fermeture est déclarée sur
+  une AUTRE entrée dont la fenêtre recoupe le plan. Cas terrain BCCL : « Matéo en travaux »,
+  porté par la période racine (17/08→30/09), ne fermait pas la semaine de reprise du 17/08 dont
+  la mère est « Vacances d'Été » — le solveur pouvait placer des séances dans un gymnase en
+  travaux, en silence. `PlanVenueClosures::forEntry` lit désormais TOUTES les fermetures datées
+  (`venue_closed`) du club+saison (`ConstraintRepository::findDatedFacilityByClubSeason`),
+  chacune bornée à la fenêtre de SA PROPRE entrée porteuse pour le repli legacy — jamais à la
+  fenêtre du plan consommateur, sinon un `config` sans dates fermerait TOUT ce plan — puis
+  croisée avec la fenêtre du plan construit. `ScheduleConstraintBuilder::buildForPeriodPlan` et
+  `CalendarEntryConflictsController` dérivent désormais leurs jours fermés de cette MAISON
+  UNIQUE plutôt que de leur propre sélection de période — deux lecteurs qui divergeraient sur les
+  mêmes fermetures, c'est un planning que le payload autorise et que le garde refuse. Quatre
+  décisions fondateur : **(R1) le socle n'a pas de dates** — un plan SEASON n'est jamais touché
+  par une fermeture ; **(R4) la transversalité est bornée aux FERMETURES** (`venue_closed`) —
+  les autres contraintes datées gardent le périmètre par-entrée actuel, « on verra si un cas réel
+  se présente » ; **priorité au périmètre le plus fin** — la reprise gouverne, l'incident y entre
+  (pas l'inverse) ; **le marqueur de fraîcheur peut se déclencher même quand rien n'est
+  réellement impacté** — surmarquage conservateur assumé : une datée portée par l'entrée A périme
+  les COMPLETED du club+saison, y compris ceux d'autres entrées, épinglé par
+  `ConstraintChangeStaleScheduleTest`. NR : `Integration/ScheduleConstraintBuilderOverlayTest`
+  (le payload — cas réel + falsification hors-fenêtre), `Integration/Service/PlanVenueClosuresTest`
+  (la maison directement), `Integration/Service/OrphanPinGuardTest` (fermé-total transversal
+  inerte, fermeture partielle transversale toujours bloquante), `Integration/Service/ConstraintChangeStaleScheduleTest`
+  (le surmarquage). Zéro migration, `engine/**` non touché, `CONTRACT_VERSION` inchangé. **Ce que
+  cette PR NE fait PAS** : elle ne pose aucune garde à la CRÉATION d'un plan/d'une entrée —
+  l'invariant 4 ci-dessus reste NON tenu par le code entre deux périodes racines qui se
+  chevauchent ; c'est l'objet de la **PR2 — « une seule planification par fenêtre »** (reste
+  ouverte, roadmap P2-38), qui s'appuiera sur le découpage semaine/bloc déjà existant
+  (`CalendarEntryStateProcessor`, `parent_entry_id` — P2-36) plutôt que d'inventer un mécanisme
+  séparé. **PR3 (front)** reste ouverte aussi (surfaçage de la transversalité).
 
 ### Note de nommage (résolution de collision)
 

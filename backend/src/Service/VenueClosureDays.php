@@ -35,14 +35,23 @@ final class VenueClosureDays
     /**
      * DATES fermées par gymnase = incident ∩ fenêtre. La source PRÉCISE (radar).
      *
+     * P2-38 — la fenêtre de CLIP (`$windowStart`/`$windowEnd`) et la fenêtre de REPLI
+     * legacy (`$fallbackStart`/`$fallbackEnd`, null ⇒ = la fenêtre de clip) sont désormais
+     * distinctes. Une fermeture TRANSVERSALE portée par une AUTRE entrée (`PlanVenueClosures`)
+     * est bornée à SA propre entrée pour le repli legacy — jamais à la fenêtre du plan
+     * consommateur, sinon un `config` sans dates fermerait TOUT le plan (le défaut que P2-38
+     * ferme). Les appelants mono-fenêtre historiques laissent le repli à null : rien ne bouge.
+     *
      * @param iterable<Constraint> $datedConstraints
      *
      * @return array<string, array<string, true>> venueId => set de dates Y-m-d fermées
      */
-    public static function closedDatesByVenue(iterable $datedConstraints, DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd): array
+    public static function closedDatesByVenue(iterable $datedConstraints, DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd, ?DateTimeImmutable $fallbackStart = null, ?DateTimeImmutable $fallbackEnd = null): array
     {
         $windowStartDay = $windowStart->format('Y-m-d');
         $windowEndDay = $windowEnd->format('Y-m-d');
+        $fallbackStartDay = ($fallbackStart ?? $windowStart)->format('Y-m-d');
+        $fallbackEndDay = ($fallbackEnd ?? $windowEnd)->format('Y-m-d');
 
         $closed = [];
         foreach ($datedConstraints as $constraint) {
@@ -53,11 +62,12 @@ final class VenueClosureDays
             $config = $constraint->getConfig();
             $incidentStart = self::isoDate($config['startDate'] ?? null);
             $incidentEnd = self::isoDate($config['endDate'] ?? null);
-            // Fallback tous-jours si UNE des bornes manque/est invalide : un config
-            // partiel est malformé, on ferme toute la fenêtre (jamais sous-contraint).
+            // Fallback si UNE des bornes manque/est invalide : un config partiel est malformé,
+            // on ferme toute la fenêtre de REPLI (par défaut la fenêtre de clip ; pour une
+            // fermeture transversale, la fenêtre de SON entrée porteuse) — jamais sous-contraint.
             if (null === $incidentStart || null === $incidentEnd) {
-                $incidentStart = $windowStartDay;
-                $incidentEnd = $windowEndDay;
+                $incidentStart = $fallbackStartDay;
+                $incidentEnd = $fallbackEndDay;
             }
             $from = max($incidentStart, $windowStartDay);
             $to = min($incidentEnd, $windowEndDay);
@@ -92,8 +102,25 @@ final class VenueClosureDays
      */
     public static function fullyClosedVenueIds(iterable $datedConstraints, DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd): array
     {
-        $closed = self::closedDatesByVenue($datedConstraints, $windowStart, $windowEnd);
-        if ([] === $closed) {
+        return self::fullyClosedFromDates(
+            self::closedDatesByVenue($datedConstraints, $windowStart, $windowEnd),
+            $windowStart,
+            $windowEnd,
+        );
+    }
+
+    /**
+     * P2-38 — même dérivation « fenêtre entièrement couverte » que {@see fullyClosedVenueIds},
+     * mais à partir d'un ensemble de dates DÉJÀ MERGÉ (l'union de plusieurs entrées porteuses,
+     * calculée par {@see PlanVenueClosures}). La seule maison du calcul « fermé-total ».
+     *
+     * @param array<string, array<string, true>> $closedDatesByVenue venueId => set de dates Y-m-d
+     *
+     * @return list<string> venueIds entièrement fermés sur la fenêtre
+     */
+    public static function fullyClosedFromDates(array $closedDatesByVenue, DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd): array
+    {
+        if ([] === $closedDatesByVenue) {
             return [];
         }
         $windowDayCount = self::windowDayCount($windowStart, $windowEnd);
@@ -101,8 +128,8 @@ final class VenueClosureDays
             return [];
         }
         $fully = [];
-        foreach ($closed as $venueId => $dates) {
-            // Les dates de $closed sont bornées à la fenêtre et dédupliquées (clé de set),
+        foreach ($closedDatesByVenue as $venueId => $dates) {
+            // Les dates sont bornées à la fenêtre et dédupliquées (clé de set),
             // donc |dates| ≤ windowDayCount : l'égalité vaut couverture totale.
             if (\count($dates) >= $windowDayCount) {
                 $fully[] = $venueId;
@@ -121,8 +148,22 @@ final class VenueClosureDays
      */
     public static function closedWeekdaysByVenue(iterable $datedConstraints, DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd): array
     {
+        return self::closedWeekdaysFromDates(self::closedDatesByVenue($datedConstraints, $windowStart, $windowEnd));
+    }
+
+    /**
+     * P2-38 — jours ISO fermés à partir d'un ensemble de dates DÉJÀ MERGÉ (union des
+     * entrées porteuses, {@see PlanVenueClosures}). Même dérivation que
+     * {@see closedWeekdaysByVenue}, une seule maison.
+     *
+     * @param array<string, array<string, true>> $closedDatesByVenue venueId => set de dates Y-m-d
+     *
+     * @return array<string, array<int, true>> venueId => set de jours ISO fermés (1..7)
+     */
+    public static function closedWeekdaysFromDates(array $closedDatesByVenue): array
+    {
         $weekdays = [];
-        foreach (self::closedDatesByVenue($datedConstraints, $windowStart, $windowEnd) as $venueId => $dates) {
+        foreach ($closedDatesByVenue as $venueId => $dates) {
             foreach (array_keys($dates) as $date) {
                 $weekdays[$venueId][(int) new DateTimeImmutable($date)->format('N')] = true;
             }
@@ -146,10 +187,12 @@ final class VenueClosureDays
      *
      * @return list<array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}>
      */
-    public static function closureSummaries(iterable $datedConstraints, DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd): array
+    public static function closureSummaries(iterable $datedConstraints, DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd, ?DateTimeImmutable $fallbackStart = null, ?DateTimeImmutable $fallbackEnd = null): array
     {
         $windowStartDay = $windowStart->format('Y-m-d');
         $windowEndDay = $windowEnd->format('Y-m-d');
+        $fallbackStartDay = ($fallbackStart ?? $windowStart)->format('Y-m-d');
+        $fallbackEndDay = ($fallbackEnd ?? $windowEnd)->format('Y-m-d');
 
         $summaries = [];
         foreach ($datedConstraints as $constraint) {
@@ -159,10 +202,11 @@ final class VenueClosureDays
             $config = $constraint->getConfig();
             $incidentStart = self::isoDate($config['startDate'] ?? null);
             $incidentEnd = self::isoDate($config['endDate'] ?? null);
-            // Legacy / config nu : bornes = fenêtre de l'entrée (voir closedDatesByVenue).
+            // Legacy / config nu : bornes = fenêtre de REPLI (l'entrée porteuse ;
+            // par défaut la fenêtre de clip, voir closedDatesByVenue).
             if (null === $incidentStart || null === $incidentEnd) {
-                $incidentStart = $windowStartDay;
-                $incidentEnd = $windowEndDay;
+                $incidentStart = $fallbackStartDay;
+                $incidentEnd = $fallbackEndDay;
             }
             $from = max($incidentStart, $windowStartDay);
             $to = min($incidentEnd, $windowEndDay);

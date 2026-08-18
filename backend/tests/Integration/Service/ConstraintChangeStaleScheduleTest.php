@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Service;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\Constraint;
 use App\Entity\Schedule;
 use App\Entity\Season;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -15,6 +18,7 @@ use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
 use App\Service\ScheduleResultImporter;
 use App\Tests\ChoosesPlanVersionTrait;
+use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -44,6 +48,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 final class ConstraintChangeStaleScheduleTest extends KernelTestCase
 {
     use ChoosesPlanVersionTrait;
+    use ProvisionsPeriodPlanTrait;
     use TenantGucTrait;
 
     private EntityManagerInterface $em;
@@ -136,11 +141,63 @@ final class ConstraintChangeStaleScheduleTest extends KernelTestCase
         );
     }
 
+    /**
+     * P2-38 — une fermeture datée est TRANSVERSALE. Le marqueur de fraîcheur reste club+saison
+     * (surmarquage conservateur ASSUMÉ par le fondateur) : une datée portée par l'entrée A périme
+     * bien le COMPLETED du plan de l'entrée B, dont la fenêtre recoupe la fermeture. C'est le
+     * comportement souhaité — un « périmé » de trop coûte une régénération, un « périmé » manqué
+     * coûte la confiance.
+     */
+    public function testADatedClosureOnAnotherEntryMarksAPeriodPlanCompleted(): void
+    {
+        [$club, $season] = $this->seed();
+
+        // Entrée A (porteuse de la fermeture) et entrée B (dont on teste le plan COMPLETED).
+        $entryA = $this->periodEntry($club, $season, '2026-05-01', '2026-05-31');
+        $entryB = $this->periodEntry($club, $season, '2026-05-04', '2026-05-10');
+        $scheduleB = (new Schedule)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setName('Overlay B')->setStatus(ScheduleStatus::COMPLETED);
+        $this->linkSeededSchedule($scheduleB, $entryB->getId());
+        $this->em->flush();
+
+        self::assertFalse($this->reload($scheduleB)->isConstraintsChangedSinceGeneration(), 'neuf : rien n’a changé');
+
+        // Une fermeture datée `venue_closed` portée par l'ENTRÉE A, écrite via l'EntityManager nu.
+        $closure = (new Constraint)
+            ->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setName('Gym en travaux')
+            ->setScope(ConstraintScope::FACILITY)->setScopeTargetId('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
+            ->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)
+            ->setCalendarEntryId($entryA->getId());
+        $closure->setConfig(['type' => 'venue_closed', 'startDate' => '2026-05-05', 'endDate' => '2026-05-05']);
+        $this->em->persist($closure);
+        $this->em->flush();
+        $this->em->clear();
+
+        self::assertTrue(
+            $this->reload($scheduleB)->isConstraintsChangedSinceGeneration(),
+            'une fermeture portée par l’entrée A périme le COMPLETED du plan de l’entrée B (surmarquage conservateur assumé).',
+        );
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
         $this->importer = self::getContainer()->get(ScheduleResultImporter::class);
+    }
+
+    private function periodEntry(Club $club, Season $season, string $start, string $end): CalendarEntry
+    {
+        $entry = (new CalendarEntry)
+            ->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)
+            ->setTitle('Période ' . $start)
+            ->setStartDate(new DateTimeImmutable($start))->setEndDate(new DateTimeImmutable($end));
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        return $entry;
     }
 
     /** @return array{0: Club, 1: Season} */
