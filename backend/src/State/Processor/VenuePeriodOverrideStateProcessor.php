@@ -10,12 +10,14 @@ use App\Dto\VenuePeriodOverrideInput;
 use App\Entity\VenuePeriodOverride;
 use App\Enum\VenuePeriodMode;
 use App\Service\ManagementAccessGuard;
+use App\Service\PlanVenueClosures;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use App\Service\VenuePeriodGrid;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
  * Le MODE d'un gymnase pour une période (décision fondateur 2026-07-24).
@@ -47,6 +49,7 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         ManagementAccessGuard $managementAccessGuard,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly VenuePeriodGrid $venuePeriodGrid,
+        private readonly PlanVenueClosures $planVenueClosures,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -61,6 +64,8 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
      */
     protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
     {
+        $this->assertVenueNotFullyClosed($input->schedulePlanId, $input->venueId);
+
         return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
             /** @var VenuePeriodOverrideResource $output */
             // P4-34 — filet de la COURSE : le contrôle d'existence est un
@@ -82,7 +87,11 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
     protected function processPut(object $input, array $uriVariables, ?string $clubId, ?string $seasonId): object
     {
         $id = $uriVariables['id'] ?? null;
-        $before = \is_string($id) ? $this->entityManager->getRepository(VenuePeriodOverride::class)->find($id)?->getMode() : null;
+        $existing = \is_string($id) ? $this->entityManager->getRepository(VenuePeriodOverride::class)->find($id) : null;
+        if (null !== $existing) {
+            $this->assertVenueNotFullyClosed($existing->getSchedulePlanId(), $existing->getVenueId());
+        }
+        $before = $existing?->getMode();
 
         return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId, $before): object {
             /** @var VenuePeriodOverrideResource $output */
@@ -126,6 +135,12 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         $override = \is_string($id) ? $this->entityManager->getRepository(VenuePeriodOverride::class)->find($id) : null;
         $schedulePlanId = $override?->getSchedulePlanId();
         $venueId = $override?->getVenueId();
+        // P2-37 D2 — DELETE = « hériter » = réactiver le gymnase. Un gymnase entièrement fermé
+        // sur la fenêtre est INDISPONIBLE : supprimer l'override manuel posé AVANT la fermeture
+        // ne doit pas offrir une réactivation de façade. On refuse comme POST/PUT.
+        if (null !== $schedulePlanId && null !== $venueId) {
+            $this->assertVenueNotFullyClosed($schedulePlanId, $venueId);
+        }
         $wasBlank = VenuePeriodMode::BLANK === $override?->getMode();
 
         $this->entityManager->wrapInTransaction(function () use ($uriVariables, $clubId, $schedulePlanId, $venueId, $wasBlank): void {
@@ -193,6 +208,30 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): VenuePeriodOverrideResource
     {
         return VenuePeriodOverrideResource::fromEntity($entity);
+    }
+
+    /**
+     * P2-37 D2 — « non réversible » gardé côté serveur : un gymnase ENTIÈREMENT fermé sur la
+     * fenêtre du plan est indisponible ; aucun mode (VIERGE/DÉSACTIVÉ) ni retour à « hériter »
+     * (DELETE) n'a de sens dessus. L'indisponibilité totale est DÉRIVÉE (D1), jamais stockée :
+     * une fermeture éditée après coup rouvre donc le geste toute seule. On refuse en 422 en
+     * nommant la fermeture (titre + bornes) — même patron surfaçant le message que
+     * `assertSchedulePlanExists` (`UnprocessableEntityHttpException`), déjà en vigueur dans ce
+     * fichier via `AssertsSchedulePlanExistsTrait` ; le `ValidationException(string)` d'API
+     * Platform, lui, ne remonte pas son message dans le corps.
+     */
+    private function assertVenueNotFullyClosed(?string $schedulePlanId, ?string $venueId): void
+    {
+        if (null === $schedulePlanId || null === $venueId) {
+            return; // autres validations (ancre absente, plan de saison) traitées ailleurs
+        }
+        $closures = $this->planVenueClosures->forPlan($schedulePlanId);
+        if (!isset($closures['fullyClosedVenueIds'][$venueId])) {
+            return;
+        }
+        $label = PlanVenueClosures::describeForVenue($closures['summaries'], $venueId);
+
+        throw new UnprocessableEntityHttpException(\sprintf('Ce gymnase est indisponible sur toute la période%s : son mode ne se règle plus tant que la fermeture tient. Ajustez ou levez la fermeture pour le rendre de nouveau réglable.', null !== $label ? ' — ' . $label : ''));
     }
 
     /**

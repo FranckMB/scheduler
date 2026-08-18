@@ -14,15 +14,18 @@ import { slotKey } from "./reservationSlots";
  *
  * Fonction PURE : la règle se teste pour elle-même, pas à travers un écran (§7.2 pt 5).
  *
- * ⚠️ MIROIR DÉCLARÉ (régime 2, P4-88) — prédicat ÉTROIT, SOUS-ENSEMBLE ASSUMÉ du bloqueur
- * backend `App\Service\OrphanPinGuard`. Ce front ne fait QUE « triplet ∉ grille » ; le
- * bloqueur backend retire EN PLUS les gymnases désactivés et les jours de fermeture, et
- * couvre les verrous HARD, puis REFUSE la génération. Le front LISTE (pour supprimer), le
- * backend REFUSE — c'est LUI qui fait foi. Parité MÉCANIQUE du prédicat étroit :
- * `OrphanPinGuard::orphanTripletIds`, cas partagés `orphanReservations.parity.json`, gardée
- * par `OrphanReservationsMirrorParityTest`. Les cas où le bloqueur complet refuse en plus
- * (gymnase désactivé, fermeture) y sont marqués comme divergence VOULUE (« front: non,
- * backend complet: oui »). Ce module figure au registre `FrontRederivationRegistryTest`.
+ * ⚠️ MIROIR DÉCLARÉ (régime 2, P4-88) — DEUX prédicats, tous deux en parité MÉCANIQUE avec
+ * `App\Service\OrphanPinGuard` (cas partagés `orphanReservations.parity.json`, gardés par
+ * `OrphanReservationsMirrorParityTest`). Ce module figure au registre `FrontRederivationRegistryTest`.
+ *
+ *  - {@link orphanReservationIds} — prédicat ÉTROIT « triplet ∉ grille » (miroir de
+ *    `OrphanPinGuard::orphanTripletIds`). Sert l'écran « Réserver » (une réservation dont le
+ *    créneau a bougé n'a plus de case).
+ *  - {@link unservedReservationIds} — prédicat LARGE « réservation NON SERVIE » (P2-37 D5,
+ *    miroir de `OrphanPinGuard::unservedReservationIds`) : triplet ∉ grille OU gymnase hors
+ *    service (désactivé / entièrement fermé) OU jour fermé. Sert le récap, qui ALERTE le
+ *    gestionnaire (décision fondateur : on n'efface rien passivement, on alerte). Le backend
+ *    reste la vérité : il REFUSE la réservation à la source (D3) et l'escamote du payload.
  */
 export function orphanReservationIds(reservations: Reservation[], slots: VenueTrainingSlot[]): Set<string> {
   const grid = new Set(slots.map((s) => slotKey(s.venueId, s.dayOfWeek, s.startTime)));
@@ -30,6 +33,33 @@ export function orphanReservationIds(reservations: Reservation[], slots: VenueTr
   return new Set(
     reservations
       .filter((r) => !grid.has(slotKey(r.venueId, r.dayOfWeek, r.startTime)))
+      .map((r) => r.id),
+  );
+}
+
+/**
+ * P2-37 D5 — les réservations qu'AUCUNE génération de la période ne servira. Union de trois
+ * causes : gymnase hors service (`disabledVenueIds` = désactivés ET entièrement fermés sur la
+ * fenêtre) · couple (gymnase, jour) fermé (`closedWeekdaysByVenue`, jours ISO 1..7) · triplet
+ * ∉ grille. Miroir MÉCANIQUE de `OrphanPinGuard::unservedReservationIds` (parité).
+ */
+export function unservedReservationIds(
+  reservations: Reservation[],
+  slots: VenueTrainingSlot[],
+  disabledVenueIds: string[],
+  closedWeekdaysByVenue: Record<string, number[]>,
+): Set<string> {
+  const grid = new Set(slots.map((s) => slotKey(s.venueId, s.dayOfWeek, s.startTime)));
+  const disabled = new Set(disabledVenueIds);
+
+  return new Set(
+    reservations
+      .filter(
+        (r) =>
+          disabled.has(r.venueId) ||
+          (closedWeekdaysByVenue[r.venueId] ?? []).includes(r.dayOfWeek) ||
+          !grid.has(slotKey(r.venueId, r.dayOfWeek, r.startTime)),
+      )
       .map((r) => r.id),
   );
 }

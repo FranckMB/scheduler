@@ -7,6 +7,7 @@ namespace App\Tests\Integration\Api;
 use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Constraint;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
@@ -17,6 +18,9 @@ use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
@@ -68,6 +72,8 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
     private Venue $venueB;
 
     private string $planId;
+
+    private string $entryId;
 
     private ?Schedule $periodSchedule = null;
 
@@ -192,6 +198,62 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         // de l'index unique. L'édition passe par PUT.
         $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
         self::assertResponseStatusCodeSame(422);
+    }
+
+    // ── P2-37 D2 : un gymnase entièrement fermé sur la fenêtre n'est plus réglable ──
+
+    public function testPostAModeOnAFullyClosedVenueIsRefused(): void
+    {
+        // Fermeture couvrant TOUTE la fenêtre 2025-12-22 → 2025-12-28 : le gymnase est indisponible.
+        $this->closeVenueForWholeWindow($this->venueA, 'Fermeture de fin d’année');
+
+        $body = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(422);
+        self::assertStringContainsString('Fermeture de fin d’année', (string) ($body['detail'] ?? ''), 'le refus nomme la fermeture');
+    }
+
+    public function testPutAModeOnAFullyClosedVenueIsRefused(): void
+    {
+        // L'override existe (posé quand le gymnase était encore ouvert)…
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(201);
+        // …puis la fermeture totale tombe → le PUT est refusé.
+        $this->closeVenueForWholeWindow($this->venueA, 'Réquisition');
+
+        $this->client->request('PUT', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers(), json_encode([
+            'schedulePlanId' => $this->planId,
+            'venueId' => $this->venueA->getId(),
+            'mode' => 'BLANK',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testDeleteAnOverrideOnAFullyClosedVenueIsRefused(): void
+    {
+        // Un override manuel posé AVANT la fermeture ne doit pas offrir une réactivation de
+        // façade : DELETE = « hériter » = réactiver, refusé tant que la fermeture tient.
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(201);
+        $this->closeVenueForWholeWindow($this->venueA, 'Réquisition');
+
+        $this->client->request('DELETE', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers());
+        self::assertResponseStatusCodeSame(422);
+
+        $this->em->clear();
+        self::assertNotNull(
+            $this->em->getRepository(VenuePeriodOverride::class)->find($created['id']),
+            'l’override survit : la réactivation de façade est refusée',
+        );
+    }
+
+    public function testAPartialClosureStillLetsTheVenueBeConfigured(): void
+    {
+        // Contre-épreuve : une fermeture PARTIELLE (un seul jour) ne rend pas le gymnase
+        // entièrement indisponible — le réglage reste permis.
+        $this->closeVenue($this->venueA, 'Un seul jour', '2025-12-24', '2025-12-24');
+
+        $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(201);
     }
 
     public function testCollectionIsScopedToTheRequestedPeriod(): void
@@ -541,7 +603,9 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         $this->em->flush();
 
         // La période et son plan naissent du geste ; la naissance copie la grille.
-        $this->planId = $this->planIdOf($this->period('Vacances', '2025-12-22', '2025-12-28'));
+        $entry = $this->period('Vacances', '2025-12-22', '2025-12-28');
+        $this->entryId = $entry->getId();
+        $this->planId = $this->planIdOf($entry);
 
         $this->periodSchedule = null;
         $this->token = $container->get(JWTTokenManagerInterface::class)->create($user);
@@ -600,6 +664,27 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         $this->em->flush();
 
         return $venue;
+    }
+
+    /** Ferme le gymnase sur TOUTE la fenêtre de la période (indisponibilité totale, D1). */
+    private function closeVenueForWholeWindow(Venue $venue, string $title): void
+    {
+        $this->closeVenue($venue, $title, '2025-12-22', '2025-12-28');
+    }
+
+    /** Une fermeture datée `venue_closed` sur ce gymnase, rattachée à l'entrée de la période. */
+    private function closeVenue(Venue $venue, string $title, string $startDate, string $endDate): void
+    {
+        $constraint = (new Constraint)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setName($title)
+            ->setScope(ConstraintScope::FACILITY)->setScopeTargetId($venue->getId())
+            ->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)
+            ->setCalendarEntryId($this->entryId);
+        $constraint->setConfig(['type' => 'venue_closed', 'startDate' => $startDate, 'endDate' => $endDate]);
+        $this->em->persist($constraint);
+        $this->em->flush();
+        $this->em->clear();
     }
 
     private function seasonSlot(Venue $venue, int $dayOfWeek, string $startTime): VenueTrainingSlot

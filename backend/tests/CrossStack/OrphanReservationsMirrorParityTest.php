@@ -47,14 +47,41 @@ final class OrphanReservationsMirrorParityTest extends TestCase
         }
     }
 
-    /** @return list<array{name: string, slots: list<array<string, mixed>>, reservations: list<array<string, mixed>>, orphanIds: list<string>}> */
+    /**
+     * P2-37 D5 — le prédicat LARGE « réservation NON SERVIE » (gymnase hors service / jour
+     * fermé / triplet ∉ grille). Miroir de `unservedReservationIds.ts`. Les cas `divergence`
+     * du fichier valent ici : l'étroit dit non, le large dit oui.
+     */
+    public function testBackendBroadUnservedPredicateMatchesTheSharedCases(): void
+    {
+        foreach ($this->cases() as $case) {
+            /** @var list<string> $expected */
+            $expected = $case['unservedIds'] ?? $case['orphanIds'];
+            sort($expected);
+            $actual = OrphanPinGuard::unservedReservationIds(
+                $case['reservations'],
+                $case['slots'],
+                $case['disabledVenueIds'] ?? [],
+                $case['closedWeekdaysByVenue'] ?? [],
+            );
+            sort($actual);
+
+            self::assertSame($expected, $actual, \sprintf(
+                "PARITÉ ROMPUE (« %s ») : le prédicat LARGE backend ne rend pas les réservations non servies partagées.\n"
+                . 'Front `unservedReservationIds` et backend `OrphanPinGuard::unservedReservationIds` doivent coïncider.',
+                (string) $case['name'],
+            ));
+        }
+    }
+
+    /** @return list<array{name: string, slots: list<array<string, mixed>>, reservations: list<array<string, mixed>>, orphanIds: list<string>, unservedIds?: list<string>, disabledVenueIds?: list<string>, closedWeekdaysByVenue?: array<string, list<int>>}> */
     private function cases(): array
     {
         $raw = file_get_contents(self::CASES);
         self::assertIsString($raw, 'Illisible : ' . self::CASES);
         $decoded = json_decode($raw, true, 512, \JSON_THROW_ON_ERROR);
         self::assertIsArray($decoded);
-        /** @var list<array{name: string, slots: list<array<string, mixed>>, reservations: list<array<string, mixed>>, orphanIds: list<string>}> $list */
+        /** @var list<array{name: string, slots: list<array<string, mixed>>, reservations: list<array<string, mixed>>, orphanIds: list<string>, unservedIds?: list<string>, disabledVenueIds?: list<string>, closedWeekdaysByVenue?: array<string, list<int>>}> $list */
         $list = $decoded['cases'] ?? [];
         self::assertNotEmpty($list, 'orphanReservations.parity.json ne porte plus aucun cas.');
 
