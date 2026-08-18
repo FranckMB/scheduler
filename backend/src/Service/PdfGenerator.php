@@ -238,7 +238,7 @@ class PdfGenerator
         // Section 2 = the "team × day" matrix, on its own page(s). Only present on a
         // multi-venue export — the same condition that set $multiSection.
         if ($multiSection) {
-            $body .= $this->buildMatrixSection($data);
+            $body .= $this->buildMatrixSection($data, $venueId);
         }
 
         return $this->wrapDocument($title, htmlspecialchars($scopeLabel), htmlspecialchars($planningName), $body, $logoImg);
@@ -438,9 +438,21 @@ class PdfGenerator
      * sheet sorts by category then name. ⚠ Le rang ORDONNE mais ne s'AFFICHE PLUS (P4-106) :
      * l'export part au gymnase et aux familles, la priorisation interne reste au gestionnaire.
      *
-     * Assumes hasMatrix($data) is true (caller-guarded): it still renders every season team.
+     * ⚠ **Les LIGNES dépendent de la PORTÉE** (P3-20). Sur un export « tous les gymnases », ce
+     * sont TOUTES les équipes de la saison : une équipe sans séance est un trou du planning, la
+     * première chose que le gestionnaire doit voir, jamais une ligne masquée. Sur un export
+     * limité à UN gymnase, seules les équipes qui y ont une séance : `ScheduleExportData` porte
+     * toujours les équipes du club+saison quelle que soit la portée, donc les lister toutes
+     * afficherait des lignes vides MENSONGÈRES — une équipe qui s'entraîne dans un autre
+     * gymnase passerait pour une équipe sans entraînement, sur un document remis aux familles.
+     * Le cas n'existait pas avant P3-20 (la matrice ne s'ouvrait qu'en multi-gymnases, donc
+     * jamais sur un export scopé) ; il existe depuis qu'on peut la DEMANDER par la vue « club ».
      */
-    private function buildMatrixSection(ScheduleExportData $data): string
+    // ⚠ Le paramètre s'appelle `$scopeVenueId`, PAS `$venueId` : le corps de cette méthode
+    // réutilise déjà `$venueId` comme variable de boucle sur les placements — un paramètre
+    // homonyme y était ÉCRASÉ par le dernier gymnase parcouru, et la portée lue plus bas
+    // n'était plus celle de l'appelant (attrapé par les tests, jamais visible à l'œil).
+    private function buildMatrixSection(ScheduleExportData $data, ?string $scopeVenueId = null): string
     {
         $venueName = static fn (string $id): string => $data->venues[$id]['name'] ?? '';
         $venueColor = static fn (string $id): string => $data->venues[$id]['color'] ?? '#666666';
@@ -468,7 +480,10 @@ class PdfGenerator
         // plus any placement whose team is missing from teamNames (anomaly) so no slot vanishes.
         /** @var array<string, array{name:string, tierRank:int, tierOrder:int}> $teams */
         $teams = [];
-        $teamIds = array_keys($data->teamNames + $matrix);
+        // Portée réduite → seules les équipes RÉELLEMENT placées ici (cf. docblock) ; portée
+        // complète → toutes celles de la saison, plus toute équipe placée mais absente de la
+        // liste (anomalie), pour qu'aucun placement ne s'évapore.
+        $teamIds = null === $scopeVenueId ? array_keys($data->teamNames + $matrix) : array_keys($matrix);
         foreach ($teamIds as $teamId) {
             $rank = $data->teamRanks[$teamId] ?? ['label' => '', 'name' => '', 'tierRank' => \PHP_INT_MAX, 'tierOrder' => \PHP_INT_MAX];
             // Le rang ne sert plus qu'à ORDONNER (P4-106) : ni label ni sous-titre ne sont

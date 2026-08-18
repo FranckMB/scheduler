@@ -320,6 +320,11 @@ Messenger ; handler backend `ExportPdfHandler`).
   (`App\Export\ExportView`, hors du contrôleur pour être vérifiable sans base) : inconnue → **400**,
   jamais un repli silencieux. Elle porte aussi un **jeton dans le nom de fichier** (`-club`) —
   `useScheduleExport` compare ce suffixe pour ne pas saisir l'export d'un autre onglet.
+  ⚠ **Les lignes de la matrice suivent la PORTÉE** : sur « tous les gymnases », toutes les
+  équipes de la saison (une équipe sans séance est le trou qu'il faut voir) ; sur **un seul
+  gymnase**, seules les équipes qui y sont placées — les données d'export portent toujours
+  toutes les équipes du club, donc les lister toutes ferait passer une équipe qui s'entraîne
+  ailleurs pour une équipe sans entraînement.
 - Les fichiers produits sont servis sous **`/exports`** : proxifié par Vite en dev
   (`vite.config.ts`) et par le Nginx frontend en prod (`docker/frontend/nginx.conf`).
 
