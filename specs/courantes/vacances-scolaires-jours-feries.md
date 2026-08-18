@@ -1,6 +1,6 @@
 # Vacances scolaires & jours fériés — référentiels calendaires
 
-Last verified @ 2026-07-16 (imports automatiques SA3-C)
+Last verified @ 2026-08-19 (**rotation de fraîcheur** — premier passage du mécanisme ajouté au skill `documentation-update` : ce fichier portait le plus vieux stamp du dépôt, un mois sans vérification. Re-vérifié CONTRE LE CODE : les 13 codes de `SchoolZoneResolver::ZONES` ✓ · la règle du mapper (« > 3 jours ouvrés ET libellé ne commençant pas par `Pont` », `FrenchSchoolCalendarMapper:80`) ✓ · les deux routes `GET` et leur déclaration dans `CustomRoutesOpenApiFactory` ✓ · la cadence trimestrielle 1er janvier/avril/juillet/octobre à 04:00 et 04:30 (`AdminJobSchedule::mostRecentDueAt`, ancres `[10, 7, 4, 1]`) ✓. **DEUX affirmations étaient FAUSSES** : (1) « fallback JSON offline pour les fériés : non construit » — `SeedPublicHolidaysCommand` existe et lit `data/public-holidays.fr-national.json` ; (2) « le bouton superadmin reste différé » — `POST /api/admin/jobs/{key}/run` existe et les deux imports portent `manualTriggerAllowed: true`) ; précédemment : 2026-07-16 (imports automatiques SA3-C)
 
 Feed d'affichage du cockpit (accueil temporel) : vacances scolaires de la zone du club + jours fériés applicables. **Display-only — jamais consommé par le solveur** : si un férié ou une vacance gêne un entraînement, le gestionnaire pose une période (`CalendarEntry` `closure`/`holiday`), il n'y a aucune règle implicite.
 
@@ -25,6 +25,7 @@ La zone du club (`Club.schoolZone`) est **dérivée du code FFBB** au register +
 |----------|--------|---------|-------|
 | `app:school-holidays:import` | API officielle Éducation nationale (ODS `data.education.gouv.fr/api/explore/v2.1`, dataset `fr-en-calendrier-scolaire`) | année scolaire courante + N+1 | pagination ODS ; filtre `population="-"` (vacances de trimestre) **or** `"Élèves"` (été côté élèves — l'été « Enseignants » est écarté) |
 | `app:school-holidays:seed` | JSON versionné dans le repo | — | **fallback hors-ligne**, même upsert |
+| `app:public-holidays:seed` | JSON versionné dans le repo (`data/public-holidays.fr-national.json`) | — | **fallback hors-ligne** national, même upsert — la parité avec le seed vacances, jadis annoncée « non faite », est faite |
 | `app:public-holidays:import` | API etalab `calendrier.api.gouv.fr/jours-feries/{zone}.json` (metropole + 9 territoires) | année civile courante + N+1 | métropole → `NATIONAL` ; extras territoriaux = **diff territoire − métropole** tagués du code territoire ; territoire non publié par etalab → warn + skip (saisie manuelle en attendant) |
 
 Règles de mapping vacances (`FrenchSchoolCalendarMapper`) :
@@ -34,7 +35,9 @@ Règles de mapping vacances (`FrenchSchoolCalendarMapper`) :
 Les deux imports restent appelables manuellement et sont aussi planifiés par SA3-C le
 1er janvier, avril, juillet et octobre (`Europe/Paris`) : vacances à 04:00, jours fériés
 à 04:30. Le tick minute rattrape le dernier créneau manqué après un arrêt et déduplique
-chaque créneau. Le bouton superadmin reste différé.
+chaque créneau. **Les deux imports sont déclenchables à la main depuis la console superadmin**
+(`POST /api/admin/jobs/{key}/run` — `AdminJobCatalog` les déclare `manualTriggerAllowed: true`,
+et la route refuse tout job qui ne le porte pas).
 
 ## Lecture (API)
 
@@ -51,7 +54,6 @@ Validation de fenêtre (quand elle s'exécute — c.-à-d. toujours pour `public
 
 - **Alsace-Moselle** (Vendredi Saint / 26 décembre) : départements 57/67/68 en zone B sans zone fériés dédiée.
 - **Saint-Barthélemy / Saint-Martin** (977/978) : hors `SchoolZoneResolver::ZONES`.
-- **Fallback JSON offline pour les fériés** : non construit (parité avec le seed vacances non faite).
 
 ## Rendu cockpit (frontend)
 

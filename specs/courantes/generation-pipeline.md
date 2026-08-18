@@ -1,6 +1,6 @@
 # Génération d'un planning — conduite normalisée (bout en bout)
 
-Last verified @ 2026-08-08 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-01 par P4-38/39 : bandeau de période, score retiré de l'écran, diagnostics contextuels)
+Last verified @ 2026-08-19 (**rotation de fraîcheur**, 2ᵉ fichier de la passe. Re-vérifié contre le code : la chaîne `POST /api/schedules/{id}/generate` → Messenger → moteur → import → Mercure ✓ · le topic `club:{clubId}:schedule:{scheduleId}` ✓ · le verrou par club ✓. **UNE affirmation était FAUSSE, et elle envoyait au mauvais endroit** : « aucun abonné Mercure côté frontend, personne ne consomme le flux » — `frontend/src/shared/lib/scheduleStream.ts` (FRT-04) ouvre UN EventSource par session abonné au template du club, authentifié par cookie httpOnly via `GET /api/mercure/auth`. Un dev qui diagnostiquait une génération « qui ne s'affiche pas » était explicitement dissuadé de regarder là. Nuance conservée : le flux est BEST-EFFORT et le polling ralentit au lieu de mourir) ; précédemment : 2026-08-08 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-01 par P4-38/39)
 
 > Vérité courante. Décrit ce qui **doit** se passer, zone par zone, quand un
 > gestionnaire lance une génération : ce que fait le frontend, ce que fait le
@@ -46,11 +46,16 @@ via `POST /generate` ; backend → frontend via Mercure SSE `club:{clubId}:sched
 - **Attente** (`features/wizard/steps/GenerateStep.tsx` + `useScheduleStatus`) : poll
   `GET /api/schedules/{id}` tant que le statut ∈ `{PENDING, GENERATING}`. Garde-fou
   client `TIMEOUT_MS = 5 min` → sinon écran d'échec + réessai.
-- **Aucun abonné Mercure côté frontend.** Le backend publie bien sur
-  `club:{clubId}:schedule:{scheduleId}`, mais **personne ne consomme le flux** : l'UI **poll**
-  (`useScheduleStatus` pendant la génération, `useSchedules` toutes les 2,5 s tant qu'une version
-  est en vol). Le canal reste ouvert pour un futur abonnement — ne pas diagnostiquer une
-  génération « qui ne s'affiche pas » en cherchant un bug SSE.
+- **Le frontend CONSOMME désormais Mercure** (FRT-04) — `shared/lib/scheduleStream.ts` ouvre
+  **UN EventSource par session**, abonné au TEMPLATE du club (`club:{clubId}:schedule:{id}` tel
+  quel : le hub matche chaque topic exact contre lui), donc toutes les générations du club
+  arrivent sur la même connexion sans connaître leurs ids à l'avance. L'authentification est un
+  **cookie httpOnly** posé par `GET /api/mercure/auth` — le JS ne voit jamais le jeton hub — et la
+  réponse porte le `topicTemplate`, seule source du clubId côté front (le tenant est résolu
+  serveur). ⚠ **Le flux reste BEST-EFFORT** : à réception on **invalide** les caches react-query,
+  on ne recopie jamais le payload dedans — le serveur reste la source de vérité — et **le polling
+  ne meurt pas, il ralentit** tant que le flux est connecté. C'est donc un accélérateur, pas un
+  chemin critique : une génération s'affiche même hub éteint.
 - **Affichage** : dès qu'un schedule est `COMPLETED`, `GenerateStep` bascule sur
   `<PlanningPage embedded />`. La page choisit le plan à ouvrir via
   `pickLandingScheduleId` (`features/planning/PlanningPage.tsx`) : **jamais un overlay
