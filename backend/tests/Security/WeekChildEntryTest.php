@@ -135,11 +135,28 @@ final class WeekChildEntryTest extends WebTestCase
 
         // Hors de la fenêtre mère → 422 (elle hériterait les datées sans raison).
         $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Hors mère', '2026-12-07', '2026-12-13');
-        // Chevauche la semaine 1 (même partiellement) → 422, pas seulement le même lundi.
-        $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Chevauche', '2026-11-10', '2026-11-16');
-        // Une « semaine » de 2 mois → 422 : elle hériterait le venue_closed
-        // date-blind sur toute sa fenêtre (revue #262 round 2).
-        $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Deux mois', '2026-11-16', '2027-01-10');
+        // Chevauche la semaine 1 (même partiellement) → 422, pas seulement le même lundi :
+        // un SEGMENT de 2 semaines lun→dim qui recoupe la semaine 1 (P2-41).
+        $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Chevauche', '2026-11-09', '2026-11-22');
+        // Un segment qui DÉBORDE les semaines couvrant la mère → 422 : il hériterait le
+        // venue_closed date-blind hors de sa portée (borne d'enveloppe, P2-41).
+        $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Déborde', '2026-11-16', '2027-01-10');
+    }
+
+    /**
+     * P2-41 — un segment couvre des semaines calendaires ENTIÈRES : début un lundi, fin
+     * un dimanche (hors clamp saison). Des bornes qui ne tombent pas lun/dim → 422 nommé.
+     */
+    public function testASegmentMustStartOnMondayAndEndOnSunday(): void
+    {
+        [$user] = $this->createClubWithSeason();
+        // Mère de 3 semaines : enveloppe lun 09/11 → dim 29/11, largement dans la saison.
+        $motherId = $this->postPeriod($user, 'closure', 'Travaux longs', '2026-11-09', '2026-11-29');
+
+        // Début un mardi (10/11) → 422 (ni lundi ni clamp saison).
+        $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Début mardi', '2026-11-10', '2026-11-15');
+        // Fin un samedi (21/11) → 422 (ni dimanche ni clamp saison).
+        $this->postWeekChildExpecting(422, $user, $motherId, 'closure', 'Fin samedi', '2026-11-09', '2026-11-21');
     }
 
     public function testABlockGeneratedMotherRefusesWeekSplitting(): void
