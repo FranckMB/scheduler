@@ -1,4 +1,4 @@
-Last verified @ 2026-08-14 (graduation : le lot P5-6 est LIVRÉ en 3 PR — le cadrage devient la spec courante)
+Last verified @ 2026-08-19 (**rotation de fraîcheur** — le doc SE CONTREDISAIT : son en-tête annonce « LIVRÉ, D1-D6 implémentées » pendant que son §1 affirmait encore, au présent, « aucun canal utilisateur : zéro mécanisme de feedback in-app, zéro endpoint », « pas de request-id », « Monolog absent ». Vérifié au code : `FeedbackController` expose `POST /api/feedback` (et `rate_limiter.yaml` le throttle par utilisateur), `RequestIdListener` + `RequestIdMiddleware` existent, Monolog est dans `composer.json`. C'est le défaut typique d'un CADRAGE gradué en spec courante : son état des lieux d'avant-livraison reste au présent et se lit comme l'état actuel. §1 est donc explicitement daté et marqué HISTORIQUE — il garde sa valeur, qui est d'expliquer POURQUOI le canal a été construit ainsi) ; précédemment : 2026-08-14 (graduation : le lot P5-6 est LIVRÉ en 3 PR)
 
 # Canal signalement, support & reproduction
 
@@ -9,7 +9,13 @@ Last verified @ 2026-08-14 (graduation : le lot P5-6 est LIVRÉ en 3 PR — le c
 > jetable), sans sur-ingénierie tickets. Ce doc pose l'état des lieux vérifié, les options et
 > les décisions à trancher. Les décisions D1-D6 + §3bis/§3ter ci-dessous sont IMPLÉMENTÉES.
 
-## 1. État des lieux (vérifié au code, 2026-08-13)
+## 1. État des lieux AVANT le lot (vérifié au code le 2026-08-13 — **historique**)
+
+> ⚠ **Cette section décrit le dépôt AVANT la livraison de P5-6, et le RESTE** : elle explique
+> pourquoi le canal a été construit ainsi. Ne la lisez pas comme l'état courant — le « ce qui
+> manque » ci-dessous **a été comblé** (rotation de fraîcheur du 2026-08-19 : `POST /api/feedback`
+> existe — `FeedbackController` —, le request-id aussi — `RequestIdListener` +
+> `RequestIdMiddleware` —, et Monolog est installé). L'état COURANT est décrit à partir du §2.
 
 **Ce qui existe déjà et qui est FORT — la reproduction d'une génération :**
 - `Schedule::$snapshotData` : le payload engine **complet et figé**, écrit AVANT l'appel moteur,
@@ -26,7 +32,7 @@ Last verified @ 2026-08-14 (graduation : le lot P5-6 est LIVRÉ en 3 PR — le c
   n'existe pas). Le jour où P5-1 est fait, les erreurs techniques remontent seules — le canal
   signalement n'a PAS à transporter les stack traces.
 
-**Ce qui manque :**
+**Ce qui manquait alors** (comblé depuis, cf. l'avertissement ci-dessus) **:**
 - **Aucun canal utilisateur** : zéro mécanisme de feedback in-app, zéro endpoint, le seul
   contact est le `mailto:` placeholder de la landing (hors app).
 - **Aucune corrélation** : pas de request-id (rien ne relie une erreur front, une entrée Sentry

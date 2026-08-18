@@ -1,6 +1,6 @@
 # Testing Strategy — Amateo
 
-Last verified @ 2026-08-17 (statut posé ce jour : titre recalé ClubScheduler → Amateo, P5-15 — aucune autre vérification de fond faite ce passage) ; précédemment 2026-08-11 (recalé ce jour : spec `modal-reachability` + socle superadmin e2e, préflight en DEUX endroits — Makefile et step CI ; précédemment 2026-08-08 : graphe des jobs + `needs` re-vérifiés contre `.github/workflows/ci.yml` ; la liste des blocking-tests a été **retirée d'ici** — elle vit en `CLAUDE.md` §4, ses deux copies ayant dérivé, audit DOC-26)
+Last verified @ 2026-08-19 (**rotation de fraîcheur** — le stamp précédent avouait « aucune autre vérification de fond faite » ; c'est fait. Graphe des jobs confronté à `ci.yml` : la chaîne `lint`+`phpstan` → `blocking-tests` → `{unit-tests, e2e}` et `{blocking-tests, engine-tests}` → `build-docker` est JUSTE ✓. **Le COMPTE était faux** : « trois jobs isolés sans `needs` » alors qu'il y en a SEPT — manquaient `secrets-scan`, `semgrep`, `engine-semantics` et `smoke-tests`, qui sont pourtant des required checks de `main` : un lecteur en concluait qu'ils n'existaient pas ou ne bloquaient rien. `engine-perf` était donné « main only » sans dire qu'il dépend d'`engine-tests` — corrigé)
 
 Scope: backend + engine. The rebuilt frontend has its own tests (Vitest + RTL unit/integration with `vi.mock`, Playwright e2e in `frontend/tests/e2e`, and the container screenshot pipelines). Companion to [`/CLAUDE.md`](../../CLAUDE.md) §4 and [`../project-map.md`](../project-map.md).
 
@@ -19,10 +19,14 @@ blocking-tests ─────────────────────�
 frontend            (lint + tsc -b + vite build + vitest) — parallel, no needs, does NOT gate build-docker
 dependency-audit    (composer/npm/pip audit, A18)          — parallel, no needs, does NOT gate build-docker
 rector              (dry-run, style gate P4-24)            — parallel, no needs, gates NOTHING… but BLOCKS the merge
-engine-perf         (dense solve < 60 s)                   — main only
+secrets-scan        (gitleaks)                             — parallel, no needs, BLOCKS the merge
+semgrep             (security gate)                        — parallel, no needs, BLOCKS the merge
+engine-semantics    (groupe `contract`, cross-stack)       — parallel, no needs, BLOCKS the merge
+smoke-tests         (5 smokes sémantiques)                 — parallel, no needs, BLOCKS the merge
+engine-perf         (dense solve < 60 s)                   — needs engine-tests ; main only
 ```
 
-**Trois jobs isolés sans `needs`** (`rector`, `dependency-audit`, `frontend`) : un signal qui peut
+**SEPT jobs isolés sans `needs`** — `frontend`, `dependency-audit`, `rector`, `secrets-scan`, `semgrep`, `engine-semantics`, `smoke-tests` (compte re-vérifié contre `ci.yml` le 2026-08-19 ; le doc en annonçait TROIS, oubliant les quatre derniers, qui sont pourtant des **required checks** de `main`) : un signal qui peut
 rougir sur un commit qui n'a rien changé (une règle Rector élargie par un bump, une advisory publiée
 ce matin) ne doit pas prendre en otage `blocking-tests` — donc l'isolation tenant/RLS — ni
 `build-docker`, donc la livraison d'un correctif de sécurité. **Rougir ≠ ne rien bloquer** : `rector`
