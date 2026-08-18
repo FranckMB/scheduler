@@ -9,7 +9,7 @@ namespace App\Deletion;
  * son id et sa portée (club + saison). Les entités sont **saison-scopées** et partagées par
  * tous les plannings — il n'existe pas de « suppression pour un seul planning » (P3-16).
  */
-final readonly class DeletionTarget
+readonly class DeletionTarget
 {
     public function __construct(
         public string $id,

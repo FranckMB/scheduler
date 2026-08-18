@@ -1,4 +1,4 @@
-# Roadmap (46) — ce qui reste à faire
+# Roadmap (45) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
@@ -69,7 +69,7 @@
 > Pas de numérotation de passe : avec plusieurs PR mergées en parallèle, deux passes partent du même
 > numéro ou en sautent — seule la DATE veut dire quelque chose.
 
-**Re-vérifié le 2026-08-18** — TOP 3 INCHANGÉ. Journée dense côté terrain (P2-37 et P2-38 soldés, les trois lots de polish livrés, le seed recalé), mais rien qui déplace le podium : ce sont des correctifs d'usage, pas la fenêtre commerciale de rentrée. Le détail de ce qui a été livré vit dans l'état des lieux.
+**Re-vérifié le 2026-08-18** — TOP 3 INCHANGÉ. Journée dense côté terrain (P2-37 et P2-38 soldés, les trois lots de polish livrés, le seed recalé), et **P4-108 soldé le jour de son entrée** : la suppression d'un créneau annonce enfin ses DEUX épinglages — la réservation ET le verrou HARD qu'elle avait matérialisé, que l'écran taisait alors qu'il est souverain pour le solveur. Plus aucun compte de suppression n'est dérivé du cache du navigateur, nulle part. Rien de tout cela ne déplace le podium : ce sont des correctifs d'usage, pas la fenêtre commerciale de rentrée. Le détail de ce qui a été livré vit dans l'état des lieux.
 1. **P5-5 — page de vente publique (+ FAQ)** : la rentrée est LA fenêtre d'achat des clubs (mesuré : le bureau achète avant-saison) et le recrutement des bêta démarre — un mail ou une démo sans page où atterrir ne convertit pas.
 2. **P5-13 — Bêta BCCL : reproduire les 3 plannings RÉELS** : le palier concret vers un client en production sur du DÉJÀ-opérationnel — chaque écart entre l'image réelle et l'app devient un finding terrain, le meilleur détecteur du dépôt (précédent : les retours du 2026-07-19).
 
@@ -125,7 +125,6 @@
 
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
-| P4-108 | **L'impact d'une suppression de CRÉNEAU est encore compté par l'écran** | 🟡 | XS | Résidu assumé de P3-16 : les trois entités saison-scopées (salle/équipe/coach) ont désormais un impact calculé SERVEUR (`GET /api/{venues\|teams\|coaches}/{id}/deletion-impact`), mais la suppression d'un **créneau de disponibilité** garde des compteurs locaux (`VenuesStep.tsx` et `PeriodStructure.tsx`, prop `impacts` de `DeleteConfirm`) — or `EntityCascadeDeleter::purgeChildrenOfSlot` emporte les réservations ET les verrous HARD qu'elles ont matérialisés, alors que l'écran n'annonce que les réservations. Même défaut que P3-16, périmètre plus petit. ⚠ Sa cascade n'est PAS exprimable dans `CascadePlan` telle quelle (elle s'identifie par le TRIPLET gymnase/jour/heure, pas par un champ) : c'est ce qui l'a laissée dehors, et ce qu'il faudra trancher |
 | P4-107 | **L'application est trop centrée — largeur perdue sur grand écran** | 🟡 | S/M | Retour terrain 2026-08-18 : *« l'application est TRÈS centrée, il y a beaucoup de marge sur les côtés selon l'écran, ce n'est pas optimisé en largeur — c'est un souci UX »*. Impact concret sur les écrans denses (grille de planning, wizard contraintes, module matchs) où la largeur perdue force du défilement. ⚠ Ne pas traiter en élargissant tout : une colonne de TEXTE devient illisible au-delà d'une certaine largeur. Le cadrage doit distinguer les écrans « tableau » (à élargir) des écrans « formulaire/lecture » (à laisser bornés). **Deux tranches déjà livrées le 2026-08-18** : le shell d'application (`frontend/src/app/AppLayout.tsx`, PR #613) et la scène d'attente de génération (`frontend/src/features/planning/GenerationWaiting.tsx` — cadre sans `max-w`, décor scindé en deux bandes ancrées aux bords, hauteur bornée). **Reste ouvert** : l'inventaire écran par écran (grille de planning, wizard contraintes, module matchs) et la règle « tableau vs formulaire » elle-même, qui n'est écrite nulle part — c'est elle qui empêchera d'élargir une colonne de texte par mégarde |
 
 ### Retour terrain du 2026-08-15 (la confiance dans ce qu'on lit à l'écran)

@@ -1,6 +1,10 @@
-Last verified @ 2026-08-18 (JSON **régénéré** — suppression sûre : les 3 routes `deletion-impact` entrent au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — bien-être PAR PÉRIODE, PR1 backend : `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId`)
+Last verified @ 2026-08-18 (JSON **régénéré** — la 4ᵉ route `deletion-impact`, celle du créneau, entre au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — suppression sûre : les 3 routes `deletion-impact` entrent au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — bien-être PAR PÉRIODE, PR1 backend : `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId`)
 
 Changements récents :
+- **Impact de suppression d'un créneau (2026-08-18)** : `GET /api/venue_training_slots/{id}/deletion-impact`
+  complète les trois routes du même nom. Particularité : les enfants d'un créneau ne citent jamais son
+  id — ils s'y rattachent par le triplet (gymnase, jour, heure) ET par la couche —, donc les comptes
+  sont bornés à la couche du créneau. Set-diff : **1 path ajouté**, aucun schéma modifié.
 - **Suppression sûre (2026-08-18)** : trois routes de lecture entrent au contrat —
   `GET /api/{venues|teams|coaches}/{id}/deletion-impact` : ce qu'une suppression VA détruire,
   compté par le serveur en parcourant **le plan de cascade que la suppression exécute**

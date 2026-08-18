@@ -98,6 +98,25 @@ final class CascadePlan
         ];
     }
 
+    /**
+     * Le CRÉNEAU de disponibilité — ses ÉPINGLAGES, pas ses résultats.
+     *
+     * Une réservation et le verrou HARD qu'elle a matérialisé sont **les deux faces d'un même
+     * épinglage** : en supprimer une sans l'autre est précisément le bug d'orphelin que cette
+     * cascade existe pour fermer (le verrou serait ré-injecté à chaque génération, sur un
+     * créneau qui n'existe plus). Jamais les placements SOFT/NONE que le solveur a choisis à
+     * cet horaire : ce sont des RÉSULTATS, ils appartiennent à leur version.
+     *
+     * @return list<CascadeStep>
+     */
+    public static function forSlot(): array
+    {
+        return [
+            new SlotPinStep(Reservation::class, hardOnly: false, label: new ImpactLabel('slot_reservation', 'réservation d\'équipe', 'réservations d\'équipe')),
+            new SlotPinStep(ScheduleSlotTemplate::class, hardOnly: true, label: new ImpactLabel('slot_hard_lock', 'créneau verrouillé dans vos plannings', 'créneaux verrouillés dans vos plannings')),
+        ];
+    }
+
     /** @return list<CascadeStep> */
     public static function forCoach(): array
     {

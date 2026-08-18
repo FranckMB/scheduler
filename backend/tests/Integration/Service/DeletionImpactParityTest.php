@@ -18,6 +18,7 @@ use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
+use App\Enum\LockLevel;
 use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
@@ -73,7 +74,7 @@ final class DeletionImpactParityTest extends KernelTestCase
     public function testEveryDestructionIsAnnounced(): void
     {
         $silent = [];
-        foreach (['team' => CascadePlan::forTeam(), 'venue' => CascadePlan::forVenue(), 'coach' => CascadePlan::forCoach()] as $kind => $steps) {
+        foreach (['team' => CascadePlan::forTeam(), 'venue' => CascadePlan::forVenue(), 'coach' => CascadePlan::forCoach(), 'slot' => CascadePlan::forSlot()] as $kind => $steps) {
             self::assertNotSame([], $steps, "le plan « {$kind} » ne peut pas être vide");
             foreach ($steps as $step) {
                 if (null === $step->label()) {
@@ -95,7 +96,7 @@ final class DeletionImpactParityTest extends KernelTestCase
         $source = file_get_contents(new ReflectionClass(EntityCascadeDeleter::class)->getFileName() ?: '');
         self::assertIsString($source);
 
-        foreach (['purgeChildrenOfTeam', 'purgeChildrenOfVenue', 'purgeChildrenOfCoach'] as $method) {
+        foreach (['purgeChildrenOfTeam', 'purgeChildrenOfVenue', 'purgeChildrenOfCoach', 'purgeChildrenOfSlot'] as $method) {
             $body = $this->methodBody($source, $method);
             self::assertStringContainsString('CascadePlan::', $body, "{$method} doit déléguer au plan");
             // Le DQL en propre est précisément ce qui rouvrirait la dérive : une destruction
@@ -161,6 +162,65 @@ final class DeletionImpactParityTest extends KernelTestCase
         self::assertSame(1, $this->countBy(VenueTrainingSlot::class, 'venueId', $other->getId()));
     }
 
+    public function testASlotAnnouncesItsPinsAndNeverCrossesItsOwnLayer(): void
+    {
+        [$club, $season] = $this->seed();
+        $venue = $this->venue($club, $season, 'Matéo');
+        $team = $this->team($club, $season, forcedVenueId: $venue->getId());
+        $schedule = $this->schedule($club, $season);
+        $at = new DateTimeImmutable('18:00');
+
+        $slot = (new VenueTrainingSlot)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setVenueId($venue->getId())->setDayOfWeek(1)->setStartTime($at)->setDurationMinutes(90)->setCapacity(1);
+        $this->em->persist($slot);
+        // Les DEUX faces d'un même épinglage : la réservation ET le verrou HARD qu'elle a
+        // matérialisé. C'est le second que l'écran n'annonçait pas.
+        $this->em->persist((new Reservation)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setTeamId($team->getId())->setVenueId($venue->getId())->setDayOfWeek(1)->setStartTime($at)->setDurationMinutes(90));
+        $this->em->persist((new ScheduleSlotTemplate)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setScheduleId($schedule->getId())->setTeamId($team->getId())->setVenueId($venue->getId())
+            ->setDayOfWeek(1)->setStartTime($at)->setDurationMinutes(90)->setLockLevel(LockLevel::HARD));
+        // Un placement que le SOLVEUR a choisi au même horaire : c'est un RÉSULTAT, il
+        // appartient à sa version — ni annoncé, ni détruit.
+        $solverPick = (new ScheduleSlotTemplate)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setScheduleId($schedule->getId())->setTeamId($team->getId())->setVenueId($venue->getId())
+            ->setDayOfWeek(1)->setStartTime($at)->setDurationMinutes(90)->setLockLevel(LockLevel::NONE);
+        $this->em->persist($solverPick);
+        // Une réservation d'une PÉRIODE au même triplet : le socle ne doit JAMAIS l'emporter
+        // (invariant fondateur n°1 — une période ne modifie pas le planning principal, et
+        // réciproquement).
+        $periodPlan = (new SchedulePlan)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setType(SchedulePlanType::CLOSURE)->setName('Reprise')
+            ->setStartDate(new DateTimeImmutable('2026-02-16'))->setEndDate(new DateTimeImmutable('2026-02-28'));
+        $this->em->persist($periodPlan);
+        $this->em->flush();
+        $periodReservation = (new Reservation)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setTeamId($team->getId())->setVenueId($venue->getId())->setDayOfWeek(1)->setStartTime($at)->setDurationMinutes(90)
+            ->setSchedulePlanId($periodPlan->getId());
+        $this->em->persist($periodReservation);
+        $this->em->flush();
+
+        $impact = self::getContainer()->get(DeletionImpactCounter::class)->forSlot($slot);
+        $announced = [];
+        foreach ($impact->lines as $line) {
+            $announced[$line['key']] = $line['count'];
+        }
+
+        self::assertSame(1, $announced['slot_reservation'] ?? 0, 'la réservation de SA couche est annoncée, pas celle de la période');
+        self::assertSame(1, $announced['slot_hard_lock'] ?? 0, 'le verrou HARD est annoncé — c’est ce que l’écran taisait');
+
+        self::getContainer()->get(EntityCascadeDeleter::class)->purgeChildrenOfSlot($slot);
+        $this->em->flush();
+        $this->em->clear();
+
+        // L'annoncé a disparu…
+        self::assertSame(0, $this->countBaseReservations($venue->getId()), 'la réservation de SOCLE est partie');
+        self::assertSame(0, $this->countHardLocks($venue->getId()));
+        // …et rien d'autre : le placement du solveur et la réservation de la PÉRIODE survivent.
+        self::assertNotNull($this->em->getRepository(ScheduleSlotTemplate::class)->find($solverPick->getId()), 'un placement SOFT/NONE est un résultat, jamais un épinglage');
+        self::assertNotNull($this->em->getRepository(Reservation::class)->find($periodReservation->getId()), 'la réservation d’une PÉRIODE ne part pas avec un créneau de saison');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -191,6 +251,24 @@ final class DeletionImpactParityTest extends KernelTestCase
             }
         }
         self::fail("corps de {$method} non borné");
+    }
+
+    /** Les réservations de SOCLE (hors période) encore posées sur ce gymnase. */
+    private function countBaseReservations(string $venueId): int
+    {
+        return (int) $this->em->createQueryBuilder()->select('COUNT(e.id)')->from(Reservation::class, 'e')
+            ->where('e.venueId = :v')->andWhere('e.schedulePlanId IS NULL')
+            ->setParameter('v', $venueId)
+            ->getQuery()->getSingleScalarResult();
+    }
+
+    /** Les verrous HARD encore posés sur ce gymnase, toutes versions confondues. */
+    private function countHardLocks(string $venueId): int
+    {
+        return (int) $this->em->createQueryBuilder()->select('COUNT(e.id)')->from(ScheduleSlotTemplate::class, 'e')
+            ->where('e.venueId = :v')->andWhere('e.lockLevel = :hard')
+            ->setParameter('v', $venueId)->setParameter('hard', LockLevel::HARD)
+            ->getQuery()->getSingleScalarResult();
     }
 
     /** @param class-string $class */

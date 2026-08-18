@@ -37,6 +37,7 @@ import {
   useDeletePeriodSlot,
   useDeleteTeamPeriodOverride,
   usePeriodConstraintOverrides,
+  useDeletionImpact,
   usePeriodSlots,
   usePriorityTiers,
   useReservations,
@@ -759,6 +760,9 @@ function PeriodSlotEditor({
   const [confirmMove, setConfirmMove] = useState(false);
 
   const moved = day !== slot.dayOfWeek || time !== hhmm(slot.startTime);
+  const slotImpact = useDeletionImpact("slot", confirmDelete ? slot.id : null);
+  // Toujours dérivé du cache, et c'est légitime : il sert à la confirmation de DÉPLACEMENT
+  // (un autre geste, qui ne détruit pas en cascade), pas à l'annonce de suppression.
   const reservationCount = reservationsHere.length;
 
   const doSave = () => {
@@ -861,7 +865,11 @@ function PeriodSlotEditor({
       <DeleteConfirm
         open={confirmDelete}
         entityName={`créneau ${DAYS.find((d) => d.n === slot.dayOfWeek)?.label ?? ""} ${hhmm(slot.startTime)}`.trim()}
-        impacts={[{ count: reservationCount, one: "réservation d'équipe", many: "réservations d'équipe" }]}
+        // P4-108 : compté par le serveur, borné à la COUCHE de ce créneau — un créneau de
+        // période n'emporte jamais l'épinglage du planning principal.
+        impact={slotImpact.data ?? undefined}
+        impactLoading={slotImpact.isPending && confirmDelete}
+        impactFailed={slotImpact.isError}
         onConfirm={() => {
           del.mutate(slot.id, { onSuccess: onClose });
           setConfirmDelete(false);

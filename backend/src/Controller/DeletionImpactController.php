@@ -9,6 +9,7 @@ use App\Deletion\DeletionImpactCounter;
 use App\Entity\Coach;
 use App\Entity\Team;
 use App\Entity\Venue;
+use App\Entity\VenueTrainingSlot;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -79,6 +80,20 @@ final class DeletionImpactController extends AbstractController
         }
 
         return $this->serialize($this->counter->forCoach($coach));
+    }
+
+    #[Route('/api/venue_training_slots/{id}/deletion-impact', name: 'api_venue_training_slot_deletion_impact', methods: ['GET'])]
+    public function slot(string $id): JsonResponse
+    {
+        $slot = $this->entityManager->getRepository(VenueTrainingSlot::class)->find($id);
+        if (!$slot instanceof VenueTrainingSlot) {
+            return $this->notFound();
+        }
+        if (($denied = $this->denyForeignClub($slot->getClubId())) instanceof JsonResponse) {
+            return $denied;
+        }
+
+        return $this->serialize($this->counter->forSlot($slot));
     }
 
     private function notFound(): JsonResponse

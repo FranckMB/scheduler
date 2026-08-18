@@ -1762,6 +1762,17 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ],
                 summary: 'Advisory gate — never writes, and does NOT run on generate/regenerate',
             )),
+            '/api/venue_training_slots/{id}/deletion-impact' => new PathItem(get: new Operation(
+                operationId: 'getApiVenueTrainingSlotDeletionImpact',
+                tags: ['Deletion'],
+                responses: [
+                    '200' => new Response('What deleting this availability slot would destroy — announced BEFORE confirmation. Its children never cite the slot id: reservations and the HARD locks they materialised attach by (venue, weekday, start time) AND by LAYER, so the counts are bounded to the slot own layer (season grid vs a period copy). Solver-chosen SOFT/NONE placements are results, never touched. Read-only.'),
+                    '401' => $unauthorized,
+                    '403' => new Response('Slot belongs to another club'),
+                    '404' => $notFound,
+                ],
+                summary: 'Impact of deleting this availability slot, computed server-side',
+            )),
             '/api/venues/{id}/deletion-impact' => new PathItem(get: new Operation(
                 operationId: 'getApiVenueDeletionImpact',
                 tags: ['Deletion'],
