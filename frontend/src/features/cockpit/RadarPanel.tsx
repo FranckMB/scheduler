@@ -97,7 +97,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
 
   // P2-5 E1 : flux de découpage partagé (radar + DayDialog) — voir requestAdapt.
   // Chemin `pending` : la mère vacances naît SEULEMENT à la confirmation du picker.
-  const { pickerFor, setPickerFor, pendingMother, setPendingMother, openPendingPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek, windowConflict, resetWindowConflict, requestAdapt: requestWeekAdapt, pickerState, blockInfo, blockDeleting, blockDeleteFailed, deleteBlockVersionsAndSplit } = useWeekAdapt(adapt);
+  const { pickerFor, setPickerFor, pendingMother, setPendingMother, openPendingPicker, needsPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, recordPendingOnly, createOneWeek, windowConflict, resetWindowConflict, requestAdapt: requestWeekAdapt, pickerState, pickerOffer, pendingOffer, pendingPickerState, blockInfo, blockDeleting, blockDeleteFailed, deleteBlockVersionsAndSplit } = useWeekAdapt(adapt);
   // #10 — la todo-list des doléances d'une période de vacances (ouverte sur la MÈRE).
   const [wishesEntry, setWishesEntry] = useState<CalendarEntry | null>(null);
   // #10 C2 — les campagnes de collecte, indexées par période (une requête pour tout le
@@ -580,8 +580,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                   const payload = { schoolHolidayId: h.id, label: h.label, startDate: range.startDate, endDate: range.endDate };
                   // Vacances couvrant PLUSIEURS semaines → picker SANS création (la
                   // mère naît à la confirmation) ; 1 semaine → création + wizard direct.
-                  const multiWeek = null !== workingSeason && periodWeeksToAdjust(range.startDate, range.endDate, workingSeason, "holiday", today).length > 1;
-                  if (multiWeek) {
+                  if (needsPicker(range.startDate, range.endDate, "holiday")) {
                     openPendingPicker({ label: h.label, startDate: range.startDate, endDate: range.endDate, periodType: "holiday", create: () => createHoliday.mutateAsync(payload) });
                     return;
                   }
@@ -645,13 +644,13 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
               onClick={() => {
                 const title = `${venueNameOf(u.venueId)} indisponible${null !== u.label ? ` (${u.label})` : ""}`;
                 const params = { title, venueId: u.venueId, startDate: u.startDate, endDate: u.endDate };
-                // P2-36 tranche 2 — l'indispo passe par la maison unique. Si elle couvre PLUSIEURS
-                // semaines, on ouvre le choix SANS créer la fermeture (l'entrée n'est pas encore
-                // née) : le chemin « pending » partagé avec les vacances la matérialise à la
-                // confirmation, via createVenueClosure. Une seule semaine → création + adaptBlock
-                // direct (comportement conservé), le plan naissant du geste d'Adapter.
-                const multiWeek = null !== workingSeason && periodWeeksToAdjust(u.startDate, u.endDate, workingSeason, "closure", today).length > 1;
-                if (multiWeek) {
+                // P2-36 tranche 2 / P2-40 — l'indispo passe par la maison unique. On ouvre le choix
+                // SANS créer la fermeture (l'entrée n'est pas encore née) dès qu'elle couvre PLUSIEURS
+                // semaines OU qu'au moins une semaine est sous vacances (needsPicker) : le chemin
+                // « pending » partagé avec les vacances la matérialise à la confirmation, via
+                // createVenueClosure. Une seule semaine hors vacances → création + adaptBlock direct
+                // (comportement conservé), le plan naissant du geste d'Adapter.
+                if (needsPicker(u.startDate, u.endDate, "closure")) {
                   openPendingPicker({ label: title, startDate: u.startDate, endDate: u.endDate, periodType: "closure", create: () => createClosureFromUnavailability.mutateAsync(params) });
                   return;
                 }
@@ -707,10 +706,13 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           title={pendingMother.label}
           startDate={pendingMother.startDate}
           endDate={pendingMother.endDate}
-          weeks={periodWeeksToAdjust(pendingMother.startDate, pendingMother.endDate, workingSeason, pendingMother.periodType, today)}
+          weeks={pendingOffer.offered}
+          excludedRanges={pendingOffer.excludedRanges}
+          state={pendingPickerState}
           busy={createHoliday.isPending || createClosureFromUnavailability.isPending || createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeksPending(pendingMother, weeks)}
           onAdaptWhole={() => adaptWholePending(pendingMother)}
+          onRecordOnly={() => recordPendingOnly(pendingMother)}
           onClose={() => { resetWindowConflict(); setPendingMother(null); }}
           conflict={windowConflict}
           onOpenConflict={adapt}
@@ -722,7 +724,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           title={pickerFor.title}
           startDate={pickerFor.startDate}
           endDate={pickerFor.endDate}
-          weeks={periodWeeksToAdjust(pickerFor.startDate, pickerFor.endDate, workingSeason, pickerFor.periodType, today)}
+          weeks={pickerOffer.offered}
+          excludedRanges={pickerOffer.excludedRanges}
           busy={createWeekChildren.isPending}
           state={pickerState}
           block={{ ...blockInfo, deleting: blockDeleting, deleteFailed: blockDeleteFailed, onDeleteVersions: deleteBlockVersionsAndSplit }}

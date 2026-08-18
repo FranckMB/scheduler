@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { actionableWeeks, addDays, isActionableWeek, mondayOf, periodAdjustWeeks, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
+import { actionableWeeks, addDays, closureWeeksOffer, holidayWindows, isActionableWeek, mondayOf, periodAdjustWeeks, periodWeeksToAdjust, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
 
 describe("cockpit date utils", () => {
   it("builds a 42-cell Monday-first grid", () => {
@@ -179,5 +179,102 @@ describe("isActionableWeek / actionableWeeks — ce qu'il reste à traiter", () 
 
   it("rend une liste vide quand tout est derrière (et non la liste entière)", () => {
     expect(actionableWeeks([week("2026-01-05"), week("2026-01-12")], "2026-03-01")).toEqual([]);
+  });
+});
+
+/**
+ * P2-40 — l'UNION des vacances servies (règle d'OFFRE de présentation, écart assumé à la règle
+ * d'or : le front dérive ici depuis les données servies, sans miroiter de calcul backend). Deux
+ * sources, comme le radar : entrées calendrier de type vacances non ignorées ∪ feed scolaire
+ * clampé saison. Une vacance IGNORÉE ne compte pas.
+ */
+describe("holidayWindows — l'union des vacances servies (P2-40)", () => {
+  const season = { startDate: "2026-08-01", endDate: "2027-07-14" };
+  const entry = (over: Partial<{ periodType: string | null; status: string; schoolHolidayId: string | null; title: string; startDate: string; endDate: string }>) => ({
+    periodType: null as string | null,
+    status: "active",
+    schoolHolidayId: null as string | null,
+    title: "",
+    startDate: "",
+    endDate: "",
+    ...over,
+  });
+
+  it("réunit les entrées calendrier de type vacances (non ignorées) et le feed clampé", () => {
+    const entries = [
+      entry({ periodType: "holiday", title: "Toussaint (mère)", startDate: "2026-10-19", endDate: "2026-11-01" }),
+      entry({ periodType: "closure", title: "Gym fermé", startDate: "2026-09-01", endDate: "2026-09-10" }),
+    ];
+    const feed = [{ id: "ete", label: "Vacances d'été", startDate: "2026-07-04", endDate: "2026-08-31" }];
+    expect(holidayWindows(entries, feed, season)).toEqual([
+      { label: "Toussaint (mère)", startDate: "2026-10-19", endDate: "2026-11-01" },
+      { label: "Vacances d'été", startDate: "2026-08-01", endDate: "2026-08-31" }, // clampé au début de saison
+    ]);
+  });
+
+  it("écarte une vacance IGNORÉE (matérialisée puis rejetée) du feed", () => {
+    const entries = [entry({ periodType: "holiday", status: "ignored", schoolHolidayId: "ete", title: "Été", startDate: "2026-08-01", endDate: "2026-08-31" })];
+    const feed = [{ id: "ete", label: "Vacances d'été", startDate: "2026-07-04", endDate: "2026-08-31" }];
+    expect(holidayWindows(entries, feed, season)).toEqual([]);
+  });
+
+  it("omet une vacance entièrement hors saison", () => {
+    const feed = [{ id: "x", label: "Avant saison", startDate: "2026-06-01", endDate: "2026-07-15" }];
+    expect(holidayWindows([], feed, season)).toEqual([]);
+  });
+});
+
+/**
+ * P2-40 — l'OFFRE de semaines d'une FERMETURE qui chevauche des vacances : les semaines
+ * gouvernées par les vacances sont EXCLUES (pas grisées). Une semaine est exclue ssi son lundi
+ * est OFFERT par des vacances (`periodAdjustWeeks(fenêtre, "holiday")` — donc dropFirst Ven/Sam/Dim
+ * joue). Fonction PURE, foyer unique des sites closure.
+ */
+describe("closureWeeksOffer — une fermeture qui chevauche des vacances (P2-40)", () => {
+  const season = { startDate: "2026-08-01", endDate: "2027-07-14" };
+  const today = "2026-01-01"; // tout est à venir
+
+  it("exclut les semaines gouvernées par les vacances (exemple normatif 31/08)", () => {
+    // Été offrant jusqu'au lundi 31/08 ; indispo 17/08 → 01/10.
+    const ete = [{ label: "Vacances d'été", startDate: "2026-08-01", endDate: "2026-08-31" }];
+    const { offered, excludedRanges } = closureWeeksOffer("2026-08-17", "2026-10-01", season, today, ete);
+    expect(offered.map((w) => w.monday)).toEqual(["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28"]);
+    expect(excludedRanges).toEqual([{ startDate: "2026-08-17", endDate: "2026-09-06", labels: ["Vacances d'été"] }]);
+  });
+
+  it("conserve la semaine d'entame d'une vacance démarrant VENDREDI (dropFirst)", () => {
+    // Toussaint vendredi 16/10 → 01/11 : elle n'offre PAS sa semaine du 12/10.
+    const toussaint = [{ label: "Toussaint", startDate: "2026-10-16", endDate: "2026-11-01" }];
+    const { offered, excludedRanges } = closureWeeksOffer("2026-10-12", "2026-11-01", season, today, toussaint);
+    expect(offered.map((w) => w.monday)).toContain("2026-10-12"); // entame conservée
+    expect(offered.map((w) => w.monday)).not.toContain("2026-10-19");
+    expect(excludedRanges).toEqual([{ startDate: "2026-10-19", endDate: "2026-11-01", labels: ["Toussaint"] }]);
+  });
+
+  it("exclut la dernière semaine d'une vacance finissant MERCREDI (elle l'offre encore)", () => {
+    // Une vacance finissant un mercredi offre quand même la semaine qui contient ce mercredi.
+    const vac = [{ label: "Petites vacances", startDate: "2026-11-02", endDate: "2026-11-11" }]; // 11/11 = mercredi
+    const { offered, excludedRanges } = closureWeeksOffer("2026-11-02", "2026-11-22", season, today, vac);
+    expect(offered.map((w) => w.monday)).toEqual(["2026-11-16"]);
+    expect(excludedRanges).toEqual([{ startDate: "2026-11-02", endDate: "2026-11-15", labels: ["Petites vacances"] }]);
+  });
+
+  it("vacances absentes → aucune exclusion, identique à periodWeeksToAdjust (comportement inchangé)", () => {
+    const offer = closureWeeksOffer("2026-08-17", "2026-10-01", season, today, []);
+    expect(offer.excludedRanges).toEqual([]);
+    expect(offer.offered).toEqual(periodWeeksToAdjust("2026-08-17", "2026-10-01", season, "closure", today));
+  });
+
+  it("respecte l'horizon aujourd'hui (les semaines révolues sont déjà hors offre)", () => {
+    const offer = closureWeeksOffer("2026-08-17", "2026-10-01", season, "2026-09-15", []);
+    expect(offer.offered.map((w) => w.monday)).toEqual(["2026-09-14", "2026-09-21", "2026-09-28"]);
+  });
+
+  it("rend TOUTE la fermeture sous vacances quand chaque semaine est couverte (offre vide)", () => {
+    const ete = [{ label: "Vacances d'été", startDate: "2026-07-04", endDate: "2026-08-31" }];
+    const offer = closureWeeksOffer("2026-08-03", "2026-08-28", season, today, ete);
+    expect(offer.offered).toEqual([]);
+    expect(offer.excludedRanges).toHaveLength(1);
+    expect(offer.excludedRanges[0].labels).toEqual(["Vacances d'été"]);
   });
 });

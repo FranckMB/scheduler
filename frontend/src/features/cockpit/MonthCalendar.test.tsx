@@ -22,6 +22,8 @@ vi.mock("./queries", () => ({
   // DayList liste les plannings couvrants (AJUSTER/Consulter) via les plans (B1).
   useSchedulePlans: () => ({ data: [] }),
   useCalendarEntries: () => ({ data: [] }),
+  // P2-40 — useWeekAdapt (dans DayList) source les vacances pour l'offre des fermetures.
+  useSchoolHolidays: () => ({ data: { zone: "A", items: [] } }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [] }),

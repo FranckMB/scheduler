@@ -5,7 +5,7 @@ import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Modal } from "@/shared/components/ui/modal";
 import { Spinner } from "@/shared/components/ui/spinner";
 
-import { frDateShort, isWithin, type WeekWindow } from "./lib/date";
+import { frDateShort, isWithin, type ExcludedWeekRange, type WeekWindow } from "./lib/date";
 import type { WeekPickerState, WindowConflict } from "./lib/useWeekAdapt";
 import { WindowAlreadyPlannedNotice } from "./WindowAlreadyPlannedNotice";
 
@@ -34,17 +34,27 @@ interface WeekPickerDialogProps {
   weeks: WeekWindow[];
   busy: boolean;
   /**
-   * P2-36 — état NOMMÉ du picker : `weeks` (choix, l'existant), `loading` (plans/plannings/
+   * P2-36/P2-40 — état NOMMÉ du picker : `weeks` (choix, l'existant), `loading` (plans/plannings/
    * enfants pas résolus — le dialogue s'ouvre et le DIT au lieu de partir en bloc en silence),
-   * `block` (une adaptation d'un bloc porte déjà des versions). Défaut `weeks`.
+   * `block` (une adaptation d'un bloc porte déjà des versions), `holiday` (une fermeture chevauche
+   * des vacances : les semaines sous vacances sont écartées, le chemin d'un bloc disparaît). Défaut
+   * `weeks`.
    */
   state?: WeekPickerState;
   /** Requis en état `block` : les faits + la découpe destructive à proposer. */
   block?: WeekPickerBlock;
+  /** P2-40 — les blocs de semaines écartés parce qu'une vacance les gouverne (ligne d'info, état `holiday`). */
+  excludedRanges?: ExcludedWeekRange[];
   /** Semaines cochées → création des plans de semaine. */
   onPickWeeks: (weeks: WeekWindow[]) => void;
   /** Chemin « d'un bloc » : adapter toute la période sur son plan (comportement historique). */
   onAdaptWhole: () => void;
+  /**
+   * P2-40 — « Consigner l'indisponibilité » : chemin PENDING, état `holiday` sans aucune semaine
+   * offerte (100 % sous vacances). Matérialise le FAIT sans plan ni navigation. Absent quand
+   * l'entrée existe déjà en base (rien à consigner).
+   */
+  onRecordOnly?: () => void;
   onClose: () => void;
   /** P2-38 — un refus « une seule planification par fenêtre » sur la création de semaines. */
   conflict?: WindowConflict | null;
@@ -64,7 +74,7 @@ interface WeekPickerDialogProps {
  * sans un mot. Chaque raison est distincte : « en chargement » ≠ « déjà générée d'un
  * bloc » — un message générique recréerait le défaut.
  */
-export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state = "weeks", block, onPickWeeks, onAdaptWhole, onClose, conflict, onOpenConflict }: WeekPickerDialogProps) {
+export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state = "weeks", block, excludedRanges = [], onPickWeeks, onAdaptWhole, onRecordOnly, onClose, conflict, onOpenConflict }: WeekPickerDialogProps) {
   const [checked, setChecked] = useState<Set<string>>(new Set(weeks.map((w) => w.monday)));
   // Confirmation de la découpe destructive (état `block`) : réutilise le patron d'avertissement
   // existant (ConfirmDialog destructif) plutôt qu'une deuxième maison du danger.
@@ -84,29 +94,56 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state
   const picked = weeks.filter((w) => checked.has(w.monday));
   const versionCount = block?.versionCount ?? 0;
   const versionLabel = `${versionCount} version${versionCount > 1 ? "s" : ""}`;
+  // La liste à cocher, partagée par l'état `weeks` (choix classique) et `holiday` (les semaines
+  // hors vacances qui restent à traiter).
+  const checkboxList = (
+    <ul className="mt-4 space-y-2">
+      {weeks.map((week) => {
+        const touched = isWithin(startDate, week.startDate, week.endDate) || isWithin(week.startDate, startDate, endDate);
+        return (
+          <li key={week.monday}>
+            <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+              <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={checked.has(week.monday)} onChange={() => toggle(week.monday)} />
+              <span>
+                Semaine du {frDateShort(week.startDate)} au {frDateShort(week.endDate)}
+                {touched ? null : <span className="text-muted-foreground"> · hors événement</span>}
+              </span>
+            </label>
+          </li>
+        );
+      })}
+    </ul>
+  );
 
   return (
     <Modal label="Choisir les semaines" title="Quelles semaines ajuster ?" onClose={onClose} className="max-w-md">
       {"weeks" === state ? (
         <>
           <p className="mt-2 text-sm text-muted-foreground">« {title} » couvre plusieurs semaines. Chaque semaine cochée devient un planning indépendant, ajustable à son rythme.</p>
-          <ul className="mt-4 space-y-2">
-            {weeks.map((week) => {
-              const touched = isWithin(startDate, week.startDate, week.endDate) || isWithin(week.startDate, startDate, endDate);
-              return (
-                <li key={week.monday}>
-                  <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-                    <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={checked.has(week.monday)} onChange={() => toggle(week.monday)} />
-                    <span>
-                      Semaine du {frDateShort(week.startDate)} au {frDateShort(week.endDate)}
-                      {touched ? null : <span className="text-muted-foreground"> · hors événement</span>}
-                    </span>
-                  </label>
-                </li>
-              );
-            })}
-          </ul>
+          {checkboxList}
         </>
+      ) : null}
+
+      {/* ÉTAT « chevauchement vacances » (P2-40) : les semaines sous vacances sont EXCLUES (pas
+          grisées) — le rappel vit déjà dans le planning des vacances. Une ligne d'info le dit, et
+          le chemin « d'un bloc » disparaît (un plan de bloc gouvernerait la fenêtre des vacances).
+          Reste (s'il en reste) le choix des semaines HORS vacances ; 100 % couvert → info seule. */}
+      {"holiday" === state ? (
+        <div className="mt-2 space-y-3 text-sm">
+          {excludedRanges.map((range) => (
+            <p key={range.startDate} className="rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-foreground">
+              Semaines du {frDateShort(range.startDate)} au {frDateShort(range.endDate)} couvertes par {range.labels.join(", ")} — le rappel vous attend dans son planning.
+            </p>
+          ))}
+          {weeks.length > 0 ? (
+            <>
+              <p className="text-muted-foreground">Choisissez les semaines à ajuster, hors vacances. Chaque semaine cochée devient un planning indépendant.</p>
+              {checkboxList}
+            </>
+          ) : (
+            <p className="text-muted-foreground">Toutes les semaines de cette indisponibilité sont couvertes par des vacances — il n'y a rien à ajuster en dehors.</p>
+          )}
+        </div>
       ) : null}
 
       {/* ÉTAT « chargement » : on ne connaît pas encore l'état des plans/plannings/enfants — le
@@ -166,13 +203,23 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state
       ) : null}
 
       <div className="mt-6 flex flex-wrap justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onAdaptWhole} disabled={busy || block?.deleting}>
-          {"block" === state ? "Continuer d'un bloc" : "Adapter toute la période d'un bloc"}
-        </Button>
-        {"weeks" === state ? (
+        {/* Le chemin « d'un bloc » disparaît dès qu'une vacance couvre une semaine (état holiday). */}
+        {"holiday" === state ? null : (
+          <Button variant="ghost" size="sm" onClick={onAdaptWhole} disabled={busy || block?.deleting}>
+            {"block" === state ? "Continuer d'un bloc" : "Adapter toute la période d'un bloc"}
+          </Button>
+        )}
+        {"weeks" === state || ("holiday" === state && weeks.length > 0) ? (
           <Button size="sm" onClick={() => onPickWeeks(picked)} disabled={busy || 0 === picked.length}>
             {busy ? <Spinner className="size-4" /> : null}
             Créer {picked.length > 1 ? `les ${picked.length} plannings de semaine` : "le planning de la semaine"}
+          </Button>
+        ) : null}
+        {/* 100 % sous vacances, chemin pending : consigner le FAIT (sans plan ni navigation). */}
+        {"holiday" === state && 0 === weeks.length && undefined !== onRecordOnly ? (
+          <Button size="sm" onClick={onRecordOnly} disabled={busy}>
+            {busy ? <Spinner className="size-4" /> : null}
+            Consigner l'indisponibilité
           </Button>
         ) : null}
       </div>

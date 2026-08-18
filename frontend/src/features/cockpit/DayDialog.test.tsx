@@ -40,6 +40,8 @@ const deleteScheduleMutateAsync = vi.fn().mockResolvedValue(undefined);
 // après un refetch en échec reste exploitable).
 let queriesNoData = false;
 let childEntriesData: CalendarEntry[] = [];
+// P2-40 — le feed des vacances scolaires que useWeekAdapt lit pour l'offre des fermetures.
+let schoolHolidaysMock: { zone: string | null; items: SchoolHoliday[] } = { zone: "A", items: [] };
 // #5 gating : socle (plan de saison) validé par défaut ; un test dédié le passe à null.
 let meData: { seasonPlan: { chosenScheduleId: string | null } } = { seasonPlan: { chosenScheduleId: "s-season" } };
 
@@ -55,6 +57,9 @@ vi.mock("./queries", () => ({
   // P2-5 E1 : enfants de semaine — aucun par défaut dans ces tests (mutable pour l'encart).
   useCalendarEntries: () => ({ data: childEntriesData }),
   useSchedulePlans: () => ({ data: allPlansMock }),
+  // P2-40 — useWeekAdapt source les vacances pour l'offre des fermetures. Vide par défaut :
+  // les cas existants (fermeture sans vacances) sont inchangés.
+  useSchoolHolidays: () => ({ data: schoolHolidaysMock }),
 }));
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
@@ -742,5 +747,48 @@ describe("DayDialog — P2-36 tranche 2 : la liste du jour passe par le sélecte
     expect(screen.queryByText("Quelles semaines ajuster ?")).not.toBeInTheDocument();
     await waitFor(() => expect(startPeriodMode).toHaveBeenCalledWith("cls"));
     expect(navigate).toHaveBeenCalledWith("/wizard");
+  });
+});
+
+// P2-40 — « Adapter »/« Ajuster » une fermeture qui chevauche des vacances passe par le picker,
+// qui EXCLUT (pas grise) les semaines gouvernées par les vacances et RETIRE le chemin « d'un bloc ».
+// L'entrée existe déjà en base ici → jamais de bouton « Consigner » (rien à consigner).
+describe("DayDialog — fermeture chevauchant des vacances (P2-40)", () => {
+  beforeEach(() => {
+    allPlansMock = [];
+    plansByEntry = {};
+    schedulesData = [];
+    queriesNoData = false;
+    childEntriesData = [];
+    schoolHolidaysMock = { zone: "A", items: [] };
+    meData = { seasonPlan: { chosenScheduleId: "s-season" } };
+  });
+
+  const spanning = (over: Partial<CalendarEntry> = {}) =>
+    entry({ id: "cl1", kind: "period", periodType: "closure", title: "Gym fermé", startDate: "2026-05-11", endDate: "2026-05-31", ...over });
+
+  it("« Adapter » ouvre le picker qui EXCLUT les semaines de vacances et retire le chemin d'un bloc", async () => {
+    schoolHolidaysMock = { zone: "A", items: [{ id: "h1", label: "Petites vacances", holidayType: "custom", startDate: "2026-05-11", endDate: "2026-05-17", schoolYear: "2025-2026" }] };
+    renderDialog([spanning()]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    expect(screen.getByText(/couvertes par Petites vacances/)).toBeInTheDocument();
+    // Deux semaines hors vacances restent à cocher ; « d'un bloc » a disparu.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: /d'un bloc/i })).not.toBeInTheDocument();
+    // Entrée déjà en base : rien à consigner.
+    expect(screen.queryByRole("button", { name: /consigner l'indisponibilité/i })).not.toBeInTheDocument();
+  });
+
+  it("témoin : la même fermeture SANS vacances garde le chemin d'un bloc (comportement inchangé)", async () => {
+    renderDialog([spanning()]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Adapter toute la période d'un bloc/i })).toBeInTheDocument();
+    expect(screen.queryByText(/couvertes par/)).not.toBeInTheDocument();
   });
 });

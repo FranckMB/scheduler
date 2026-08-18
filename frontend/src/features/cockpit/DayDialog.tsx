@@ -85,14 +85,16 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
   // un plan ouvrent d'abord le sélecteur de semaines si la période en couvre plusieurs, au
   // lieu de filer droit au plan de bloc. Le geste direct (une seule semaine / déjà découpée)
   // crée le plan idempotent puis ouvre le wizard — même comportement qu'au radar. Le refus
-  // de chevauchement (P2-38) et la découpe destructive vivent dans le hook.
-  const today = todayISO();
+  // de chevauchement (P2-38) et la découpe destructive vivent dans le hook. P2-40 : l'offre de
+  // semaines (dont l'exclusion des semaines sous vacances) vient du hook — la liste ne la calcule
+  // plus elle-même.
   const workingSeason = useWorkingSeason();
   const {
     requestAdapt: requestWeekAdapt,
     pickerFor,
     setPickerFor,
     pickerState,
+    pickerOffer,
     blockInfo,
     blockDeleting,
     blockDeleteFailed,
@@ -269,7 +271,8 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
           title={pickerFor.title}
           startDate={pickerFor.startDate}
           endDate={pickerFor.endDate}
-          weeks={periodWeeksToAdjust(pickerFor.startDate, pickerFor.endDate, workingSeason, pickerFor.periodType, today)}
+          weeks={pickerOffer.offered}
+          excludedRanges={pickerOffer.excludedRanges}
           busy={createWeekChildren.isPending}
           state={pickerState}
           block={{ ...blockInfo, deleting: blockDeleting, deleteFailed: blockDeleteFailed, onDeleteVersions: deleteBlockVersionsAndSplit }}

@@ -151,3 +151,84 @@ describe("WeekPickerDialog — états nommés (P2-36)", () => {
     expect(screen.getByText(/génération est en cours/i)).toBeInTheDocument();
   });
 });
+
+// P2-40 — une fermeture qui chevauche des vacances : les semaines gouvernées par les vacances sont
+// EXCLUES (pas grisées), une ligne d'info le dit, et le chemin « d'un bloc » DISPARAÎT (un plan de
+// bloc gouvernerait la fenêtre des vacances). 100 % sous vacances → info seule ; sur le chemin
+// pending, un bouton « Consigner l'indisponibilité » crée le FAIT sans plan ni navigation.
+describe("WeekPickerDialog — chevauchement vacances (P2-40)", () => {
+  const offered = [
+    { startDate: "2026-09-07", endDate: "2026-09-13", monday: "2026-09-07" },
+    { startDate: "2026-09-14", endDate: "2026-09-20", monday: "2026-09-14" },
+  ];
+  const excludedRanges = [{ startDate: "2026-08-17", endDate: "2026-09-06", labels: ["Vacances d'été"] }];
+
+  it("affiche la ligne d'info, propose les semaines hors vacances, et RETIRE le chemin d'un bloc", () => {
+    render(
+      <WeekPickerDialog
+        title="Armand indisponible"
+        startDate="2026-08-17"
+        endDate="2026-10-01"
+        weeks={offered}
+        excludedRanges={excludedRanges}
+        busy={false}
+        state="holiday"
+        onPickWeeks={vi.fn()}
+        onAdaptWhole={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/couvertes par Vacances d'été/)).toBeInTheDocument();
+    expect(screen.getByText(/le rappel vous attend/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    // Le chemin « d'un bloc » a disparu (les deux libellés possibles).
+    expect(screen.queryByRole("button", { name: /d'un bloc/i })).not.toBeInTheDocument();
+  });
+
+  it("100 % sous vacances (aucune semaine offerte) → info seule + « Consigner l'indisponibilité » (chemin pending)", async () => {
+    const user = userEvent.setup();
+    const onRecordOnly = vi.fn();
+    render(
+      <WeekPickerDialog
+        title="Armand indisponible"
+        startDate="2026-08-03"
+        endDate="2026-08-28"
+        weeks={[]}
+        excludedRanges={excludedRanges}
+        busy={false}
+        state="holiday"
+        onPickWeeks={vi.fn()}
+        onAdaptWhole={vi.fn()}
+        onClose={vi.fn()}
+        onRecordOnly={onRecordOnly}
+      />,
+    );
+
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /créer/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /consigner l'indisponibilité/i }));
+    expect(onRecordOnly).toHaveBeenCalled();
+  });
+
+  it("entrée déjà en base (pas de onRecordOnly) : info seule, aucun bouton d'action", () => {
+    render(
+      <WeekPickerDialog
+        title="Armand indisponible"
+        startDate="2026-08-03"
+        endDate="2026-08-28"
+        weeks={[]}
+        excludedRanges={excludedRanges}
+        busy={false}
+        state="holiday"
+        onPickWeeks={vi.fn()}
+        onAdaptWhole={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /consigner l'indisponibilité/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /d'un bloc/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/couvertes par Vacances d'été/)).toBeInTheDocument();
+  });
+});
