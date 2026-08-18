@@ -11,6 +11,7 @@ use App\Export\ExportEmptyWindow;
 use App\Export\ScheduleExportData;
 use App\Export\ScheduleExportDataProvider;
 use App\Storage\LogoStorage;
+use App\Support\FrenchNameOrder;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use finfo;
@@ -151,7 +152,7 @@ class PdfGenerator
         $columns = [];
         foreach ($present as $day => $venueIds) {
             $ids = array_keys($venueIds);
-            usort($ids, static fn (string $a, string $b): int => ($venues[$a]['name'] ?? '') <=> ($venues[$b]['name'] ?? ''));
+            usort($ids, static fn (string $a, string $b): int => FrenchNameOrder::compare($venues[$a]['name'] ?? '', $venues[$b]['name'] ?? ''));
             foreach ($ids as $vId) {
                 $columns[] = ['day' => $day, 'venueId' => $vId];
             }
@@ -415,8 +416,9 @@ class PdfGenerator
      * enter it; a team with no session keeps an empty row — the hole a manager must see; a
      * team training twice a day keeps both entries). It diverges from the XLSX on ROW ORDER on
      * purpose (founder-frozen for the PDF): rows are grouped by priority tier S→A→B→C→D, each
-     * group carrying a subtitle and kept atomic in landscape pagination (tbody break-inside:
-     * avoid), whereas the XLSX sheet sorts by category then name.
+     * group kept atomic in landscape pagination (tbody break-inside: avoid), whereas the XLSX
+     * sheet sorts by category then name. ⚠ Le rang ORDONNE mais ne s'AFFICHE PLUS (P4-106) :
+     * l'export part au gymnase et aux familles, la priorisation interne reste au gestionnaire.
      *
      * Assumes hasMatrix($data) is true (caller-guarded): it still renders every season team.
      */
@@ -446,16 +448,15 @@ class PdfGenerator
 
         // Rows = EVERY season team (a team with no session is a hole to surface, never hidden),
         // plus any placement whose team is missing from teamNames (anomaly) so no slot vanishes.
-        /** @var array<string, array{name:string, label:string, subtitle:string, tierRank:int, tierOrder:int}> $teams */
+        /** @var array<string, array{name:string, tierRank:int, tierOrder:int}> $teams */
         $teams = [];
         $teamIds = array_keys($data->teamNames + $matrix);
         foreach ($teamIds as $teamId) {
             $rank = $data->teamRanks[$teamId] ?? ['label' => '', 'name' => '', 'tierRank' => \PHP_INT_MAX, 'tierOrder' => \PHP_INT_MAX];
-            $subtitle = trim($rank['label'] . ('' !== $rank['name'] ? ' · ' . $rank['name'] : ''));
+            // Le rang ne sert plus qu'à ORDONNER (P4-106) : ni label ni sous-titre ne sont
+            // conservés, pour qu'aucun rendu ne puisse les réafficher par inadvertance.
             $teams[$teamId] = [
                 'name' => $data->teamNames[$teamId] ?? '',
-                'label' => $rank['label'],
-                'subtitle' => '' === $subtitle ? 'Sans rang' : $subtitle,
                 'tierRank' => $rank['tierRank'],
                 'tierOrder' => $rank['tierOrder'],
             ];
@@ -468,7 +469,10 @@ class PdfGenerator
             array_keys(ScheduleExportData::DAY_LABELS),
             static fn (int $d): bool => isset($daysUsed[$d]),
         ));
-        uasort($teams, static fn (array $a, array $b): int => [$a['tierRank'], $a['tierOrder'], $a['name']] <=> [$b['tierRank'], $b['tierOrder'], $b['name']]);
+        // Rang, puis position dans le rang, puis le NOM — ce dernier en ordre français
+        // (`FrenchNameOrder`) : une équipe accentuée ne doit pas finir en bas de son groupe.
+        uasort($teams, static fn (array $a, array $b): int => [$a['tierRank'], $a['tierOrder']] <=> [$b['tierRank'], $b['tierOrder']]
+            ?: FrenchNameOrder::compare($a['name'], $b['name']));
 
         $colspan = 1 + \count($dayColumns);
         $head = '<tr><th class="team-col">Équipe</th>';
@@ -482,17 +486,15 @@ class PdfGenerator
         $groups = '';
         $currentRank = null;
         $groupRows = '';
-        $groupSubtitle = '';
         foreach ($teams as $teamId => $meta) {
             if ($meta['tierRank'] !== $currentRank) {
-                $groups .= $this->renderRankGroup($colspan, $groupSubtitle, $groupRows);
+                $groups .= $this->renderRankGroup($colspan, $groupRows);
                 $currentRank = $meta['tierRank'];
-                $groupSubtitle = $meta['subtitle'];
                 $groupRows = '';
             }
             $groupRows .= $this->matrixRow($teamId, $meta['name'], $matrix, $dayColumns);
         }
-        $groups .= $this->renderRankGroup($colspan, $groupSubtitle, $groupRows);
+        $groups .= $this->renderRankGroup($colspan, $groupRows);
 
         return \sprintf(
             '<section class="page-matrix"><h2 class="matrix-title">Par équipe — quand chaque équipe s’entraîne</h2>'
@@ -502,19 +504,21 @@ class PdfGenerator
         );
     }
 
-    /** One rank group as a break-inside-safe tbody (subtitle row + its team rows); '' when empty. */
-    private function renderRankGroup(int $colspan, string $subtitle, string $rows): string
+    /** One rank group as a break-inside-safe tbody (its team rows only); '' when empty. */
+    /**
+     * Un groupe de rang = un `<tbody>` (pour que la pagination ne coupe pas un rang en deux),
+     * SANS titre affiché. P4-106 (décision fondateur 2026-08-18) : le rang est une information
+     * de GESTION — un export est affiché au gymnase et envoyé aux familles, la priorisation
+     * interne des équipes n'a rien à y faire. L'ORDRE, lui, reste piloté par le rang : il se
+     * voit sans se lire, et c'est ce qui rend le document utile au gestionnaire.
+     */
+    private function renderRankGroup(int $colspan, string $rows): string
     {
         if ('' === $rows) {
             return '';
         }
 
-        return \sprintf(
-            '<tbody class="rank-group"><tr class="rank-title"><th colspan="%d">%s</th></tr>%s</tbody>',
-            $colspan,
-            htmlspecialchars($subtitle),
-            $rows,
-        );
+        return \sprintf('<tbody class="rank-group">%s</tbody>', $rows);
     }
 
     /**
@@ -647,7 +651,6 @@ class PdfGenerator
                 table.matrix .team-col { text-align: left; font-weight: bold; width: 92px; background: #fafafa; }
                 /* A whole rank group stays on one page — never split by landscape pagination. */
                 table.matrix tbody.rank-group { break-inside: avoid; }
-                table.matrix tr.rank-title th { text-align: left; background: #e9e9ee; color: #222; font-size: 10px; padding: 3px 4px; border-top: 2px solid #999; }
                 /* No badge: the venue colour FILLS the cell, text centred. Two sessions in a
                    day stack two full-width blocks that together fill the cell. */
                 table.matrix td .fill { display: block; padding: 2px 4px; font-size: 8px; line-height: 1.3; }

@@ -86,7 +86,13 @@ final class PdfTeamDayMatrixTest extends TestCase
         self::assertStringNotContainsString(' · ', $ghostRow, 'la ligne d’une équipe sans séance ne porte aucun créneau');
     }
 
-    public function testRankSubtitlesAppearInOrderSToD(): void
+    /**
+     * P4-106 (décision fondateur 2026-08-18) : le rang ORDONNE les groupes mais ne s'AFFICHE
+     * PLUS. Un export part au gymnase et aux familles — la priorisation interne des équipes
+     * n'y a pas sa place. Ce test épingle les deux moitiés : l'ordre S→A→B→C→D tient (par la
+     * position des NOMS d'équipes), et aucune étiquette de rang ne subsiste dans le document.
+     */
+    public function testRankOrdersTheGroupsWithoutPrintingAnyLabel(): void
     {
         // Teams handed in scrambled tier order ; the matrix must group them S→A→B→C→D.
         $html = $this->buildMatrix($this->data(
@@ -108,15 +114,22 @@ final class PdfTeamDayMatrixTest extends TestCase
             ],
         ));
 
+        // L'ORDRE se lit sur les noms d'équipes : Elite (S) avant RegPlus (A) avant Reg (B)…
         $positions = array_map(static fn (string $needle): int|false => mb_strpos($html, $needle), [
-            'S · Elite', 'A · Régional+', 'B · Régional', 'C · Départemental', 'D · Loisir',
+            'Elite 1', 'RegPlus 1', 'Reg 1', 'Dep 1', 'Loisir 1',
         ]);
         foreach ($positions as $p) {
-            self::assertIsInt($p, 'chaque sous-titre de rang doit être présent');
+            self::assertIsInt($p, 'chaque équipe doit apparaître dans la matrice');
         }
         $sorted = $positions;
         sort($sorted);
-        self::assertSame($sorted, $positions, 'les sous-titres de rang doivent apparaître dans l’ordre S→A→B→C→D');
+        self::assertSame($sorted, $positions, 'les groupes doivent rester dans l’ordre de rang S→A→B→C→D');
+
+        // ...et AUCUNE étiquette de rang ne doit être imprimée : ni le libellé (« S · Elite »),
+        // ni le nom du rang seul, ni le repli « Sans rang » d'une équipe non classée.
+        foreach (['S · Elite', 'A · Régional+', 'B · Régional', 'C · Départemental', 'D · Loisir', 'Sans rang', 'rank-title'] as $forbidden) {
+            self::assertStringNotContainsString($forbidden, $html, \sprintf('« %s » ne doit pas être imprimé dans un document public', $forbidden));
+        }
     }
 
     /**

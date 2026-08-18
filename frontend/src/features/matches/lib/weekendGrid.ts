@@ -9,6 +9,7 @@ export const MATCH_MINUTES = 105;
 // D-20 : c'était la seule des trois copies à clamper — elle est devenue le foyer partagé.
 import { formatMinutes } from "@/shared/lib/time";
 import { assignLanes } from "@/shared/lib/gridLayout";
+import { compareNamesFr } from "@/shared/lib/nameOrder";
 
 export { formatMinutes };
 
@@ -189,7 +190,7 @@ export function buildWeekendGrid(
     const dayFixtures = placed.filter((f) => f.matchDate === dateKey);
     const dayGhosts = ghosts.filter((g) => g.dateKey === dateKey);
     const venueIds = [...new Set([...dayFixtures.map((f) => f.venueId as string), ...dayGhosts.map((g) => g.venueId)])].sort((a, b) =>
-      (venues.get(a)?.name ?? "").localeCompare(venues.get(b)?.name ?? "", "fr"),
+      compareNamesFr(venues.get(a)?.name ?? "", venues.get(b)?.name ?? ""),
     );
     dateGroups.push({ dateKey, label: dateLabel(dateKey), startColumn: cssColumn, span: venueIds.length });
     for (const venueId of venueIds) {

@@ -1,6 +1,7 @@
 import { HTTPError } from "ky";
 
 import { api } from "@/shared/api/client";
+import { sortByName } from "@/shared/lib/nameOrder";
 
 /**
  * Planning read API. Tenant (club) + active season are resolved server-side from
@@ -655,7 +656,7 @@ export const getSchedule = (id: string): Promise<Schedule> => api.get(`schedules
 export const getSlots = (scheduleId: string): Promise<Slot[]> => collection<Slot>("schedule_slot_templates", { scheduleId });
 export const getDiagnostics = (scheduleId: string): Promise<Diagnostic[]> => collection<Diagnostic>("schedule_diagnostics", { scheduleId });
 export const getTeams = (): Promise<Team[]> => collectionAll<Team>("teams");
-export const getVenues = (): Promise<Venue[]> => collectionAll<Venue>("venues");
+export const getVenues = async (): Promise<Venue[]> => sortByName(await collectionAll<Venue>("venues"));
 /**
  * Les créneaux de la COUCHE d'une version : le socle (aucun filtre → le provider
  * restreint à `schedulePlanId IS NULL`) ou la grille que possède un plan de période
