@@ -13,11 +13,18 @@ use Doctrine\ORM\Mapping as ORM;
  * dirigeant a changé le comportement du gymnase sur cette période — pas de ligne =
  * INHERIT, le gymnase garde ses créneaux de saison.
  *
- * DISABLED = le gymnase ne sert pas du tout cette période.
- * BLANK    = on repart d'une grille vierge (les créneaux de saison sont ignorés) ;
- * seuls les créneaux prêtés du plan restent utilisables.
+ * Deux réglages INDÉPENDANTS y cohabitent, tous deux facultatifs (au moins l'un présent) :
  *
- * Dans les deux cas le planning principal n'est JAMAIS modifié : c'est l'overlay de
+ *  - `mode` (NULLABLE) : DISABLED = le gymnase ne sert pas du tout cette période ;
+ *    BLANK = on repart d'une grille vierge (les créneaux de saison sont ignorés, seuls
+ *    les créneaux prêtés du plan restent) ; NULL = hériter (une ligne peut n'exister QUE
+ *    pour son masque, sans imposer de mode).
+ *  - `dayOverrides` (masque manuel tri-état, SPARSE) : map jour ISO (1..7) → OPEN|CLOSED,
+ *    un jour absent hérite du défaut vivant (dérivé de l'indisponibilité déclarée). Il
+ *    s'AJOUTE au défaut jour par jour ({@see App\Service\PlanVenueClosures}, la maison
+ *    unique de la composition) : le mode DISABLED le rend DORMANT (conservé, sans effet).
+ *
+ * Dans tous les cas le planning principal n'est JAMAIS modifié : c'est l'overlay de
  * période qui lit ces lignes, la structure saisonnière reste intacte.
  */
 #[ORM\Entity]
@@ -58,8 +65,18 @@ class VenuePeriodOverride implements TenantOwnedInterface
     #[ORM\Column(type: 'guid')]
     private string $venueId;
 
-    #[ORM\Column(length: 16, enumType: VenuePeriodMode::class)]
-    private VenuePeriodMode $mode = VenuePeriodMode::DISABLED;
+    #[ORM\Column(length: 16, nullable: true, enumType: VenuePeriodMode::class)]
+    private ?VenuePeriodMode $mode = null;
+
+    /**
+     * Masque manuel SPARSE : jour ISO (1..7) → OPEN|CLOSED. NULL/[] = aucun jour forcé.
+     * Colonne JSON inscriptible = surface d'injection : la validation forte des clés (1..7)
+     * et des valeurs (OPEN|CLOSED) vit dans {@see App\Dto\VenuePeriodOverrideInput}.
+     *
+     * @var array<int|string, string>|null
+     */
+    #[ORM\Column(type: 'json', nullable: true)]
+    private ?array $dayOverrides = null;
 
     public function __construct()
     {
@@ -144,14 +161,32 @@ class VenuePeriodOverride implements TenantOwnedInterface
         return $this;
     }
 
-    public function getMode(): VenuePeriodMode
+    public function getMode(): ?VenuePeriodMode
     {
         return $this->mode;
     }
 
-    public function setMode(VenuePeriodMode $mode): self
+    public function setMode(?VenuePeriodMode $mode): self
     {
         $this->mode = $mode;
+
+        return $this;
+    }
+
+    /**
+     * @return array<int|string, string>|null
+     */
+    public function getDayOverrides(): ?array
+    {
+        return $this->dayOverrides;
+    }
+
+    /**
+     * @param array<int|string, string>|null $dayOverrides
+     */
+    public function setDayOverrides(?array $dayOverrides): self
+    {
+        $this->dayOverrides = $dayOverrides;
 
         return $this;
     }

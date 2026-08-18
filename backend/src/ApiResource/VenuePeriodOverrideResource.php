@@ -20,9 +20,11 @@ use DateTimeImmutable;
 use Symfony\Component\Serializer\Attribute\Groups;
 
 /**
- * Réglage sparse par (période, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK
- * (grille vierge, les créneaux de saison sont ignorés). Pas de ligne = INHERIT, le
- * défaut. L'overlay de période lit ces lignes ; le planning principal reste intact.
+ * Réglage sparse par (période, gymnase) : un `mode` FACULTATIF — DISABLED (le gymnase ne
+ * sert pas) ou BLANK (grille vierge, les créneaux de saison sont ignorés) — et/ou un masque
+ * manuel `dayOverrides` (jour ISO → OPEN|CLOSED) qui s'ajoute au défaut de l'indisponibilité.
+ * Pas de ligne = INHERIT, le défaut. L'overlay de période lit ces lignes ; le planning
+ * principal reste intact.
  */
 #[ApiResource(shortName: 'VenuePeriodOverride', operations: [
     new GetCollection,
@@ -74,7 +76,16 @@ class VenuePeriodOverrideResource
     public string $venueId = '';
 
     #[Groups(['read'])]
-    public string $mode = '';
+    public ?string $mode = null;
+
+    /**
+     * Masque manuel jour ISO (1..7) → OPEN|CLOSED, ou null. Le front le lit tel quel — il ne
+     * redérive jamais la composition (celle-ci vit dans PlanVenueClosures, servie par le radar).
+     *
+     * @var array<int|string, string>|null
+     */
+    #[Groups(['read'])]
+    public ?array $dayOverrides = null;
 
     public static function fromEntity(VenuePeriodOverride $entity): self
     {
@@ -85,7 +96,8 @@ class VenuePeriodOverrideResource
         $dto->updatedAt = $entity->getUpdatedAt();
         $dto->schedulePlanId = $entity->getSchedulePlanId();
         $dto->venueId = $entity->getVenueId();
-        $dto->mode = $entity->getMode()->value;
+        $dto->mode = $entity->getMode()?->value;
+        $dto->dayOverrides = $entity->getDayOverrides();
 
         return $dto;
     }
