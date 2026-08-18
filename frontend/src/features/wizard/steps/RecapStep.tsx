@@ -109,7 +109,7 @@ export function RecapStep() {
   // sert le MOTIF « gymnase fermé » de la liste des réservations. Rien n'est redérivé côté front.
   const { data: entryConflicts } = useEntryConflicts(periodEntryId);
   const { teams, pausedIds, layerRead: teamsRead } = useActiveTeams(layerPlanId);
-  const { venues, disabledIds, layerRead: venuesRead } = useActiveVenues(layerPlanId, entryConflicts?.fullyClosedVenueIds ?? []);
+  const { venues, disabledIds, layerRead: venuesRead } = useActiveVenues(layerPlanId, entryConflicts?.disabledVenueIds ?? [], entryConflicts?.fullyClosedVenueIds ?? []);
   const { data: allTeams = [] } = useWizardTeams();
   const { data: allVenues = [] } = useWizardVenues();
   const { data: slots = [] } = useGridSlots(layerPlanId);
@@ -184,11 +184,16 @@ export function RecapStep() {
   // hors grille. C'est le seul écran qui les liste (la grille de « Réserver » boucle sur les
   // créneaux) et donc le seul où le geste correctif — la poubelle — peut vivre. On n'efface
   // RIEN d'office : on ALERTE (décision fondateur).
+  // Indispo INFORMATIVE (2026-08-18) — on lit l'ÉTAT EFFECTIF servi (`effectiveClosedWeekdays`,
+  // incident × masque manuel composé SERVEUR), plus les fermetures BRUTES : un jour rouvert OPEN
+  // n'y figure PAS, donc n'est plus annoncé fermé. Les gymnases DÉSACTIVÉS (dont l'état effectif
+  // est vide côté serveur) passent par `disabledVenueIds` servi — c'est ainsi qu'OrphanPinGuard
+  // les traite (inertes), le prédicat `unservedReservationIds` en est le miroir déclaré.
   const closedWeekdaysByVenue: Record<string, number[]> = {};
-  for (const c of entryConflicts?.closures ?? []) {
-    closedWeekdaysByVenue[c.venueId] = [...new Set([...(closedWeekdaysByVenue[c.venueId] ?? []), ...c.weekdays])];
+  for (const [venueId, days] of Object.entries(entryConflicts?.effectiveClosedWeekdays ?? {})) {
+    closedWeekdaysByVenue[venueId] = Object.keys(days).map(Number);
   }
-  const unservedIds = unservedReservationIds(reservations, slots, [...disabledIds], closedWeekdaysByVenue);
+  const unservedIds = unservedReservationIds(reservations, slots, entryConflicts?.disabledVenueIds ?? [], closedWeekdaysByVenue);
   // Le MOTIF affiché (présentation, pas une décision métier — cf. `matches/lib/diagnostic.ts`) :
   // fermeture (gymnase entièrement fermé OU jour fermé) → « gymnase fermé — {titre} » ; gymnase
   // désactivé « override » → son mode ; sinon → créneau supprimé/déplacé. La fermeture prime : le

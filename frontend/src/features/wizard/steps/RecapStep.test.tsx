@@ -23,9 +23,10 @@ const { recapLayer, anchorState, storeState, constraintsState, constraintsArg, c
   constraintsState: { data: [] as Array<Record<string, unknown>> },
   constraintsArg: { value: undefined as string | null | undefined },
   calendarEntryState: { data: { parentEntryId: null } as { parentEntryId: string | null } | undefined },
-  // P2-37 D5/D6 — les fermetures servies par /conflicts : `closures` porte le motif, et
-  // `fullyClosedVenueIds` rend un gymnase entièrement fermé indisponible.
-  conflictsState: { data: { closures: [], fullyClosedVenueIds: [] } as Record<string, unknown> },
+  // P2-37 D5/D6 + indispo INFORMATIVE (2026-08-18) — les fermetures servies par /conflicts :
+  // `closures` porte le motif, `fullyClosedVenueIds` un gymnase entièrement fermé, et
+  // `effectiveClosedWeekdays` l'ÉTAT EFFECTIF jour par jour (un jour rouvert n'y figure PAS).
+  conflictsState: { data: { closures: [], fullyClosedVenueIds: [], effectiveClosedWeekdays: {}, disabledVenueIds: [] } as Record<string, unknown> },
   recapLayer: {
     teams: [] as unknown[],
     pausedIds: [] as string[],
@@ -214,7 +215,9 @@ describe("RecapStep — read-only summary", () => {
     // Le créneau EXISTE (donc pas orphelin ÉTROIT) — c'est la fermeture qui le rend non servi.
     recapLayer.slots = [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "18:00", durationMinutes: 90, capacity: 1 }];
     h.reservations = [{ id: "rFermee", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "18:00", durationMinutes: 90 }];
-    conflictsState.data = { closures: [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [2] }], fullyClosedVenueIds: [] };
+    // Indispo INFORMATIVE : le motif se lit de l'ÉTAT EFFECTIF servi (le jour 2 est fermé), pas
+    // des fermetures brutes. `closures` reste le porteur du TITRE affiché.
+    conflictsState.data = { closures: [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [2] }], fullyClosedVenueIds: [], effectiveClosedWeekdays: { v1: { "2": "default-incident" } }, disabledVenueIds: [] };
     const user = userEvent.setup();
     renderWithProviders(<RecapStep />);
 
@@ -226,6 +229,24 @@ describe("RecapStep — read-only summary", () => {
     // Aucune suppression passive : la poubelle est là, mais rien n'a été retiré au rendu.
     expect(screen.getByRole("button", { name: /Retirer la réservation de SM1/ })).toBeInTheDocument();
     expect(deleteReservationMock).not.toHaveBeenCalled();
+  });
+
+  // Indispo INFORMATIVE (2026-08-18) — item 7 : le récap lit l'ÉTAT EFFECTIF, pas les fermetures
+  // brutes. Un jour ROUVERT (masque OPEN) n'apparaît PAS dans `effectiveClosedWeekdays`, donc une
+  // réservation ce jour-là n'est plus annoncée fermée alors qu'une fermeture brute la couvrait.
+  it("n'annonce PAS fermée une réservation sur un jour rouvert malgré l'indisponibilité (état effectif)", async () => {
+    recapLayer.slots = [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "18:00", durationMinutes: 90, capacity: 1 }];
+    h.reservations = [{ id: "rReouvert", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "18:00", durationMinutes: 90 }];
+    // La fermeture BRUTE couvre le jour 2, mais l'état EFFECTIF ne le liste pas (rouvert) :
+    // le récap ne doit rien annoncer de fermé sur cette réservation.
+    conflictsState.data = { closures: [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [2] }], fullyClosedVenueIds: [], effectiveClosedWeekdays: {}, disabledVenueIds: [] };
+    const user = userEvent.setup();
+    renderWithProviders(<RecapStep />);
+
+    await user.click(screen.getByRole("button", { name: /Réservations/ }));
+
+    expect(screen.queryByText(/gymnase fermé/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Retirer la réservation de SM1/ })).toBeNull();
   });
 
   it("shows the team tiers open by default (ranks visible at first glance)", async () => {

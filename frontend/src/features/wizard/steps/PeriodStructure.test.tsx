@@ -42,8 +42,14 @@ const teamOverridesLoadingState = { value: false };
 const teamOverridesErrorState = { value: false };
 const constraintOverridesLoadingState = { value: false };
 const constraintOverridesErrorState = { value: false };
-const conflictState: { venueIds: string[]; closures: Closure[]; fullyClosedVenueIds: string[] } = { venueIds: [], closures: [], fullyClosedVenueIds: [] };
-const overridesVenueState: { data: Array<{ id: string; schedulePlanId: string; venueId: string; mode: "DISABLED" | "BLANK" }> } = { data: [] };
+const conflictState: {
+  venueIds: string[];
+  closures: Closure[];
+  fullyClosedVenueIds: string[];
+  effectiveClosedWeekdays: Record<string, Record<string, "manual" | "default-incident">>;
+  disabledVenueIds: string[];
+} = { venueIds: [], closures: [], fullyClosedVenueIds: [], effectiveClosedWeekdays: {}, disabledVenueIds: [] };
+const overridesVenueState: { data: Array<{ id: string; schedulePlanId: string; venueId: string; mode: "DISABLED" | "BLANK" | null; dayOverrides?: Record<string, "OPEN" | "CLOSED"> | null }> } = { data: [] };
 const overridesFetchingState = { value: false };
 const venueCanSplitState = { value: false };
 // Le club n'a QU'UN gymnase par défaut : la plupart des tests portent sur une grille, et
@@ -155,7 +161,7 @@ vi.mock("../queries", () => ({
   useSharedTrainingGroups: () => ({ data: sharedGroupsState.data }),
 }));
 vi.mock("@/features/cockpit/queries", () => ({
-  useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds, closures: conflictState.closures, fullyClosedVenueIds: conflictState.fullyClosedVenueIds }, isError: false, refetch: vi.fn() }),
+  useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds, closures: conflictState.closures, fullyClosedVenueIds: conflictState.fullyClosedVenueIds, effectiveClosedWeekdays: conflictState.effectiveClosedWeekdays, disabledVenueIds: conflictState.disabledVenueIds }, isError: false, refetch: vi.fn() }),
   useCalendarEntry: () => ({ data: entryState.data, isLoading: false }),
   useSchedulePlanForEntry: () => ({ data: planState.data, isLoading: false }),
   // Dérivé de planState : un test qui met planState.data à undefined simule le plan pas
@@ -209,6 +215,8 @@ afterEach(() => {
   conflictState.venueIds = [];
   conflictState.closures = [];
   conflictState.fullyClosedVenueIds = [];
+  conflictState.effectiveClosedWeekdays = {};
+  conflictState.disabledVenueIds = [];
   overridesVenueState.data = [];
   overridesFetchingState.value = false;
   deletePeriodSlotImpl.value = deleteSlot;
@@ -562,22 +570,23 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     expect(screen.getByRole("alert")).toHaveTextContent("Indispo toute la période du 1/5 au 10/5 — Congés");
   });
 
-  // P2-37 D6 — un gymnase ENTIÈREMENT fermé sur la fenêtre : l'interrupteur Désactiver/
-  // Réactiver laisse place à la RAISON (le serveur refuserait le geste, D2). L'écran le dit
-  // AVANT le clic. La donnée vient du serveur (`fullyClosedVenueIds`), le front ne redérive rien.
-  it("gymnase entièrement fermé : l'interrupteur laisse place à la raison, aucun geste de mode", () => {
+  // Indispo INFORMATIVE (2026-08-18) — le surfaçage P2-37 D6 (interrupteur caché, raison à sa
+  // place) est PÉRIMÉ : le serveur accepte désormais le geste. L'interrupteur REVIENT sur un
+  // gymnase entièrement fermé ; la raison RESTE affichée (information), pas à la place du geste.
+  it("gymnase entièrement fermé : l'interrupteur REVIENT, la raison reste en information", async () => {
     conflictState.venueIds = ["v1"];
     conflictState.closures = [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [1, 2, 3, 4, 5, 6, 7] }];
     conflictState.fullyClosedVenueIds = ["v1"];
+    conflictState.effectiveClosedWeekdays = { v1: { "1": "default-incident", "2": "default-incident", "3": "default-incident", "4": "default-incident", "5": "default-incident", "6": "default-incident", "7": "default-incident" } };
     render(<PeriodVenues calendarEntryId="e1" />);
 
-    // Plus d'interrupteur : ni Désactiver ni Réactiver.
-    expect(screen.queryByRole("button", { name: "Désactiver" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Réactiver" })).toBeNull();
-    // La raison est dite en clair, avant tout clic — LÀ où était l'interrupteur (le marqueur
-    // `status` de l'en-tête), et pas seulement dans l'alerte d'ensemble.
-    expect(screen.getByText(/fermé toute la période/)).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Indispo toute la période du 1/5 au 10/5 — Travaux");
+    // L'interrupteur est là et fonctionne (le serveur ne refuse plus).
+    const toggle = screen.getByRole("button", { name: "Désactiver" });
+    expect(toggle).toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(setMode).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", mode: "DISABLED" }));
+    // La raison reste dite en clair — information, pas remplacement du geste (bandeau + en-tête).
+    expect(screen.getAllByText(/Indispo toute la période du 1\/5 au 10\/5 — Travaux/).length).toBeGreaterThan(0);
   });
 
   // TÉMOIN (P2-37 D6) — une fermeture PARTIELLE ne change RIEN : le gymnase reste ACTIF, son
@@ -831,6 +840,91 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     await user.click(screen.getByRole("button", { name: "Reprendre" }));
     expect(resetGrid).toHaveBeenCalledWith("v1", expect.anything());
     expect(clearMode).not.toHaveBeenCalled();
+  });
+});
+
+describe("PeriodVenues — coches jour (indispo informative, 2026-08-18)", () => {
+  it("montre une rangée de 7 coches jour, cochées quand le jour est ouvert", () => {
+    render(<PeriodVenues calendarEntryId="e1" />);
+    expect(screen.getByRole("checkbox", { name: "Lundi — Gymnase A" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Dimanche — Gymnase A" })).toBeChecked();
+  });
+
+  it("un jour fermé par l'indisponibilité déclarée est décoché, avec sa provenance", () => {
+    conflictState.effectiveClosedWeekdays = { v1: { "6": "default-incident" } };
+    render(<PeriodVenues calendarEntryId="e1" />);
+    const sat = screen.getByRole("checkbox", { name: "Samedi — Gymnase A" });
+    expect(sat).not.toBeChecked();
+    expect(sat.getAttribute("title")).toMatch(/indisponibilité déclarée/);
+  });
+
+  it("un jour décoché à la main porte la provenance « décoché manuellement »", () => {
+    conflictState.effectiveClosedWeekdays = { v1: { "6": "manual" } };
+    render(<PeriodVenues calendarEntryId="e1" />);
+    const sat = screen.getByRole("checkbox", { name: "Samedi — Gymnase A" });
+    expect(sat).not.toBeChecked();
+    expect(sat.getAttribute("title")).toMatch(/décoché manuellement/);
+  });
+
+  it("un jour rouvert malgré l'indisponibilité est coché, avec sa provenance", () => {
+    overridesVenueState.data = [{ id: "o1", schedulePlanId: "plan-1", venueId: "v1", mode: null, dayOverrides: { "6": "OPEN" } }];
+    render(<PeriodVenues calendarEntryId="e1" />);
+    const sat = screen.getByRole("checkbox", { name: "Samedi — Gymnase A" });
+    expect(sat).toBeChecked();
+    expect(sat.getAttribute("title")).toMatch(/réactivé malgré/);
+  });
+
+  it("décocher un jour ouvert écrit CLOSED dans le masque", async () => {
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Samedi — Gymnase A" }));
+    expect(setMode).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", dayOverrides: { 6: "CLOSED" } }));
+  });
+
+  it("cocher un jour fermé par l'incident écrit OPEN dans le masque", async () => {
+    conflictState.effectiveClosedWeekdays = { v1: { "6": "default-incident" } };
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await userEvent.click(screen.getByRole("checkbox", { name: "Samedi — Gymnase A" }));
+    expect(setMode).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", dayOverrides: { 6: "OPEN" } }));
+  });
+
+  it("recliquer un jour vers son défaut RETIRE la ligne quand le masque redevient vide (DELETE)", async () => {
+    overridesVenueState.data = [{ id: "o1", schedulePlanId: "plan-1", venueId: "v1", mode: null, dayOverrides: { "6": "OPEN" } }];
+    render(<PeriodVenues calendarEntryId="e1" />);
+    // Le jour est ouvert (réactivé) : le recliquer retire l'entrée OPEN → masque vide → DELETE.
+    await userEvent.click(screen.getByRole("checkbox", { name: "Samedi — Gymnase A" }));
+    expect(clearMode).toHaveBeenCalledWith("o1");
+  });
+
+  it("« Réactiver malgré l'indisponibilité » ouvre les 7 jours (masque OPEN×7)", async () => {
+    conflictState.venueIds = ["v1"];
+    conflictState.closures = [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [1, 2, 3, 4, 5, 6, 7] }];
+    conflictState.fullyClosedVenueIds = ["v1"];
+    conflictState.effectiveClosedWeekdays = { v1: { "1": "default-incident", "2": "default-incident", "3": "default-incident", "4": "default-incident", "5": "default-incident", "6": "default-incident", "7": "default-incident" } };
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await userEvent.click(screen.getByRole("button", { name: /Réactiver malgré/ }));
+    expect(setMode).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", dayOverrides: { 1: "OPEN", 2: "OPEN", 3: "OPEN", 4: "OPEN", 5: "OPEN", 6: "OPEN", 7: "OPEN" } }));
+  });
+
+  it("« Revenir au défaut » supprime la ligne (DELETE)", async () => {
+    overridesVenueState.data = [{ id: "o1", schedulePlanId: "plan-1", venueId: "v1", mode: null, dayOverrides: { "6": "CLOSED" } }];
+    conflictState.effectiveClosedWeekdays = { v1: { "6": "manual" } };
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await userEvent.click(screen.getByRole("button", { name: "Revenir au défaut" }));
+    expect(clearMode).toHaveBeenCalledWith("o1");
+  });
+
+  it("gymnase DÉSACTIVÉ : la rangée de jours est grisée et conserve les coches", () => {
+    overridesVenueState.data = [{ id: "o1", schedulePlanId: "plan-1", venueId: "v1", mode: "DISABLED", dayOverrides: { "6": "CLOSED" } }];
+    render(<PeriodVenues calendarEntryId="e1" />);
+    expect(screen.getByText(/coches conservées/)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Samedi — Gymnase A" })).toBeDisabled();
+  });
+
+  it("le bandeau d'ensemble liste aussi les jours décochés à la main", () => {
+    conflictState.effectiveClosedWeekdays = { v1: { "6": "manual" } };
+    render(<PeriodVenues calendarEntryId="e1" />);
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(/décoché/);
   });
 });
 

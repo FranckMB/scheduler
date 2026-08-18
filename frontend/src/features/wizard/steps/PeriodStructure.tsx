@@ -2,6 +2,7 @@ import { Loader2, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useCalendarEntry, useEntryConflicts, usePeriodAnchor, useSchedulePlanForEntry } from "@/features/cockpit/queries";
+import { frDateShort } from "@/features/cockpit/lib/date";
 import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
 import { readFailed, readLoading } from "@/shared/lib/readState";
 import { AccordionSection } from "@/shared/components/ui/accordion";
@@ -25,6 +26,8 @@ import type { Closure } from "@/features/cockpit/api";
 import type { Constraint, ConstraintRuleType, SharedTrainingGroup, Team, TeamPeriodOverride, Venue, VenuePeriodOverride, VenueTrainingSlot } from "../api";
 import { DAYS, DURATIONS, durationOptions, hhmm } from "../lib/days";
 import { closuresByVenue, closurePeriodLabel } from "../lib/venueClosures";
+import { computeDayMaskToggle, manualClosedWeekdays } from "../lib/venueDays";
+import type { DayMask } from "../lib/venueDays";
 import { slotPlacementError } from "../lib/slotOverlap";
 import {
   useCreatePeriodConstraintOverride,
@@ -439,7 +442,15 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
   const fullyClosed = new Set(conflicts?.fullyClosedVenueIds ?? []);
   const closuresByV = closuresByVenue(conflicts?.closures ?? []);
   const closureLabelsFor = (venueId: string): string[] => (closuresByV.get(venueId) ?? []).map(closurePeriodLabel);
+  // Indispo INFORMATIVE (2026-08-18) — l'état effectif jour par jour, servi AVEC provenance
+  // (`effectiveClosedWeekdays`). Le front le LIT ; il ne recompose jamais incident × masque.
+  const effectiveClosedWeekdays = conflicts?.effectiveClosedWeekdays;
+  const manualDaysFor = (venueId: string): number[] => manualClosedWeekdays(effectiveClosedWeekdays, venueId);
   const venueSlots = periodSlots.filter((s) => s.venueId === selected.id);
+  // Le bandeau rappelle TOUT ce qui ne sert pas : indisponibilités déclarées ET jours décochés
+  // à la main (décision C) — sans quoi un jour fermé d'un clic passait inaperçu hors du gymnase
+  // sélectionné.
+  const venuesToRemind = venues.filter((v) => closed.has(v.id) || manualDaysFor(v.id).length > 0);
 
   return (
     <div>
@@ -467,18 +478,26 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
       </div>
 
       {/* Indicateur d'ensemble : le badge par gymnase ne montre que le gymnase choisi, or
-          un gestionnaire doit voir d'un coup TOUS les gymnases interdits (revue #8 PR-B
-          round 2) — sans quoi il croit un gymnase utilisable et ne comprend pas pourquoi
-          aucune équipe n'y est placée. */}
-      {venues.some((v) => closed.has(v.id)) ? (
+          un gestionnaire doit voir d'un coup TOUT ce qui ne sert pas (revue #8 PR-B round 2 ;
+          décision C 2026-08-18) — les indisponibilités déclarées ET les jours décochés à la
+          main — sans quoi il croit un jour/gymnase utilisable et ne comprend pas le résultat. */}
+      {venuesToRemind.length > 0 ? (
         <div role="alert" className="mb-3 space-y-1 text-sm text-destructive">
-          {venues
-            .filter((v) => closed.has(v.id))
-            .map((v) => (
+          {venuesToRemind.map((v) => {
+            const parts: string[] = [];
+            if (closed.has(v.id)) {
+              parts.push(closureLabelsFor(v.id).join(" · ") || "Indispo cette période");
+            }
+            const manual = manualDaysFor(v.id);
+            if (manual.length > 0) {
+              parts.push(`jours décochés à la main : ${manual.map((d) => DAY_LABELS_LONG[d].toLowerCase()).join(", ")}`);
+            }
+            return (
               <p key={v.id}>
-                <span className="font-medium">{v.name}</span> : {closureLabelsFor(v.id).join(" · ") || "Indispo cette période"}
+                <span className="font-medium">{v.name}</span> : {parts.join(" — ")}
               </p>
-            ))}
+            );
+          })}
         </div>
       ) : null}
 
@@ -490,6 +509,7 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
         override={override}
         closures={closuresByV.get(selected.id) ?? []}
         fullyClosed={fullyClosed.has(selected.id)}
+        effectiveClosed={effectiveClosedWeekdays?.[selected.id] ?? {}}
         syncing={overridesQuery.isFetching}
         editingSlot={editingSlot}
         onEditSlot={setEditingSlot}
@@ -507,6 +527,7 @@ function PeriodVenuePanel({
   override,
   closures,
   fullyClosed,
+  effectiveClosed,
   syncing,
   editingSlot,
   onEditSlot,
@@ -518,9 +539,12 @@ function PeriodVenuePanel({
   slots: VenueTrainingSlot[];
   override: VenuePeriodOverride | null;
   closures: Closure[];
-  /** P2-37 D6 — gymnase entièrement fermé sur la fenêtre (donnée serveur). L'interrupteur
-   *  Désactiver/Réactiver laisse place à la raison ; le serveur refuse le geste (D2). */
+  /** Indispo INFORMATIVE (2026-08-18) — gymnase entièrement fermé sur la fenêtre (donnée serveur).
+   *  Le geste est désormais ACCEPTÉ ; la raison reste affichée en information, jamais à sa place. */
   fullyClosed: boolean;
+  /** L'état effectif jour par jour du gymnase, servi AVEC provenance : `{ jour ISO → provenance }`.
+   *  Seuls les jours EFFECTIVEMENT fermés y figurent. Composé SERVEUR — jamais recomposé ici. */
+  effectiveClosed: Record<string, "manual" | "default-incident">;
   syncing: boolean;
   editingSlot: VenueTrainingSlot | null;
   onEditSlot: (slot: VenueTrainingSlot | null) => void;
@@ -554,56 +578,146 @@ function PeriodVenuePanel({
   // il coûte une ligne et son absence rendrait le créneau muet.
   const offGridSlots = slots.filter((sl) => !WEEK.some((d) => d.n === sl.dayOfWeek));
 
-  const toggleActive = () => {
-    if (isDisabled) {
-      // Réactiver = retirer la ligne. Depuis DISABLED, le backend ne touche PAS la grille.
-      clearMode.mutate(override.id);
+  // Le masque manuel STOCKÉ (la ressource que l'écran édite). Le front l'écrit, mais ne
+  // recompose jamais l'état effectif — celui-ci vient du serveur (`effectiveClosed`).
+  const dayMask: DayMask = override?.dayOverrides ?? {};
+  const hasIncident = closures.length > 0;
+  const hasOverride = null !== override;
+  const maskHasEntries = Object.keys(dayMask).length > 0;
+
+  // Basculer la coche d'UN jour : écrire l'intention (OPEN/CLOSED) dans le masque SPARSE, et
+  // supprimer la ligne dès que mode ET masque redeviennent vides (retour au défaut « hériter »).
+  const toggleDay = (weekday: number, currentlyClosed: boolean) => {
+    const nextMask = computeDayMaskToggle(dayMask, weekday, currentlyClosed);
+    const mode = override?.mode ?? null;
+    const maskEmpty = 0 === Object.keys(nextMask).length;
+    if (null === mode && maskEmpty) {
+      if (null !== override) {
+        clearMode.mutate(override.id);
+      }
       return;
     }
-    setMode.mutate({ venueId: venue.id, mode: "DISABLED", existingId: override?.id });
+    setMode.mutate({ venueId: venue.id, mode, dayOverrides: maskEmpty ? null : nextMask, existingId: override?.id });
+  };
+
+  // Geste gymnase entier — rouvrir les 7 jours malgré l'indisponibilité (masque OPEN×7), mode
+  // courant préservé (le serveur REMPLACE mode + masque au PUT, on envoie donc l'état complet).
+  const reactivateDespite = () => {
+    const allOpen: DayMask = { 1: "OPEN", 2: "OPEN", 3: "OPEN", 4: "OPEN", 5: "OPEN", 6: "OPEN", 7: "OPEN" };
+    setMode.mutate({ venueId: venue.id, mode: override?.mode ?? null, dayOverrides: allOpen, existingId: override?.id });
+  };
+
+  // « Revenir au défaut » : supprimer la ligne (mode ET masque effacés) — sans ligne = hériter.
+  const backToDefault = () => {
+    if (null !== override) {
+      clearMode.mutate(override.id);
+    }
+  };
+
+  const toggleActive = () => {
+    if (isDisabled && null !== override) {
+      // Réactiver : garder le masque DORMANT (coches conservées). Masque vide → retirer la ligne
+      // (le backend ne touche pas la grille depuis DISABLED) ; masque présent → PUT mode nul +
+      // masque, jamais un DELETE qui effacerait les coches conservées.
+      if (maskHasEntries) {
+        setMode.mutate({ venueId: venue.id, mode: null, dayOverrides: dayMask, existingId: override.id });
+      } else {
+        clearMode.mutate(override.id);
+      }
+      return;
+    }
+    // Désactiver : poser le mode en PRÉSERVANT le masque (le PUT remplace tout côté serveur).
+    setMode.mutate({ venueId: venue.id, mode: "DISABLED", dayOverrides: maskHasEntries ? dayMask : null, existingId: override?.id });
   };
 
   return (
     <section aria-label={`Gymnase ${venue.name}`} className="rounded-lg border border-border bg-card p-3">
       <header className="mb-2 flex flex-wrap items-center gap-2">
-        <span className={cn("font-medium", (isDisabled || fullyClosed) && "text-muted-foreground line-through")}>{venue.name}</span>
-        {isDisabled && !fullyClosed ? <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold text-muted-foreground">Désactivé cette période</span> : null}
-        {/* Fermeture PARTIELLE : le badge par jour, inchangé. Fermeture TOTALE : la raison prend
-            la place de l'interrupteur (ci-dessous), on ne la double donc pas ici. */}
-        {!fullyClosed
-          ? closures.map((c) => (
-              <span key={c.constraintId} className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive">
-                {closurePeriodLabel(c)}
-              </span>
-            ))
-          : null}
+        <span className={cn("font-medium", isDisabled && "text-muted-foreground line-through")}>{venue.name}</span>
+        {isDisabled ? <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold text-muted-foreground">Désactivé cette période</span> : null}
+        {/* Indispo INFORMATIVE (2026-08-18) — la raison reste affichée en INFORMATION (badge par
+            fermeture, grain jour), qu'elle soit partielle ou totale. Elle ne remplace plus
+            l'interrupteur : le serveur accepte désormais le geste. */}
+        {closures.map((c) => (
+          <span key={c.constraintId} className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive">
+            {closurePeriodLabel(c)}
+          </span>
+        ))}
         <span className="text-xs text-muted-foreground">
           {slots.length} créneau{slots.length > 1 ? "x" : ""}
         </span>
-        {/* P2-37 D6 — gymnase entièrement fermé : AUCUN geste de mode. Le serveur refuse
-            Désactiver/Réactiver (D2) ; l'écran le dit AVANT le clic — l'interrupteur laisse
-            place à la RAISON, en clair (titre + bornes). Une fermeture éditée/levée rouvre le
-            geste toute seule (l'indisponibilité est dérivée, jamais stockée). */}
-        {fullyClosed ? (
-          <span role="status" className="ml-auto rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive">
-            {closures.map(closurePeriodLabel).join(" · ") || "Indisponible cette période"}
-          </span>
-        ) : (
-          <Button type="button" size="sm" variant="outline" className="ml-auto" disabled={modeBusy} onClick={toggleActive}>
-            {isDisabled ? "Réactiver" : "Désactiver"}
-          </Button>
-        )}
+        <Button type="button" size="sm" variant="outline" className="ml-auto" disabled={modeBusy} onClick={toggleActive}>
+          {isDisabled ? "Réactiver" : "Désactiver"}
+        </Button>
       </header>
 
-      {fullyClosed ? (
+      {fullyClosed && !isDisabled ? (
         <p className="mb-2 text-xs text-muted-foreground">
-          Ce gymnase est fermé toute la période — aucune séance n'y sera placée. Son mode ne se règle plus tant que la fermeture tient : ajustez ou levez la fermeture pour le rendre de nouveau réglable. Sa grille reste modifiable (vous pouvez la préparer pour la suite).
+          Ce gymnase est indisponible sur toute la fenêtre (indisponibilité déclarée) — aucune séance n'y sera placée. Vous pouvez rouvrir des jours ci-dessous, ou le préparer pour la suite.
         </p>
       ) : isDisabled ? (
         <p className="mb-2 text-xs text-muted-foreground">Ce gymnase ne sera pas utilisé pour cette période. Sa grille est conservée telle quelle — réactivez-le pour la modifier.</p>
       ) : 0 === slots.length ? (
         <p role="alert" className="mb-2 text-sm text-destructive">Aucun créneau : aucune équipe ne pourra s’entraîner dans ce gymnase tant que vous n’en aurez pas posé.</p>
       ) : null}
+
+      {/* Rangée de coches JOUR (indispo INFORMATIVE, 2026-08-18) : la coche du plan fait foi, jour
+          par jour. L'état est LU de `effectiveClosed` (composé SERVEUR, avec provenance) ; le clic
+          écrit OPEN/CLOSED dans le masque manuel, ou RETIRE l'entrée au retour au défaut. Sous
+          DISABLED la rangée est GELÉE (fieldset) et montre le masque DORMANT — coches conservées. */}
+      <fieldset disabled={isDisabled} className={cn("mb-3 min-w-0 border-0 p-0", isDisabled && "opacity-50")}>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">Jours ouverts cette période</p>
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          {WEEK.map((d) => {
+            // Sous DISABLED, l'état effectif servi exclut le gymnase : on rend alors le masque
+            // dormant. Sinon, `effectiveClosed` (serveur) fait foi.
+            const closedDay = isDisabled ? "CLOSED" === dayMask[d.n] : undefined !== effectiveClosed[d.n];
+            const provenance = effectiveClosed[d.n];
+            const reopened = "OPEN" === dayMask[d.n];
+            const firstClosure = closures[0];
+            const datesSuffix = firstClosure ? ` (du ${frDateShort(firstClosure.startDate)} au ${frDateShort(firstClosure.endDate)})` : "";
+            const title = closedDay
+              ? "manual" === provenance
+                ? "fermé — décoché manuellement"
+                : `fermé — indisponibilité déclarée${datesSuffix}`
+              : reopened
+                ? "ouvert — réactivé malgré l'indisponibilité"
+                : "ouvert";
+            return (
+              <label key={d.n} className="flex items-center gap-1 text-xs text-muted-foreground" title={title}>
+                <input
+                  type="checkbox"
+                  checked={!closedDay}
+                  disabled={modeBusy}
+                  onChange={() => toggleDay(d.n, closedDay)}
+                  aria-label={`${DAY_LABELS_LONG[d.n]} — ${venue.name}`}
+                  title={title}
+                />
+                <span>{d.label}</span>
+              </label>
+            );
+          })}
+        </div>
+        {isDisabled ? (
+          <p className="mt-1 text-xs italic text-muted-foreground">Grille et coches conservées — réactivez le gymnase pour les retrouver.</p>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">Décocher un jour le ferme sur toutes les semaines de la période ; le recocher le rouvre partout.</p>
+        )}
+        {!isDisabled && (hasIncident || hasOverride) ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {hasIncident ? (
+              <Button type="button" size="sm" variant="outline" disabled={modeBusy} onClick={reactivateDespite}>
+                Réactiver malgré l&apos;indisponibilité
+              </Button>
+            ) : null}
+            {hasOverride ? (
+              <Button type="button" size="sm" variant="ghost" disabled={modeBusy} onClick={backToDefault}>
+                Revenir au défaut
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </fieldset>
 
       {/* fieldset disabled : gèle la grille à la souris ET au clavier quand le gymnase est
           désactivé — ses boutons sortent de l'ordre de tabulation et ne s'activent pas.
