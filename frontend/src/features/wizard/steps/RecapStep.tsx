@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { anchorIsWritable, useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
+import { anchorIsWritable, useCalendarEntry, useEntryConflicts, usePeriodAnchor } from "@/features/cockpit/queries";
 import { frDateShort } from "@/features/cockpit/lib/date";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Card, CardContent } from "@/shared/components/ui/card";
@@ -21,42 +21,48 @@ import { sharedGroupLabel } from "../lib/sharedTraining";
 import { useWizardStore } from "../store";
 import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { dayLabel, hhmm } from "../lib/days";
-import { orphanReservationIds } from "../lib/orphanReservations";
+import { unservedReservationIds } from "../lib/orphanReservations";
+import { closuresByVenue } from "../lib/venueClosures";
 import { useDeleteReservation } from "../queries";
 import { Button } from "@/shared/components/ui/button";
 import { Trash2 } from "lucide-react";
 
 // Manager-facing labels for the FFBB play levels (mirrors the teams step).
 /**
- * P4-44 — une ligne de réservation. ORPHELINE (créneau déplacé ou supprimé), elle se
- * signale ET s'enlève : c'est le seul écran capable de la montrer, donc le seul où le
- * geste correctif peut vivre. Le serveur, lui, bloque la génération dessus — un blocage
- * sans recours atteignable enfermerait le gestionnaire (leçon P3-20).
+ * P4-44 / P2-37 D5 — une ligne de réservation. NON SERVIE (créneau déplacé/supprimé, gymnase
+ * fermé sur la fenêtre ou ce jour-là, gymnase désactivé), elle se signale AVEC SON MOTIF ET
+ * s'enlève : c'est le seul écran capable de la montrer, donc le seul où le geste correctif peut
+ * vivre. Le serveur, lui, refuse la RÉSERVATION à la source et l'escamote du payload — mais on
+ * n'efface RIEN passivement (décision fondateur : « on ne fait pas de modification passive, on
+ * alerte »). La poubelle reste à la main du gestionnaire.
+ *
+ * `reason` null = servie normalement (lecture seule) ; non-null = le motif, affiché en clair.
  */
 function ReservationRow({
   reservation,
   teamName,
   venueName,
-  isOrphan,
+  reason,
   onRemove,
   busy,
 }: {
   reservation: { id: string; teamId: string; venueId: string; dayOfWeek: number; startTime: string };
   teamName: Map<string, string>;
   venueName: Map<string, string>;
-  isOrphan: boolean;
+  reason: string | null;
   onRemove: () => void;
   busy: boolean;
 }) {
   const label = teamName.get(reservation.teamId) ?? "?";
   const where = `${venueName.get(reservation.venueId) ?? "?"} · ${dayLabel(reservation.dayOfWeek)} ${hhmm(reservation.startTime)}`;
+  const unserved = null !== reason;
 
   return (
     <SummaryRow
-      label={isOrphan ? <span className="text-destructive">{label} — créneau supprimé ou déplacé</span> : label}
-      meta={<span className={isOrphan ? "text-destructive" : undefined}>{where}</span>}
+      label={unserved ? <span className="text-destructive">{label} — {reason}</span> : label}
+      meta={<span className={unserved ? "text-destructive" : undefined}>{where}</span>}
       action={
-        isOrphan ? (
+        unserved ? (
           <Button variant="ghost" size="icon" className="size-7" aria-label={`Retirer la réservation de ${label}`} disabled={busy} onClick={onRemove}>
             <Trash2 className="size-4" />
           </Button>
@@ -97,8 +103,13 @@ export function RecapStep() {
   // le mensonge exact que ce lot corrige — on l'annonce (`useStepValidation` bloque déjà
   // la génération sur ces états ; ici c'est l'affichage qui doit cesser de mentir).
   const periodLayerUnresolved = null !== periodEntryId && "period" !== periodAnchorEarly.state;
+  // P2-37 D5/D6 — les fermetures de gymnase de la période, calculées SERVEUR. On interroge
+  // l'entrée COURANTE (semaine enfant comprise) ; le serveur résout la mère. `fullyClosedVenueIds`
+  // rend les gymnases entièrement fermés indisponibles (via `useActiveVenues`), et `closures`
+  // sert le MOTIF « gymnase fermé » de la liste des réservations. Rien n'est redérivé côté front.
+  const { data: entryConflicts } = useEntryConflicts(periodEntryId);
   const { teams, pausedIds, layerRead: teamsRead } = useActiveTeams(layerPlanId);
-  const { venues, layerRead: venuesRead } = useActiveVenues(layerPlanId);
+  const { venues, disabledIds, layerRead: venuesRead } = useActiveVenues(layerPlanId, entryConflicts?.fullyClosedVenueIds ?? []);
   const { data: allTeams = [] } = useWizardTeams();
   const { data: allVenues = [] } = useWizardVenues();
   const { data: slots = [] } = useGridSlots(layerPlanId);
@@ -167,11 +178,41 @@ export function RecapStep() {
   // Reservations ordered by team rank (fanion S → A → B → C → D), then day + time.
   const teamRank = new Map(groupTeamsByTier(teams, tiers).flatMap((g) => g.teams).map((t, i) => [t.id, i]));
   const rankOf = (id: string): number => teamRank.get(id) ?? Number.MAX_SAFE_INTEGER;
-  // P4-44 — les réservations devenues orphelines (créneau déplacé ou supprimé) : le
-  // serveur les BLOQUE au récap, et c'est ici — seul écran qui les liste — qu'on peut
-  // les retirer. L'écran « Réserver » en est incapable : sa grille boucle sur les
-  // créneaux, une réservation hors grille n'y a aucune case.
-  const orphanIds = orphanReservationIds(reservations, slots);
+  // P2-37 D5 — les réservations qu'AUCUNE génération ne servira. Prédicat LARGE (miroir
+  // déclaré de `OrphanPinGuard::unservedReservationIds`) : gymnase hors service (désactivé OU
+  // entièrement fermé — `disabledIds` les fond déjà), couple (gymnase, jour) fermé, ou triplet
+  // hors grille. C'est le seul écran qui les liste (la grille de « Réserver » boucle sur les
+  // créneaux) et donc le seul où le geste correctif — la poubelle — peut vivre. On n'efface
+  // RIEN d'office : on ALERTE (décision fondateur).
+  const closedWeekdaysByVenue: Record<string, number[]> = {};
+  for (const c of entryConflicts?.closures ?? []) {
+    closedWeekdaysByVenue[c.venueId] = [...new Set([...(closedWeekdaysByVenue[c.venueId] ?? []), ...c.weekdays])];
+  }
+  const unservedIds = unservedReservationIds(reservations, slots, [...disabledIds], closedWeekdaysByVenue);
+  // Le MOTIF affiché (présentation, pas une décision métier — cf. `matches/lib/diagnostic.ts`) :
+  // fermeture (gymnase entièrement fermé OU jour fermé) → « gymnase fermé — {titre} » ; gymnase
+  // désactivé « override » → son mode ; sinon → créneau supprimé/déplacé. La fermeture prime : le
+  // gestionnaire ajuste la fermeture, pas le mode.
+  const fullyClosedVenues = new Set(entryConflicts?.fullyClosedVenueIds ?? []);
+  const closureTitleByVenue = new Map<string, string>();
+  for (const [venueId, cs] of closuresByVenue(entryConflicts?.closures ?? [])) {
+    closureTitleByVenue.set(venueId, cs.map((c) => c.title).join(", "));
+  }
+  const reservationReason = (r: { id: string; venueId: string; dayOfWeek: number }): string | null => {
+    if (!unservedIds.has(r.id)) {
+      return null;
+    }
+    if (fullyClosedVenues.has(r.venueId) || (closedWeekdaysByVenue[r.venueId] ?? []).includes(r.dayOfWeek)) {
+      const title = closureTitleByVenue.get(r.venueId);
+      return title ? `gymnase fermé — ${title}` : "gymnase fermé";
+    }
+    // `disabledIds` fond désactivés ET entièrement fermés — la fermeture est déjà traitée, il ne
+    // reste ici que le désactivé « override ».
+    if (disabledIds.has(r.venueId)) {
+      return "gymnase désactivé pour cette période";
+    }
+    return "créneau supprimé ou déplacé";
+  };
   const deleteReservation = useDeleteReservation();
 
   const sortedReservations = [...reservations].sort((a, b) => rankOf(a.teamId) - rankOf(b.teamId) || a.dayOfWeek - b.dayOfWeek || hhmm(a.startTime).localeCompare(hhmm(b.startTime)));
@@ -346,7 +387,7 @@ export function RecapStep() {
                       <div key={g.tier?.id ?? "orphan"} className="mb-2 last:mb-0">
                         <p className="px-1 pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">{tierGroupLabel(g.tier)}</p>
                         {rows.map((r) => (
-                          <ReservationRow key={r.id} reservation={r} teamName={teamName} venueName={venueName} isOrphan={orphanIds.has(r.id)} onRemove={() => deleteReservation.mutate(r.id)} busy={deleteReservation.isPending} />
+                          <ReservationRow key={r.id} reservation={r} teamName={teamName} venueName={venueName} reason={reservationReason(r)} onRemove={() => deleteReservation.mutate(r.id)} busy={deleteReservation.isPending} />
                         ))}
                       </div>
                     ))}
@@ -354,7 +395,7 @@ export function RecapStep() {
                       <div className="mb-2 last:mb-0">
                         <p className="px-1 pb-0.5 pt-1 text-xs font-semibold text-muted-foreground">Autres</p>
                         {orphanRows.map((r) => (
-                          <ReservationRow key={r.id} reservation={r} teamName={teamName} venueName={venueName} isOrphan={orphanIds.has(r.id)} onRemove={() => deleteReservation.mutate(r.id)} busy={deleteReservation.isPending} />
+                          <ReservationRow key={r.id} reservation={r} teamName={teamName} venueName={venueName} reason={reservationReason(r)} onRemove={() => deleteReservation.mutate(r.id)} busy={deleteReservation.isPending} />
                         ))}
                       </div>
                     ) : null}

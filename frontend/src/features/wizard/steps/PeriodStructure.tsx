@@ -431,6 +431,11 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
   // dates, titre) vient de `closures`, au grain JOUR. Le front ne dérive rien : `weekdays` est
   // calculé serveur.
   const closed = new Set(conflicts?.venueIds ?? []);
+  // P2-37 D6 — les gymnases ENTIÈREMENT fermés sur la fenêtre, tels que le SERVEUR les
+  // calcule (`fullyClosedVenueIds`). Indisponibilité TOTALE : le front la LIT, il ne
+  // redérive pas « toutes les dates fermées » (règle d'or). Sur un tel gymnase, l'interrupteur
+  // Désactiver/Réactiver laisse place à la RAISON — le serveur refuserait le geste (D2).
+  const fullyClosed = new Set(conflicts?.fullyClosedVenueIds ?? []);
   const closuresByV = closuresByVenue(conflicts?.closures ?? []);
   const closureLabelsFor = (venueId: string): string[] => (closuresByV.get(venueId) ?? []).map(closurePeriodLabel);
   const venueSlots = periodSlots.filter((s) => s.venueId === selected.id);
@@ -483,6 +488,7 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
         slots={venueSlots}
         override={override}
         closures={closuresByV.get(selected.id) ?? []}
+        fullyClosed={fullyClosed.has(selected.id)}
         syncing={overridesQuery.isFetching}
         editingSlot={editingSlot}
         onEditSlot={setEditingSlot}
@@ -499,6 +505,7 @@ function PeriodVenuePanel({
   slots,
   override,
   closures,
+  fullyClosed,
   syncing,
   editingSlot,
   onEditSlot,
@@ -510,6 +517,9 @@ function PeriodVenuePanel({
   slots: VenueTrainingSlot[];
   override: VenuePeriodOverride | null;
   closures: Closure[];
+  /** P2-37 D6 — gymnase entièrement fermé sur la fenêtre (donnée serveur). L'interrupteur
+   *  Désactiver/Réactiver laisse place à la raison ; le serveur refuse le geste (D2). */
+  fullyClosed: boolean;
   syncing: boolean;
   editingSlot: VenueTrainingSlot | null;
   onEditSlot: (slot: VenueTrainingSlot | null) => void;
@@ -555,22 +565,40 @@ function PeriodVenuePanel({
   return (
     <section aria-label={`Gymnase ${venue.name}`} className="rounded-lg border border-border bg-card p-3">
       <header className="mb-2 flex flex-wrap items-center gap-2">
-        <span className={cn("font-medium", isDisabled && "text-muted-foreground line-through")}>{venue.name}</span>
-        {isDisabled ? <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold text-muted-foreground">Désactivé cette période</span> : null}
-        {closures.map((c) => (
-          <span key={c.constraintId} className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive">
-            {closurePeriodLabel(c)}
-          </span>
-        ))}
+        <span className={cn("font-medium", (isDisabled || fullyClosed) && "text-muted-foreground line-through")}>{venue.name}</span>
+        {isDisabled && !fullyClosed ? <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold text-muted-foreground">Désactivé cette période</span> : null}
+        {/* Fermeture PARTIELLE : le badge par jour, inchangé. Fermeture TOTALE : la raison prend
+            la place de l'interrupteur (ci-dessous), on ne la double donc pas ici. */}
+        {!fullyClosed
+          ? closures.map((c) => (
+              <span key={c.constraintId} className="rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive">
+                {closurePeriodLabel(c)}
+              </span>
+            ))
+          : null}
         <span className="text-xs text-muted-foreground">
           {slots.length} créneau{slots.length > 1 ? "x" : ""}
         </span>
-        <Button type="button" size="sm" variant="outline" className="ml-auto" disabled={modeBusy} onClick={toggleActive}>
-          {isDisabled ? "Réactiver" : "Désactiver"}
-        </Button>
+        {/* P2-37 D6 — gymnase entièrement fermé : AUCUN geste de mode. Le serveur refuse
+            Désactiver/Réactiver (D2) ; l'écran le dit AVANT le clic — l'interrupteur laisse
+            place à la RAISON, en clair (titre + bornes). Une fermeture éditée/levée rouvre le
+            geste toute seule (l'indisponibilité est dérivée, jamais stockée). */}
+        {fullyClosed ? (
+          <span role="status" className="ml-auto rounded bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold text-destructive">
+            {closures.map(closurePeriodLabel).join(" · ") || "Indisponible cette période"}
+          </span>
+        ) : (
+          <Button type="button" size="sm" variant="outline" className="ml-auto" disabled={modeBusy} onClick={toggleActive}>
+            {isDisabled ? "Réactiver" : "Désactiver"}
+          </Button>
+        )}
       </header>
 
-      {isDisabled ? (
+      {fullyClosed ? (
+        <p className="mb-2 text-xs text-muted-foreground">
+          Ce gymnase est fermé toute la période — aucune séance n'y sera placée. Son mode ne se règle plus tant que la fermeture tient : ajustez ou levez la fermeture pour le rendre de nouveau réglable. Sa grille reste modifiable (vous pouvez la préparer pour la suite).
+        </p>
+      ) : isDisabled ? (
         <p className="mb-2 text-xs text-muted-foreground">Ce gymnase ne sera pas utilisé pour cette période. Sa grille est conservée telle quelle — réactivez-le pour la modifier.</p>
       ) : 0 === slots.length ? (
         <p role="alert" className="mb-2 text-sm text-destructive">Aucun créneau : aucune équipe ne pourra s’entraîner dans ce gymnase tant que vous n’en aurez pas posé.</p>

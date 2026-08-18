@@ -1154,10 +1154,34 @@ describe("ConstraintsStep — Réserver : fermetures de gymnase (D2)", () => {
     await user.selectOptions(screen.getByLabelText("Gymnase"), "v2");
     await user.click(screen.getByRole("button", { name: /Jeu 19:00 · Gymnase B/ }));
 
-    // Ajout fermé : pas de picker, un message qui dit pourquoi.
+    // Ajout fermé : pas de picker, un message qui dit pourquoi — aligné au refus serveur
+    // (P2-37 D3) : « fermé ce jour-là » + le titre et les bornes de la fermeture.
     expect(screen.queryByLabelText("Ajouter une équipe")).toBeNull();
-    expect(screen.getByText(/jour de fermeture/)).toBeInTheDocument();
+    expect(screen.getByText(/fermé ce jour-là.*Indispo du 1\/5 au 10\/5 — Travaux/)).toBeInTheDocument();
     // Retrait ouvert : c'est la raison d'être de la porte.
+    expect(screen.getByRole("button", { name: "Retirer SM1" })).toBeInTheDocument();
+  });
+
+  // P2-37 D6 — un gymnase ENTIÈREMENT fermé : le refus est d'un cran plus fort qu'un jour fermé,
+  // et la modale le dit comme le serveur (« indisponible sur toute la période » + titre/bornes),
+  // pas « fermé ce jour-là » ni « désactivé ». Le retrait reste ouvert (geste correctif).
+  it("gymnase entièrement fermé : la modale dit « indisponible sur toute la période » (aligné serveur), retrait ouvert", async () => {
+    const user = userEvent.setup();
+    entryConflictsState.data = { entryId: "e", venueIds: ["v2"], conflicts: [], closures: [{ constraintId: "cc", venueId: "v2", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [4] }], fullyClosedVenueIds: ["v2"], seasonPlanChosen: true };
+    // `useActiveVenues` range un gymnase entièrement fermé dans `disabledIds` (le mock le reçoit tel quel).
+    activeVenuesState.disabledIds = new Set(["v2"]);
+    h.reservations = [{ id: "r9", calendarEntryId: null, teamId: "t1", venueId: "v2", dayOfWeek: 4, startTime: "19:00", durationMinutes: 90 }];
+    renderWithProviders(<ConstraintsStep />);
+
+    await user.click(screen.getAllByRole("button", { name: /Réserver/ })[0]);
+    await user.selectOptions(screen.getByLabelText("Gymnase"), "v2");
+    await user.click(screen.getByRole("button", { name: /Jeu 19:00 · Gymnase B/ }));
+
+    expect(screen.queryByLabelText("Ajouter une équipe")).toBeNull();
+    // Le motif SERVEUR, pas « fermé ce jour-là » ni « désactivé ».
+    expect(screen.getByText(/indisponible sur toute la période.*Indispo du 1\/5 au 10\/5 — Travaux/)).toBeInTheDocument();
+    expect(screen.queryByText(/fermé ce jour-là/)).toBeNull();
+    // Retrait ouvert : on n'efface rien d'office, mais le geste correctif reste possible.
     expect(screen.getByRole("button", { name: "Retirer SM1" })).toBeInTheDocument();
   });
 

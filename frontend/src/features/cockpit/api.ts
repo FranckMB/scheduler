@@ -124,6 +124,14 @@ export interface EntryConflictsResponse {
   /** Fermetures de gymnase déclarées sur la fenêtre (toujours servies, indépendantes de `seasonPlanChosen`). */
   closures: Closure[];
   /**
+   * P2-37 D6 — les gymnases ENTIÈREMENT fermés sur la fenêtre : indisponibilité TOTALE
+   * (toutes les dates fermées, relais de fermetures compris). DÉRIVÉE côté SERVEUR (jamais
+   * stockée) — le front la LIT, il ne redérive PAS le calcul « toutes les dates fermées »
+   * (règle d'or : `.claude/rules/frontend.md`). Servie sur TOUTES les sorties qui portent
+   * `closures`, indépendante de `seasonPlanChosen`.
+   */
+  fullyClosedVenueIds: string[];
+  /**
    * Le plan de la saison pointe-t-il une version ? Sinon la saison n'a PAS de
    * calendrier et le radar n'a rien pu comparer : `conflicts: []` veut alors dire
    * « je ne sais pas », pas « aucun impact ». Sans ce drapeau les deux se lisent

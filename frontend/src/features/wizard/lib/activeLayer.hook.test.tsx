@@ -65,6 +65,29 @@ describe("useActiveVenues / useActiveTeams — le câblage de la couche", () => 
     expect(result.current.disabledIds.has("v2")).toBe(true);
   });
 
+  // P2-37 D6 — un gymnase ENTIÈREMENT FERMÉ sur la fenêtre (donnée SERVEUR passée par
+  // l'appelant, jamais redérivée) compte comme indisponible : retiré de la liste active ET
+  // rangé dans `disabledIds`, au même titre qu'un DÉSACTIVÉ « override ».
+  it("période : un gymnase entièrement fermé (donnée serveur) compte comme indisponible", async () => {
+    vi.mocked(api.listVenuePeriodOverrides).mockResolvedValue([] as never); // aucun override
+    const { result } = renderHook(() => useActiveVenues("p1", ["v2"]), { wrapper });
+
+    await waitFor(() => expect(result.current.layerRead).toBe("ready"));
+    expect(result.current.venues.map((v) => v.id)).toEqual(["v1"]);
+    expect(result.current.disabledIds.has("v2")).toBe(true);
+  });
+
+  // Les deux causes se cumulent : désactivé « override » ET entièrement fermé sortent tous deux.
+  it("période : DÉSACTIVÉ (override) et ENTIÈREMENT FERMÉ (serveur) sortent tous deux", async () => {
+    vi.mocked(api.listVenuePeriodOverrides).mockResolvedValue([{ id: "o1", schedulePlanId: "p1", venueId: "v1", mode: "DISABLED" }] as never);
+    const { result } = renderHook(() => useActiveVenues("p1", ["v2"]), { wrapper });
+
+    await waitFor(() => expect(result.current.layerRead).toBe("ready"));
+    expect(result.current.venues).toHaveLength(0);
+    expect(result.current.disabledIds.has("v1")).toBe(true);
+    expect(result.current.disabledIds.has("v2")).toBe(true);
+  });
+
   // FAIL-CLOSED : masquer sur une lecture ratée ferait croire à une période plus petite
   // qu'elle n'est. On rend la liste ENTIÈRE et on le signale à l'appelant.
   it("lecture ratée : ne masque RIEN et le signale (failed)", async () => {

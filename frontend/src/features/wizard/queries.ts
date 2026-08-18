@@ -3,7 +3,7 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tansta
 import { readState, type ReadState } from "@/shared/lib/readState";
 import { isScheduleStreamConnected, useScheduleStream } from "@/shared/lib/scheduleStream";
 
-import { activeTeams, activeVenues, disabledVenueIds, pausedTeamIds } from "./lib/activeLayer";
+import { activeTeams, disabledVenueIds, pausedTeamIds } from "./lib/activeLayer";
 
 import type { CoachPayload, ConstraintPayload, SlotPayload, Team, TeamCoachRole, TeamPayload, Venue, VenuePayload } from "./api";
 import * as wizardApi from "./api";
@@ -320,7 +320,18 @@ export function useDeletePeriodSlot(schedulePlanId: string | null) {
  * d'erreur récurrent apprend au gestionnaire à ignorer le bandeau — exactement le jour où
  * la lecture échoue vraiment. Charger et échouer ne se disent pas de la même façon.
  */
-export function useActiveVenues(schedulePlanId: string | null): { venues: Venue[]; disabledIds: Set<string>; layerRead: ReadState } {
+/**
+ * @param fullyClosedVenueIds P2-37 D6 — gymnases ENTIÈREMENT fermés sur la fenêtre, tels que
+ *   le SERVEUR les calcule (`/calendar-entries/{id}/conflicts` → `fullyClosedVenueIds`). Un
+ *   gymnase fermé sur toute la période ne SERT pas : il rejoint les désactivés — retiré de la
+ *   liste active, présent dans `disabledIds`. La donnée vient du serveur, le front ne redérive
+ *   RIEN (règle d'or) : l'appelant passe ce qu'il a LU des conflits. Défaut `[]` = mode socle ou
+ *   conflits pas encore lus (fail-closed : on ne masque rien tant qu'on ne sait pas).
+ */
+export function useActiveVenues(
+  schedulePlanId: string | null,
+  fullyClosedVenueIds: Iterable<string> = [],
+): { venues: Venue[]; disabledIds: Set<string>; layerRead: ReadState } {
   const all = useWizardVenues();
   const overrides = useVenuePeriodOverrides(schedulePlanId);
   const venues = all.data ?? [];
@@ -332,9 +343,12 @@ export function useActiveVenues(schedulePlanId: string | null): { venues: Venue[
   if ("ready" !== layerRead) {
     return { venues, disabledIds: new Set(), layerRead };
   }
-  const disabledIds = disabledVenueIds(overrides.data ?? []);
+  // Union des deux causes d'indisponibilité : DÉSACTIVÉ (override, `activeLayer`) ET
+  // ENTIÈREMENT FERMÉ (fermeture datée, dérivée serveur). Le premier est stocké, le second
+  // est un fait du calendrier — mais tous deux retirent le gymnase du payload solveur.
+  const disabledIds = new Set([...disabledVenueIds(overrides.data ?? []), ...fullyClosedVenueIds]);
 
-  return { venues: activeVenues(venues, overrides.data ?? []), disabledIds, layerRead };
+  return { venues: venues.filter((v) => !disabledIds.has(v.id)), disabledIds, layerRead };
 }
 
 /** Le pendant équipes — même contrat, même fail-closed. @see useActiveVenues */

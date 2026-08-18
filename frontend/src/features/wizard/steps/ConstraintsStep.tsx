@@ -22,7 +22,7 @@ import type { Constraint, ConstraintFamily, ConstraintPayload, ConstraintRuleTyp
 import { DAYS } from "../lib/days";
 import { dayLabelLong } from "@/shared/lib/days";
 import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useActiveTeams, useActiveVenues, useWizardVenues, useReservations } from "../queries";
-import { useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
+import { useCalendarEntry, useEntryConflicts, usePeriodAnchor } from "@/features/cockpit/queries";
 import { sortByName } from "@/shared/lib/nameOrder";
 import { useWizardStore } from "../store";
 import { PeriodConstraints } from "./PeriodStructure";
@@ -112,7 +112,12 @@ export function ConstraintsStep() {
   // picker permettait d'épingler une équipe en pause — `OrphanPinGuard` ne regarde que la
   // salle/le jour/l'heure, donc la génération PASSE et l'équipe n'a de séance nulle part.
   const layerPlanId = "period" === anchor.state ? anchor.planId : null;
-  const { venues, disabledIds, layerRead: venuesRead } = useActiveVenues(layerPlanId);
+  // P2-37 D6 — un gymnase entièrement fermé sur la fenêtre est indisponible : `useActiveVenues`
+  // le retire de la liste active et le range dans `disabledIds`, DEPUIS la donnée serveur
+  // (`fullyClosedVenueIds` — jamais redérivée côté front). On interroge l'entrée COURANTE
+  // (semaine enfant comprise) : le serveur résout la mère pour les fermetures.
+  const { data: entryConflicts } = useEntryConflicts(periodEntryId);
+  const { venues, disabledIds, layerRead: venuesRead } = useActiveVenues(layerPlanId, entryConflicts?.fullyClosedVenueIds ?? []);
   const { teams, pausedIds, layerRead: teamsRead } = useActiveTeams(layerPlanId);
   const { data: allVenues = [] } = useWizardVenues();
   // Mode période dont l'ancre n'est PAS résolue (`loading`, `failed`, `absent`) : la couche

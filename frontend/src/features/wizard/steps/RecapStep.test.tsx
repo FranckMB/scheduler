@@ -14,7 +14,8 @@ type TeamRow = { id: string; name: string; sportCategoryId: string; priorityTier
 const team = (id: string, name: string, tier: number): TeamRow => ({ id, name, sportCategoryId: "c", priorityTierId: tier, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true });
 
 // P2-15 : la COUCHE que le récap décrit — période (équipes/gymnases actifs) ou socle.
-const { recapLayer, anchorState, storeState, constraintsState, constraintsArg, calendarEntryState } = vi.hoisted(() => ({
+const deleteReservationMock = vi.hoisted(() => vi.fn());
+const { recapLayer, anchorState, storeState, constraintsState, constraintsArg, calendarEntryState, conflictsState } = vi.hoisted(() => ({
   anchorState: { value: { state: "period", planId: "plan-1" } as { state: string; planId: string | null } },
   storeState: { value: { mode: "season", calendarEntryId: null } as { mode: string; calendarEntryId: string | null } },
   // P2-22 — les contraintes affichées (D4) + l'id que le récap passe à useWizardConstraints,
@@ -22,6 +23,9 @@ const { recapLayer, anchorState, storeState, constraintsState, constraintsArg, c
   constraintsState: { data: [] as Array<Record<string, unknown>> },
   constraintsArg: { value: undefined as string | null | undefined },
   calendarEntryState: { data: { parentEntryId: null } as { parentEntryId: string | null } | undefined },
+  // P2-37 D5/D6 — les fermetures servies par /conflicts : `closures` porte le motif, et
+  // `fullyClosedVenueIds` rend un gymnase entièrement fermé indisponible.
+  conflictsState: { data: { closures: [], fullyClosedVenueIds: [] } as Record<string, unknown> },
   recapLayer: {
     teams: [] as unknown[],
     pausedIds: [] as string[],
@@ -38,6 +42,7 @@ vi.mock("@/features/cockpit/queries", () => ({
   usePeriodAnchor: () => anchorState.value,
   anchorIsWritable: (a: { state: string }) => "period" === a.state || "base" === a.state,
   useCalendarEntry: () => ({ data: calendarEntryState.data }),
+  useEntryConflicts: () => ({ data: conflictsState.data, isError: false, refetch: vi.fn() }),
 }));
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({
@@ -61,7 +66,7 @@ vi.mock("../queries", () => ({
   },
   useWizardTeamTags: () => ({ data: [] }),
   // P4-44 — le récap peut retirer une réservation orpheline (seul écran capable de la montrer).
-  useDeleteReservation: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteReservation: () => ({ mutate: deleteReservationMock, isPending: false }),
   useReservations: () => ({ data: h.reservations }),
   useSharedTrainingGroups: () => ({ data: sharedGroupsState.data }),
   usePriorityTiers: () => ({
@@ -80,6 +85,8 @@ describe("RecapStep — read-only summary", () => {
   beforeEach(() => {
     h.reservations = [];
     sharedGroupsState.data = [];
+    conflictsState.data = { closures: [], fullyClosedVenueIds: [] };
+    deleteReservationMock.mockClear();
     // Défaut : la couche décrit les mêmes équipes que la liste de saison, aucune en pause.
     recapLayer.teams = [team("t1", "SM1", 3), team("t2", "Fanion", 1)];
     recapLayer.pausedIds = [];
@@ -197,6 +204,30 @@ describe("RecapStep — read-only summary", () => {
     expect(screen.getByRole("button", { name: /Retirer la réservation/ })).toBeInTheDocument();
   });
 
+  /**
+   * P2-37 D5 — le prédicat LARGE : une réservation dont le gymnase est FERMÉ (ici ce jour-là)
+   * devient non servie même si son créneau EXISTE encore. Le récap la nomme AVEC son motif
+   * « gymnase fermé — {titre} », distinct du motif orphelin (créneau supprimé/déplacé). Et il
+   * n'efface RIEN d'office (décision fondateur : on alerte) — seule la poubelle, à la main.
+   */
+  it("nomme l'équipe ET le motif « gymnase fermé » d'une réservation non servie, sans rien supprimer", async () => {
+    // Le créneau EXISTE (donc pas orphelin ÉTROIT) — c'est la fermeture qui le rend non servi.
+    recapLayer.slots = [{ id: "s1", venueId: "v1", dayOfWeek: 2, startTime: "18:00", durationMinutes: 90, capacity: 1 }];
+    h.reservations = [{ id: "rFermee", calendarEntryId: null, teamId: "t1", venueId: "v1", dayOfWeek: 2, startTime: "18:00", durationMinutes: 90 }];
+    conflictsState.data = { closures: [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [2] }], fullyClosedVenueIds: [] };
+    const user = userEvent.setup();
+    renderWithProviders(<RecapStep />);
+
+    await user.click(screen.getByRole("button", { name: /Réservations/ }));
+
+    // L'équipe est NOMMÉE, et le motif dit « gymnase fermé — {titre} » (pas « supprimé/déplacé »).
+    expect(screen.getByText(/SM1 — gymnase fermé — Travaux/)).toBeInTheDocument();
+    expect(screen.queryByText(/créneau supprimé ou déplacé/)).toBeNull();
+    // Aucune suppression passive : la poubelle est là, mais rien n'a été retiré au rendu.
+    expect(screen.getByRole("button", { name: /Retirer la réservation de SM1/ })).toBeInTheDocument();
+    expect(deleteReservationMock).not.toHaveBeenCalled();
+  });
+
   it("shows the team tiers open by default (ranks visible at first glance)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<RecapStep />);
@@ -224,6 +255,7 @@ describe("RecapStep — créneaux partagés", () => {
 
   beforeEach(() => {
     h.reservations = [];
+    conflictsState.data = { closures: [], fullyClosedVenueIds: [] };
     recapLayer.teams = [team("t1", "SM1", 3), team("t2", "Fanion", 1)];
     recapLayer.pausedIds = [];
     // canSplit ABSENT du mock d'origine : on le pose, c'est lui qui arme la capacité 2.
@@ -272,6 +304,8 @@ describe("RecapStep — créneaux partagés", () => {
 describe("RecapStep — fermetures de gymnase et semaine enfant", () => {
   beforeEach(() => {
     h.reservations = [];
+    conflictsState.data = { closures: [], fullyClosedVenueIds: [] };
+    deleteReservationMock.mockClear();
     recapLayer.teams = [team("t1", "SM1", 3), team("t2", "Fanion", 1)];
     recapLayer.pausedIds = [];
     recapLayer.venues = [{ id: "v1", name: "Gymnase A", color: null, isActive: true }];
