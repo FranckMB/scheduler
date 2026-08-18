@@ -44,7 +44,7 @@ paths:
   `getBoundingClientRect` y valent 0. Le **contraste** et le **reflow** (WCAG 1.4.10) ne se testent
   qu'en **Playwright**. Un test jsdom sur ces sujets est vert par construction — il n'atteste rien.
 - **TDD obligatoire**, RED prouvé avant l'implémentation
-  ([`specs/courantes/frontend-strategy.md`](../../specs/courantes/frontend-strategy.md) §1).
+  ([`../../frontend/docs/frontend-strategy.md`](../../frontend/docs/frontend-strategy.md) §1).
 - **Passe de design `ui-ux-pro-max`** (dans un agent, bornée à l'apparence, elle ne valide rien)
   dès qu'un écran **public** est créé ou remanié — même doc, règle du 2026-08-11.
 - **Muter la PROD, pas le mock** : un test qui n'exerce que son double ne garde rien.

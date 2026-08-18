@@ -157,7 +157,7 @@ engine/
 
 ## Contraintes CP-SAT
 
-> Liste exhaustive et à jour : `constraints.py` (`add_level_1_hard_constraints` / `add_time_window_constraints`) et **`specs/courantes/engine-inventory.md` §4** (la seule vue maintenue — pas de décompte figé ici, il périmerait).
+> Liste exhaustive et à jour : `constraints.py` (`add_level_1_hard_constraints` / `add_time_window_constraints`) et **`docs/engine-inventory.md` §4** (la seule vue maintenue — pas de décompte figé ici, il périmerait).
 
 ### Hard (Level 1) — Impératives
 Salle at-most-one (capacité), coach at-most-one, coach-joueur non-overlap, repos coach / distribution salariés / max consécutifs, forbidden assignments, indispo coach, fermetures salle (étendues en `forbiddenVenueId` côté backend), forced venues, planchers par gymnase (`minAtVenueId`, ALIGN-05), une session/jour, âge croissant. Détail : engine-inventory §4.4.

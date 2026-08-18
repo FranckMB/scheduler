@@ -148,5 +148,5 @@ to the plan's latest version. `GenerateScheduleHandler` resolves it (explicit so
 the same lineage, else the plan's latest `COMPLETED` version, else none) and injects it
 into the solver payload *after* `snapshotHash` is computed — the previous placement is a
 convergence preference, not a structure fact, so it must never enter the hash that gates
-the "structure changed" signal. Detail: `specs/courantes/backend-inventory.md` §route
-`regenerate`, `specs/courantes/engine-inventory.md` §POST /generate, §5 Solver.
+the "structure changed" signal. Detail: `../../backend/docs/backend-inventory.md` §route
+`regenerate`, `../../engine/docs/engine-inventory.md` §POST /generate, §5 Solver.

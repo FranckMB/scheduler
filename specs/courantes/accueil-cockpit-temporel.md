@@ -585,7 +585,7 @@ signalé**, en attente d'être adapté.
 > contrairement à `conflicts` (séances à replacer) qui, lui, dépend du plan choisi. La **donnée**
 > (PR 1) est reprise par le **surfaçage** (PR 2) dans les trois écrans concernés — créneau BARRÉ
 > + libellé « Indispo du X au Y — titre » au grain JOUR (pas de bande de remplacement), sur les
-> grilles Gymnases/Réserver, `PeriodStructure` et le récap. Détail : [`frontend-wizard.md`](frontend-wizard.md).
+> grilles Gymnases/Réserver, `PeriodStructure` et le récap. Détail : [`frontend-wizard.md`](../../frontend/docs/frontend-wizard.md).
 
 ---
 

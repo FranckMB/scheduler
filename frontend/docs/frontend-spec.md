@@ -723,7 +723,7 @@ type AuthState = {
 
 | Document | Rôle | Localisation |
 |----------|------|--------------|
-| `backend-inventory.md` | Inventaire backward : resources API Platform, contrôleurs custom, sécurité JWT, Mercure, pagination | `specs/courantes/backend-inventory.md` |
+| `backend-inventory.md` | Inventaire backward : resources API Platform, contrôleurs custom, sécurité JWT, Mercure, pagination | `../../backend/docs/backend-inventory.md` |
 | `openapi-snapshot.json` | Snapshot OpenAPI 3.1 des ressources API Platform (contrat/doc ; plus de codegen front — types API manuels depuis FRT-15) | `specs/courantes/openapi-snapshot.json` |
 
 ### Endpoints consommés par le frontend (par route)

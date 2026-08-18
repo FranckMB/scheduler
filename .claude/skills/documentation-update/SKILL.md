@@ -13,7 +13,7 @@ Goal: a developer landing in `backend/` vs `engine/` vs `frontend/` grasps the s
 - [`specs/evolution/roadmap.md`](../../../specs/evolution/roadmap.md) holds **ONLY what is still open** (bugs, evolutions, technical debt, parking, vision). Nothing delivered stays there.
 - [`specs/courantes/etat-des-lieux.md`](../../../specs/courantes/etat-des-lieux.md) holds **what is delivered**: the capability map, the **closed decisions** (deliberate abandons — they are what stops a settled question from being re-opened every three months), and the dated delivery traces.
 
-A delivered item **moves**: it is deleted from the roadmap and gains a trace line in the état des lieux, with its behaviour documented in the receiving `courantes/` spec. Never both. Never neither.
+A delivered item **moves**: it is deleted from the roadmap and gains a trace line in the état des lieux, with its behaviour documented in **the doc that owns that behaviour** — `specs/courantes/` quand elle traverse les zones, **`<zone>/docs/` quand elle n'en concerne qu'une** (règle de placement ci-dessous : une livraison backend gradue vers `backend/docs/backend-inventory.md`, une livraison d'écran vers `frontend/docs/frontend-spec.md`). Never both. Never neither.
 
 **Prime directive: a doc that lies is worse than no doc.** This project is agent-driven; a false fact in CLAUDE.md/AGENTS.md/project-map is injected into every future plan. Accuracy beats completeness.
 
