@@ -162,6 +162,79 @@ final class VenueClosureDaysTest extends TestCase
         self::assertNotSame($summaries[0]['constraintId'], $summaries[1]['constraintId']);
     }
 
+    public function testFullyClosedWhenOneClosureCoversTheWholeWindow(): void
+    {
+        // Incident lun 05-04 → dim 05-10 == fenêtre entière : le gymnase est fermé tous les jours.
+        $fully = VenueClosureDays::fullyClosedVenueIds(
+            [$this->venueClosed('2026-05-04', '2026-05-10')],
+            new DateTimeImmutable('2026-05-04'),
+            new DateTimeImmutable('2026-05-10'),
+        );
+        self::assertSame([self::VENUE], $fully);
+    }
+
+    public function testPartialClosureIsNotFullyClosed(): void
+    {
+        // Incident ven→dim seulement : le gymnase sert encore lun→jeu → PAS entièrement fermé.
+        $fully = VenueClosureDays::fullyClosedVenueIds(
+            [$this->venueClosed('2026-05-08', '2026-05-10')],
+            new DateTimeImmutable('2026-05-04'),
+            new DateTimeImmutable('2026-05-10'),
+        );
+        self::assertSame([], $fully, 'une fermeture partielle ne rend pas le gymnase entièrement indisponible');
+    }
+
+    public function testTwoRelayingClosuresJointlyCoverTheWindow(): void
+    {
+        // DEUX fermetures partielles qui se RELAIENT : lun→jeu et ven→dim. Ni l'une ni
+        // l'autre ne couvre la fenêtre seule (un test « incident ⊇ fenêtre » raterait le
+        // cas) ; ensemble elles ferment TOUS les jours → entièrement fermé.
+        $fully = VenueClosureDays::fullyClosedVenueIds(
+            [
+                $this->venueClosed('2026-05-04', '2026-05-07'),
+                $this->venueClosed('2026-05-08', '2026-05-10'),
+            ],
+            new DateTimeImmutable('2026-05-04'),
+            new DateTimeImmutable('2026-05-10'),
+        );
+        self::assertSame([self::VENUE], $fully, 'deux fermetures qui se relaient couvrent la fenêtre à elles deux');
+    }
+
+    public function testTwoRelayingClosuresWithAGapAreNotFullyClosed(): void
+    {
+        // Même relais mais avec un TROU (le mercredi 05-06 reste ouvert) → pas entièrement fermé.
+        $fully = VenueClosureDays::fullyClosedVenueIds(
+            [
+                $this->venueClosed('2026-05-04', '2026-05-05'),
+                $this->venueClosed('2026-05-07', '2026-05-10'),
+            ],
+            new DateTimeImmutable('2026-05-04'),
+            new DateTimeImmutable('2026-05-10'),
+        );
+        self::assertSame([], $fully, 'un seul jour ouvert suffit à ce que le gymnase ne soit pas entièrement fermé');
+    }
+
+    public function testLegacyClosureWithoutDatesIsFullyClosed(): void
+    {
+        // Config nu (legacy) → fermé toute la fenêtre → entièrement fermé.
+        $fully = VenueClosureDays::fullyClosedVenueIds(
+            [$this->venueClosed(null, null)],
+            new DateTimeImmutable('2026-05-04'),
+            new DateTimeImmutable('2026-05-06'),
+        );
+        self::assertSame([self::VENUE], $fully);
+    }
+
+    public function testDisjointClosureLeavesNothingFullyClosed(): void
+    {
+        $fully = VenueClosureDays::fullyClosedVenueIds(
+            [$this->venueClosed('2026-06-01', '2026-06-07')],
+            new DateTimeImmutable('2026-05-04'),
+            new DateTimeImmutable('2026-05-10'),
+        );
+        self::assertSame([], $fully);
+    }
+
     private function venueClosed(?string $start, ?string $end, string $name = 'Salle fermée'): Constraint
     {
         $c = new Constraint;

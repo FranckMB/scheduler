@@ -11,8 +11,11 @@ use App\Entity\ScheduleSlotTemplate;
 use App\Entity\User;
 use App\Enum\AuditAction;
 use App\Enum\LockLevel;
+use App\Service\PlanVenueClosures;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
+use Symfony\Contracts\Service\Attribute\Required;
 
 /**
  * @extends AbstractStateProcessor<Reservation, ReservationInput, ReservationResource>
@@ -20,6 +23,14 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 class ReservationStateProcessor extends AbstractStateProcessor
 {
     use AssertsSchedulePlanExistsTrait;
+
+    private PlanVenueClosures $planVenueClosures;
+
+    #[Required]
+    public function setPlanVenueClosures(PlanVenueClosures $planVenueClosures): void
+    {
+        $this->planVenueClosures = $planVenueClosures;
+    }
 
     protected function getEntityClass(): string
     {
@@ -117,6 +128,7 @@ class ReservationStateProcessor extends AbstractStateProcessor
             $entity->setDurationMinutes($input->durationMinutes);
         }
         $this->assertSchedulePlanExists($this->entityManager, $input->schedulePlanId);
+        $this->assertVenueOpen($input->schedulePlanId, $input->venueId, $input->dayOfWeek);
         $entity->setSchedulePlanId($input->schedulePlanId);
 
         return $entity;
@@ -137,5 +149,37 @@ class ReservationStateProcessor extends AbstractStateProcessor
     protected function mapEntityToOutput(object $entity): ReservationResource
     {
         return ReservationResource::fromEntity($entity);
+    }
+
+    /**
+     * P2-37 D3 — on ne réserve pas un gymnase que la période rend indisponible. Deux causes,
+     * dérivées des fermetures datées du fait (D1) : le gymnase est ENTIÈREMENT fermé sur la
+     * fenêtre, ou le couple (gymnase, jour) est un jour fermé. On refuse à la SOURCE (422 en
+     * nommant la cause) ; les réservations DÉJÀ posées ne sont ni supprimées ni modifiées
+     * (décision fondateur : « on ne fait pas de modification passive, on alerte » — l'alerte
+     * vit côté récap, prédicat `unservedReservationIds`).
+     */
+    private function assertVenueOpen(?string $schedulePlanId, ?string $venueId, ?int $dayOfWeek): void
+    {
+        // Trois retours anticipés séparés (et non un `||` — que Rector réécrirait en `in_array`,
+        // perdant le narrowing non-null dont a besoin `forPlan(string)`).
+        if (null === $schedulePlanId) {
+            return;
+        }
+        if (null === $venueId || null === $dayOfWeek) {
+            return;
+        }
+        $closures = $this->planVenueClosures->forPlan($schedulePlanId);
+        $fullyClosed = isset($closures['fullyClosedVenueIds'][$venueId]);
+        $dayClosed = isset($closures['closedWeekdaysByVenue'][$venueId][$dayOfWeek]);
+        if (!$fullyClosed && !$dayClosed) {
+            return;
+        }
+        $label = PlanVenueClosures::describeForVenue($closures['summaries'], $venueId);
+        $cause = $fullyClosed ? 'est indisponible sur toute la période' : 'est fermé ce jour-là';
+
+        // Même patron surfaçant le message que `assertSchedulePlanExists` (le
+        // `ValidationException(string)` d'API Platform ne remonte pas son message).
+        throw new UnprocessableEntityHttpException(\sprintf('Ce gymnase %s%s : la séance ne peut pas y être réservée. Choisissez un autre créneau, ou ajustez la fermeture.', $cause, null !== $label ? ' — ' . $label : ''));
     }
 }

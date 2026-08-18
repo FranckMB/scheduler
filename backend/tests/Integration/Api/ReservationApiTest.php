@@ -4,12 +4,19 @@ declare(strict_types=1);
 
 namespace App\Tests\Integration\Api;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
+use App\Entity\Constraint;
 use App\Entity\Reservation;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\ConstraintFamily;
+use App\Enum\ConstraintRuleType;
+use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Enum\SeasonStatus;
 use App\Tests\CreatesPeriodPlanTrait;
@@ -26,6 +33,8 @@ final class ReservationApiTest extends WebTestCase
 {
     use CreatesPeriodPlanTrait;
     use TenantGucTrait;
+
+    private const VENUE = '22222222-2222-4222-8222-222222222222';
 
     private KernelBrowser $client;
 
@@ -104,6 +113,44 @@ final class ReservationApiTest extends WebTestCase
         self::assertCount(0, $this->members());
     }
 
+    // ── P2-37 D3 : on ne réserve pas un gymnase que la période rend indisponible ──
+
+    public function testReservationOnAFullyClosedVenueIsRefused(): void
+    {
+        // Entrée lun 2026-10-19 → dim 2026-10-25, gymnase fermé sur TOUTE la fenêtre.
+        $planId = $this->closedPeriodPlan('2026-10-19', '2026-10-25', '2026-10-19', '2026-10-25', 'Gymnase indisponible');
+
+        $this->post($planId); // dayOfWeek 2 (mardi) — peu importe, tout est fermé
+        self::assertResponseStatusCodeSame(422);
+        self::assertStringContainsString('Gymnase indisponible', (string) $this->client->getResponse()->getContent());
+    }
+
+    public function testReservationOnAClosedDayIsRefused(): void
+    {
+        // Fermeture du SEUL mardi 2026-10-20 (dayOfWeek 2) : le couple (gymnase, mardi) est fermé.
+        $planId = $this->closedPeriodPlan('2026-10-19', '2026-10-25', '2026-10-20', '2026-10-20', 'Mardi fermé');
+
+        $this->post($planId); // dayOfWeek 2 = mardi
+        self::assertResponseStatusCodeSame(422);
+        self::assertStringContainsString('Mardi fermé', (string) $this->client->getResponse()->getContent());
+    }
+
+    public function testReservationOnAnOpenDayOfAPartiallyClosedVenueSucceeds(): void
+    {
+        // Même fermeture du mardi, mais on réserve le MERCREDI (dayOfWeek 3) : jour ouvert.
+        $planId = $this->closedPeriodPlan('2026-10-19', '2026-10-25', '2026-10-20', '2026-10-20', 'Mardi fermé');
+
+        $this->client->request('POST', '/api/reservations', [], [], $this->headers(), json_encode([
+            'teamId' => '11111111-1111-4111-8111-111111111111',
+            'venueId' => self::VENUE,
+            'dayOfWeek' => 3,
+            'startTime' => '20:30',
+            'durationMinutes' => 120,
+            'schedulePlanId' => $planId,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -148,6 +195,29 @@ final class ReservationApiTest extends WebTestCase
         $this->em->flush();
 
         $this->token = $container->get(JWTTokenManagerInterface::class)->create($this->user);
+    }
+
+    /**
+     * Un plan de période dont l'entrée porte une fermeture datée du gymnase self::VENUE.
+     * Retourne le planId à ancrer sur la réservation.
+     */
+    private function closedPeriodPlan(string $entryStart, string $entryEnd, string $closureStart, string $closureEnd, string $title): string
+    {
+        $entry = (new CalendarEntry)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle($title)
+            ->setStartDate(new DateTimeImmutable($entryStart))->setEndDate(new DateTimeImmutable($entryEnd));
+        $this->em->persist($entry);
+        $constraint = (new Constraint)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setName($title)
+            ->setScope(ConstraintScope::FACILITY)->setScopeTargetId(self::VENUE)
+            ->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)
+            ->setCalendarEntryId($entry->getId());
+        $constraint->setConfig(['type' => 'venue_closed', 'startDate' => $closureStart, 'endDate' => $closureEnd]);
+        $this->em->persist($constraint);
+        $this->em->flush();
+
+        return $this->createPeriodPlan($this->club->getId(), $this->season->getId(), $entry->getId());
     }
 
     /** @return array<string, string> */

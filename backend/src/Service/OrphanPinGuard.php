@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace App\Service;
 
-use App\Entity\CalendarEntry;
-use App\Entity\Constraint;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\Team;
 use App\Entity\Venue;
 use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
@@ -37,6 +36,7 @@ final class OrphanPinGuard
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly PlanVenueClosures $planVenueClosures,
     ) {}
 
     /**
@@ -74,6 +74,56 @@ final class OrphanPinGuard
         return $orphans;
     }
 
+    /**
+     * P2-37 D5 — LE prédicat LARGE « réservation NON SERVIE » : elle ne sera honorée par
+     * aucune génération de la période. Trois causes, UNION :
+     *  - son gymnase est ENTIÈREMENT fermé sur la fenêtre (dérivé D1, {@see VenueClosureDays::fullyClosedVenueIds}) ;
+     *  - le couple (gymnase, jour) est un JOUR fermé (`closedWeekdaysByVenue`) ;
+     *  - son triplet (gymnase, jour, heure) ne retombe sur AUCUN créneau de la grille.
+     *
+     * ⚠ MIROIR DÉCLARÉ (régime 2) — parité MÉCANIQUE avec le front
+     * (`wizard/lib/orphanReservations.ts::unservedReservationIds`, cas partagés
+     * `orphanReservations.parity.json`, gardée par `OrphanReservationsMirrorParityTest`). Le
+     * front LISTE ces réservations pour ALERTER (décision fondateur : « on ne fait pas de
+     * modification passive, on alerte » — rien n'est supprimé) ; le backend, lui, REFUSE la
+     * réservation à la source (D3) et l'escamote du payload à la génération.
+     *
+     * `orphanTripletIds` reste le prédicat ÉTROIT (triplet seul), sous-ensemble de celui-ci.
+     *
+     * @param list<array{id: string, venueId: string, dayOfWeek: int, startTime: string}> $reservations
+     * @param list<array{venueId: string, dayOfWeek: int, startTime: string}>             $slots
+     * @param list<string>                                                                $disabledVenueIds      gymnases hors service (désactivés OU fermés-total)
+     * @param array<string, list<int>>                                                    $closedWeekdaysByVenue venueId => jours ISO fermés (1..7)
+     *
+     * @return list<string> ids des réservations non servies, ordre d'entrée
+     */
+    public static function unservedReservationIds(array $reservations, array $slots, array $disabledVenueIds, array $closedWeekdaysByVenue): array
+    {
+        $grid = [];
+        foreach ($slots as $slot) {
+            $grid[self::tripletKey($slot['venueId'], $slot['dayOfWeek'], $slot['startTime'])] = true;
+        }
+        $disabled = array_fill_keys($disabledVenueIds, true);
+        $closed = [];
+        foreach ($closedWeekdaysByVenue as $venueId => $weekdays) {
+            foreach ($weekdays as $weekday) {
+                $closed[$venueId][$weekday] = true;
+            }
+        }
+
+        $unserved = [];
+        foreach ($reservations as $reservation) {
+            $isOff = isset($disabled[$reservation['venueId']])
+                || isset($closed[$reservation['venueId']][$reservation['dayOfWeek']])
+                || !isset($grid[self::tripletKey($reservation['venueId'], $reservation['dayOfWeek'], $reservation['startTime'])]);
+            if ($isOff) {
+                $unserved[] = $reservation['id'];
+            }
+        }
+
+        return $unserved;
+    }
+
     /** Heure NORMALISÉE à H:i (comme `hhmm` côté front) — la grille peut porter les secondes. */
     private static function tripletKey(string $venueId, int $dayOfWeek, string $startTime): string
     {
@@ -99,9 +149,10 @@ final class OrphanPinGuard
         // Résumés des fermetures de la période : on en tire d'une part les jours ISO fermés
         // par gymnase (pour retirer les créneaux fermés, comme buildForOverlay), d'autre
         // part de quoi NOMMER la cause quand un épinglage tombe justement sur un jour fermé.
+        $closure = $this->planVenueClosures->forPlan((string) $schedulePlanId);
         $closureByVenueDay = [];
         $closedWeekdaysByVenue = [];
-        foreach ($this->closureSummariesOf($schedule) as $summary) {
+        foreach ($closure['summaries'] as $summary) {
             foreach ($summary['weekdays'] as $weekday) {
                 $closedWeekdaysByVenue[$summary['venueId']][$weekday] = true;
                 $closureByVenueDay[$summary['venueId']][$weekday] ??= $summary;
@@ -112,7 +163,13 @@ final class OrphanPinGuard
         // épinglages qui s'y trouvent. Les compter comme disponibles ici laissait donc
         // passer un verrou que le solveur ne verrait jamais, et la séance était déplacée
         // en silence — précisément ce que ce garde existe pour empêcher (revue #8, round 4).
-        $disabledVenueIds = [];
+        //
+        // P2-37 D4 — un gymnase ENTIÈREMENT fermé sur la fenêtre rejoint le même skip : il ne
+        // sert AUCUN jour, comme un désactivé. Un épinglage y est inerte (jamais déplacé en
+        // silence puisqu'il n'y a nulle part où aller), donc NON bloquant — même doctrine que
+        // P3-20. La fermeture PARTIELLE (un jour d'un gymnase par ailleurs ouvert), elle, reste
+        // bloquante plus bas : là, la séance SERAIT replacée ailleurs sans le dire.
+        $disabledVenueIds = $closure['fullyClosedVenueIds'];
         foreach ($this->entityManager->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
             if (VenuePeriodMode::DISABLED === $override->getMode()) {
                 $disabledVenueIds[$override->getVenueId()] = true;
@@ -150,7 +207,7 @@ final class OrphanPinGuard
                 continue;
             }
             if (!isset($available[$this->key($lock->getVenueId(), $lock->getDayOfWeek(), $lock->getStartTime()->format('H:i'))])) {
-                return $this->message($lock->getVenueId(), $lock->getDayOfWeek(), $closureByVenueDay[$lock->getVenueId()][$lock->getDayOfWeek()] ?? null);
+                return $this->message($lock->getVenueId(), $lock->getDayOfWeek(), $lock->getTeamId(), $closureByVenueDay[$lock->getVenueId()][$lock->getDayOfWeek()] ?? null);
             }
         }
 
@@ -159,30 +216,11 @@ final class OrphanPinGuard
                 continue;
             }
             if (!isset($available[$this->key($reservation->getVenueId(), $reservation->getDayOfWeek(), $reservation->getStartTime()->format('H:i'))])) {
-                return $this->message($reservation->getVenueId(), $reservation->getDayOfWeek(), $closureByVenueDay[$reservation->getVenueId()][$reservation->getDayOfWeek()] ?? null);
+                return $this->message($reservation->getVenueId(), $reservation->getDayOfWeek(), $reservation->getTeamId(), $closureByVenueDay[$reservation->getVenueId()][$reservation->getDayOfWeek()] ?? null);
             }
         }
 
         return null;
-    }
-
-    /**
-     * Les fermetures effectives de la période — même source que buildForOverlay
-     * (contraintes datées de l'entrée, ou de sa mère pour une semaine enfant).
-     *
-     * @return list<array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}>
-     */
-    private function closureSummariesOf(Schedule $schedule): array
-    {
-        $entry = $this->entityManager->getRepository(CalendarEntry::class)
-            ->findOneBy(['id' => $this->schedulePlanProvisioner->periodEntryIdOf($schedule) ?? '']);
-        if (!$entry instanceof CalendarEntry) {
-            return [];
-        }
-        $dated = $this->entityManager->getRepository(Constraint::class)
-            ->findBy(['calendarEntryId' => $entry->datedConstraintSourceId()]);
-
-        return VenueClosureDays::closureSummaries($dated, $entry->getStartDate(), $entry->getEndDate());
     }
 
     private function key(string $venueId, int $dayOfWeek, string $startTime): string
@@ -191,12 +229,19 @@ final class OrphanPinGuard
     }
 
     /**
+     * P2-37 D4 — le message NOMME l'équipe épinglée (le `teamId` est déjà porté par le
+     * verrou/la réservation ; un `find(Team)` suffit). Aucun identifiant interne dans un texte
+     * lu par un humain (`PublicTextIsFreeOfInternalIdentifiersTest`) : on résout le NOM, ou un
+     * repli neutre si l'équipe est introuvable.
+     *
      * @param array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}|null $closure la fermeture qui cause l'orphelin, si c'en est une
      */
-    private function message(string $venueId, int $dayOfWeek, ?array $closure = null): string
+    private function message(string $venueId, int $dayOfWeek, string $teamId, ?array $closure = null): string
     {
         $venue = $this->entityManager->getRepository(Venue::class)->find($venueId);
         $venueName = $venue?->getName() ?? 'ce gymnase';
+        $team = $this->entityManager->getRepository(Team::class)->find($teamId);
+        $teamName = $team?->getName() ?? 'une équipe';
         $days = [1 => 'lundi', 2 => 'mardi', 3 => 'mercredi', 4 => 'jeudi', 5 => 'vendredi', 6 => 'samedi', 7 => 'dimanche'];
         $dayLabel = $days[$dayOfWeek] ?? 'jour ' . $dayOfWeek;
 
@@ -204,19 +249,21 @@ final class OrphanPinGuard
         // redéfinir — c'est la fermeture qu'il gère, ou l'épinglage qu'il retire.
         if (null !== $closure) {
             return \sprintf(
-                'Le gymnase %s est fermé du %s au %s — %s : une séance du %s y est épinglée sans créneau disponible. Retirez l’épinglage, ou ajustez la fermeture.',
+                'Le gymnase %s est fermé du %s au %s — %s : une séance de %s le %s y est épinglée sans créneau disponible. Retirez l’épinglage, ou ajustez la fermeture.',
                 $venueName,
                 $this->humanDate($closure['startDate']),
                 $this->humanDate($closure['endDate']),
                 $closure['title'],
+                $teamName,
                 $dayLabel,
             );
         }
 
         return \sprintf(
-            'Les créneaux du %s à %s ne sont plus disponibles en l’état : une séance y est épinglée sans créneau correspondant. Redéfinissez les créneaux de ce gymnase pour la période, ou retirez l’épinglage.',
+            'Les créneaux du %s à %s ne sont plus disponibles en l’état : une séance de %s y est épinglée sans créneau correspondant. Redéfinissez les créneaux de ce gymnase pour la période, ou retirez l’épinglage.',
             $dayLabel,
             $venueName,
+            $teamName,
         );
     }
 

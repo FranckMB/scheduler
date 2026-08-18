@@ -12,6 +12,7 @@ use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
+use App\Entity\Team;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenuePeriodOverride;
@@ -201,6 +202,62 @@ final class OrphanPinGuardTest extends WebTestCase
         self::assertStringContainsString($this->venue->getName(), $message);
     }
 
+    /**
+     * NR — P2-37 D4 : un gymnase ENTIÈREMENT fermé sur la fenêtre du plan ne bloque PLUS.
+     * Il ne sert AUCUN jour : l'épinglage y est inerte (rien où le déplacer en silence), même
+     * doctrine que le gymnase désactivé (P3-20). La fermeture PARTIELLE, elle, bloque encore.
+     */
+    public function testAFullyClosedVenueNoLongerBlocks(): void
+    {
+        // Fermeture couvrant toute la fenêtre 2025-10-20 → 2025-10-26.
+        $this->em->persist($this->closureConstraint('Réquisition totale', '2025-10-20', '2025-10-26'));
+        // Verrou sur le seul créneau de la période (mardi 18:00), désormais dans un gymnase fermé-total.
+        $this->em->persist($this->slotTemplate(2, '18:00', LockLevel::HARD));
+        $this->em->flush();
+
+        self::assertNull(
+            $this->guard->firstOrphanMessage($this->overlay),
+            'un gymnase entièrement fermé est inerte comme un désactivé : il ne bloque plus la génération',
+        );
+    }
+
+    /**
+     * NR — P2-37 D1/D4 : DEUX fermetures partielles qui se RELAIENT couvrent la fenêtre à
+     * elles deux → gymnase fermé-total → non bloquant. Un test « incident ⊇ fenêtre » naïf
+     * raterait ce cas (aucune des deux fermetures ne couvre seule la fenêtre).
+     */
+    public function testTwoRelayingClosuresFullyCloseTheVenueAndNoLongerBlock(): void
+    {
+        $this->em->persist($this->closureConstraint('Première moitié', '2025-10-20', '2025-10-23'));
+        $this->em->persist($this->closureConstraint('Seconde moitié', '2025-10-24', '2025-10-26'));
+        $this->em->persist($this->slotTemplate(2, '18:00', LockLevel::HARD));
+        $this->em->flush();
+
+        self::assertNull(
+            $this->guard->firstOrphanMessage($this->overlay),
+            'deux fermetures qui se relaient ferment tout le gymnase : inerte, non bloquant',
+        );
+    }
+
+    /**
+     * NR — P2-37 D4 : un jour fermé d'un gymnase PARTIELLEMENT ouvert reste BLOQUANT (la
+     * séance SERAIT replacée ailleurs en silence), ET le message NOMME l'équipe épinglée.
+     */
+    public function testAPartialDayClosureBlocksAndNamesTheTeam(): void
+    {
+        $this->seedTeam('Poussins 1'); // l'équipe que l'épinglage désigne (teamId hardcodé du fichier)
+        // Gymnase fermé le SEUL mardi 2025-10-21 (fenêtre de 7 jours) → fermeture PARTIELLE.
+        $this->em->persist($this->closureConstraint('Gymnase réquisitionné', '2025-10-21', '2025-10-21'));
+        $this->em->persist($this->reservation(2, '18:00')); // mardi 18:00 : créneau existant, mais fermé ce jour-là
+        $this->em->flush();
+
+        $message = $this->guard->firstOrphanMessage($this->overlay);
+        self::assertIsString($message);
+        self::assertStringContainsString('fermé', $message, 'la cause fermeture partielle est nommée');
+        self::assertStringContainsString('Poussins 1', $message, 'le message nomme l’ÉQUIPE épinglée');
+        self::assertStringContainsString($this->venue->getName(), $message);
+    }
+
     public function testSeasonScheduleIsNeverBlocked(): void
     {
         // Le socle définit lui-même sa grille : la notion d'orphelin n'y a pas de sens.
@@ -322,6 +379,35 @@ final class OrphanPinGuardTest extends WebTestCase
             ->setTeamId('11111111-1111-4111-8111-111111111111')
             ->setVenueId($this->venue->getId())
             ->setDayOfWeek($dayOfWeek)->setStartTime(new DateTimeImmutable($startTime))->setDurationMinutes(90);
+    }
+
+    /** Une fermeture datée `venue_closed` sur ce gymnase, rattachée à l'entrée de période. */
+    private function closureConstraint(string $name, string $startDate, string $endDate): Constraint
+    {
+        $constraint = (new Constraint)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setName($name)
+            ->setScope(ConstraintScope::FACILITY)->setScopeTargetId($this->venue->getId())
+            ->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)
+            ->setCalendarEntryId($this->entryId);
+        $constraint->setConfig(['type' => 'venue_closed', 'startDate' => $startDate, 'endDate' => $endDate]);
+
+        return $constraint;
+    }
+
+    /** L'équipe portée par les épinglages de ce fichier (teamId hardcodé) — pour que le message la NOMME. */
+    private function seedTeam(string $name): void
+    {
+        $team = (new Team)
+            ->setId('11111111-1111-4111-8111-111111111111')
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSportCategoryId('99999999-9999-4999-8999-999999999999')
+            ->setPriorityTierId(1)
+            ->setName($name)
+            ->setSessionsPerWeek(1)
+            ->setIsActive(true);
+        $this->em->persist($team);
+        $this->em->flush();
     }
 
     /** @return array<string, string> */

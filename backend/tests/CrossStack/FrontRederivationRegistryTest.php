@@ -94,8 +94,8 @@ final class FrontRederivationRegistryTest extends TestCase
             'parityTest' => 'CoachDoubleBookingMirrorParityTest.php',
         ],
         'features/wizard/lib/orphanReservations.ts' => [
-            'decides' => 'réservation orpheline par triplet (prédicat étroit, sous-ensemble d\'OrphanPinGuard)',
-            'backendTruth' => 'App\\Service\\OrphanPinGuard::orphanTripletIds',
+            'decides' => 'réservation orpheline par triplet (étroit) ET réservation NON SERVIE (large : hors service / jour fermé / triplet ∉ grille)',
+            'backendTruth' => 'App\\Service\\OrphanPinGuard::orphanTripletIds + ::unservedReservationIds',
             'parityTest' => 'OrphanReservationsMirrorParityTest.php',
         ],
         'features/matches/lib/matchAccess.ts' => [

@@ -75,6 +75,44 @@ final class VenueClosureDays
     }
 
     /**
+     * P2-37 D1 — les gymnases dont TOUTES les dates de la fenêtre sont fermées : le gymnase
+     * ne sert AUCUN jour de la période, il est TOTALEMENT indisponible. DÉRIVÉ, jamais stocké
+     * (une fermeture éditée après coup se répercute alors toute seule).
+     *
+     * Calculé sur {@see closedDatesByVenue}, qui UNIT les dates fermées de TOUTES les
+     * fermetures du gymnase : deux fermetures partielles qui se RELAIENT (lun→jeu + ven→dim)
+     * couvrent la fenêtre à elles deux et rendent le gymnase entièrement fermé — un test naïf
+     * « une fermeture ⊇ la fenêtre » raterait ce cas. Un gymnase est entièrement fermé ssi son
+     * ensemble de dates fermées (borné à la fenêtre, dédupliqué) a autant d'éléments que la
+     * fenêtre a de jours.
+     *
+     * @param iterable<Constraint> $datedConstraints
+     *
+     * @return list<string> venueIds entièrement fermés sur la fenêtre
+     */
+    public static function fullyClosedVenueIds(iterable $datedConstraints, DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd): array
+    {
+        $closed = self::closedDatesByVenue($datedConstraints, $windowStart, $windowEnd);
+        if ([] === $closed) {
+            return [];
+        }
+        $windowDayCount = self::windowDayCount($windowStart, $windowEnd);
+        if (0 === $windowDayCount) {
+            return [];
+        }
+        $fully = [];
+        foreach ($closed as $venueId => $dates) {
+            // Les dates de $closed sont bornées à la fenêtre et dédupliquées (clé de set),
+            // donc |dates| ≤ windowDayCount : l'égalité vaut couverture totale.
+            if (\count($dates) >= $windowDayCount) {
+                $fully[] = $venueId;
+            }
+        }
+
+        return $fully;
+    }
+
+    /**
      * JOURS ISO fermés par gymnase (dérivés des dates) — pour le BUILDER (semaine-type).
      *
      * @param iterable<Constraint> $datedConstraints
@@ -149,6 +187,18 @@ final class VenueClosureDays
         }
 
         return $summaries;
+    }
+
+    /** Nombre de jours calendaires de la fenêtre, bornes incluses (0 si fenêtre inversée). */
+    private static function windowDayCount(DateTimeImmutable $windowStart, DateTimeImmutable $windowEnd): int
+    {
+        $start = new DateTimeImmutable($windowStart->format('Y-m-d'));
+        $end = new DateTimeImmutable($windowEnd->format('Y-m-d'));
+        if ($end < $start) {
+            return 0;
+        }
+
+        return (int) $start->diff($end)->days + 1;
     }
 
     /**
