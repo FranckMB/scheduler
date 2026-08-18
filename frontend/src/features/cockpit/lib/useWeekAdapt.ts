@@ -9,7 +9,7 @@ import { toast } from "@/shared/stores/toastStore";
 import type { CalendarEntry, CalendarEntryPeriodType, SchedulePlan } from "../api";
 import { WindowAlreadyPlannedError } from "../api";
 import { useCalendarEntries, useCreateHolidayPeriod, useCreatePeriodPlan, useCreateWeekChildren, useSchedulePlans, useSchoolHolidays, type WeekChildrenResult } from "../queries";
-import { closureWeeksOffer, holidayWindows, periodWeeksToAdjust, todayISO, type ClosureWeeksOffer, type WeekWindow } from "./date";
+import { closureWeeksOffer, holidayWindows, periodWeeksToAdjust, todayISO, type ClosureWeeksOffer, type WeekSegment, type WeekWindow } from "./date";
 
 /** Le refus « une seule planification par fenêtre » (P2-38), tel que l'affiche le geste. */
 export interface WindowConflict {
@@ -281,11 +281,11 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
     adapt(result.created[0].id);
   };
 
-  // Semaines cochées d'une mère DÉJÀ matérialisée → création des plans.
-  const pickWeeks = (mother: CalendarEntry, weeks: WeekWindow[]): void => {
+  // Segments cochés d'une mère DÉJÀ matérialisée → création des plans (un enfant par segment).
+  const pickWeeks = (mother: CalendarEntry, segments: WeekSegment[]): void => {
     setWindowConflict(null);
     createWeekChildren.mutate(
-      { mother, weeks },
+      { mother, segments },
       {
         onSuccess: (result) => {
           setPickerFor(null);
@@ -304,12 +304,12 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
   // `create`), puis ses semaines. Le créateur est un mutateAsync (pas d'onSuccess
   // portée) : navigation/toasts doivent partir même si la modale se referme pendant
   // le POST. Erreur relevée par le filet global des mutations (queryClient.ts).
-  const pickWeeksPending = async (pending: PendingMother, weeks: WeekWindow[]): Promise<void> => {
+  const pickWeeksPending = async (pending: PendingMother, segments: WeekSegment[]): Promise<void> => {
     setWindowConflict(null);
     try {
       const mother = await pending.create();
       setPendingMother(null);
-      createWeekChildren.mutate({ mother, weeks }, { onSuccess: finishChildren, onError: noteWindowConflict });
+      createWeekChildren.mutate({ mother, segments }, { onSuccess: finishChildren, onError: noteWindowConflict });
     } catch (error) {
       // La création de la mère elle-même ne heurte pas la garde (entrée racine, sans plan) ;
       // seul le lot de semaines peut. Par sûreté, un refus typé est aussi capté ici.
@@ -345,11 +345,12 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
     }
   };
 
-  // Chip « + créer » d'UNE semaine manquante (couverture) → crée puis adapte.
+  // Chip « + créer » d'UNE semaine manquante (couverture) → crée puis adapte. Geste de rattrapage
+  // ponctuel : reste à la SEMAINE (segment de taille 1), décision ferme.
   const createOneWeek = (mother: CalendarEntry, week: WeekWindow): void => {
     setWindowConflict(null);
     createWeekChildren.mutate(
-      { mother, weeks: [week] },
+      { mother, segments: [{ weeks: [week], startDate: week.startDate, endDate: week.endDate, monday: week.monday, partial: false }] },
       {
         onSuccess: (result) => {
           announce(result);

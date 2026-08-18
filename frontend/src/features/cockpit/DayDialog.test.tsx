@@ -464,9 +464,10 @@ describe("DayDialog — holiday awareness (Lot B)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
     expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
     // La semaine partielle du 11–17 mai (contenant le vendredi) n'est pas proposée.
-    expect(screen.queryByText(/Semaine du 11 mai/)).not.toBeInTheDocument();
-    // La 1ʳᵉ semaine offerte commence le lundi suivant (18 mai).
-    expect(screen.getByText(/Semaine du 18 mai/)).toBeInTheDocument();
+    expect(screen.queryByText(/11 mai/)).not.toBeInTheDocument();
+    // P2-41 — les deux semaines pleines restantes (18–24 + 25–31) sont un SEGMENT unique,
+    // proposé d'un bloc à partir du lundi suivant (18 mai).
+    expect(screen.getByText(/Semaines du 18 mai 2026 au 31 mai 2026 — d'un bloc/)).toBeInTheDocument();
   });
 
   // Revue C F2 : une vacance démarrant vendredi qui, une fois la semaine partielle
@@ -775,9 +776,11 @@ describe("DayDialog — fermeture chevauchant des vacances (P2-40)", () => {
 
     expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
     expect(screen.getByText(/couvertes par Petites vacances/)).toBeInTheDocument();
-    // Deux semaines hors vacances restent à cocher ; « d'un bloc » a disparu.
-    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
-    expect(screen.queryByRole("button", { name: /d'un bloc/i })).not.toBeInTheDocument();
+    // P2-41 — les deux semaines pleines hors vacances forment UN segment (une coche) ; le chemin
+    // de repli « d'un bloc » a disparu (ses deux libellés de bouton).
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /adapter toute la période d'un bloc/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /continuer d'un bloc/i })).not.toBeInTheDocument();
     // Entrée déjà en base : rien à consigner.
     expect(screen.queryByRole("button", { name: /consigner l'indisponibilité/i })).not.toBeInTheDocument();
   });

@@ -6,7 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createConstraint } from "@/features/wizard/api";
 
 import * as cockpitApi from "./api";
-import { useCreateCutoff, usePublicHolidays } from "./queries";
+import { addDays, segmentsFromOffer, type WeekWindow } from "./lib/date";
+import { useCreateCutoff, useCreateWeekChildren, usePublicHolidays } from "./queries";
 
 vi.mock("./api", () => ({
   getCalendarEntries: vi.fn(),
@@ -55,5 +56,36 @@ describe("cockpit queries — payload contracts", () => {
     renderHook(() => usePublicHolidays("2026-07-01", "2026-08-09"), { wrapper });
 
     await waitFor(() => expect(cockpitApi.getPublicHolidays).toHaveBeenCalledWith("2026-07-01", "2026-08-09"));
+  });
+
+  // P2-41 — un POST par SEGMENT coché : fenêtre = bornes du segment ; titre taille 1 inchangé
+  // (« {mère} — semaine du {lundi} »), titre multi « {mère} — semaines du {X} au {Y} ».
+  it("useCreateWeekChildren crée un enfant par segment, avec le bon titre selon sa taille", async () => {
+    vi.mocked(cockpitApi.createCalendarEntry).mockResolvedValue({ id: "child" } as never);
+    const wk = (monday: string): WeekWindow => ({ startDate: monday, endDate: addDays(monday, 6), monday });
+    // Indispo mer 02/09 → dim 27/09 → [entame 31/08 (taille 1)] + [bloc 07/09→27/09 (3 semaines)].
+    const segments = segmentsFromOffer([wk("2026-08-31"), wk("2026-09-07"), wk("2026-09-14"), wk("2026-09-21")], "2026-09-02", "2026-09-27");
+    const mother = { id: "m1", title: "Barros fermé", periodType: "closure" } as never;
+
+    const { result } = renderHook(() => useCreateWeekChildren(), { wrapper });
+    result.current.mutate({ mother, segments });
+
+    await waitFor(() => expect(cockpitApi.createCalendarEntry).toHaveBeenCalledTimes(2));
+    expect(cockpitApi.createCalendarEntry).toHaveBeenNthCalledWith(1, {
+      kind: "period",
+      periodType: "closure",
+      title: "Barros fermé — semaine du 31 août 2026",
+      startDate: "2026-08-31",
+      endDate: "2026-09-06",
+      parentEntryId: "m1",
+    });
+    expect(cockpitApi.createCalendarEntry).toHaveBeenNthCalledWith(2, {
+      kind: "period",
+      periodType: "closure",
+      title: "Barros fermé — semaines du 7 sept. 2026 au 27 sept. 2026",
+      startDate: "2026-09-07",
+      endDate: "2026-09-27",
+      parentEntryId: "m1",
+    });
   });
 });

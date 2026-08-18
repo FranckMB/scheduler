@@ -299,6 +299,30 @@ describe("RadarPanel", () => {
     expect(screen.queryByText(/à replacer/)).not.toBeInTheDocument();
   });
 
+  // P2-41 — un enfant-SEGMENT couvrant N semaines est retrouvé une fois par semaine ; la carte le
+  // rend en UNE seule puce (« du X au Y »), pas N puces répétées. Le compte « N/M » reste au niveau
+  // semaine (les deux semaines sont couvertes).
+  it("groupe un enfant-segment de 2 semaines en UNE puce, sans dédoubler la couverture", async () => {
+    const user = userEvent.setup();
+    const w1s = mondayOf("2999-01-15");
+    const w2s = addDays(w1s, 7);
+    // Enfant PAS encore généré (aucun plan) : la carte reste (une mère entièrement couverte quitte
+    // le radar) — ce qui nous laisse voir son unique puce.
+    plansData = [];
+    renderRadar({
+      entries: [
+        closure({ id: "m1", title: "Barros en travaux", startDate: addDays(w1s, 3), endDate: addDays(w2s, 1) }),
+        // UN enfant unique couvrant les DEUX semaines (segment).
+        closure({ id: "seg1", title: "Barros — bloc", parentEntryId: "m1", startDate: w1s, endDate: addDays(w2s, 6) }),
+      ],
+    });
+    // Le compte reste au niveau semaine : 0 couverte sur 2 (l'enfant existe mais n'est pas généré).
+    expect(screen.getByText("0/2 semaines à venir couverte")).toBeInTheDocument();
+    await expandCard(user, "Barros en travaux");
+    // Une seule puce, libellée « du X au Y » — pas deux puces répétées pour le même enfant.
+    expect(screen.getAllByRole("button", { name: /sem\. du .+ au .+· à faire/ })).toHaveLength(1);
+  });
+
   // Une semaine DÉCOCHÉE au picker (ou perdue sur échec partiel) reste
   // planifiable : chip « + créer » (dead-end de la revue #262 round 1).
   it("a missing week shows a « + créer » chip on the coverage card", async () => {
@@ -524,8 +548,10 @@ describe("RadarPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "Adapter" }));
     expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
-    expect(screen.queryByText(new RegExp(`Semaine du ${frDateShort(w1s)}`))).toBeNull();
-    expect(screen.getByText(new RegExp(`Semaine du ${frDateShort(addDays(w1s, 7))}`))).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(`du ${frDateShort(w1s)} `))).toBeNull();
+    // P2-41 — les deux semaines restantes (la révolue écartée) forment UN segment débutant au
+    // lundi de la 2ᵉ semaine.
+    expect(screen.getByText(new RegExp(`Semaines du ${frDateShort(addDays(w1s, 7))} `))).toBeInTheDocument();
   });
 
   // « Commencé » n'est pas « fini », à l'échelle VACANCE aussi : le filtre de période
@@ -950,9 +976,11 @@ describe("RadarPanel", () => {
       expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
       expect(screen.getByText(/couvertes par Vacances test/)).toBeInTheDocument();
       expect(screen.getByText(/le rappel vous attend/i)).toBeInTheDocument();
-      // Deux semaines hors vacances restent à cocher ; « d'un bloc » a disparu.
-      expect(screen.getAllByRole("checkbox")).toHaveLength(2);
-      expect(screen.queryByRole("button", { name: /d'un bloc/i })).not.toBeInTheDocument();
+      // P2-41 — les deux semaines pleines hors vacances forment UN segment (une coche) ; le chemin
+      // de repli « d'un bloc » a disparu (ses deux libellés de bouton).
+      expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+      expect(screen.queryByRole("button", { name: /adapter toute la période d'un bloc/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /continuer d'un bloc/i })).not.toBeInTheDocument();
       // Rien créé tant que non confirmé.
       expect(createVenueClosureMutate).not.toHaveBeenCalled();
       expect(createVenueClosureMutateAsync).not.toHaveBeenCalled();
