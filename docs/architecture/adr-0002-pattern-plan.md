@@ -631,6 +631,23 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   `UnprocessableEntityHttpException` (pas `ValidationException` d'API Platform, qui ne remonte pas
   son message dans le corps de la réponse — même patron que `AssertsSchedulePlanExistsTrait`,
   déjà en vigueur). Zéro migration, zéro moteur, `CONTRACT_VERSION` inchangé.
+- ⚠ **Le refus 422 de réactivation ci-dessus (point 2) est SUPPLANTÉ le 2026-08-18 (soir) — lot
+  « indispo gymnase informative » (PR1 backend, hors de la numérotation A→D, post-ADR)**, décision
+  fondateur : une fermeture datée ne verrouille plus le réglage, elle **PRÉ-REMPLIT** un défaut que
+  la coche du plan peut contredire jour par jour. `VenuePeriodOverride.mode` devient NULLABLE
+  (une ligne peut n'exister que pour son masque) et gagne `dayOverrides` — masque manuel tri-état
+  SPARSE, jour ISO 1..7 → nouvel enum `VenueDayState` (OPEN\|CLOSED). La composition (incident ×
+  masque) gagne une méthode dans la même maison unique, `PlanVenueClosures::effectiveStateForPlan/Entry`
+  (rend `{disabledVenueIds, effectiveClosedWeekdaysByVenue, defaultClosedWeekdaysByVenue,
+  manualClosedWeekdaysByVenue, fullyClosedVenueIds, summaries}`), partagée par `PeriodConstraintSelector`
+  (gate == payload par construction), `ScheduleConstraintBuilder`, `OrphanPinGuard` (jour rouvert
+  OPEN non bloquant, jour décoché CLOSED bloquant, fermé-total effectif toujours inerte — doctrine
+  P2-37 point 1 / P3-20 préservée), `ReservationStateProcessor` (422 au grain jour effectif) et
+  `CalendarEntryConflictsController` (sert l'état effectif avec provenance `default-incident`\|`manual`).
+  **POST/PUT/DELETE `VenuePeriodOverride` sont de nouveau ACCEPTÉS** sur un gymnase entièrement
+  fermé — DELETE purge mode ET masque. Migration `Version20260818120000`, à la main, additive.
+  Zéro moteur, `CONTRACT_VERSION` inchangé. PR2 (front — coches jour, bandeau, gestes) reste
+  ouverte, `specs/evolution/roadmap.md` (P2-37).
 - **Lot P2-38 — une fermeture de gymnase est un FAIT TRANSVERSAL (PR1 + PR2 backend + PR3 front,
   LOT SOLDÉ, les 3 PR livrées 2026-08-18 — l'item a quitté `specs/evolution/roadmap.md`)**, hors de
   la numérotation A→D (post-ADR), une couche au-dessus de P2-37 : P2-37 dérivait correctement le

@@ -1,6 +1,20 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-18 (recalé ce jour : **P2-36 livré (les deux tranches, une seule PR) —
+Last verified @ 2026-08-18 (recalé ce jour : **indisponibilité de gymnase informative, PR1
+backend (décision fondateur du soir)** — le §Gymnases (tableau §6bis) et le corollaire §9ter.e
+sont réécrits : le verrou P2-37 D2 (réactiver un gymnase entièrement fermé refusé en 422) est
+**SUPPLANTÉ** — `VenuePeriodOverride.mode` devient NULLABLE et gagne un masque manuel jour
+`dayOverrides` (jour ISO 1..7 → OPEN|CLOSED), composé avec le défaut dérivé de l'incident dans la
+maison unique `PlanVenueClosures::effectiveStateForPlan/Entry` ; POST/PUT/DELETE sont de nouveau
+acceptés sur un gymnase entièrement fermé (DELETE purge mode ET masque). ⚠ Vérité TRANSITOIRE
+assumée : le SERVEUR accepte, mais l'ÉCRAN (surfaçage P2-37 PR2 de ce matin, non touché par ce
+lot) cache encore l'interrupteur d'un gymnase entièrement fermé — rattrapage en PR2 (coches jour +
+bandeau + gestes), `roadmap.md` P2-37 — re-vérifié contre `backend/src/Service/PlanVenueClosures.php`,
+`backend/src/Entity/VenuePeriodOverride.php`, `backend/src/Enum/VenueDayState.php`,
+`backend/src/Dto/VenuePeriodOverrideInput.php`, `backend/src/Service/OrphanPinGuard.php`,
+`backend/src/State/Processor/ReservationStateProcessor.php`,
+`backend/src/Controller/CalendarEntryConflictsController.php`. Précédemment ce même jour :
+**P2-36 livré (les deux tranches, une seule PR) —
 retiré de la roadmap**, `etat-des-lieux.md` §3 — §5bis gagne le détail de la décision d'ouverture
 du sélecteur de semaines : `decideWeekAdapt` (`lib/useWeekAdapt.ts`) devient la maison unique, à
 cinq branches nommées (`single-week`/`already-split`/`loading`/`block-generated`/`weeks`), et son
@@ -550,7 +564,24 @@ différents** :
 | Étape wizard | En mode période |
 |---|---|
 | Équipes | Roster **hérité** (non ré-éditable), mais **activable/désactivable** pour la période + **séances** surchargeables (champ 1–7, toggle = 0 séance). **Défaut conscient du type de période** (E3, 2026-07-19) : **reprise** (`holiday`) = **Fanion + importantes** (les 2 premiers rangs, S+A) pré-cochées, avec repli sur le meilleur rang réellement présent si le club n'a ni S ni A — la reprise n'est jamais vide ; **fermeture** (`closure`) = **tout le club actif** (structure verrouillée, les équipes loisir se décochent à la main). |
-| Gymnases | **La période possède SA grille** (#8, 2026-07-24) : les créneaux de saison y sont **copiés** à la naissance du plan, puis modifiables sans jamais toucher au planning principal. Plus rien d'additif — le socle et la période ne sont **jamais** unis. Fermetures datées marquées au **grain JOUR** (« Indispo ven–dim du X au Y — titre », P2-22 PR 2, `frontend-wizard.md` pour le détail). À l'écran, un **sélecteur de gymnase** (une grille à la fois, comme l'éditeur de saison) montre la grille servie à la période, éditable créneau par créneau (clic = poser, clic sur un créneau = modale jour/heure/durée/capacité + suppression confirmée). Par gymnase : un **état** actif/désactivé qui ne touche jamais la grille — désactiver n'a donc aucun coût, réactiver la rend telle quelle — et deux **actions** destructives atomiques, « reprendre la grille du planning principal » et « vider », chacune confirmée en annonçant les réservations emportées. Un gymnase désactivé a sa grille **gelée** dans un `<fieldset disabled>` (inerte souris ET clavier) : la table ne stocke qu'un mode par gymnase, donc vider écraserait l'état désactivé. Sous le capot, réglage épars `VenuePeriodOverride` — pas de ligne = hériter, le défaut. Un épinglage qui ne retombe sur aucun créneau **bloque la génération** en nommant le gymnase, le jour et l'équipe — **sauf sur un gymnase ENTIÈREMENT fermé par une fermeture datée couvrant toute la fenêtre** (indisponibilité DÉRIVÉE des dates fermées, jamais stockée — deux fermetures qui se relaient comptent quand même, P2-37 2026-08-18) : là, comme un gymnase désactivé, l'épinglage est inerte et ne bloque plus ; une fermeture **partielle** (un jour fermé d'un gymnase par ailleurs ouvert) reste bloquante. Réactiver un gymnase entièrement fermé — POST/PUT **ou DELETE** de son `VenuePeriodOverride` — est refusé en 422 (le DELETE aussi, sinon « revenir à hériter » rouvrirait le gymnase par la petite porte). **Surfaçage écran (P2-37 PR2, 2026-08-18)** : sur un gymnase ENTIÈREMENT fermé, l'interrupteur Désactiver/Réactiver **disparaît** — remplacé, au même endroit de l'en-tête, par la RAISON en clair (« Indispo du X au Y — titre »), annoncée AVANT tout clic (l'écran dit ce que le serveur refuserait, il ne laisse pas cliquer pour l'apprendre en 422) ; une fermeture **partielle** ne change RIEN à l'écran — le gymnase reste actif, son interrupteur reste posable (témoin dédié, `PeriodStructure.test.tsx`). ⚠ **Point contre-intuitif, vérifié au code, pas un oubli** : la grille d'un gymnase entièrement fermé reste **modifiable** (créneaux, Reprendre/Vider) — le `<fieldset disabled>` ne gèle que sur le mode `DISABLED` de l'override, jamais sur une fermeture (`PeriodStructure.tsx`). Geler la grille aurait inventé une restriction que le SERVEUR n'impose pas (seuls le mode override et les réservations sont refusés en 422, jamais un geste de grille) — le front serait devenu plus strict que le serveur, ce que la règle d'or interdit. L'écran le dit : « Sa grille reste modifiable (vous pouvez la préparer pour la suite). » Si ce point mérite d'être tranché autrement, c'est une question ouverte, `roadmap.md` §Parking. |
+| Gymnases | **La période possède SA grille** (#8, 2026-07-24) : les créneaux de saison y sont **copiés** à la naissance du plan, puis modifiables sans jamais toucher au planning principal. Plus rien d'additif — le socle et la période ne sont **jamais** unis. Fermetures datées marquées au **grain JOUR** (« Indispo ven–dim du X au Y — titre », P2-22 PR 2, `frontend-wizard.md` pour le détail). À l'écran, un **sélecteur de gymnase** (une grille à la fois, comme l'éditeur de saison) montre la grille servie à la période, éditable créneau par créneau (clic = poser, clic sur un créneau = modale jour/heure/durée/capacité + suppression confirmée). Par gymnase : un **état** actif/désactivé qui ne touche jamais la grille — désactiver n'a donc aucun coût, réactiver la rend telle quelle — et deux **actions** destructives atomiques, « reprendre la grille du planning principal » et « vider », chacune confirmée en annonçant les réservations emportées. Un gymnase désactivé a sa grille **gelée** dans un `<fieldset disabled>` (inerte souris ET clavier) : la table ne stocke qu'un mode par gymnase, donc vider écraserait l'état désactivé. Sous le capot, réglage épars `VenuePeriodOverride` — pas de ligne = hériter, le défaut ; deux
+réglages indépendants, chacun facultatif : `mode` (NULLABLE — DISABLED/BLANK/hériter) et un
+**masque manuel** jour ISO 1..7 → OPEN|CLOSED (`dayOverrides`), qui s'ajoute au défaut JOUR PAR
+JOUR. **Indisponibilité INFORMATIVE (décision fondateur 2026-08-18, remplace le régime ci-dessous)** :
+une fermeture datée `venue_closed` ne verrouille plus le réglage — elle PRÉ-REMPLIT un défaut
+vivant que le masque du plan peut contredire (jour rouvert `OPEN`, jour décoché `CLOSED`). La
+composition (incident × masque) vit dans la maison unique
+`PlanVenueClosures::effectiveStateForPlan/Entry`, partagée par TOUS les consommateurs (gate,
+payload, `OrphanPinGuard`, réservations, radar) — aucun ne la redérive. Un épinglage qui ne
+retombe sur aucun créneau **bloque la génération** en nommant le gymnase, le jour et l'équipe —
+**sauf sur un gymnase EFFECTIVEMENT fermé-total** (union des jours fermés après composition
+couvrant toute la fenêtre) : là, comme un gymnase désactivé, l'épinglage est inerte et ne bloque
+plus ; un jour **effectivement** fermé d'un gymnase par ailleurs ouvert (par le défaut OU par un
+masque `CLOSED`) reste bloquant ; un jour rouvert par le masque (`OPEN`) n'est plus une cause de
+blocage. **Réactiver un gymnase entièrement fermé — POST/PUT ou DELETE de son
+`VenuePeriodOverride` — N'EST PLUS REFUSÉ** : le verrou P2-37 D2 (« refusé en 422, non réversible »)
+est SUPPLANTÉ — le serveur accepte de nouveau le geste, DELETE purge mode ET masque (retour complet
+au défaut). **Surfaçage écran (P2-37 PR2, 2026-08-18 matin)** : sur un gymnase ENTIÈREMENT fermé, l'interrupteur Désactiver/Réactiver **disparaît** — remplacé, au même endroit de l'en-tête, par la RAISON en clair (« Indispo du X au Y — titre »), annoncée AVANT tout clic ; une fermeture **partielle** ne change RIEN à l'écran — le gymnase reste actif, son interrupteur reste posable (témoin dédié, `PeriodStructure.test.tsx`). ⚠ **Vérité TRANSITOIRE, à ne pas prendre pour la cible** : ce surfaçage a été écrit AVANT la décision d'informative du soir même — il disait alors « l'écran dit ce que le serveur refuserait ». Depuis, le SERVEUR accepte de nouveau le geste (ci-dessus) mais l'ÉCRAN, lui, n'a pas bougé : il cache TOUJOURS l'interrupteur d'un gymnase entièrement fermé, devenant plus strict que le serveur qu'il ne fait plus que refléter à moitié. Rattrapage prévu en PR2 du nouveau lot (coches jour dans les réglages, bandeau de rappel, geste « Réactiver malgré l'indispo », et le retour de l'interrupteur) — `roadmap.md` P2-37. ⚠ **Point contre-intuitif, vérifié au code, pas un oubli** : la grille d'un gymnase entièrement fermé reste **modifiable** (créneaux, Reprendre/Vider) — le `<fieldset disabled>` ne gèle que sur le mode `DISABLED` de l'override, jamais sur une fermeture (`PeriodStructure.tsx`). Geler la grille aurait inventé une restriction que le SERVEUR n'impose pas (seule la réservation reste refusée en 422, au grain jour EFFECTIF — le mode override, lui, est de nouveau accepté depuis la décision fondateur du 2026-08-18 ; jamais un geste de grille) — le front serait devenu plus strict que le serveur, ce que la règle d'or interdit. L'écran le dit : « Sa grille reste modifiable (vous pouvez la préparer pour la suite). » Si ce point mérite d'être tranché autrement, c'est une question ouverte, `roadmap.md` §Parking. |
 | Coachs | **Hérités, lecture seule** (lien équipe↔coach préservé) |
 | **Contraintes** | **Active.** Pré-remplie avec **l'exception** (ex. De Barros indispo sur la fenêtre) ; le gestionnaire **ajoute les contraintes propres à la période** (« du coup U13 passe le mercredi ») et **hérite les contraintes permanentes du socle**, chacune **cochable/décochable** pour la fenêtre. DIFF `ConstraintPeriodOverride` épars : une ligne n'existe que pour une **déviation** du défaut (le socle et le `isActive` propre de la contrainte ne sont **jamais** touchés). **Défaut selon le type de période :** <br>• **Fermeture** (closure) → **tout gardé** (on décoche ce qui gêne). <br>• **Reprise** (holiday) → défaut **intelligent qui suit les équipes** : contrainte **club/coach** gardée, contrainte **d'équipe** gardée seulement si l'équipe reprend (décochée si l'équipe est en pause), contrainte **de gymnase** décochée (pas de créneaux socle en reprise). Calculé (pas de seed persisté), miroir back/front. |
 | Récap | Résumé de la **période** (fenêtre + exceptions + contraintes) |
@@ -791,9 +822,12 @@ l'autre — la période est PROPRIÉTAIRE.**
   **copiés** dans le plan à sa naissance (ancre `schedulePlanId`), puis vivent leur vie. Le
   build d'overlay ne lit **que** les créneaux du plan — **aucune union**, aucune résolution
   « saisonnier→période ». Modifier la grille d'une période ne touche donc jamais le socle, et
-  réciproquement. Par gymnase, un réglage **épars** `VenuePeriodOverride` (`DISABLED` / `BLANK`,
-  pas de ligne = hériter) et deux actions destructives atomiques (« reprendre la grille du
-  planning principal », « vider »).
+  réciproquement. Par gymnase, un réglage **épars** `VenuePeriodOverride` — `mode` NULLABLE
+  (`DISABLED` / `BLANK` / hériter) **et/ou** un masque manuel jour ISO 1..7 → `OPEN`/`CLOSED`
+  (`dayOverrides`), les deux facultatifs — et deux actions destructives atomiques (« reprendre la
+  grille du planning principal », « vider »). **Indisponibilité INFORMATIVE (décision fondateur
+  2026-08-18)** : une fermeture datée pré-remplit un défaut que le masque contredit jour par jour ;
+  composition dans la maison unique `PlanVenueClosures::effectiveStateForPlan/Entry`.
 - **Contraintes permanentes** : c'est là, et seulement là, que `periodType` porte encore une
   sémantique d'héritage. `closure` → toutes gardées (le gestionnaire décoche) ; `holiday` →
   défaut intelligent qui suit la sélection d'équipes (club/coach gardées, équipe gardée si
@@ -804,7 +838,7 @@ l'autre — la période est PROPRIÉTAIRE.**
 - `cutoff` et `mutualisation` ne portent pas de plan de période.
 
 Corollaire opérationnel : un épinglage HARD qui ne retombe sur aucun créneau de la grille de la
-période **bloque la génération** (422 nommant le gymnase, le jour et l'équipe, `OrphanPinGuard` — sauf sur un gymnase DÉSACTIVÉ (exclu depuis P3-20) **ou ENTIÈREMENT FERMÉ sur la fenêtre par une fermeture datée** — indisponibilité DÉRIVÉE des dates fermées, jamais stockée (P2-37, 2026-08-18) ; une fermeture PARTIELLE d'un gymnase par ailleurs ouvert reste bloquante) — dans un
+période **bloque la génération** (422 nommant le gymnase, le jour et l'équipe, `OrphanPinGuard` — sauf sur un gymnase DÉSACTIVÉ (exclu depuis P3-20) **ou EFFECTIVEMENT fermé-total sur la fenêtre** — état EFFECTIF de `PlanVenueClosures` (incident × masque manuel du plan, décision fondateur 2026-08-18) ; un jour effectivement fermé (par le défaut ou par le masque) d'un gymnase par ailleurs ouvert reste bloquant, un jour rouvert par le masque ne l'est plus) — dans un
 modèle additif il aurait silencieusement retrouvé un créneau de saison.
 
 ## 10. En une phrase
