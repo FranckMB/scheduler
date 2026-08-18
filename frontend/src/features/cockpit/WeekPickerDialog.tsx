@@ -5,7 +5,7 @@ import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Modal } from "@/shared/components/ui/modal";
 import { Spinner } from "@/shared/components/ui/spinner";
 
-import { frDateShort, isWithin, type ExcludedWeekRange, type WeekWindow } from "./lib/date";
+import { frDateShort, mergeSegments, segmentLabel, segmentsFromOffer, segmentWeekCount, splitSegment, type ExcludedWeekRange, type WeekSegment, type WeekWindow } from "./lib/date";
 import type { WeekPickerState, WindowConflict } from "./lib/useWeekAdapt";
 import { WindowAlreadyPlannedNotice } from "./WindowAlreadyPlannedNotice";
 
@@ -27,10 +27,10 @@ export interface WeekPickerBlock {
 interface WeekPickerDialogProps {
   /** Libellé de la période mère (matérialisée OU vacance pas encore créée — P2-5 E1). */
   title: string;
-  /** Fenêtre de la mère (pour marquer les semaines « hors événement »). */
+  /** Fenêtre de la mère (pour segmenter : entame/fin partielles de l'événement). */
   startDate: string;
   endDate: string;
-  /** Semaines lun→dim couvrant la fenêtre de la mère, clampées à la saison (weeksCovering). */
+  /** Semaines lun→dim OFFERTES couvrant la fenêtre de la mère, clampées à la saison. */
   weeks: WeekWindow[];
   busy: boolean;
   /**
@@ -45,8 +45,8 @@ interface WeekPickerDialogProps {
   block?: WeekPickerBlock;
   /** P2-40 — les blocs de semaines écartés parce qu'une vacance les gouverne (ligne d'info, état `holiday`). */
   excludedRanges?: ExcludedWeekRange[];
-  /** Semaines cochées → création des plans de semaine. */
-  onPickWeeks: (weeks: WeekWindow[]) => void;
+  /** P2-41 — segments cochés → un planning (enfant) par segment. */
+  onPickSegments: (segments: WeekSegment[]) => void;
   /** Chemin « d'un bloc » : adapter toute la période sur son plan (comportement historique). */
   onAdaptWhole: () => void;
   /**
@@ -63,19 +63,36 @@ interface WeekPickerDialogProps {
 }
 
 /**
- * P2-5 E1 (fondateur 2026-07-18) : « la semaine est l'unité hors socle ». Adapter
- * une période longue = choisir les SEMAINES à traiter — chaque semaine cochée
- * devient un plan indépendant. Précochées : les semaines que l'événement touche
- * (toutes ici, par construction de weeksCovering). Le chemin « d'un bloc » reste
- * offert (décision fondateur — période courte ou gestionnaire pressé).
+ * P2-41 (fondateur, amende P2-5 E1) : « le SEGMENT est l'unité hors socle ». La liste du picker
+ * n'est plus une semaine par ligne mais une liste de SEGMENTS — des blocs de semaines pleines et
+ * contiguës proposés aux ruptures GÉOMÉTRIQUES (`segmentsFromOffer` : entame/fin partielle de
+ * l'événement, discontinuité de l'offre). Ils sont PRÉCOCHÉS ; le gestionnaire peut SCINDER un
+ * segment (le déplier en semaines) ou FUSIONNER des segments adjacents dans l'offre — liberté
+ * totale, le serveur ne borne que contiguïté + enveloppe. Chaque segment coché devient un planning.
  *
- * P2-36 : le dialogue s'OUVRE toujours, même quand le choix des semaines n'est pas
- * (encore) possible — il nomme alors la raison (`state`), au lieu de basculer en bloc
- * sans un mot. Chaque raison est distincte : « en chargement » ≠ « déjà générée d'un
- * bloc » — un message générique recréerait le défaut.
+ * Le front ne redérive AUCUNE règle solveur : les ruptures sont calculées des données servies
+ * (semaines offertes + fenêtre de l'événement). La phrase sur un segment multi-semaines est de la
+ * PRÉSENTATION (comment le solveur traitera N semaines en un plan), jamais une décision.
+ *
+ * P2-36 : le dialogue s'OUVRE toujours et NOMME sa raison (`state`) — « en chargement » ≠ « déjà
+ * générée d'un bloc » — au lieu de basculer en bloc sans un mot.
  */
-export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state = "weeks", block, excludedRanges = [], onPickWeeks, onAdaptWhole, onRecordOnly, onClose, conflict, onOpenConflict }: WeekPickerDialogProps) {
-  const [checked, setChecked] = useState<Set<string>>(new Set(weeks.map((w) => w.monday)));
+export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state = "weeks", block, excludedRanges = [], onPickSegments, onAdaptWhole, onRecordOnly, onClose, conflict, onOpenConflict }: WeekPickerDialogProps) {
+  // Segments dérivés de l'offre + fenêtre, PUIS mutés localement par scinder/fusionner.
+  const [segments, setSegments] = useState<WeekSegment[]>(() => segmentsFromOffer(weeks, startDate, endDate));
+  const [checked, setChecked] = useState<Set<string>>(() => new Set(segments.map((s) => s.monday)));
+  // L'offre change (loading → weeks : de [] à peuplée) : on ré-initialise segments + coches. Motif
+  // « ajuster un state quand une prop change » (setState pendant le rendu) plutôt qu'un effet — les
+  // gestes scinder/fusionner ne doivent PAS être écrasés à chaque rendu (l'array `weeks` est neuf à
+  // chaque fois, seule sa signature est stable).
+  const signature = weeks.map((w) => w.monday).join("|");
+  const [sig, setSig] = useState(signature);
+  if (sig !== signature) {
+    const fresh = segmentsFromOffer(weeks, startDate, endDate);
+    setSegments(fresh);
+    setChecked(new Set(fresh.map((s) => s.monday)));
+    setSig(signature);
+  }
   // Confirmation de la découpe destructive (état `block`) : réutilise le patron d'avertissement
   // existant (ConfirmDialog destructif) plutôt qu'une deuxième maison du danger.
   const [confirmingSplit, setConfirmingSplit] = useState(false);
@@ -91,24 +108,78 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state
       return next;
     });
 
-  const picked = weeks.filter((w) => checked.has(w.monday));
+  // Scinder un segment multi-semaines : il devient ses semaines individuelles (les coches suivent).
+  const splitAt = (index: number) => {
+    const seg = segments[index];
+    const parts = splitSegment(seg);
+    setSegments((prev) => [...prev.slice(0, index), ...parts, ...prev.slice(index + 1)]);
+    setChecked((prev) => {
+      const next = new Set(prev);
+      const was = next.has(seg.monday);
+      next.delete(seg.monday);
+      if (was) {
+        parts.forEach((p) => next.add(p.monday));
+      }
+      return next;
+    });
+  };
+
+  // Fusionner un segment avec le PRÉCÉDENT (adjacent dans la liste — même par-dessus une rupture).
+  const mergeWithPrevious = (index: number) => {
+    const a = segments[index - 1];
+    const b = segments[index];
+    const merged = mergeSegments(a, b);
+    setSegments((prev) => [...prev.slice(0, index - 1), merged, ...prev.slice(index + 1)]);
+    setChecked((prev) => {
+      const next = new Set(prev);
+      const was = next.has(a.monday) || next.has(b.monday);
+      next.delete(a.monday);
+      next.delete(b.monday);
+      if (was) {
+        next.add(merged.monday); // merged.monday === a.monday
+      }
+      return next;
+    });
+  };
+
+  const picked = segments.filter((s) => checked.has(s.monday));
   const versionCount = block?.versionCount ?? 0;
   const versionLabel = `${versionCount} version${versionCount > 1 ? "s" : ""}`;
-  // La liste à cocher, partagée par l'état `weeks` (choix classique) et `holiday` (les semaines
-  // hors vacances qui restent à traiter).
-  const checkboxList = (
+  const createLabel = picked.length > 1 ? `Créer les ${picked.length} plannings` : "Créer le planning";
+
+  // La liste de segments, partagée par l'état `weeks` (choix classique) et `holiday` (les segments
+  // hors vacances qui restent à traiter). Précochés ; scinder/fusionner sont des gestes nommés,
+  // atteignables au clavier.
+  const segmentList = (
     <ul className="mt-4 space-y-2">
-      {weeks.map((week) => {
-        const touched = isWithin(startDate, week.startDate, week.endDate) || isWithin(week.startDate, startDate, endDate);
+      {segments.map((seg, index) => {
+        const multi = segmentWeekCount(seg) > 1;
+        const label = segmentLabel(seg);
         return (
-          <li key={week.monday}>
-            <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-              <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={checked.has(week.monday)} onChange={() => toggle(week.monday)} />
-              <span>
-                Semaine du {frDateShort(week.startDate)} au {frDateShort(week.endDate)}
-                {touched ? null : <span className="text-muted-foreground"> · hors événement</span>}
-              </span>
-            </label>
+          <li key={seg.monday} className="rounded-md border border-border px-3 py-2 text-sm">
+            <div className="flex items-start justify-between gap-2">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={checked.has(seg.monday)} onChange={() => toggle(seg.monday)} />
+                <span>{label}</span>
+              </label>
+              <div className="flex shrink-0 gap-1">
+                {index > 0 ? (
+                  <Button variant="ghost" size="sm" disabled={busy} aria-label={`Fusionner « ${label} » avec le segment précédent`} onClick={() => mergeWithPrevious(index)}>
+                    Fusionner
+                  </Button>
+                ) : null}
+                {multi ? (
+                  <Button variant="ghost" size="sm" disabled={busy} aria-label={`Scinder « ${label} » en semaines`} onClick={() => splitAt(index)}>
+                    Scinder
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            {/* Pédagogie (présentation, pas décision) sur un segment multi-semaines : comment le
+                solveur traite N semaines en UN plan. */}
+            {multi ? (
+              <p className="mt-1 text-xs text-muted-foreground">Des semaines identiques donnent un planning exact ; si elles diffèrent, la fermeture la plus large s'applique à toutes.</p>
+            ) : null}
           </li>
         );
       })}
@@ -119,15 +190,15 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state
     <Modal label="Choisir les semaines" title="Quelles semaines ajuster ?" onClose={onClose} className="max-w-md">
       {"weeks" === state ? (
         <>
-          <p className="mt-2 text-sm text-muted-foreground">« {title} » couvre plusieurs semaines. Chaque semaine cochée devient un planning indépendant, ajustable à son rythme.</p>
-          {checkboxList}
+          <p className="mt-2 text-sm text-muted-foreground">« {title} » couvre plusieurs semaines. Chaque segment coché devient un planning indépendant — scindez-le en semaines ou fusionnez des segments voisins à votre main.</p>
+          {segmentList}
         </>
       ) : null}
 
       {/* ÉTAT « chevauchement vacances » (P2-40) : les semaines sous vacances sont EXCLUES (pas
           grisées) — le rappel vit déjà dans le planning des vacances. Une ligne d'info le dit, et
           le chemin « d'un bloc » disparaît (un plan de bloc gouvernerait la fenêtre des vacances).
-          Reste (s'il en reste) le choix des semaines HORS vacances ; 100 % couvert → info seule. */}
+          Reste (s'il en reste) le choix des segments HORS vacances ; 100 % couvert → info seule. */}
       {"holiday" === state ? (
         <div className="mt-2 space-y-3 text-sm">
           {excludedRanges.map((range) => (
@@ -135,10 +206,10 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state
               Semaines du {frDateShort(range.startDate)} au {frDateShort(range.endDate)} couvertes par {range.labels.join(", ")} — le rappel vous attend dans son planning.
             </p>
           ))}
-          {weeks.length > 0 ? (
+          {segments.length > 0 ? (
             <>
-              <p className="text-muted-foreground">Choisissez les semaines à ajuster, hors vacances. Chaque semaine cochée devient un planning indépendant.</p>
-              {checkboxList}
+              <p className="text-muted-foreground">Choisissez les semaines à ajuster, hors vacances. Chaque segment coché devient un planning indépendant.</p>
+              {segmentList}
             </>
           ) : (
             <p className="text-muted-foreground">Toutes les semaines de cette indisponibilité sont couvertes par des vacances — il n'y a rien à ajuster en dehors.</p>
@@ -209,14 +280,14 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state
             {"block" === state ? "Continuer d'un bloc" : "Adapter toute la période d'un bloc"}
           </Button>
         )}
-        {"weeks" === state || ("holiday" === state && weeks.length > 0) ? (
-          <Button size="sm" onClick={() => onPickWeeks(picked)} disabled={busy || 0 === picked.length}>
+        {"weeks" === state || ("holiday" === state && segments.length > 0) ? (
+          <Button size="sm" onClick={() => onPickSegments(picked)} disabled={busy || 0 === picked.length}>
             {busy ? <Spinner className="size-4" /> : null}
-            Créer {picked.length > 1 ? `les ${picked.length} plannings de semaine` : "le planning de la semaine"}
+            {createLabel}
           </Button>
         ) : null}
         {/* 100 % sous vacances, chemin pending : consigner le FAIT (sans plan ni navigation). */}
-        {"holiday" === state && 0 === weeks.length && undefined !== onRecordOnly ? (
+        {"holiday" === state && 0 === segments.length && undefined !== onRecordOnly ? (
           <Button size="sm" onClick={onRecordOnly} disabled={busy}>
             {busy ? <Spinner className="size-4" /> : null}
             Consigner l'indisponibilité

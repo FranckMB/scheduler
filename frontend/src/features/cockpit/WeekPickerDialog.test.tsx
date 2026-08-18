@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { WeekPickerDialog } from "./WeekPickerDialog";
@@ -12,25 +13,27 @@ const weeks = [
 ];
 
 describe("WeekPickerDialog (P2-5 E1)", () => {
-  it("prechecks every week and creates the picked ones", async () => {
+  it("prechecks every segment and creates the picked ones", async () => {
     const user = userEvent.setup();
-    const onPickWeeks = vi.fn();
-    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} onPickWeeks={onPickWeeks} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
+    const onPickSegments = vi.fn();
+    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} onPickSegments={onPickSegments} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
 
+    // Incident 12→18 nov : les deux semaines sont ENTAMÉES par l'événement → deux segments de
+    // taille 1, chacun précoché.
     const boxes = screen.getAllByRole("checkbox");
     expect(boxes).toHaveLength(2);
     boxes.forEach((b) => expect(b).toBeChecked());
 
-    // Décocher la semaine 2 → seule la semaine 1 est créée.
+    // Décocher le segment 2 → seul le segment 1 est créé (un enfant de taille 1).
     await user.click(boxes[1]);
-    await user.click(screen.getByRole("button", { name: /créer le planning de la semaine/i }));
-    expect(onPickWeeks).toHaveBeenCalledWith([weeks[0]]);
+    await user.click(screen.getByRole("button", { name: /^créer le planning$/i }));
+    expect(onPickSegments).toHaveBeenCalledWith([{ weeks: [weeks[0]], startDate: "2026-11-09", endDate: "2026-11-15", monday: "2026-11-09", partial: true }]);
   });
 
   it("keeps the whole-block path available (founder decision)", async () => {
     const user = userEvent.setup();
     const onAdaptWhole = vi.fn();
-    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} onPickWeeks={vi.fn()} onAdaptWhole={onAdaptWhole} onClose={vi.fn()} />);
+    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} onPickSegments={vi.fn()} onAdaptWhole={onAdaptWhole} onClose={vi.fn()} />);
 
     await user.click(screen.getByRole("button", { name: /d'un bloc/i }));
     expect(onAdaptWhole).toHaveBeenCalled();
@@ -38,7 +41,7 @@ describe("WeekPickerDialog (P2-5 E1)", () => {
 
   it("disarms creation when nothing is picked", async () => {
     const user = userEvent.setup();
-    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} onPickWeeks={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
+    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} onPickSegments={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
     for (const b of screen.getAllByRole("checkbox")) {
       await user.click(b);
     }
@@ -65,7 +68,7 @@ describe("WeekPickerDialog — refus de chevauchement (P2-38)", () => {
         endDate={mother.endDate}
         weeks={weeks}
         busy={false}
-        onPickWeeks={vi.fn()}
+        onPickSegments={vi.fn()}
         onAdaptWhole={vi.fn()}
         onClose={vi.fn()}
         conflict={conflict}
@@ -80,7 +83,7 @@ describe("WeekPickerDialog — refus de chevauchement (P2-38)", () => {
   });
 
   it("témoin : sans conflit, aucun bloc de refus (non-régression)", () => {
-    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} onPickWeeks={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
+    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} onPickSegments={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
     expect(screen.queryByRole("button", { name: /ouvrir le planning en place/i })).not.toBeInTheDocument();
   });
 });
@@ -92,7 +95,7 @@ describe("WeekPickerDialog — états nommés (P2-36)", () => {
   const block = { versionCount: 2, validated: false, generationInFlight: false, deleting: false, deleteFailed: false, onDeleteVersions: vi.fn() };
 
   it("état « chargement » : le dit, n'affiche PAS de cases à cocher, garde « d'un bloc »", () => {
-    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="loading" onPickWeeks={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
+    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="loading" onPickSegments={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
 
     expect(screen.getByText(/On vérifie l'état de/)).toBeInTheDocument();
     // Pas de coches tant qu'on ne sait pas (le repli « ne jamais cocher sans savoir » demeure)…
@@ -103,7 +106,7 @@ describe("WeekPickerDialog — états nommés (P2-36)", () => {
   });
 
   it("état « bloc » : NOMME le fait (N versions), garde « Continuer d'un bloc », propose la découpe", () => {
-    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="block" block={block} onPickWeeks={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
+    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="block" block={block} onPickSegments={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
 
     expect(screen.getByText(/déjà été adaptée d'un bloc — 2 versions/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Continuer d'un bloc/i })).toBeInTheDocument();
@@ -115,7 +118,7 @@ describe("WeekPickerDialog — états nommés (P2-36)", () => {
   it("« Continuer d'un bloc » conserve le comportement (appelle onAdaptWhole)", async () => {
     const user = userEvent.setup();
     const onAdaptWhole = vi.fn();
-    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="block" block={block} onPickWeeks={vi.fn()} onAdaptWhole={onAdaptWhole} onClose={vi.fn()} />);
+    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="block" block={block} onPickSegments={vi.fn()} onAdaptWhole={onAdaptWhole} onClose={vi.fn()} />);
 
     await user.click(screen.getByRole("button", { name: /Continuer d'un bloc/i }));
     expect(onAdaptWhole).toHaveBeenCalled();
@@ -124,7 +127,7 @@ describe("WeekPickerDialog — états nommés (P2-36)", () => {
   it("la confirmation NOMME la portée : nombre de versions supprimées + réglages repartant de la saison", async () => {
     const user = userEvent.setup();
     const onDeleteVersions = vi.fn();
-    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="block" block={{ ...block, onDeleteVersions }} onPickWeeks={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
+    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="block" block={{ ...block, onDeleteVersions }} onPickSegments={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
 
     await user.click(screen.getByRole("button", { name: /Supprimer les versions et découper en semaines/i }));
     // La confirmation nomme la portée avant d'agir.
@@ -136,7 +139,7 @@ describe("WeekPickerDialog — états nommés (P2-36)", () => {
   });
 
   it("bloc VALIDÉ : PAS de bouton de découpe, la raison est affichée et renvoie aux gestes existants", () => {
-    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="block" block={{ ...block, validated: true }} onPickWeeks={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
+    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="block" block={{ ...block, validated: true }} onPickSegments={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
 
     expect(screen.queryByRole("button", { name: /Supprimer les versions et découper/i })).not.toBeInTheDocument();
     expect(screen.getByText(/validé.*rouvrez-le puis supprimez-le/i)).toBeInTheDocument();
@@ -145,7 +148,7 @@ describe("WeekPickerDialog — états nommés (P2-36)", () => {
   });
 
   it("génération en vol : le bouton de découpe est DÉSACTIVÉ avec sa raison", () => {
-    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="block" block={{ ...block, generationInFlight: true }} onPickWeeks={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
+    render(<WeekPickerDialog title={mother.title} startDate={mother.startDate} endDate={mother.endDate} weeks={weeks} busy={false} state="block" block={{ ...block, generationInFlight: true }} onPickSegments={vi.fn()} onAdaptWhole={vi.fn()} onClose={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: /Supprimer les versions et découper/i })).toBeDisabled();
     expect(screen.getByText(/génération est en cours/i)).toBeInTheDocument();
@@ -173,7 +176,7 @@ describe("WeekPickerDialog — chevauchement vacances (P2-40)", () => {
         excludedRanges={excludedRanges}
         busy={false}
         state="holiday"
-        onPickWeeks={vi.fn()}
+        onPickSegments={vi.fn()}
         onAdaptWhole={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -181,9 +184,13 @@ describe("WeekPickerDialog — chevauchement vacances (P2-40)", () => {
 
     expect(screen.getByText(/couvertes par Vacances d'été/)).toBeInTheDocument();
     expect(screen.getByText(/le rappel vous attend/i)).toBeInTheDocument();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
-    // Le chemin « d'un bloc » a disparu (les deux libellés possibles).
-    expect(screen.queryByRole("button", { name: /d'un bloc/i })).not.toBeInTheDocument();
+    // P2-41 — les deux semaines hors vacances, contiguës et pleines, sont proposées comme UN
+    // segment (une seule coche), pas deux semaines individuelles.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getByText("Semaines du 7 sept. 2026 au 20 sept. 2026 — d'un bloc (2 semaines)")).toBeInTheDocument();
+    // Le chemin « d'un bloc » a disparu (les deux libellés possibles du bouton de repli).
+    expect(screen.queryByRole("button", { name: /adapter toute la période d'un bloc/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /continuer d'un bloc/i })).not.toBeInTheDocument();
   });
 
   it("100 % sous vacances (aucune semaine offerte) → info seule + « Consigner l'indisponibilité » (chemin pending)", async () => {
@@ -198,7 +205,7 @@ describe("WeekPickerDialog — chevauchement vacances (P2-40)", () => {
         excludedRanges={excludedRanges}
         busy={false}
         state="holiday"
-        onPickWeeks={vi.fn()}
+        onPickSegments={vi.fn()}
         onAdaptWhole={vi.fn()}
         onClose={vi.fn()}
         onRecordOnly={onRecordOnly}
@@ -221,7 +228,7 @@ describe("WeekPickerDialog — chevauchement vacances (P2-40)", () => {
         excludedRanges={excludedRanges}
         busy={false}
         state="holiday"
-        onPickWeeks={vi.fn()}
+        onPickSegments={vi.fn()}
         onAdaptWhole={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -230,5 +237,95 @@ describe("WeekPickerDialog — chevauchement vacances (P2-40)", () => {
     expect(screen.queryByRole("button", { name: /consigner l'indisponibilité/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /d'un bloc/i })).not.toBeInTheDocument();
     expect(screen.getByText(/couvertes par Vacances d'été/)).toBeInTheDocument();
+  });
+});
+
+// P2-41 — la liste devient une liste de SEGMENTS précochés (blocs de semaines pleines et contiguës
+// aux ruptures géométriques). Le gestionnaire peut SCINDER un segment (le déplier en semaines) et
+// FUSIONNER des segments adjacents. Une phrase pédagogique sur tout segment multi-semaines. PAS de
+// bouton « adapter le reste d'un bloc » (le reste EST un segment proposé).
+describe("WeekPickerDialog — segments (P2-41)", () => {
+  // Exemple normatif : indispo mer 02/09 → dim 27/09 → [entame 31/08] + [bloc 07/09→27/09].
+  const closure = { title: "Barros fermé", startDate: "2026-09-02", endDate: "2026-09-27" };
+  const offered = [
+    { startDate: "2026-08-31", endDate: "2026-09-06", monday: "2026-08-31" },
+    { startDate: "2026-09-07", endDate: "2026-09-13", monday: "2026-09-07" },
+    { startDate: "2026-09-14", endDate: "2026-09-20", monday: "2026-09-14" },
+    { startDate: "2026-09-21", endDate: "2026-09-27", monday: "2026-09-21" },
+  ];
+  const renderPicker = (props: Partial<ComponentProps<typeof WeekPickerDialog>> = {}) =>
+    render(
+      <WeekPickerDialog
+        title={closure.title}
+        startDate={closure.startDate}
+        endDate={closure.endDate}
+        weeks={offered}
+        busy={false}
+        onPickSegments={vi.fn()}
+        onAdaptWhole={vi.fn()}
+        onClose={vi.fn()}
+        {...props}
+      />,
+    );
+
+  it("propose deux segments précochés : l'entame et le bloc, avec leurs libellés", () => {
+    renderPicker();
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes).toHaveLength(2);
+    boxes.forEach((b) => expect(b).toBeChecked());
+    expect(screen.getByText("Semaine du 31 août 2026 (entamée)")).toBeInTheDocument();
+    expect(screen.getByText("Semaines du 7 sept. 2026 au 27 sept. 2026 — d'un bloc (3 semaines)")).toBeInTheDocument();
+  });
+
+  it("affiche la phrase pédagogique SUR un segment multi-semaines (présentation)", () => {
+    renderPicker();
+    expect(screen.getByText(/la fermeture la plus large s'applique à toutes/i)).toBeInTheDocument();
+  });
+
+  it("n'offre AUCUN bouton « adapter le reste d'un bloc » (le reste est déjà un segment)", () => {
+    renderPicker();
+    expect(screen.queryByRole("button", { name: /le reste/i })).not.toBeInTheDocument();
+  });
+
+  it("confirme les deux segments précochés (1 entame + 1 bloc de 3 semaines)", async () => {
+    const user = userEvent.setup();
+    const onPickSegments = vi.fn();
+    renderPicker({ onPickSegments });
+    await user.click(screen.getByRole("button", { name: /^créer les 2 plannings$/i }));
+    expect(onPickSegments).toHaveBeenCalledTimes(1);
+    const segs = onPickSegments.mock.calls[0][0];
+    expect(segs.map((s: { monday: string }) => s.monday)).toEqual(["2026-08-31", "2026-09-07"]);
+    expect(segs[1].weeks).toHaveLength(3);
+  });
+
+  it("SCINDER un bloc le déplie en semaines individuelles (toujours précochées)", async () => {
+    const user = userEvent.setup();
+    const onPickSegments = vi.fn();
+    renderPicker({ onPickSegments });
+    await user.click(screen.getByRole("button", { name: /Scinder .* en semaines/i }));
+    // entame + 3 semaines = 4 coches, toutes cochées ; plus aucune phrase pédagogique (aucun bloc).
+    const boxes = screen.getAllByRole("checkbox");
+    expect(boxes).toHaveLength(4);
+    boxes.forEach((b) => expect(b).toBeChecked());
+    expect(screen.queryByText(/la fermeture la plus large/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^créer les 4 plannings$/i }));
+    const segs = onPickSegments.mock.calls[0][0];
+    expect(segs.map((s: { monday: string }) => s.monday)).toEqual(["2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21"]);
+    expect(segs.every((s: { weeks: unknown[] }) => 1 === s.weeks.length)).toBe(true);
+  });
+
+  it("FUSIONNER absorbe l'entame dans le bloc → un seul segment de 4 semaines", async () => {
+    const user = userEvent.setup();
+    const onPickSegments = vi.fn();
+    renderPicker({ onPickSegments });
+    await user.click(screen.getByRole("button", { name: /Fusionner .* avec le segment précédent/i }));
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getByText("Semaines du 31 août 2026 au 27 sept. 2026 — d'un bloc (4 semaines)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^créer le planning$/i }));
+    const segs = onPickSegments.mock.calls[0][0];
+    expect(segs).toHaveLength(1);
+    expect(segs[0].startDate).toBe("2026-08-31");
+    expect(segs[0].endDate).toBe("2026-09-27");
+    expect(segs[0].weeks).toHaveLength(4);
   });
 });
