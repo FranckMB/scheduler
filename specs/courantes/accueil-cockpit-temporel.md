@@ -1,6 +1,11 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-18 (recalé ce jour : **P2-37 PR2 front, LOT SOLDÉ** — le §Gymnases décrit désormais le surfaçage écran d'un gymnase ENTIÈREMENT fermé : l'interrupteur Désactiver/Réactiver laisse place à la raison en clair, annoncée avant tout clic (une fermeture PARTIELLE ne change rien à l'écran — témoin dédié) ; sa grille reste modifiable — décision vérifiée au code, pas une omission — re-vérifié contre `PeriodStructure.tsx`. Précédemment ce même jour (P2-37 PR1 backend) : le corollaire `OrphanPinGuard` — deux occurrences, §Gymnases et §e — disait qu'un épinglage HARD/une réservation orpheline bloque TOUJOURS la génération sur un jour fermé ; c'est devenu partiellement faux, P2-37 PR1 backend distingue désormais fermeture TOTALE (dérivée des dates fermées, exclue comme un gymnase désactivé, non bloquante) et fermeture PARTIELLE (reste bloquante) — réactiver un gymnase entièrement fermé (POST/PUT/DELETE `VenuePeriodOverride`) est aussi refusé en 422 ; précédemment : 2026-08-16 (corrigé ce jour : le §d citait `ManualEditController`/`manual-edit/one-time`/`temporaryLock` comme couvrant déjà le grain fin « juste ce mardi-là » — les deux sont retirés (P4-86, contrat 2.9), la phrase affirmait une capacité qui n'existe plus ; précédemment : 2026-08-14 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-14 par les livraisons elles-mêmes : `GET /api/calendar-entries/{id}/conflicts` sert `closures` depuis P2-22 PR 1 (§6) et le surfaçage écran de la PR 2 (détail : `frontend-wizard.md`) est intégralement livré — le lot P2-22 est clos ; précédemment recalé jusqu'au 2026-08-06 : radar borné à l'avenir actionnable P3-13/15c/11 · bandeau de période et diagnostics contextuels P4-38/39 · gymnase désactivé qui ne bloque plus la génération, 2026-08-06)))
+Last verified @ 2026-08-18 (recalé ce jour : **P2-38 PR3 front, LOT SOLDÉ (3 PR)** — §5bis gagne le
+paragraphe « Refus de chevauchement sur « Adapter » » : le 409 `window_already_planned`
+(`PeriodWindowUniquenessGuard`, PR2 backend) s'affiche désormais À L'ENDROIT DU GESTE au lieu
+d'être avalé par le filet global — re-vérifié contre `DayDialog.tsx`, `RadarPanel.tsx`,
+`WeekPickerDialog.tsx`, `WindowAlreadyPlannedNotice.tsx`, `lib/useWeekAdapt.ts`, `cockpit/api.ts`
+et `cockpit/queries.ts`. Précédemment ce même jour : **P2-37 PR2 front, LOT SOLDÉ** — le §Gymnases décrit désormais le surfaçage écran d'un gymnase ENTIÈREMENT fermé : l'interrupteur Désactiver/Réactiver laisse place à la raison en clair, annoncée avant tout clic (une fermeture PARTIELLE ne change rien à l'écran — témoin dédié) ; sa grille reste modifiable — décision vérifiée au code, pas une omission — re-vérifié contre `PeriodStructure.tsx`. Précédemment ce même jour (P2-37 PR1 backend) : le corollaire `OrphanPinGuard` — deux occurrences, §Gymnases et §e — disait qu'un épinglage HARD/une réservation orpheline bloque TOUJOURS la génération sur un jour fermé ; c'est devenu partiellement faux, P2-37 PR1 backend distingue désormais fermeture TOTALE (dérivée des dates fermées, exclue comme un gymnase désactivé, non bloquante) et fermeture PARTIELLE (reste bloquante) — réactiver un gymnase entièrement fermé (POST/PUT/DELETE `VenuePeriodOverride`) est aussi refusé en 422 ; précédemment : 2026-08-16 (corrigé ce jour : le §d citait `ManualEditController`/`manual-edit/one-time`/`temporaryLock` comme couvrant déjà le grain fin « juste ce mardi-là » — les deux sont retirés (P4-86, contrat 2.9), la phrase affirmait une capacité qui n'existe plus ; précédemment : 2026-08-14 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-14 par les livraisons elles-mêmes : `GET /api/calendar-entries/{id}/conflicts` sert `closures` depuis P2-22 PR 1 (§6) et le surfaçage écran de la PR 2 (détail : `frontend-wizard.md`) est intégralement livré — le lot P2-22 est clos ; précédemment recalé jusqu'au 2026-08-06 : radar borné à l'avenir actionnable P3-13/15c/11 · bandeau de période et diagnostics contextuels P4-38/39 · gymnase désactivé qui ne bloque plus la génération, 2026-08-06)))
 
 > **Statut** : **approche arrêtée** (décisions tranchées §9) — **livrée** ; cf. [`etat-des-lieux.md`](etat-des-lieux.md) §1.2.
 > **Pas un plan** — pas de tâches, pas d'effort chiffré ; l'exécution se planifiera palier par palier (§8).
@@ -439,6 +444,24 @@ l'horloge. Le **serveur** garde l'heure réelle (P4-16 reste ouverte pour lui).
 
 Le geste unique « cliquer une date » ouvre donc **le bon niveau selon le besoin** : une note
 rapide (modale) ou l'atelier de génération (le wizard en mode période). Pas deux entrées à retenir.
+
+**Refus de chevauchement sur « Adapter » (P2-38 PR3, 2026-08-18).** Le geste « Adapter » — mini
+popover d'une date, `WeekPickerDialog`, carte du radar — est sous la garde serveur (« une seule
+planification par fenêtre », backend-inventory.md `PeriodWindowUniquenessGuard`) : un 409
+`window_already_planned` (un AUTRE plan de période gouverne déjà tout ou partie de la fenêtre)
+s'affiche désormais **à l'endroit du geste**, dans le dialogue qui l'a déclenché
+(`WindowAlreadyPlannedNotice`), au lieu d'être avalé et remplacé par un toast générique du filet
+global (« problème de connexion » — qui accusait le réseau alors que le serveur avait répondu
+précisément). Le message du serveur est repris **tel quel** : il nomme déjà la période en place,
+sa fenêtre et les trois issues (modifier / supprimer ce planning / découper la période en
+semaines) — le front n'en redérive rien (règle d'or, `frontend/AGENTS.md`). Le bloc n'offre qu'un
+raccourci, « Ouvrir le planning en place » (navigue vers la période en conflit via son `entryId`) :
+**aucun bouton de suppression** — le geste destructif garde sa maison (`DeletePlanningButton`, sa
+confirmation, son avertissement de portée). Le hook `useWeekAdapt` (partagé par le radar et le
+bloc vacances du `DayDialog`) **possède son feedback** (patron `ownSlotEditFeedback` du rail de
+retouche) : il tait ce refus typé — le dialogue l'affiche — et laisse le filet global toaster tout
+vrai échec transport ; taire l'erreur sans afficher le bloc aurait transformé un mauvais toast en
+échec **silencieux**, d'où le partage assumé du même hook par les deux surfaces.
 
 > **Ex.** « AG le 12 mai » → clic sur le 12, popover, titre + toggle informatif, **enregistré, je
 > reste sur le cockpit** (2 s). « Gym Barros fermé la semaine du 4 » que je veux résoudre → clic,
