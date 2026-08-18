@@ -1,6 +1,6 @@
 # Frontend Strategy — TDD, Stack Fixée & Anti-patterns
 
-Last verified @ 2026-08-11 (recalé ce jour : RÈGLE DE PASSE DE DESIGN — `ui-ux-pro-max` borné à l'apparence, dans un agent, et il ne valide rien ; convention de MODALE — hauteur bornée + contenu défilant dans les deux composants partagés, WCAG 1.4.10, que le linter ne voit pas ; précédemment 2026-08-08 : statut posé ; convention de TAILLE DE CIBLE ajoutée — WCAG 2.5.8, que le linter ne mesure pas, AUD-A11Y-12 ; versions re-lues dans `frontend/package.json` le 2026-07-29 ; contenu recalé depuis par P4-65 — activer Sentry ne peut plus échouer en silence, garde de build `sentryCspGuard`)
+Last verified @ 2026-08-19 (**rotation de fraîcheur**, 3ᵉ fichier de la passe — re-vérifié contre `frontend/package.json`, `vitest.config.ts` et `src/test/` : **QUATRE versions avaient dérivé** (`jsdom` 29→30, `lucide-react` 1.27→1.31, `@sentry/react` 10.68→10.70, `vite` 8.0→8.2). Correctif de RÈGLE plutôt que de cas : les tables portent désormais la **MAJEURE seule** — une mineure bouge à chaque lot Dependabot et personne ne repasse ici, alors que la majeure porte du sens et ne bouge qu'une fois par an. La version exacte vit dans `package.json` ; la table garde ce qu'il ne dit pas, le RÔLE de chaque outil. Le doc s'imposait « refléter ici en même temps que dans le lockfile » — le même aveu que le cas RLS, et il avait produit la même dérive) ; précédemment : 2026-08-11 (recalé ce jour : RÈGLE DE PASSE DE DESIGN — `ui-ux-pro-max` borné à l'apparence, dans un agent, et il ne valide rien ; convention de MODALE — hauteur bornée + contenu défilant dans les deux composants partagés, WCAG 1.4.10, que le linter ne voit pas ; précédemment 2026-08-08 : statut posé ; convention de TAILLE DE CIBLE ajoutée — WCAG 2.5.8, que le linter ne mesure pas, AUD-A11Y-12 ; versions re-lues dans `frontend/package.json` le 2026-07-29 ; contenu recalé depuis par P4-65 — activer Sentry ne peut plus échouer en silence, garde de build `sentryCspGuard`)
 
 > **Statut : le rebuild est LIVRÉ.** Les formulations « pour le rebuild » ci-dessous sont
 > historiques ; le document reste la référence vivante des **versions de la stack**, des
@@ -45,18 +45,24 @@ cycle RED → GREEN → REFACTOR avant d'être considéré livrable.
 
 | Outil | Version (`frontend/package.json`) | Rôle |
 |------|---------|------|
-| Vitest | ^4.1 | Runner de test (config `vitest.config.ts` : jsdom, `globals`, setup `src/test/setup.ts`, exclut `tests/e2e/`) |
-| @vitest/coverage-v8 · @vitest/ui | ^4.1 | Couverture · UI de debug |
-| @testing-library/react | ^16.3 | Rendu et queries DOM |
-| @testing-library/user-event | ^14.6 | Simulation d'interaction |
-| @testing-library/jest-dom | ^7.0 | Matchers DOM |
-| jsdom | ^29.1 | Environnement DOM |
-| msw | ^2.15 | Mock réseau HTTP |
-| @playwright/test | ^1.62 | E2E (`frontend/tests/e2e/`) |
-| **vitest-axe** · **@axe-core/playwright** | ^0.1 · ^4.12 | **Assertions a11y** — suite unitaire (`src/test/a11y.test.tsx`) + spec de contraste e2e (`tests/e2e/a11y-contrast.spec.ts`) |
-| storybook · @storybook/react-vite | ^10.5 | Atelier de composants (`npm run storybook`) |
+| Vitest | 4.x | Runner de test (config `vitest.config.ts` : jsdom, `globals`, setup `src/test/setup.ts`, exclut `tests/e2e/`) |
+| @vitest/coverage-v8 · @vitest/ui | 4.x | Couverture · UI de debug |
+| @testing-library/react | 16.x | Rendu et queries DOM |
+| @testing-library/user-event | 14.x | Simulation d'interaction |
+| @testing-library/jest-dom | 7.x | Matchers DOM |
+| jsdom | 30.x | Environnement DOM |
+| msw | 2.x | Mock réseau HTTP |
+| @playwright/test | 1.x | E2E (`frontend/tests/e2e/`) |
+| **vitest-axe** · **@axe-core/playwright** | 0.x · 4.x | **Assertions a11y** — suite unitaire (`src/test/a11y.test.tsx`) + spec de contraste e2e (`tests/e2e/a11y-contrast.spec.ts`) |
+| storybook · @storybook/react-vite | 10.x | Atelier de composants (`npm run storybook`) |
 
-> Toute mise à jour de version doit être **reflétée ici en même temps que dans le lockfile**.
+> ⚑ **Ces tables portent la MAJEURE, jamais la mineure** (décision du 2026-08-19, rotation de
+> fraîcheur). Elles donnaient `^4.1`, `^29.1`, `^10.68`… et **quatre avaient déjà dérivé** : une
+> mineure bouge à chaque lot Dependabot, personne ne repasse ici, et le doc ment en silence. La
+> majeure, elle, porte du SENS (React 19 → `createRoot`, Vite 8, Tailwind 4) et ne bouge qu'une
+> fois par an. **La version exacte vit dans `frontend/package.json`** — cette table dit ce que
+> `package.json` ne dit pas : à quoi sert chaque outil. On ne recopie plus, on pointe.
+>
 > Ces tableaux ne sont pas un verrou technique (rien ne les vérifie automatiquement) : ils ne
 > valent que par leur exactitude.
 
@@ -134,17 +140,17 @@ de version majeure ou mineure sans décision explicite et re-vérification de co
 
 | Package | Version (`frontend/package.json`) | Rôle | Notes |
 |---------|--------------|------|-------|
-| react / react-dom | ^19.2 | Framework UI / rendu DOM | React 19 — pas de ReactDOM.render, createRoot obligatoire (voir §3) |
-| vite | ^8.0 | Bundler / dev server | Plugin `@tailwindcss/vite` |
-| typescript | ~6.0 | Typage | `~6.0` = patch libre, minor figée |
-| tailwindcss | ^4.3 | CSS utility-first | Configuration via CSS `@theme`, pas `tailwind.config.js` (voir §3) |
-| @tanstack/react-query | ^5.101 | Server state | v5 — pas de `onSuccess` (voir §3) |
-| zustand | ^5.0 | Client state | v5 — `migrate()` requiert null check (voir §3) |
-| ky | ^2.0 | Client HTTP | v2 — API fetch moderne |
+| react / react-dom | 19.x | Framework UI / rendu DOM | React 19 — pas de ReactDOM.render, createRoot obligatoire (voir §3) |
+| vite | 8.x | Bundler / dev server | Plugin `@tailwindcss/vite` |
+| typescript | 6.x | Typage | `~6.0` = patch libre, minor figée |
+| tailwindcss | 4.x | CSS utility-first | Configuration via CSS `@theme`, pas `tailwind.config.js` (voir §3) |
+| @tanstack/react-query | 5.x | Server state | v5 — pas de `onSuccess` (voir §3) |
+| zustand | 5.x | Client state | v5 — `migrate()` requiert null check (voir §3) |
+| ky | 2.x | Client HTTP | v2 — API fetch moderne |
 | @dnd-kit/core + sortable + utilities | ^6.3 / ^10.0 / ^3.2 | Drag & drop | Accessible ; utilisé pour le tri des équipes (wizard) |
-| react-router | ^8.3 | Routing | Data router (`createBrowserRouter`), **`lazy` par route** (P4-6), nested layouts. ⚠ paquet **`react-router`**, PAS `react-router-dom` |
-| lucide-react | ^1.27 | Icônes | SVG tree-shakeable |
-| @sentry/react | ^10.68 | Reporting d'erreurs | **Erreurs seules** — pas d'APM, pas de replay, `tracesSampleRate: 0` (quota free tier préservé). DSN absent → init sautée, SDK inerte. ⚠ **L'activer demande DEUX gestes** (P4-65) : poser `VITE_SENTRY_DSN` au build **ET** autoriser l'hôte d'ingestion du DSN dans `connect-src` (`docker/frontend/csp.conf`, qui n'autorise aucun tiers). Le DSN seul initialise le SDK et la CSP jette chaque envoi **en silence** ; un garde de build (`frontend/tooling/sentryCspGuard.ts`) refuse désormais cette combinaison. INF-01 |
+| react-router | 8.x | Routing | Data router (`createBrowserRouter`), **`lazy` par route** (P4-6), nested layouts. ⚠ paquet **`react-router`**, PAS `react-router-dom` |
+| lucide-react | 1.x | Icônes | SVG tree-shakeable |
+| @sentry/react | 10.x | Reporting d'erreurs | **Erreurs seules** — pas d'APM, pas de replay, `tracesSampleRate: 0` (quota free tier préservé). DSN absent → init sautée, SDK inerte. ⚠ **L'activer demande DEUX gestes** (P4-65) : poser `VITE_SENTRY_DSN` au build **ET** autoriser l'hôte d'ingestion du DSN dans `connect-src` (`docker/frontend/csp.conf`, qui n'autorise aucun tiers). Le DSN seul initialise le SDK et la CSP jette chaque envoi **en silence** ; un garde de build (`frontend/tooling/sentryCspGuard.ts`) refuse désormais cette combinaison. INF-01 |
 | @radix-ui/react-label + react-slot | ^2.1 / ^1.1 | Primitives UI | Base des composants shadcn-style de `shared/components/ui/` |
 
 > **FullCalendar n'est PAS installé** : la grille planning est un composant custom
