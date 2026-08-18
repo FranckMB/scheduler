@@ -43,7 +43,7 @@ make exec              # shell dans l'image de tooling Node
 
 ## Points structurants (à comprendre avant de coder)
 
-- **Deux modes, même app** : le **wizard** alimente le solveur (et, à l'étape Génération, affiche le planning inline une fois `COMPLETED`) ; la **boucle de travail** (`planning`) ajuste/verrouille/régénère un planning existant. Détail canonique : [`specs/courantes/frontend-wizard.md`](../specs/courantes/frontend-wizard.md).
+- **Deux modes, même app** : le **wizard** alimente le solveur (et, à l'étape Génération, affiche le planning inline une fois `COMPLETED`) ; la **boucle de travail** (`planning`) ajuste/verrouille/régénère un planning existant. Détail canonique : [`docs/frontend-wizard.md`](docs/frontend-wizard.md).
 - **Onboarding guidé vs libre** : selon `me.club.onboardingCompleted` (nav verrouillée vers l'avant pour un club neuf ; reprise sur la 1re étape incomplète).
 - **Contraintes ciblées par groupe** : l'écran Contraintes pose une contrainte CLUB + `config.targetTag` (ex. `JEUNE`) que le backend éclate en N contraintes d'équipe.
 - **Bundle découpé par route** : toutes les routes sont en `lazy` react-router **sauf** `/login` et les gardes (`app/router.tsx`). Trois filets rendent ce découpage sûr et **aucun n'est optionnel** quand on ajoute une route — `errorElement` (sinon un chunk 404 remplace toute l'app par l'écran anglais du router, invisible de Sentry), `HydrateFallback` (sinon page blanche au F5 d'une route lazy) et un indicateur d'attente `useNavigation` (sinon un clic ne produit aucun retour).
@@ -56,9 +56,9 @@ make exec              # shell dans l'image de tooling Node
 | [`AGENTS.md`](AGENTS.md) | Cheat-sheet agent : frontières, arborescence réelle, découpage lazy et ses trois filets, pièges (`tsc --noEmit`, `error.data`), a11y bloquante, primitives partagées, gotchas. |
 | [`docs/constraint-emission.md`](docs/constraint-emission.md) | Ce que le wizard émet réellement + alignement 3 couches (frontend → backend → engine). |
 | [`specs/courantes/superadmin-auth.md`](../specs/courantes/superadmin-auth.md) · [`types-de-planning.md`](../specs/courantes/types-de-planning.md) | Console superadmin (`/admin`) · doléances coachs (#10, dont `/doleances/{token}`). |
-| [`specs/courantes/frontend-wizard.md`](../specs/courantes/frontend-wizard.md) | Flux réel du wizard (6 étapes) + principes (save par entité, modes, reprise). |
-| [`specs/courantes/frontend-spec.md`](../specs/courantes/frontend-spec.md) · [`frontend-strategy.md`](../specs/courantes/frontend-strategy.md) | Architecture (routes, state), stack figée, anti-patterns, mandat TDD. |
-| [`specs/courantes/frontend-components.md`](../specs/courantes/frontend-components.md) | Contrat pages/composants. |
+| [`docs/frontend-wizard.md`](docs/frontend-wizard.md) | Flux réel du wizard (6 étapes) + principes (save par entité, modes, reprise). |
+| [`docs/frontend-spec.md`](docs/frontend-spec.md) · [`frontend-strategy.md`](docs/frontend-strategy.md) | Architecture (routes, state), stack figée, anti-patterns, mandat TDD. |
+| [`docs/frontend-components.md`](docs/frontend-components.md) | Contrat pages/composants. |
 
 ## Stack
 

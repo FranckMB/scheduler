@@ -47,7 +47,7 @@ Last verified @ 2026-08-17 (re-vérifié contre `engine/app/solver/validate_assi
 ### POST /place-matches
 
 Le **second problème CP-SAT**, distinct du solve hebdomadaire (ADR-0003 ; comportement produit :
-[`module-matchs.md`](module-matchs.md) §Solveur de placement). Ce qui est propre à l'engine :
+[`module-matchs.md`](../../specs/courantes/module-matchs.md) §Solveur de placement). Ce qui est propre à l'engine :
 
 - **Handler** : `place_matches(input_data: MatchPlacementInputSchema)` (`main.py:526-545`). Même
   garde de contrat que `/generate` — MAJOR seul, 422 sinon : **un seul `CONTRACT_VERSION` pour les

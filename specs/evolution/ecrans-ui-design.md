@@ -6,7 +6,7 @@
 > **sans logo au centre** — l'« élément imposé » ci-dessous ne tient plus, voir la note dans A1).
 > Ce cadrage reste utile si on veut un jour remplacer cette scène par des assets DÉSIGNÉS, par
 > sport ; ce n'est plus le point de départ « aucune scène ». Comportement livré :
-> `specs/courantes/frontend-spec.md` §6.2, décision de retrait du logo :
+> `../../frontend/docs/frontend-spec.md` §6.2, décision de retrait du logo :
 > `specs/courantes/identite-visuelle-club.md`.
 > Rattachement roadmap : **P5-16** (habillage + câblage) — distinct de
 > [`roadmap.md`](roadmap.md) **P5-14** qui arrête QUELS écrans système existent et sous quelle
@@ -14,7 +14,7 @@
 > visuel de certains d'entre eux et le prompt prêt à donner au designer.
 > **Nature** : cadrage à consommer par un designer (humain ou IA) — pas du code, pas un ADR.
 > **Le comportement livré ne vit pas ici** : une fois les assets intégrés, leur câblage se documente
-> dans `specs/courantes/frontend-spec.md` (écrans concernés) et l'item quitte la roadmap.
+> dans `../../frontend/docs/frontend-spec.md` (écrans concernés) et l'item quitte la roadmap.
 
 ## Contexte technique commun (à lire avant tout design)
 
@@ -53,7 +53,7 @@
   filigrané) et le centre imposé a changé de nature : **décision fondateur, plus AUCUN logo/initiale
   du club** — le centre porte désormais la mini-grille + le titre/phrase tournante/note, tous pilotés
   par les tokens de thème et l'accent du club (jamais un littéral). Détail :
-  `specs/courantes/frontend-spec.md` §6.2. Si ce cadrage sert un jour à commander des assets
+  `../../frontend/docs/frontend-spec.md` §6.2. Si ce cadrage sert un jour à commander des assets
   DÉSIGNÉS par sport, ils remplaceraient ce motif basketball codé en dur — **pas** un logo à
   ménager une place pour.
 - **Cadre de composition** : scène **800 × 500** (16:10), redimensionnée fluide entre ~560 px

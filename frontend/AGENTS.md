@@ -4,7 +4,7 @@
 > platform. Rebuilt from scratch and **active** — every path below exists in `src/`.
 >
 > Canonical detail lives in `README.md` (role & boundaries) and
-> `../specs/courantes/frontend-spec.md` (routes, state, API contract). This file is the
+> `docs/frontend-spec.md` (routes, state, API contract). This file is the
 > agent cheat-sheet: what breaks, what is a trap, what is non-negotiable.
 
 ---
@@ -267,7 +267,7 @@ believe empty.
    guardrail). Flip it to `warn` only to temporarily unblock a large refactor. There is also
    an a11y unit suite (`src/test/a11y.test.tsx`) and a Playwright contrast spec.
 4. **Migration anti-patterns are ESLint-enforced**, not just documented — e.g. a
-   `no-restricted-syntax` rule bans `ReactDOM.render`. See `../specs/courantes/frontend-strategy.md` §3.
+   `no-restricted-syntax` rule bans `ReactDOM.render`. See `docs/frontend-strategy.md` §3.
 5. **The theme is applied before React's first paint** (`main.tsx`, `readPersistedThemeMode`).
    Without it the tree renders light, then an effect flips `.dark` — a flash of the wrong
    theme plus a `transition-colors` animation that leaves surfaces at sub-AA colours (A11Y-06).
@@ -295,7 +295,7 @@ believe empty.
 10. **A period owns its venue grid.** In wizard period mode the Venues step is **editable**, not
     a read-only summary: the period's slots are a copy taken at plan birth and never unioned
     with the season's own. Same gestures as the season, barre « À poser » included (P4-43).
-    See `../specs/courantes/frontend-wizard.md`.
+    See `docs/frontend-wizard.md`.
 11. **Accent as TEXT needs a plain background.** `text-accent` clears 4.5:1 (WCAG 1.4.3) only
     on `bg-background`/`bg-card`: over `bg-accent/10` it drops to 4.18:1 in light mode, over
     `bg-muted` to 4.37:1 — even `accent/05` fails. Tint the surface **or** colour the text,
@@ -315,8 +315,8 @@ believe empty.
 | Tooling shell | `cd frontend && make exec` |
 
 **Pointers:** `README.md` (role, boundaries, delivered features) ·
-`../specs/courantes/frontend-spec.md` (routes, state, API contract) ·
-`../specs/courantes/frontend-wizard.md` (wizard & period mode) ·
+`docs/frontend-spec.md` (routes, state, API contract) ·
+`docs/frontend-wizard.md` (wizard & period mode) ·
 `docs/constraint-emission.md` (what the wizard emits, 3-layer alignment) ·
 `../specs/courantes/superadmin-auth.md` (`/admin`) ·
 `../specs/courantes/types-de-planning.md` (doléances coachs, #10).

@@ -2,7 +2,7 @@
 
 Cinquième récidive du même motif : `engine/CONTRACT_VERSION` bump, et le doc de
 second rang qui le cite reste à l'ancienne valeur. Ce n'est pas une coquette : ce
-projet est piloté par des agents, et `specs/courantes/engine-inventory.md` est lu
+projet est piloté par des agents, et `engine/docs/engine-inventory.md` est lu
 comme la source de vérité quand on planifie un changement de contrat. Un doc qui
 annonce 2.1 alors que le fichier dit 2.2 fait partir un plan à contresens — c'est
 exactement ce qui s'est produit entre le 2026-08-03 (bump 2.2) et le 2026-08-07.
@@ -22,7 +22,7 @@ import re
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 CONTRACT_VERSION_FILE = REPO_ROOT / "engine" / "CONTRACT_VERSION"
-INVENTORY_DOC = REPO_ROOT / "specs" / "courantes" / "engine-inventory.md"
+INVENTORY_DOC = REPO_ROOT / "engine" / "docs" / "engine-inventory.md"
 
 # D-37 (2026-08-08) — le garde ne surveillait QUE l'inventaire, et sept autres documents ont
 # derive sous son nez : ils annoncaient encore le contrat 2.1 alors que le fichier disait 2.2,
@@ -57,7 +57,7 @@ def test_inventory_doc_quotes_the_current_contract_version() -> None:
     doc = INVENTORY_DOC.read_text(encoding="utf-8")
 
     assert version in doc, (
-        f"specs/courantes/engine-inventory.md ne cite pas CONTRACT_VERSION={version}. "
+        f"engine/docs/engine-inventory.md ne cite pas CONTRACT_VERSION={version}. "
         "Le doc est lu comme source de vérité par les agents : le laisser sur une version "
         "périmée fait partir un plan à contresens (DOC-04, 5 récidives). Mettre à jour le "
         "doc dans le MÊME commit que le bump."

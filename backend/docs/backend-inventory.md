@@ -113,7 +113,7 @@ Doctrine correspondantes vivent dans `backend/src/Entity/` et utilisent des UUID
 | — | VenuePeriodOverride | `/api/venue_period_overrides` (+ actions atomiques `POST /reset-grid` « reprendre la grille du planning principal » et `POST /clear-grid` « vider la grille » pour un gymnase — SEC-07, 422 si visées sur le plan de saison, 404 hors club) | Réglage sparse par (`schedulePlanId`, `venueId`) : deux réglages INDÉPENDANTS, chacun facultatif — `mode` NULLABLE (`DISABLED`\|`BLANK`\|hériter) et un masque manuel `dayOverrides` (jour ISO 1..7 → `OPEN`\|`CLOSED`, tri-état sparse) — pas de ligne = hériter la grille de saison. DÉSACTIVÉ conserve la grille mais sort le gymnase du payload engine ; VIERGE la vide ; DELETE (retour à hériter) purge mode ET masque puis recopie. **Indisponibilité INFORMATIVE (décision fondateur 2026-08-18, SUPPLANTE le régime P2-37 du matin)** : une fermeture datée (indisponibilité DÉRIVÉE, jamais stockée) PRÉ-REMPLIT un défaut que le masque contredit jour par jour — composition dans la maison unique `PlanVenueClosures::effectiveStateForPlan/Entry`, partagée par le gate/payload/`OrphanPinGuard`/réservations/radar. POST/PUT/DELETE sont de nouveau ACCEPTÉS sur un gymnase entièrement fermé (l'ancien refus 422, non réversible, est révisé). | |
 | — | TeamPeriodOverride | `/api/team_period_overrides` | Surcharge d'une équipe pour une période (#8) : sparse par (`schedulePlanId`, `teamId`), `isActive` (équipe hors de l'overlay sans toucher son plan de base) + `sessionsPerWeek` nullable (volume réduit ; null = garder le saisonnier). Pas de ligne = hériter la saison. Le build overlay les lit ; le plan de base n'est jamais modifié |
 | — | ConstraintPeriodOverride | `/api/constraint_period_overrides` | Activation d'une contrainte pour une période (#8) : sparse par (`schedulePlanId`, `constraintId`), `isActive`. Une ligne est une déviation EXPLICITE (elle l'emporte) ; sans ligne, la contrainte suit son propre `isActive`. Le build overlay OMET du payload les contraintes désactivées (`ScheduleConstraintBuilder`, simple filtre — zéro engine) ; ni le socle ni le `isActive` de la `Constraint` ne sont touchés |
-| — | ImplicitRuleSetting | `/api/implicit_rule_settings/{ruleKey}` (identifiant = `ruleKey`, pas un uuid ; `?schedulePlanId=` cible un plan de période) | Réglage d'UNE des 4 règles implicites « bien-être » (intensité HARD/PREFERRED + seuil, contrat moteur 2.7) — RÉGLABLE PAR PORTÉE (`schedulePlanId` nullable, ADR-0002 inv. 5) : NULL = la saison (base — absence de ligne = défaut, zéro seeding) ; un UUID = un plan de période, qui reçoit à sa NAISSANCE une **copie matérialisée** de ses 4 lignes (`SchedulePlanProvisioner::materializeForPlan`, jamais sparse — patron de la copie de grille, #8) et n'est plus jamais recouché par une modification ultérieure de la saison. Un plan **legacy** (né avant cette fonctionnalité, zéro ligne) retombe sur la portée saison (repli vivant). GET **résolu** (toujours 4 entrées) ; PUT upserte (portée dans le corps, matérialise au premier réglage de plan) ; DELETE réinitialise — portée saison : supprime la ligne ; portée plan : **re-copie** la valeur saison courante (l'invariant 4 lignes du plan ne se brise jamais). Purgée avec le plan (`OverlayManager::purgePlanAnchoredSettings`) ; la transition de saison ne recopie que la portée saison. API stable depuis PR1 ; le front l'exerce par portée (saison ou plan de période) depuis PR2 — comportement écran : [`frontend-wizard.md`](frontend-wizard.md) §4. | |
+| — | ImplicitRuleSetting | `/api/implicit_rule_settings/{ruleKey}` (identifiant = `ruleKey`, pas un uuid ; `?schedulePlanId=` cible un plan de période) | Réglage d'UNE des 4 règles implicites « bien-être » (intensité HARD/PREFERRED + seuil, contrat moteur 2.7) — RÉGLABLE PAR PORTÉE (`schedulePlanId` nullable, ADR-0002 inv. 5) : NULL = la saison (base — absence de ligne = défaut, zéro seeding) ; un UUID = un plan de période, qui reçoit à sa NAISSANCE une **copie matérialisée** de ses 4 lignes (`SchedulePlanProvisioner::materializeForPlan`, jamais sparse — patron de la copie de grille, #8) et n'est plus jamais recouché par une modification ultérieure de la saison. Un plan **legacy** (né avant cette fonctionnalité, zéro ligne) retombe sur la portée saison (repli vivant). GET **résolu** (toujours 4 entrées) ; PUT upserte (portée dans le corps, matérialise au premier réglage de plan) ; DELETE réinitialise — portée saison : supprime la ligne ; portée plan : **re-copie** la valeur saison courante (l'invariant 4 lignes du plan ne se brise jamais). Purgée avec le plan (`OverlayManager::purgePlanAnchoredSettings`) ; la transition de saison ne recopie que la portée saison. API stable depuis PR1 ; le front l'exerce par portée (saison ou plan de période) depuis PR2 — comportement écran : [`frontend-wizard.md`](../../frontend/docs/frontend-wizard.md) §4. | |
 | — | CoachWish | `/api/coach_wishes` | Doléance coach pour une semaine de vacances (#10 C1) : par (équipe × semaine), nb de créneaux souhaités / jours indisponibles / commentaire / coche « traité ». **Souhait, jamais une contrainte** (zéro effet solveur). Ancrée à l'entrée MÈRE (`calendarEntryId`) + `weekStart` (lundi). Writes SEC-07 ; 422 hors période holiday / sur une semaine enfant / semaine non-lundi ou hors fenêtre / doublon (équipe, semaine). `coachId` nullable (suppression du coach → dé-attribution). Cascades : suppression de la mère, purge saison, suppression d'équipe (delete) / de coach (dé-attribution). |
 | — | CoachWishCampaign | `/api/coach_wish_campaigns` (+ actions `POST /{id}/send-links` et `POST /{id}/remind` — SEC-07, #10 C3) | Campagne de collecte (#10 C2) : une par période de vacances (`calendarEntryId` UNIQUE), modifiable (semaines / équipes / deadline). Writes SEC-07 ; 422 doublon d'entrée / ancre non-holiday / semaine hors fenêtre. Sortie enrichie : compteurs radar (`totalCoachCount`/`respondedCoachCount`/`openWishCount`) + `lastReminderAt` + `coaches[{token, respondedAt, email, sentAt}]` (périmètre COURANT). Au POST/PUT, **sync des tokens** (un par coach des équipes retenues, jamais supprimé). DELETE emporte les tokens (FK) mais **laisse les `CoachWish`** (la todo-list C1 survit). Cascades : suppression de la mère, purge saison. **Actions C3** : `send-links` (corps `{coachIds?}`) envoie le lien par email aux coachs à email PAS ENCORE servis, ou aux `coachIds` ciblés (ajout tardif) — stampe `token.sentAt`, best-effort, filtre `FILTER_VALIDATE_EMAIL` ; `remind` relance les silencieux à email, **1×/jour Europe/Paris → 422 sinon**. |
 | — | CoachWishToken | *(pas de ressource API)* | Lien personnel d'un coach (#10 C2) : `token` VARCHAR(64) **EN CLAIR** (`bin2hex(random_bytes(32))` — décision fondateur : « copier le lien » doit re-fonctionner ; privilège minuscule, borné au périmètre du token). `TenantOwnedInterface` (porte `club_id` pour poser le GUC RLS sur le chemin public sans JWT). RLS **hybride** : SELECT ouvert (lookup pré-GUC), écritures tenant. Consommé par le contrôleur public ci-dessous. |
@@ -165,7 +165,7 @@ partitionnement sont différés aux jobs SA3.
 
 Identité, provider et firewall stateful séparés de `User`/`ClubUser` et du JWT club. Le
 parcours mot de passe + TOTP, la session, le CSRF et l'audit fail-closed sont spécifiés dans
-[`superadmin-auth.md`](superadmin-auth.md). Routes : `POST /api/admin/auth/password`,
+[`superadmin-auth.md`](../../specs/courantes/superadmin-auth.md). Routes : `POST /api/admin/auth/password`,
 `POST /api/admin/auth/totp`, `GET /api/admin/auth/me`, `POST /api/admin/auth/logout`.
 
 Le reste de la console (supervision parc/solveur, jobs planifiés, journaux read-only, actions
@@ -173,7 +173,7 @@ de support, demandes de création de club) vit derrière le même firewall `/api
 `AdminMonitoringController`, `AdminJobController`, `AdminAuditLogController`,
 `AdminMessengerFailedController`, `AdminSystemErrorsController`, `AdminClubActionController`
 et `AdminClubRequestController` (`backend/src/Controller/Admin*.php`) — catalogue de routes
-exhaustif et à jour dans [`superadmin-auth.md`](superadmin-auth.md), pas dupliqué ici.
+exhaustif et à jour dans [`superadmin-auth.md`](../../specs/courantes/superadmin-auth.md), pas dupliqué ici.
 Deux mécanismes transverses à toute la console : le `TenantFilterListener` **retourne
 immédiatement** sur `/api/admin/**` (SEC-17, `src/EventListener/TenantFilterListener.php:70` —
 la console n'a pas de tenant, et poser `app.club_id` pour une identité admin violerait le
@@ -278,7 +278,7 @@ qu'elles changent le résultat du solveur est portée par le job CI dédié `eng
 
 ### Calendriers — vacances scolaires & jours fériés
 
-Référentiels globaux display-only (jamais consommés par le solveur). Détail complet (modèle, zones, commandes d'import, règles) : [`vacances-scolaires-jours-feries.md`](vacances-scolaires-jours-feries.md).
+Référentiels globaux display-only (jamais consommés par le solveur). Détail complet (modèle, zones, commandes d'import, règles) : [`vacances-scolaires-jours-feries.md`](../../specs/courantes/vacances-scolaires-jours-feries.md).
 
 | Route | Méthode | Contrôleur | Description |
 |-------|---------|------------|-------------|
@@ -403,7 +403,7 @@ l'horloge simulée).
 
 ### Cockpit temporel (overlays période/événement)
 
-Détail : [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md). `CalendarEntry` (kind PERIOD/EVENT) est le **déclencheur daté** ; le planning de période est un `SchedulePlan` ancré à l'entrée, et c'est **le plan** qui pointe sa version (`chosenScheduleId`). Le pointeur inverse `overlayScheduleId` a été supprimé par ADR-0002 lot D-b.
+Détail : [`accueil-cockpit-temporel.md`](../../specs/courantes/accueil-cockpit-temporel.md). `CalendarEntry` (kind PERIOD/EVENT) est le **déclencheur daté** ; le planning de période est un `SchedulePlan` ancré à l'entrée, et c'est **le plan** qui pointe sa version (`chosenScheduleId`). Le pointeur inverse `overlayScheduleId` a été supprimé par ADR-0002 lot D-b.
 
 | Route | Méthode | Contrôleur | Description |
 |-------|---------|------------|-------------|
@@ -411,7 +411,7 @@ Détail : [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md). `Calenda
 
 ### Module matchs (palier A — FFBB)
 
-Détail : [`module-matchs.md`](module-matchs.md). Placement des rencontres domicile + radar de conflits coach/joueur ; catalogue-ligue global `LeagueMatchWindow` (hors tenant).
+Détail : [`module-matchs.md`](../../specs/courantes/module-matchs.md). Placement des rencontres domicile + radar de conflits coach/joueur ; catalogue-ligue global `LeagueMatchWindow` (hors tenant).
 
 | Route | Méthode | Contrôleur | Description |
 |-------|---------|------------|-------------|

@@ -1,6 +1,6 @@
 # Les 3 types de planning — référence produit
 
-Last verified @ 2026-08-08 (statut posé ce jour ; gabarits de noms par défaut recalés P4-41/P2-20 ; contenu recalé depuis par P3-14/P3-15 a/b — ordre des listes de doléances et coach qui encadre vraiment l'équipe)
+Last verified @ 2026-08-18 (aucun changement de FOND : seuls les chemins vers la doc frontend sont recalés après son déplacement vers `frontend/docs/`) ; précédemment : 2026-08-08 (statut posé ce jour ; gabarits de noms par défaut recalés P4-41/P2-20 ; contenu recalé depuis par P3-14/P3-15 a/b — ordre des listes de doléances et coach qui encadre vraiment l'équipe)
 
 > **Rôle de ce document** : la trace durable du modèle métier des plannings, validé avec le
 > fondateur le 2026-07-12. C'est LA référence à consulter avant tout travail sur la
@@ -13,7 +13,7 @@ Last verified @ 2026-08-08 (statut posé ce jour ; gabarits de noms par défaut 
 > concept = une maison, pas de duplication.
 > Mécanique temporelle : [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md)
 > (CalendarEntry, cockpit) · entités et gardes serveur :
-> [`backend-inventory.md`](backend-inventory.md) §2.
+> [`backend-inventory.md`](../../backend/docs/backend-inventory.md) §2.
 
 ## Vue d'ensemble
 
@@ -98,7 +98,7 @@ Last verified @ 2026-08-08 (statut posé ce jour ; gabarits de noms par défaut 
   (campagne → lien tokenisé sans login `/doleances/{token}` → page publique pré-remplie →
   emails + digest quotidien + relance) + **badge radar** « X/Y répondu · N à traiter ».
   Un souhait, jamais une contrainte. Détail : E5 ci-dessous ·
-  [`backend-inventory.md`](backend-inventory.md) §2 (entités, token, page publique).
+  [`backend-inventory.md`](../../backend/docs/backend-inventory.md) §2 (entités, token, page publique).
 - **État** : 🟢 rodé sur les axes livrés — héritage contraintes + défaut intelligent (#212),
   équipes on/off + séances, **grille de gymnases possédée par la période** (#8 — copie du
   modèle de saison, éditable gymnase par gymnase à l'écran), **choix des semaines** (E1), été inclus (E2),

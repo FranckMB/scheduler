@@ -33,7 +33,7 @@ Last verified @ 2026-08-18 (recalé ce jour par **indisponibilité de gymnase IN
 - **Périmètre engagé (P2-7a)** — axe structurant (`CLAUDE.md` §7.1) : une équipe qui joue en compétition porte **`Team.isEngaged`**, **dit par le serveur** (`TeamResource.isEngaged`) et **jamais recalculé côté front**. À l'étape Équipes, sa **suppression** et son **changement de niveau de jeu** sont grisés — ses matchs sont déposés à la fédération. Une légende explicative n'apparaît que si au moins une équipe du club est engagée. Garde serveur : `EngagedTeamGuardTest`.
 - **Tenant** : le front n'envoie **aucun** header `X-Club-Id` (club résolu serveur depuis le JWT — voir `backend/docs/TENANT.md`).
 - **URIs API** : snake_case (`/api/team_coaches`, `/api/venue_training_slots`, `/api/sport_categories`, `/api/priority_tiers`…), **pas** les tirets du draft.
-- **Différé (évolution)** : import Excel/CSV, mode démo, fermetures exceptionnelles, rôles non-admin & gestion des membres — suivis en roadmap (**P3-7**, **P2-4**, **P1-1**) ; la transition de saison est livrée ([`etat-des-lieux.md`](etat-des-lieux.md) §1.7).
+- **Différé (évolution)** : import Excel/CSV, mode démo, fermetures exceptionnelles, rôles non-admin & gestion des membres — suivis en roadmap (**P3-7**, **P2-4**, **P1-1**) ; la transition de saison est livrée ([`etat-des-lieux.md`](../../specs/courantes/etat-des-lieux.md) §1.7).
 - Garanti par : `backend/tests/.../OnboardingFlowTest`, `backend/scripts/onboarding-smoke.sh`, `frontend/.../WizardPage.test`.
 
 ---
@@ -66,7 +66,7 @@ scheduling, pas des données d'onboarding — elles vont dans l'étape Contraint
 > Référence endpoints : `specs/courantes/openapi-snapshot.json` (paths
 > `\/api\/venues`, `\/api\/teams`, `\/api\/coaches`, `\/api\/constraints`,
 > `\/api\/priority-tiers`, `\/api\/sport-categories`, `\/api\/clubs`).
-> Référence contrôleurs : `specs/courantes/backend-inventory.md` §2 (20
+> Référence contrôleurs : `../../backend/docs/backend-inventory.md` §2 (20
 > ressources API Platform) et §3 (custom controllers).
 
 ### Mode démo
@@ -426,7 +426,7 @@ if (!result.success) {
 > **Correction (ex-gap G7, fermé) :** le champ **existe** dans l'OpenAPI en
 > camelCase `Club.onboardingCompleted` (boolean, default false) — l'ancien
 > claim de gap (snake_case `onboarding_completed` absent) était une erreur de
-> doc. Décisions tracées dans [`etat-des-lieux.md`](etat-des-lieux.md) §2.
+> doc. Décisions tracées dans [`etat-des-lieux.md`](../../specs/courantes/etat-des-lieux.md) §2.
 
 ### UX
 
@@ -645,7 +645,7 @@ Wizard mount
 > wizard ne tient aucune donnée d'étape), ce qui couvre déjà « ne rien
 > perdre » ; un draft-blob serait une 2e source de vérité. Le champ
 > `onboardingCompleted` existe (camelCase, voir §5). Trace :
-> [`etat-des-lieux.md`](etat-des-lieux.md) §2.
+> [`etat-des-lieux.md`](../../specs/courantes/etat-des-lieux.md) §2.
 
 ### Test Cases
 
@@ -759,7 +759,7 @@ Wizard mount
 
 > Référence : `specs/courantes/openapi-snapshot.json` (paths vérifiés au
 > 2026-06-30, backend SHA `6e35a6ce`). Décisions sur les ex-gaps :
-> [`etat-des-lieux.md`](etat-des-lieux.md) §2.
+> [`etat-des-lieux.md`](../../specs/courantes/etat-des-lieux.md) §2.
 
 ---
 

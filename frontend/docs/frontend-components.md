@@ -14,12 +14,12 @@ Last verified @ 2026-08-17 (re-vérifié contre `AuthLayout.tsx` : le produit s'
 > |---|---|
 > | Routes, state, contrat API, arborescence livrée | [`frontend-spec.md`](frontend-spec.md) §2 / §8 / §9 / §10 |
 > | Wizard (6 étapes) + mode période | [`frontend-wizard.md`](frontend-wizard.md) |
-> | Cycle de vie du planning (valider / rouvrir / pointeur) | [`planning-lifecycle-validated.md`](planning-lifecycle-validated.md) + ADR-0002 |
-> | Cockpit (accueil temporel, radar) | [`accueil-cockpit-temporel.md`](accueil-cockpit-temporel.md) |
-> | Module matchs | [`module-matchs.md`](module-matchs.md) |
-> | Doléances coachs (#10) — dont la page publique `/doleances/{token}` | [`types-de-planning.md`](types-de-planning.md) §E5 |
+> | Cycle de vie du planning (valider / rouvrir / pointeur) | [`planning-lifecycle-validated.md`](../../specs/courantes/planning-lifecycle-validated.md) + ADR-0002 |
+> | Cockpit (accueil temporel, radar) | [`accueil-cockpit-temporel.md`](../../specs/courantes/accueil-cockpit-temporel.md) |
+> | Module matchs | [`module-matchs.md`](../../specs/courantes/module-matchs.md) |
+> | Doléances coachs (#10) — dont la page publique `/doleances/{token}` | [`types-de-planning.md`](../../specs/courantes/types-de-planning.md) §E5 |
 > | **Onglets** (`shared/components/ui/tabs.tsx`) — motif WAI-ARIA (roving tabindex, flèches/Home/End), deux peaux : `console` (admin, sombre) et `app` (club, **défaut**). Déplacé de `features/admin/` le 2026-08-01 quand la modale de sollicitation en a eu besoin. ⚠ **Des onglets dans une MODALE demandent deux précautions** (revue #346) : le piège à focus de `useModalA11y` ignore désormais les sous-arbres `hidden` — sans quoi le « dernier » focusable est un bouton du panneau inactif et Tab sort du dialogue — et toute bascule d'onglet PROGRAMMATIQUE doit emporter le focus, sinon il retombe sur `<body>` et le piège comme Échap cessent d'agir | — |
-> | Console superadmin (`/admin`) | [`superadmin-auth.md`](superadmin-auth.md) |
+> | Console superadmin (`/admin`) | [`superadmin-auth.md`](../../specs/courantes/superadmin-auth.md) |
 > | Conventions agent, pièges, primitives partagées | [`../../frontend/AGENTS.md`](../../frontend/AGENTS.md) |
 >
 > **Principaux écarts** entre les sections historiques et le code : aucune des pages

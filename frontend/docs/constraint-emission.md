@@ -45,7 +45,7 @@ couches et rester sans effet parce que son gymnase est désactivé pour la péri
 | **`ConstraintPeriodOverride`** | Bascule d'une contrainte **permanente héritée**, uniquement quand elle **dévie du défaut intelligent** | Active/désactive la contrainte **pour la fenêtre** ; le plan de base et le `Constraint.isActive` ne sont jamais modifiés |
 | **`TeamPeriodOverride`** | Activation / désactivation d'une équipe pour la fenêtre | Une contrainte TEAM d'une équipe désactivée est **non applicable** et retirée du payload côté serveur |
 
-Détail des écrans et des arbitrages : `specs/courantes/frontend-wizard.md`.
+Détail des écrans et des arbitrages : `frontend-wizard.md`.
 
 ## 2. Table d'alignement 3 couches
 

@@ -621,7 +621,7 @@ restantes, c'est aussi ça « le moins pénible possible » : savoir ce qui rest
 pas forcément des matchs ») sans le spécifier.
 
 ⚑ **La collision, à traiter avant de coder** : le wizard **exige aujourd'hui au moins un créneau par gymnase**
-(règle affichée sous le formulaire d'ajout, cf. [`frontend-wizard.md`](../courantes/frontend-wizard.md)). Or un
+(règle affichée sous le formulaire d'ajout, cf. [`frontend-wizard.md`](../../frontend/docs/frontend-wizard.md)). Or un
 gymnase **réservé aux matchs** — une salle plus grande louée le week-end, par exemple — n'a **aucun créneau
 d'entraînement**. La règle actuelle le refuserait, ou forcerait le gestionnaire à inventer un créneau fictif
 qui partirait ensuite au solveur.

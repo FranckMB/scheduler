@@ -36,7 +36,7 @@ Le **backend** est le point central du système. Il expose l'API REST, gère les
 
 Toutes les routes sont exposées sous `/api` via **API Platform** (auto-génération CRUD + OpenAPI docs).
 
-> ⚠️ **URIs en `snake_case`** (`/api/team_coaches`, `/api/venue_training_slots`, `/api/sport_categories`, `/api/priority_tiers`, `/api/schedule_slot_templates`…), **pas** en kebab. La **source de vérité** est l'OpenAPI (`/api/docs`) et l'inventaire [`specs/courantes/backend-inventory.md`](../specs/courantes/backend-inventory.md) ; le tableau ci-dessous est indicatif.
+> ⚠️ **URIs en `snake_case`** (`/api/team_coaches`, `/api/venue_training_slots`, `/api/sport_categories`, `/api/priority_tiers`, `/api/schedule_slot_templates`…), **pas** en kebab. La **source de vérité** est l'OpenAPI (`/api/docs`) et l'inventaire [`docs/backend-inventory.md`](docs/backend-inventory.md) ; le tableau ci-dessous est indicatif.
 
 ### Ressources métier (CRUD standard)
 

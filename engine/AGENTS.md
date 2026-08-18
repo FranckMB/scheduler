@@ -6,7 +6,7 @@
 ## Where things live (no counts — they rot)
 
 - `app/main.py` FastAPI endpoints + solve orchestration · `app/schemas/` Pydantic v2 input/output · `app/solver/` model / constraints / objective / result_builder · `tests/` golden + invariants + hypothesis, fixtures under `tests/fixtures/`.
-- Solver detail (constraint families, weights, locks): `specs/courantes/engine-inventory.md` §4-5 + [`docs/constraint-vocabulary.md`](docs/constraint-vocabulary.md). There is deliberately no nested `app/solver/AGENTS.md` — it duplicated this file and drifted.
+- Solver detail (constraint families, weights, locks): `docs/engine-inventory.md` §4-5 + [`docs/constraint-vocabulary.md`](docs/constraint-vocabulary.md). There is deliberately no nested `app/solver/AGENTS.md` — it duplicated this file and drifted.
 - Contract source of truth: `CONTRACT_VERSION` file at engine root (returned in `/` and metrics).
 
 ## Endpoints (verify in `app/main.py` before relying on this)
