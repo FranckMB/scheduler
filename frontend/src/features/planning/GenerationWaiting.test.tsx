@@ -45,6 +45,32 @@ describe("GenerationWaiting", () => {
     expect(screen.queryByText("Placement des équipes prioritaires…")).not.toBeInTheDocument();
   });
 
+  // Retour fondateur 2026-08-18 : le cadre était borné à 640 px alors que le shell est
+  // pleine largeur — de l'espace perdu à gauche ET à droite pendant toute la génération.
+  it("occupe toute la largeur disponible — le cadre ne porte AUCUNE largeur maximale", () => {
+    render(<GenerationWaiting />);
+    const frame = screen.getByTestId("gen-scene-frame");
+    expect(frame.className).toContain("w-full");
+    expect(frame.className).not.toMatch(/\bmax-w-/);
+  });
+
+  /**
+   * Le décor ne vit que dans DEUX bandes latérales (le centre est la zone protégée des
+   * textes) : elles sont donc ancrées aux bords et le centre s'étire. Chaque bande garde
+   * les coordonnées d'origine du dessin — seule sa viewBox cadre sa moitié.
+   */
+  it("ancre les deux bandes de décor aux bords, coordonnées d'origine préservées", () => {
+    render(<GenerationWaiting />);
+    const left = screen.getByTestId("gen-band-left");
+    const right = screen.getByTestId("gen-band-right");
+    expect(left.getAttribute("viewBox")).toBe("0 0 230 500");
+    expect(right.getAttribute("viewBox")).toBe("570 0 230 500");
+    expect(left.getAttribute("class")).toContain("left-0");
+    expect(right.getAttribute("class")).toContain("right-0");
+    // Une seule des deux porte le sens : deux `role="img"` feraient lire la scène deux fois.
+    expect(right.getAttribute("aria-hidden")).toBe("true");
+  });
+
   // Décision fondateur : la scène EST le contenu, aucun logo de club ni initiale par-dessus.
   it("ne rend AUCUN logo de club", () => {
     render(<GenerationWaiting />);
