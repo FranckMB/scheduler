@@ -4,32 +4,18 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use App\Deletion\CascadePlan;
+use App\Deletion\CascadeStep;
+use App\Deletion\DeletionTarget;
 use App\Entity\Coach;
-use App\Entity\CoachPlayerMembership;
-use App\Entity\CoachWish;
-use App\Entity\Competition;
 use App\Entity\Constraint;
-use App\Entity\ConstraintPeriodOverride;
-use App\Entity\Fixture;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
-use App\Entity\ScheduleDiagnostic;
 use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
-use App\Entity\SharedTrainingGroup;
-use App\Entity\SharedTrainingGroupTeam;
 use App\Entity\Team;
-use App\Entity\TeamCoach;
-use App\Entity\TeamLink;
-use App\Entity\TeamMatchHabit;
-use App\Entity\TeamPeriodOverride;
-use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
-use App\Entity\VenueMatchWindow;
-use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
-use App\Entity\VenueUnavailability;
-use App\Enum\ConstraintScope;
 use App\Enum\LockLevel;
 use App\Enum\SchedulePlanType;
 use Doctrine\ORM\EntityManagerInterface;
@@ -61,85 +47,17 @@ final class EntityCascadeDeleter
 
     public function purgeChildrenOfTeam(Team $team): void
     {
-        $clubId = $team->getClubId();
-        $seasonId = $team->getSeasonId();
-        $teamId = $team->getId();
-
-        $this->withoutTenantFilters(function () use ($clubId, $seasonId, $teamId): void {
-            $this->deleteByField(Reservation::class, 'teamId', $teamId, $clubId, $seasonId);
-            $this->deleteByField(TeamCoach::class, 'teamId', $teamId, $clubId, $seasonId);
-            $this->deleteByField(CoachPlayerMembership::class, 'teamId', $teamId, $clubId, $seasonId);
-            // P1-4 PR C — habits + links follow their team (links on BOTH sides:
-            // the couple is normalized, the team may sit on either column).
-            $this->deleteByField(TeamMatchHabit::class, 'teamId', $teamId, $clubId, $seasonId);
-            $this->deleteByField(TeamLink::class, 'teamAId', $teamId, $clubId, $seasonId);
-            $this->deleteByField(TeamLink::class, 'teamBId', $teamId, $clubId, $seasonId);
-            $this->deleteByField(ScheduleSlotTemplate::class, 'teamId', $teamId, $clubId, $seasonId);
-            $this->deleteByField(ScheduleDiagnostic::class, 'teamId', $teamId, $clubId, $seasonId);
-            // Match module: a team's fixtures + competition enrolments key on teamId.
-            // NOTE: depuis la garde du périmètre engagé, cette ligne ne supprime plus
-            // rien par l'API — un seul match, même UNPLACED, rend l'équipe indélébile
-            // (TeamStateProcessor::cascadeBeforeDelete refuse AVANT d'arriver ici). On
-            // la garde comme filet : si la règle d'engagement se relâche un jour, les
-            // matchs partiront avec l'équipe au lieu de pendre sur un team_id mort.
-            $this->deleteByField(Fixture::class, 'teamId', $teamId, $clubId, $seasonId);
-            $this->deleteByField(Competition::class, 'teamId', $teamId, $clubId, $seasonId);
-            // TeamTagAssignment has a season_id but NO club_id (scoped by season).
-            $this->deleteByField(TeamTagAssignment::class, 'teamId', $teamId, null, $seasonId);
-            // Period-editable structure (B1): a team's per-period overrides key on teamId.
-            $this->deleteByField(TeamPeriodOverride::class, 'teamId', $teamId, $clubId, $seasonId);
-            // #10 — sans équipe, une doléance n'a plus de sens : elle part.
-            $this->deleteByField(CoachWish::class, 'teamId', $teamId, $clubId, $seasonId);
-            $this->deleteScopedConstraint(ConstraintScope::TEAM, $teamId, $clubId, $seasonId);
-            // P2-27 — la mutualisation : retirer l'équipe des groupes ; un groupe qui tombe
-            // sous 2 membres n'a plus de sens et part avec ses lignes restantes.
-            $this->pruneSharedTrainingGroupsForTeam($teamId, $clubId, $seasonId);
-            $this->clearParentRef(Team::class, 'parentTeamId', $teamId, $clubId, $seasonId);
-        });
+        $this->run(CascadePlan::forTeam(), new DeletionTarget($team->getId(), $team->getClubId(), $team->getSeasonId()));
     }
 
     public function purgeChildrenOfVenue(Venue $venue): void
     {
-        $clubId = $venue->getClubId();
-        $seasonId = $venue->getSeasonId();
-        $venueId = $venue->getId();
-
-        $this->withoutTenantFilters(function () use ($clubId, $seasonId, $venueId): void {
-            $this->deleteByField(VenueTrainingSlot::class, 'venueId', $venueId, $clubId, $seasonId);
-            $this->deleteByField(VenueMatchWindow::class, 'venueId', $venueId, $clubId, $seasonId);
-            $this->deleteByField(VenueUnavailability::class, 'venueId', $venueId, $clubId, $seasonId);
-            $this->deleteByField(VenuePeriodOverride::class, 'venueId', $venueId, $clubId, $seasonId);
-            $this->deleteByField(Reservation::class, 'venueId', $venueId, $clubId, $seasonId);
-            $this->deleteByField(ScheduleSlotTemplate::class, 'venueId', $venueId, $clubId, $seasonId);
-            $this->deleteByField(ScheduleDiagnostic::class, 'venueId', $venueId, $clubId, $seasonId);
-            $this->deleteScopedConstraint(ConstraintScope::FACILITY, $venueId, $clubId, $seasonId);
-            $this->clearParentRef(Team::class, 'forcedVenueId', $venueId, $clubId, $seasonId);
-            $this->clearParentRef(Venue::class, 'parentVenueId', $venueId, $clubId, $seasonId);
-            // A fixture's venue is optional (match may be TBD) — the fixture
-            // survives the venue delete, it just loses its (now-gone) venue.
-            $this->clearParentRef(Fixture::class, 'venueId', $venueId, $clubId, $seasonId);
-        });
+        $this->run(CascadePlan::forVenue(), new DeletionTarget($venue->getId(), $venue->getClubId(), $venue->getSeasonId()));
     }
 
     public function purgeChildrenOfCoach(Coach $coach): void
     {
-        $clubId = $coach->getClubId();
-        $seasonId = $coach->getSeasonId();
-        $coachId = $coach->getId();
-
-        $this->withoutTenantFilters(function () use ($clubId, $seasonId, $coachId): void {
-            $this->deleteByField(TeamCoach::class, 'coachId', $coachId, $clubId, $seasonId);
-            $this->deleteByField(CoachPlayerMembership::class, 'coachId', $coachId, $clubId, $seasonId);
-            $this->deleteByField(ScheduleDiagnostic::class, 'coachId', $coachId, $clubId, $seasonId);
-            $this->deleteScopedConstraint(ConstraintScope::COACH, $coachId, $clubId, $seasonId);
-            // A slot placement keeps existing without its (now-deleted) coach —
-            // the engine leaves slot.coachId empty anyway, so null it out.
-            $this->clearParentRef(ScheduleSlotTemplate::class, 'coachId', $coachId, $clubId, $seasonId);
-            // #10 — la doléance SURVIT au coach supprimé, dé-attribuée : son info d'équipe
-            // reste utile au plan de vacances.
-            $this->clearParentRef(CoachWish::class, 'coachId', $coachId, $clubId, $seasonId);
-            $this->clearParentRef(Coach::class, 'parentCoachId', $coachId, $clubId, $seasonId);
-        });
+        $this->run(CascadePlan::forCoach(), new DeletionTarget($coach->getId(), $coach->getClubId(), $coach->getSeasonId()));
     }
 
     /**
@@ -241,6 +159,21 @@ final class EntityCascadeDeleter
             // horaire et `findBaseSlotTemplates` le ré-injecterait à chaque génération.
             $this->moveBySlotKey(Reservation::class, $before, $after, $clubId, $seasonId, hardOnly: false);
             $this->moveBySlotKey(ScheduleSlotTemplate::class, $before, $after, $clubId, $seasonId, hardOnly: true);
+        });
+    }
+
+    /**
+     * Exécute un plan de cascade dans l'ordre déclaré (les enfants avant les parents, les
+     * bascules de période avant leurs contraintes — cf. {@see CascadePlan}).
+     *
+     * @param list<CascadeStep> $steps
+     */
+    private function run(array $steps, DeletionTarget $target): void
+    {
+        $this->withoutTenantFilters(function () use ($steps, $target): void {
+            foreach ($steps as $step) {
+                $step->execute($this->entityManager, $target);
+            }
         });
     }
 
@@ -363,130 +296,6 @@ final class EntityCascadeDeleter
             static fn (SchedulePlan $p): string => $p->getId(),
             $this->entityManager->getRepository(SchedulePlan::class)->findBy(['seasonId' => $seasonId, 'type' => SchedulePlanType::SEASON]),
         );
-    }
-
-    /**
-     * P2-27 — retire une équipe supprimée de tous ses groupes de mutualisation, puis élague les
-     * groupes tombés sous 2 membres (le moteur exige ≥ 2 : un groupe à 1 est mort). Les lignes
-     * membres restantes du groupe élagué partent avec lui — aucun orphelin.
-     */
-    private function pruneSharedTrainingGroupsForTeam(string $teamId, string $clubId, string $seasonId): void
-    {
-        /** @var list<string> $affectedGroupIds */
-        $affectedGroupIds = $this->entityManager->createQueryBuilder()
-            ->select('DISTINCT t.groupId')
-            ->from(SharedTrainingGroupTeam::class, 't')
-            ->where('t.teamId = :teamId')
-            ->andWhere('t.clubId = :clubId')
-            ->andWhere('t.seasonId = :seasonId')
-            ->setParameter('teamId', $teamId)
-            ->setParameter('clubId', $clubId)
-            ->setParameter('seasonId', $seasonId)
-            ->getQuery()
-            ->getSingleColumnResult();
-
-        if ([] === $affectedGroupIds) {
-            return;
-        }
-
-        $this->deleteByField(SharedTrainingGroupTeam::class, 'teamId', $teamId, $clubId, $seasonId);
-
-        foreach ($affectedGroupIds as $groupId) {
-            $remaining = (int) $this->entityManager->createQueryBuilder()
-                ->select('COUNT(t.id)')
-                ->from(SharedTrainingGroupTeam::class, 't')
-                ->where('t.groupId = :groupId')
-                ->setParameter('groupId', $groupId)
-                ->getQuery()
-                ->getSingleScalarResult();
-            if ($remaining >= 2) {
-                continue;
-            }
-            $this->entityManager->createQueryBuilder()
-                ->delete(SharedTrainingGroupTeam::class, 't')
-                ->where('t.groupId = :groupId')
-                ->setParameter('groupId', $groupId)
-                ->getQuery()
-                ->execute();
-            $this->entityManager->createQueryBuilder()
-                ->delete(SharedTrainingGroup::class, 'g')
-                ->where('g.id = :groupId')
-                ->setParameter('groupId', $groupId)
-                ->getQuery()
-                ->execute();
-        }
-    }
-
-    private function deleteByField(string $entityClass, string $field, string $value, ?string $clubId, string $seasonId): void
-    {
-        $qb = $this->entityManager->createQueryBuilder()
-            ->delete($entityClass, 'e')
-            ->where(\sprintf('e.%s = :value', $field))
-            ->andWhere('e.seasonId = :seasonId')
-            ->setParameter('value', $value)
-            ->setParameter('seasonId', $seasonId);
-        if (null !== $clubId) {
-            $qb->andWhere('e.clubId = :clubId')->setParameter('clubId', $clubId);
-        }
-        $qb->getQuery()->execute();
-    }
-
-    private function deleteScopedConstraint(ConstraintScope $scope, string $targetId, string $clubId, string $seasonId): void
-    {
-        // Period toggles keyed on these constraints must go first, else deleting a
-        // team/coach/venue whose permanent scoped constraint had a period override
-        // leaves that override dangling (same no-orphan contract as the direct
-        // constraint delete in ConstraintStateProcessor::cascadeBeforeDelete).
-        $constraintIds = $this->entityManager->createQueryBuilder()
-            ->select('e.id')
-            ->from(Constraint::class, 'e')
-            ->where('e.clubId = :clubId')
-            ->andWhere('e.seasonId = :seasonId')
-            ->andWhere('e.scope = :scope')
-            ->andWhere('e.scopeTargetId = :target')
-            ->setParameter('clubId', $clubId)
-            ->setParameter('seasonId', $seasonId)
-            ->setParameter('scope', $scope)
-            ->setParameter('target', $targetId)
-            ->getQuery()
-            ->getSingleColumnResult();
-        if ([] !== $constraintIds) {
-            $this->entityManager->createQueryBuilder()
-                ->delete(ConstraintPeriodOverride::class, 'o')
-                ->where('o.constraintId IN (:ids)')
-                ->setParameter('ids', $constraintIds)
-                ->getQuery()
-                ->execute();
-        }
-
-        $this->entityManager->createQueryBuilder()
-            ->delete(Constraint::class, 'e')
-            ->where('e.clubId = :clubId')
-            ->andWhere('e.seasonId = :seasonId')
-            ->andWhere('e.scope = :scope')
-            ->andWhere('e.scopeTargetId = :target')
-            ->setParameter('clubId', $clubId)
-            ->setParameter('seasonId', $seasonId)
-            ->setParameter('scope', $scope)
-            ->setParameter('target', $targetId)
-            ->getQuery()
-            ->execute();
-    }
-
-    /** Null out a (self- or cross-) reference column pointing at the deleted id. */
-    private function clearParentRef(string $entityClass, string $field, string $value, string $clubId, string $seasonId): void
-    {
-        $this->entityManager->createQueryBuilder()
-            ->update($entityClass, 'e')
-            ->set(\sprintf('e.%s', $field), 'NULL')
-            ->where(\sprintf('e.%s = :value', $field))
-            ->andWhere('e.clubId = :clubId')
-            ->andWhere('e.seasonId = :seasonId')
-            ->setParameter('value', $value)
-            ->setParameter('clubId', $clubId)
-            ->setParameter('seasonId', $seasonId)
-            ->getQuery()
-            ->execute();
     }
 
     private function withoutTenantFilters(callable $work): void

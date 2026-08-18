@@ -5,6 +5,59 @@ import { describe, expect, it, vi } from "vitest";
 import { DeleteConfirm } from "./delete-confirm";
 
 describe("DeleteConfirm", () => {
+  const impact = (over = {}) => ({ blocked: false, reason: null, lines: [], slotsInForce: 0, declaredFixtures: 0, ...over });
+
+  /**
+   * P3-16 — les comptes ET les libellés viennent du serveur : une famille ajoutée à la
+   * cascade s'affiche d'office, au lieu de disparaître faute de traduction côté écran.
+   */
+  it("affiche l'impact SERVEUR, la casse du planning en vigueur et l'alerte fédération", () => {
+    render(
+      <DeleteConfirm
+        open
+        entityName="Matéo"
+        impact={impact({
+          lines: [{ key: "venue_slot", count: 12, one: "créneau de disponibilité", many: "créneaux de disponibilité" }],
+          slotsInForce: 6,
+          declaredFixtures: 2,
+        })}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/12 créneaux de disponibilité/)).toBeInTheDocument();
+    expect(screen.getByText(/planning/i)).toBeInTheDocument();
+    expect(screen.getByText(/déjà déclarés/)).toBeInTheDocument();
+  });
+
+  it("n'offre PAS de confirmer tant que l'impact n'a pas répondu — ni quand le serveur refusera", async () => {
+    const onConfirm = vi.fn();
+    const { rerender } = render(<DeleteConfirm open entityName="Matéo" impactLoading onConfirm={onConfirm} onCancel={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Supprimer" }));
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    // Périmètre engagé : le geste rendrait 409 — on l'annonce au lieu de l'offrir.
+    rerender(
+      <DeleteConfirm
+        open
+        entityName="SM1"
+        impact={impact({ blocked: true, reason: "Cette équipe joue en compétition." })}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/joue en compétition/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Supprimer" }));
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it("ne présente JAMAIS un impact inconnu comme un impact vide", () => {
+    render(<DeleteConfirm open entityName="Matéo" impactFailed onConfirm={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByText(/Impossible de vérifier/)).toBeInTheDocument();
+  });
+
   it("lists only the non-zero impact lines, pluralised", () => {
     render(
       <DeleteConfirm

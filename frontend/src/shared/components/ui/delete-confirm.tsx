@@ -1,3 +1,4 @@
+import type { DeletionImpact } from "@/features/wizard/api";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 
 /** One linked-count line of the impact list ("2 créneaux réservés"). */
@@ -13,8 +14,21 @@ interface DeleteConfirmProps {
   open: boolean;
   /** The thing being deleted, shown in the title + sentence (e.g. a team/coach/venue name). */
   entityName: string;
-  /** Linked entities the cascade will also remove; zero-count lines are hidden. */
-  impacts: ImpactLine[];
+  /**
+   * P3-16 — l'impact CALCULÉ PAR LE SERVEUR (`GET /api/{venues|teams|coaches}/{id}/deletion-impact`).
+   * `undefined` = pas encore répondu, `null` = pas d'impact serveur pour ce type d'objet.
+   */
+  impact?: DeletionImpact | null;
+  /** L'impact serveur est en vol : on ne laisse pas confirmer à l'aveugle. */
+  impactLoading?: boolean;
+  /** L'impact serveur n'a pas pu être lu : on le DIT, on ne prétend pas qu'il n'y a rien. */
+  impactFailed?: boolean;
+  /**
+   * Lignes calculées LOCALEMENT — tolérées uniquement là où aucun impact serveur n'existe
+   * encore (suppression d'un CRÉNEAU de disponibilité, hors périmètre P3-16). Partout
+   * ailleurs, passer `impact` : compter côté écran, c'est ce que ce lot corrige.
+   */
+  impacts?: ImpactLine[];
   /**
    * The entity also owns reservations that can live in period plans (overlays):
    * the base-scope impact counts under-report those, so the permanence caution
@@ -27,34 +41,82 @@ interface DeleteConfirmProps {
 }
 
 /**
- * Destructive-delete confirmation that spells out the IMPACT: the manager sees
- * exactly what interlinked data the cascade (backend EntityCascadeDeleter) will
- * remove — "SM1 a 2 créneaux réservés et 3 coach-joueurs liés" — before it
- * happens. Wraps the shared ConfirmDialog; each caller computes its own counts
- * from the query cache. Lines with a zero count are omitted so the dialog only
- * ever states real collateral. A permanence caution ALWAYS closes the dialog —
- * most so precisely when there IS collateral (the impact list is base-scope, so
- * it can still under-report period-plan reservations).
+ * Destructive-delete confirmation that spells out the IMPACT: the manager sees exactly what
+ * interlinked data the cascade will remove — before it happens.
+ *
+ * ⚑ **P3-16 : les comptes viennent du SERVEUR.** Ils étaient auparavant calculés par chaque
+ * appelant depuis son cache react-query, et la modale annonçait 2 ou 3 familles quand la
+ * cascade en emportait dix : l'écran ne pouvait pas dire vrai, il n'avait chargé ni les
+ * matchs, ni les contraintes, ni les séances des autres plannings. Les libellés eux-mêmes
+ * viennent du serveur, pour qu'une famille ajoutée à la cascade s'affiche d'office au lieu de
+ * disparaître en silence faute de traduction ici.
+ *
+ * Trois précisions que le serveur ajoute et qui décident du geste : le geste est-il REFUSÉ
+ * (périmètre engagé), combien de séances touchées vivent dans le planning **en vigueur**, et
+ * combien de matchs **déjà déclarés à la fédération** perdront leur salle (DOC-2).
+ *
+ * Tant que l'impact n'a pas répondu, la confirmation reste DÉSACTIVÉE — confirmer à l'aveugle
+ * est exactement le défaut corrigé ici.
  */
-export function DeleteConfirm({ open, entityName, impacts, affectsPeriodPlans = false, confirmLabel = "Supprimer", onConfirm, onCancel }: DeleteConfirmProps) {
-  const lines = impacts.filter((impact) => impact.count > 0);
+export function DeleteConfirm({
+  open,
+  entityName,
+  impact,
+  impactLoading = false,
+  impactFailed = false,
+  impacts = [],
+  affectsPeriodPlans = false,
+  confirmLabel = "Supprimer",
+  onConfirm,
+  onCancel,
+}: DeleteConfirmProps) {
+  const serverLines = impact?.lines ?? [];
+  const localLines = impacts.filter((line) => line.count > 0);
+  const lines = [
+    ...serverLines.map((line) => ({ count: line.count, one: line.one, many: line.many })),
+    ...localLines,
+  ];
+  const blocked = true === impact?.blocked;
   const description = (
     <>
-      {lines.length > 0 ? (
+      {blocked ? (
+        <p className="font-medium text-foreground">{impact?.reason}</p>
+      ) : (
         <>
-          La suppression de « {entityName} » retirera aussi&nbsp;:
-          <ul className="mt-2 list-disc space-y-0.5 pl-5">
-            {lines.map((line) => (
-              <li key={line.one}>
-                {line.count} {line.count > 1 ? line.many : line.one}
-              </li>
-            ))}
-          </ul>
+          {impactLoading ? <p className="text-muted-foreground">Calcul de ce qui sera supprimé…</p> : null}
+          {impactFailed ? (
+            // Ne JAMAIS présenter un impact inconnu comme un impact vide.
+            <p className="font-medium text-foreground">Impossible de vérifier ce que cette suppression emportera. Réessayez plus tard.</p>
+          ) : null}
+          {lines.length > 0 ? (
+            <>
+              La suppression de « {entityName} » retirera aussi&nbsp;:
+              <ul className="mt-2 list-disc space-y-0.5 pl-5">
+                {lines.map((line) => (
+                  <li key={line.one}>
+                    {line.count} {line.count > 1 ? line.many : line.one}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {undefined !== impact && null !== impact && impact.slotsInForce > 0 ? (
+            <p className="mt-3 text-foreground">
+              Dont <strong>{impact.slotsInForce}</strong> {impact.slotsInForce > 1 ? "séances" : "séance"} du planning <strong>en vigueur</strong>. Vos plannings terminés passeront en «&nbsp;périmé&nbsp;» — régénérez pour retrouver un état sûr.
+            </p>
+          ) : null}
+          {undefined !== impact && null !== impact && impact.declaredFixtures > 0 ? (
+            // DOC-2 — on ne refuse pas le geste (un gymnase qui ferme, ça arrive), on avertit :
+            // le match redevient « à placer », mais il faudra le re-soumettre.
+            <p className="mt-3 text-foreground">
+              <strong>{impact.declaredFixtures}</strong> {impact.declaredFixtures > 1 ? "matchs déjà déclarés" : "match déjà déclaré"} à la fédération {impact.declaredFixtures > 1 ? "perdront leur salle" : "perdra sa salle"} et {impact.declaredFixtures > 1 ? "devront" : "devra"} être re-{impact.declaredFixtures > 1 ? "soumis" : "soumis"} à la fédération.
+            </p>
+          ) : null}
+          <p className={lines.length > 0 ? "mt-3 font-medium text-foreground" : "font-medium text-foreground"}>
+            Cette action est définitive{affectsPeriodPlans ? ", y compris les réservations des plannings de période" : ""}.
+          </p>
         </>
-      ) : null}
-      <p className={lines.length > 0 ? "mt-3 font-medium text-foreground" : "font-medium text-foreground"}>
-        Cette action est définitive{affectsPeriodPlans ? ", y compris les réservations des plannings de période" : ""}.
-      </p>
+      )}
     </>
   );
 
@@ -65,6 +127,9 @@ export function DeleteConfirm({ open, entityName, impacts, affectsPeriodPlans = 
       description={description}
       confirmLabel={confirmLabel}
       destructive
+      // Confirmer sans savoir ce qu'on détruit — ou alors que le serveur refusera — n'est
+      // jamais offert.
+      confirmDisabled={blocked || impactLoading || impactFailed}
       onConfirm={onConfirm}
       onCancel={onCancel}
     />

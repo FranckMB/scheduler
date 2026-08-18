@@ -1762,6 +1762,39 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ],
                 summary: 'Advisory gate — never writes, and does NOT run on generate/regenerate',
             )),
+            '/api/venues/{id}/deletion-impact' => new PathItem(get: new Operation(
+                operationId: 'getApiVenueDeletionImpact',
+                tags: ['Deletion'],
+                responses: [
+                    '200' => new Response('What deleting this entity would destroy — announced BEFORE confirmation. `lines` are counted by walking the SAME cascade plan the delete executes (App\\Deletion\\CascadePlan), labels included, so a destruction can never be added without its announcement. `blocked`/`reason` carry the engaged-perimeter refusal (the UI must not offer a gesture the server will 409). `slotsInForce` = touched sessions living in a version the plan POINTS AT. `declaredFixtures` = matches already SUBMITTED/VALIDATED to the federation that will lose their venue — announced, never blocking. Read-only.'),
+                    '401' => $unauthorized,
+                    '403' => new Response('Entity belongs to another club'),
+                    '404' => $notFound,
+                ],
+                summary: 'Impact of deleting this venue, computed server-side',
+            )),
+            '/api/teams/{id}/deletion-impact' => new PathItem(get: new Operation(
+                operationId: 'getApiTeamDeletionImpact',
+                tags: ['Deletion'],
+                responses: [
+                    '200' => new Response('What deleting this entity would destroy — announced BEFORE confirmation. `lines` are counted by walking the SAME cascade plan the delete executes (App\\Deletion\\CascadePlan), labels included, so a destruction can never be added without its announcement. `blocked`/`reason` carry the engaged-perimeter refusal (the UI must not offer a gesture the server will 409). `slotsInForce` = touched sessions living in a version the plan POINTS AT. `declaredFixtures` = matches already SUBMITTED/VALIDATED to the federation that will lose their venue — announced, never blocking. Read-only.'),
+                    '401' => $unauthorized,
+                    '403' => new Response('Entity belongs to another club'),
+                    '404' => $notFound,
+                ],
+                summary: 'Impact of deleting this team, computed server-side',
+            )),
+            '/api/coaches/{id}/deletion-impact' => new PathItem(get: new Operation(
+                operationId: 'getApiCoachDeletionImpact',
+                tags: ['Deletion'],
+                responses: [
+                    '200' => new Response('What deleting this entity would destroy — announced BEFORE confirmation. `lines` are counted by walking the SAME cascade plan the delete executes (App\\Deletion\\CascadePlan), labels included, so a destruction can never be added without its announcement. `blocked`/`reason` carry the engaged-perimeter refusal (the UI must not offer a gesture the server will 409). `slotsInForce` = touched sessions living in a version the plan POINTS AT. `declaredFixtures` = matches already SUBMITTED/VALIDATED to the federation that will lose their venue — announced, never blocking. Read-only.'),
+                    '401' => $unauthorized,
+                    '403' => new Response('Entity belongs to another club'),
+                    '404' => $notFound,
+                ],
+                summary: 'Impact of deleting this coach, computed server-side',
+            )),
             '/api/calendar-entries/{id}/conflicts' => new PathItem(get: new Operation(
                 operationId: 'getApiCalendarEntryConflicts',
                 tags: ['Cockpit'],

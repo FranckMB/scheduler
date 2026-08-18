@@ -239,7 +239,6 @@ export function PlanningToolbar({
       <DeleteConfirm
         open={confirmDelete}
         entityName={selected ? labelOf(selected) : ""}
-        impacts={[]}
         onConfirm={() => {
           onDelete();
           setConfirmDelete(false);

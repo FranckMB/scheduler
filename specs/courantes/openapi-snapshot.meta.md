@@ -1,6 +1,14 @@
-Last verified @ 2026-08-18 (JSON **régénéré** — bien-être PAR PÉRIODE, PR1 backend : `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId`)
+Last verified @ 2026-08-18 (JSON **régénéré** — suppression sûre : les 3 routes `deletion-impact` entrent au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — bien-être PAR PÉRIODE, PR1 backend : `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId`)
 
 Changements récents :
+- **Suppression sûre (2026-08-18)** : trois routes de lecture entrent au contrat —
+  `GET /api/{venues|teams|coaches}/{id}/deletion-impact` : ce qu'une suppression VA détruire,
+  compté par le serveur en parcourant **le plan de cascade que la suppression exécute**
+  (`App\Deletion\CascadePlan`), libellés compris. Portent aussi le refus du périmètre engagé
+  (`blocked`/`reason`), les séances touchées vivant dans une version pointée (`slotsInForce`) et
+  les matchs déjà déposés à la fédération qui perdront leur salle (`declaredFixtures`, annoncés
+  jamais bloquants). Set-diff : **3 paths ajoutés**, aucun schéma modifié, aucune route retirée.
+  Contrat backend⇄engine **inchangé** (2.12).
 - **Bien-être par période — PR1 backend (2026-08-18)** : le DTO d'entrée
   `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId` (uuid nullable, absent =
   la saison) — la portée du réglage (PUT dans le corps, DELETE en query `?schedulePlanId=`, GET en
