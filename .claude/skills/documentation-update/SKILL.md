@@ -1,6 +1,6 @@
 ---
 name: documentation-update
-description: Refresh the living docs before opening a PR — general + per-subproject READMEs, CLAUDE.md index, per-zone docs/, ADRs, and specs/ reconciliation (roadmap = open only, etat-des-lieux = delivered). Verifies claims against code (no drift), bans volatile counts, enforces evolution→courantes graduation. No filler.
+description: Refresh the living docs before opening a PR — general + per-subproject READMEs, CLAUDE.md index, per-zone docs/, ADRs, and specs/ reconciliation (roadmap = open only, etat-des-lieux = delivered). Enforces WHERE a doc lives (one zone → that zone ; the seam between zones → root ; specs/ = the product's time axis), verifies claims against code (no drift) on the PR's docs PLUS a bounded rotation of the oldest stamps, bans volatile counts, enforces evolution→courantes graduation. Flags misplaced and duplicated docs — never moves them itself. No filler.
 ---
 
 ## Documentation Update
@@ -30,8 +30,55 @@ A delivered item **moves**: it is deleted from the roadmap and gains a trace lin
 | `specs/evolution/roadmap.md` | both | **the OPEN only**: prioritized backlog (P1-P4), deliberate-keep debt, parking, unpriced vision. A delivered line does not live here |
 | `specs/courantes/etat-des-lieux.md` | both | **the DELIVERED**: capability map (pointers, not behaviour), **closed decisions**, dated delivery traces |
 | `specs/` | both | living product specs (see reconciliation below) |
+| `business/` | human | **LOCAL-ONLY, gitignoré** (stratégie, pricing, pilote). ⚠ Ne JAMAIS l'exiger dans une PR, ne jamais l'attendre en CI, ne jamais y renvoyer depuis un fichier versionné comme s'il était lisible par tous — un lecteur du dépôt public ne l'a pas. Une décision business qui doit être OPPOSABLE au code (un prix qui devient un plafond, une promesse qui devient une contrainte) est recopiée **en substance** dans `specs/courantes/`, jamais par lien |
 
 Rule: **README points, it does not recopy.** If a fact is in `docs/` or `AGENTS.md`, the README links to it. Every added line must carry a fact a future reader would otherwise get wrong.
+
+### Où un doc VIT — la règle de placement (à appliquer AVANT d'écrire une ligne)
+
+Trois questions, dans l'ordre. La première qui répond « oui » décide.
+
+1. **Ce doc décrit-il UNE SEULE zone** (son métier, sa stack, ses pièges, son inventaire) ?
+   → il vit dans **`<zone>/docs/`**. Un dev qui débarque dans `frontend/` doit trouver la doc du
+   frontend **dans `frontend/`**, pas ailleurs.
+2. **Décrit-il la COUTURE entre zones** (contrat backend⇄engine, ADR structurant, glossaire,
+   sécurité transverse, ops, stratégie de test) ? → **`docs/` racine**. La ranger dans une zone
+   obligerait à la dupliquer dans l'autre — c'est le motif « une vérité, deux endroits ».
+3. **Est-ce du PRODUIT sur l'axe TEMPS** (le besoin d'origine, ce que l'app fait aujourd'hui, ce
+   qu'elle fera) ? → **`specs/`**. C'est la seule chose que `docs/` ne sait pas dire, et la raison
+   d'être des deux dossiers : `specs/` n'est pas « la doc bis », c'est la lecture
+   `initiales → courantes → evolution`.
+
+⚠ **`specs/courantes/` n'est pas le dossier du « courant »** — c'est le dossier du **produit**
+courant. Un inventaire technique de zone, une stratégie de test de zone, une liste de composants
+n'y ont rien à faire : ils décrivent UNE zone, ils appartiennent à cette zone. Ce glissement est le
+défaut historique du dépôt (mesuré le 2026-08-18 : ~4 000 lignes de doc de zone logées en
+`specs/courantes/`, pendant que `frontend/docs/` ne contenait qu'un fichier).
+
+**Ce que tu fais quand tu constates un fichier mal placé — et ce que tu ne fais PAS.**
+Tu le **SIGNALES** dans le résumé de changement (fichier, où il devrait vivre, pourquoi) et, si
+c'est structurant, tu ouvres une ligne P4 dans `roadmap.md`. **Tu ne le déplaces pas dans cette
+PR.** Ce skill tourne avant CHAQUE PR : y glisser des déplacements gonflerait des diffs sans
+rapport avec le sujet, casserait des références croisées en série, et rendrait la revue
+impossible. **Ranger est une migration one-shot, relue pour elle-même.** L'exception : le fichier
+que TA PR crée ou récrit largement — celui-là, tu le places correctement du premier coup, c'est
+gratuit.
+
+### Mutualiser ? le TEST, jamais le réflexe
+
+Deux fichiers qui parlent du même sujet ne sont pas forcément un doublon. Avant de proposer une
+fusion, applique le test maison (`specs/evolution/duplications-de-verite.md`) :
+
+> **La divergence serait-elle SILENCIEUSE ?** Si les deux fichiers dérivent, est-ce que quelqu'un
+> s'en aperçoit — ou est-ce qu'on lit tranquillement le faux pendant six mois ?
+
+- **Deux AUDIENCES distinctes, chacune servie** → ce n'est pas un doublon. Exemple vivant :
+  `backend/docs/RLS.md` (mode d'emploi pour l'exploitant : env, rôles, dépannage) et
+  `docs/security/rls.md` (architecture effective) — un exploitant qui débugge à 2 h du matin et
+  un architecte ne lisent pas le même document. Fusionner appauvrirait les deux.
+- **Mais un « garder les deux en phase » écrit noir sur blanc est un AVEU** : c'est exactement le
+  motif « une vérité, deux endroits ». Ces fichiers-là sont des **candidats** — signalés, discutés,
+  jamais fusionnés d'autorité au détour d'une PR de feature.
 
 ### Anti-drift rules (hard)
 
@@ -41,6 +88,30 @@ Rule: **README points, it does not recopy.** If a fact is in `docs/` or `AGENTS.
 4. **Claimed ≠ implemented.** Docs must state what the code *does*, not what is planned. If a mechanism is prepared but inactive (e.g. an RLS template never executed), the doc must say "prepared, NOT active" explicitly. Aspirational statements go to `specs/evolution/`, nowhere else.
 5. **Cross-file consistency.** When you change a fact, grep for its other occurrences (`grep -rn` on the key term across `CLAUDE.md`, `docs/`, `*/AGENTS.md`, `specs/courantes/`) and fix or remove them all — half-updated facts created the priority-7/8 contradiction (DOC-01).
 6. **Stamp what you verified.** Files carrying `Last verified @ <sha|date>`: bump the stamp **only for files whose claims you actually re-checked this pass** — a stamp is a proof of verification, not a courtesy.
+
+### Fraîcheur — le balayage TOUCHÉ, plus une ROTATION bornée
+
+Deux passes, et la seconde est ce qui empêche le corpus de pourrir en silence.
+
+**(a) Les docs que ta PR touche** — obligatoire, décrit ci-dessous.
+
+**(b) Une rotation de 2 ou 3 fichiers**, choisis par leur stamp le plus ANCIEN, quel que soit le
+sujet de ta PR. Tu vérifies leurs 3-6 affirmations les plus fortes contre le code, tu corriges ce
+qui est faux, tu redates. Si tout est juste : tu redates quand même **en nommant ce que tu as
+re-vérifié** — un stamp est une preuve de vérification, pas une politesse.
+
+```bash
+# Les stamps les plus anciens du dépôt, tous dossiers confondus.
+grep -rl "Last verified @" --include="*.md" . | grep -v node_modules | while read -r f; do
+  printf '%s\t%s\n' "$(grep -m1 -oE 'Last verified @ [0-9-]+' "$f" | grep -oE '[0-9-]+$')" "$f"
+done | sort | head -5
+```
+
+⚑ **Pourquoi une rotation et pas tout le corpus** : ~70 fichiers vérifiés à chaque PR, c'est un
+skill si lent qu'on finit par le sauter — et un skill sauté ne protège rien. Deux fichiers par PR,
+c'est indolore, et le corpus entier est couvert en quelques semaines. Le coût est **réparti**, pas
+supprimé. ⚠ Une rotation qui trouve du faux **le dit dans le résumé** : c'est le signal que la
+zone concernée dérive, et il vaut souvent une ligne de roadmap.
 
 ### Drift sweep (mandatory, cheap)
 
@@ -89,13 +160,20 @@ No `archive/` bucket — nothing is lost (git + `initiales` hold the history). W
 
 ### Steps
 1. **Decide what genuinely changed** among: business behaviour, architecture, conventions, public APIs, subproject scope. **Look before concluding** — list the docs you checked. "Nothing changed" is a finding to justify, not a default.
+1bis. **Pour chaque doc que tu crées ou récris largement : applique la règle de placement** (une
+   zone → sa zone ; la couture → racine ; l'axe temps du produit → `specs/`). Pour les autres,
+   note ce qui te saute aux yeux comme mal placé, **sans le déplacer** — ça part au résumé, et en
+   ligne P4 si c'est structurant.
 2. **Drift sweep** on every doc you will touch + affected zone `AGENTS.md` (see above).
 3. **READMEs** — refresh the root README and any affected `<zone>/README.md` per the required sections above.
 4. **CLAUDE.md** — update only non-obvious facts; keep it a short index (< ~200 lines).
 5. **Zone docs** (`<zone>/docs`, `docs/project-map.md`, `docs/testing/`, `docs/technique/`) — update the affected deep-dives; add a how-to/business doc if a new structuring mechanism appeared.
 6. **ADR** — if a structural decision was made, add one and reference it in `docs/architecture/adr-index.md`.
 7. **specs/** — reconcile per the rules above: update stale `courantes`, **run the graduation check**, **run the MOVE** (roadmap line deleted + trace in `etat-des-lieux.md` §3 + map §1 refreshed), record any **closed decision** in §2, add roadmap lines for newly found open items, apply the API-change trigger, delete removed features, surface dead process notes for confirmation.
-8. **Change summary** — list files touched, facts corrected by the drift sweep, and **one line per item delivered this run: → receiving courantes file, or the explicit reason no graduation applies**.
+8. **Change summary** — list files touched, facts corrected by the drift sweep, and **one line per item delivered this run: → receiving courantes file, or the explicit reason no graduation applies**. Plus, systématiquement :
+   - **la rotation** : quels fichiers vérifiés, ce qui était faux (ou « tout juste ») ;
+   - **le mal placé** : fichier → où il devrait vivre → pourquoi (signalé, jamais déplacé ici) ;
+   - **les candidats à mutualisation** : uniquement ceux dont la divergence serait SILENCIEUSE.
 
 ### Doc-only PRs
 
@@ -105,4 +183,8 @@ A PR that touches no code gets no `/code-review` (it would have nothing to revie
 - **No filler.** A future agent must get something wrong without the line.
 - **One canonical home**, README points to detail, detail is not copied back.
 - **Never edit `specs/initiales/`.** Reconcile `courantes`/`evolution` only.
+- **Ce skill ne DÉPLACE rien** — il place correctement ce que la PR crée, et signale le reste.
+  Ranger le dispersé est une migration one-shot, relue pour elle-même.
+- **`business/` est local-only** : jamais exigé dans une PR, jamais vérifié en CI, jamais cité
+  depuis un fichier versionné comme une source lisible.
 - **Deletions are surfaced, not silent** — list what you propose to remove and why before removing large specs/docs.
