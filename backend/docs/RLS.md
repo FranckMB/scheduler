@@ -1,6 +1,6 @@
 # ClubScheduler — PostgreSQL Row-Level Security (RLS)
 
-> ✅ **STATUS: ACTIVE** since migration `Version20260703120000` (SEC-03 fixed). The migration — not the initdb scripts — is the source of truth for policies and grants: **every table carrying a `club_id` column** is under `FORCE ROW LEVEL SECURITY` with a `tenant_isolation` policy `TO app_user` (no hard count here — new tenant tables inherit the pattern via the migration helper; the count would rot). `club_user` and `coach_wish_token` carry the hybrid SELECT bootstrap policy (open only while NO tenant GUC is set — scoped to the tenant otherwise, SEC-12 residual closed by `Version20260804120000`; deliberate cross-tenant reads go through `TenantConnectionContext::runWithoutTenant()`). Runtime connects as `app_user`; the GUC is set via `TenantConnectionContext` (`set_config`, session-scoped). **This file = operator how-to (env, roles, troubleshooting); the effective architecture (who sets the GUC, the superadmin door) is the canonical `docs/security/rls.md` — keep the two in sync, don't duplicate.** The `01/02/03-*.sql` initdb scripts remain for fresh volumes only.
+> ✅ **STATUS: ACTIVE** since migration `Version20260703120000` (SEC-03 fixed). The migration — not the initdb scripts — is the source of truth for policies and grants: **every table carrying a `club_id` column** is under `FORCE ROW LEVEL SECURITY` with a `tenant_isolation` policy `TO app_user` (no hard count here — new tenant tables inherit the pattern via the migration helper; the count would rot). `club_user` and `coach_wish_token` carry the hybrid SELECT bootstrap policy (open only while NO tenant GUC is set — scoped to the tenant otherwise, SEC-12 residual closed by `Version20260804120000`; deliberate cross-tenant reads go through `TenantConnectionContext::runWithoutTenant()`). Runtime connects as `app_user`; the GUC is set via `TenantConnectionContext` (`set_config`, session-scoped). **This file = operator how-to (env, roles, troubleshooting). The effective architecture — who sets the GUC, the exception tables, the superadmin door — is `docs/security/rls.md`, and it is CANONICAL.** ⚑ La consigne précédente disait « garder les deux en phase » : c'est précisément ce qui a produit la dérive du prédicat corrigée le 2026-08-19. Deux fichiers qu'on maintient en phase à la main divergent — le seul garde-fou est de ne PAS redire ici ce que le canon dit là-bas : on pointe. The `01/02/03-*.sql` initdb scripts remain for fresh volumes only.
 
 ## Overview
 
@@ -39,16 +39,30 @@ ClubScheduler is designed to use **PostgreSQL Row-Level Security (RLS)** to enfo
 
 There is **no manual post-deploy step**: the Doctrine migration that creates a new `club_id` table also creates its RLS policy — the migration is the source of truth. A migration adding a tenant table must include:
 
+> ⚠ **Ne recopiez pas ce SQL de mémoire — et surtout pas depuis une vieille migration.** Le
+> prédicat et le rôle sont **canoniques** : toute policy d'une table `club_id` est comparée par
+> **égalité stricte** au canon lu à l'exécution (`RlsIsolationTest::testEveryPolicyOnClubIdTablesIsTenantScoped`,
+> gate bloquant). Le geste sûr : copier une migration **récente** qui crée une table tenant — elles
+> portent le prédicat dans une constante (`TENANT_PREDICATE`), pas en toutes lettres.
+>
+> ⚑ Ce document a lui-même dérivé sur ce point jusqu'au 2026-08-19 : il donnait
+> `current_setting('app.club_id')::UUID` **sans `NULLIF(…, '')` ni le `true` de `missing_ok`**, et
+> **sans `TO app_user`**. Les trois écarts comptent — sans `true`, `current_setting` **lève** quand
+> le GUC est absent au lieu de rendre NULL (fin du fail-closed) ; sans `NULLIF`, la **chaîne vide**
+> que pose `TenantConnectionContext::clear()` part en `''::uuid` et rend une **erreur 22P02** ;
+> sans `TO app_user`, la policy s'applique à tous les rôles et brouille la porte admin. L'architecture
+> effective, elle, est et reste [`../../docs/security/rls.md`](../../docs/security/rls.md).
+
 ```sql
 -- 1. Enable RLS
 ALTER TABLE public.<table_name> ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.<table_name> FORCE ROW LEVEL SECURITY;
 
--- 2. Create tenant isolation policy
+-- 2. Create tenant isolation policy — predicate + role are CANONICAL, copy them exactly
 CREATE POLICY tenant_isolation ON public.<table_name>
-    FOR ALL
-    USING (club_id = current_setting('app.club_id')::UUID)
-    WITH CHECK (club_id = current_setting('app.club_id')::UUID);
+    FOR ALL TO app_user
+    USING (club_id = NULLIF(current_setting('app.club_id', true), '')::uuid)
+    WITH CHECK (club_id = NULLIF(current_setting('app.club_id', true), '')::uuid);
 
 -- 3. Admin door (required — a FORCE-RLS table without it locks the admin
 --    connection out on managed PostgreSQL, where no role has BYPASSRLS)
