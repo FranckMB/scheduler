@@ -580,6 +580,40 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   resserrée : un réglage de PLAN ne périme que SON plan ; un réglage de SAISON garde club+saison
   tant que le repli legacy existe quelque part — surmarquage conservateur assumé, dette notée en
   roadmap).
+- **Lot P2-37 — l'indisponibilité totale d'un gymnase est DÉRIVÉE, jamais réglable (PR1 backend +
+  miroir livrée 2026-08-18 ; PR2 front — UI période + récapitulatif — reste ouverte, roadmap)**,
+  hors de la numérotation A→D (post-ADR). Retour terrain BCCL (gymnase fermé pour travaux) :
+  l'amendement #8 posait qu'un épinglage qui ne retombe sur aucun créneau de la grille de la
+  période bloque la génération en 422 — mais une fermeture **datée** (`Constraint` `venue_closed`
+  portée par la `CalendarEntry`, inv. 5) couvrant TOUTE la fenêtre du plan n'était traitée par
+  `OrphanPinGuard` que jour par jour, comme n'importe quelle fermeture partielle : un épinglage
+  restait bloquant sur un gymnase pourtant inerte de bout en bout, et rien n'empêchait de
+  « réactiver » ce même gymnase via `VenuePeriodOverride`. Nouvelle maison unique
+  `App\Service\PlanVenueClosures` (ce que les fermetures datées font à un plan — résout l'entrée
+  du plan, semaines-enfant comprises via `datedConstraintSourceId`) + `VenueClosureDays::fullyClosedVenueIds` :
+  un gymnase est ENTIÈREMENT fermé ssi l'UNION de ses dates fermées (toutes fermetures confondues)
+  couvre la fenêtre entière — **calculé, jamais stocké** : deux fermetures qui se RELAIENT sans
+  qu'aucune ne couvre seule la fenêtre ferment quand même le gymnase, et une fermeture éditée
+  après coup se répercute seule, sans synchronisation ni état en base. Trois conséquences :
+  (1) `OrphanPinGuard` traite désormais un gymnase entièrement fermé comme un gymnase DÉSACTIVÉ
+  (même doctrine que P3-20) — non bloquant, son épinglage est inerte ; une fermeture **PARTIELLE**
+  (un seul jour fermé d'un gymnase par ailleurs ouvert) **reste bloquante** — là, la séance
+  serait sinon replacée ailleurs en silence, précisément ce que l'amendement #8 existe pour
+  empêcher ; son message nomme désormais aussi l'ÉQUIPE épinglée ; (2) `VenuePeriodOverrideStateProcessor`
+  refuse en 422 tout POST/PUT **et DELETE** sur un gymnase entièrement fermé — le DELETE compte :
+  sans lui, supprimer un override manuel antérieur rouvrirait le gymnase par la petite porte ;
+  (3) `ReservationStateProcessor` refuse en 422 toute nouvelle réservation sur un gymnase
+  entièrement fermé ou un jour fermé, en nommant la cause — les réservations DÉJÀ posées ne sont
+  **ni supprimées ni déplacées** (décision fondateur : « on ne fait pas de modification passive,
+  on alerte »). L'alerte elle-même est un nouveau prédicat partagé « réservation non servie »
+  (`OrphanPinGuard::unservedReservationIds` ⇄ miroir `orphanReservations.ts::unservedReservationIds`,
+  parité gardée par `OrphanReservationsMirrorParityTest`) — il existe des deux côtés mais **n'est
+  câblé à aucun écran** : c'est tout l'objet de la PR2. `/api/calendar-entries/{id}/conflicts`
+  sert en plus `fullyClosedVenueIds` (niveau GYMNASE, pas un drapeau par fermeture — un drapeau ne
+  pourrait pas exprimer le cas des deux fermetures relayées). Refus serveur en
+  `UnprocessableEntityHttpException` (pas `ValidationException` d'API Platform, qui ne remonte pas
+  son message dans le corps de la réponse — même patron que `AssertsSchedulePlanExistsTrait`,
+  déjà en vigueur). Zéro migration, zéro moteur, `CONTRACT_VERSION` inchangé.
 
 ### Note de nommage (résolution de collision)
 

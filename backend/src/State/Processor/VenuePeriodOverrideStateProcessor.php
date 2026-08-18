@@ -64,6 +64,12 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
      */
     protected function processPost(object $input, ?string $clubId, ?string $seasonId): object
     {
+        // L'existence du plan se contrôle AVANT la fermeture : le garde de fermeture
+        // interroge la base avec l'id reçu, et un id vide sur une colonne `guid` remonterait
+        // un 500 opaque au lieu du 422 attendu. La validation du DTO l'interdit aujourd'hui,
+        // mais l'ordre rend l'invariant vrai par construction plutôt que par dépendance —
+        // relevé en revue sécurité (2026-08-18).
+        $this->assertSchedulePlanExists($this->entityManager, $input->schedulePlanId);
         $this->assertVenueNotFullyClosed($input->schedulePlanId, $input->venueId);
 
         return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
