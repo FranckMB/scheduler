@@ -6,25 +6,38 @@ namespace App\Service;
 
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
+use App\Repository\ConstraintRepository;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
- * P2-37 — la MAISON UNIQUE de « ce que les fermetures datées font à un plan de période ».
+ * P2-37/P2-38 — la MAISON UNIQUE de « ce que les fermetures s'appliquant à CE plan font ».
  *
- * Une indisponibilité de gymnase est une contrainte datée `venue_closed` portée par l'entrée
- * de calendrier (ADR-0002 inv. 5 : la datée décrit le FAIT, elle reste au calendrier). Trois
+ * Une indisponibilité de gymnase est une contrainte datée `venue_closed` portée par une entrée
+ * de calendrier (ADR-0002 inv. 5 : la datée décrit le FAIT, elle reste au calendrier). Quatre
  * consommateurs en dérivent la même chose et doivent le faire de LA MÊME façon :
+ *  - `ScheduleConstraintBuilder::buildForPeriodPlan` (le payload : le gymnase perd ses créneaux
+ *    les jours fermés) ;
  *  - `OrphanPinGuard` (fermé-total = gymnase inerte, à SKIPPER ; jour fermé partiel = bloquant) ;
- *  - `VenuePeriodOverrideStateProcessor` (D2 — pas de mode sur un gymnase fermé-total) ;
- *  - `ReservationStateProcessor` (D3 — pas de réservation sur un gymnase fermé-total ou un jour fermé).
+ *  - `VenuePeriodOverrideStateProcessor` (pas de mode sur un gymnase fermé-total) ;
+ *  - `ReservationStateProcessor` (pas de réservation sur un gymnase fermé-total ou un jour fermé).
  *
- * La fenêtre et la SOURCE des datées suivent {@see CalendarEntry::datedConstraintSourceId} :
- * une semaine ENFANT hérite des fermetures de sa MÈRE, recoupées sur sa propre fenêtre.
+ * P2-38 — TRANSVERSALITÉ (décision fondateur R4, bornée aux FERMETURES) : une fermeture
+ * `venue_closed` s'applique à TOUT plan de période dont la fenêtre recoupe ses dates, quelle que
+ * soit l'entrée qui la porte. Une fermeture « Matéo en travaux » déclarée sur la période racine
+ * doit fermer le gymnase pendant une semaine de reprise qui la recoupe — sinon le solveur y place
+ * des séances (planning faux produit en silence, le défaut que P2-38 ferme). On lit donc TOUTES
+ * les fermetures du club+saison, chacune bornée à (les dates de son `config` si valides, sinon la
+ * fenêtre de SA PROPRE entrée porteuse — le repli legacy ; jamais la fenêtre du plan consommateur)
+ * ∩ la fenêtre du plan. Le plan SEASON n'a pas de fenêtre datée : {@see forPlan} y rend le vide
+ * (R1 — une fermeture datée ne touche jamais le socle).
  */
 final class PlanVenueClosures
 {
-    public function __construct(private readonly EntityManagerInterface $entityManager) {}
+    public function __construct(
+        private readonly EntityManagerInterface $entityManager,
+        private readonly ConstraintRepository $constraintRepository,
+    ) {}
 
     /**
      * Un libellé HUMAIN des fermetures d'un gymnase (titre + bornes j/n), ou null si aucune.
@@ -61,31 +74,108 @@ final class PlanVenueClosures
      * @return array{
      *   fullyClosedVenueIds: array<string, true>,
      *   closedWeekdaysByVenue: array<string, array<int, true>>,
+     *   closedDatesByVenue: array<string, array<string, true>>,
      *   summaries: list<array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}>
      * }
      */
     public function forPlan(string $schedulePlanId): array
     {
-        $empty = ['fullyClosedVenueIds' => [], 'closedWeekdaysByVenue' => [], 'summaries' => []];
         $entry = $this->periodEntry($schedulePlanId);
         if (!$entry instanceof CalendarEntry) {
-            return $empty; // un plan SEASON (ou introuvable) n'a pas de fermeture de période
+            // un plan SEASON (ou introuvable) n'a pas de fenêtre datée → aucune fermeture (R1)
+            return ['fullyClosedVenueIds' => [], 'closedWeekdaysByVenue' => [], 'closedDatesByVenue' => [], 'summaries' => []];
         }
-        $dated = $this->entityManager->getRepository(Constraint::class)
-            ->findBy(['calendarEntryId' => $entry->datedConstraintSourceId()]);
-        $start = $entry->getStartDate();
-        $end = $entry->getEndDate();
 
+        return $this->forEntry($entry);
+    }
+
+    /**
+     * Les fermetures qui s'appliquent à la FENÊTRE d'une entrée de période — transversales
+     * (toutes entrées confondues, bornées à leur propre entrée porteuse) ∩ la fenêtre de
+     * `$planEntry`. Le radar (`CalendarEntryConflictsController`) l'utilise directement pour
+     * une entrée qui porte un plan ; {@see forPlan} y délègue.
+     *
+     * @return array{
+     *   fullyClosedVenueIds: array<string, true>,
+     *   closedWeekdaysByVenue: array<string, array<int, true>>,
+     *   closedDatesByVenue: array<string, array<string, true>>,
+     *   summaries: list<array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}>
+     * }
+     */
+    public function forEntry(CalendarEntry $planEntry): array
+    {
+        $planStart = $planEntry->getStartDate();
+        $planEnd = $planEntry->getEndDate();
+
+        $closedDates = [];
+        $summaries = [];
+        foreach ($this->closuresByCarrier($planEntry->getClubId(), $planEntry->getSeasonId()) as [$constraints, $carrierStart, $carrierEnd]) {
+            // Clip = fenêtre du plan ; repli legacy = fenêtre de l'entrée PORTEUSE (jamais celle
+            // du plan : sinon un config sans dates fermerait TOUT le plan — défaut fermé par P2-38).
+            foreach (VenueClosureDays::closedDatesByVenue($constraints, $planStart, $planEnd, $carrierStart, $carrierEnd) as $venueId => $dates) {
+                foreach (array_keys($dates) as $day) {
+                    $closedDates[$venueId][$day] = true;
+                }
+            }
+            foreach (VenueClosureDays::closureSummaries($constraints, $planStart, $planEnd, $carrierStart, $carrierEnd) as $summary) {
+                $summaries[] = $summary;
+            }
+        }
+
+        // Fermé-total = calculé sur l'UNION des dates fermées de TOUTES les entrées porteuses
+        // (deux fermetures qui se relaient couvrent la fenêtre à elles deux — P2-37 D1).
         $fully = [];
-        foreach (VenueClosureDays::fullyClosedVenueIds($dated, $start, $end) as $venueId) {
+        foreach (VenueClosureDays::fullyClosedFromDates($closedDates, $planStart, $planEnd) as $venueId) {
             $fully[$venueId] = true;
         }
 
         return [
             'fullyClosedVenueIds' => $fully,
-            'closedWeekdaysByVenue' => VenueClosureDays::closedWeekdaysByVenue($dated, $start, $end),
-            'summaries' => VenueClosureDays::closureSummaries($dated, $start, $end),
+            'closedWeekdaysByVenue' => VenueClosureDays::closedWeekdaysFromDates($closedDates),
+            'closedDatesByVenue' => $closedDates,
+            'summaries' => $summaries,
         ];
+    }
+
+    /**
+     * Les fermetures datées du club+saison, groupées par entrée PORTEUSE, chacune assortie de
+     * la fenêtre de cette entrée (pour le repli legacy). Ordre stable : le repo trie par
+     * (createdAt, id) — d'où des résumés déterministes quand plusieurs fermetures se recoupent.
+     *
+     * @return list<array{0: list<Constraint>, 1: DateTimeImmutable, 2: DateTimeImmutable}>
+     */
+    private function closuresByCarrier(string $clubId, string $seasonId): array
+    {
+        $closures = $this->constraintRepository->findDatedFacilityByClubSeason($clubId, $seasonId);
+        if ([] === $closures) {
+            return [];
+        }
+
+        $byCarrier = [];
+        foreach ($closures as $closure) {
+            $carrierId = $closure->getCalendarEntryId();
+            if (null === $carrierId) {
+                continue; // déjà filtré en SQL — garde de typage
+            }
+            $byCarrier[$carrierId][] = $closure;
+        }
+
+        // La fenêtre de CHAQUE entrée porteuse : elle borne le repli legacy à sa propre entrée.
+        $windowById = [];
+        foreach ($this->entityManager->getRepository(CalendarEntry::class)->findBy(['id' => array_keys($byCarrier)]) as $carrier) {
+            $windowById[$carrier->getId()] = [$carrier->getStartDate(), $carrier->getEndDate()];
+        }
+
+        $groups = [];
+        foreach ($byCarrier as $carrierId => $constraints) {
+            if (!isset($windowById[$carrierId])) {
+                continue; // entrée porteuse disparue : aucune fenêtre pour la borner, on ignore
+            }
+            [$carrierStart, $carrierEnd] = $windowById[$carrierId];
+            $groups[] = [$constraints, $carrierStart, $carrierEnd];
+        }
+
+        return $groups;
     }
 
     private function periodEntry(string $schedulePlanId): ?CalendarEntry

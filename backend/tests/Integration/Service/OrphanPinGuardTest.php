@@ -258,6 +258,46 @@ final class OrphanPinGuardTest extends WebTestCase
         self::assertStringContainsString($this->venue->getName(), $message);
     }
 
+    /**
+     * NR — P2-38 (R5) : un gymnase ENTIÈREMENT fermé par la fermeture d'une AUTRE entrée (fait
+     * transversal) est inerte comme un désactivé — l'épinglage n'a nulle part où glisser, donc
+     * il ne bloque pas. C'est le cas terrain : « Matéo en travaux » déclaré sur la période racine
+     * ferme le gymnase pendant la semaine de reprise, transparente au gestionnaire.
+     */
+    public function testAVenueFullyClosedByAnotherEntryIsInert(): void
+    {
+        $other = $this->otherEntry('2025-10-01', '2025-11-30');
+        // Fermeture portée par l'AUTRE entrée, couvrant TOUTE la fenêtre du plan (2025-10-20→26).
+        $this->em->persist($this->closureOnEntry('Réquisition totale (autre entrée)', '2025-10-20', '2025-10-26', $other));
+        $this->em->persist($this->slotTemplate(2, '18:00', LockLevel::HARD)); // le créneau de la période
+        $this->em->flush();
+
+        self::assertNull(
+            $this->guard->firstOrphanMessage($this->overlay),
+            'un gymnase fermé-total par la fermeture d’une AUTRE entrée est inerte : il ne bloque pas (R5)',
+        );
+    }
+
+    /**
+     * NR — P2-38 : une fermeture PARTIELLE (un jour) portée par une AUTRE entrée reste BLOQUANTE
+     * — la séance SERAIT replacée ailleurs en silence. La transversalité n'affaiblit pas la
+     * doctrine P2-37 sur les fermetures partielles.
+     */
+    public function testAPartialDayClosureFromAnotherEntryStillBlocks(): void
+    {
+        $this->seedTeam('Poussins 1');
+        $other = $this->otherEntry('2025-10-01', '2025-11-30');
+        // Fermeture du SEUL mardi 2025-10-21, portée par l'AUTRE entrée → fermeture PARTIELLE.
+        $this->em->persist($this->closureOnEntry('Gymnase réquisitionné (autre entrée)', '2025-10-21', '2025-10-21', $other));
+        $this->em->persist($this->reservation(2, '18:00')); // mardi 18:00 : créneau existant, fermé ce jour-là
+        $this->em->flush();
+
+        $message = $this->guard->firstOrphanMessage($this->overlay);
+        self::assertIsString($message, 'un jour fermé partiel, même déclaré sur une AUTRE entrée, reste bloquant');
+        self::assertStringContainsString('fermé', $message, 'la cause fermeture est nommée');
+        self::assertStringContainsString($this->venue->getName(), $message);
+    }
+
     public function testSeasonScheduleIsNeverBlocked(): void
     {
         // Le socle définit lui-même sa grille : la notion d'orphelin n'y a pas de sens.
@@ -384,15 +424,33 @@ final class OrphanPinGuardTest extends WebTestCase
     /** Une fermeture datée `venue_closed` sur ce gymnase, rattachée à l'entrée de période. */
     private function closureConstraint(string $name, string $startDate, string $endDate): Constraint
     {
+        return $this->closureOnEntry($name, $startDate, $endDate, $this->entryId);
+    }
+
+    /** Idem, mais portée par une entrée ARBITRAIRE (P2-38 — fermeture transversale). */
+    private function closureOnEntry(string $name, string $startDate, string $endDate, string $carrierEntryId): Constraint
+    {
         $constraint = (new Constraint)
             ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
             ->setName($name)
             ->setScope(ConstraintScope::FACILITY)->setScopeTargetId($this->venue->getId())
             ->setFamily(ConstraintFamily::FACILITY)->setRuleType(ConstraintRuleType::HARD)
-            ->setCalendarEntryId($this->entryId);
+            ->setCalendarEntryId($carrierEntryId);
         $constraint->setConfig(['type' => 'venue_closed', 'startDate' => $startDate, 'endDate' => $endDate]);
 
         return $constraint;
+    }
+
+    /** Une AUTRE entrée de période du club/saison, porteuse d'une fermeture transversale. */
+    private function otherEntry(string $start, string $end): string
+    {
+        $entry = (new CalendarEntry)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Autre période')
+            ->setStartDate(new DateTimeImmutable($start))->setEndDate(new DateTimeImmutable($end));
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        return $entry->getId();
     }
 
     /** L'équipe portée par les épinglages de ce fichier (teamId hardcodé) — pour que le message la NOMME. */

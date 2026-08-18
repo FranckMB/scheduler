@@ -11,6 +11,7 @@ use App\Entity\Season;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryStatus;
 use App\Enum\ConstraintFamily;
+use App\Service\PlanVenueClosures;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\VenueClosureDays;
 use DateInterval;
@@ -41,6 +42,7 @@ final class CalendarEntryConflictsController extends AbstractController
         private readonly EntityManagerInterface $entityManager,
         private readonly RequestStack $requestStack,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
+        private readonly PlanVenueClosures $planVenueClosures,
     ) {}
 
     #[Route('/api/calendar-entries/{id}/conflicts', name: 'api_calendar_entry_conflicts', methods: ['GET'])]
@@ -74,34 +76,39 @@ final class CalendarEntryConflictsController extends AbstractController
             return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'closures' => [], 'fullyClosedVenueIds' => [], 'seasonPlanChosen' => $planChosen]);
         }
 
-        // Closed venues = active FACILITY constraints attached to this entry.
-        /** @var list<Constraint> $facilityConstraints */
-        // P2-5 E1 : les datées d'une semaine ENFANT vivent sur sa période MÈRE
-        // (source unique : CalendarEntry::datedConstraintSourceId).
-        $facilityConstraints = $this->entityManager->getRepository(Constraint::class)->findBy([
-            'calendarEntryId' => $entry->datedConstraintSourceId(),
-            'family' => ConstraintFamily::FACILITY,
-            'isActive' => true,
-        ]);
-        // P2-5 5b : les DATES fermées par gymnase (incident ∩ fenêtre). `venueIds` = les
-        // gymnases réellement fermés DANS cette fenêtre — un gymnase dont l'incident tombe
-        // hors de la période n'est pas listé (sinon le chip « gymnase fermé » mentirait).
-        $closedDatesByVenue = VenueClosureDays::closedDatesByVenue($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
+        // Les gymnases fermés dans cette fenêtre + leurs dates + leurs résumés.
+        //
+        // P2-38 — une entrée qui PORTE un plan voit les fermetures TRANSVERSALEMENT (toutes
+        // entrées confondues, chacune bornée à sa propre entrée porteuse ∩ la fenêtre), comme
+        // le payload et OrphanPinGuard : sinon les jours barrés à l'écran ignoreraient la
+        // fermeture déclarée sur une autre entrée qui recoupe la période. Une entrée SANS plan
+        // (jamais adaptée) garde le périmètre par-entrée historique (P2-5 E1 : les datées d'une
+        // semaine ENFANT vivent sur sa MÈRE — CalendarEntry::datedConstraintSourceId).
+        //
+        // Ces trois sorties (`venueIds`, `closures`, `fullyClosedVenueIds`) sont servies sur
+        // TOUTES les sorties, y compris sans plan choisi — une fermeture est un fait déclaré,
+        // indépendant de l'existence d'un calendrier à comparer. Seuls les `conflicts` (séances à
+        // replacer) dépendent du plan choisi.
+        if ($this->schedulePlanProvisioner->periodPlanExists($entry->getId())) {
+            $bundle = $this->planVenueClosures->forEntry($entry);
+            $closedDatesByVenue = $bundle['closedDatesByVenue'];
+            $closures = $bundle['summaries'];
+            $fullyClosedVenueIds = array_keys($bundle['fullyClosedVenueIds']);
+        } else {
+            /** @var list<Constraint> $facilityConstraints */
+            $facilityConstraints = $this->entityManager->getRepository(Constraint::class)->findBy([
+                'calendarEntryId' => $entry->datedConstraintSourceId(),
+                'family' => ConstraintFamily::FACILITY,
+                'isActive' => true,
+            ]);
+            $closedDatesByVenue = VenueClosureDays::closedDatesByVenue($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
+            $closures = VenueClosureDays::closureSummaries($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
+            $fullyClosedVenueIds = VenueClosureDays::fullyClosedVenueIds($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
+        }
+        // `venueIds` = les gymnases réellement fermés DANS cette fenêtre — un gymnase dont
+        // l'incident tombe hors de la période n'est pas listé (sinon le chip « gymnase fermé »
+        // mentirait).
         $venueIds = array_keys($closedDatesByVenue);
-
-        // Les fermetures affichables (gymnase, titre, bornes, jours fermés) : servies sur
-        // TOUTES les sorties, y compris sans plan choisi — une fermeture est un fait
-        // déclaré, indépendant de l'existence d'un calendrier à comparer. Seuls les
-        // `conflicts` (séances à replacer) dépendent du plan.
-        $closures = VenueClosureDays::closureSummaries($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
-
-        // P2-37 D6 — les gymnases ENTIÈREMENT fermés sur la fenêtre : indisponibilité TOTALE,
-        // DÉRIVÉE (jamais stockée, D1) et donc à ne pas redériver côté front (le calcul « toutes
-        // les dates fermées », relais de fermetures compris, vit ici). C'est un fait de niveau
-        // GYMNASE, pas de niveau fermeture : deux fermetures qui se relaient ferment le gymnase
-        // sans qu'aucune ne couvre seule la fenêtre — un drapeau par fermeture (`coversWindow`)
-        // ne pourrait pas l'exprimer. Servi sur toutes les sorties qui portent `closures`.
-        $fullyClosedVenueIds = VenueClosureDays::fullyClosedVenueIds($facilityConstraints, $entry->getStartDate(), $entry->getEndDate());
 
         if ([] === $venueIds) {
             return $this->json(['entryId' => $entry->getId(), 'venueIds' => [], 'conflicts' => [], 'closures' => $closures, 'fullyClosedVenueIds' => $fullyClosedVenueIds, 'seasonPlanChosen' => $planChosen]);

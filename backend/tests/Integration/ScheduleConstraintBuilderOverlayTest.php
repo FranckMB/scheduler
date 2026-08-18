@@ -29,6 +29,7 @@ use App\Enum\Gender;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
 use App\Enum\VenuePeriodMode;
+use App\Service\PeriodConstraintSelector;
 use App\Service\ScheduleConstraintBuilder;
 use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
@@ -115,6 +116,73 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $kept = $this->closedVenueWeekdays($schedule, $entry);
         sort($kept);
         self::assertSame([1, 2, 3], $kept, 'le gym reste ouvert lun-mer (hors incident), fermé jeu-dim');
+    }
+
+    /**
+     * P2-38 (axe constraint semantics) — LE TEST DU LOT : une fermeture portée par l'entrée A
+     * retire les créneaux du PAYLOAD d'un plan de l'entrée B dont la fenêtre recoupe ses dates.
+     * Le défaut réel (terrain BCCL) : « Matéo en travaux » sur la période racine ne fermait pas
+     * le gymnase pendant la semaine de reprise — le solveur y plaçait des séances en silence.
+     */
+    public function testAClosureCarriedByAnotherEntryRemovesThisPlansSlots(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $this->venue($club, $season, self::VENUE_CLOSED, 'Gym en travaux');
+        // Grille de SAISON lun→dim, copiée à la naissance du plan B.
+        foreach ([1, 2, 3, 4, 5, 6, 7] as $day) {
+            $this->venueSlot($club, $season, self::VENUE_CLOSED, null, $day);
+        }
+        $this->em->flush();
+
+        // Plan B : la semaine de reprise (lun 2026-05-04 → dim 2026-05-10).
+        $entryB = $this->bareClosurePeriod($club, $season, '2026-05-04', '2026-05-10');
+        $schedule = $this->overlaySchedule($club, $season, $entryB);
+
+        // Entrée A : une AUTRE période (la racine), qui PORTE la fermeture jeu→dim 05-07→05-10.
+        $entryA = $this->bareClosurePeriod($club, $season, '2026-05-01', '2026-05-31');
+        $this->datedClosedVenueConstraintDated($club, $season, $entryA, '2026-05-07', '2026-05-10');
+        $this->em->flush();
+
+        $kept = $this->closedVenueWeekdays($schedule, $entryB);
+        sort($kept);
+        self::assertSame([1, 2, 3], $kept, 'la fermeture d’une AUTRE entrée retire les créneaux du plan aux bons jours (jeu-dim), garde lun-mer');
+
+        // R5 — la fermeture transversale n'entre PAS dans la sélection de période (le sélecteur
+        // ne charge que les datées de l'entrée du plan) : elle retire des créneaux SANS ajouter
+        // le moindre warning au gate. Les trois sources de warning de sélection sont vides.
+        $selection = self::getContainer()->get(PeriodConstraintSelector::class)
+            ->selectForPeriodPlan($club->getId(), $season->getId(), $this->planIdOf($entryB), $entryB);
+        self::assertSame([], $selection->droppedForDisabledVenue, 'aucun warning « gymnase fermé » (R5)');
+        self::assertSame([], $selection->partiallyAppliedForDisabledVenue, 'aucun warning « appliquée partiellement » (R5)');
+        self::assertSame([], $selection->droppedForInertTag, 'aucun warning « tag inerte » (R5)');
+    }
+
+    /**
+     * P2-38 — falsification : une fermeture d'une autre entrée ENTIÈREMENT hors de la fenêtre du
+     * plan ne retire AUCUN créneau (la transversalité est bornée par le recoupement des dates).
+     */
+    public function testAClosureOutsideThisPlansWindowLeavesTheSlotsIntact(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $this->venue($club, $season, self::VENUE_CLOSED, 'Gym lointain');
+        foreach ([1, 2, 3, 4, 5, 6, 7] as $day) {
+            $this->venueSlot($club, $season, self::VENUE_CLOSED, null, $day);
+        }
+        $this->em->flush();
+
+        $entryB = $this->bareClosurePeriod($club, $season, '2026-05-04', '2026-05-10');
+        $schedule = $this->overlaySchedule($club, $season, $entryB);
+
+        // Fermeture d'une autre entrée, en JUIN : hors de la fenêtre de mai de B.
+        $entryA = $this->bareClosurePeriod($club, $season, '2026-06-01', '2026-06-30');
+        $this->datedClosedVenueConstraintDated($club, $season, $entryA, '2026-06-10', '2026-06-20');
+        $this->em->flush();
+
+        $kept = $this->closedVenueWeekdays($schedule, $entryB);
+        sort($kept);
+        self::assertSame([1, 2, 3, 4, 5, 6, 7], $kept, 'une fermeture hors fenêtre ne retire aucun créneau');
     }
 
     public function testHolidayOverlayRemovesTheClosedVenueSlots(): void
