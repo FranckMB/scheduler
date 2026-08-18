@@ -42,7 +42,7 @@ const teamOverridesLoadingState = { value: false };
 const teamOverridesErrorState = { value: false };
 const constraintOverridesLoadingState = { value: false };
 const constraintOverridesErrorState = { value: false };
-const conflictState: { venueIds: string[]; closures: Closure[] } = { venueIds: [], closures: [] };
+const conflictState: { venueIds: string[]; closures: Closure[]; fullyClosedVenueIds: string[] } = { venueIds: [], closures: [], fullyClosedVenueIds: [] };
 const overridesVenueState: { data: Array<{ id: string; schedulePlanId: string; venueId: string; mode: "DISABLED" | "BLANK" }> } = { data: [] };
 const overridesFetchingState = { value: false };
 const venueCanSplitState = { value: false };
@@ -148,7 +148,7 @@ vi.mock("../queries", () => ({
   useSharedTrainingGroups: () => ({ data: sharedGroupsState.data }),
 }));
 vi.mock("@/features/cockpit/queries", () => ({
-  useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds, closures: conflictState.closures }, isError: false, refetch: vi.fn() }),
+  useEntryConflicts: () => ({ data: { venueIds: conflictState.venueIds, closures: conflictState.closures, fullyClosedVenueIds: conflictState.fullyClosedVenueIds }, isError: false, refetch: vi.fn() }),
   useCalendarEntry: () => ({ data: entryState.data, isLoading: false }),
   useSchedulePlanForEntry: () => ({ data: planState.data, isLoading: false }),
   // Dérivé de planState : un test qui met planState.data à undefined simule le plan pas
@@ -201,6 +201,7 @@ afterEach(() => {
   constraintOverridesErrorState.value = false;
   conflictState.venueIds = [];
   conflictState.closures = [];
+  conflictState.fullyClosedVenueIds = [];
   overridesVenueState.data = [];
   overridesFetchingState.value = false;
   deletePeriodSlotImpl.value = deleteSlot;
@@ -552,6 +553,39 @@ describe("PeriodVenues — la grille de la période, gymnase par gymnase", () =>
     conflictState.closures = [{ constraintId: "cc", venueId: "v1", title: "Congés", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [1, 2, 3, 4, 5, 6, 7] }];
     render(<PeriodVenues calendarEntryId="e1" />);
     expect(screen.getByRole("alert")).toHaveTextContent("Indispo toute la période du 1/5 au 10/5 — Congés");
+  });
+
+  // P2-37 D6 — un gymnase ENTIÈREMENT fermé sur la fenêtre : l'interrupteur Désactiver/
+  // Réactiver laisse place à la RAISON (le serveur refuserait le geste, D2). L'écran le dit
+  // AVANT le clic. La donnée vient du serveur (`fullyClosedVenueIds`), le front ne redérive rien.
+  it("gymnase entièrement fermé : l'interrupteur laisse place à la raison, aucun geste de mode", () => {
+    conflictState.venueIds = ["v1"];
+    conflictState.closures = [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [1, 2, 3, 4, 5, 6, 7] }];
+    conflictState.fullyClosedVenueIds = ["v1"];
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    // Plus d'interrupteur : ni Désactiver ni Réactiver.
+    expect(screen.queryByRole("button", { name: "Désactiver" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Réactiver" })).toBeNull();
+    // La raison est dite en clair, avant tout clic — LÀ où était l'interrupteur (le marqueur
+    // `status` de l'en-tête), et pas seulement dans l'alerte d'ensemble.
+    expect(screen.getByText(/fermé toute la période/)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Indispo toute la période du 1/5 au 10/5 — Travaux");
+  });
+
+  // TÉMOIN (P2-37 D6) — une fermeture PARTIELLE ne change RIEN : le gymnase reste ACTIF, son
+  // interrupteur reste là et fonctionne (les jours fermés sont déjà barrés dans la grille depuis
+  // P2-22). Ce test échouerait si l'on désactivait un gymnase seulement PARTIELLEMENT fermé.
+  it("fermeture PARTIELLE : l'interrupteur RESTE et pose le mode (témoin)", async () => {
+    conflictState.venueIds = ["v1"];
+    conflictState.closures = [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [5, 6, 7] }];
+    conflictState.fullyClosedVenueIds = []; // partielle : pas entièrement fermé
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    const toggle = screen.getByRole("button", { name: "Désactiver" });
+    expect(toggle).toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(setMode).toHaveBeenCalledWith(expect.objectContaining({ venueId: "v1", mode: "DISABLED" }));
   });
 
   it("désactiver un gymnase pose le mode, sans toucher à sa grille", async () => {

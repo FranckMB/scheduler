@@ -5,9 +5,12 @@ import { Button } from "@/shared/components/ui/button";
 import { Modal } from "@/shared/components/ui/modal";
 import { TeamSelect } from "@/shared/components/ui/team-select";
 
+import type { Closure } from "@/features/cockpit/api";
+
 import type { PriorityTier, Reservation, Team, TeamCoach, Venue, VenueTrainingSlot } from "../api";
 import { conflictingReservation, mainCoachByTeam } from "../lib/coachDoubleBooking";
 import { dayLabel, hhmm } from "../lib/days";
+import { closureLabel } from "../lib/venueClosures";
 import { assignableTeams, effectiveSlotCapacity, slotKey } from "../lib/reservationSlots";
 import { useCreateReservation, useDeleteReservation } from "../queries";
 import { WizardStepLink } from "../WizardStepLink";
@@ -31,6 +34,12 @@ interface Props {
    *  (l'épinglage sur un jour fermé est orphelin et bloque la génération). Même patron que
    *  `disabledVenueIds`, au grain JOUR : atteignable pour corriger, pas pour aggraver. */
   slotClosed?: boolean;
+  /** P2-37 D6 — ce gymnase est ENTIÈREMENT fermé sur la fenêtre (donnée serveur) : le refus est
+   *  d'un cran plus fort qu'un jour fermé, et le message le dit comme le serveur (D3). */
+  venueFullyClosed?: boolean;
+  /** Les fermetures de CE gymnase (titre + bornes) — pour dire à l'écran la même chose que le
+   *  refus serveur : quelle fermeture, sur quelles dates. */
+  venueClosures?: Closure[];
   venueCanSplit: Map<string, boolean>;
   schedulePlanId: string | null;
   onClose: () => void;
@@ -68,6 +77,8 @@ export function SlotReservationModal({
   disabledVenueIds,
   pausedTeamIds,
   slotClosed = false,
+  venueFullyClosed = false,
+  venueClosures = [],
   venueCanSplit,
   schedulePlanId,
   onClose,
@@ -116,8 +127,15 @@ export function SlotReservationModal({
   // son nom reste lisible sur un épinglage existant, mais elle n'est plus proposée (le
   // solveur ne la verra pas, l'épingler serait un geste sans effet).
   const venueDisabled = true === disabledVenueIds?.has(slot.venueId);
-  // Un jour de fermeture ferme l'ajout comme un gymnase désactivé, au grain JOUR (P2-22 D2).
-  const blockAdd = venueDisabled || slotClosed;
+  // `disabledVenueIds` fond DÉSACTIVÉ (override) et ENTIÈREMENT FERMÉ (fermeture, P2-37). On
+  // sépare pour dire le BON motif : le désactivé « override » n'est que ce qui reste une fois
+  // la fermeture écartée.
+  const overrideDisabled = venueDisabled && !venueFullyClosed;
+  // Trois causes qui ferment l'AJOUT (le retrait, lui, reste ouvert — geste correctif) :
+  // gymnase entièrement fermé, jour fermé, ou désactivé pour la période (P2-22 D2 · P2-37 D6).
+  const blockAdd = venueFullyClosed || slotClosed || venueDisabled;
+  // Le libellé des fermetures du gymnase (titre + bornes) — même substance que le refus serveur.
+  const closureText = venueClosures.map(closureLabel).join(" · ");
   const offerable = undefined === pausedTeamIds ? teams : teams.filter((t) => !pausedTeamIds.has(t.id));
   const pickable = blockAdd ? [] : assignableTeams(offerable, tiers, slot, draftReservations, venueCanSplit);
 
@@ -246,13 +264,20 @@ export function SlotReservationModal({
         </ul>
       ) : null}
 
-      {venueDisabled ? (
+      {/* Les motifs de blocage disent la MÊME chose que le refus serveur (P2-37 D3) : la
+          fermeture TOTALE prime sur le jour fermé (refus d'un cran plus fort), et le désactivé
+          « override » n'est que ce qui reste une fois la fermeture écartée. */}
+      {venueFullyClosed ? (
         <p role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
-          {venue.name} est désactivé pour cette période : on ne peut plus y ajouter d'équipe. Retirez les réservations ci-dessus pour débloquer la génération.
+          Ce gymnase est indisponible sur toute la période{closureText ? ` — ${closureText}` : ""} : la séance ne peut pas y être réservée. Retirez les réservations ci-dessus pour débloquer la génération ; ajustez ou levez la fermeture pour rouvrir ce gymnase.
         </p>
       ) : slotClosed ? (
         <p role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
-          Ce créneau tombe un jour de fermeture de {venue.name} : on ne peut plus y ajouter d'équipe ici. Retirez les réservations ci-dessus pour débloquer la génération.
+          Ce gymnase est fermé ce jour-là{closureText ? ` — ${closureText}` : ""} : la séance ne peut pas y être réservée ici. Retirez les réservations ci-dessus pour débloquer la génération.
+        </p>
+      ) : overrideDisabled ? (
+        <p role="status" className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground">
+          {venue.name} est désactivé pour cette période : on ne peut plus y ajouter d'équipe. Retirez les réservations ci-dessus pour débloquer la génération.
         </p>
       ) : !guardReady ? (
         <p role="status" className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">

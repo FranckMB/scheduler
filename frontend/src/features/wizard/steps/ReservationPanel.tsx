@@ -8,7 +8,7 @@ import { readFailed } from "@/shared/lib/readState";
 
 import type { PriorityTier, Team, Venue, VenueTrainingSlot } from "../api";
 import { reservedTeamsBySlot, effectiveSlotCapacity, slotKey } from "../lib/reservationSlots";
-import { closuresByVenue, isSlotClosed } from "../lib/venueClosures";
+import { closuresByVenue, closurePeriodLabel, isSlotClosed } from "../lib/venueClosures";
 import { useGridSlots, useReservations, useWizardTeamCoaches } from "../queries";
 import { ReservationGrid } from "./ReservationGrid";
 import { SlotReservationModal } from "./SlotReservationModal";
@@ -81,6 +81,12 @@ export function ReservationPanel({
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const venueSlots = slots.filter((s) => s.venueId === selected.id);
   const closuresOfVenue = closuresByVenue(conflictsQuery.data?.closures ?? []).get(selected.id) ?? [];
+  // P2-37 D6 — les gymnases ENTIÈREMENT fermés, tels que le serveur les calcule. Un tel gymnase
+  // est bien dans `disabledVenueIds` (via `useActiveVenues`), mais le MOTIF diffère d'un
+  // désactivé « override » : on le distingue pour dire à l'écran la même chose que le refus
+  // serveur (fermeture, pas désactivation manuelle).
+  const fullyClosed = new Set(conflictsQuery.data?.fullyClosedVenueIds ?? []);
+  const selectedFullyClosed = fullyClosed.has(selected.id);
 
   // slotKey → reserved team NAMES (for the grid badges).
   const reservedNames = new Map<string, string[]>();
@@ -96,7 +102,7 @@ export function ReservationPanel({
           aria-label="Gymnase"
           className="h-8"
           wrapperClassName="w-52"
-          venues={venues.map((v) => ({ id: v.id, name: v.name + (disabledVenueIds?.has(v.id) ? " (désactivé pour cette période)" : ""), color: v.color }))}
+          venues={venues.map((v) => ({ id: v.id, name: v.name + (fullyClosed.has(v.id) ? " (fermé cette période)" : disabledVenueIds?.has(v.id) ? " (désactivé pour cette période)" : ""), color: v.color }))}
           value={selected.id}
           onChange={(e) => {
             setActiveSlot(null); // never leave a modal open on a slot from the previous venue
@@ -111,7 +117,14 @@ export function ReservationPanel({
           L'écran reste atteignable pour le geste CORRECTIF (retirer), fermé au geste
           fautif (ajouter) : §7.2 pt 3. L'ancien texte annonçait un blocage qui n'existe
           plus — le laisser aurait fait courir le gestionnaire après un faux problème. */}
-      {disabledVenueIds?.has(selected.id) ? (
+      {/* P2-37 D6 — deux motifs, deux textes : entièrement fermé (fermeture datée, on ajuste la
+          fermeture) vs désactivé « override » (on réactive le gymnase). Les deux conservent les
+          réservations et ferment l'ajout ; seul le geste de sortie diffère. */}
+      {selectedFullyClosed ? (
+        <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          {selected.name} est indisponible sur toute la période{closuresOfVenue.length > 0 ? ` — ${closuresOfVenue.map(closurePeriodLabel).join(" · ")}` : ""} : ses créneaux et ses réservations ne partiront pas au système. Elles sont conservées — ajustez ou levez la fermeture pour le rouvrir. On ne peut plus en ajouter ici.
+        </p>
+      ) : disabledVenueIds?.has(selected.id) ? (
         <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
           {selected.name} est désactivé pour cette période : ses créneaux et ses réservations ne partiront pas au système. Elles sont conservées — réactiver le gymnase les rend telles quelles. On ne peut plus en ajouter ici.
         </p>
@@ -142,6 +155,8 @@ export function ReservationPanel({
           disabledVenueIds={disabledVenueIds}
           pausedTeamIds={pausedTeamIds}
           slotClosed={isSlotClosed(activeSlot, closuresOfVenue)}
+          venueFullyClosed={selectedFullyClosed}
+          venueClosures={closuresOfVenue}
           venueCanSplit={venueCanSplit}
           schedulePlanId={schedulePlanId}
           onClose={() => setActiveSlot(null)}
