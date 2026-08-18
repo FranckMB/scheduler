@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { actionableWeeks, addDays, closureWeeksOffer, holidayWindows, isActionableWeek, mondayOf, periodAdjustWeeks, periodWeeksToAdjust, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate } from "./date";
+import { actionableWeeks, addDays, closureWeeksOffer, groupCoverageSlots, holidayWindows, isActionableWeek, mergeSegments, mondayOf, periodAdjustWeeks, periodWeeksToAdjust, segmentLabel, segmentsFromOffer, segmentWeekCount, splitSegment, weeksCovering, buildMonthGrid, daysUntil, isWithin, monthWindow, toISODate, type WeekWindow } from "./date";
 
 describe("cockpit date utils", () => {
   it("builds a 42-cell Monday-first grid", () => {
@@ -276,5 +276,161 @@ describe("closureWeeksOffer — une fermeture qui chevauche des vacances (P2-40)
     expect(offer.offered).toEqual([]);
     expect(offer.excludedRanges).toHaveLength(1);
     expect(offer.excludedRanges[0].labels).toEqual(["Vacances d'été"]);
+  });
+});
+
+/**
+ * P2-41 PR-C — LE SEGMENT est l'unité hors socle. À partir des semaines OFFERTES (sortie de
+ * closureWeeksOffer/periodAdjustWeeks) et de la fenêtre de l'événement, on propose des SEGMENTS aux
+ * ruptures GÉOMÉTRIQUES (calculables des données en main, aucune règle solveur redérivée) :
+ *  (a) semaine d'entame/de fin PARTIELLE de l'événement → segment de taille 1, le run de semaines
+ *      PLEINES adjacent = un segment ;
+ *  (b) discontinuité de l'offre (trou vacances P2-40 ou filtre temporel) → chaque run contigu = un
+ *      segment.
+ * Un run de semaines pleines contiguës sans rupture = UN segment multi-semaines.
+ */
+describe("segmentsFromOffer — le découpage géométrique en segments (P2-41)", () => {
+  const wk = (monday: string, startDate = monday, endDate = addDays(monday, 6)): WeekWindow => ({ startDate, endDate, monday });
+
+  it("exemple normatif : indispo mer 02/09 → dim 27/09 → [entame 31/08] + [bloc 07/09→27/09]", () => {
+    const offered = [wk("2026-08-31"), wk("2026-09-07"), wk("2026-09-14"), wk("2026-09-21")];
+    const segments = segmentsFromOffer(offered, "2026-09-02", "2026-09-27");
+    expect(segments).toEqual([
+      { weeks: [wk("2026-08-31")], startDate: "2026-08-31", endDate: "2026-09-06", monday: "2026-08-31", partial: true },
+      {
+        weeks: [wk("2026-09-07"), wk("2026-09-14"), wk("2026-09-21")],
+        startDate: "2026-09-07",
+        endDate: "2026-09-27",
+        monday: "2026-09-07",
+        partial: false,
+      },
+    ]);
+  });
+
+  it("une rupture d'offre au milieu (semaine vacances exclue) → 2 segments contigus", () => {
+    // Event 07/09 → 04/10 plein aux deux bords ; la semaine du 21/09 est exclue (trou).
+    const offered = [wk("2026-09-07"), wk("2026-09-14"), wk("2026-09-28")];
+    const segments = segmentsFromOffer(offered, "2026-09-07", "2026-10-04");
+    expect(segments.map((s) => s.monday)).toEqual(["2026-09-07", "2026-09-28"]);
+    expect(segments[0].weeks.map((w) => w.monday)).toEqual(["2026-09-07", "2026-09-14"]);
+    expect(segments[1].weeks.map((w) => w.monday)).toEqual(["2026-09-28"]);
+    // La semaine isolée par le trou est PLEINE (pas entamée) — pas de « (entamée) ».
+    expect(segments[1].partial).toBe(false);
+  });
+
+  it("entame ET fin partielles → deux segments de taille 1, chacun partiel", () => {
+    // Event mer 02/09 → ven 11/09 : la semaine du 31/08 est entamée, celle du 07/09 finit ven.
+    const offered = [wk("2026-08-31"), wk("2026-09-07")];
+    const segments = segmentsFromOffer(offered, "2026-09-02", "2026-09-11");
+    expect(segments).toHaveLength(2);
+    expect(segments.every((s) => 1 === s.weeks.length && s.partial)).toBe(true);
+  });
+
+  it("offre vide → aucun segment", () => {
+    expect(segmentsFromOffer([], "2026-09-02", "2026-09-27")).toEqual([]);
+  });
+
+  it("un run unique sans rupture → UN segment multi-semaines", () => {
+    const offered = [wk("2026-09-07"), wk("2026-09-14"), wk("2026-09-21")];
+    const segments = segmentsFromOffer(offered, "2026-09-07", "2026-09-27");
+    expect(segments).toHaveLength(1);
+    expect(segments[0].weeks).toHaveLength(3);
+    expect(segments[0].partial).toBe(false);
+  });
+
+  it("une seule semaine pleine → un segment de taille 1 non partiel", () => {
+    const offered = [wk("2026-09-07")];
+    const segments = segmentsFromOffer(offered, "2026-09-07", "2026-09-13");
+    expect(segments).toEqual([{ weeks: [wk("2026-09-07")], startDate: "2026-09-07", endDate: "2026-09-13", monday: "2026-09-07", partial: false }]);
+  });
+});
+
+describe("segmentLabel / segmentWeekCount / splitSegment / mergeSegments (P2-41)", () => {
+  const wk = (monday: string, startDate = monday, endDate = addDays(monday, 6)): WeekWindow => ({ startDate, endDate, monday });
+  const [entame, bloc] = segmentsFromOffer([wk("2026-08-31"), wk("2026-09-07"), wk("2026-09-14"), wk("2026-09-21")], "2026-09-02", "2026-09-27");
+
+  it("nomme un segment entamé, un segment plein isolé et un segment multi-semaines", () => {
+    expect(segmentLabel(entame)).toBe("Semaine du 31 août 2026 (entamée)");
+    expect(segmentLabel(bloc)).toBe("Semaines du 7 sept. 2026 au 27 sept. 2026 — d'un bloc (3 semaines)");
+    const plein = segmentsFromOffer([wk("2026-09-07")], "2026-09-07", "2026-09-13")[0];
+    expect(segmentLabel(plein)).toBe("Semaine du 7 sept. 2026");
+  });
+
+  it("compte les semaines d'un segment (span, y compris par-dessus un trou fusionné)", () => {
+    expect(segmentWeekCount(entame)).toBe(1);
+    expect(segmentWeekCount(bloc)).toBe(3);
+  });
+
+  it("scinde un segment multi-semaines en semaines individuelles (pleines)", () => {
+    const parts = splitSegment(bloc);
+    expect(parts.map((s) => s.monday)).toEqual(["2026-09-07", "2026-09-14", "2026-09-21"]);
+    expect(parts.every((s) => 1 === s.weeks.length && !s.partial)).toBe(true);
+  });
+
+  it("fusionne deux segments adjacents en un bloc unique (l'entame absorbée dans le bloc)", () => {
+    const merged = mergeSegments(entame, bloc);
+    expect(merged.monday).toBe("2026-08-31");
+    expect(merged.startDate).toBe("2026-08-31");
+    expect(merged.endDate).toBe("2026-09-27");
+    expect(merged.weeks.map((w) => w.monday)).toEqual(["2026-08-31", "2026-09-07", "2026-09-14", "2026-09-21"]);
+    expect(merged.partial).toBe(false);
+    expect(segmentWeekCount(merged)).toBe(4);
+  });
+
+  it("fusionne par-dessus une rupture d'offre : le span couvre le trou, les semaines offertes non", () => {
+    // 07/09+14/09 puis 28/09 (21/09 exclue) : le bloc fusionné va du 07/09 au 04/10 (4 semaines de
+    // span), mais ne porte que les 3 semaines OFFERTES.
+    const [a, b] = segmentsFromOffer([wk("2026-09-07"), wk("2026-09-14"), wk("2026-09-28")], "2026-09-07", "2026-10-04");
+    const merged = mergeSegments(a, b);
+    expect(merged.startDate).toBe("2026-09-07");
+    expect(merged.endDate).toBe("2026-10-04");
+    expect(segmentWeekCount(merged)).toBe(4);
+    expect(merged.weeks).toHaveLength(3);
+  });
+});
+
+/**
+ * P2-41 PR-C — la carte de couverture groupe PAR ENFANT : un enfant-segment retrouvé sur N semaines
+ * consécutives devient UNE entrée (son libellé du X au Y). Les semaines MANQUANTES (child null)
+ * restent individuelles — le geste « + créer » est ponctuel, à la semaine.
+ */
+describe("groupCoverageSlots — regroupement des semaines par enfant (P2-41)", () => {
+  const wk = (monday: string): WeekWindow => ({ startDate: monday, endDate: addDays(monday, 6), monday });
+  const child = (id: string) => ({ id });
+
+  it("groupe des semaines consécutives portées par le MÊME enfant en une entrée", () => {
+    const seg = child("seg-1");
+    const groups = groupCoverageSlots([
+      { week: wk("2026-09-07"), child: seg },
+      { week: wk("2026-09-14"), child: seg },
+      { week: wk("2026-09-21"), child: seg },
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].child).toBe(seg);
+    expect(groups[0].startDate).toBe("2026-09-07");
+    expect(groups[0].endDate).toBe("2026-09-27");
+    expect(groups[0].weeks).toHaveLength(3);
+  });
+
+  it("garde les semaines MANQUANTES individuelles (une entrée par semaine à créer)", () => {
+    const groups = groupCoverageSlots([
+      { week: wk("2026-09-07"), child: null },
+      { week: wk("2026-09-14"), child: null },
+    ]);
+    expect(groups).toHaveLength(2);
+    expect(groups.every((g) => null === g.child)).toBe(true);
+  });
+
+  it("sépare deux enfants distincts et intercale une semaine manquante", () => {
+    const a = child("a");
+    const b = child("b");
+    const groups = groupCoverageSlots([
+      { week: wk("2026-09-07"), child: a },
+      { week: wk("2026-09-14"), child: a },
+      { week: wk("2026-09-21"), child: null },
+      { week: wk("2026-09-28"), child: b },
+    ]);
+    expect(groups.map((g) => g.child?.id ?? null)).toEqual(["a", null, "b"]);
+    expect(groups[0].weeks).toHaveLength(2);
   });
 });

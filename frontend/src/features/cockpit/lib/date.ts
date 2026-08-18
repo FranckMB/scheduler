@@ -203,6 +203,132 @@ export function periodAdjustWeeks(start: string, end: string, season: { startDat
   return dropFirst ? weeks.slice(1) : weeks;
 }
 
+/**
+ * P2-41 — UN SEGMENT hors socle : un bloc de semaines calendaires pleines et contiguës
+ * (lun→dim, clamp saison admis aux bords). La semaine simple est le segment de taille 1.
+ * `weeks` porte les semaines OFFERTES du segment (jamais les semaines d'un trou franchi par une
+ * fusion) ; `monday` est la clé d'affichage stable (le lundi de la 1ʳᵉ semaine).
+ */
+export interface WeekSegment {
+  weeks: WeekWindow[];
+  startDate: string;
+  endDate: string;
+  monday: string;
+  /** Semaine d'entame/de fin PARTIELLE de l'événement (taille 1) : libellé « (entamée) ». */
+  partial: boolean;
+}
+
+const makeSegment = (weeks: WeekWindow[], partial: boolean): WeekSegment => ({
+  weeks,
+  startDate: weeks[0].startDate,
+  endDate: weeks[weeks.length - 1].endDate,
+  monday: weeks[0].monday,
+  partial,
+});
+
+/** L'événement [start, end] couvre-t-il TOUTE la semaine calendaire (lun→dim) ? */
+const eventCoversFullWeek = (week: WeekWindow, eventStart: string, eventEnd: string): boolean =>
+  eventStart <= week.monday && eventEnd >= addDays(week.monday, 6);
+
+/**
+ * P2-41 — LE DÉCOUPAGE en segments, aux ruptures GÉOMÉTRIQUES seulement (calculables des semaines
+ * OFFERTES + de la fenêtre de l'événement, AUCUNE règle solveur redérivée) :
+ *  (a) une semaine d'entame/de fin que l'événement ne couvre pas ENTIÈREMENT → segment de taille 1
+ *      (le run de semaines pleines adjacent forme son propre segment) ;
+ *  (b) une discontinuité de l'offre (trou d'exclusion vacances P2-40 ou du filtre temporel) → chaque
+ *      run contigu = un segment.
+ * Un run de semaines pleines contiguës sans rupture = UN segment multi-semaines.
+ */
+export function segmentsFromOffer(offered: WeekWindow[], eventStart: string, eventEnd: string): WeekSegment[] {
+  const segments: WeekSegment[] = [];
+  let run: WeekWindow[] = [];
+  const flush = (): void => {
+    if (run.length > 0) {
+      segments.push(makeSegment(run, false));
+      run = [];
+    }
+  };
+  for (let i = 0; i < offered.length; i += 1) {
+    const week = offered[i];
+    const partial = !eventCoversFullWeek(week, eventStart, eventEnd);
+    if (partial) {
+      flush();
+      segments.push(makeSegment([week], true));
+      continue;
+    }
+    const gapBefore = i > 0 && week.monday !== addDays(offered[i - 1].monday, 7);
+    if (gapBefore) {
+      flush();
+    }
+    run.push(week);
+  }
+  flush();
+  return segments;
+}
+
+/** Le nombre de semaines calendaires que le segment COUVRE (span lundi→lundi, trou fusionné compris). */
+export function segmentWeekCount(segment: WeekSegment): number {
+  const lastMonday = segment.weeks[segment.weeks.length - 1].monday;
+  return Math.round(daysUntil(segment.monday, lastMonday) / 7) + 1;
+}
+
+/** Libellé du segment dans le picker — présentation, pas décision. */
+export function segmentLabel(segment: WeekSegment): string {
+  const count = segmentWeekCount(segment);
+  if (count > 1) {
+    return `Semaines du ${frDateShort(segment.startDate)} au ${frDateShort(segment.endDate)} — d'un bloc (${count} semaines)`;
+  }
+  return segment.partial ? `Semaine du ${frDateShort(segment.startDate)} (entamée)` : `Semaine du ${frDateShort(segment.startDate)}`;
+}
+
+/** Scinde un segment multi-semaines en ses semaines OFFERTES, chacune un segment de taille 1 (pleine). */
+export function splitSegment(segment: WeekSegment): WeekSegment[] {
+  return segment.weeks.map((w) => makeSegment([w], false));
+}
+
+/** Fusionne deux segments ADJACENTS (a avant b) en un bloc unique — le serveur ne borne que
+ *  contiguïté + enveloppe, donc la fusion par-dessus une rupture est permise. */
+export function mergeSegments(a: WeekSegment, b: WeekSegment): WeekSegment {
+  return makeSegment([...a.weeks, ...b.weeks], false);
+}
+
+/** Une entrée de couverture groupée PAR ENFANT (P2-41) : un enfant-segment sur N semaines
+ *  consécutives devient une seule entrée ; une semaine manquante (child null) reste seule. */
+export interface CoverageGroup<C> {
+  child: C | null;
+  weeks: WeekWindow[];
+  startDate: string;
+  endDate: string;
+  /** Clé de rendu stable : l'id de l'enfant, ou `new-{lundi}` pour une semaine à créer. */
+  key: string;
+}
+
+/**
+ * P2-41 — regroupe des créneaux { semaine, enfant } CONSÉCUTIFS portant le MÊME enfant en une entrée
+ * (le libellé « du X au Y » d'un segment) ; une semaine manquante (child null) reste individuelle —
+ * le geste « + créer » est ponctuel, à la semaine. Le comptage « N/M semaines couvertes » reste au
+ * niveau semaine, en amont : ce regroupement ne touche QUE le rendu.
+ */
+export function groupCoverageSlots<C extends { id: string }>(slots: { week: WeekWindow; child: C | null }[]): CoverageGroup<C>[] {
+  const groups: CoverageGroup<C>[] = [];
+  for (const slot of slots) {
+    const last = groups[groups.length - 1];
+    if (null !== slot.child && undefined !== last && last.child?.id === slot.child.id) {
+      last.weeks.push(slot.week);
+      last.endDate = slot.week.endDate;
+      continue;
+    }
+    groups.push({
+      child: slot.child,
+      weeks: [slot.week],
+      startDate: slot.week.startDate,
+      endDate: slot.week.endDate,
+      key: slot.child?.id ?? `new-${slot.week.monday}`,
+    });
+  }
+  return groups;
+}
+
 /** Une fenêtre de vacances telle que le front la LIT dans les données servies (P2-40). */
 export interface HolidayWindow {
   label: string;
