@@ -405,7 +405,9 @@ final class PeriodPlanBirthTest extends WebTestCase
     {
         [$user, $club] = $this->createClubWithSeason();
         $entryA = $this->postPeriod($user, 'holiday', 'Toussaint');
-        $entryB = $this->postPeriod($user, 'closure', 'Gymnase en travaux');
+        // Fenêtres DISJOINTES depuis P2-38 PR2 : deux plans ne gouvernent jamais les mêmes
+        // dates. Le sujet du test reste le cloisonnement des réglages PAR PLAN.
+        $entryB = $this->postPeriodDated($user, 'closure', 'Gymnase en travaux', '2026-12-07', '2026-12-13');
         $this->adaptPeriod($user, $entryA);
         $this->adaptPeriod($user, $entryB);
         $planA = $this->planOf($club->getId(), $entryA);
@@ -544,13 +546,113 @@ final class PeriodPlanBirthTest extends WebTestCase
         );
     }
 
+    /** Le geste « Adapter » : POST /api/schedule_plans — rend l'id du plan (201). */
+    /**
+     * NR P2-38 PR2 — UNE SEULE PLANIFICATION PAR FENÊTRE (règle fondateur 2026-08-18 :
+     * « un overlay d'incident ne touche jamais une semaine de vacances »).
+     *
+     * Deux plans de période ne doivent jamais gouverner les mêmes dates : le second geste est
+     * refusé en 409, en NOMMANT le plan déjà en place et en donnant l'entrée où aller. Rien
+     * n'est supprimé ni rétréci — le geste destructif reste au gestionnaire.
+     */
+    public function testAdaptIsRefusedWhenAnotherPlanAlreadyGovernsTheWindow(): void
+    {
+        [$user] = $this->createClubWithSeason();
+        $vacances = $this->postPeriodDated($user, 'holiday', 'Vacances de Toussaint', '2026-10-19', '2026-11-02');
+        $this->adaptPeriod($user, $vacances);
+
+        // Un incident qui MORD sur la fenêtre déjà planifiée (recouvrement PARTIEL, pas une
+        // inclusion : la garde doit voir les deux).
+        $incident = $this->postPeriodDated($user, 'closure', 'Gymnase indisponible', '2026-10-26', '2026-11-10');
+        $this->adaptPeriodExpecting(409, $user, $incident);
+
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        self::assertSame('window_already_planned', $payload['code'] ?? null, 'le refus porte son code machine');
+        self::assertSame($vacances, $payload['entryId'] ?? null, 'le front doit pouvoir NAVIGUER vers le planning en place');
+        self::assertIsString($payload['error'] ?? null);
+        self::assertStringContainsString('Vacances de Toussaint', $payload['error'], 'le message NOMME le planning existant');
+    }
+
+    /** Le refus vaut dans les DEUX sens : une semaine ne naît pas dans une fenêtre déjà adaptée. */
+    public function testWeekChildIsRefusedInsideAWindowAlreadyPlannedByAnotherPeriod(): void
+    {
+        [$user] = $this->createClubWithSeason();
+        $incident = $this->postPeriodDated($user, 'closure', 'Gymnase indisponible', '2026-10-26', '2026-11-10');
+        $this->adaptPeriod($user, $incident);
+
+        $mere = $this->postPeriodDated($user, 'holiday', 'Vacances de Toussaint', '2026-10-19', '2026-11-02');
+        $this->client->request('POST', '/api/calendar_entries', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'kind' => 'period',
+            'title' => 'Semaine du 26 octobre',
+            'startDate' => '2026-10-26',
+            'endDate' => '2026-11-01',
+            'periodType' => 'holiday',
+            'parentEntryId' => $mere,
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(409);
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        self::assertSame('window_already_planned', $payload['code'] ?? null);
+        self::assertSame($incident, $payload['entryId'] ?? null);
+    }
+
+    /**
+     * TÉMOIN 1 — le chevauchement LÉGITIME : une semaine vit forcément DANS sa mère. Une garde
+     * trop large casserait le découpage en semaines, qui existe et sert.
+     */
+    public function testAWeekInsideItsOwnMotherIsNeverRefused(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $mere = $this->postPeriodDated($user, 'holiday', 'Vacances de Toussaint', '2026-10-19', '2026-11-02');
+        $this->adaptPeriod($user, $mere); // plan-bloc : la découpe le supprimera
+
+        $semaine = $this->postWeekChild($user, $mere, '2026-10-19', '2026-10-25');
+
+        self::assertInstanceOf(SchedulePlan::class, $this->planOf($club->getId(), $semaine), 'la semaine naît AVEC son plan');
+        self::assertNull($this->planOf($club->getId(), $mere), 'la découpe emporte le plan-bloc de la mère');
+    }
+
+    /** TÉMOIN 2 — deux périodes qui ne se recoupent pas s'adaptent toutes les deux. */
+    public function testTwoDisjointPeriodsBothGetTheirPlan(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $octobre = $this->postPeriodDated($user, 'holiday', 'Vacances de Toussaint', '2026-10-19', '2026-11-02');
+        $decembre = $this->postPeriodDated($user, 'holiday', 'Vacances de Noël', '2026-12-19', '2027-01-04');
+
+        $this->adaptPeriod($user, $octobre);
+        $this->adaptPeriod($user, $decembre);
+
+        self::assertInstanceOf(SchedulePlan::class, $this->planOf($club->getId(), $octobre));
+        self::assertInstanceOf(SchedulePlan::class, $this->planOf($club->getId(), $decembre));
+    }
+
+    /**
+     * TÉMOIN 3 — le FAIT reste libre. Déclarer une indisponibilité PAR-DESSUS une période déjà
+     * planifiée doit passer : c'est le PLAN d'adaptation qu'on borne, jamais la vérité sur le
+     * gymnase (et depuis P2-38 PR1, cette fermeture s'applique quand même au plan qui recoupe
+     * ses dates).
+     */
+    public function testDeclaringAClosureOverAPlannedWindowStaysFree(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $vacances = $this->postPeriodDated($user, 'holiday', 'Vacances de Toussaint', '2026-10-19', '2026-11-02');
+        $this->adaptPeriod($user, $vacances);
+
+        $incident = $this->postPeriodDated($user, 'closure', 'Gymnase indisponible', '2026-10-26', '2026-11-10');
+
+        self::assertNull($this->planOf($club->getId(), $incident), 'déclarer n’adapte pas — et surtout, déclarer n’est jamais refusé');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
     }
 
-    /** Le geste « Adapter » : POST /api/schedule_plans — rend l'id du plan (201). */
     private function adaptPeriod(User $user, string $entryId, int $expected = 201): string
     {
         $this->client->request('POST', '/api/schedule_plans', [], [], $this->authHeaders($user) + [
@@ -631,6 +733,27 @@ final class PeriodPlanBirthTest extends WebTestCase
         self::assertIsArray($items);
 
         return array_values($items);
+    }
+
+    /** Une période aux dates CHOISIES — la garde d'unicité de fenêtre se teste sur des bornes. */
+    private function postPeriodDated(User $user, string $periodType, string $title, string $start, string $end): string
+    {
+        $this->client->request('POST', '/api/calendar_entries', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'kind' => 'period',
+            'title' => $title,
+            'startDate' => $start,
+            'endDate' => $end,
+            'periodType' => $periodType,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
+
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        self::assertIsString($payload['id']);
+
+        return $payload['id'];
     }
 
     private function postPeriod(User $user, string $periodType, string $title): string

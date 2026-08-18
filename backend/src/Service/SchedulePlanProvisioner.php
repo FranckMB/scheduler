@@ -625,6 +625,17 @@ final class SchedulePlanProvisioner
         $this->copySeasonalSlotRows($schedulePlanId, (string) $row['club_id'], (string) $row['season_id'], $venueId);
     }
 
+    /**
+     * Le repère daté d'une fenêtre, en clair — SOURCE UNIQUE réutilisée par la garde d'unicité
+     * de fenêtre (P2-38 : nommer la fenêtre du plan déjà en place dans le 409). Délègue au même
+     * {@see windowSuffix} que les noms de plan, pour que « du 20 octobre au 2 novembre » se lise
+     * partout à l'identique.
+     */
+    public function windowLabel(DateTimeImmutable $start, DateTimeImmutable $end): string
+    {
+        return $this->windowSuffix($start, $end);
+    }
+
     /** Inv. 9 : seuls closure/holiday portent un plan. Source unique du mapping. */
     private function periodPlanType(?string $periodType): ?SchedulePlanType
     {

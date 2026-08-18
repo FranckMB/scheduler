@@ -83,7 +83,8 @@ Ce qu'il faut retenir en toute session :
 `Security/ClubQuotaTest` (caps métier PAR CLUB, les 3 routes de solve) ·
 `Security/SuperAdminAccessTest` (frontière SA0) ·
 `Security/EngagedTeamGuardTest` (périmètre engagé) ·
-`Security/PeriodPlanBirthTest` (naissance du plan — ADR-0002) ·
+`Security/PeriodPlanBirthTest` (naissance du plan — ADR-0002 ; depuis P2-38, garde aussi le refus
+409 `window_already_planned` dans les deux sens quand deux plans de période se chevauchent) ·
 `Security/SeasonVersionUniquenessTest` (socle en vigueur unique) ·
 `Security/SeasonPlanInForceTest` (SocleGuard, défense en profondeur) ·
 `Security/PeriodGatePayloadParityTest` (gate pré-solve == payload) ·
