@@ -2,6 +2,7 @@ import { HTTPError } from "ky";
 
 import { api } from "@/shared/api/client";
 import { collection, collectionAll } from "@/shared/api/collection";
+import { sortVenuesByName } from "@/shared/lib/venueOrder";
 
 export type Gender = "M" | "F" | "MIXTE";
 
@@ -151,7 +152,7 @@ export interface SlotPayload {
   schedulePlanId?: string | null;
 }
 
-export const listVenues = (): Promise<Venue[]> => collectionAll<Venue>("venues");
+export const listVenues = async (): Promise<Venue[]> => sortVenuesByName(await collectionAll<Venue>("venues"));
 export const listVenueSlots = (): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots");
 /** #8 — la grille que la période POSSÈDE (copie du modèle de saison, plus rien d'additif). */
 export const listPeriodSlots = (schedulePlanId: string): Promise<VenueTrainingSlot[]> => collectionAll<VenueTrainingSlot>("venue_training_slots", { schedulePlanId });
