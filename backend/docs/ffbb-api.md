@@ -65,7 +65,7 @@ Body:
 > l'index ne connaît pas (correspondant, président, salle principale — vérifié champ par champ) ont été
 > **retirés de l'écran et de `/api/me`** : pas d'automatique possible + saisie manuelle non voulue = pas
 > de champ (les colonnes restent en base, données intactes). Cadrage complet :
-> [`api-ffbb-completion-club.md`](../../specs/evolution/api-ffbb-completion-club.md).
+> [`api-ffbb-completion-club.md`](../../docs/archive/api-ffbb-completion-club.md).
 
 Champs **ignorés** : `offresPratiques`, `labellisation`, `engagements_*`, `_geo`, `type_association`, `*ClubPro`, `saison`, `dateAffiliation`.
 
@@ -131,4 +131,4 @@ pour un code club réel — rien à récupérer, l'import FBI reste le chemin.
 La reconnaissance P2-19 a mesuré ce que la même clé `key_ms` rend **en plus** — les index restants
 (salles, organismes détaillés…) restent non exploités.
 
-→ Inventaire complet, route par route, avec les mesures : [`../../specs/evolution/api-ffbb-app-reconnaissance.md`](../../specs/evolution/api-ffbb-app-reconnaissance.md)
+→ Inventaire complet, route par route, avec les mesures : [`../../docs/archive/api-ffbb-app-reconnaissance.md`](../../docs/archive/api-ffbb-app-reconnaissance.md)

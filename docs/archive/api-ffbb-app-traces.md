@@ -1,5 +1,7 @@
 # Traces brutes de la reconnaissance API FFBB — P2-19
 
+> 🗄 **ARCHIVÉ le 2026-08-18** (déplacé de `specs/evolution/`) : les lots qu'il nourrissait (P2-19, P2-18, P2-20, fiche club lecture seule) sont tous soldés — trace dans `specs/courantes/etat-des-lieux.md`. Reste une **référence de mesure figée** (club réel `ARA0069036`), coûteuse à refaire — citée par `ffbb-appariement-source-de-verite.md` et `backend/docs/ffbb-api.md`.
+
 > Annexe de [`api-ffbb-app-reconnaissance.md`](api-ffbb-app-reconnaissance.md), qui porte l'analyse.
 > **Ici, la sortie réelle de l'API**, capturée le **2026-08-02** pour le club **`ARA0069036`** (B Charpennes Croix Luizet).
 > Elle existe pour qu'on puisse relire chaque route sans refaire les appels, et vérifier ce que le rapport affirme.
