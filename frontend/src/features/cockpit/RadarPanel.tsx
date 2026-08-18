@@ -12,7 +12,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
 import { useCreateVenueClosure, useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
-import { clampRangeToSeason, daysUntil, frDateShort, isActionableWeek, periodWeeksToAdjust, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { clampRangeToSeason, daysUntil, frDateShort, groupCoverageSlots, isActionableWeek, periodWeeksToAdjust, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
 import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { unavailabilitiesToAlert } from "./lib/venueUnavailabilityRadar";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
@@ -501,18 +501,23 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
               ) : null
             }
           >
-            {slots.map(({ week, child }) => {
+            {/* P2-41 — groupé PAR ENFANT : un enfant-segment sur N semaines = UNE puce (son
+                libellé « du X au Y »). Une semaine MANQUANTE (child null) reste individuelle — le
+                geste « + créer » est ponctuel, à la semaine (décision ferme). Le compte
+                « N/M couvertes » ci-dessus reste au niveau semaine (calculé sur `slots`). */}
+            {groupCoverageSlots(slots).map((group) => {
+              const child = group.child;
               if (null === child) {
                 return (
                   <Button
-                    key={`new-${week.monday}`}
+                    key={group.key}
                     variant="outline"
                     size="sm"
                     disabled={createWeekChildren.isPending || !socleValidated}
                     title={lockTitle}
-                    onClick={() => createOneWeek(m, week)}
+                    onClick={() => createOneWeek(m, group.weeks[0])}
                   >
-                    {`+ sem. du ${frDateShort(week.startDate)}`}
+                    {`+ sem. du ${frDateShort(group.startDate)}`}
                   </Button>
                 );
               }
@@ -521,6 +526,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
               // Gating uniquement sur une semaine À CRÉER/DÉMARRER (« à faire ») :
               // « Voir » (validée) et « en cours » (reprise) restent actifs.
               const chipLocked = null === activeId && !wip && !socleValidated;
+              const span = group.weeks.length > 1 ? ` au ${frDateShort(child.endDate)}` : "";
               return (
                 <Button
                   key={child.id}
@@ -530,7 +536,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                   title={chipLocked ? lockTitle : undefined}
                   onClick={() => (null !== activeId ? viewOverlay(activeId) : adapt(child.id))}
                 >
-                  {`sem. du ${frDateShort(child.startDate)} ${null !== activeId ? "✅" : wip ? "· en cours" : "· à faire"}`}
+                  {`sem. du ${frDateShort(child.startDate)}${span} ${null !== activeId ? "✅" : wip ? "· en cours" : "· à faire"}`}
                 </Button>
               );
             })}
@@ -710,7 +716,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           excludedRanges={pendingOffer.excludedRanges}
           state={pendingPickerState}
           busy={createHoliday.isPending || createClosureFromUnavailability.isPending || createWeekChildren.isPending}
-          onPickWeeks={(weeks) => pickWeeksPending(pendingMother, weeks)}
+          onPickSegments={(segments) => pickWeeksPending(pendingMother, segments)}
           onAdaptWhole={() => adaptWholePending(pendingMother)}
           onRecordOnly={() => recordPendingOnly(pendingMother)}
           onClose={() => { resetWindowConflict(); setPendingMother(null); }}
@@ -729,7 +735,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           busy={createWeekChildren.isPending}
           state={pickerState}
           block={{ ...blockInfo, deleting: blockDeleting, deleteFailed: blockDeleteFailed, onDeleteVersions: deleteBlockVersionsAndSplit }}
-          onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
+          onPickSegments={(segments) => pickWeeks(pickerFor, segments)}
           onAdaptWhole={() => {
             setPickerFor(null);
             void adaptBlock(pickerFor.id);

@@ -13,7 +13,7 @@ import { toast } from "@/shared/stores/toastStore";
 import type { CalendarEntry, PublicHoliday, SchedulePlan, SchoolHoliday } from "./api";
 import { useWorkingSeason } from "@/features/auth/queries";
 
-import { clampRangeToSeason, frDateShort, periodWeeksToAdjust, todayISO, weeksCovering } from "./lib/date";
+import { clampRangeToSeason, frDateShort, groupCoverageSlots, periodWeeksToAdjust, todayISO, weeksCovering } from "./lib/date";
 import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WindowAlreadyPlannedNotice } from "./WindowAlreadyPlannedNotice";
@@ -276,7 +276,7 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
           busy={createWeekChildren.isPending}
           state={pickerState}
           block={{ ...blockInfo, deleting: blockDeleting, deleteFailed: blockDeleteFailed, onDeleteVersions: deleteBlockVersionsAndSplit }}
-          onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
+          onPickSegments={(segments) => pickWeeks(pickerFor, segments)}
           onAdaptWhole={() => {
             setPickerFor(null);
             void adaptBlock(pickerFor.id);
@@ -400,29 +400,34 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
         // que la carte radar (validée → Voir, sinon → Reprendre, MANQUANTE → +
         // créer — une semaine décochée reste planifiable, revue #262).
         <div className="flex flex-col items-end gap-1">
-          {(null === workingSeason
-            ? weekChildren.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c as CalendarEntry | null }))
-            : (() => {
-              // Revue C F1 : toutes les semaines calendaires ; on garde celle qui porte
-              // un enfant EXISTANT (toujours visible) OU qui est OFFERTE à la création
-              // (periodAdjustWeeks écarte la semaine partielle d'une vacance Ven/Sam/Dim).
-              const offeredMondays = new Set(periodWeeksToAdjust(entry.startDate, entry.endDate, workingSeason, "holiday", today).map((w) => w.monday));
-              return weeksCovering(entry.startDate, entry.endDate, workingSeason)
-                .map((week) => ({ week, child: (weekChildren.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null) as CalendarEntry | null }))
-                .filter(({ week, child }) => null !== child || offeredMondays.has(week.monday));
-            })()
-          ).map(({ week, child }) => {
+          {/* P2-41 — groupé PAR ENFANT (parité radar) : un enfant-segment sur N semaines = UNE
+              puce (« du X au Y »). Une semaine MANQUANTE (child null) reste individuelle → « + créer »
+              ponctuel, à la semaine. */}
+          {groupCoverageSlots(
+            null === workingSeason
+              ? weekChildren.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c as CalendarEntry | null }))
+              : (() => {
+                // Revue C F1 : toutes les semaines calendaires ; on garde celle qui porte
+                // un enfant EXISTANT (toujours visible) OU qui est OFFERTE à la création
+                // (periodAdjustWeeks écarte la semaine partielle d'une vacance Ven/Sam/Dim).
+                const offeredMondays = new Set(periodWeeksToAdjust(entry.startDate, entry.endDate, workingSeason, "holiday", today).map((w) => w.monday));
+                return weeksCovering(entry.startDate, entry.endDate, workingSeason)
+                  .map((week) => ({ week, child: (weekChildren.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null) as CalendarEntry | null }))
+                  .filter(({ week, child }) => null !== child || offeredMondays.has(week.monday));
+              })(),
+          ).map((group) => {
+            const child = group.child;
             if (null === child) {
               return (
                 <Button
-                  key={`new-${week.monday}`}
+                  key={group.key}
                   variant="outline"
                   size="sm"
                   disabled={createWeekChildren.isPending || !socleValidated}
                   title={lockTitle}
-                  onClick={() => createOneWeek(entry, week)}
+                  onClick={() => createOneWeek(entry, group.weeks[0])}
                 >
-                  {`+ sem. du ${frDateShort(week.startDate)}`}
+                  {`+ sem. du ${frDateShort(group.startDate)}`}
                 </Button>
               );
             }
@@ -433,6 +438,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
             // Gating : seule une semaine À DÉMARRER est bloquée socle non validé —
             // « Voir » et « en cours » (reprise) restent actifs (parité radar).
             const chipLocked = null === chosen && !wip && !socleValidated;
+            const span = group.weeks.length > 1 ? ` au ${frDateShort(child.endDate)}` : "";
             return (
               <span key={child.id} className="flex items-center gap-1">
                 <Button
@@ -442,9 +448,9 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
                   title={chipLocked ? lockTitle : undefined}
                   onClick={() => (null !== chosen ? viewOverlay(chosen) : adapt(child.id))}
                 >
-                  {`sem. du ${frDateShort(child.startDate)} ${null !== chosen ? "✅" : wip ? "· en cours" : "· à faire"}`}
+                  {`sem. du ${frDateShort(child.startDate)}${span} ${null !== chosen ? "✅" : wip ? "· en cours" : "· à faire"}`}
                 </Button>
-                {/* Suppression de LA semaine — dans l'encart, le plan est attaché aux
+                {/* Suppression de L'enfant (segment) — dans l'encart, le plan est attaché aux
                     vacances (fondateur 2026-07-24 ; la ligne séparée a disparu). */}
                 <button
                   type="button"
@@ -543,7 +549,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           endDate={pendingMother.endDate}
           weeks={periodWeeksToAdjust(pendingMother.startDate, pendingMother.endDate, workingSeason, pendingMother.periodType, today)}
           busy={createHoliday.isPending || createWeekChildren.isPending}
-          onPickWeeks={(weeks) => pickWeeksPending(pendingMother, weeks)}
+          onPickSegments={(segments) => pickWeeksPending(pendingMother, segments)}
           onAdaptWhole={() => adaptWholePending(pendingMother)}
           onClose={() => { resetWindowConflict(); setPendingMother(null); }}
           conflict={windowConflict}
@@ -560,7 +566,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           busy={createWeekChildren.isPending}
           state={pickerState}
           block={{ ...blockInfo, deleting: blockDeleting, deleteFailed: blockDeleteFailed, onDeleteVersions: deleteBlockVersionsAndSplit }}
-          onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
+          onPickSegments={(segments) => pickWeeks(pickerFor, segments)}
           onAdaptWhole={() => {
             setPickerFor(null);
             void adaptBlock(pickerFor.id);
