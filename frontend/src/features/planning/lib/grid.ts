@@ -117,7 +117,8 @@ export function resourceKeysForSlot(slot: Slot, viewMode: ViewMode, lookups: Loo
   if ("gymnase" === viewMode) {
     return [slot.venueId];
   }
-  if ("equipe" === viewMode) {
+  // P3-20 : la vue « club » (matrice équipes × jours) se filtre PAR ÉQUIPE, comme « equipe ».
+  if ("equipe" === viewMode || "club" === viewMode) {
     return [slot.teamId];
   }
   // P2-33 : en vue « jour », la ressource FILTRABLE est le jour ISO (les colonnes de grille,
@@ -164,6 +165,7 @@ function resourceLabel(id: string, viewMode: ViewMode, lookups: Lookups): string
 
     return "" === long ? "?" : long;
   }
+  // Repli = l'équipe (vues « equipe » et « club », dont l'axe filtrable est le même).
   return lookups.teams.get(id)?.name ?? "Équipe ?";
 }
 
@@ -184,7 +186,8 @@ function resourceComparator(viewMode: ViewMode, lookups: Lookups): (a: GridResou
   if ("jour" === viewMode) {
     return (a, b) => Number(a.id) - Number(b.id);
   }
-  if ("equipe" !== viewMode) {
+  // « equipe » ET « club » rangent par RANG (même axe : l'équipe) ; tout le reste, alphabétique.
+  if ("equipe" !== viewMode && "club" !== viewMode) {
     return (a, b) => compareNamesFr(a.label, b.label);
   }
   return (a, b) => {
@@ -218,7 +221,7 @@ export interface GridResourceGroup {
  */
 export function availableResourceGroups(slots: Slot[], viewMode: ViewMode, lookups: Lookups, tiers: TierLike[]): GridResourceGroup[] {
   const flat = availableResources(slots, viewMode, lookups);
-  if ("equipe" !== viewMode || 0 === tiers.length || 0 === flat.length) {
+  if (("equipe" !== viewMode && "club" !== viewMode) || 0 === tiers.length || 0 === flat.length) {
     return [{ label: null, resources: flat }];
   }
   const byId = new Map(flat.map((r) => [r.id, r]));

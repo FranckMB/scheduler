@@ -5,12 +5,16 @@ import { Button } from "@/shared/components/ui/button";
 import { Select } from "@/shared/components/ui/select";
 import { useCredits } from "@/shared/credits/useCredits";
 
-import type { Venue } from "./api";
+import type { ExportView, Venue } from "./api";
 import { type ExportFormat, useScheduleExport } from "./queries";
 
 /**
  * Export the currently viewed schedule to PDF / PNG / Excel, scoped to every gym
  * or a single one (venue-only, per product). Each export fits one landscape page.
+ *
+ * P3-20 — deux réglages, pas un : le **périmètre** (quels gymnases) et la **vue de l'image**
+ * (grille jours × gymnases, ou « par club » équipes × jours). La vue ne concerne que le PNG :
+ * le PDF et l'Excel portent déjà les deux (section 2 / 2ᵉ feuille), une image non.
  */
 export function ExportMenu({
   scheduleId,
@@ -33,6 +37,10 @@ export function ExportMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<string>(""); // "" = all venues
+  // P3-20 — la vue que l'IMAGE photographie. Le PDF et l'Excel portent DÉJÀ les deux vues
+  // (grille + matrice équipes × jours) : seul le PNG doit choisir, puisqu'une image ne peut
+  // pas être feuilletée. Défaut « grid » = le comportement historique, à l'octet près.
+  const [view, setView] = useState<ExportView>("grid");
   const rootRef = useRef<HTMLDivElement>(null);
   const { run, busy } = useScheduleExport(scheduleId, exportName);
   // §4bis pt 2 — les TROIS exports (PDF/PNG/Excel) consomment 1 crédit : chaque
@@ -94,6 +102,14 @@ export function ExportMenu({
               </option>
             ))}
           </Select>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="export-view">
+            Vue de l'image
+          </label>
+          <Select id="export-view" aria-label="Vue de l'image exportée" className="mb-1 h-9 w-full" value={view} onChange={(e) => setView(e.target.value as ExportView)}>
+            <option value="grid">Grille (jours × gymnases)</option>
+            <option value="club">Par club (équipes × jours)</option>
+          </Select>
+          <p className="mb-3 text-xs leading-tight text-muted-foreground">Le PDF et l'Excel contiennent les deux vues.</p>
           <div className="flex flex-col gap-1">
             {formats.map(({ key, label, icon: Icon }) => (
               <button
@@ -101,7 +117,7 @@ export function ExportMenu({
                 type="button"
                 role="menuitem"
                 disabled={null !== busy || creditsBlocked}
-                onClick={() => void run(key, venueId)}
+                onClick={() => void run(key, venueId, view)}
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-50"
               >
                 {busy === key ? <Loader2 className="size-4 animate-spin" /> : <Icon className="size-4" />}

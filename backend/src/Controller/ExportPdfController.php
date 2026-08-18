@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Entity\Schedule;
+use App\Export\ExportView;
 use App\Message\ExportPdfMessage;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
@@ -46,6 +48,12 @@ final class ExportPdfController extends AbstractController
         // club+season; foreign/unknown → 404 via the shared trait).
         $venueId = $this->resolveExportVenueId($this->entityManager, $this->requestStack, $schedule);
 
+        // P3-20 — vue demandée pour l'IMAGE : « grid » (défaut, comportement historique) ou
+        // « club » (la matrice équipes × jours, jusque-là réservée au PDF/XLS). Liste BLANCHE
+        // stricte : cette valeur atteint un nom de fichier, elle ne peut donc pas être libre —
+        // une valeur inconnue est un 400 explicite, jamais un repli silencieux.
+        $view = $this->resolveExportView();
+
         $schedule->setPdfExportStatus('pending');
         $this->entityManager->flush();
 
@@ -54,9 +62,21 @@ final class ExportPdfController extends AbstractController
                 scheduleId: $schedule->getId(),
                 clubId: $schedule->getClubId(),
                 venueId: $venueId,
+                view: $view,
             ),
         );
 
         return $this->json(['message' => 'PDF export queued.'], Response::HTTP_ACCEPTED);
+    }
+
+    /** @return ExportView::GRID|ExportView::CLUB */
+    private function resolveExportView(): string
+    {
+        $request = $this->requestStack->getCurrentRequest();
+        if (!$request instanceof Request) {
+            return ExportView::GRID;
+        }
+
+        return ExportView::fromRequestBody(json_decode($request->getContent() ?: '{}', true));
     }
 }

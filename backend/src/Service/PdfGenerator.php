@@ -8,6 +8,7 @@ use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Export\ExportEmptyWindow;
+use App\Export\ExportView;
 use App\Export\ScheduleExportData;
 use App\Export\ScheduleExportDataProvider;
 use App\Storage\LogoStorage;
@@ -70,17 +71,29 @@ class PdfGenerator
     /**
      * @return array{pdf: string, png: ?string}
      */
-    public function generate(Schedule $schedule, ?string $venueId = null): array
+    public function generate(Schedule $schedule, ?string $venueId = null, ?string $view = null): array
     {
         $data = $this->exportData->load($schedule, $venueId);
-        // A "team × day" matrix is appended as a second section only on a genuinely
-        // multi-venue export (see hasMatrix). That is exactly when the PDF becomes
-        // multi-page, so the two facts are the same flag: it drives both the HTML
-        // and the worker's multi-section paging.
-        $multiSection = $this->hasMatrix($data);
+        // P3-20 — la vue « club » (matrice équipes × jours) est ce que le gestionnaire veut
+        // EN IMAGE. On ne fabrique pas une 5ᵉ mise en forme pour ça : c'est la section 2 déjà
+        // rendue ici qui est photographiée, le worker choisissant simplement quelle section
+        // il garde à l'écran avant le screenshot.
+        $clubView = ExportView::CLUB === $view;
+        // A "team × day" matrix is appended as a second section on a genuinely multi-venue
+        // export (see hasMatrix) — OR whenever the club view is explicitly requested: un
+        // gestionnaire qui demande cette vue doit la recevoir, même sur un club mono-gymnase
+        // où elle n'apparaîtrait pas d'elle-même. That is exactly when the PDF becomes
+        // multi-page, so the two facts are the same flag: it drives both the HTML and the
+        // worker's multi-section paging.
+        $multiSection = $this->hasMatrix($data) || $clubView;
         $html = $this->buildHtml($schedule, $data, $venueId, $multiSection);
-        // Scope suffix keeps the all-venues and per-venue exports as distinct files.
+        // Scope suffix keeps the all-venues and per-venue exports as distinct files. Le jeton
+        // de VUE compte autant : la page qui attend l'export compare ce suffixe pour ne pas
+        // saisir le fichier d'une autre demande — sans lui, une image « par club » servirait
+        // la grille rendue une seconde plus tôt. La vue « grid » ne porte AUCUN jeton : son
+        // nom de fichier reste byte-identique à l'historique.
         $scope = null === $venueId ? 'all' : substr($venueId, 0, 8);
+        $scope .= $clubView ? '-club' : '';
         $pdfFilename = \sprintf('schedule-%s-%s.pdf', $schedule->getId(), $scope);
         $pngFilename = \sprintf('schedule-%s-%s.png', $schedule->getId(), $scope);
 
@@ -90,7 +103,7 @@ class PdfGenerator
         // the worker, and forced a world-writable chmod).
 
         try {
-            $this->callWorker($html, $pdfFilename, $multiSection);
+            $this->callWorker($html, $pdfFilename, $multiSection, $clubView);
         } catch (TransportExceptionInterface $e) {
             throw new RuntimeException('PDF worker unreachable: ' . $e->getMessage(), $e->getCode(), $e);
         }
@@ -103,7 +116,7 @@ class PdfGenerator
         ];
     }
 
-    private function callWorker(string $html, string $filename, bool $multiSection = false): void
+    private function callWorker(string $html, string $filename, bool $multiSection = false, bool $clubView = false): void
     {
         // Single-section exports keep the EXACT historical payload (no extra key), so the
         // worker takes its unchanged one-page path and produces the same file as before.
@@ -115,6 +128,11 @@ class PdfGenerator
         ];
         if ($multiSection) {
             $json['multiSection'] = true;
+        }
+        // P3-20 — quelle section l'IMAGE photographie. Absent = la grille (page 1), le
+        // comportement historique : un worker qui ignorerait la clé rendrait le même PNG.
+        if ($clubView) {
+            $json['pngSection'] = 'matrix';
         }
 
         $response = $this->httpClient->request('POST', self::PDF_WORKER_URL, [

@@ -165,8 +165,16 @@ export interface Schedule {
 export type ExportVenueScope = string | null;
 
 /** Queue a PDF+PNG export (async worker). Poll the schedule for pdfExportStatus/Url. */
-export const exportSchedulePdf = (id: string, venueId: ExportVenueScope): Promise<unknown> =>
-  api.post(`schedules/${id}/export-pdf`, { json: null === venueId ? {} : { venueId } }).json();
+/** P3-20 — quelle VUE l'image PNG photographie. « grid » = la grille (défaut historique). */
+export type ExportView = "grid" | "club";
+
+export const exportSchedulePdf = (id: string, venueId: ExportVenueScope, view: ExportView = "grid"): Promise<unknown> =>
+  api
+    .post(`schedules/${id}/export-pdf`, {
+      // Le corps reste VIDE dans le cas par défaut : mêmes octets qu'avant P3-20.
+      json: { ...(null === venueId ? {} : { venueId }), ...("club" === view ? { view } : {}) },
+    })
+    .json();
 
 /** Download the schedule as an .xlsx (synchronous stream). Returns the blob. */
 export const exportScheduleXlsx = async (id: string, venueId: ExportVenueScope): Promise<Blob> =>

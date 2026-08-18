@@ -226,7 +226,7 @@ export function useScheduleExport(scheduleId: string | null, exportName: string 
   const [busy, setBusy] = useState<ExportFormat | null>(null);
 
   const run = useCallback(
-    async (format: ExportFormat, venueId: planningApi.ExportVenueScope): Promise<void> => {
+    async (format: ExportFormat, venueId: planningApi.ExportVenueScope, view: planningApi.ExportView = "grid"): Promise<void> => {
       if (null === scheduleId || null !== busy) {
         return;
       }
@@ -238,12 +238,14 @@ export function useScheduleExport(scheduleId: string | null, exportName: string 
           download(URL.createObjectURL(blob), `${fileBase}.xlsx`);
           return;
         }
-        await planningApi.exportSchedulePdf(scheduleId, venueId);
+        await planningApi.exportSchedulePdf(scheduleId, venueId, view);
         // The worker writes the file path with a scope suffix (-all / -<venueId8>);
         // the schedule row carries a single, shared export URL, so only download
         // once it matches THIS request's scope — guards against another in-flight
         // export (other tab/scope) whose 'completed' + URL we'd otherwise grab.
-        const scopeToken = `-${null === venueId ? "all" : venueId.slice(0, 8)}.${format}`;
+        // P3-20 : le jeton porte AUSSI la vue — sans lui, une demande « par club » saisirait
+        // l'image de grille qu'un autre onglet vient de terminer.
+        const scopeToken = `-${null === venueId ? "all" : venueId.slice(0, 8)}${"club" === view ? "-club" : ""}.${format}`;
         const deadline = Date.now() + EXPORT_TIMEOUT_MS;
         for (;;) {
           await sleep(EXPORT_POLL_MS);

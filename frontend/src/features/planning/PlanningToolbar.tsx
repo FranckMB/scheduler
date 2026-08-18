@@ -15,6 +15,8 @@ const VIEWS: { key: ViewMode; label: string }[] = [
   { key: "equipe", label: "Par équipe" },
   // P2-33 : 4e vue — tous les gymnases, filtrés sur le/les jour(s) de la semaine.
   { key: "jour", label: "Par jour" },
+  // P3-20 : 5e vue — la matrice équipes × jours, jusque-là réservée aux exports PDF/XLS.
+  { key: "club", label: "Par club" },
 ];
 
 interface PlanningToolbarProps {
