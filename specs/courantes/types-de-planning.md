@@ -1,6 +1,6 @@
 # Les 3 types de planning — référence produit
 
-Last verified @ 2026-08-08 (statut posé ce jour ; gabarits de noms par défaut recalés P4-41/P2-20 ; contenu recalé depuis par P3-14/P3-15 a/b — ordre des listes de doléances et coach qui encadre vraiment l'équipe)
+Last verified @ 2026-08-18 (aucun changement de FOND : seuls les chemins vers la doc frontend sont recalés après son déplacement vers `frontend/docs/`) ; précédemment : 2026-08-08 (statut posé ce jour ; gabarits de noms par défaut recalés P4-41/P2-20 ; contenu recalé depuis par P3-14/P3-15 a/b — ordre des listes de doléances et coach qui encadre vraiment l'équipe)
 
 > **Rôle de ce document** : la trace durable du modèle métier des plannings, validé avec le
 > fondateur le 2026-07-12. C'est LA référence à consulter avant tout travail sur la

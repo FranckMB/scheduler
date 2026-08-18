@@ -1,6 +1,6 @@
 # Living Specs System
 
-Last verified @ 2026-08-08 (règle « initiales figées » précisée — modifier ≠ archiver une pièce source, audit DOC-30 ; règle des deux fichiers re-vérifiée contre roadmap/état-des-lieux)
+Last verified @ 2026-08-18 (frontière de `courantes` réécrite — un doc qui décrit UNE zone appartient à sa zone, tenue par `DocPlacementTest` ; l'inventaire des fichiers perd les 6 documents partis en `frontend/docs`, `backend/docs`, `engine/docs`) ; précédemment : 2026-08-08 (règle « initiales figées » précisée — modifier ≠ archiver une pièce source, audit DOC-30 ; règle des deux fichiers re-vérifiée contre roadmap/état-des-lieux)
 
 ## 3-Tier Structure
 
