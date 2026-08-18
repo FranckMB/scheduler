@@ -1,5 +1,40 @@
+import { HTTPError } from "ky";
+
 import { api } from "@/shared/api/client";
 import { collectionAll } from "@/shared/api/collection";
+
+/**
+ * ADR-0002 inv. 4 (P2-38 PR3) — un AUTRE plan de période gouverne déjà tout ou partie de la
+ * fenêtre du plan qui naît (409 `window_already_planned`). Le serveur NOMME déjà la période en
+ * place, sa fenêtre et les issues (modifier / supprimer / découper en semaines) dans `message` —
+ * le front l'AFFICHE tel quel (règle d'or : il ne réécrit pas une règle métier). `conflictingEntryId`
+ * = l'entrée du planning en conflit, de quoi l'ouvrir « en place ».
+ */
+export class WindowAlreadyPlannedError extends Error {
+  readonly conflictingEntryId: string;
+
+  constructor(message: string, conflictingEntryId: string) {
+    super(message);
+    this.name = "WindowAlreadyPlannedError";
+    this.conflictingEntryId = conflictingEntryId;
+  }
+}
+
+/**
+ * Traduit un 409 `window_already_planned` en {@link WindowAlreadyPlannedError} ; tout autre échec
+ * → `null` (le pipeline normal reprend). Lecture par `error.data` (ky 2.x consomme lui-même le
+ * corps ; re-lire `error.response` throw « body stream already read ») — patron `planning/api.ts`.
+ */
+export function asWindowAlreadyPlanned(error: unknown): WindowAlreadyPlannedError | null {
+  if (error instanceof HTTPError && 409 === error.response.status) {
+    const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; error?: string; entryId?: string };
+    if ("window_already_planned" === body.code && "string" === typeof body.entryId) {
+      return new WindowAlreadyPlannedError(body.error ?? "Ces dates sont déjà planifiées par un autre planning.", body.entryId);
+    }
+  }
+
+  return null;
+}
 
 export type CalendarEntryKind = "event" | "period";
 export type CalendarEntryPeriodType = "closure" | "holiday" | "cutoff" | "mutualisation" | "custom";
@@ -61,8 +96,17 @@ export const getAllSchedulePlans = async (): Promise<SchedulePlan[]> => collecti
  * closure/holiday naît de ce POST — plus jamais de la création de l'entrée.
  * Idempotent : la période a déjà son plan → il est rendu tel quel (201).
  */
-export const createSchedulePlan = (calendarEntryId: string): Promise<SchedulePlan> =>
-  api.post("schedule_plans", { json: { calendarEntryId } }).json();
+export const createSchedulePlan = async (calendarEntryId: string): Promise<SchedulePlan> => {
+  try {
+    return await api.post("schedule_plans", { json: { calendarEntryId } }).json<SchedulePlan>();
+  } catch (error) {
+    const conflict = asWindowAlreadyPlanned(error);
+    if (null !== conflict) {
+      throw conflict;
+    }
+    throw error;
+  }
+};
 
 export interface SchoolHoliday {
   id: string;

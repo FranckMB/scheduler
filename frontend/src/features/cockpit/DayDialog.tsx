@@ -11,11 +11,13 @@ import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, PublicHoliday, SchedulePlan, SchoolHoliday } from "./api";
+import { WindowAlreadyPlannedError } from "./api";
 import { useWorkingSeason } from "@/features/auth/queries";
 
 import { clampRangeToSeason, frDateShort, periodWeeksToAdjust, todayISO, weeksCovering } from "./lib/date";
 import { seasonLockTitle, useSocleValidated } from "./lib/socle";
-import { useWeekAdapt } from "./lib/useWeekAdapt";
+import { useWeekAdapt, type WindowConflict } from "./lib/useWeekAdapt";
+import { WindowAlreadyPlannedNotice } from "./WindowAlreadyPlannedNotice";
 import { entryIcon, entryLabel, holidayIcon, isHolidayAnchor, isHolidayWeekChild } from "./lib/markers";
 import { useCalendarEntries, useCreateCutoff, useCreateEvent, useCreatePeriodPlan, useCreateVenueClosure, useDeleteEntry, useSchedulePlanForEntry, useSchedulePlans } from "./queries";
 import { WeekPickerDialog } from "./WeekPickerDialog";
@@ -83,12 +85,20 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
   // (sans lui, usePeriodAnchor attendrait à l'infini). Les semaines-enfants, nées
   // avec leur plan, gardent adjust() nu.
   const createPeriodPlan = useCreatePeriodPlan();
+  // P2-38 — un « Adapter » refusé pour chevauchement s'affiche ICI comme une proposition (le
+  // serveur nomme la période en place), plutôt qu'en toast générique du filet mensongèrement
+  // attribué au réseau. Réinitialisé à chaque tentative.
+  const [windowConflict, setWindowConflict] = useState<WindowConflict | null>(null);
   const adaptRoot = async (entryId: string) => {
+    setWindowConflict(null);
     try {
       await createPeriodPlan.mutateAsync(entryId);
       adjust(entryId);
-    } catch {
-      /* relevé par le filet global des mutations (queryClient.ts) */
+    } catch (error) {
+      // Refus de chevauchement → proposition affichée ; tout autre échec → filet global.
+      if (error instanceof WindowAlreadyPlannedError) {
+        setWindowConflict({ message: error.message, entryId: error.conflictingEntryId });
+      }
     }
   };
   const consult = (scheduleId: string) => {
@@ -143,6 +153,8 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
       ) : null}
 
       {holiday ? <HolidayBlock holiday={holiday} entries={entries} onClose={onClose} /> : null}
+
+      {null !== windowConflict ? <WindowAlreadyPlannedNotice message={windowConflict.message} onOpen={() => adjust(windowConflict.entryId)} /> : null}
 
       {deletable.length > 0 ? (
         <ul className="space-y-2">
@@ -337,7 +349,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   // Flux de découpage partagé avec le radar ; ici, plusieurs semaines créées →
   // referme le DayDialog (le radar reprend le relais via ses cartes). Le chemin
   // `pending` matérialise la mère vacances SEULEMENT à la confirmation du picker.
-  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek } = useWeekAdapt(adapt);
+  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek, windowConflict, resetWindowConflict } = useWeekAdapt(adapt);
   // Même règle que le radar : période couvrant PLUSIEURS semaines calendaires →
   // choix des semaines (7 jours à cheval jeu→mer = 2 semaines, l'exemple
   // fondateur) ; sinon direct. Données pas résolues (schedules OU enfants) →
@@ -481,6 +493,12 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
         </div>
       )}
 
+      {/* Refus de chevauchement (P2-38) hors picker (adapter un bloc / créer une semaine) : la
+          proposition vit dans l'encart. Le picker ouvert, elle vit DANS le picker (ci-dessous). */}
+      {null !== windowConflict && null === pickerFor && null === pendingHoliday ? (
+        <WindowAlreadyPlannedNotice message={windowConflict.message} onOpen={() => adapt(windowConflict.entryId)} />
+      ) : null}
+
       <ConfirmDialog
         open={null !== weekToDelete}
         title={`Supprimer « ${weekToDelete?.title ?? ""} » ?`}
@@ -506,7 +524,9 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           busy={createHoliday.isPending || createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeksPending(pendingHoliday, weeks)}
           onAdaptWhole={() => adaptWholePending(pendingHoliday)}
-          onClose={() => setPendingHoliday(null)}
+          onClose={() => { resetWindowConflict(); setPendingHoliday(null); }}
+          conflict={windowConflict}
+          onOpenConflict={adapt}
         />
       ) : null}
 
@@ -522,7 +542,9 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
             setPickerFor(null);
             void adaptBlock(pickerFor.id);
           }}
-          onClose={() => setPickerFor(null)}
+          onClose={() => { resetWindowConflict(); setPickerFor(null); }}
+          conflict={windowConflict}
+          onOpenConflict={adapt}
         />
       ) : null}
     </div>

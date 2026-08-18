@@ -113,8 +113,10 @@ Schedule (= Version)                    ← existant, recentré
    `App\Service\PeriodWindowUniquenessGuard` refuse en 409 (`window_already_planned`) tout
    plan de période dont la fenêtre recoupe celle d'un AUTRE plan de période, aux deux seuls
    sites de naissance (le geste « Adapter » et la création d'une entrée-semaine qui naît avec
-   son plan), dans les deux sens. Détail : lot P2-38 ci-dessous. **La PR3 (front — surfacer le
-   refus dans les dialogues du cockpit) reste ouverte** (`specs/evolution/roadmap.md` P2-38).
+   son plan), dans les deux sens. **La PR3 (front, livrée 2026-08-18) ferme le lot** : le refus
+   409 s'affiche à l'endroit du geste (`WindowAlreadyPlannedNotice`, reprenant tel quel le
+   message serveur) au lieu du toast générique du filet global — détail : lot P2-38 ci-dessous,
+   **P2-38 intégralement livré (3 PR), l'item a quitté `specs/evolution/roadmap.md`**.
 5. **Les réglages de période s'accrochent au Plan** (pas au déclencheur calendrier) :
    coches équipes (`TeamPeriodOverride`), contraintes gardées/enlevées
    (`ConstraintPeriodOverride`), sa grille de gymnases (`VenueTrainingSlot` scopé période —
@@ -629,8 +631,8 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   `UnprocessableEntityHttpException` (pas `ValidationException` d'API Platform, qui ne remonte pas
   son message dans le corps de la réponse — même patron que `AssertsSchedulePlanExistsTrait`,
   déjà en vigueur). Zéro migration, zéro moteur, `CONTRACT_VERSION` inchangé.
-- **Lot P2-38 — une fermeture de gymnase est un FAIT TRANSVERSAL (PR1 + PR2 backend livrées
-  2026-08-18 ; PR3 front reste ouverte, roadmap)**, hors de
+- **Lot P2-38 — une fermeture de gymnase est un FAIT TRANSVERSAL (PR1 + PR2 backend + PR3 front,
+  LOT SOLDÉ, les 3 PR livrées 2026-08-18 — l'item a quitté `specs/evolution/roadmap.md`)**, hors de
   la numérotation A→D (post-ADR), une couche au-dessus de P2-37 : P2-37 dérivait correctement le
   fermé-total d'un plan à partir des SEULES datées de SA PROPRE entrée porteuse
   (`CalendarEntry::datedConstraintSourceId`) — insuffisant dès qu'une fermeture est déclarée sur
@@ -690,8 +692,22 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   deux sens, recouvrement PARTIEL nommé, et trois témoins (semaine dans sa mère jamais refusée,
   deux périodes disjointes s'adaptent toutes les deux, déclarer une fermeture par-dessus une
   période planifiée reste libre). Zéro migration, `engine/**` non touché, `CONTRACT_VERSION`
-  inchangé. **PR3 (front)** reste ouverte (transformer le refus en proposition dans les dialogues
-  du cockpit, roadmap P2-38).
+  inchangé.
+
+  **PR3 — front (livrée 2026-08-18) ferme le lot.** Le refus 409 s'affiche désormais **à
+  l'endroit du geste** — `WindowAlreadyPlannedNotice`, monté dans `DayDialog` (racine sans plan,
+  bloc vacances hors picker), `RadarPanel` (même hook partagé) et `WeekPickerDialog` (dans le
+  picker) — au lieu d'être avalé par le filet global des mutations et remplacé par un toast
+  générique. `cockpit/api.ts` traduit le 409 structuré en `WindowAlreadyPlannedError` typée ; le
+  **message serveur est repris tel quel** (il nomme déjà la période en place, sa fenêtre, les
+  trois issues) — le front n'en redérive rien (règle d'or, `frontend/AGENTS.md`). Un raccourci
+  « Ouvrir le planning en place » navigue vers l'`entryId` reçu ; **aucun bouton de suppression**
+  — le geste destructif garde sa maison (`DeletePlanningButton`). Le hook `useWeekAdapt`
+  (et `useCreatePeriodPlan`/`useCreateWeekChildren`) possède son feedback (patron
+  `ownSlotEditFeedback`, `planning/queries.ts`) : il tait ce refus typé, tout autre échec
+  continue de remplacer le toast du filet global. Détail : `specs/courantes/etat-des-lieux.md`
+  (trace datée), `specs/courantes/accueil-cockpit-temporel.md` §5bis. **P2-38 est intégralement
+  livré (3 PR), l'item a quitté `specs/evolution/roadmap.md`.**
 
 ### Note de nommage (résolution de collision)
 

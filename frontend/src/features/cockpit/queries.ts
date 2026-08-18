@@ -7,7 +7,24 @@ import { toast } from "@/shared/stores/toastStore";
 
 import * as cockpitApi from "./api";
 import type { CalendarEntry, CreateClosurePayload, CreateCutoffPayload, CreateEventPayload } from "./api";
+import { asWindowAlreadyPlanned, WindowAlreadyPlannedError } from "./api";
 import { frDateShort } from "./lib/date";
+
+/**
+ * ADR-0002 inv. 4 (P2-38 PR3) — LE HOOK POSSÈDE SON FEEDBACK (patron `ownSlotEditFeedback`,
+ * planning/queries). Le filet global `MutationCache.onError` (queryClient) ne toaste QUE les
+ * mutations SANS onError de NIVEAU HOOK — un onError `mutate()` ne le désarme pas. Sans ce
+ * onError-ci, un refus « une seule planification par fenêtre » tomberait dans le filet et
+ * deviendrait « Problème de connexion » (mensonger). Ici on TAIT le refus (le dialogue l'affiche
+ * comme une proposition) et on ne parle que d'un vrai échec transport — remplaçant le filet,
+ * jamais le doublant.
+ */
+function ownWindowConflictFeedback(error: unknown): void {
+  if (error instanceof WindowAlreadyPlannedError) {
+    return; // le dialogue du geste affiche le refus (WindowAlreadyPlannedNotice)
+  }
+  void errorMessage(error).then((message) => toast.error(message));
+}
 
 export function useCalendarEntries(from: string, to: string, enabled = true) {
   return useQuery({
@@ -212,6 +229,9 @@ export function useCreatePeriodPlan() {
   return useMutation({
     mutationFn: (calendarEntryId: string) => cockpitApi.createSchedulePlan(calendarEntryId),
     onSuccess: () => invalidateEntries(queryClient),
+    // Le hook possède son feedback : un refus de chevauchement (P2-38) est TU ici (le dialogue
+    // l'affiche), tout autre échec remplace le toast du filet global.
+    onError: ownWindowConflictFeedback,
   });
 }
 
@@ -358,6 +378,13 @@ export function useCreateWeekChildren() {
           if (await isAlreadySplit422(error)) {
             continue;
           }
+          // Une semaine dont la fenêtre est déjà gouvernée par un AUTRE plan (409, P2-38) : on
+          // ABANDONNE le lot et on remonte le refus typé — le dialogue le propose (ouvrir /
+          // supprimer / découper), plutôt que de compter un échec muet noyé dans failedCount.
+          const conflict = asWindowAlreadyPlanned(error);
+          if (null !== conflict) {
+            throw conflict;
+          }
           failedCount += 1;
           firstHardError = firstHardError ?? error;
         }
@@ -368,6 +395,9 @@ export function useCreateWeekChildren() {
       return { created, failedCount };
     },
     onSettled: () => invalidateEntries(queryClient),
+    // Le hook possède son feedback : le refus de chevauchement (P2-38) est TU (le picker/l'encart
+    // l'affiche), tout autre échec remplace le toast du filet global.
+    onError: ownWindowConflictFeedback,
   });
 }
 

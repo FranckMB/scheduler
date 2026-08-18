@@ -5,6 +5,8 @@ import { Modal } from "@/shared/components/ui/modal";
 import { Spinner } from "@/shared/components/ui/spinner";
 
 import { frDateShort, isWithin, type WeekWindow } from "./lib/date";
+import type { WindowConflict } from "./lib/useWeekAdapt";
+import { WindowAlreadyPlannedNotice } from "./WindowAlreadyPlannedNotice";
 
 interface WeekPickerDialogProps {
   /** Libellé de la période mère (matérialisée OU vacance pas encore créée — P2-5 E1). */
@@ -20,6 +22,10 @@ interface WeekPickerDialogProps {
   /** Chemin « d'un bloc » : adapter toute la période sur son plan (comportement historique). */
   onAdaptWhole: () => void;
   onClose: () => void;
+  /** P2-38 — un refus « une seule planification par fenêtre » sur la création de semaines. */
+  conflict?: WindowConflict | null;
+  /** Ouvrir le planning en conflit (navigation vers son entrée). */
+  onOpenConflict?: (entryId: string) => void;
 }
 
 /**
@@ -29,7 +35,7 @@ interface WeekPickerDialogProps {
  * (toutes ici, par construction de weeksCovering). Le chemin « d'un bloc » reste
  * offert (décision fondateur — période courte ou gestionnaire pressé).
  */
-export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, onPickWeeks, onAdaptWhole, onClose }: WeekPickerDialogProps) {
+export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, onPickWeeks, onAdaptWhole, onClose, conflict, onOpenConflict }: WeekPickerDialogProps) {
   const [checked, setChecked] = useState<Set<string>>(new Set(weeks.map((w) => w.monday)));
 
   const toggle = (monday: string) =>
@@ -66,6 +72,11 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, onPic
           );
         })}
       </ul>
+      {conflict && onOpenConflict ? (
+        <div className="mt-4">
+          <WindowAlreadyPlannedNotice message={conflict.message} onOpen={() => onOpenConflict(conflict.entryId)} />
+        </div>
+      ) : null}
       <div className="mt-6 flex flex-wrap justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onAdaptWhole} disabled={busy}>
           Adapter toute la période d'un bloc
