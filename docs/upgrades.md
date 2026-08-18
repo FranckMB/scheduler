@@ -7,6 +7,43 @@
 
 ## 2026-08-18 — lot Dependabot
 
+### Groupe frontend-npm — 7 montées (PR #617)
+
+**C'est quoi** : sept briques de la partie visible, toutes en version mineure ou corrective.
+**Sentry** est le mouchard qui nous prévient quand un écran plante chez un club, avec la trace de
+ce qui s'est passé. **Lucide** est la bibliothèque d'icônes. **ESLint** et **typescript-eslint**
+sont les relecteurs automatiques qui refusent le code douteux avant qu'il n'arrive en production.
+**jest-dom**, **@types/node** et **eslint-plugin-react-refresh** sont de l'outillage d'atelier :
+ils n'existent que chez nous, jamais chez les clubs.
+
+**Ça apporte** : des correctifs, pas des nouveautés — Sentry 10.69 → **10.70**, Lucide 1.29 →
+**1.31**, ESLint 10.8.0 → **10.8.1**, typescript-eslint 8.66 → **8.67**, plus trois patchs
+d'outillage. Aucune rupture, rien à réapprendre. L'intérêt de les prendre au fil de l'eau est
+précisément d'éviter le saut de version douloureux qu'on subit quand on laisse traîner.
+
+**Adapté chez nous** : **rien**. Suite complète verte (176 fichiers, 1538 tests) **et build de
+production vérifié en plus des tests** — Sentry et Lucide finissent tous deux dans le fichier que
+les navigateurs téléchargent, or un test vert ne prouve pas qu'on sait encore fabriquer ce fichier.
+
+### actions/cache 4.3.0 → 6.1.0 (PR #616)
+
+**C'est quoi** : une brique de notre chaîne d'intégration — celle qui **met en cache** des choses
+lourdes entre deux exécutions, pour ne pas les retélécharger à chaque fois. On s'en sert à deux
+endroits : le navigateur Chromium des tests de bout en bout, et la base de données de failles de
+sécurité du scanner. Elle ne tourne que sur GitHub, jamais chez les clubs.
+
+**Ça apporte** : deux versions majeures d'un coup, mais dont les ruptures sont **internes** —
+réécriture du module en ESM, mise à jour des dépendances, meilleure gestion d'un cache en lecture
+seule. Les réglages qu'on utilise (`path`, `key`, `restore-keys`) et le signal qu'on lit
+(`cache-hit`, qui nous dit s'il faut retélécharger Chromium) sont l'interface stable : ils n'ont
+pas bougé. Rester sur une majeure abandonnée d'une action GitHub, c'est prendre le risque qu'elle
+cesse un jour de fonctionner sans préavis.
+
+**Adapté chez nous** : **rien** — deux lignes de version épinglée. ⚠ Une montée d'action ne se
+teste pas en local : **c'est la CI de la PR qui EST le test**, et elle exerce bien les deux usages
+(cache Chromium dans les tests de bout en bout, cache du scanner dans le job sécurité). Les 14
+contrôles sont passés.
+
 ### Rector 2.5.9 → 2.6.1 (PR #615)
 
 **C'est quoi** : **Rector** est un outil qui relit le code PHP et le réécrit tout seul pour le
