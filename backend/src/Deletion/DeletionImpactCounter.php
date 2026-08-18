@@ -10,6 +10,7 @@ use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\Venue;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\FixtureStatus;
 use App\Service\DisablesTenantFilters;
 use App\Service\TeamEngagementGuard;
@@ -83,6 +84,34 @@ final readonly class DeletionImpactCounter
             slotField: 'coachId',
             declaredFixtures: 0,
         );
+    }
+
+    /**
+     * Le CRÉNEAU de disponibilité. Deux différences avec les trois entités saison-scopées :
+     * sa cible porte le triplet et la couche (ses enfants ne citent jamais son id), et il n'a
+     * ni séance « en vigueur » propre ni match — le verrou HARD qu'il emporte est déjà une
+     * ligne d'impact à part entière, la nommer deux fois n'aiderait personne.
+     */
+    public function forSlot(VenueTrainingSlot $slot): DeletionImpact
+    {
+        $this->disableTenantFilters($this->entityManager);
+        $target = SlotDeletionTarget::of($slot);
+
+        /** @var list<array{key: string, count: int, one: string, many: string}> $lines */
+        $lines = [];
+        foreach (CascadePlan::forSlot() as $step) {
+            $label = $step->label();
+            if (null === $label) {
+                continue;
+            }
+            $count = $step->count($this->entityManager, $target);
+            if (0 === $count) {
+                continue;
+            }
+            $lines[] = ['key' => $label->key, 'count' => $count, 'one' => $label->one, 'many' => $label->many];
+        }
+
+        return new DeletionImpact(blocked: false, reason: null, lines: $lines, slotsInForce: 0, declaredFixtures: 0);
     }
 
     /**

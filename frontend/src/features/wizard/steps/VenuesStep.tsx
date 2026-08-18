@@ -104,7 +104,9 @@ export function ColorField({ venue, onApply }: { venue: Venue; onApply: (color: 
 function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTrainingSlot; canSplit: boolean; otherSlots: VenueTrainingSlot[]; onClose: () => void }) {
   const update = useUpdateSlot();
   const del = useDeleteSlot();
-  const { data: reservations = [] } = useReservations();
+  // P4-108 — cette collection n'était chargée dans CETTE modale que pour compter l'impact
+  // d'une suppression de créneau depuis le cache. Le serveur le fait, et lui voit aussi les
+  // verrous HARD que la réservation avait matérialisés.
   const [day, setDay] = useState(slot.dayOfWeek);
   const [time, setTime] = useState(hhmm(slot.startTime));
   const [duration, setDuration] = useState(slot.durationMinutes);
@@ -112,7 +114,7 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
   const [groupLabel, setGroupLabel] = useState(slot.groupLabel ?? "");
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const reservationCount = reservations.filter((r) => r.venueId === slot.venueId && r.dayOfWeek === slot.dayOfWeek && hhmm(r.startTime) === hhmm(slot.startTime)).length;
+  const slotImpact = useDeletionImpact("slot", confirmDelete ? slot.id : null);
 
   const save = () => {
     // Minuit puis chevauchement — même foyer que la pose au clic (`slotPlacementError`),
@@ -198,7 +200,11 @@ function SlotEditor({ slot, canSplit, otherSlots, onClose }: { slot: VenueTraini
         open={confirmDelete}
         entityName={`créneau ${DAYS.find((d) => d.n === slot.dayOfWeek)?.label ?? ""} ${hhmm(slot.startTime)}`.trim()}
         affectsPeriodPlans
-        impacts={[{ count: reservationCount, one: "réservation d'équipe", many: "réservations d'équipe" }]}
+        // P4-108 : le serveur compte — l'écran ignorait les verrous HARD que la réservation
+        // avait matérialisés, or ils partent avec le créneau.
+        impact={slotImpact.data ?? undefined}
+        impactLoading={slotImpact.isPending && confirmDelete}
+        impactFailed={slotImpact.isError}
         onConfirm={() => {
           // Close only once the delete succeeds (same as save()): a rejected
           // write keeps the editor open instead of silently vanishing.

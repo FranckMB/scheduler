@@ -1,15 +1,6 @@
 import type { DeletionImpact } from "@/features/wizard/api";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 
-/** One linked-count line of the impact list ("2 créneaux réservés"). */
-export interface ImpactLine {
-  count: number;
-  /** Singular label (count === 1). */
-  one: string;
-  /** Plural label (count > 1). */
-  many: string;
-}
-
 interface DeleteConfirmProps {
   open: boolean;
   /** The thing being deleted, shown in the title + sentence (e.g. a team/coach/venue name). */
@@ -23,12 +14,6 @@ interface DeleteConfirmProps {
   impactLoading?: boolean;
   /** L'impact serveur n'a pas pu être lu : on le DIT, on ne prétend pas qu'il n'y a rien. */
   impactFailed?: boolean;
-  /**
-   * Lignes calculées LOCALEMENT — tolérées uniquement là où aucun impact serveur n'existe
-   * encore (suppression d'un CRÉNEAU de disponibilité, hors périmètre P3-16). Partout
-   * ailleurs, passer `impact` : compter côté écran, c'est ce que ce lot corrige.
-   */
-  impacts?: ImpactLine[];
   /**
    * The entity also owns reservations that can live in period plans (overlays):
    * the base-scope impact counts under-report those, so the permanence caution
@@ -64,18 +49,15 @@ export function DeleteConfirm({
   impact,
   impactLoading = false,
   impactFailed = false,
-  impacts = [],
   affectsPeriodPlans = false,
   confirmLabel = "Supprimer",
   onConfirm,
   onCancel,
 }: DeleteConfirmProps) {
-  const serverLines = impact?.lines ?? [];
-  const localLines = impacts.filter((line) => line.count > 0);
-  const lines = [
-    ...serverLines.map((line) => ({ count: line.count, one: line.one, many: line.many })),
-    ...localLines,
-  ];
+  // P4-108 — plus AUCUN compte local : les quatre gestes de suppression (salle, équipe,
+  // coach, créneau) lisent l'impact du serveur. La prop `impacts` a disparu avec son dernier
+  // appelant, pour qu'on ne puisse plus recompter ici par commodité.
+  const lines = impact?.lines ?? [];
   const blocked = true === impact?.blocked;
   const description = (
     <>

@@ -129,6 +129,13 @@ vi.mock("../queries", () => ({
   },
   useSetVenuePeriodMode: () => ({ mutate: setMode, isPending: false }),
   useUpdatePeriodSlot: () => ({ mutate: updateSlot, isPending: false }),
+  // P4-108 — l'impact d'une suppression de créneau vient du SERVEUR (il voit les verrous
+  // HARD que l'écran ne pouvait pas compter). Le mock rend l'épinglage de ce créneau.
+  useDeletionImpact: () => ({
+    data: { blocked: false, reason: null, lines: [{ key: "slot_reservation", count: 1, one: "réservation d'équipe", many: "réservations d'équipe" }], slotsInForce: 0, declaredFixtures: 0 },
+    isPending: false,
+    isError: false,
+  }),
   useClearVenuePeriodMode: () => ({ mutate: clearMode, isPending: false }),
   useResetVenuePeriodGrid: () => ({ mutate: resetGrid, isPending: false }),
   useClearVenuePeriodGrid: () => ({ mutate: clearGrid, isPending: false }),

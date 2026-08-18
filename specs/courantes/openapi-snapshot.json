@@ -7925,6 +7925,29 @@
                 "summary": "Impact of deleting this team, computed server-side"
             }
         },
+        "/api/venue_training_slots/{id}/deletion-impact": {
+            "get": {
+                "operationId": "getApiVenueTrainingSlotDeletionImpact",
+                "tags": [
+                    "Deletion"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "What deleting this availability slot would destroy \u2014 announced BEFORE confirmation. Its children never cite the slot id: reservations and the HARD locks they materialised attach by (venue, weekday, start time) AND by LAYER, so the counts are bounded to the slot own layer (season grid vs a period copy). Solver-chosen SOFT/NONE placements are results, never touched. Read-only."
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Slot belongs to another club"
+                    },
+                    "404": {
+                        "description": "Resource not found"
+                    }
+                },
+                "summary": "Impact of deleting this availability slot, computed server-side"
+            }
+        },
         "/api/venues/{id}/deletion-impact": {
             "get": {
                 "operationId": "getApiVenueDeletionImpact",

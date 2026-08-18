@@ -168,7 +168,7 @@ export const deleteVenue = (id: string): Promise<void> => api.delete(`venues/${i
  * vrai — il n'a chargé ici ni les matchs, ni les contraintes, ni les séances des autres
  * plannings. Le front AFFICHE désormais ce que le backend a compté (règle 🔴 maison).
  */
-export type DeletableKind = "venue" | "team" | "coach";
+export type DeletableKind = "venue" | "team" | "coach" | "slot";
 
 export interface DeletionImpactLine {
   key: string;
@@ -189,7 +189,7 @@ export interface DeletionImpact {
   declaredFixtures: number;
 }
 
-const DELETION_IMPACT_PATH: Record<DeletableKind, string> = { venue: "venues", team: "teams", coach: "coaches" };
+const DELETION_IMPACT_PATH: Record<DeletableKind, string> = { venue: "venues", team: "teams", coach: "coaches", slot: "venue_training_slots" };
 
 export const fetchDeletionImpact = (kind: DeletableKind, id: string): Promise<DeletionImpact> =>
   api.get(`${DELETION_IMPACT_PATH[kind]}/${id}/deletion-impact`).json<DeletionImpact>();
