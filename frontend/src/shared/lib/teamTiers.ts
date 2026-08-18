@@ -1,3 +1,5 @@
+import { compareNamesFr } from "@/shared/lib/nameOrder";
+
 // Single home for the priority-tier "découpage" S/A/B/C/D shared by the teams
 // step and every team selector. The order here is THE canonical team order:
 // tiers by importance (id asc, 1=S…5=D), then the manager's manual tierOrder,
@@ -49,7 +51,7 @@ export const ORPHAN_TIER_LABEL = "Autres";
  * list that needs the exact "Autres last" placement should use groupTeamsByTier.
  */
 export function compareTeamsByRank(a: TeamLike, b: TeamLike): number {
-  return a.priorityTierId - b.priorityTierId || a.tierOrder - b.tierOrder || a.name.localeCompare(b.name, "fr");
+  return a.priorityTierId - b.priorityTierId || a.tierOrder - b.tierOrder || compareNamesFr(a.name, b.name);
 }
 
 /** "S · Fanion" — the label of a tier group (optgroup / zone header). */
@@ -66,7 +68,7 @@ export const tierGroupLabel = (tier: TierLike | null): string =>
  */
 export function groupTeamsByTier<T extends TeamLike>(teams: T[], tiers: TierLike[]): TeamTierGroup<T>[] {
   const known = new Set(tiers.map((t) => t.id));
-  const byOrderThenName = (a: T, b: T) => a.tierOrder - b.tierOrder || a.name.localeCompare(b.name, "fr");
+  const byOrderThenName = (a: T, b: T) => a.tierOrder - b.tierOrder || compareNamesFr(a.name, b.name);
 
   const groups: TeamTierGroup<T>[] = tiers
     .filter((tier) => teams.some((t) => t.priorityTierId === tier.id))

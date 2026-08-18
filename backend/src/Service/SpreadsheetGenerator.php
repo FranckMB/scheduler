@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\Schedule;
 use App\Export\ScheduleExportData;
 use App\Export\ScheduleExportDataProvider;
+use App\Support\FrenchNameOrder;
 use DateInterval;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\StringValueBinder;
@@ -209,8 +210,10 @@ class SpreadsheetGenerator
             array_keys(ScheduleExportData::DAY_LABELS),
             static fn (int $d): bool => isset($daysUsed[$d]),
         ));
-        // Rows sorted by category then name, coherent with the on-screen order.
-        uasort($teams, static fn (array $a, array $b): int => [$a['category'], $a['name']] <=> [$b['category'], $b['name']]);
+        // Catégorie puis nom, en ordre FRANÇAIS (`FrenchNameOrder`) — le même que l'écran :
+        // un export ne doit jamais contredire la liste qu'on avait sous les yeux.
+        uasort($teams, static fn (array $a, array $b): int => FrenchNameOrder::compare($a['category'], $b['category'])
+            ?: FrenchNameOrder::compare($a['name'], $b['name']));
 
         $sheet = $spreadsheet->createSheet();
         $sheet->setTitle('Équipes × jours');

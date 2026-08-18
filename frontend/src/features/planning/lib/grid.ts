@@ -44,6 +44,7 @@ export function parseTimeToMinutes(time: string): number {
 import { formatMinutes, parseTime } from "@/shared/lib/time";
 import { coachFullName } from "@/shared/lib/coachName";
 import { assignLanes } from "@/shared/lib/gridLayout";
+import { compareNamesFr } from "@/shared/lib/nameOrder";
 
 export { formatMinutes };
 
@@ -184,14 +185,14 @@ function resourceComparator(viewMode: ViewMode, lookups: Lookups): (a: GridResou
     return (a, b) => Number(a.id) - Number(b.id);
   }
   if ("equipe" !== viewMode) {
-    return (a, b) => a.label.localeCompare(b.label, "fr");
+    return (a, b) => compareNamesFr(a.label, b.label);
   }
   return (a, b) => {
     const ta = lookups.teams.get(a.id);
     const tb = lookups.teams.get(b.id);
     // A team absent from the lookup (shouldn't happen) sorts last, by label.
     if (undefined === ta || undefined === tb) {
-      return (undefined === ta ? 1 : 0) - (undefined === tb ? 1 : 0) || a.label.localeCompare(b.label, "fr");
+      return (undefined === ta ? 1 : 0) - (undefined === tb ? 1 : 0) || compareNamesFr(a.label, b.label);
     }
     return compareTeamsByRank(ta, tb);
   };

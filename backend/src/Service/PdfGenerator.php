@@ -11,6 +11,7 @@ use App\Export\ExportEmptyWindow;
 use App\Export\ScheduleExportData;
 use App\Export\ScheduleExportDataProvider;
 use App\Storage\LogoStorage;
+use App\Support\FrenchNameOrder;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use finfo;
@@ -151,7 +152,7 @@ class PdfGenerator
         $columns = [];
         foreach ($present as $day => $venueIds) {
             $ids = array_keys($venueIds);
-            usort($ids, static fn (string $a, string $b): int => ($venues[$a]['name'] ?? '') <=> ($venues[$b]['name'] ?? ''));
+            usort($ids, static fn (string $a, string $b): int => FrenchNameOrder::compare($venues[$a]['name'] ?? '', $venues[$b]['name'] ?? ''));
             foreach ($ids as $vId) {
                 $columns[] = ['day' => $day, 'venueId' => $vId];
             }
@@ -468,7 +469,10 @@ class PdfGenerator
             array_keys(ScheduleExportData::DAY_LABELS),
             static fn (int $d): bool => isset($daysUsed[$d]),
         ));
-        uasort($teams, static fn (array $a, array $b): int => [$a['tierRank'], $a['tierOrder'], $a['name']] <=> [$b['tierRank'], $b['tierOrder'], $b['name']]);
+        // Rang, puis position dans le rang, puis le NOM — ce dernier en ordre français
+        // (`FrenchNameOrder`) : une équipe accentuée ne doit pas finir en bas de son groupe.
+        uasort($teams, static fn (array $a, array $b): int => [$a['tierRank'], $a['tierOrder']] <=> [$b['tierRank'], $b['tierOrder']]
+            ?: FrenchNameOrder::compare($a['name'], $b['name']));
 
         $colspan = 1 + \count($dayColumns);
         $head = '<tr><th class="team-col">Équipe</th>';

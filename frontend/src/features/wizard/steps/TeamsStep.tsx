@@ -20,6 +20,7 @@ import { orderedTeams, teamsOfTier } from "../lib/ranking";
 import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useReservations, useSharedTrainingGroups, useSportCategories, useUpdateTeam, useWizardCoachPlayers, useWizardTeamCoaches, useWizardTeams } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodTeams } from "./PeriodStructure";
+import { compareNamesFr } from "@/shared/lib/nameOrder";
 
 const GENDERS: { value: Gender | ""; label: string }[] = [
   { value: "", label: "—" },
@@ -211,7 +212,7 @@ function levelRank(level: TeamLevel | null): number {
 }
 
 function compareOn(column: SortColumn, a: Team, b: Team, categoryRank: Map<string, number>): number {
-  const byName = a.name.localeCompare(b.name, "fr");
+  const byName = compareNamesFr(a.name, b.name);
   switch (column) {
     case "name":
       return byName;

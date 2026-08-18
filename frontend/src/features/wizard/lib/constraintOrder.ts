@@ -3,6 +3,7 @@ import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { targetTagNames } from "@/shared/lib/tagTeamIds";
 
 import { AXIS_LABEL, groupTagsByAxis, KNOWN_AXES, tagLabel } from "./tagLabels";
+import { compareNamesFr } from "@/shared/lib/nameOrder";
 
 /** A grouped section of the constraint list: a header + its constraint rows. */
 export interface ConstraintSection {
@@ -101,7 +102,7 @@ export function groupConstraints(constraints: Constraint[], family: string, ctx:
     }
     const out = [...ctx.venues]
       .filter((v) => byVenue.has(v.id))
-      .sort((a, b) => a.name.localeCompare(b.name, "fr"))
+      .sort((a, b) => compareNamesFr(a.name, b.name))
       .map((v) => ({ key: `v:${v.id}`, label: ctx.venueName(v.id), items: byVenue.get(v.id) as Constraint[] }));
     // Venues referenced but absent from the list, then the venue-less remainder.
     [...byVenue.keys()].filter((id) => !ctx.venues.some((v) => v.id === id)).forEach((id) => out.push({ key: `v:${id}`, label: ctx.venueName(id), items: byVenue.get(id) as Constraint[] }));

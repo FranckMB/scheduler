@@ -23,6 +23,7 @@ import { DAYS } from "../lib/days";
 import { dayLabelLong } from "@/shared/lib/days";
 import { useCreateConstraint, useDeleteConstraint, usePriorityTiers, useUpdateConstraint, useWizardCoachPlayers, useWizardCoaches, useWizardConstraints, useWizardTeamTagAssignments, useWizardTeamTags, useWizardTeams, useActiveTeams, useActiveVenues, useWizardVenues, useReservations } from "../queries";
 import { useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
+import { sortByName } from "@/shared/lib/nameOrder";
 import { useWizardStore } from "../store";
 import { PeriodConstraints } from "./PeriodStructure";
 import { ReservationPanel } from "./ReservationPanel";
@@ -889,7 +890,7 @@ export function ConstraintsStep() {
               className="h-8"
               wrapperClassName="w-48"
               placeholder="— gymnase —"
-              venues={[...editVenues].sort((a, b) => a.name.localeCompare(b.name, "fr")).map((v) => ({ id: v.id, name: v.name + (disabledIds.has(v.id) ? " (désactivé pour cette période)" : ""), color: v.color }))}
+              venues={sortByName(editVenues).map((v) => ({ id: v.id, name: v.name + (disabledIds.has(v.id) ? " (désactivé pour cette période)" : ""), color: v.color }))}
               value={venueId}
               onChange={(e) => setVenueId(e.target.value)}
             />
