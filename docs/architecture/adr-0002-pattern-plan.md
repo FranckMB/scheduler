@@ -771,6 +771,12 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   `specs/courantes/types-de-planning.md` (règle transverse recalée), `specs/evolution/roadmap.md`
   (P2-41 resserré sur le picker).
 
+  **PR-C livrée (2026-08-19), le lot P2-41 se solde.** `WeekPickerDialog` propose désormais les
+  segments aux ruptures géométriques, précochés, avec scission et fusion (y compris par-dessus une
+  rupture), et la phrase pédagogique sur le sur-ferme décrite ci-dessus — le geste front annoncé
+  « pas encore livré » ci-dessus est livré. L'item a quitté `specs/evolution/roadmap.md`. Détail :
+  `specs/courantes/etat-des-lieux.md` §3 (trace datée).
+
 ### Note de nommage (résolution de collision)
 
 Le concept est « le Plan » dans tout ce document, mais l'entité technique s'appelle

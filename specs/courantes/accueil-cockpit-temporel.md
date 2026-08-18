@@ -1,11 +1,17 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-19 (recalé — vérification du 18 au soir, commit passé minuit : **P2-41 PR-B backend livrée, l'item RESTE ouvert
+Last verified @ 2026-08-19 (recalé — **P2-41 PR-C frontend livrée, le lot P2-41 SE SOLDE (PR-B +
+PR-C), retiré de la roadmap** — §5bis recale le choix des semaines : `WeekPickerDialog` propose
+désormais des SEGMENTS précochés, scindables et fusionnables (`segmentsFromOffer`, `lib/date.ts`),
+serveur et écran alignés — re-vérifié contre `frontend/src/features/cockpit/lib/date.ts`,
+`frontend/src/features/cockpit/WeekPickerDialog.tsx`, `frontend/src/features/cockpit/queries.ts`,
+`frontend/src/features/cockpit/RadarPanel.tsx`, `frontend/src/features/cockpit/DayDialog.tsx`).
+Précédemment : 2026-08-18 (recalé — vérification du 18 au soir, commit passé minuit : **P2-41 PR-B backend livrée, l'item RESTE ouvert
 pour le picker** — §5bis note que le serveur accepte désormais les SEGMENTS (bloc de semaines
 pleines et contiguës comme un seul enfant/un seul plan, ADR-0002) alors que `WeekPickerDialog` ne
 les propose pas encore — re-vérifié contre `backend/src/State/Processor/CalendarEntryStateProcessor.php`
 et `frontend/src/features/cockpit/WeekPickerDialog.tsx` (comportement écran
-inchangé). Précédemment ce même jour : **P2-40 livré — le picker de semaines EXCLUT les
+inchangé)). Précédemment ce même jour : **P2-40 livré — le picker de semaines EXCLUT les
 semaines gouvernées par des vacances, retiré de la roadmap** — §5bis gagne le détail : fonctions
 pures `holidayWindows`/`closureWeeksOffer` (`lib/date.ts`), le fait `holidayCovered` de
 `decideWeekAdapt` (retire le chemin « d'un bloc », ouvre toujours le picker), l'état `holiday` de
@@ -464,15 +470,23 @@ l'horloge. Le **serveur** garde l'heure réelle (P4-16 reste ouverte pour lui).
   en plus un **« Adapter »** directement dans la modale (même action que le radar : crée la période
   de vacances si absente puis ouvre le wizard en mode période ; « Voir le planning » si l'overlay
   existe déjà) — pas besoin de passer par le radar.
-  - Si la période couvre **plusieurs semaines calendaires**, un **choix des semaines**
-    (`WeekPickerDialog`) s'interpose avant le wizard : chaque semaine cochée devient une entrée
-    **enfant** (`parentEntryId`) avec **son propre plan** (P2-5 E1) ; une seule semaine → wizard
-    direct. Même règle partout où le geste existe, pour ne pas offrir deux comportements au même
-    geste. ⚠ **Vrai côté ÉCRAN seulement (2026-08-18) : le SERVEUR accepte déjà les SEGMENTS**
-    (P2-41 PR-B, [ADR-0002](../../docs/architecture/adr-0002-pattern-plan.md) — un bloc de
-    semaines calendaires pleines et contiguës comme UN seul enfant/UN seul plan, la semaine
-    simple restant le segment de taille 1) ; `WeekPickerDialog` ne PROPOSE pas encore ce choix,
-    chaque semaine cochée reste un enfant séparé — PR-C, pas encore livrée.
+  - Si la période couvre **plusieurs semaines calendaires**, un **choix des SEGMENTS**
+    (`WeekPickerDialog`) s'interpose avant le wizard : chaque **segment** coché devient une entrée
+    **enfant** (`parentEntryId`) avec **son propre plan** (P2-5 E1, P2-41) ; une seule semaine →
+    wizard direct. Même règle partout où le geste existe, pour ne pas offrir deux comportements au
+    même geste. **Le SERVEUR et l'ÉCRAN sont alignés depuis P2-41 PR-C (2026-08-19)** :
+    un segment est un bloc de semaines calendaires pleines et contiguës (lundi→dimanche, clamp
+    saison), la semaine simple restant le segment de taille 1
+    ([ADR-0002](../../docs/architecture/adr-0002-pattern-plan.md)). `WeekPickerDialog` propose des
+    segments **précochés**, découpés aux ruptures GÉOMÉTRIQUES de l'offre (`segmentsFromOffer`,
+    `lib/date.ts` — semaine d'entame/fin partielle de l'événement, discontinuité de l'offre :
+    exclusion vacances P2-40 ou filtre temporel), avec deux gestes nommés : **scinder** (déplier un
+    segment en semaines) et **fusionner** (assembler deux segments adjacents dans l'offre, y
+    compris par-dessus une rupture — le serveur ne borne que contiguïté + enveloppe). Un segment
+    multi-semaines porte une phrase pédagogique (présentation, pas décision) sur le sur-ferme du
+    solveur si ses semaines diffèrent. La carte de couverture (radar, `DayDialog`) regroupe les
+    créneaux par enfant (`groupCoverageSlots`) — une puce par segment plutôt qu'une par semaine ; la
+    puce « + créer » d'une semaine manquante reste, elle, à la semaine.
   - **La décision d'ouvrir ce picker (P2-36, 2026-08-18)** vit dans une seule fonction pure,
     `decideWeekAdapt` (`lib/useWeekAdapt.ts`) — le radar et le DayDialog la dupliquaient avec des
     entrées différentes, corriger un seul côté garantissait un écart, et le défaut qu'elle ferme :
