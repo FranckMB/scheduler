@@ -30,7 +30,7 @@ final class HolidaySeeder
         private readonly EntityManagerInterface $entityManager,
         private readonly SchoolHolidayPeriodRepository $schoolRepository,
         private readonly PublicHolidayRepository $publicRepository,
-        #[Autowire('%kernel.project_dir%')]
+        #[Autowire(param: 'kernel.project_dir')]
         private readonly string $projectDir,
     ) {}
 

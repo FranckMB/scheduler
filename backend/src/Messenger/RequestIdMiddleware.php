@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\Messenger;
 
 use App\Service\RequestIdContext;
+
+use function Sentry\configureScope;
+
 use Sentry\State\Scope;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Middleware\MiddlewareInterface;
@@ -59,7 +62,7 @@ final readonly class RequestIdMiddleware implements MiddlewareInterface
     /** Inerte quand le DSN Sentry est vide (SDK non initialisé → no-op). */
     private function tagSentry(string $requestId): void
     {
-        \Sentry\configureScope(static function (Scope $scope) use ($requestId): void {
+        configureScope(static function (Scope $scope) use ($requestId): void {
             $scope->setTag('request_id', $requestId);
         });
     }

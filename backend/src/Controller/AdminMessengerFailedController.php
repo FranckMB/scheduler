@@ -31,9 +31,9 @@ final readonly class AdminMessengerFailedController
     public function __construct(
         #[Autowire(service: 'messenger.transport.failed')]
         private TransportInterface $failedTransport,
-        #[Autowire('%env(REDIS_URL)%')]
+        #[Autowire(env: 'REDIS_URL')]
         private string $redisUrl,
-        #[Autowire('%env(MESSENGER_FAILURE_TRANSPORT_DSN)%')]
+        #[Autowire(env: 'MESSENGER_FAILURE_TRANSPORT_DSN')]
         private string $failedDsn,
     ) {}
 

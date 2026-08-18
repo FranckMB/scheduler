@@ -5,6 +5,52 @@
 > l'upgrade apporte, et ce qu'il a fallu adapter chez nous. But : comprendre les mises à jour,
 > pas les subir. Ordre antichronologique.
 
+## 2026-08-18 — lot Dependabot
+
+### Rector 2.5.9 → 2.6.1 (PR #615)
+
+**C'est quoi** : **Rector** est un outil qui relit le code PHP et le réécrit tout seul pour le
+mettre au goût du jour — passer d'une vieille façon d'écrire à celle que recommande la version
+actuelle de PHP ou de Symfony. Chez nous il ne se contente pas de proposer : **son style FAIT
+convention** et la CI refuse de passer si le code s'en écarte. Il ne tourne jamais chez les
+clubs — c'est un outil d'atelier, pas une brique du produit.
+
+**Ça apporte** : une version mineure, mais qui embarque une **nouvelle règle** — et une nouvelle
+règle Rector, chez nous, veut dire du travail immédiat : le gardien de style se met à refuser du
+code qui passait la veille. Mieux vaut le prendre maintenant, sur dix fichiers connus, que dans six
+mois sur cinquante.
+
+**Adapté chez nous** : **10 fichiers**. La règle `ParamAndEnvAttributeRector` remplace l'écriture
+par gabarit de texte par une écriture nommée, pour les valeurs que Symfony injecte dans nos
+services :
+
+```php
+#[Autowire('%env(REDIS_URL)%')]   →   #[Autowire(env: 'REDIS_URL')]
+#[Autowire('%kernel.debug%')]     →   #[Autowire(param: 'kernel.debug')]
+```
+
+Le comportement est **identique** — c'est la même valeur, injectée au même endroit. Ce qui change,
+c'est que l'intention est dite explicitement (« ceci est une variable d'environnement », « ceci est
+un paramètre »), donc lisible et vérifiable par l'outillage, au lieu d'être devinée dans une
+chaîne de caractères. Deux fichiers ont ensuite demandé un passage de CS-Fixer, Rector ayant écrit
+des noms de classes en entier là où le dépôt veut un import.
+
+⚠ **Le correctif touche du code de production**, dont `JwtCookieFactory` et `MercureAuthController`
+— deux fichiers sensibles (cookie JWT, authentification Mercure). La modification n'y change que la
+FAÇON dont une valeur de configuration arrive, jamais ce qu'on en fait. Vérifié par le miroir
+complet de la CI : **1591 tests, 9223 assertions**, dont les tests bloquants de sécurité.
+
+**Et un réglage d'outillage, qui est le vrai enseignement du lot.** Nos deux gardiens de style se
+sont mis à se contredire : Rector réécrit en noms de classes ENTIERS
+(`\Symfony\Component\HttpFoundation\Cookie::…`), CS-Fixer les IMPORTE (`Cookie::…`) — chacun
+défaisant l'autre, chacun rouge dans son propre contrôle. Ce n'est pas nouveau : c'est que jusqu'ici
+Rector n'avait **rien à réécrire**, donc les deux ne se croisaient jamais. La première règle qui le
+fait travailler a révélé le désaccord. `backend/rector.php` gagne donc `withImportNames()` — Rector
+importe désormais, comme CS-Fixer — **borné à `removeUnusedImports: false`** : on voulait aligner
+les deux outils, pas déclencher un ménage d'imports sur 8 fichiers étrangers à la montée (supprimer
+un import n'est jamais anodin quand un docblock le référence encore). Effet réel : 2 fichiers, un
+import de fonction Sentry.
+
 ## 2026-08-15 — lot Dependabot
 
 ### Groupe frontend-npm — Vite, Storybook, Lucide (PR #550)

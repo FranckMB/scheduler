@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace App\EventListener;
 
 use App\Service\RequestIdContext;
+
+use function Sentry\configureScope;
+
 use Sentry\State\Scope;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
@@ -80,7 +83,7 @@ final readonly class RequestIdListener implements EventSubscriberInterface
      */
     private function tagSentry(string $requestId): void
     {
-        \Sentry\configureScope(static function (Scope $scope) use ($requestId): void {
+        configureScope(static function (Scope $scope) use ($requestId): void {
             $scope->setTag('request_id', $requestId);
         });
     }
