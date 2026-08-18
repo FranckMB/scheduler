@@ -663,6 +663,12 @@ final class BcclSeeder
             ['firstName' => 'Aela', 'lastName' => 'Desplanque'],
             ['firstName' => 'Charlie', 'lastName' => 'Lefort'],
             ['firstName' => 'Julia', 'lastName' => 'Patin'],
+            // Ajoutés par le gestionnaire dans l'app le 2026-08-18 (relevé de la base réelle) :
+            // le seed les ignorait, un environnement neuf repartait donc sans eux.
+            ['firstName' => 'Alexis', 'lastName' => 'Kuriyan'],
+            ['firstName' => 'Ambrine', 'lastName' => 'Hamani'],
+            ['firstName' => 'Chaima', 'lastName' => 'Othmane'],
+            ['firstName' => 'Joseph', 'lastName' => 'Enama'],
         ];
 
         foreach ($newCoachesData as $coachData) {
@@ -738,6 +744,10 @@ final class BcclSeeder
         $coachCyril = $coaches['Cyril Benveniste'];
         $coachMathis = $coaches['Mathis Bidaux'];
         $coachAnna = $coaches['Anna Textoris'];
+        $coachAlexis = $coaches['Alexis Kuriyan'];
+        $coachAmbrineHamani = $coaches['Ambrine Hamani'];
+        $coachChaima = $coaches['Chaima Othmane'];
+        $coachJoseph = $coaches['Joseph Enama'];
         $coachMaeleen = $coaches['Maeleen Creantor'];
         $coachPierreChauvin = $coaches['Pierre Chauvin'];
         $coachAmbrine = $coaches['Ambrine Azizi'];
@@ -781,7 +791,13 @@ final class BcclSeeder
             ['coach' => $coachJordan, 'team' => $teams['U13F2'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachEthan, 'team' => $teams['U13F3'], 'role' => TeamCoachRole::MAIN],
             //            ['coach' => $coachEnzo, 'team' => $teams['U11M1'], 'role' => TeamCoachRole::MAIN],
-            ['coach' => $coachAnna, 'team' => $teams['U11M2'], 'role' => TeamCoachRole::MAIN],
+            // Correction 2026-08-18 (fondateur) : Anna est sur U11M1, pas U11M2 — l'erreur
+            // venait du seed lui-même, d'où deux coachs principaux sur U11M2 et U11M1 sans coach.
+            ['coach' => $coachAnna, 'team' => $teams['U11M1'], 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachJoseph, 'team' => $teams['U11M2'], 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachAlexis, 'team' => $teams['U18M2'], 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachAmbrineHamani, 'team' => $teams['Baby 1'], 'role' => TeamCoachRole::MAIN],
+            ['coach' => $coachChaima, 'team' => $teams['Baby 2'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachPierreChauvin, 'team' => $teams['U11F1'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachMaeleen, 'team' => $teams['U11F2'], 'role' => TeamCoachRole::MAIN],
             ['coach' => $coachJordan, 'team' => $teams['U9M1'], 'role' => TeamCoachRole::MAIN],
