@@ -9,10 +9,8 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Team;
 use App\Entity\Venue;
-use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\LockLevel;
-use App\Enum\VenuePeriodMode;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -142,39 +140,33 @@ final class OrphanPinGuard
 
         // Les créneaux RÉELLEMENT SERVIS à la période, par (gymnase, jour, heure) — c'est
         // ce qu'un épinglage désigne : ni un verrou ni une réservation ne cite l'id du
-        // créneau. On applique le MÊME retrait des jours fermés que buildForOverlay : sans
-        // lui, un verrou posé un jour où le gymnase est déclaré fermé passerait le
-        // garde-fou et la séance serait perdue en silence — ce que ce garde existe pour
-        // empêcher (revue #8).
-        // Résumés des fermetures de la période : on en tire d'une part les jours ISO fermés
-        // par gymnase (pour retirer les créneaux fermés, comme buildForOverlay), d'autre
-        // part de quoi NOMMER la cause quand un épinglage tombe justement sur un jour fermé.
-        $closure = $this->planVenueClosures->forPlan((string) $schedulePlanId);
+        // créneau. On applique le MÊME retrait des jours fermés que buildForOverlay, via
+        // l'ÉTAT EFFECTIF de la MAISON UNIQUE (incident × masque manuel) : sans lui, un verrou
+        // posé un jour effectivement fermé passerait le garde-fou et la séance serait perdue
+        // en silence — ce que ce garde existe pour empêcher (revue #8).
+        $state = $this->planVenueClosures->effectiveStateForPlan((string) $schedulePlanId);
+        $closedWeekdaysByVenue = $state['effectiveClosedWeekdaysByVenue'];
+        // De quoi NOMMER la cause quand un épinglage tombe sur un jour fermé par une
+        // INDISPONIBILITÉ déclarée — bornée aux jours EFFECTIVEMENT fermés : un jour rouvert
+        // OPEN par le gestionnaire n'est plus une cause (l'incident est désormais informatif).
         $closureByVenueDay = [];
-        $closedWeekdaysByVenue = [];
-        foreach ($closure['summaries'] as $summary) {
+        foreach ($state['summaries'] as $summary) {
             foreach ($summary['weekdays'] as $weekday) {
-                $closedWeekdaysByVenue[$summary['venueId']][$weekday] = true;
-                $closureByVenueDay[$summary['venueId']][$weekday] ??= $summary;
+                if (isset($closedWeekdaysByVenue[$summary['venueId']][$weekday])) {
+                    $closureByVenueDay[$summary['venueId']][$weekday] ??= $summary;
+                }
             }
         }
         // Un gymnase DÉSACTIVÉ ne sert pas : ses créneaux existent encore en base (le mode
-        // conserve la grille) mais buildForOverlay les retire du payload, avec les
-        // épinglages qui s'y trouvent. Les compter comme disponibles ici laissait donc
-        // passer un verrou que le solveur ne verrait jamais, et la séance était déplacée
-        // en silence — précisément ce que ce garde existe pour empêcher (revue #8, round 4).
+        // conserve la grille) mais buildForOverlay les retire du payload, avec les épinglages
+        // qui s'y trouvent — les compter disponibles ici laisserait passer un verrou que le
+        // solveur ne verrait jamais (revue #8, round 4).
         //
-        // P2-37 D4 — un gymnase ENTIÈREMENT fermé sur la fenêtre rejoint le même skip : il ne
-        // sert AUCUN jour, comme un désactivé. Un épinglage y est inerte (jamais déplacé en
-        // silence puisqu'il n'y a nulle part où aller), donc NON bloquant — même doctrine que
-        // P3-20. La fermeture PARTIELLE (un jour d'un gymnase par ailleurs ouvert), elle, reste
-        // bloquante plus bas : là, la séance SERAIT replacée ailleurs sans le dire.
-        $disabledVenueIds = $closure['fullyClosedVenueIds'];
-        foreach ($this->entityManager->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
-            if (VenuePeriodMode::DISABLED === $override->getMode()) {
-                $disabledVenueIds[$override->getVenueId()] = true;
-            }
-        }
+        // P2-37 D4 — un gymnase EFFECTIVEMENT fermé-total (aucun jour servi après composition)
+        // rejoint le même skip : l'épinglage y est inerte (nulle part où aller), NON bloquant —
+        // même doctrine que P3-20. La fermeture PARTIELLE (un jour d'un gymnase par ailleurs
+        // ouvert), elle, reste bloquante plus bas : là, la séance SERAIT replacée en silence.
+        $disabledVenueIds = $state['disabledVenueIds'] + $state['fullyClosedVenueIds'];
         $available = [];
         foreach ($this->entityManager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $slot) {
             if (isset($disabledVenueIds[$slot->getVenueId()]) || isset($closedWeekdaysByVenue[$slot->getVenueId()][$slot->getDayOfWeek()])) {

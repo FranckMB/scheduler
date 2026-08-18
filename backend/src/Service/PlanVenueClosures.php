@@ -6,7 +6,12 @@ namespace App\Service;
 
 use App\Entity\CalendarEntry;
 use App\Entity\Constraint;
+use App\Entity\VenuePeriodOverride;
+use App\Enum\VenueDayState;
+use App\Enum\VenuePeriodMode;
 use App\Repository\ConstraintRepository;
+use DateInterval;
+use DatePeriod;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -31,6 +36,14 @@ use Doctrine\ORM\EntityManagerInterface;
  * fenêtre de SA PROPRE entrée porteuse — le repli legacy ; jamais la fenêtre du plan consommateur)
  * ∩ la fenêtre du plan. Le plan SEASON n'a pas de fenêtre datée : {@see forPlan} y rend le vide
  * (R1 — une fermeture datée ne touche jamais le socle).
+ *
+ * Indispo INFORMATIVE (décision fondateur 2026-08-18) — l'indisponibilité déclarée ne FERME plus
+ * d'autorité : elle PRÉ-REMPLIT le défaut, et le réglage du plan décide. {@see effectiveStateForPlan}
+ * COMPOSE l'incident (le défaut vivant) avec les réglages de `VenuePeriodOverride` (mode + masque
+ * jour) et rend l'ÉTAT EFFECTIF que tous les consommateurs partagent : le payload
+ * (`ScheduleConstraintBuilder`), le gate (`PeriodConstraintSelector`), le garde (`OrphanPinGuard`),
+ * la garde de réservation (`ReservationStateProcessor`) et le radar (`CalendarEntryConflictsController`).
+ * La composition est la SEULE maison ; les consommateurs ne la redérivent jamais.
  */
 final class PlanVenueClosures
 {
@@ -135,6 +148,157 @@ final class PlanVenueClosures
             'closedDatesByVenue' => $closedDates,
             'summaries' => $summaries,
         ];
+    }
+
+    /**
+     * L'ÉTAT EFFECTIF d'un plan de période : l'incident (le défaut vivant) COMPOSÉ avec les
+     * réglages de `VenuePeriodOverride` (mode + masque jour). C'est la maison unique que tous
+     * les consommateurs partagent — aucun ne redérive la composition.
+     *
+     * Le plan SEASON (ou introuvable) n'a pas de fenêtre datée → tout est vide (R1).
+     *
+     * @return array{
+     *   disabledVenueIds: array<string, true>,
+     *   effectiveClosedWeekdaysByVenue: array<string, array<int, true>>,
+     *   defaultClosedWeekdaysByVenue: array<string, array<int, true>>,
+     *   manualClosedWeekdaysByVenue: array<string, array<int, true>>,
+     *   fullyClosedVenueIds: array<string, true>,
+     *   summaries: list<array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}>
+     * }
+     */
+    public function effectiveStateForPlan(string $schedulePlanId): array
+    {
+        $entry = $this->periodEntry($schedulePlanId);
+        if (!$entry instanceof CalendarEntry) {
+            return $this->emptyEffectiveState();
+        }
+
+        return $this->effectiveStateForEntry($entry, $schedulePlanId);
+    }
+
+    /**
+     * Même composition que {@see effectiveStateForPlan}, mais quand l'appelant tient déjà
+     * l'entrée du plan (le sélecteur de période) — évite de la relire.
+     *
+     * Règle de composition (décision fondateur 2026-08-18), jour par jour :
+     *   mode = DISABLED           → gymnase hors service (masque DORMANT, conservé sans effet) ;
+     *   sinon base(jour) =
+     *     mode = BLANK            → ouvert (grille ressaisie, incident informatif) ;
+     *     sinon (défaut vivant)   → fermé ssi jour ∈ jours dérivés de l'incident ;
+     *   masque[jour] = OPEN       → ouvert (remplace la base pour CE jour) ;
+     *   masque[jour] = CLOSED     → fermé ;
+     *   masque[jour] absent       → base(jour).
+     *
+     * @return array{
+     *   disabledVenueIds: array<string, true>,
+     *   effectiveClosedWeekdaysByVenue: array<string, array<int, true>>,
+     *   defaultClosedWeekdaysByVenue: array<string, array<int, true>>,
+     *   manualClosedWeekdaysByVenue: array<string, array<int, true>>,
+     *   fullyClosedVenueIds: array<string, true>,
+     *   summaries: list<array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}>
+     * }
+     */
+    public function effectiveStateForEntry(CalendarEntry $planEntry, string $schedulePlanId): array
+    {
+        $incident = $this->forEntry($planEntry);
+        $defaultClosedWeekdaysByVenue = $incident['closedWeekdaysByVenue'];
+
+        $disabledVenueIds = [];
+        $modeByVenue = [];
+        $maskByVenue = [];
+        foreach ($this->entityManager->getRepository(VenuePeriodOverride::class)->findBy(['schedulePlanId' => $schedulePlanId]) as $override) {
+            $venueId = $override->getVenueId();
+            $modeByVenue[$venueId] = $override->getMode();
+            $maskByVenue[$venueId] = $override->getDayOverrides() ?? [];
+            if (VenuePeriodMode::DISABLED === $override->getMode()) {
+                $disabledVenueIds[$venueId] = true;
+            }
+        }
+
+        $windowWeekdays = $this->windowWeekdays($planEntry);
+
+        $effectiveClosedWeekdaysByVenue = [];
+        $manualClosedWeekdaysByVenue = [];
+        $fullyClosedVenueIds = [];
+        $venueIds = array_unique([...array_keys($defaultClosedWeekdaysByVenue), ...array_keys($modeByVenue)]);
+        foreach ($venueIds as $venueId) {
+            // Un gymnase DÉSACTIVÉ est hors service tout entier : le masque reste DORMANT
+            // (stocké, rendu tel quel à la réactivation), sans effet sur l'état effectif.
+            if (isset($disabledVenueIds[$venueId])) {
+                continue;
+            }
+            $mode = $modeByVenue[$venueId] ?? null;
+            // BLANK ressaisit la grille : l'incident redevient purement informatif (base vide).
+            $closed = VenuePeriodMode::BLANK === $mode ? [] : ($defaultClosedWeekdaysByVenue[$venueId] ?? []);
+            foreach ($maskByVenue[$venueId] ?? [] as $day => $state) {
+                $day = (int) $day;
+                if (VenueDayState::OPEN->value === $state) {
+                    unset($closed[$day]);
+                } elseif (VenueDayState::CLOSED->value === $state) {
+                    $closed[$day] = true;
+                    if (!isset($defaultClosedWeekdaysByVenue[$venueId][$day])) {
+                        $manualClosedWeekdaysByVenue[$venueId][$day] = true;
+                    }
+                }
+            }
+            if ([] !== $closed) {
+                $effectiveClosedWeekdaysByVenue[$venueId] = $closed;
+            }
+            // Effectivement fermé-total = plus AUCUN jour de la fenêtre n'est servi. Un
+            // épinglage y est inerte (rien où le déplacer en silence) — même doctrine que le
+            // gymnase désactivé (OrphanPinGuard, P2-37 D4 / P3-20).
+            if ([] !== $windowWeekdays && [] === array_diff($windowWeekdays, array_keys($closed))) {
+                $fullyClosedVenueIds[$venueId] = true;
+            }
+        }
+
+        return [
+            'disabledVenueIds' => $disabledVenueIds,
+            'effectiveClosedWeekdaysByVenue' => $effectiveClosedWeekdaysByVenue,
+            'defaultClosedWeekdaysByVenue' => $defaultClosedWeekdaysByVenue,
+            'manualClosedWeekdaysByVenue' => $manualClosedWeekdaysByVenue,
+            'fullyClosedVenueIds' => $fullyClosedVenueIds,
+            'summaries' => $incident['summaries'],
+        ];
+    }
+
+    /**
+     * @return array{
+     *   disabledVenueIds: array<string, true>,
+     *   effectiveClosedWeekdaysByVenue: array<string, array<int, true>>,
+     *   defaultClosedWeekdaysByVenue: array<string, array<int, true>>,
+     *   manualClosedWeekdaysByVenue: array<string, array<int, true>>,
+     *   fullyClosedVenueIds: array<string, true>,
+     *   summaries: list<array{constraintId: string, venueId: string, title: string, startDate: string, endDate: string, weekdays: list<int>}>
+     * }
+     */
+    private function emptyEffectiveState(): array
+    {
+        return [
+            'disabledVenueIds' => [],
+            'effectiveClosedWeekdaysByVenue' => [],
+            'defaultClosedWeekdaysByVenue' => [],
+            'manualClosedWeekdaysByVenue' => [],
+            'fullyClosedVenueIds' => [],
+            'summaries' => [],
+        ];
+    }
+
+    /**
+     * Les jours ISO (1..7) qui APPARAISSENT dans la fenêtre du plan — la base du « fermé-total »
+     * effectif. Une semaine pleine les couvre tous ; une fenêtre courte en couvre un sous-ensemble.
+     *
+     * @return list<int>
+     */
+    private function windowWeekdays(CalendarEntry $planEntry): array
+    {
+        $weekdays = [];
+        $end = $planEntry->getEndDate()->modify('+1 day'); // DatePeriod end exclusif
+        foreach (new DatePeriod($planEntry->getStartDate(), new DateInterval('P1D'), $end) as $day) {
+            $weekdays[(int) $day->format('N')] = true;
+        }
+
+        return array_keys($weekdays);
     }
 
     /**

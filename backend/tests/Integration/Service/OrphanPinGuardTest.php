@@ -298,6 +298,42 @@ final class OrphanPinGuardTest extends WebTestCase
         self::assertStringContainsString($this->venue->getName(), $message);
     }
 
+    /**
+     * NR indispo informative (fondateur 2026-08-18) — un jour ROUVERT par le masque (OPEN) sert
+     * de nouveau : un épinglage qui y retombe n'est plus orphelin. L'incident est informatif.
+     */
+    public function testAPinOnADayReopenedByTheMaskNoLongerBlocks(): void
+    {
+        // L'incident ferme le mardi (le seul créneau de la période), mais le gestionnaire l'a
+        // ROUVERT (masque OPEN) : le verrou du mardi 18:00 retombe sur un créneau servi.
+        $this->em->persist($this->closureConstraint('Réquisition levée', '2025-10-21', '2025-10-21')); // mardi
+        $this->mask([2 => 'OPEN']);
+        $this->em->persist($this->slotTemplate(2, '18:00', LockLevel::HARD));
+        $this->em->flush();
+
+        self::assertNull(
+            $this->guard->firstOrphanMessage($this->overlay),
+            'un jour rouvert OPEN sert de nouveau : l’épinglage n’est plus orphelin',
+        );
+    }
+
+    /**
+     * NR indispo informative — un jour DÉCOCHÉ à la main (masque CLOSED) ferme son créneau : un
+     * épinglage qui y retombe redevient orphelin BLOQUANT (la séance serait replacée en silence).
+     */
+    public function testAPinOnADayManuallyClosedByTheMaskBlocks(): void
+    {
+        $this->seedTeam('Poussins 1');
+        // Aucune indisponibilité déclarée, mais le mardi est DÉCOCHÉ (masque CLOSED).
+        $this->mask([2 => 'CLOSED']);
+        $this->em->persist($this->reservation(2, '18:00')); // mardi 18:00 : créneau existant, décoché
+        $this->em->flush();
+
+        $message = $this->guard->firstOrphanMessage($this->overlay);
+        self::assertIsString($message, 'un jour décoché à la main ferme son créneau : l’épinglage bloque');
+        self::assertStringContainsString($this->venue->getName(), $message);
+    }
+
     public function testSeasonScheduleIsNeverBlocked(): void
     {
         // Le socle définit lui-même sa grille : la notion d'orphelin n'y a pas de sens.
@@ -439,6 +475,20 @@ final class OrphanPinGuardTest extends WebTestCase
         $constraint->setConfig(['type' => 'venue_closed', 'startDate' => $startDate, 'endDate' => $endDate]);
 
         return $constraint;
+    }
+
+    /**
+     * Pose le masque manuel du gymnase de ce fichier sur le plan de la période (jour → OPEN|CLOSED).
+     *
+     * @param array<int, string> $dayOverrides
+     */
+    private function mask(array $dayOverrides): void
+    {
+        $override = (new VenuePeriodOverride)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSchedulePlanId($this->planId)->setVenueId($this->venue->getId())
+            ->setDayOverrides($dayOverrides);
+        $this->em->persist($override);
     }
 
     /** Une AUTRE entrée de période du club/saison, porteuse d'une fermeture transversale. */

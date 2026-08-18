@@ -10,26 +10,29 @@ use App\Dto\VenuePeriodOverrideInput;
 use App\Entity\VenuePeriodOverride;
 use App\Enum\VenuePeriodMode;
 use App\Service\ManagementAccessGuard;
-use App\Service\PlanVenueClosures;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonAccessGuard;
 use App\Service\SeasonResolver;
 use App\Service\VenuePeriodGrid;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
-use Symfony\Component\HttpKernel\Exception\UnprocessableEntityHttpException;
 
 /**
- * Le MODE d'un gymnase pour une période (décision fondateur 2026-07-24).
+ * Le MODE + le MASQUE d'un gymnase pour une période (décisions fondateur 2026-07-24 puis
+ * 2026-08-18 « l'indisponibilité devient informative »).
  *
  * Une période POSSÈDE sa grille : ses créneaux ont été copiés depuis la saison à la
  * naissance du plan, et un gymnase n'a jamais deux jeux de créneaux dans une période.
- * Les trois options sont donc des ACTIONS sur cette grille, bornées à UN gymnase :
+ * Le `mode` est donc une ACTION sur cette grille, bornée à UN gymnase :
  *  - VIERGE (BLANK)   : on vide le gymnase, le gestionnaire ressaisit tout ;
  *  - HÉRITER (défaut) : on vide le gymnase puis on RECOPIE le modèle de saison — c'est
  *    le retour au défaut, donc la SUPPRESSION de la ligne (sparse : pas de ligne = hériter) ;
  *  - DÉSACTIVÉ        : le gymnase ne sert pas ; ses créneaux restent mais il sort du
  *    payload et des sélecteurs (« tout est lié au gymnase, son indisponibilité les impacte »).
+ *
+ * Le `dayOverrides` (masque manuel tri-état) n'agit PAS sur la grille : c'est une métadonnée
+ * SPARSE que la composition ({@see App\Service\PlanVenueClosures}) lit à la génération. Le
+ * changer ne vide ni ne recopie rien — seul le `mode` touche la grille.
  *
  * Vider passe par EntityCascadeDeleter::purgeChildrenOfSlot : supprimer un créneau
  * emporte ses réservations et les verrous qu'elles ont matérialisés. Un `remove()` nu
@@ -49,7 +52,6 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         ManagementAccessGuard $managementAccessGuard,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly VenuePeriodGrid $venuePeriodGrid,
-        private readonly PlanVenueClosures $planVenueClosures,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -70,7 +72,6 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         // mais l'ordre rend l'invariant vrai par construction plutôt que par dépendance —
         // relevé en revue sécurité (2026-08-18).
         $this->assertSchedulePlanExists($this->entityManager, $input->schedulePlanId);
-        $this->assertVenueNotFullyClosed($input->schedulePlanId, $input->venueId);
 
         return $this->entityManager->wrapInTransaction(function () use ($input, $clubId, $seasonId): object {
             /** @var VenuePeriodOverrideResource $output */
@@ -94,9 +95,6 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
     {
         $id = $uriVariables['id'] ?? null;
         $existing = \is_string($id) ? $this->entityManager->getRepository(VenuePeriodOverride::class)->find($id) : null;
-        if (null !== $existing) {
-            $this->assertVenueNotFullyClosed($existing->getSchedulePlanId(), $existing->getVenueId());
-        }
         $before = $existing?->getMode();
 
         return $this->entityManager->wrapInTransaction(function () use ($input, $uriVariables, $clubId, $seasonId, $before): object {
@@ -141,12 +139,6 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         $override = \is_string($id) ? $this->entityManager->getRepository(VenuePeriodOverride::class)->find($id) : null;
         $schedulePlanId = $override?->getSchedulePlanId();
         $venueId = $override?->getVenueId();
-        // P2-37 D2 — DELETE = « hériter » = réactiver le gymnase. Un gymnase entièrement fermé
-        // sur la fenêtre est INDISPONIBLE : supprimer l'override manuel posé AVANT la fermeture
-        // ne doit pas offrir une réactivation de façade. On refuse comme POST/PUT.
-        if (null !== $schedulePlanId && null !== $venueId) {
-            $this->assertVenueNotFullyClosed($schedulePlanId, $venueId);
-        }
         $wasBlank = VenuePeriodMode::BLANK === $override?->getMode();
 
         $this->entityManager->wrapInTransaction(function () use ($uriVariables, $clubId, $schedulePlanId, $venueId, $wasBlank): void {
@@ -189,9 +181,8 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
         if (null !== $input->venueId) {
             $entity->setVenueId($input->venueId);
         }
-        if (null !== $input->mode) {
-            $entity->setMode(VenuePeriodMode::from($input->mode));
-        }
+        $entity->setMode(null === $input->mode ? null : VenuePeriodMode::from($input->mode));
+        $entity->setDayOverrides($this->normalizeMask($input->dayOverrides));
 
         return $entity;
     }
@@ -202,10 +193,11 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
      */
     protected function updateEntityFromInput(object $entity, object $input): void
     {
-        // schedulePlanId + venueId identifient la ligne — jamais remappés à l'édition.
-        if (null !== $input->mode) {
-            $entity->setMode(VenuePeriodMode::from($input->mode));
-        }
+        // schedulePlanId + venueId identifient la ligne — jamais remappés à l'édition. Le PUT
+        // REMPLACE les réglages : mode et masque suivent le corps (omis = effacé), la validation
+        // du DTO garantit qu'au moins l'un des deux reste présent.
+        $entity->setMode(null === $input->mode ? null : VenuePeriodMode::from($input->mode));
+        $entity->setDayOverrides($this->normalizeMask($input->dayOverrides));
     }
 
     /**
@@ -217,27 +209,24 @@ class VenuePeriodOverrideStateProcessor extends AbstractStateProcessor
     }
 
     /**
-     * P2-37 D2 — « non réversible » gardé côté serveur : un gymnase ENTIÈREMENT fermé sur la
-     * fenêtre du plan est indisponible ; aucun mode (VIERGE/DÉSACTIVÉ) ni retour à « hériter »
-     * (DELETE) n'a de sens dessus. L'indisponibilité totale est DÉRIVÉE (D1), jamais stockée :
-     * une fermeture éditée après coup rouvre donc le geste toute seule. On refuse en 422 en
-     * nommant la fermeture (titre + bornes) — même patron surfaçant le message que
-     * `assertSchedulePlanExists` (`UnprocessableEntityHttpException`), déjà en vigueur dans ce
-     * fichier via `AssertsSchedulePlanExistsTrait` ; le `ValidationException(string)` d'API
-     * Platform, lui, ne remonte pas son message dans le corps.
+     * Le masque validé, réduit à ses clés jour ISO (int) et à null quand il est vide — pas de
+     * `[]` stocké qui se lirait comme un masque « présent mais sans jour ».
+     *
+     * @param array<int|string, string>|null $mask
+     *
+     * @return array<int, string>|null
      */
-    private function assertVenueNotFullyClosed(?string $schedulePlanId, ?string $venueId): void
+    private function normalizeMask(?array $mask): ?array
     {
-        if (null === $schedulePlanId || null === $venueId) {
-            return; // autres validations (ancre absente, plan de saison) traitées ailleurs
+        if (null === $mask || [] === $mask) {
+            return null;
         }
-        $closures = $this->planVenueClosures->forPlan($schedulePlanId);
-        if (!isset($closures['fullyClosedVenueIds'][$venueId])) {
-            return;
+        $normalized = [];
+        foreach ($mask as $day => $state) {
+            $normalized[(int) $day] = $state;
         }
-        $label = PlanVenueClosures::describeForVenue($closures['summaries'], $venueId);
 
-        throw new UnprocessableEntityHttpException(\sprintf('Ce gymnase est indisponible sur toute la période%s : son mode ne se règle plus tant que la fermeture tient. Ajustez ou levez la fermeture pour le rendre de nouveau réglable.', null !== $label ? ' — ' . $label : ''));
+        return $normalized;
     }
 
     /**

@@ -105,12 +105,6 @@ final class ScheduleConstraintBuilder
         // pour le mode léger sans DB : le chemin `build()` en mémoire retombe alors sur les
         // défauts (tout HARD), byte-identique au payload historique de PR 1 côté absence.
         private readonly ?ImplicitRuleResolver $implicitRuleResolver = null,
-        // P2-38 — la maison unique des fermetures qui s'appliquent à un plan (transversales).
-        // Le payload DOIT dériver ses jours fermés d'ICI, pas des seules datées de l'entrée du
-        // plan : sinon une fermeture portée par une AUTRE entrée resterait invisible au solveur
-        // (le défaut du lot) et divergerait de ce qu'OrphanPinGuard voit déjà. Nullable pour le
-        // mode léger sans DB (le chemin overlay l'exige).
-        private readonly ?PlanVenueClosures $planVenueClosures = null,
     ) {}
 
     /**
@@ -293,10 +287,6 @@ final class ScheduleConstraintBuilder
             throw new LogicException('ScheduleConstraintBuilder requires the period constraint selector for overlay builds.');
         }
 
-        if (!$this->planVenueClosures instanceof PlanVenueClosures) {
-            throw new LogicException('ScheduleConstraintBuilder requires the plan venue closures service for overlay builds.');
-        }
-
         // P2-14 — LA sélection (quelles entités partent au solveur, pourquoi les autres
         // non) est calculée par la source UNIQUE partagée avec le gate pré-solve. Ce qui
         // suit ne fait plus que SÉRIALISER cette sélection ; les post-filtres sur lignes
@@ -320,15 +310,14 @@ final class ScheduleConstraintBuilder
         $this->currentSessionOverrides = $selection->sessionOverrides;
         $constraints = $selection->kept;
 
-        // P2-5 5b / P2-38 — granularité JOUR des fermetures : les jours de semaine où chaque
-        // gymnase est réellement fermé dans CE plan (incident ∩ fenêtre du plan). Dérivé de la
-        // MAISON UNIQUE `PlanVenueClosures`, TRANSVERSALE (toutes entrées confondues), et NON des
-        // seules datées de l'entrée du plan (`$selection->dated`) : une fermeture portée par une
-        // AUTRE entrée qui recoupe la fenêtre doit retirer les créneaux, exactement comme
-        // OrphanPinGuard (déjà branché sur `PlanVenueClosures`) la voit — sinon le payload et le
-        // garde diraient deux choses des mêmes fermetures. Pas de créneau ⇒ pas de variable ⇒ le
-        // solveur ne peut pas placer là ; il PEUT les autres jours.
-        $closedWeekdaysByVenue = $this->planVenueClosures->forEntry($entry)['closedWeekdaysByVenue'];
+        // P2-5 5b / P2-38 / indispo informative — granularité JOUR des fermetures : les jours de
+        // semaine EFFECTIVEMENT fermés par gymnase (incident × masque manuel), portés par la
+        // SÉLECTION. La composition vit dans la MAISON UNIQUE `PlanVenueClosures`, TRANSVERSALE
+        // (toutes entrées confondues) : le gate et le garde partagent la même — sinon payload,
+        // récap et OrphanPinGuard diraient trois choses des mêmes fermetures. Pas de créneau ⇒ pas
+        // de variable ⇒ le solveur ne peut pas placer là ; il PEUT les autres jours (dont ceux
+        // rouverts OPEN par le gestionnaire, l'incident étant désormais informatif).
+        $closedWeekdaysByVenue = $selection->effectiveClosedWeekdaysByVenue;
 
         // La grille de la PÉRIODE, et elle seule — aucune union avec les créneaux de
         // saison. C'est ce qui rend le modèle sûr : un gymnase n'a jamais deux jeux de

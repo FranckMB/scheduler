@@ -27793,7 +27793,7 @@
             },
             "VenuePeriodOverride": {
                 "type": "object",
-                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact.",
+                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : un `mode` FACULTATIF \u2014 DISABLED (le gymnase ne\nsert pas) ou BLANK (grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s) \u2014 et/ou un masque\nmanuel `dayOverrides` (jour ISO \u2192 OPEN|CLOSED) qui s'ajoute au d\u00e9faut de l'indisponibilit\u00e9.\nPas de ligne = INHERIT, le d\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning\nprincipal reste intact.",
                 "properties": {
                     "id": {
                         "default": "",
@@ -27820,18 +27820,29 @@
                         "type": "string"
                     },
                     "mode": {
-                        "default": "",
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "dayOverrides": {
+                        "description": "Masque manuel jour ISO (1..7) \u2192 OPEN|CLOSED, ou null. Le front le lit tel quel \u2014 il ne\nred\u00e9rive jamais la composition (celle-ci vit dans PlanVenueClosures, servie par le radar).",
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
                     }
                 }
             },
             "VenuePeriodOverride.VenuePeriodOverrideInput": {
                 "type": "object",
-                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact.",
+                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : un `mode` FACULTATIF \u2014 DISABLED (le gymnase ne\nsert pas) ou BLANK (grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s) \u2014 et/ou un masque\nmanuel `dayOverrides` (jour ISO \u2192 OPEN|CLOSED) qui s'ajoute au d\u00e9faut de l'indisponibilit\u00e9.\nPas de ligne = INHERIT, le d\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning\nprincipal reste intact.",
                 "required": [
                     "schedulePlanId",
-                    "venueId",
-                    "mode"
+                    "venueId"
                 ],
                 "properties": {
                     "schedulePlanId": {
@@ -27859,17 +27870,30 @@
                             "DISABLED",
                             "BLANK"
                         ],
-                        "description": "INHERIT n'est pas une valeur accept\u00e9e : c'est le d\u00e9faut, mat\u00e9rialis\u00e9 par l'ABSENCE\nde ligne. Pour revenir aux cr\u00e9neaux de saison on supprime l'override (DELETE).",
+                        "description": "Le mode est FACULTATIF (une ligne peut n'exister que pour son masque) : plus de\n`NotBlank`. INHERIT n'est pas une valeur accept\u00e9e \u2014 c'est le d\u00e9faut, mat\u00e9rialis\u00e9 par\nl'ABSENCE de ligne (DELETE pour y revenir), ou ici par un `mode` nul.",
                         "type": [
                             "string",
                             "null"
                         ]
+                    },
+                    "dayOverrides": {
+                        "description": "Masque manuel SPARSE : jour ISO (1..7) \u2192 OPEN|CLOSED. Entr\u00e9e BRUTE non valid\u00e9e (la colonne\nJSON est inscriptible) : les valeurs sont `mixed` jusqu'\u00e0 {@see validateMask}, qui refuse\ntoute cl\u00e9 hors 1..7 et toute valeur hors OPEN|CLOSED. NULL/[] = aucun jour forc\u00e9.",
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
                     }
                 }
             },
             "VenuePeriodOverride.html": {
                 "type": "object",
-                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact.",
+                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : un `mode` FACULTATIF \u2014 DISABLED (le gymnase ne\nsert pas) ou BLANK (grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s) \u2014 et/ou un masque\nmanuel `dayOverrides` (jour ISO \u2192 OPEN|CLOSED) qui s'ajoute au d\u00e9faut de l'indisponibilit\u00e9.\nPas de ligne = INHERIT, le d\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning\nprincipal reste intact.",
                 "properties": {
                     "id": {
                         "default": "",
@@ -27896,8 +27920,20 @@
                         "type": "string"
                     },
                     "mode": {
-                        "default": "",
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "dayOverrides": {
+                        "description": "Masque manuel jour ISO (1..7) \u2192 OPEN|CLOSED, ou null. Le front le lit tel quel \u2014 il ne\nred\u00e9rive jamais la composition (celle-ci vit dans PlanVenueClosures, servie par le radar).",
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
                     }
                 }
             },
@@ -27934,13 +27970,25 @@
                                 "type": "string"
                             },
                             "mode": {
-                                "default": "",
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "dayOverrides": {
+                                "description": "Masque manuel jour ISO (1..7) \u2192 OPEN|CLOSED, ou null. Le front le lit tel quel \u2014 il ne\nred\u00e9rive jamais la composition (celle-ci vit dans PlanVenueClosures, servie par le radar).",
+                                "type": [
+                                    "array",
+                                    "null"
+                                ],
+                                "items": {
+                                    "type": "string"
+                                }
                             }
                         }
                     }
                 ],
-                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact."
+                "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : un `mode` FACULTATIF \u2014 DISABLED (le gymnase ne\nsert pas) ou BLANK (grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s) \u2014 et/ou un masque\nmanuel `dayOverrides` (jour ISO \u2192 OPEN|CLOSED) qui s'ajoute au d\u00e9faut de l'indisponibilit\u00e9.\nPas de ligne = INHERIT, le d\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning\nprincipal reste intact."
             },
             "VenueTrainingSlot": {
                 "type": "object",
@@ -28515,7 +28563,7 @@
         },
         {
             "name": "VenuePeriodOverride",
-            "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : DISABLED (le gymnase ne sert pas) ou BLANK\n(grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s). Pas de ligne = INHERIT, le\nd\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning principal reste intact."
+            "description": "R\u00e9glage sparse par (p\u00e9riode, gymnase) : un `mode` FACULTATIF \u2014 DISABLED (le gymnase ne\nsert pas) ou BLANK (grille vierge, les cr\u00e9neaux de saison sont ignor\u00e9s) \u2014 et/ou un masque\nmanuel `dayOverrides` (jour ISO \u2192 OPEN|CLOSED) qui s'ajoute au d\u00e9faut de l'indisponibilit\u00e9.\nPas de ligne = INHERIT, le d\u00e9faut. L'overlay de p\u00e9riode lit ces lignes ; le planning\nprincipal reste intact."
         },
         {
             "name": "Venue",

@@ -392,6 +392,77 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         );
     }
 
+    /**
+     * NR indispo informative (§7.1 constraint semantics) — un gymnase DÉSACTIVÉ court-circuite
+     * son masque : il sort entièrement du payload, un masque OPEN ne le ressuscite pas (dormant).
+     */
+    public function testDisabledVenueShortCircuitsItsMask(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $this->venue($club, $season, self::VENUE_CLOSED, 'Gym désactivé');
+        foreach ([1, 2, 3, 4, 5, 6, 7] as $day) {
+            $this->venueSlot($club, $season, self::VENUE_CLOSED, null, $day);
+        }
+        $this->em->flush();
+        $entry = $this->holidayPeriod($club, $season);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        // DÉSACTIVÉ + masque {lundi: OPEN} : le masque est DORMANT, le gymnase reste hors payload.
+        $this->venueOverride($club, $season, $entry, self::VENUE_CLOSED, VenuePeriodMode::DISABLED, [1 => 'OPEN']);
+        $this->em->flush();
+
+        $venueIds = array_map(static fn (array $v): string => $v['id'], $this->builder->buildForOverlay($schedule, $entry)['venues']);
+        self::assertNotContains(self::VENUE_CLOSED, $venueIds, 'un gymnase désactivé sort du payload — son masque OPEN ne le ressuscite pas');
+    }
+
+    /**
+     * NR indispo informative — BLANK compose avec le masque : l'incident redevient informatif
+     * (jour fermé rouvert), le masque CLOSED ferme son jour. Incident jeudi + BLANK + masque
+     * {samedi: CLOSED} → le gymnase garde tous ses jours SAUF le samedi (le jeudi revient).
+     */
+    public function testBlankComposesWithTheMask(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $this->venue($club, $season, self::VENUE_CLOSED, 'Gym BLANK + masque');
+        foreach ([1, 2, 3, 4, 5, 6, 7] as $day) {
+            $this->venueSlot($club, $season, self::VENUE_CLOSED, null, $day);
+        }
+        $this->em->flush();
+        $entry = $this->bareClosurePeriod($club, $season, '2026-05-04', '2026-05-10');
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $this->datedClosedVenueConstraintDated($club, $season, $entry, '2026-05-07', '2026-05-07'); // incident jeudi
+        $this->venueOverride($club, $season, $entry, self::VENUE_CLOSED, VenuePeriodMode::BLANK, [6 => 'CLOSED']);
+        $this->em->flush();
+
+        $kept = $this->closedVenueWeekdays($schedule, $entry);
+        sort($kept);
+        self::assertSame([1, 2, 3, 4, 5, 7], $kept, 'BLANK rouvre le jeudi (incident informatif), le masque ferme le samedi');
+    }
+
+    /**
+     * NR indispo informative — construire le payload NE MODIFIE PAS le masque d'un gymnase
+     * désactivé : il reste DORMANT et STOCKÉ, prêt à revenir à la réactivation.
+     */
+    public function testDisabledVenueMaskStaysStoredAfterBuild(): void
+    {
+        [$club, $season] = $this->seed();
+        $this->team($club, $season, 'U11');
+        $this->venue($club, $season, self::VENUE_CLOSED, 'Gym dormant');
+        $this->venueSlot($club, $season, self::VENUE_CLOSED, null, 2);
+        $this->em->flush();
+        $entry = $this->holidayPeriod($club, $season);
+        $schedule = $this->overlaySchedule($club, $season, $entry);
+        $override = $this->venueOverride($club, $season, $entry, self::VENUE_CLOSED, VenuePeriodMode::DISABLED, [6 => 'CLOSED']);
+        $this->em->flush();
+        $overrideId = $override->getId();
+
+        $this->builder->buildForOverlay($schedule, $entry);
+
+        $this->em->clear();
+        self::assertSame([6 => 'CLOSED'], $this->em->getRepository(VenuePeriodOverride::class)->find($overrideId)?->getDayOverrides(), 'le masque dormant survit intact à un build (lecture seule)');
+    }
+
     public function testOverlayDropsConstraintDisabledForPeriod(): void
     {
         [$club, $season] = $this->seed();
@@ -834,6 +905,25 @@ final class ScheduleConstraintBuilderOverlayTest extends KernelTestCase
         $o->setVenueId($venueId);
         $o->setMode($mode);
         $this->em->persist($o);
+    }
+
+    /**
+     * #8 + indispo informative — un réglage de période avec mode ET/OU masque jour tri-état.
+     *
+     * @param array<int, string>|null $dayOverrides
+     */
+    private function venueOverride(Club $club, Season $season, CalendarEntry $entry, string $venueId, ?VenuePeriodMode $mode, ?array $dayOverrides): VenuePeriodOverride
+    {
+        $o = new VenuePeriodOverride;
+        $o->setClubId($club->getId());
+        $o->setSeasonId($season->getId());
+        $o->setSchedulePlanId($this->planIdOf($entry));
+        $o->setVenueId($venueId);
+        $o->setMode($mode);
+        $o->setDayOverrides($dayOverrides);
+        $this->em->persist($o);
+
+        return $o;
     }
 
     private function venueSlot(Club $club, Season $season, string $venueId, ?string $schedulePlanId, int $dayOfWeek = 1): void

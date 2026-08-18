@@ -1,6 +1,15 @@
-Last verified @ 2026-08-18 (JSON **régénéré** — la 4ᵉ route `deletion-impact`, celle du créneau, entre au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — suppression sûre : les 3 routes `deletion-impact` entrent au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — bien-être PAR PÉRIODE, PR1 backend : `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId`)
+Last verified @ 2026-08-18 (JSON **régénéré** — indisponibilité de gymnase informative : `VenuePeriodOverride` gagne `dayOverrides`) ; précédemment : 2026-08-18 (JSON **régénéré** — la 4ᵉ route `deletion-impact`, celle du créneau, entre au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — suppression sûre : les 3 routes `deletion-impact` entrent au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — bien-être PAR PÉRIODE, PR1 backend : `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId`)
 
 Changements récents :
+- **Indisponibilité de gymnase informative — PR1 backend (2026-08-18)** : `VenuePeriodOverride`
+  (schéma de lecture ET `VenuePeriodOverrideInput`) — `mode` devient **nullable** (perd `default: ""`
+  côté lecture, quitte `required` côté écriture : une ligne peut n'exister que pour son masque) et
+  gagne **`dayOverrides`** (array|null, masque manuel jour ISO 1..7 → OPEN|CLOSED, sparse — la
+  composition avec le défaut dérivé de l'indisponibilité déclarée vit dans `PlanVenueClosures`,
+  jamais redérivée côté front). Décision fondateur : l'indisponibilité déclarée ne verrouille plus
+  le réglage, elle le pré-remplit. Set-diff : **0 path ajouté/retiré**, property-only sur les 4
+  variantes du schéma (`VenuePeriodOverride`, `.jsonld`, `.html`, `.VenuePeriodOverrideInput`).
+  Contrat backend⇄engine **inchangé** (2.12) — la fermeture reste hors payload solveur.
 - **Impact de suppression d'un créneau (2026-08-18)** : `GET /api/venue_training_slots/{id}/deletion-impact`
   complète les trois routes du même nom. Particularité : les enfants d'un créneau ne citent jamais son
   id — ils s'y rattachent par le triplet (gymnase, jour, heure) ET par la couche —, donc les comptes

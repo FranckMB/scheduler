@@ -19,6 +19,7 @@ use App\Entity\TeamTagAssignment;
 use App\Entity\User;
 use App\Entity\Venue;
 use App\Entity\VenuePeriodOverride;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
@@ -191,6 +192,46 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         }
     }
 
+    /**
+     * Indispo INFORMATIVE (axe constraint semantics §7.1) — la sélection PORTE l'état effectif
+     * au grain JOUR (incident × masque manuel), et le PAYLOAD le consomme : gate et payload le
+     * partagent PAR CONSTRUCTION (une seule maison, `PlanVenueClosures`, via la sélection).
+     *
+     * Incident mercredi + masque {samedi: CLOSED} → gate ET payload retirent mer+sam et EUX
+     * SEULS. Falsifié : masque {mercredi: OPEN} → les créneaux du mercredi reviennent des deux
+     * côtés (l'incident redevient informatif).
+     */
+    public function testGateAndPayloadAgreeOnEffectiveClosedWeekdays(): void
+    {
+        // Fenêtre semaine pleine lun 2026-05-04 → dim 2026-05-10 ; mercredi = 05-06 (jour 3),
+        // samedi = 05-09 (jour 6). Grille de saison : lundi(1), mercredi(3), samedi(6).
+        [$club, $season, $venue, $entry, $planId] = $this->seedDayGrainScenario([6 => 'CLOSED']);
+        $this->closure($club, $season, $entry, $venue->getId(), '2026-05-06', '2026-05-06'); // incident mercredi
+        $this->em->flush();
+
+        // 1) La SÉLECTION (source unique gate ↔ payload) porte l'état effectif : mer + sam.
+        $selection = self::getContainer()->get(PeriodConstraintSelector::class)
+            ->selectForPeriodPlan($club->getId(), $season->getId(), $planId, $entry);
+        $effective = array_keys($selection->effectiveClosedWeekdaysByVenue[$venue->getId()] ?? []);
+        sort($effective);
+        self::assertSame([3, 6], $effective, 'la sélection retire mer (incident) + sam (masque) et EUX SEULS');
+
+        // 2) Le PAYLOAD consomme la sélection : le gymnase ne garde que le lundi.
+        self::assertSame([1], $this->payloadWeekdaysOf($club, $season, $planId, $entry, $venue->getId()), 'le payload retire les mêmes jours — lundi seul survit');
+
+        // 3) FALSIFICATION : masque {mercredi: OPEN} → les créneaux du mercredi reviennent des
+        //    deux côtés ; seul le lundi et le mercredi restent (le samedi n'est plus masqué).
+        $override = $this->em->getRepository(VenuePeriodOverride::class)->findOneBy(['schedulePlanId' => $planId, 'venueId' => $venue->getId()]);
+        self::assertInstanceOf(VenuePeriodOverride::class, $override);
+        $override->setDayOverrides([3 => 'OPEN']);
+        $this->em->flush();
+
+        $selection = self::getContainer()->get(PeriodConstraintSelector::class)
+            ->selectForPeriodPlan($club->getId(), $season->getId(), $planId, $entry);
+        self::assertSame([], array_keys($selection->effectiveClosedWeekdaysByVenue[$venue->getId()] ?? []), 'mercredi rouvert OPEN annule l’incident, plus aucun jour fermé');
+        self::assertSame([1, 3, 6], $this->payloadWeekdaysOf($club, $season, $planId, $entry, $venue->getId()), 'les trois créneaux reviennent au payload');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -198,6 +239,114 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         $this->em = $container->get(EntityManagerInterface::class);
         $this->hasher = $container->get(UserPasswordHasherInterface::class);
         $this->jwt = $container->get(JWTTokenManagerInterface::class);
+    }
+
+    /**
+     * Les jours ISO des créneaux d'un gymnase dans le payload de période, triés.
+     *
+     * @return list<int>
+     */
+    private function payloadWeekdaysOf(Club $club, Season $season, string $planId, CalendarEntry $entry, string $venueId): array
+    {
+        $payload = self::getContainer()->get(ScheduleConstraintBuilder::class)
+            ->buildForPeriodPlan($club->getId(), $season->getId(), $planId, $entry);
+        $days = [];
+        foreach ($payload['venues'] as $venue) {
+            if ($venue['id'] === $venueId) {
+                $days = array_map(static fn (array $slot): int => $slot['dayOfWeek'], $venue['trainingSlots']);
+            }
+        }
+        sort($days);
+
+        return $days;
+    }
+
+    /**
+     * Un club/saison/gymnase avec une grille de saison lun(1)/mer(3)/sam(6), une période
+     * semaine-pleine (son plan copie la grille à sa naissance), et un masque de période.
+     *
+     * @param array<int, string> $dayOverrides
+     *
+     * @return array{0: Club, 1: Season, 2: Venue, 3: CalendarEntry, 4: string}
+     */
+    private function seedDayGrainScenario(array $dayOverrides): array
+    {
+        $uid = uniqid('', true);
+
+        $club = new Club;
+        $club->setName('Club jour ' . $uid);
+        $club->setSlug('jour-' . $uid);
+        $club->setTimezone('Europe/Paris');
+        $club->setLocale('fr');
+        $club->setOnboardingCompleted(true);
+        $club->setFfbbClubCode('JOU' . strtoupper(substr(md5($uid), 0, 10)));
+        $this->em->persist($club);
+        $this->em->flush();
+
+        $this->scopeGucToClub($club->getId());
+
+        $season = new Season;
+        $season->setClubId($club->getId());
+        $season->setName('2025-2026');
+        $season->setStartDate(new DateTimeImmutable('2025-09-01'));
+        $season->setEndDate(new DateTimeImmutable('2026-06-30'));
+        $season->setStatus(SeasonStatus::ACTIVE);
+        $this->em->persist($season);
+        $this->em->flush();
+
+        $venue = $this->venue($club, $season, 'Gymnase jour');
+        foreach ([1, 3, 6] as $day) {
+            $slot = new VenueTrainingSlot;
+            $slot->setClubId($club->getId());
+            $slot->setSeasonId($season->getId());
+            $slot->setVenueId($venue->getId());
+            $slot->setDayOfWeek($day);
+            $slot->setStartTime(new DateTimeImmutable('18:00'));
+            $slot->setDurationMinutes(90);
+            $slot->setCapacity(1);
+            $this->em->persist($slot);
+        }
+        $this->em->flush();
+
+        $entry = new CalendarEntry;
+        $entry->setClubId($club->getId());
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setTitle('Semaine jour');
+        $entry->setStartDate(new DateTimeImmutable('2026-05-04'));
+        $entry->setEndDate(new DateTimeImmutable('2026-05-10'));
+        $entry->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
+        $entry->setStatus(CalendarEntryStatus::ACTIVE);
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        $planId = $this->planIdOf($entry); // copie la grille de saison sur le plan
+
+        $override = new VenuePeriodOverride;
+        $override->setClubId($club->getId());
+        $override->setSeasonId($season->getId());
+        $override->setSchedulePlanId($planId);
+        $override->setVenueId($venue->getId());
+        $override->setDayOverrides($dayOverrides);
+        $this->em->persist($override);
+        $this->em->flush();
+
+        return [$club, $season, $venue, $entry, $planId];
+    }
+
+    private function closure(Club $club, Season $season, CalendarEntry $carrier, string $venueId, string $start, string $end): void
+    {
+        $constraint = new Constraint;
+        $constraint->setClubId($club->getId());
+        $constraint->setSeasonId($season->getId());
+        $constraint->setName('Gym en travaux');
+        $constraint->setScope(ConstraintScope::FACILITY);
+        $constraint->setScopeTargetId($venueId);
+        $constraint->setFamily(ConstraintFamily::FACILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setCalendarEntryId($carrier->getId());
+        $constraint->setConfig(['type' => 'venue_closed', 'startDate' => $start, 'endDate' => $end]);
+        $this->em->persist($constraint);
     }
 
     /**

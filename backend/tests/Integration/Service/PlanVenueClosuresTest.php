@@ -10,12 +10,14 @@ use App\Entity\ClubUser;
 use App\Entity\Constraint;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Entity\VenuePeriodOverride;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
 use App\Enum\SeasonStatus;
+use App\Enum\VenuePeriodMode;
 use App\Service\PlanVenueClosures;
 use App\Service\SchedulePlanProvisioner;
 use App\Tests\ProvisionsPeriodPlanTrait;
@@ -155,11 +157,139 @@ final class PlanVenueClosuresTest extends KernelTestCase
         );
     }
 
+    // ── Indispo INFORMATIVE (fondateur 2026-08-18) : la composition incident × masque ──
+    //
+    // `effectiveStateForPlan` est la MAISON UNIQUE : elle compose le défaut vivant (dérivé de
+    // l'incident) avec les réglages du plan (mode + masque jour). Chaque exemple normatif de la
+    // décision fondateur est épinglé, avec sa contre-épreuve (ensemble EXACT des jours fermés).
+    //
+    // Fenêtre commune : semaine pleine lun 2026-05-04 → dim 2026-05-10 (tous les jours ISO
+    // présents). Mercredi = 2026-05-06 (jour 3), samedi = 2026-05-09 (jour 6).
+
+    public function testIncidentPlusManualClosedMaskAddDayByDay(): void
+    {
+        // Exemple normatif : incident mercredi + masque {samedi: CLOSED} → fermés = {mer, sam}.
+        [$club, $season] = $this->seed();
+        $entry = $this->period($club, $season, '2026-05-04', '2026-05-10');
+        $planId = $this->planIdOf($entry);
+        $this->closure($club, $season, $entry, '2026-05-06', '2026-05-06'); // mercredi
+        $this->override($club, $season, $planId, null, [6 => 'CLOSED']);
+        $this->em->flush();
+
+        $state = $this->closures->effectiveStateForPlan($planId);
+
+        self::assertSame([3, 6], $this->closedDays($state['effectiveClosedWeekdaysByVenue']), 'le masque CLOSED s’AJOUTE au défaut, jour par jour');
+        self::assertSame([3], $this->closedDays($state['defaultClosedWeekdaysByVenue']), 'le défaut vivant reste l’incident seul (mercredi)');
+        self::assertSame([6], $this->closedDays($state['manualClosedWeekdaysByVenue']), 'le samedi est fermé À LA MAIN (provenance manuelle)');
+    }
+
+    public function testAnOpenMaskReopensAnIncidentDay(): void
+    {
+        // Exemple normatif : masque {mercredi: OPEN} sur un incident mercredi → fermés = ∅.
+        [$club, $season] = $this->seed();
+        $entry = $this->period($club, $season, '2026-05-04', '2026-05-10');
+        $planId = $this->planIdOf($entry);
+        $this->closure($club, $season, $entry, '2026-05-06', '2026-05-06'); // mercredi
+        $this->override($club, $season, $planId, null, [3 => 'OPEN']);
+        $this->em->flush();
+
+        $state = $this->closures->effectiveStateForPlan($planId);
+
+        self::assertSame([], $state['effectiveClosedWeekdaysByVenue'], 'un jour rouvert OPEN annule la fermeture de l’incident');
+        self::assertSame([], $state['fullyClosedVenueIds']);
+    }
+
+    public function testReactivatingAFullyClosedVenueWithSevenOpenDays(): void
+    {
+        // « Réactiver le gymnase entier malgré l'indispo » = OPEN × 7. L'incident ferme toute la
+        // semaine ; le masque OPEN sur chaque jour rend le gymnase entièrement ouvert.
+        [$club, $season] = $this->seed();
+        $entry = $this->period($club, $season, '2026-05-04', '2026-05-10');
+        $planId = $this->planIdOf($entry);
+        $this->closure($club, $season, $entry, '2026-05-04', '2026-05-10'); // toute la fenêtre
+        $this->override($club, $season, $planId, null, [1 => 'OPEN', 2 => 'OPEN', 3 => 'OPEN', 4 => 'OPEN', 5 => 'OPEN', 6 => 'OPEN', 7 => 'OPEN']);
+        $this->em->flush();
+
+        $state = $this->closures->effectiveStateForPlan($planId);
+
+        self::assertSame([], $state['effectiveClosedWeekdaysByVenue'], 'OPEN × 7 rouvre entièrement le gymnase malgré l’indispo');
+        self::assertSame([], $state['fullyClosedVenueIds'], 'et il n’est donc plus fermé-total');
+        // Contre-épreuve : sans le masque, l'incident total le rendrait bien fermé-total.
+        self::assertArrayHasKey(self::VENUE, $this->closures->forPlan($planId)['fullyClosedVenueIds']);
+    }
+
+    public function testDisabledKeepsTheMaskDormant(): void
+    {
+        // DISABLED + masque → gymnase hors service, masque DORMANT (conservé, sans effet).
+        [$club, $season] = $this->seed();
+        $entry = $this->period($club, $season, '2026-05-04', '2026-05-10');
+        $planId = $this->planIdOf($entry);
+        $override = $this->override($club, $season, $planId, VenuePeriodMode::DISABLED, [6 => 'CLOSED']);
+        $this->em->flush();
+        $overrideId = $override->getId();
+
+        $state = $this->closures->effectiveStateForPlan($planId);
+
+        self::assertArrayHasKey(self::VENUE, $state['disabledVenueIds'], 'le gymnase désactivé est hors service');
+        self::assertArrayNotHasKey(self::VENUE, $state['effectiveClosedWeekdaysByVenue'], 'le masque est DORMANT tant que le mode est DISABLED');
+
+        // Le masque reste STOCKÉ : la réactivation le rendra tel quel.
+        $this->em->clear();
+        self::assertSame([6 => 'CLOSED'], $this->em->getRepository(VenuePeriodOverride::class)->find($overrideId)?->getDayOverrides());
+    }
+
+    public function testBlankIgnoresTheIncidentButKeepsTheMask(): void
+    {
+        // Exemple normatif : BLANK ressaisit la grille (incident informatif) ; le masque, lui,
+        // s'applique quand même. Incident mercredi + BLANK + masque {samedi: CLOSED} → fermés = {sam}.
+        [$club, $season] = $this->seed();
+        $entry = $this->period($club, $season, '2026-05-04', '2026-05-10');
+        $planId = $this->planIdOf($entry);
+        $this->closure($club, $season, $entry, '2026-05-06', '2026-05-06'); // mercredi
+        $this->override($club, $season, $planId, VenuePeriodMode::BLANK, [6 => 'CLOSED']);
+        $this->em->flush();
+
+        $state = $this->closures->effectiveStateForPlan($planId);
+
+        self::assertSame([6], $this->closedDays($state['effectiveClosedWeekdaysByVenue']), 'BLANK oublie l’incident (mercredi ouvert), le masque ferme le samedi');
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
         $this->em = self::getContainer()->get(EntityManagerInterface::class);
         $this->closures = self::getContainer()->get(PlanVenueClosures::class);
+    }
+
+    /**
+     * Les jours ISO fermés de self::VENUE, triés — pour des assertions d'ensemble EXACT.
+     *
+     * @param array<string, array<int, true>> $closedWeekdaysByVenue
+     *
+     * @return list<int>
+     */
+    private function closedDays(array $closedWeekdaysByVenue): array
+    {
+        $days = array_keys($closedWeekdaysByVenue[self::VENUE] ?? []);
+        sort($days);
+
+        return $days;
+    }
+
+    /**
+     * Un réglage de période pour self::VENUE : mode (nullable) et/ou masque jour.
+     *
+     * @param array<int, string> $dayOverrides
+     */
+    private function override(Club $club, Season $season, string $schedulePlanId, ?VenuePeriodMode $mode, array $dayOverrides): VenuePeriodOverride
+    {
+        $override = (new VenuePeriodOverride)
+            ->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setSchedulePlanId($schedulePlanId)->setVenueId(self::VENUE)
+            ->setMode($mode)->setDayOverrides([] === $dayOverrides ? null : $dayOverrides);
+        $this->em->persist($override);
+
+        return $override;
     }
 
     private function period(Club $club, Season $season, string $start, string $end): CalendarEntry
