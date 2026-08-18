@@ -32,7 +32,9 @@ let allPlansMock: { id: string; calendarEntryId: string | null; chosenScheduleId
 // = une Schedule pend au plan (schedulePlanId). Les deux se dérivent du plan, plus de
 // pointeur sur l'entrée.
 let plansByEntry: Record<string, { id: string; chosenScheduleId: string | null }> = {};
-let schedulesData: { id: string; schedulePlanId: string | null }[] = [];
+let schedulesData: { id: string; schedulePlanId: string | null; status?: string }[] = [];
+// P2-36 — spy de la suppression de version (découpe destructive de l'état « bloc »).
+const deleteScheduleMutateAsync = vi.fn().mockResolvedValue(undefined);
 // undefined data = requêtes pas encore résolues (1er chargement ou 1er échec sans donnée) →
 // fail-closed. Le code clé sur la PRÉSENCE de `data`, pas sur le statut (une donnée périmée
 // après un refetch en échec reste exploitable).
@@ -57,6 +59,8 @@ vi.mock("./queries", () => ({
 vi.mock("@/features/planning/queries", () => ({
   useVenues: () => ({ data: [{ id: "v1", name: "Gymnase A", color: null, canSplit: false, isActive: true }] }),
   useSchedules: () => ({ data: queriesNoData ? undefined : schedulesData }),
+  // P2-36 — la découpe destructive supprime les versions via useDeleteSchedule.
+  useDeleteSchedule: () => ({ mutateAsync: deleteScheduleMutateAsync, isPending: false }),
 }));
 vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
 // Toast espionné : un refus de chevauchement s'affiche DANS le dialogue (proposition), jamais en
@@ -611,5 +615,54 @@ describe("DayDialog — refus de chevauchement sur « Adapter » (P2-38)", () =>
     // Laisse la rejection se propager, puis vérifie qu'aucun bloc de chevauchement n'a surgi.
     await waitFor(() => expect(periodPlanMutateAsync).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: /ouvrir le planning en place/i })).not.toBeInTheDocument();
+  });
+});
+
+// P2-36 — plus de bascule silencieuse en bloc depuis le DayDialog non plus : « Adapter » d'une
+// vacance MATÉRIALISÉE déjà générée d'un bloc ouvre le picker qui NOMME le fait, et propose la
+// découpe destructive (versions supprimées une par une, jamais le plan ni l'entrée).
+describe("DayDialog — P2-36 : le picker nomme l'état « bloc déjà généré »", () => {
+  // Vacance MATÉRIALISÉE multi-semaines, plan de bloc non validé portant une/des version(s).
+  const materialisedHoliday = () => entry({ id: "pe", kind: "period", periodType: "holiday", schoolHolidayId: "sh1", startDate: "2026-05-10", endDate: "2026-05-20" });
+
+  beforeEach(() => {
+    holidayMutateAsync.mockClear();
+    navigate.mockClear();
+    startPeriodMode.mockClear();
+    weekChildrenMutate.mockReset();
+    deleteScheduleMutateAsync.mockClear();
+    deleteMutate.mockClear();
+    meData = { seasonPlan: { chosenScheduleId: "s-season" } };
+    plansByEntry = { pe: { id: "plan-pe", chosenScheduleId: null } }; // plan de bloc non validé
+    allPlansMock = [{ id: "plan-pe", calendarEntryId: "pe", chosenScheduleId: null }];
+    schedulesData = [{ id: "sv1", schedulePlanId: "plan-pe", status: "COMPLETED" }]; // ≥ 1 version
+    queriesNoData = false;
+    childEntriesData = []; // pas de semaines-enfants
+  });
+
+  it("ne bascule plus en bloc en silence : « Adapter » ouvre le picker qui NOMME le bloc généré", async () => {
+    renderDialog([materialisedHoliday()], { holiday: schoolHoliday() });
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+    expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+    expect(screen.getByText(/déjà été adaptée d'un bloc — 1 version/)).toBeInTheDocument();
+    // Rien n'a été matérialisé/navigué en silence.
+    expect(startPeriodMode).not.toHaveBeenCalled();
+  });
+
+  it("découpe destructive : supprime la version du plan de bloc, sans toucher au plan ni à l'entrée", async () => {
+    schedulesData = [
+      { id: "sv1", schedulePlanId: "plan-pe", status: "COMPLETED" },
+      { id: "sv2", schedulePlanId: "plan-pe", status: "COMPLETED" },
+    ];
+    renderDialog([materialisedHoliday()], { holiday: schoolHoliday() });
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+    await userEvent.click(screen.getByRole("button", { name: /Supprimer les versions et découper en semaines/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Supprimer et découper" }));
+
+    expect(deleteScheduleMutateAsync).toHaveBeenCalledWith("sv1");
+    expect(deleteScheduleMutateAsync).toHaveBeenCalledWith("sv2");
+    expect(deleteMutate).not.toHaveBeenCalled(); // jamais l'entrée (DELETE calendar_entry)
   });
 });

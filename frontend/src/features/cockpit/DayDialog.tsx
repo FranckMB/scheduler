@@ -330,12 +330,6 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
     deleteEntry.mutate(weekToDelete.id, { onSuccess: () => toast.success("Semaine retirée du calendrier") });
     setWeekToDelete(null);
   };
-  // Plan résolu ? blockGenerated est faux tant que plan.data est undefined
-  // (chargement) — offrir le picker alors ferait 422 chaque semaine sur une mère
-  // déjà générée en bloc (revue #262 round 3). entry null (aucune période encore)
-  // = résolu par définition : la query est désactivée.
-  const planResolved = null === entry || undefined !== plan.data;
-  const blockGenerated = undefined !== plan.data && null !== plan.data && (schedulesQuery.data ?? []).some((s) => s.schedulePlanId === plan.data?.id);
   const adapt = (entryId: string) => {
     startPeriodMode(entryId);
     onClose();
@@ -349,20 +343,13 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   // Flux de découpage partagé avec le radar ; ici, plusieurs semaines créées →
   // referme le DayDialog (le radar reprend le relais via ses cartes). Le chemin
   // `pending` matérialise la mère vacances SEULEMENT à la confirmation du picker.
-  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek, windowConflict, resetWindowConflict } = useWeekAdapt(adapt);
-  // Même règle que le radar : période couvrant PLUSIEURS semaines calendaires →
-  // choix des semaines (7 jours à cheval jeu→mer = 2 semaines, l'exemple
-  // fondateur) ; sinon direct. Données pas résolues (schedules OU enfants) →
-  // direct aussi (fail-open du picker = 422 en série, revue #262 round 2).
-  const requestAdapt = (target: CalendarEntry) => {
-    const multiWeek = null !== workingSeason && periodWeeksToAdjust(target.startDate, target.endDate, workingSeason, "holiday", today).length > 1;
-    if (multiWeek && childrenResolved && 0 === weekChildren.length && schedulesResolved && planResolved && !blockGenerated) {
-      setPickerFor(target);
-      return;
-    }
-    // Bloc : le plan naît du geste (ADR-0002 amendé 2026-07-24).
-    void adaptBlock(target.id);
-  };
+  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek, windowConflict, resetWindowConflict, requestAdapt: requestWeekAdapt, pickerState, blockInfo, blockDeleting, blockDeleteFailed, deleteBlockVersionsAndSplit } = useWeekAdapt(adapt, childrenResolved);
+  // P2-36 — la décision « semaines / bloc / chargement » vit dans useWeekAdapt (maison unique,
+  // partagée avec le radar) : on ne passe plus que l'entrée + le savoir « déjà découpée »
+  // (weekChildren). Données pas résolues → le picker s'ouvre en « chargement » et le DIT, au
+  // lieu de partir en bloc en silence (revue #262 gardait la raison — ne jamais cocher sans
+  // savoir ; P2-36 en retire le seul silence).
+  const requestAdapt = (target: CalendarEntry) => requestWeekAdapt(target, { alreadySplit: weekChildren.length > 0 });
 
   return (
     <div className="space-y-2 rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-2">
@@ -537,6 +524,8 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           endDate={pickerFor.endDate}
           weeks={periodWeeksToAdjust(pickerFor.startDate, pickerFor.endDate, workingSeason, "holiday", today)}
           busy={createWeekChildren.isPending}
+          state={pickerState}
+          block={{ ...blockInfo, deleting: blockDeleting, deleteFailed: blockDeleteFailed, onDeleteVersions: deleteBlockVersionsAndSplit }}
           onPickWeeks={(weeks) => pickWeeks(pickerFor, weeks)}
           onAdaptWhole={() => {
             setPickerFor(null);

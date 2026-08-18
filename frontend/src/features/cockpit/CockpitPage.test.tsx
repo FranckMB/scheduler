@@ -20,6 +20,8 @@ vi.mock("@/features/planning/queries", () => ({
   useSlots: () => ({ data: [], isLoading: false }),
   useSchedules: () => ({ data: [{ id: "s1", name: "Planning A", status: "COMPLETED", score: 9011, createdAt: "", updatedAt: "", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true }] }),
   useReopenSchedule: () => ({ mutate: vi.fn(), isPending: false }),
+  // P2-36 — useWeekAdapt (dans RadarPanel) lit useDeleteSchedule pour la découpe destructive.
+  useDeleteSchedule: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 const publicHolidayWindows: [string, string][] = [];
