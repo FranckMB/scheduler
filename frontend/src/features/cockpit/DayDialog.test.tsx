@@ -21,6 +21,9 @@ const navigate = vi.fn();
 const startPeriodMode = vi.fn();
 const setSelectedScheduleId = vi.fn();
 const weekChildrenMutate = vi.fn();
+// P2-38 : « Adapter » (DayList adaptRoot) crée le plan via mutateAsync — mock partagé pour qu'un
+// test le fasse REJETER avec un refus de chevauchement (409 window_already_planned).
+const periodPlanMutateAsync = vi.fn().mockResolvedValue({});
 // Plans couvrant le jour (B1) : DayList lit chosenScheduleId par calendarEntryId.
 let allPlansMock: { id: string; calendarEntryId: string | null; chosenScheduleId: string | null }[] = [];
 
@@ -44,7 +47,7 @@ vi.mock("./queries", () => ({
   useCreateCutoff: () => ({ mutate: cutoffMutate, isPending: false }),
   useCreateHolidayPeriod: () => ({ mutate: vi.fn(), mutateAsync: holidayMutateAsync, isPending: false }),
   useCreateWeekChildren: () => ({ mutate: weekChildrenMutate, isPending: false }),
-  useCreatePeriodPlan: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useCreatePeriodPlan: () => ({ mutateAsync: periodPlanMutateAsync, isPending: false }),
   useDeleteEntry: () => ({ mutate: deleteMutate, isPending: false }),
   useSchedulePlanForEntry: (id: string | null) => ({ data: null !== id && !queriesNoData ? (plansByEntry[id] ?? null) : undefined }),
   // P2-5 E1 : enfants de semaine — aucun par défaut dans ces tests (mutable pour l'encart).
@@ -56,6 +59,9 @@ vi.mock("@/features/planning/queries", () => ({
   useSchedules: () => ({ data: queriesNoData ? undefined : schedulesData }),
 }));
 vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-router")>()), useNavigate: () => navigate }));
+// Toast espionné : un refus de chevauchement s'affiche DANS le dialogue (proposition), jamais en
+// toast générique par-dessus (P2-38).
+vi.mock("@/shared/stores/toastStore", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: (sel: (s: unknown) => unknown) => sel({ startPeriodMode }) }));
 vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknown) => unknown) => sel({ setSelectedScheduleId }) }));
 // Freeze "today" so the fixed test date (2026-05-12) is not in the past (start ≥ today).
@@ -545,5 +551,65 @@ describe("DayDialog — holiday block chips (3 states) and integrated week delet
     expect(deleteMutate).not.toHaveBeenCalled(); // jamais sans confirmation
     await userEvent.click(screen.getByRole("button", { name: "Supprimer" }));
     expect(deleteMutate).toHaveBeenCalledWith("wk1", expect.anything());
+  });
+});
+
+// ── P2-38 PR3 : « Adapter » (adaptRoot) refusé pour chevauchement → proposition dans le dialogue ──
+describe("DayDialog — refus de chevauchement sur « Adapter » (P2-38)", () => {
+  const conflictMessage =
+    "Ces dates sont déjà planifiées par « Vacances de Toussaint » (du 19 octobre 2026 au 2 novembre 2026). Modifiez ce planning existant ou supprimez-le avant d’en créer un autre ici. Vous pouvez aussi découper la période en semaines.";
+
+  beforeEach(async () => {
+    periodPlanMutateAsync.mockReset();
+    startPeriodMode.mockClear();
+    navigate.mockClear();
+    const { toast } = await import("@/shared/stores/toastStore");
+    vi.mocked(toast.error).mockClear();
+    meData = { seasonPlan: { chosenScheduleId: "s-season" } };
+    allPlansMock = [];
+    plansByEntry = {};
+    schedulesData = [];
+    queriesNoData = false;
+    childEntriesData = [];
+  });
+
+  // Fermeture RACINE sans plan → bouton « Adapter » (adaptRoot). Le POST /schedule_plans est
+  // refusé (409) : le dialogue AFFICHE le message du serveur et propose d'ouvrir le planning en
+  // place — pas de toast générique par-dessus.
+  it("affiche la proposition serveur (nomme la période) et n'émet aucun toast générique", async () => {
+    const { WindowAlreadyPlannedError } = await import("./api");
+    periodPlanMutateAsync.mockRejectedValueOnce(new WindowAlreadyPlannedError(conflictMessage, "toussaint-entry"));
+    const { toast } = await import("@/shared/stores/toastStore");
+    renderDialog([entry({ id: "cl9", kind: "period", periodType: "closure", title: "Gymnase A — travaux" })]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+
+    expect(await screen.findByText(/déjà planifiées par « Vacances de Toussaint »/)).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
+    // On n'a PAS navigué vers le wizard : le geste a été refusé, il propose au lieu d'emmener.
+    expect(navigate).not.toHaveBeenCalledWith("/wizard");
+  });
+
+  it("« Ouvrir le planning en place » mène à la période reçue dans entryId", async () => {
+    const { WindowAlreadyPlannedError } = await import("./api");
+    periodPlanMutateAsync.mockRejectedValueOnce(new WindowAlreadyPlannedError(conflictMessage, "toussaint-entry"));
+    renderDialog([entry({ id: "cl9", kind: "period", periodType: "closure", title: "Gymnase A — travaux" })]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+    await userEvent.click(await screen.findByRole("button", { name: /ouvrir le planning en place/i }));
+
+    expect(startPeriodMode).toHaveBeenCalledWith("toussaint-entry");
+    expect(navigate).toHaveBeenCalledWith("/wizard");
+  });
+
+  it("témoin de non-régression : une AUTRE erreur (réseau/500) n'affiche PAS le bloc de refus", async () => {
+    periodPlanMutateAsync.mockRejectedValueOnce(new Error("network down"));
+    renderDialog([entry({ id: "cl9", kind: "period", periodType: "closure", title: "Gymnase A — travaux" })]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Adapter" }));
+
+    // Laisse la rejection se propager, puis vérifie qu'aucun bloc de chevauchement n'a surgi.
+    await waitFor(() => expect(periodPlanMutateAsync).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /ouvrir le planning en place/i })).not.toBeInTheDocument();
   });
 });

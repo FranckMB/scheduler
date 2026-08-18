@@ -3,8 +3,15 @@ import { useState } from "react";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry } from "../api";
+import { WindowAlreadyPlannedError } from "../api";
 import { useCreateHolidayPeriod, useCreatePeriodPlan, useCreateWeekChildren, type WeekChildrenResult } from "../queries";
 import type { WeekWindow } from "./date";
+
+/** Le refus « une seule planification par fenêtre » (P2-38), tel que l'affiche le geste. */
+export interface WindowConflict {
+  message: string;
+  entryId: string;
+}
 
 /** Vacance scolaire pas encore matérialisée en période mère (P2-5 E1). */
 export interface PendingHoliday {
@@ -37,6 +44,17 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
   const createWeekChildren = useCreateWeekChildren();
   const createHoliday = useCreateHolidayPeriod();
   const createPeriodPlan = useCreatePeriodPlan();
+  // P2-38 — le refus de chevauchement affiché à l'endroit du geste (picker ouvert → dans le
+  // picker ; sinon → dans l'encart). Un seul état : les deux cas s'excluent (un refus de picker
+  // GARDE le picker ouvert ; adaptBlock/createOneWeek se jouent sans picker). Réinitialisé au
+  // début de chaque tentative pour ne jamais coller un refus périmé sur un nouveau geste.
+  const [windowConflict, setWindowConflict] = useState<WindowConflict | null>(null);
+  const resetWindowConflict = (): void => setWindowConflict(null);
+  const noteWindowConflict = (error: unknown): void => {
+    if (error instanceof WindowAlreadyPlannedError) {
+      setWindowConflict({ message: error.message, entryId: error.conflictingEntryId });
+    }
+  };
 
   // LE GESTE « Adapter » un BLOC (mère entière / fermeture) — ADR-0002 amendé
   // 2026-07-24 : la période n'a plus de plan à sa matérialisation, il naît ICI,
@@ -45,11 +63,14 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
   // Idempotent côté serveur ; erreur (ex. 422 période découpée sur données
   // périmées) relevée par le filet global des mutations — on ne navigue pas.
   const adaptBlock = async (entryId: string): Promise<void> => {
+    setWindowConflict(null);
     try {
       await createPeriodPlan.mutateAsync(entryId);
       adapt(entryId);
-    } catch {
-      /* relevé par le filet global des mutations (queryClient.ts) */
+    } catch (error) {
+      // Refus de chevauchement (P2-38) → affiché comme proposition ; tout autre échec → filet
+      // global des mutations (queryClient.ts).
+      noteWindowConflict(error);
     }
   };
 
@@ -81,6 +102,7 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
 
   // Semaines cochées d'une mère DÉJÀ matérialisée → création des plans.
   const pickWeeks = (mother: CalendarEntry, weeks: WeekWindow[]): void => {
+    setWindowConflict(null);
     createWeekChildren.mutate(
       { mother, weeks },
       {
@@ -88,6 +110,9 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
           setPickerFor(null);
           finishChildren(result);
         },
+        // Une semaine gouvernée par un autre plan (P2-38) : le picker RESTE ouvert et affiche
+        // le refus ; les autres échecs vont au filet global.
+        onError: noteWindowConflict,
       },
     );
   };
@@ -99,12 +124,15 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
   // doivent partir même si la modale se referme pendant le POST. Erreur relevée
   // par le filet global des mutations (queryClient.ts).
   const pickWeeksPending = async (holiday: PendingHoliday, weeks: WeekWindow[]): Promise<void> => {
+    setWindowConflict(null);
     try {
       const mother = await createHoliday.mutateAsync(holiday);
       setPendingHoliday(null);
-      createWeekChildren.mutate({ mother, weeks }, { onSuccess: finishChildren });
-    } catch {
-      /* relevé par le filet global des mutations */
+      createWeekChildren.mutate({ mother, weeks }, { onSuccess: finishChildren, onError: noteWindowConflict });
+    } catch (error) {
+      // La création de la mère elle-même ne heurte pas la garde (entrée racine, sans plan) ;
+      // seul le lot de semaines peut. Par sûreté, un refus typé est aussi capté ici.
+      noteWindowConflict(error);
     }
   };
 
@@ -122,6 +150,7 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
 
   // Chip « + créer » d'UNE semaine manquante (couverture) → crée puis adapte.
   const createOneWeek = (mother: CalendarEntry, week: WeekWindow): void => {
+    setWindowConflict(null);
     createWeekChildren.mutate(
       { mother, weeks: [week] },
       {
@@ -131,6 +160,8 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
             adapt(result.created[0].id);
           }
         },
+        // Cette semaine recoupe un autre plan (P2-38) → refus affiché dans l'encart.
+        onError: noteWindowConflict,
       },
     );
   };
@@ -149,5 +180,7 @@ export function useWeekAdapt(adapt: (entryId: string) => void) {
     pickWeeksPending,
     adaptWholePending,
     createOneWeek,
+    windowConflict,
+    resetWindowConflict,
   };
 }

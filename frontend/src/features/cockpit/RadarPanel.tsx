@@ -17,6 +17,7 @@ import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { unavailabilitiesToAlert } from "./lib/venueUnavailabilityRadar";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
 import { WeekPickerDialog } from "./WeekPickerDialog";
+import { WindowAlreadyPlannedNotice } from "./WindowAlreadyPlannedNotice";
 import { CoachWishesModal } from "@/features/coach-wishes/CoachWishesModal";
 import { RadarCoachWishAction } from "@/features/coach-wishes/RadarCoachWishAction";
 import { useCoachWishCampaigns } from "@/features/coach-wishes/campaignQueries";
@@ -96,7 +97,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
 
   // P2-5 E1 : flux de découpage partagé (radar + DayDialog) — voir requestAdapt.
   // Chemin `pending` : la mère vacances naît SEULEMENT à la confirmation du picker.
-  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek } = useWeekAdapt(adapt);
+  const { pickerFor, setPickerFor, pendingHoliday, setPendingHoliday, openPendingPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, createOneWeek, windowConflict, resetWindowConflict } = useWeekAdapt(adapt);
   // #10 — la todo-list des doléances d'une période de vacances (ouverte sur la MÈRE).
   const [wishesEntry, setWishesEntry] = useState<CalendarEntry | null>(null);
   // #10 C2 — les campagnes de collecte, indexées par période (une requête pour tout le
@@ -413,6 +414,13 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
     <aside className="space-y-3 rounded-lg border border-border bg-card p-4">
       <h2 className="text-sm font-semibold">À traiter</h2>
 
+      {/* Refus de chevauchement (P2-38) hors picker (adapter un bloc / créer une semaine depuis
+          une carte) : la proposition vit en tête du radar. Picker ouvert → elle vit DANS le
+          picker (ci-dessous). */}
+      {null !== windowConflict && null === pickerFor && null === pendingHoliday ? (
+        <WindowAlreadyPlannedNotice message={windowConflict.message} onOpen={() => adapt(windowConflict.entryId)} />
+      ) : null}
+
       {/* Gating (#5) : plan de saison non validé → tout ajustement est bloqué. Encart
           rouge en TÊTE, l'action la plus prioritaire : finir de valider la saison. */}
       {!socleValidated ? (
@@ -715,7 +723,9 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           busy={createHoliday.isPending || createWeekChildren.isPending}
           onPickWeeks={(weeks) => pickWeeksPending(pendingHoliday, weeks)}
           onAdaptWhole={() => adaptWholePending(pendingHoliday)}
-          onClose={() => setPendingHoliday(null)}
+          onClose={() => { resetWindowConflict(); setPendingHoliday(null); }}
+          conflict={windowConflict}
+          onOpenConflict={adapt}
         />
       ) : null}
 
@@ -731,7 +741,9 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
             setPickerFor(null);
             void adaptBlock(pickerFor.id);
           }}
-          onClose={() => setPickerFor(null)}
+          onClose={() => { resetWindowConflict(); setPickerFor(null); }}
+          conflict={windowConflict}
+          onOpenConflict={adapt}
         />
       ) : null}
       {null !== wishesEntry ? <CoachWishesModal mother={wishesEntry} weekFilter={null} onClose={() => setWishesEntry(null)} /> : null}
