@@ -202,3 +202,120 @@ export function periodAdjustWeeks(start: string, end: string, season: { startDat
   const dropFirst = "holiday" === periodType && weeks.length > 1 && startsLateInWeek(start) && weeks[0].startDate === weeks[0].monday;
   return dropFirst ? weeks.slice(1) : weeks;
 }
+
+/** Une fenêtre de vacances telle que le front la LIT dans les données servies (P2-40). */
+export interface HolidayWindow {
+  label: string;
+  startDate: string;
+  endDate: string;
+}
+
+/** Un bloc de semaines qu'une (ou des) vacance(s) gouvernent, écarté de l'offre d'une fermeture. */
+export interface ExcludedWeekRange {
+  startDate: string;
+  endDate: string;
+  /** Noms des vacances qui couvrent ce bloc (union dédupliquée, ordre rencontré). */
+  labels: string[];
+}
+
+export interface ClosureWeeksOffer {
+  /** Les semaines que la fermeture offre ENCORE — hors de celles gouvernées par les vacances. */
+  offered: WeekWindow[];
+  /** Les blocs de semaines écartés parce qu'une vacance les gouverne (ligne d'info du picker). */
+  excludedRanges: ExcludedWeekRange[];
+}
+
+/**
+ * P2-40 — L'UNION des fenêtres de vacances SERVIES. Règle d'OFFRE de présentation, ÉCART ASSUMÉ à
+ * la règle d'or (frontend.md) : le front dérive ici depuis les données servies (useCalendarEntries
+ * + useSchoolHolidays), il ne miroite AUCUN calcul backend et n'est donc pas au registre des
+ * miroirs. Par API directe une semaine peut encore naître sous vacances sans plan ; le 409 P2-38
+ * reste le filet dès qu'un plan existe (son refus reste affiché par noteWindowConflict).
+ *
+ * Deux sources, comme le radar :
+ *  - les entrées calendrier de type vacances NON ignorées (mère matérialisée ou vacance custom) ;
+ *  - le feed des vacances scolaires de la zone, clampé à la saison.
+ * Une vacance IGNORÉE (matérialisée puis écartée) ne compte pas.
+ */
+export function holidayWindows(
+  entries: { periodType: string | null; status: string; schoolHolidayId: string | null; title: string; startDate: string; endDate: string }[],
+  schoolHolidays: { id: string; label: string; startDate: string; endDate: string }[],
+  season: { startDate: string; endDate: string },
+): HolidayWindow[] {
+  const ignoredHolidayIds = new Set(entries.filter((e) => "ignored" === e.status && null !== e.schoolHolidayId).map((e) => e.schoolHolidayId));
+  const windows: HolidayWindow[] = [];
+  for (const e of entries) {
+    if ("holiday" === e.periodType && "ignored" !== e.status) {
+      windows.push({ label: e.title, startDate: e.startDate, endDate: e.endDate });
+    }
+  }
+  for (const h of schoolHolidays) {
+    if (ignoredHolidayIds.has(h.id)) {
+      continue;
+    }
+    const clamped = clampRangeToSeason(h.startDate, h.endDate, season);
+    if (null !== clamped) {
+      windows.push({ label: h.label, startDate: clamped.startDate, endDate: clamped.endDate });
+    }
+  }
+  return windows;
+}
+
+/**
+ * P2-40 — L'OFFRE de semaines d'une FERMETURE (indispo de gymnase) qui chevauche des vacances :
+ * les semaines gouvernées par les vacances sont EXCLUES de l'offre (pas grisées) — le rappel vit
+ * déjà dans le planning des vacances. Une semaine est exclue ssi son lundi est OFFERT par des
+ * vacances : `periodAdjustWeeks(fenêtre vacances, "holiday")` (donc la règle dropFirst Ven/Sam/Dim
+ * joue — une vacance démarrant vendredi n'offre pas sa semaine d'entame, qui reste offerte par la
+ * fermeture). Foyer UNIQUE : les sites closure passent par ici ; les autres périodes gardent
+ * `periodWeeksToAdjust`.
+ */
+export function closureWeeksOffer(
+  start: string,
+  end: string,
+  season: { startDate: string; endDate: string },
+  today: string,
+  holidayWins: HolidayWindow[],
+): ClosureWeeksOffer {
+  const weeks = periodWeeksToAdjust(start, end, season, "closure", today);
+  // lundi → noms des vacances qui l'offrent (dédupliqués, ordre rencontré).
+  const labelsByMonday = new Map<string, string[]>();
+  for (const hw of holidayWins) {
+    for (const w of periodAdjustWeeks(hw.startDate, hw.endDate, season, "holiday")) {
+      const existing = labelsByMonday.get(w.monday);
+      if (undefined === existing) {
+        labelsByMonday.set(w.monday, [hw.label]);
+      } else if (!existing.includes(hw.label)) {
+        existing.push(hw.label);
+      }
+    }
+  }
+  const offered = weeks.filter((w) => !labelsByMonday.has(w.monday));
+  // Regrouper les semaines exclues CONTIGUËS (dans l'ordre de la fermeture) en blocs d'info.
+  const excludedRanges: ExcludedWeekRange[] = [];
+  let run: WeekWindow[] = [];
+  let runLabels: string[] = [];
+  const flush = (): void => {
+    if (0 === run.length) {
+      return;
+    }
+    excludedRanges.push({ startDate: run[0].startDate, endDate: run[run.length - 1].endDate, labels: runLabels });
+    run = [];
+    runLabels = [];
+  };
+  for (const w of weeks) {
+    const labels = labelsByMonday.get(w.monday);
+    if (undefined === labels) {
+      flush();
+      continue;
+    }
+    run.push(w);
+    for (const l of labels) {
+      if (!runLabels.includes(l)) {
+        runLabels.push(l);
+      }
+    }
+  }
+  flush();
+  return { offered, excludedRanges };
+}

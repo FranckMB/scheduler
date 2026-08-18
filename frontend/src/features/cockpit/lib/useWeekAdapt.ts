@@ -8,8 +8,8 @@ import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, CalendarEntryPeriodType, SchedulePlan } from "../api";
 import { WindowAlreadyPlannedError } from "../api";
-import { useCreateHolidayPeriod, useCreatePeriodPlan, useCreateWeekChildren, useSchedulePlans, type WeekChildrenResult } from "../queries";
-import { periodWeeksToAdjust, todayISO, type WeekWindow } from "./date";
+import { useCalendarEntries, useCreateHolidayPeriod, useCreatePeriodPlan, useCreateWeekChildren, useSchedulePlans, useSchoolHolidays, type WeekChildrenResult } from "../queries";
+import { closureWeeksOffer, holidayWindows, periodWeeksToAdjust, todayISO, type ClosureWeeksOffer, type WeekWindow } from "./date";
 
 /** Le refus « une seule planification par fenêtre » (P2-38), tel que l'affiche le geste. */
 export interface WindowConflict {
@@ -61,6 +61,7 @@ export type WeekAdaptDecision =
   | { kind: "already-split" }
   | { kind: "loading" }
   | { kind: "block-generated" }
+  | { kind: "holiday-covered" }
   | { kind: "weeks" };
 
 export interface WeekAdaptInput {
@@ -72,17 +73,28 @@ export interface WeekAdaptInput {
   resolved: boolean;
   /** Le plan « bloc » de la période porte-t-il déjà ≥ 1 version ? */
   blockGenerated: boolean;
+  /**
+   * P2-40 — au moins une semaine de la fermeture est GOUVERNÉE par des vacances (exclue de
+   * l'offre). Dès qu'une exclusion existe : le picker s'ouvre TOUJOURS (même 0 ou 1 semaine
+   * offerte) et le chemin « d'un bloc » DISPARAÎT (un plan de bloc gouvernerait la fenêtre des
+   * vacances). L'exclusion l'emporte donc sur single-week / already-split / block-generated —
+   * mais jamais sur le chargement (on ne conclut pas sans les données).
+   */
+  holidayCovered: boolean;
 }
 
-export function decideWeekAdapt({ multiWeek, alreadySplit, resolved, blockGenerated }: WeekAdaptInput): WeekAdaptDecision {
-  if (!multiWeek) {
+export function decideWeekAdapt({ multiWeek, alreadySplit, resolved, blockGenerated, holidayCovered }: WeekAdaptInput): WeekAdaptDecision {
+  if (!multiWeek && !holidayCovered) {
     return { kind: "single-week" };
   }
-  if (alreadySplit) {
+  if (alreadySplit && !holidayCovered) {
     return { kind: "already-split" };
   }
   if (!resolved) {
     return { kind: "loading" };
+  }
+  if (holidayCovered) {
+    return { kind: "holiday-covered" };
   }
   if (blockGenerated) {
     return { kind: "block-generated" };
@@ -91,7 +103,7 @@ export function decideWeekAdapt({ multiWeek, alreadySplit, resolved, blockGenera
 }
 
 /** Les états VISIBLES du picker. `null` ⇒ la décision ne l'ouvre pas (bloc direct). */
-export type WeekPickerState = "weeks" | "loading" | "block";
+export type WeekPickerState = "weeks" | "loading" | "block" | "holiday";
 export function pickerStateOf(decision: WeekAdaptDecision): WeekPickerState | null {
   switch (decision.kind) {
     case "weeks":
@@ -100,6 +112,8 @@ export function pickerStateOf(decision: WeekAdaptDecision): WeekPickerState | nu
       return "loading";
     case "block-generated":
       return "block";
+    case "holiday-covered":
+      return "holiday";
     case "single-week":
     case "already-split":
       return null;
@@ -149,15 +163,67 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
   const deleteSchedule = useDeleteSchedule();
   const [blockDeleting, setBlockDeleting] = useState(false);
   const [blockDeleteFailed, setBlockDeleteFailed] = useState(false);
+  // P2-40 — les fenêtres de vacances SERVIES, sourcées ICI (react-query dédoublonne avec les
+  // lectures des surfaces) pour que celles-ci cessent de recalculer l'offre localement. Deux
+  // sources (comme le radar) : le feed scolaire (défaut saison) ∪ les entrées calendrier de type
+  // vacances non ignorées, sur la fenêtre de la saison. `undefined` = pas encore résolu → l'offre
+  // d'une fermeture reste en « chargement » (jamais une bascule en bloc en silence).
+  const schoolHolidaysQuery = useSchoolHolidays();
+  const calendarEntriesQuery = useCalendarEntries(workingSeason?.startDate ?? "", workingSeason?.endDate ?? "", null !== workingSeason);
+  const holidayWindowsResolved = undefined !== schoolHolidaysQuery.data && undefined !== calendarEntriesQuery.data;
+  const holidayWins = null === workingSeason || !holidayWindowsResolved ? [] : holidayWindows(calendarEntriesQuery.data ?? [], schoolHolidaysQuery.data?.items ?? [], workingSeason);
 
   const planForEntry = (entryId: string): SchedulePlan | null => (plans ?? []).find((p) => p.calendarEntryId === entryId) ?? null;
   const versionsOf = (planId: string | null): Schedule[] => (null === planId ? [] : (schedules ?? []).filter((s) => s.schedulePlanId === planId));
+
+  // P2-40 — l'OFFRE de semaines d'une fenêtre : pour une fermeture, `closureWeeksOffer` écarte
+  // les semaines gouvernées par des vacances ; pour tout autre type, l'offre historique. Foyer
+  // unique exposé aux surfaces (`weekOffer`) pour qu'elles ne recalculent plus.
+  const offerFor = (startDate: string, endDate: string, periodType: CalendarEntryPeriodType | null): ClosureWeeksOffer => {
+    if (null === workingSeason) {
+      return { offered: [], excludedRanges: [] };
+    }
+    if ("closure" !== periodType) {
+      return { offered: periodWeeksToAdjust(startDate, endDate, workingSeason, periodType, todayISO()), excludedRanges: [] };
+    }
+    return closureWeeksOffer(startDate, endDate, workingSeason, todayISO(), holidayWins);
+  };
+
+  const decisionForWindow = (
+    startDate: string,
+    endDate: string,
+    periodType: CalendarEntryPeriodType | null,
+    { alreadySplit, blockGenerated }: { alreadySplit: boolean; blockGenerated: boolean },
+  ): WeekAdaptDecision => {
+    const isClosure = "closure" === periodType;
+    // Une fermeture ne peut décider qu'une fois les vacances résolues : sinon on ne SAIT PAS si
+    // une semaine est couverte (et un raccourci « une seule semaine » filerait en bloc à tort).
+    const holidayResolved = !isClosure || holidayWindowsResolved;
+    const resolved = undefined !== plans && undefined !== schedules && childrenResolved && holidayResolved;
+    const offer = offerFor(startDate, endDate, periodType);
+    const holidayCovered = offer.excludedRanges.length > 0;
+    const totalWeeks = null === workingSeason ? 0 : periodWeeksToAdjust(startDate, endDate, workingSeason, periodType, todayISO()).length;
+    // Fermeture aux vacances non résolues : on force `multiWeek` pour ne PAS court-circuiter en
+    // single-week — la décision retombe alors sur « chargement » (le picker s'ouvre et le dit).
+    const multiWeek = isClosure && !holidayResolved ? true : totalWeeks > 1;
+    return decideWeekAdapt({ multiWeek, alreadySplit, resolved, blockGenerated, holidayCovered });
+  };
+
   const decisionFor = (entry: CalendarEntry, alreadySplit: boolean): WeekAdaptDecision => {
-    const multiWeek = null !== workingSeason && periodWeeksToAdjust(entry.startDate, entry.endDate, workingSeason, entry.periodType, todayISO()).length > 1;
-    const resolved = undefined !== plans && undefined !== schedules && childrenResolved;
     const plan = planForEntry(entry.id);
     const blockGenerated = null !== plan && versionsOf(plan.id).length > 0;
-    return decideWeekAdapt({ multiWeek, alreadySplit, resolved, blockGenerated });
+    return decisionForWindow(entry.startDate, entry.endDate, entry.periodType, { alreadySplit, blockGenerated });
+  };
+
+  // P2-40 — les surfaces demandent au foyer unique s'il faut OUVRIR le picker pour une fenêtre pas
+  // encore matérialisée (chemin pending) : plusieurs semaines OU au moins une exclue par les
+  // vacances. Une seule semaine hors vacances reste sur le chemin direct (création + adaptBlock).
+  const needsPicker = (startDate: string, endDate: string, periodType: CalendarEntryPeriodType | null): boolean => {
+    if (null === workingSeason) {
+      return false;
+    }
+    const offer = offerFor(startDate, endDate, periodType);
+    return periodWeeksToAdjust(startDate, endDate, workingSeason, periodType, todayISO()).length > 1 || offer.excludedRanges.length > 0;
   };
   // P2-38 — le refus de chevauchement affiché à l'endroit du geste (picker ouvert → dans le
   // picker ; sinon → dans l'encart). Un seul état : les deux cas s'excluent (un refus de picker
@@ -263,6 +329,22 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
     }
   };
 
+  // P2-40 — « Consigner l'indisponibilité » : quand TOUTES les semaines d'une fermeture sont sous
+  // vacances, il n'y a ni semaine à découper ni bloc à adapter — mais le FAIT doit exister. Sans
+  // lui, le pré-remplissage des coches gymnase dans le planning des vacances n'a rien à lire, et
+  // « le rappel vous attend » serait faux. On matérialise donc la fermeture via son `create`, SANS
+  // plan ni navigation. Réservé au chemin pending (une entrée déjà en base n'a rien à consigner).
+  const recordPendingOnly = async (pending: PendingMother): Promise<void> => {
+    setWindowConflict(null);
+    try {
+      await pending.create();
+      setPendingMother(null);
+      toast.success("Indisponibilité consignée — le rappel vous attend dans le planning des vacances.");
+    } catch (error) {
+      noteWindowConflict(error);
+    }
+  };
+
   // Chip « + créer » d'UNE semaine manquante (couverture) → crée puis adapte.
   const createOneWeek = (mother: CalendarEntry, week: WeekWindow): void => {
     setWindowConflict(null);
@@ -302,6 +384,12 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
   // « semaines » sans un clic de plus (les versions supprimées → `blockGenerated` retombe).
   const pickerDecision = null === pickerFor ? null : decisionFor(pickerFor, false);
   const pickerState: WeekPickerState = null === pickerDecision ? "weeks" : (pickerStateOf(pickerDecision) ?? "weeks");
+  // L'offre (semaines offertes + blocs exclus par les vacances) du picker ouvert et de la mère
+  // pending — exposée pour que les surfaces ne recalculent plus (P2-40).
+  const pickerOffer: ClosureWeeksOffer = null === pickerFor ? { offered: [], excludedRanges: [] } : offerFor(pickerFor.startDate, pickerFor.endDate, pickerFor.periodType);
+  const pendingOffer: ClosureWeeksOffer = null === pendingMother ? { offered: [], excludedRanges: [] } : offerFor(pendingMother.startDate, pendingMother.endDate, pendingMother.periodType);
+  const pendingDecision = null === pendingMother ? null : decisionForWindow(pendingMother.startDate, pendingMother.endDate, pendingMother.periodType, { alreadySplit: false, blockGenerated: false });
+  const pendingPickerState: WeekPickerState = null === pendingDecision ? "weeks" : (pickerStateOf(pendingDecision) ?? "weeks");
   const pickerPlan = null === pickerFor ? null : planForEntry(pickerFor.id);
   const pickerVersions = versionsOf(pickerPlan?.id ?? null);
   const blockInfo: BlockVersionsInfo = {
@@ -346,7 +434,11 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
 
   return {
     requestAdapt,
+    needsPicker,
     pickerState,
+    pickerOffer,
+    pendingOffer,
+    pendingPickerState,
     blockInfo,
     blockDeleting,
     blockDeleteFailed,
@@ -363,6 +455,7 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
     pickWeeks,
     pickWeeksPending,
     adaptWholePending,
+    recordPendingOnly,
     createOneWeek,
     windowConflict,
     resetWindowConflict,

@@ -58,11 +58,18 @@ const createVenueClosureMutateAsync = vi.fn().mockResolvedValue({
 });
 let unavailabilitiesData: { id: string; venueId: string; startDate: string; endDate: string; label: string | null }[] | undefined = [];
 let impactItemsData: { unavailabilityId: string; trainingSlotCount: number }[] = [];
+// P2-40 — le hook useWeekAdapt source les fenêtres de vacances (feed scolaire + entrées calendrier)
+// pour EXCLURE de l'offre d'une fermeture les semaines sous vacances. Vides par défaut : les cas
+// existants (fermeture sans vacances) ne voient aucun changement.
+let schoolHolidaysData: { zone: string | null; items: SchoolHoliday[] } | undefined = { zone: "A", items: [] };
+let calendarEntriesData: CalendarEntry[] | undefined = [];
 
 vi.mock("./queries", () => ({
   useCreateHolidayPeriod: () => ({ mutate: createHolidayMutate, mutateAsync: createHolidayMutateAsync, isPending: false }),
   useCreateWeekChildren: () => ({ mutate: createWeekChildrenMutate, isPending: false }),
   useCreatePeriodPlan: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useSchoolHolidays: () => ({ data: schoolHolidaysData }),
+  useCalendarEntries: () => ({ data: calendarEntriesData }),
   useEntryConflicts: () => ({ data: conflictsData }),
   // Le parent lit l'impact de TOUTES les fermetures pour masquer celles qui ne
   // demandent rien — même donnée que la carte enfant (le cache dédoublonne).
@@ -163,6 +170,8 @@ describe("RadarPanel", () => {
     createVenueClosureMutateAsync.mockClear();
     unavailabilitiesData = [];
     impactItemsData = [];
+    schoolHolidaysData = { zone: "A", items: [] };
+    calendarEntriesData = [];
     deleteScheduleMutateAsync.mockClear();
   });
   afterEach(() => setTodayOverride(null));
@@ -921,5 +930,54 @@ describe("RadarPanel", () => {
 
     await user.click(screen.getByRole("button", { name: "Reprendre" }));
     expect(screen.getByRole("button", { name: /Supprimer les versions et découper/i })).toBeDisabled();
+  });
+
+  // P2-40 — quand une indispo de gymnase CHEVAUCHE des vacances, le picker EXCLUT (pas grise) les
+  // semaines gouvernées par les vacances, affiche une ligne d'info, et le chemin « d'un bloc »
+  // disparaît. 100 % sous vacances → info seule + « Consigner l'indisponibilité » (crée le fait).
+  describe("chevauchement vacances (P2-40)", () => {
+    it("EXCLUT les semaines sous vacances, affiche l'info, et RETIRE le chemin d'un bloc", async () => {
+      const user = userEvent.setup();
+      const today = todayISO();
+      const start = mondayOf(addDays(today, 12)); // un lundi, sous l'horizon 30 j
+      unavailabilitiesData = [{ id: "u1", venueId: "gym-1", startDate: start, endDate: addDays(start, 27), label: "travaux" }]; // 4 semaines
+      // Vacances alignées lundi couvrant les 2 premières semaines (pas de dropFirst).
+      schoolHolidaysData = { zone: "A", items: [{ id: "hol1", label: "Vacances test", holidayType: "custom", startDate: start, endDate: addDays(start, 13), schoolYear: "2998-2999" }] };
+      renderRadar();
+
+      await user.click(screen.getByRole("button", { name: "Adapter" }));
+
+      expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
+      expect(screen.getByText(/couvertes par Vacances test/)).toBeInTheDocument();
+      expect(screen.getByText(/le rappel vous attend/i)).toBeInTheDocument();
+      // Deux semaines hors vacances restent à cocher ; « d'un bloc » a disparu.
+      expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+      expect(screen.queryByRole("button", { name: /d'un bloc/i })).not.toBeInTheDocument();
+      // Rien créé tant que non confirmé.
+      expect(createVenueClosureMutate).not.toHaveBeenCalled();
+      expect(createVenueClosureMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it("indispo ENTIÈREMENT sous vacances (même sur une seule semaine) : info seule + « Consigner l'indisponibilité » crée le fait sans plan", async () => {
+      const user = userEvent.setup();
+      const today = todayISO();
+      const start = mondayOf(addDays(today, 12));
+      // Une seule semaine calendaire, entièrement sous vacances → jamais un chemin direct : le
+      // picker s'ouvre quand même (règle « 0 semaine offerte »).
+      unavailabilitiesData = [{ id: "u1", venueId: "gym-1", startDate: start, endDate: addDays(start, 4), label: "travaux" }];
+      schoolHolidaysData = { zone: "A", items: [{ id: "hol1", label: "Vacances test", holidayType: "custom", startDate: start, endDate: addDays(start, 6), schoolYear: "2998-2999" }] };
+      renderRadar();
+
+      await user.click(screen.getByRole("button", { name: "Adapter" }));
+
+      expect(screen.getByText(/couvertes par Vacances test/)).toBeInTheDocument();
+      expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /d'un bloc/i })).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: /consigner l'indisponibilité/i }));
+      await waitFor(() =>
+        expect(createVenueClosureMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ venueId: "gym-1", startDate: start, endDate: addDays(start, 4) })),
+      );
+    });
   });
 });
