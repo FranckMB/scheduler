@@ -17,7 +17,7 @@ import { cn } from "@/shared/lib/utils";
 import type { Gender, PriorityTier, SharedTrainingGroup, SportCategory, Team, TeamLevel, TeamPayload } from "../api";
 import { useWizardFooter } from "../lib/footerSlot";
 import { orderedTeams, teamsOfTier } from "../lib/ranking";
-import { useCreateTeam, useDeleteTeam, usePriorityTiers, useReorderTeams, useReservations, useSharedTrainingGroups, useSportCategories, useUpdateTeam, useWizardCoachPlayers, useWizardTeamCoaches, useWizardTeams } from "../queries";
+import { useCreateTeam, useDeleteTeam, useDeletionImpact, usePriorityTiers, useReorderTeams, useSharedTrainingGroups, useSportCategories, useUpdateTeam, useWizardTeams } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodTeams } from "./PeriodStructure";
 import { compareNamesFr } from "@/shared/lib/nameOrder";
@@ -353,9 +353,9 @@ function TeamsEditor() {
   const { data: teams = [] } = useWizardTeams();
   const { data: categories = [], isLoading: categoriesLoading } = useSportCategories();
   const { data: tiers = [] } = usePriorityTiers();
-  const { data: reservations = [] } = useReservations();
-  const { data: teamCoaches = [] } = useWizardTeamCoaches();
-  const { data: coachPlayers = [] } = useWizardCoachPlayers();
+  // P3-16 — ces trois collections n'étaient chargées ICI que pour compter l'impact d'une
+  // suppression depuis le cache. Le serveur le fait désormais : trois requêtes de moins, et
+  // surtout un compte qui ne peut plus sous-estimer ce qu'il ignore.
   // P2-27 — le repère « mutualisée » sur chaque ligne : les groupes du SOCLE (l'éditeur de saison
   // ne travaille jamais une période). Sans param le provider renvoie socle ET périodes → on filtre.
   const { data: sharedGroups = [] } = useSharedTrainingGroups(null);
@@ -364,6 +364,8 @@ function TeamsEditor() {
   const del = useDeleteTeam();
   const reorder = useReorderTeams();
   const [toDelete, setToDelete] = useState<Team | null>(null);
+  // P3-16 — l'impact vient du serveur (et porte le refus du périmètre engagé).
+  const teamImpact = useDeletionImpact("team", toDelete?.id ?? null);
 
   // P2-21 lot A — la modale d'annonce de l'import automatique FFBB (décision
   // fondateur 2026-08-04 : « le gestionnaire n'a rien à faire, il constate que
@@ -873,11 +875,10 @@ function TeamsEditor() {
         open={toDelete !== null}
         entityName={toDelete?.name ?? ""}
         affectsPeriodPlans
-        impacts={[
-          { count: reservations.filter((r) => r.teamId === toDelete?.id).length, one: "créneau réservé", many: "créneaux réservés" },
-          { count: teamCoaches.filter((l) => l.teamId === toDelete?.id).length, one: "coach lié", many: "coachs liés" },
-          { count: coachPlayers.filter((l) => l.teamId === toDelete?.id).length, one: "coach-joueur lié", many: "coach-joueurs liés" },
-        ]}
+        // P3-16 : le serveur compte (et dit si le périmètre engagé refusera le geste).
+        impact={teamImpact.data ?? undefined}
+        impactLoading={teamImpact.isPending && null !== toDelete}
+        impactFailed={teamImpact.isError}
         onConfirm={() => {
           if (toDelete) {
             del.mutate(toDelete.id);

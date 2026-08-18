@@ -129,6 +129,24 @@ export function useUpdateVenue() {
   });
 }
 
+/**
+ * P3-16 — l'impact d'une suppression, calculé par le serveur. Requête montée SEULEMENT quand
+ * une suppression est en attente de confirmation (`id` non nul) : c'est une lecture par
+ * entité, pas une donnée d'écran.
+ *
+ * ⚠ `staleTime: 0` DÉLIBÉRÉMENT : entre deux ouvertures de la modale, le club a pu changer.
+ * Annoncer un impact périmé serait revenir au défaut qu'on corrige.
+ */
+export function useDeletionImpact(kind: wizardApi.DeletableKind, id: string | null) {
+  return useQuery({
+    queryKey: ["wizard", "deletion_impact", kind, id],
+    queryFn: () => wizardApi.fetchDeletionImpact(kind, id ?? ""),
+    enabled: null !== id,
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 export function useDeleteVenue() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -26,7 +26,7 @@ import type { FfbbSalle, Venue, VenueTrainingSlot } from "../api";
 import { DAYS, durationOptions, DURATIONS, hhmm } from "../lib/days";
 import { filterSalles } from "../lib/salleSuggestions";
 import { slotPlacementError } from "../lib/slotOverlap";
-import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeleteVenue, useFfbbSalles, useFfbbSallesProches, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
+import { useCreateSlot, useCreateVenue, useDeleteSlot, useDeletionImpact, useDeleteVenue, useFfbbSalles, useFfbbSallesProches, useReservations, useUpdateSlot, useUpdateVenue, useVenueSlots, useWizardVenues } from "../queries";
 import { useWizardStore } from "../store";
 import { PeriodVenues } from "./PeriodStructure";
 import { VenueAvailabilityGrid } from "./VenueAvailabilityGrid";
@@ -319,8 +319,8 @@ function VenuesEditor() {
     setSelectedId(slot.venueId);
     setEditingSlot(slot);
   }, [slotTarget, slots]);
-  const pendingDeleteSlotCount = pendingDeleteVenue ? slots.filter((s) => s.venueId === pendingDeleteVenue.id).length : 0;
-  const pendingDeleteReservationCount = pendingDeleteVenue ? reservations.filter((r) => r.venueId === pendingDeleteVenue.id).length : 0;
+  // P3-16 — l'impact vient du serveur, et seulement quand une suppression attend confirmation.
+  const venueImpact = useDeletionImpact("venue", pendingDeleteVenue?.id ?? null);
 
   const addVenue = (event: FormEvent) => {
     event.preventDefault();
@@ -703,10 +703,10 @@ function VenuesEditor() {
         open={pendingDeleteVenue !== null}
         entityName={pendingDeleteVenue?.name ?? ""}
         affectsPeriodPlans
-        impacts={[
-          { count: pendingDeleteSlotCount, one: "créneau de disponibilité", many: "créneaux de disponibilité" },
-          { count: pendingDeleteReservationCount, one: "réservation d'équipe", many: "réservations d'équipe" },
-        ]}
+        // P3-16 : plus aucun compte deviné depuis le cache — le serveur dit ce qu'il détruit.
+        impact={venueImpact.data ?? undefined}
+        impactLoading={venueImpact.isPending && null !== pendingDeleteVenue}
+        impactFailed={venueImpact.isError}
         onCancel={() => setPendingDeleteVenue(null)}
         onConfirm={() => {
           if (pendingDeleteVenue) {

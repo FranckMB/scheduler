@@ -28,6 +28,17 @@ const updateMut = vi.fn();
 const reorderMut = vi.fn();
 const reorderPending = { value: false };
 const deleteMut = vi.fn();
+// P3-16 — l'impact d'une suppression vient du SERVEUR : le mock le rend tel quel, l'écran
+// ne dérive plus aucun compte de son cache.
+const deletionImpact = {
+  value: {
+    blocked: false,
+    reason: null as string | null,
+    lines: [{ key: "team_reservation", count: 1, one: "créneau réservé", many: "créneaux réservés" }],
+    slotsInForce: 0,
+    declaredFixtures: 0,
+  },
+};
 
 vi.mock("../queries", () => ({
   useWizardTeams: () => ({ data: teamsState.data ?? [team] }),
@@ -48,6 +59,9 @@ vi.mock("../queries", () => ({
   useWizardTeamCoaches: () => ({ data: [] }),
   useWizardCoachPlayers: () => ({ data: [] }),
   useSharedTrainingGroups: () => ({ data: sharedGroupsState.data }),
+  // P3-16 — l'impact d'une suppression est calculé par le SERVEUR : le mock rend une
+  // réponse résolue et vide, l'écran n'en dérive plus aucun compte.
+  useDeletionImpact: () => ({ data: deletionImpact.value, isPending: false, isError: false }),
 }));
 
 import { TeamsStep } from "./TeamsStep";
@@ -71,7 +85,7 @@ describe("TeamsStep", () => {
     // The row's Trash button (aria-label "Supprimer") opens the confirmation.
     await user.click(screen.getByRole("button", { name: "Supprimer" }));
     const dialog = screen.getByRole("dialog");
-    // Impact confirmation names the linked reservation — no immediate delete.
+    // P3-16 — la ligne d'impact vient du SERVEUR (libellé compris), plus du cache de l'écran.
     expect(within(dialog).getByText("1 créneau réservé")).toBeInTheDocument();
     expect(deleteMut).not.toHaveBeenCalled();
 

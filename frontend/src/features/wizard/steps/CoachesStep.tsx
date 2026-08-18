@@ -14,6 +14,7 @@ import {
   useCreateCoachPlayer,
   useCreateTeamCoach,
   useDeleteCoach,
+  useDeletionImpact,
   useDeleteCoachPlayer,
   useDeleteTeamCoach,
   usePriorityTiers,
@@ -54,6 +55,8 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
   const [linkTeam, setLinkTeam] = useState("");
   const [linkRole, setLinkRole] = useState<TeamCoachRole | "PLAYER">("MAIN");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // P3-16 — l'impact vient du serveur.
+  const coachImpact = useDeletionImpact("coach", confirmDelete ? coach.id : null);
   // Cards are read-only by default; « Éditer » reveals the fields (batch item 4).
   const [editing, setEditing] = useState(false);
 
@@ -172,10 +175,10 @@ function CoachCard({ coach, teams, tiers, teamName, coachLinks, playerLinks }: C
       <DeleteConfirm
         open={confirmDelete}
         entityName={`${coach.firstName} ${coach.lastName}`.trim()}
-        impacts={[
-          { count: coachLinks.length, one: "équipe coachée", many: "équipes coachées" },
-          { count: playerLinks.length, one: "équipe où il joue", many: "équipes où il joue" },
-        ]}
+        // P3-16 : le serveur compte — l'écran ne voit ni les contraintes ni les séances.
+        impact={coachImpact.data ?? undefined}
+        impactLoading={coachImpact.isPending && confirmDelete}
+        impactFailed={coachImpact.isError}
         onConfirm={() => {
           del.mutate(coach.id);
           setConfirmDelete(false);

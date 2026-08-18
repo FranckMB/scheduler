@@ -159,6 +159,41 @@ export const listPeriodSlots = (schedulePlanId: string): Promise<VenueTrainingSl
 export const createVenue = (body: VenuePayload): Promise<Venue> => api.post("venues", { json: { source: "manual", ...body } }).json();
 export const updateVenue = (id: string, body: VenuePayload): Promise<Venue> => api.put(`venues/${id}`, { json: { source: "manual", ...body } }).json();
 export const deleteVenue = (id: string): Promise<void> => api.delete(`venues/${id}`).then(() => undefined);
+
+/**
+ * P3-16 — ce qu'une suppression VA détruire, calculé par le SERVEUR.
+ *
+ * ⚑ Ces compteurs étaient dérivés côté écran, depuis le cache react-query : la modale
+ * annonçait 2 ou 3 familles quand la cascade en emportait dix. L'écran ne pouvait pas dire
+ * vrai — il n'a chargé ici ni les matchs, ni les contraintes, ni les séances des autres
+ * plannings. Le front AFFICHE désormais ce que le backend a compté (règle 🔴 maison).
+ */
+export type DeletableKind = "venue" | "team" | "coach";
+
+export interface DeletionImpactLine {
+  key: string;
+  count: number;
+  /** Libellés PORTÉS PAR LE SERVEUR : une famille ajoutée au cascade s'affiche d'office. */
+  one: string;
+  many: string;
+}
+
+export interface DeletionImpact {
+  /** Le serveur REFUSERA le geste (équipe engagée) : ne pas l'offrir. */
+  blocked: boolean;
+  reason: string | null;
+  lines: DeletionImpactLine[];
+  /** Séances touchées vivant dans une version EN VIGUEUR. */
+  slotsInForce: number;
+  /** DOC-2 : matchs déjà déclarés à la fédération qui perdront leur salle. */
+  declaredFixtures: number;
+}
+
+const DELETION_IMPACT_PATH: Record<DeletableKind, string> = { venue: "venues", team: "teams", coach: "coaches" };
+
+export const fetchDeletionImpact = (kind: DeletableKind, id: string): Promise<DeletionImpact> =>
+  api.get(`${DELETION_IMPACT_PATH[kind]}/${id}/deletion-impact`).json<DeletionImpact>();
+
 export const createSlot = (body: SlotPayload): Promise<VenueTrainingSlot> => api.post("venue_training_slots", { json: body }).json();
 export const updateSlot = (id: string, body: SlotPayload): Promise<VenueTrainingSlot> => api.put(`venue_training_slots/${id}`, { json: body }).json();
 export const deleteSlot = (id: string): Promise<void> => api.delete(`venue_training_slots/${id}`).then(() => undefined);
