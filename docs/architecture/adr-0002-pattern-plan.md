@@ -726,6 +726,51 @@ validation du besoin → plan → code → NR phase1 → code-review → go util
   (trace datée), `specs/courantes/accueil-cockpit-temporel.md` §5bis. **P2-38 est intégralement
   livré (3 PR), l'item a quitté `specs/evolution/roadmap.md`.**
 
+- **Lot P2-41 — le SEGMENT devient l'unité hors socle (PR-B backend livrée 2026-08-18, l'item
+  RESTE ouvert pour le picker)**, amendement de l'invariant 5/du geste « cocher une semaine au
+  picker » ci-dessus : « cocher une semaine » naissait toujours UN enfant d'UNE semaine
+  (`assertValidWeekChild` plafonnait sa fenêtre à ≤ 7 jours) — besoin routine constaté : N
+  semaines identiques (même structure/contraintes) obligeaient à répéter le même geste semaine
+  par semaine, avec le risque que le solveur (8 workers, non déterministe) rende N résultats
+  divergents pour une même intention. **Décision : le SEGMENT — un bloc de semaines calendaires
+  PLEINES et CONTIGUËS (lundi→dimanche, clamp saison admis aux deux bords) — devient l'unité hors
+  socle ; la semaine simple est le segment de taille 1 (rétro-compatible sans migration, aucun
+  nouveau concept : même rail 1 entrée = 1 plan, mêmes gardes)**.
+  `CalendarEntryStateProcessor::assertValidWeekChild` remplace le plafond ≤ 7 jours par une garde
+  à deux étages : (1) une **borne d'enveloppe** — la fenêtre reste incluse dans les semaines qui
+  COUVRENT la mère (du lundi de la semaine de son début au dimanche de la semaine de sa fin,
+  clampé à la saison lue par SQL paramétré sur `season_id`, RLS-scopé) — cette borne **REMPLACE**
+  l'ancien « toucher la mère », strictement plus forte que lui : sans elle, retirer le plafond
+  laisserait un segment déborder largement la mère et hériter ses contraintes datées date-blind
+  hors de sa portée ; (2) des **bornes pleines** — début un lundi, fin un dimanche, sauf clamp
+  saison (un segment peut commencer/finir au premier/dernier jour de saison même hors lun/dim,
+  comme la semaine simple avant P2-41). L'anti-chevauchement entre semaines/segments d'une même
+  mère et la garde 409 `window_already_planned` (P2-38) valent **tels quels**, sans modification :
+  ce sont des comparaisons de fenêtres DATE, indifférentes à la largeur du segment qui les porte.
+  **Bonus non cherché** : sur un segment dont toutes les semaines sont EFFECTIVEMENT identiques
+  (même profil de fermetures), la réduction semaine-type de l'engine (`App\Service\VenueClosureDays`
+  — l'engine planifie en semaine-type, donc un jour fermé sur une seule semaine d'un bloc multi-
+  semaines ferme ce jour sur TOUT le bloc, « sur-ferme », documenté depuis 5b) devient de facto
+  **EXACTE** : le sur-ferme ne diverge de l'exact que si les semaines du segment divergent entre
+  elles — sur des semaines identiques, il n'y a rien à sur-fermer. **Assumé** : un segment
+  hétérogène (des semaines aux réglages différents regroupées dans le même bloc) reste **permis**
+  côté API — le sur-ferme s'applique alors normalement (comme n'importe quel bloc avant P2-41),
+  et l'avertissement pédagogique à l'écran est un geste **PR-C (frontend, pas encore livré)**, pas
+  une garde serveur. NR (axe planning lifecycle) : `Security/PeriodPlanBirthTest` (step bloquant)
+  étendu — segment 3 semaines naît avec son plan sur la fenêtre entière, deux segments frères qui
+  se chevauchent → 422, un segment débordant les semaines couvrant la mère → 422 (borne
+  d'enveloppe), un segment dans une fenêtre déjà gouvernée par un plan étranger → 409 dans les
+  deux sens, la semaine simple (taille 1) reste acceptée, un segment clampé au bord de saison est
+  accepté — et `Security/WeekChildEntryTest` (bornes non-lundi/non-dimanche hors clamp → 422).
+  Zéro migration (aucune contrainte DB de durée), `engine/**` non touché, `CONTRACT_VERSION`
+  inchangé (schéma date-blind), aucun champ de ressource API ne bouge (garde et messages
+  seulement). **Ce que cette PR-B ne fait PAS** : le picker (`WeekPickerDialog`) ne PROPOSE
+  toujours QUE des semaines individuelles — l'API accepte les segments, l'écran ne les offre pas
+  encore (PR-C : proposition aux ruptures géométriques, précochage, fusion/scission, pédagogie
+  sur-ferme). Détail : `specs/courantes/etat-des-lieux.md` §3 (trace datée),
+  `specs/courantes/types-de-planning.md` (règle transverse recalée), `specs/evolution/roadmap.md`
+  (P2-41 resserré sur le picker).
+
 ### Note de nommage (résolution de collision)
 
 Le concept est « le Plan » dans tout ce document, mais l'entité technique s'appelle
