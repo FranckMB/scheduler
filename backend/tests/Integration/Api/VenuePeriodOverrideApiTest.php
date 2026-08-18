@@ -200,24 +200,26 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(422);
     }
 
-    // ── P2-37 D2 : un gymnase entièrement fermé sur la fenêtre n'est plus réglable ──
+    // ── Indispo INFORMATIVE (fondateur 2026-08-18) : le verrou P2-37 D2 SAUTE ──
+    // Un gymnase entièrement fermé par une indisponibilité déclarée redevient PILOTABLE :
+    // la coche du plan fait foi. Ces trois cas gardaient l'inverse (refus 422) — ils s'inversent.
 
-    public function testPostAModeOnAFullyClosedVenueIsRefused(): void
+    public function testPostAModeOnAFullyClosedVenueIsNowAllowed(): void
     {
-        // Fermeture couvrant TOUTE la fenêtre 2025-12-22 → 2025-12-28 : le gymnase est indisponible.
+        // Fermeture couvrant TOUTE la fenêtre 2025-12-22 → 2025-12-28 : l'indisponibilité est
+        // désormais INFORMATIVE — le gestionnaire peut quand même régler le gymnase.
         $this->closeVenueForWholeWindow($this->venueA, 'Fermeture de fin d’année');
 
-        $body = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
-        self::assertResponseStatusCodeSame(422);
-        self::assertStringContainsString('Fermeture de fin d’année', (string) ($body['detail'] ?? ''), 'le refus nomme la fermeture');
+        $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
+        self::assertResponseStatusCodeSame(201, 'le réglage n’est plus verrouillé par l’indisponibilité (D2 supplanté)');
+        self::assertSame('DISABLED', $created['mode']);
     }
 
-    public function testPutAModeOnAFullyClosedVenueIsRefused(): void
+    public function testPutAModeOnAFullyClosedVenueIsNowAllowed(): void
     {
-        // L'override existe (posé quand le gymnase était encore ouvert)…
         $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
         self::assertResponseStatusCodeSame(201);
-        // …puis la fermeture totale tombe → le PUT est refusé.
+        // La fermeture totale tombe : le PUT reste possible — plus de verrou de façade.
         $this->closeVenueForWholeWindow($this->venueA, 'Réquisition');
 
         $this->client->request('PUT', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers(), json_encode([
@@ -225,31 +227,88 @@ final class VenuePeriodOverrideApiTest extends WebTestCase
             'venueId' => $this->venueA->getId(),
             'mode' => 'BLANK',
         ], \JSON_THROW_ON_ERROR));
-        self::assertResponseStatusCodeSame(422);
+        self::assertResponseIsSuccessful();
+        self::assertSame('BLANK', json_decode((string) $this->client->getResponse()->getContent(), true)['mode']);
     }
 
-    public function testDeleteAnOverrideOnAFullyClosedVenueIsRefused(): void
+    public function testDeleteAnOverrideOnAFullyClosedVenueIsNowAllowed(): void
     {
-        // Un override manuel posé AVANT la fermeture ne doit pas offrir une réactivation de
-        // façade : DELETE = « hériter » = réactiver, refusé tant que la fermeture tient.
+        // « Réactiver le gymnase entier malgré l'indispo » n'est plus refusé : l'indisponibilité
+        // ne fait que pré-remplir le défaut, elle ne verrouille rien.
         $created = $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);
         self::assertResponseStatusCodeSame(201);
         $this->closeVenueForWholeWindow($this->venueA, 'Réquisition');
 
         $this->client->request('DELETE', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers());
-        self::assertResponseStatusCodeSame(422);
+        self::assertResponseStatusCodeSame(204);
 
         $this->em->clear();
-        self::assertNotNull(
+        self::assertNull(
             $this->em->getRepository(VenuePeriodOverride::class)->find($created['id']),
-            'l’override survit : la réactivation de façade est refusée',
+            'l’override est bien supprimé : le retour à « hériter » n’est plus verrouillé',
         );
+    }
+
+    // ── Masque manuel jour tri-état (OPEN|CLOSED) — décision fondateur 2026-08-18 ──
+
+    public function testAMaskOnlyRowIsAcceptedWithoutAMode(): void
+    {
+        // Une ligne peut n'exister QUE pour son masque : mode NULL (hériter), masque forçant
+        // le samedi fermé et le mercredi ouvert.
+        $created = $this->post([
+            'schedulePlanId' => $this->planId,
+            'venueId' => $this->venueA->getId(),
+            'dayOverrides' => ['6' => 'CLOSED', '3' => 'OPEN'],
+        ]);
+        self::assertResponseStatusCodeSame(201);
+        self::assertNull($created['mode'], 'mode facultatif : une ligne peut n’avoir qu’un masque');
+        self::assertSame(['6' => 'CLOSED', '3' => 'OPEN'], $created['dayOverrides']);
+
+        // La grille n’a pas bougé : le masque ne vide/recopie rien (contrairement à BLANK).
+        self::assertSame(2, $this->countPeriodSlots($this->venueA), 'le masque n’agit pas sur la grille');
+    }
+
+    public function testAnEmptyRowWithNeitherModeNorMaskIsRejected(): void
+    {
+        $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId()]);
+        self::assertResponseStatusCodeSame(422, 'une ligne sans mode ni masque n’exprime rien');
+    }
+
+    public function testAnInvalidMaskKeyIsRejected(): void
+    {
+        // Clé hors 1..7 (8 = pas un jour ISO) → 422, la colonne JSON n’est jamais un fourre-tout.
+        $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'dayOverrides' => ['8' => 'OPEN']]);
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testAnInvalidMaskValueIsRejected(): void
+    {
+        // Valeur hors OPEN|CLOSED → 422.
+        $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'dayOverrides' => ['2' => 'MAYBE']]);
+        self::assertResponseStatusCodeSame(422);
+    }
+
+    public function testDeleteReturnsToInheritAndPurgesBothModeAndMask(): void
+    {
+        // DELETE = retour complet au défaut : mode ET masque disparaissent (sparse : pas de ligne).
+        $created = $this->post([
+            'schedulePlanId' => $this->planId,
+            'venueId' => $this->venueA->getId(),
+            'mode' => 'DISABLED',
+            'dayOverrides' => ['6' => 'CLOSED'],
+        ]);
+        self::assertResponseStatusCodeSame(201);
+
+        $this->client->request('DELETE', '/api/venue_period_overrides/' . $created['id'], [], [], $this->headers());
+        self::assertResponseStatusCodeSame(204);
+
+        $this->em->clear();
+        self::assertNull($this->em->getRepository(VenuePeriodOverride::class)->find($created['id']), 'la ligne — mode ET masque — a disparu');
     }
 
     public function testAPartialClosureStillLetsTheVenueBeConfigured(): void
     {
-        // Contre-épreuve : une fermeture PARTIELLE (un seul jour) ne rend pas le gymnase
-        // entièrement indisponible — le réglage reste permis.
+        // Une fermeture PARTIELLE (un seul jour) laisse évidemment le réglage permis.
         $this->closeVenue($this->venueA, 'Un seul jour', '2025-12-24', '2025-12-24');
 
         $this->post(['schedulePlanId' => $this->planId, 'venueId' => $this->venueA->getId(), 'mode' => 'DISABLED']);

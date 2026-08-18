@@ -12,6 +12,7 @@ use App\Entity\Reservation;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Entity\VenuePeriodOverride;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
@@ -151,6 +152,30 @@ final class ReservationApiTest extends WebTestCase
         self::assertResponseStatusCodeSame(201);
     }
 
+    // ── Indispo INFORMATIVE (fondateur 2026-08-18) : le masque du plan fait foi ──
+
+    public function testReservationOnADayReopenedByTheMaskSucceeds(): void
+    {
+        // Le mardi est fermé par l'indisponibilité déclarée, mais le gestionnaire l'a ROUVERT
+        // (masque OPEN) : la réservation du mardi passe — l'incident n'est plus qu'informatif.
+        $planId = $this->closedPeriodPlan('2026-10-19', '2026-10-25', '2026-10-20', '2026-10-20', 'Mardi fermé');
+        $this->mask($planId, [2 => 'OPEN']);
+
+        $this->post($planId); // dayOfWeek 2 = mardi, rouvert
+        self::assertResponseStatusCodeSame(201, 'un jour rouvert OPEN redevient réservable');
+    }
+
+    public function testReservationOnADayManuallyClosedByTheMaskIsRefused(): void
+    {
+        // Aucune indisponibilité déclarée, mais le gestionnaire a DÉCOCHÉ le mardi (masque CLOSED).
+        $planId = $this->createPeriodPlan($this->club->getId(), $this->season->getId(), $this->openEntry('2026-10-19', '2026-10-25'));
+        $this->mask($planId, [2 => 'CLOSED']);
+
+        $this->post($planId); // dayOfWeek 2 = mardi, décoché
+        self::assertResponseStatusCodeSame(422);
+        self::assertStringContainsString('décoché', (string) $this->client->getResponse()->getContent(), 'la cause « jour décoché » est distinguée de l’indisponibilité déclarée');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -218,6 +243,33 @@ final class ReservationApiTest extends WebTestCase
         $this->em->flush();
 
         return $this->createPeriodPlan($this->club->getId(), $this->season->getId(), $entry->getId());
+    }
+
+    /** Une entrée de période SANS fermeture — pour éprouver le masque manuel seul. */
+    private function openEntry(string $entryStart, string $entryEnd): string
+    {
+        $entry = (new CalendarEntry)->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setKind(CalendarEntryKind::PERIOD)->setPeriodType(CalendarEntryPeriodType::HOLIDAY)->setTitle('Période ouverte')
+            ->setStartDate(new DateTimeImmutable($entryStart))->setEndDate(new DateTimeImmutable($entryEnd));
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        return $entry->getId();
+    }
+
+    /**
+     * Pose le masque manuel du gymnase self::VENUE sur ce plan (jour ISO → OPEN|CLOSED).
+     *
+     * @param array<int, string> $dayOverrides
+     */
+    private function mask(string $schedulePlanId, array $dayOverrides): void
+    {
+        $override = (new VenuePeriodOverride)
+            ->setClubId($this->club->getId())->setSeasonId($this->season->getId())
+            ->setSchedulePlanId($schedulePlanId)->setVenueId(self::VENUE)
+            ->setDayOverrides($dayOverrides);
+        $this->em->persist($override);
+        $this->em->flush();
     }
 
     /** @return array<string, string> */

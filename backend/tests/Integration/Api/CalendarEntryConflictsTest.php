@@ -12,6 +12,7 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\User;
+use App\Entity\VenuePeriodOverride;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
@@ -22,6 +23,7 @@ use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
 use App\Service\SchedulePlanProvisioner;
 use App\Tests\ChoosesPlanVersionTrait;
+use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
@@ -40,6 +42,7 @@ use Symfony\Component\PasswordHasher\Hasher\UserPasswordHasherInterface;
 final class CalendarEntryConflictsTest extends WebTestCase
 {
     use ChoosesPlanVersionTrait;
+    use ProvisionsPeriodPlanTrait;
     use TenantGucTrait;
 
     private const VENUE_X = '11111111-1111-4111-8111-111111111111';
@@ -271,6 +274,38 @@ final class CalendarEntryConflictsTest extends WebTestCase
         self::assertSame('2026-05-04', $data['closures'][0]['startDate']);
         self::assertSame('2026-05-06', $data['closures'][0]['endDate']);
         self::assertSame([1, 2, 3], $data['closures'][0]['weekdays']);
+    }
+
+    /**
+     * NR indispo informative (fondateur 2026-08-18) — le radar sert l'ÉTAT EFFECTIF jour par
+     * jour AVEC provenance : le front ne redérive JAMAIS la composition. Incident mercredi +
+     * masque {samedi: CLOSED} → mercredi 'default-incident', samedi 'manual'.
+     */
+    public function testEffectiveClosedWeekdaysAreServedWithProvenance(): void
+    {
+        [$user, $club, $season] = $this->seed('CFB');
+        $this->baseline($club, $season);
+        // Fenêtre lun 05-04 → dim 05-10 ; incident venue X le mercredi 05-06.
+        $entry = $this->closureWithIncident($club, $season, self::VENUE_X, '2026-05-04', '2026-05-10', '2026-05-06', '2026-05-06');
+        $planId = $this->planIdOf($entry); // provisionne le plan de la période
+        // Masque : le samedi (jour 6) est décoché à la main.
+        $override = (new VenuePeriodOverride)
+            ->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setSchedulePlanId($planId)->setVenueId(self::VENUE_X)
+            ->setDayOverrides([6 => 'CLOSED']);
+        $this->em->persist($override);
+        $this->em->flush();
+
+        $this->client->request('GET', "/api/calendar-entries/{$entry->getId()}/conflicts", [], [], $this->authHeaders($user, $club));
+        self::assertResponseIsSuccessful();
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        self::assertSame(
+            ['3' => 'default-incident', '6' => 'manual'],
+            $data['effectiveClosedWeekdays'][self::VENUE_X] ?? null,
+            'mercredi vient de l’indisponibilité déclarée, samedi du décochage manuel',
+        );
+        self::assertSame([], $data['disabledVenueIds'], 'aucun gymnase désactivé ici');
     }
 
     public function testForeignEntryIsForbidden(): void
