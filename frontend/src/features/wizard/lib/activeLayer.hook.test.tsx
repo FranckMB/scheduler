@@ -56,31 +56,33 @@ describe("useActiveVenues / useActiveTeams — le câblage de la couche", () => 
     expect(api.listVenuePeriodOverrides).not.toHaveBeenCalled();
   });
 
-  it("période : retire le gymnase DÉSACTIVÉ et rend ses identifiants", async () => {
-    vi.mocked(api.listVenuePeriodOverrides).mockResolvedValue([{ id: "o1", schedulePlanId: "p1", venueId: "v2", mode: "DISABLED" }] as never);
-    const { result } = renderHook(() => useActiveVenues("p1"), { wrapper });
+  // Indispo INFORMATIVE (2026-08-18) — `disabledVenueIds` est désormais un CHAMP SERVI (mode
+  // DISABLED calculé serveur), passé par l'appelant ; plus de dérivation locale des overrides.
+  // La lecture des overrides ne sert QUE de signal fail-closed (`layerRead`).
+  it("période : retire le gymnase DÉSACTIVÉ servi et rend ses identifiants", async () => {
+    vi.mocked(api.listVenuePeriodOverrides).mockResolvedValue([] as never); // charge → layerRead ready
+    const { result } = renderHook(() => useActiveVenues("p1", ["v2"]), { wrapper });
 
     await waitFor(() => expect(result.current.layerRead).toBe("ready"));
     expect(result.current.venues.map((v) => v.id)).toEqual(["v1"]);
     expect(result.current.disabledIds.has("v2")).toBe(true);
   });
 
-  // P2-37 D6 — un gymnase ENTIÈREMENT FERMÉ sur la fenêtre (donnée SERVEUR passée par
-  // l'appelant, jamais redérivée) compte comme indisponible : retiré de la liste active ET
-  // rangé dans `disabledIds`, au même titre qu'un DÉSACTIVÉ « override ».
+  // Un gymnase ENTIÈREMENT FERMÉ sur la fenêtre (donnée SERVEUR, 3e argument) compte comme
+  // indisponible : retiré de la liste active ET rangé dans `disabledIds`, comme un DÉSACTIVÉ.
   it("période : un gymnase entièrement fermé (donnée serveur) compte comme indisponible", async () => {
     vi.mocked(api.listVenuePeriodOverrides).mockResolvedValue([] as never); // aucun override
-    const { result } = renderHook(() => useActiveVenues("p1", ["v2"]), { wrapper });
+    const { result } = renderHook(() => useActiveVenues("p1", [], ["v2"]), { wrapper });
 
     await waitFor(() => expect(result.current.layerRead).toBe("ready"));
     expect(result.current.venues.map((v) => v.id)).toEqual(["v1"]);
     expect(result.current.disabledIds.has("v2")).toBe(true);
   });
 
-  // Les deux causes se cumulent : désactivé « override » ET entièrement fermé sortent tous deux.
-  it("période : DÉSACTIVÉ (override) et ENTIÈREMENT FERMÉ (serveur) sortent tous deux", async () => {
-    vi.mocked(api.listVenuePeriodOverrides).mockResolvedValue([{ id: "o1", schedulePlanId: "p1", venueId: "v1", mode: "DISABLED" }] as never);
-    const { result } = renderHook(() => useActiveVenues("p1", ["v2"]), { wrapper });
+  // Les deux causes SERVIES se cumulent : désactivé ET entièrement fermé sortent tous deux.
+  it("période : DÉSACTIVÉ (servi) et ENTIÈREMENT FERMÉ (servi) sortent tous deux", async () => {
+    vi.mocked(api.listVenuePeriodOverrides).mockResolvedValue([] as never);
+    const { result } = renderHook(() => useActiveVenues("p1", ["v1"], ["v2"]), { wrapper });
 
     await waitFor(() => expect(result.current.layerRead).toBe("ready"));
     expect(result.current.venues).toHaveLength(0);

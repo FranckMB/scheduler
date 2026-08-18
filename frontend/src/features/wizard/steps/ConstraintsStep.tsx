@@ -117,7 +117,7 @@ export function ConstraintsStep() {
   // (`fullyClosedVenueIds` — jamais redérivée côté front). On interroge l'entrée COURANTE
   // (semaine enfant comprise) : le serveur résout la mère pour les fermetures.
   const { data: entryConflicts } = useEntryConflicts(periodEntryId);
-  const { venues, disabledIds, layerRead: venuesRead } = useActiveVenues(layerPlanId, entryConflicts?.fullyClosedVenueIds ?? []);
+  const { venues, disabledIds, layerRead: venuesRead } = useActiveVenues(layerPlanId, entryConflicts?.disabledVenueIds ?? [], entryConflicts?.fullyClosedVenueIds ?? []);
   const { teams, pausedIds, layerRead: teamsRead } = useActiveTeams(layerPlanId);
   const { data: allVenues = [] } = useWizardVenues();
   // Mode période dont l'ancre n'est PAS résolue (`loading`, `failed`, `absent`) : la couche

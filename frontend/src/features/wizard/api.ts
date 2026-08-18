@@ -208,19 +208,37 @@ export const deleteSlot = (id: string): Promise<void> => api.delete(`venue_train
  * `BLANK` : on repart d'une grille vierge — destructif, à confirmer.
  */
 export type VenuePeriodMode = "DISABLED" | "BLANK";
+/** Le masque manuel tri-état d'un jour : OPEN (rouvert) / CLOSED (fermé). L'absence = « hériter ». */
+export type VenueDayState = "OPEN" | "CLOSED";
+/** Masque manuel SPARSE : jour ISO (1..7) → OPEN|CLOSED. Clés string en JSON. */
+export type VenueDayMask = Record<string, VenueDayState>;
 
 export interface VenuePeriodOverride {
   id: string;
   schedulePlanId: string;
   venueId: string;
-  mode: VenuePeriodMode;
+  /**
+   * FACULTATIF (indispo informative, 2026-08-18) : une ligne peut n'exister que pour son masque.
+   * null = pas de mode (hériter), le défaut étant matérialisé par l'ABSENCE de ligne (DELETE).
+   */
+  mode: VenuePeriodMode | null;
+  /** Masque manuel jour ISO → OPEN|CLOSED (ou null). Le front le LIT ; la composition vit serveur. */
+  dayOverrides: VenueDayMask | null;
+}
+
+/** Corps d'écriture d'un réglage (mode ET/OU masque — au moins l'un, garde serveur). */
+export interface VenuePeriodOverridePayload {
+  schedulePlanId: string;
+  venueId: string;
+  mode?: VenuePeriodMode | null;
+  dayOverrides?: VenueDayMask | null;
 }
 
 export const listVenuePeriodOverrides = (schedulePlanId: string): Promise<VenuePeriodOverride[]> =>
   collectionAll<VenuePeriodOverride>("venue_period_overrides", { schedulePlanId });
-export const createVenuePeriodOverride = (body: { schedulePlanId: string; venueId: string; mode: VenuePeriodMode }): Promise<VenuePeriodOverride> =>
+export const createVenuePeriodOverride = (body: VenuePeriodOverridePayload): Promise<VenuePeriodOverride> =>
   api.post("venue_period_overrides", { json: body }).json();
-export const updateVenuePeriodOverride = (id: string, body: { schedulePlanId: string; venueId: string; mode: VenuePeriodMode }): Promise<VenuePeriodOverride> =>
+export const updateVenuePeriodOverride = (id: string, body: VenuePeriodOverridePayload): Promise<VenuePeriodOverride> =>
   api.put(`venue_period_overrides/${id}`, { json: body }).json();
 /** Retirer la ligne = revenir au défaut « hériter ». Depuis VIERGE, cela reprend la grille
  *  de saison ; depuis DÉSACTIVÉ, cela réactive SANS toucher à la grille (revue #8 round 4). */

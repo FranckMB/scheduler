@@ -1,18 +1,27 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-18 (recalé ce jour : **indisponibilité de gymnase informative, PR1
-backend (décision fondateur du soir)** — le §Gymnases (tableau §6bis) et le corollaire §9ter.e
-sont réécrits : le verrou P2-37 D2 (réactiver un gymnase entièrement fermé refusé en 422) est
-**SUPPLANTÉ** — `VenuePeriodOverride.mode` devient NULLABLE et gagne un masque manuel jour
-`dayOverrides` (jour ISO 1..7 → OPEN|CLOSED), composé avec le défaut dérivé de l'incident dans la
-maison unique `PlanVenueClosures::effectiveStateForPlan/Entry` ; POST/PUT/DELETE sont de nouveau
-acceptés sur un gymnase entièrement fermé (DELETE purge mode ET masque). ⚠ Vérité TRANSITOIRE
-assumée : le SERVEUR accepte, mais l'ÉCRAN (surfaçage P2-37 PR2 de ce matin, non touché par ce
-lot) cache encore l'interrupteur d'un gymnase entièrement fermé — rattrapage en PR2 (coches jour +
-bandeau + gestes), `roadmap.md` P2-37 — re-vérifié contre `backend/src/Service/PlanVenueClosures.php`,
-`backend/src/Entity/VenuePeriodOverride.php`, `backend/src/Enum/VenueDayState.php`,
-`backend/src/Dto/VenuePeriodOverrideInput.php`, `backend/src/Service/OrphanPinGuard.php`,
-`backend/src/State/Processor/ReservationStateProcessor.php`,
+Last verified @ 2026-08-18 (recalé ce jour : **indisponibilité de gymnase informative, PR2 front
+— lot P2-37 SOLDÉ, retiré de la roadmap** — le §Gymnases (tableau §6bis) rattrape l'écran : rangée
+de 7 coches jour par gymnase (état EFFECTIF servi + provenance en info-bulle), l'écriture de la
+coche (helpers purs `wizard/lib/venueDays.ts` — jamais de recomposition front), les gestes
+gymnase entier (Désactiver/**Réactiver** qui REVIENT sur un gymnase entièrement fermé — le
+surfaçage transitoire du 2026-08-18 matin qui le cachait est retiré —, « Réactiver malgré
+l'indisponibilité », « Revenir au défaut »), le gel sous DISABLED (coches conservées), le bandeau
+étendu aux jours décochés à la main, et le récap (`RecapStep.tsx`) qui lit désormais l'état
+EFFECTIF (`effectiveClosedWeekdays` + `disabledVenueIds`) plutôt que les fermetures brutes —
+re-vérifié contre `frontend/src/features/wizard/steps/PeriodStructure.tsx`,
+`frontend/src/features/wizard/lib/venueDays.ts`, `frontend/src/features/wizard/steps/RecapStep.tsx`,
+`frontend/src/features/wizard/queries.ts`, `frontend/src/features/cockpit/api.ts`,
+`frontend/src/features/wizard/api.ts`. Précédemment ce même jour : **indisponibilité de gymnase
+informative, PR1 backend (décision fondateur du soir)** — le corollaire §9ter.e est réécrit : le
+verrou P2-37 D2 (réactiver un gymnase entièrement fermé refusé en 422) est **SUPPLANTÉ** —
+`VenuePeriodOverride.mode` devient NULLABLE et gagne un masque manuel jour `dayOverrides` (jour
+ISO 1..7 → OPEN|CLOSED), composé avec le défaut dérivé de l'incident dans la maison unique
+`PlanVenueClosures::effectiveStateForPlan/Entry` ; POST/PUT/DELETE sont de nouveau acceptés sur un
+gymnase entièrement fermé (DELETE purge mode ET masque) — re-vérifié contre
+`backend/src/Service/PlanVenueClosures.php`, `backend/src/Entity/VenuePeriodOverride.php`,
+`backend/src/Enum/VenueDayState.php`, `backend/src/Dto/VenuePeriodOverrideInput.php`,
+`backend/src/Service/OrphanPinGuard.php`, `backend/src/State/Processor/ReservationStateProcessor.php`,
 `backend/src/Controller/CalendarEntryConflictsController.php`. Précédemment ce même jour :
 **P2-36 livré (les deux tranches, une seule PR) —
 retiré de la roadmap**, `etat-des-lieux.md` §3 — §5bis gagne le détail de la décision d'ouverture
@@ -581,7 +590,40 @@ masque `CLOSED`) reste bloquant ; un jour rouvert par le masque (`OPEN`) n'est p
 blocage. **Réactiver un gymnase entièrement fermé — POST/PUT ou DELETE de son
 `VenuePeriodOverride` — N'EST PLUS REFUSÉ** : le verrou P2-37 D2 (« refusé en 422, non réversible »)
 est SUPPLANTÉ — le serveur accepte de nouveau le geste, DELETE purge mode ET masque (retour complet
-au défaut). **Surfaçage écran (P2-37 PR2, 2026-08-18 matin)** : sur un gymnase ENTIÈREMENT fermé, l'interrupteur Désactiver/Réactiver **disparaît** — remplacé, au même endroit de l'en-tête, par la RAISON en clair (« Indispo du X au Y — titre »), annoncée AVANT tout clic ; une fermeture **partielle** ne change RIEN à l'écran — le gymnase reste actif, son interrupteur reste posable (témoin dédié, `PeriodStructure.test.tsx`). ⚠ **Vérité TRANSITOIRE, à ne pas prendre pour la cible** : ce surfaçage a été écrit AVANT la décision d'informative du soir même — il disait alors « l'écran dit ce que le serveur refuserait ». Depuis, le SERVEUR accepte de nouveau le geste (ci-dessus) mais l'ÉCRAN, lui, n'a pas bougé : il cache TOUJOURS l'interrupteur d'un gymnase entièrement fermé, devenant plus strict que le serveur qu'il ne fait plus que refléter à moitié. Rattrapage prévu en PR2 du nouveau lot (coches jour dans les réglages, bandeau de rappel, geste « Réactiver malgré l'indispo », et le retour de l'interrupteur) — `roadmap.md` P2-37. ⚠ **Point contre-intuitif, vérifié au code, pas un oubli** : la grille d'un gymnase entièrement fermé reste **modifiable** (créneaux, Reprendre/Vider) — le `<fieldset disabled>` ne gèle que sur le mode `DISABLED` de l'override, jamais sur une fermeture (`PeriodStructure.tsx`). Geler la grille aurait inventé une restriction que le SERVEUR n'impose pas (seule la réservation reste refusée en 422, au grain jour EFFECTIF — le mode override, lui, est de nouveau accepté depuis la décision fondateur du 2026-08-18 ; jamais un geste de grille) — le front serait devenu plus strict que le serveur, ce que la règle d'or interdit. L'écran le dit : « Sa grille reste modifiable (vous pouvez la préparer pour la suite). » Si ce point mérite d'être tranché autrement, c'est une question ouverte, `roadmap.md` §Parking. |
+au défaut). **Écran (P2-37 PR2, 2026-08-18 soir — lot SOLDÉ)** : sous le sélecteur de gymnase, une
+**rangée de 7 coches jour** (« Jours ouverts cette période ») lit l'état EFFECTIF servi
+(`effectiveClosedWeekdays`) — une coche cochée = jour ouvert, décochée = jour effectivement fermé,
+avec sa **provenance** en info-bulle (« fermé — indisponibilité déclarée (du…au…) » /
+« fermé — décoché manuellement » / « ouvert — réactivé malgré l'indisponibilité »). Cliquer une
+coche écrit l'OPPOSÉ de l'état effectif dans le masque (`dayOverrides`) si le jour n'y a pas déjà
+d'entrée, ou RETIRE l'entrée existante (retour au défaut de l'incident) — jamais de recomposition
+côté front (`wizard/lib/venueDays.ts`, helpers purs, pas de miroir déclaré : la composition reste
+100 % serveur). **L'interrupteur Désactiver/Réactiver REVIENT sur un gymnase entièrement fermé** —
+le surfaçage du 2026-08-18 matin qui le cachait (remplacé par la raison en clair) est PÉRIMÉ : le
+serveur accepte le geste, donc l'écran ne le cache plus ; la raison reste affichée en badge
+d'information, à côté de l'interrupteur, jamais à sa place. **Gestes gymnase entier**, sous la
+rangée de coches : « Réactiver malgré l'indisponibilité » (visible si une indisponibilité déclarée
+existe — pose `dayOverrides` = OPEN×7, mode préservé) et « Revenir au défaut » (visible si une ligne
+`VenuePeriodOverride` existe — DELETE, purge mode ET masque). Sous **DISABLED**, la rangée est gelée
+(`<fieldset disabled>`, coches conservées, mention « Grille et coches conservées — réactivez le
+gymnase pour les retrouver ») — réactiver ne perd pas le masque manuel posé avant la désactivation.
+**Grain semaine-type** : décocher/cocher un jour vaut pour **toutes les semaines de la période**
+(mention à l'écran), pas une date précise. **Bandeau d'ensemble** (au-dessus du sélecteur) : liste
+maintenant aussi bien les gymnases indisponibles (déclaré) que ceux portant des jours décochés À LA
+MAIN (`manual`), pour qu'un gestionnaire les voie sans sélectionner chaque gymnase. **Récap**
+(`RecapStep.tsx`) : les réservations non servies et le motif affiché lisent l'état EFFECTIF servi
+(`effectiveClosedWeekdays` + `disabledVenueIds`), plus les fermetures brutes pour le TITRE — un jour
+rouvert par le masque n'est plus annoncé fermé. Témoins : `PeriodStructure.test.tsx` (rangée de
+coches, provenance, gestes gymnase entier, gel sous DISABLED, bandeau), `venueDays.test.ts` (règle
+d'écriture de la coche), `RecapStep.test.tsx` (état effectif). ⚠ **Point contre-intuitif, vérifié
+au code, pas un oubli** : la grille d'un gymnase entièrement fermé reste **modifiable** (créneaux,
+Reprendre/Vider) — le `<fieldset disabled>` de la grille ne gèle que sur le mode `DISABLED` de
+l'override, jamais sur une fermeture (`PeriodStructure.tsx`). Geler la grille aurait inventé une
+restriction que le SERVEUR n'impose pas (seule la réservation reste refusée en 422, au grain jour
+EFFECTIF — le mode override, lui, est accepté depuis la décision fondateur du 2026-08-18 ; jamais un
+geste de grille) — le front serait devenu plus strict que le serveur, ce que la règle d'or interdit.
+L'écran le dit : « Vous pouvez rouvrir des jours ci-dessous, ou le préparer pour la suite. » Si ce
+point mérite d'être tranché autrement, c'est une question ouverte, `roadmap.md` §Dette. |
 | Coachs | **Hérités, lecture seule** (lien équipe↔coach préservé) |
 | **Contraintes** | **Active.** Pré-remplie avec **l'exception** (ex. De Barros indispo sur la fenêtre) ; le gestionnaire **ajoute les contraintes propres à la période** (« du coup U13 passe le mercredi ») et **hérite les contraintes permanentes du socle**, chacune **cochable/décochable** pour la fenêtre. DIFF `ConstraintPeriodOverride` épars : une ligne n'existe que pour une **déviation** du défaut (le socle et le `isActive` propre de la contrainte ne sont **jamais** touchés). **Défaut selon le type de période :** <br>• **Fermeture** (closure) → **tout gardé** (on décoche ce qui gêne). <br>• **Reprise** (holiday) → défaut **intelligent qui suit les équipes** : contrainte **club/coach** gardée, contrainte **d'équipe** gardée seulement si l'équipe reprend (décochée si l'équipe est en pause), contrainte **de gymnase** décochée (pas de créneaux socle en reprise). Calculé (pas de seed persisté), miroir back/front. |
 | Récap | Résumé de la **période** (fenêtre + exceptions + contraintes) |

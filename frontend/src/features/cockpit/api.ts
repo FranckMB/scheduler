@@ -176,6 +176,17 @@ export interface EntryConflictsResponse {
    */
   fullyClosedVenueIds: string[];
   /**
+   * Indispo INFORMATIVE (décision fondateur 2026-08-18) — l'ÉTAT EFFECTIF jour par jour, AVEC
+   * provenance : `{ venueId → { jour ISO "1".."7" → "manual" | "default-incident" } }`. Seuls les
+   * jours EFFECTIVEMENT fermés y figurent (`manual` = décoché à la main ; `default-incident` =
+   * hérité de l'indisponibilité déclarée). Composé SERVEUR (`PlanVenueClosures`) — le front le LIT,
+   * il ne recompose JAMAIS incident × masque (règle d'or, `.claude/rules/frontend.md`).
+   * Un gymnase DÉSACTIVÉ en est absent (il rejoint `disabledVenueIds`). Vide sans plan de période.
+   */
+  effectiveClosedWeekdays: Record<string, Record<string, "manual" | "default-incident">>;
+  /** Les gymnases DÉSACTIVÉS pour la période (mode DISABLED), calculés SERVEUR. Vide sans plan. */
+  disabledVenueIds: string[];
+  /**
    * Le plan de la saison pointe-t-il une version ? Sinon la saison n'a PAS de
    * calendrier et le radar n'a rien pu comparer : `conflicts: []` veut alors dire
    * « je ne sais pas », pas « aucun impact ». Sans ce drapeau les deux se lisent
