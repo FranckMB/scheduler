@@ -1,6 +1,6 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-18 (recalé ce jour : **P2-41 PR-B backend livrée, l'item RESTE ouvert
+Last verified @ 2026-08-19 (recalé — vérification du 18 au soir, commit passé minuit : **P2-41 PR-B backend livrée, l'item RESTE ouvert
 pour le picker** — §5bis note que le serveur accepte désormais les SEGMENTS (bloc de semaines
 pleines et contiguës comme un seul enfant/un seul plan, ADR-0002) alors que `WeekPickerDialog` ne
 les propose pas encore — re-vérifié contre `backend/src/State/Processor/CalendarEntryStateProcessor.php`
