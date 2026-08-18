@@ -1,6 +1,11 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-18 (recalé ce jour : **P2-40 livré — le picker de semaines EXCLUT les
+Last verified @ 2026-08-19 (recalé — vérification du 18 au soir, commit passé minuit : **P2-41 PR-B backend livrée, l'item RESTE ouvert
+pour le picker** — §5bis note que le serveur accepte désormais les SEGMENTS (bloc de semaines
+pleines et contiguës comme un seul enfant/un seul plan, ADR-0002) alors que `WeekPickerDialog` ne
+les propose pas encore — re-vérifié contre `backend/src/State/Processor/CalendarEntryStateProcessor.php`
+et `frontend/src/features/cockpit/WeekPickerDialog.tsx` (comportement écran
+inchangé). Précédemment ce même jour : **P2-40 livré — le picker de semaines EXCLUT les
 semaines gouvernées par des vacances, retiré de la roadmap** — §5bis gagne le détail : fonctions
 pures `holidayWindows`/`closureWeeksOffer` (`lib/date.ts`), le fait `holidayCovered` de
 `decideWeekAdapt` (retire le chemin « d'un bloc », ouvre toujours le picker), l'état `holiday` de
@@ -463,7 +468,11 @@ l'horloge. Le **serveur** garde l'heure réelle (P4-16 reste ouverte pour lui).
     (`WeekPickerDialog`) s'interpose avant le wizard : chaque semaine cochée devient une entrée
     **enfant** (`parentEntryId`) avec **son propre plan** (P2-5 E1) ; une seule semaine → wizard
     direct. Même règle partout où le geste existe, pour ne pas offrir deux comportements au même
-    geste.
+    geste. ⚠ **Vrai côté ÉCRAN seulement (2026-08-18) : le SERVEUR accepte déjà les SEGMENTS**
+    (P2-41 PR-B, [ADR-0002](../../docs/architecture/adr-0002-pattern-plan.md) — un bloc de
+    semaines calendaires pleines et contiguës comme UN seul enfant/UN seul plan, la semaine
+    simple restant le segment de taille 1) ; `WeekPickerDialog` ne PROPOSE pas encore ce choix,
+    chaque semaine cochée reste un enfant séparé — PR-C, pas encore livrée.
   - **La décision d'ouvrir ce picker (P2-36, 2026-08-18)** vit dans une seule fonction pure,
     `decideWeekAdapt` (`lib/useWeekAdapt.ts`) — le radar et le DayDialog la dupliquaient avec des
     entrées différentes, corriger un seul côté garantissait un écart, et le défaut qu'elle ferme :

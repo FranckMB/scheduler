@@ -1,6 +1,6 @@
 # Les 3 types de planning — référence produit
 
-Last verified @ 2026-08-18 (aucun changement de FOND : seuls les chemins vers la doc frontend sont recalés après son déplacement vers `frontend/docs/`) ; précédemment : 2026-08-08 (statut posé ce jour ; gabarits de noms par défaut recalés P4-41/P2-20 ; contenu recalé depuis par P3-14/P3-15 a/b — ordre des listes de doléances et coach qui encadre vraiment l'équipe)
+Last verified @ 2026-08-19 (re-vérifié contre `backend/src/State/Processor/CalendarEntryStateProcessor.php` — **P2-41 PR-B backend**, vérification du 18 au soir, commit passé minuit : la règle transverse « la semaine est l'unité » devient « le SEGMENT est l'unité » côté API (semaine simple = segment de taille 1) — reste vrai côté écran, le picker ne propose encore que des semaines individuelles, PR-C non livrée) ; précédemment : 2026-08-18 (aucun changement de FOND : seuls les chemins vers la doc frontend sont recalés après son déplacement vers `frontend/docs/`) ; précédemment : 2026-08-08 (statut posé ce jour ; gabarits de noms par défaut recalés P4-41/P2-20 ; contenu recalé depuis par P3-14/P3-15 a/b — ordre des listes de doléances et coach qui encadre vraiment l'équipe)
 
 > **Rôle de ce document** : la trace durable du modèle métier des plannings, validé avec le
 > fondateur le 2026-07-12. C'est LA référence à consulter avant tout travail sur la
@@ -26,18 +26,26 @@ Last verified @ 2026-08-18 (aucun changement de FOND : seuls les chemins vers la
 | **Ce que ça comble** | Le plan de base de l'année — le process **le mieux rodé** | **Réparer un souci ponctuel** (gym fermé, coach absent) sans toucher le socle | La **reprise progressive** semaine par semaine (vacances, effectif réduit) |
 | **Nom par défaut** | `Planning de la saison 20XX-20XX` | `Ajustement {NOM DU GYMNASE} — {repère}` | `Vacances de la Toussaint — {repère}` |
 
-## Règle transverse : la SEMAINE est l'unité
+## Règle transverse : le SEGMENT est l'unité
 
-**Tout planning qui n'est pas le socle couvre UNE semaine.** Un besoin multi-semaines =
-**N plannings hebdomadaires**, jamais un seul planning multi-semaines.
+**Tout planning qui n'est pas le socle couvre un SEGMENT — un bloc de semaines calendaires
+pleines et contiguës (lundi→dimanche, clamp saison admis aux deux bords) ; la semaine simple est
+le segment de taille 1.** ⚠ **Vrai côté API depuis P2-41 (2026-08-18, PR-B backend,
+`CalendarEntryStateProcessor::assertValidWeekChild`, [ADR-0002](../../docs/architecture/adr-0002-pattern-plan.md))
+— reste VRAI côté écran que la règle historique ci-dessous : le picker (`WeekPickerDialog`, PR-C,
+pas encore livrée) ne propose toujours QUE des semaines individuelles à cocher une par une.** Un
+enfant naît toujours avec SON plan (rail 1 entrée = 1 plan), quelle que soit la largeur de son
+segment.
 
 - **Overlay** : une indispo à cheval (jeudi → jeudi suivant) ⇒ **2 overlays auto** (un par
   semaine englobée). On gère le premier ; l'outil **notifie qu'un second planning est
   ouvert à compléter**. Semaine 1 : jeudi–vendredi indisponibles ; semaine 2 : lundi–jeudi
   indisponibles — le vendredi de la semaine 2 **garde ses créneaux du socle**.
-- **Reprise** : le gestionnaire clique les semaines possibles des vacances. **N semaines
-  cochées ensemble = N semaines IDENTIQUES** (un planning répliqué). Deux semaines
-  **différentes** = deux plannings (deux sélections).
+- **Reprise (écran actuel)** : le gestionnaire clique les semaines possibles des vacances, une par
+  une. **N semaines cochées ensemble = N semaines IDENTIQUES** (un planning répliqué). Deux
+  semaines **différentes** = deux plannings (deux sélections). Ce que l'API permettrait déjà —
+  cocher un SEGMENT multi-semaines en un seul enfant/un seul plan — n'est pas encore ce que le
+  picker propose (P2-41 PR-C).
 
 ## 1. Planning principal (socle)
 

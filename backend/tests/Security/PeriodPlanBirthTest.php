@@ -647,6 +647,133 @@ final class PeriodPlanBirthTest extends WebTestCase
         self::assertNull($this->planOf($club->getId(), $incident), 'déclarer n’adapte pas — et surtout, déclarer n’est jamais refusé');
     }
 
+    /**
+     * NR — P2-41 SEGMENTS : un enfant dont la fenêtre couvre PLUSIEURS semaines
+     * contiguës naît comme n'importe quelle semaine — un enfant, son plan, jamais un
+     * nouveau concept. Ici 3 semaines pleines (lun→dim) : le plan naît sur le SEGMENT.
+     */
+    public function testAThreeWeekSegmentBirthsItsOwnPlanOnTheSegmentWindow(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $motherId = $this->postPeriodDated($user, 'holiday', 'Vacances longues', '2026-10-19', '2026-11-08');
+
+        $segmentId = $this->postWeekChild($user, $motherId, '2026-10-19', '2026-11-08');
+
+        $plan = $this->planOf($club->getId(), $segmentId);
+        self::assertInstanceOf(SchedulePlan::class, $plan, 'le segment naît avec SON plan (rail 1 entrée = 1 plan)');
+        self::assertSame(SchedulePlanType::HOLIDAY, $plan->getType());
+        self::assertSame('2026-10-19', $plan->getStartDate()->format('Y-m-d'), 'la fenêtre du plan est le SEGMENT entier');
+        self::assertSame('2026-11-08', $plan->getEndDate()->format('Y-m-d'));
+    }
+
+    /** NR — P2-41 : une semaine simple (segment de taille 1) reste acceptée — non-régression. */
+    public function testASingleWeekSegmentStillBirthsItsPlan(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $motherId = $this->postPeriodDated($user, 'holiday', 'Vacances', '2026-10-19', '2026-11-02');
+
+        $weekId = $this->postWeekChild($user, $motherId, '2026-10-19', '2026-10-25');
+
+        self::assertInstanceOf(SchedulePlan::class, $this->planOf($club->getId(), $weekId), 'la semaine simple naît toujours avec son plan');
+    }
+
+    /**
+     * NR — P2-41 : deux segments FRÈRES qui se chevauchent → 422. La garde
+     * anti-chevauchement existante (par recouvrement de fenêtres) vaut pour des blocs,
+     * pas seulement pour le même lundi.
+     */
+    public function testTwoOverlappingSegmentsOfTheSameMotherAreRefused(): void
+    {
+        [$user] = $this->createClubWithSeason();
+        $motherId = $this->postPeriodDated($user, 'holiday', 'Vacances longues', '2026-10-19', '2026-11-08');
+
+        $this->postWeekChild($user, $motherId, '2026-10-19', '2026-11-01'); // seg1 : 2 semaines
+        // seg2 recoupe seg1 sur la semaine du 26 (les deux sont lun→dim).
+        $this->postWeekChildExpecting(422, $user, $motherId, '2026-10-26', '2026-11-08');
+    }
+
+    /**
+     * NR — P2-41 : un segment qui DÉBORDE les semaines couvrant la mère → 422. Borne
+     * NOUVELLE (le plafond ≤7 j bornait les dégâts avant P2-41 ; sans elle, un segment
+     * hériterait les datées de la mère hors de sa portée).
+     */
+    public function testASegmentOverflowingTheMotherWeeksIsRefused(): void
+    {
+        [$user] = $this->createClubWithSeason();
+        // Mère de 3 semaines (envelope lun 19/10 → dim 08/11) ; le segment vise 4 semaines.
+        $motherId = $this->postPeriodDated($user, 'holiday', 'Vacances longues', '2026-10-19', '2026-11-08');
+
+        $this->postWeekChildExpecting(422, $user, $motherId, '2026-10-19', '2026-11-15');
+    }
+
+    /**
+     * NR — P2-41 : le refus 409 window_already_planned vaut aussi pour un SEGMENT — sens
+     * 1, un segment ne naît pas dans une fenêtre qu'un plan de période ÉTRANGER gouverne.
+     */
+    public function testASegmentIsRefusedInsideAWindowAlreadyPlannedByAnotherPeriod(): void
+    {
+        [$user] = $this->createClubWithSeason();
+        $incident = $this->postPeriodDated($user, 'closure', 'Gymnase indisponible', '2026-10-26', '2026-11-10');
+        $this->adaptPeriod($user, $incident);
+
+        $mere = $this->postPeriodDated($user, 'holiday', 'Vacances de Toussaint', '2026-10-19', '2026-11-08');
+        // Segment de 3 semaines qui MORD sur la fenêtre déjà planifiée par l'incident.
+        $this->client->request('POST', '/api/calendar_entries', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'kind' => 'period',
+            'title' => 'Segment 3 semaines',
+            'startDate' => '2026-10-19',
+            'endDate' => '2026-11-08',
+            'periodType' => 'holiday',
+            'parentEntryId' => $mere,
+        ], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseStatusCodeSame(409);
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        self::assertSame('window_already_planned', $payload['code'] ?? null);
+        self::assertSame($incident, $payload['entryId'] ?? null);
+    }
+
+    /**
+     * NR — P2-41 : sens 2 — une AUTRE période ne s'adapte pas par-dessus un segment déjà
+     * en place. Le 409 nomme le segment et donne son entrée.
+     */
+    public function testAnotherPeriodAdaptIsRefusedWhenASegmentAlreadyGovernsTheWindow(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $mere = $this->postPeriodDated($user, 'holiday', 'Vacances de Toussaint', '2026-10-19', '2026-11-08');
+        $segmentId = $this->postWeekChild($user, $mere, '2026-10-19', '2026-11-08');
+        self::assertInstanceOf(SchedulePlan::class, $this->planOf($club->getId(), $segmentId), 'le segment gouverne sa fenêtre');
+
+        $incident = $this->postPeriodDated($user, 'closure', 'Gymnase indisponible', '2026-10-26', '2026-11-10');
+        $this->adaptPeriodExpecting(409, $user, $incident);
+
+        $payload = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+        self::assertIsArray($payload);
+        self::assertSame('window_already_planned', $payload['code'] ?? null);
+        self::assertSame($segmentId, $payload['entryId'] ?? null, 'le refus pointe vers le segment déjà en place');
+    }
+
+    /**
+     * NR — P2-41 : un segment dont une borne est CLAMPÉE à la saison (donc pas un
+     * lundi/dimanche exact) reste valide — même règle que la semaine simple de bord.
+     * Saison 08/01 → 15/07 ; la fin du segment tombe le dernier jour de saison (un jeudi).
+     */
+    public function testASegmentClampedToTheSeasonEdgeIsAccepted(): void
+    {
+        [$user, $club] = $this->createClubWithSeason();
+        $motherId = $this->postPeriodDated($user, 'holiday', 'Fin de saison', '2027-07-05', '2027-07-15');
+
+        // 05/07 lundi → 15/07 (dernier jour de saison, jeudi) : borne haute clampée.
+        $segmentId = $this->postWeekChild($user, $motherId, '2027-07-05', '2027-07-15');
+
+        $plan = $this->planOf($club->getId(), $segmentId);
+        self::assertInstanceOf(SchedulePlan::class, $plan, 'un segment clampé au bord de saison naît normalement');
+        self::assertSame('2027-07-15', $plan->getEndDate()->format('Y-m-d'), 'la fenêtre s’arrête au dernier jour de saison');
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -695,6 +822,22 @@ final class PeriodPlanBirthTest extends WebTestCase
         self::assertIsString($payload['id']);
 
         return $payload['id'];
+    }
+
+    /** POST d'un enfant-segment attendu en échec (422 chevauchement/débordement/bornes, ou 409 fenêtre). */
+    private function postWeekChildExpecting(int $status, User $user, string $motherId, string $start, string $end): void
+    {
+        $this->client->request('POST', '/api/calendar_entries', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            'kind' => 'period',
+            'title' => 'Segment ' . $start,
+            'startDate' => $start,
+            'endDate' => $end,
+            'periodType' => 'holiday',
+            'parentEntryId' => $motherId,
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame($status);
     }
 
     private function addMember(Club $club, string $role): User

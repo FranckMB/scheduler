@@ -266,12 +266,15 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
     }
 
     /**
-     * P2-5 E1 — garde du POST d'une semaine enfant : la mère existe (même club —
+     * P2-5 E1 / P2-41 — garde du POST d'un enfant-SEGMENT : la mère existe (même club —
      * RLS + filtre saison la masquent sinon), porte un plan (closure/holiday),
      * n'est pas elle-même un enfant (1 seul niveau), le type de l'enfant est celui
      * de la mère, et son plan « bloc » n'a AUCUNE version (exclusivité : une
      * période déjà générée d'un bloc ne se découpe pas — supprimer ses versions
-     * d'abord). Appelée SOUS le verrou du plan-scope de la mère.
+     * d'abord). Sa fenêtre est un bloc de semaines calendaires PLEINES lun→dim
+     * contiguës (la semaine simple = segment de taille 1), inclus dans les semaines
+     * qui couvrent la mère, clamp saison admis. Appelée SOUS le verrou du plan-scope
+     * de la mère.
      */
     private function assertValidWeekChild(CalendarEntryInput $input, ?string $clubId, ?string $seasonId): void
     {
@@ -300,19 +303,50 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         if (null !== $parentPlanId && $this->planHasVersions($parentPlanId)) {
             throw new UnprocessableEntityHttpException('Cette période a déjà été adaptée d’un bloc : supprimez d’abord ses versions pour la découper en semaines.');
         }
-        // La FENÊTRE de l'enfant doit toucher celle de la mère : une semaine que
-        // l'événement ne couvre pas hériterait ses contraintes datées sans raison.
+        // SEGMENT (P2-41) — la fenêtre de l'enfant est un BLOC de semaines calendaires
+        // PLEINES lun→dim CONTIGUËS ; la semaine simple est le segment de taille 1. Toutes
+        // les bornes se comparent en DATE (Y-m-d, exacte au jour, sans ambiguïté de fuseau).
         $childStart = (string) $input->startDate;
         $childEnd = (string) $input->endDate;
-        if ($childEnd < $parent->getStartDate()->format('Y-m-d') || $childStart > $parent->getEndDate()->format('Y-m-d')) {
-            throw new UnprocessableEntityHttpException('La semaine ne recouvre pas la période mère.');
+        $childStartDate = new DateTimeImmutable($childStart);
+        $childEndDate = new DateTimeImmutable($childEnd);
+
+        // La saison de la MÈRE (toujours présente) borne les deux « clamps » : une semaine
+        // de bord rognée par le début ou la fin de saison reste valide — même règle que la
+        // semaine simple avant P2-41. SQL brut : season_filter épinglerait la lecture à la
+        // saison active (un plan peut vivre pour une autre), RLS scope le club.
+        $seasonRow = $this->entityManager->getConnection()->fetchAssociative(
+            'SELECT start_date, end_date FROM season WHERE id = :sid',
+            ['sid' => $parent->getSeasonId()],
+        );
+        $seasonStart = false === $seasonRow ? null : (string) $seasonRow['start_date'];
+        $seasonEnd = false === $seasonRow ? null : (string) $seasonRow['end_date'];
+
+        // 1) La fenêtre reste DANS les semaines qui COUVRENT la mère : du lundi de la semaine
+        //    de son début au dimanche de la semaine de sa fin, le tout clampé à la saison.
+        //    Cette borne REMPLACE l'ancien « toucher la mère » : sans elle, le retrait du
+        //    plafond ≤7 j laisserait passer un segment débordant largement la mère (qui
+        //    hériterait ses contraintes datées date-blind hors de sa portée — revue #262 r2).
+        $motherStart = $parent->getStartDate();
+        $motherEnd = $parent->getEndDate();
+        $mondayOfMotherStart = $motherStart->modify(\sprintf('-%d days', (int) $motherStart->format('N') - 1))->format('Y-m-d');
+        $sundayOfMotherEnd = $motherEnd->modify(\sprintf('+%d days', 7 - (int) $motherEnd->format('N')))->format('Y-m-d');
+        $envelopeStart = null === $seasonStart ? $mondayOfMotherStart : max($mondayOfMotherStart, $seasonStart);
+        $envelopeEnd = null === $seasonEnd ? $sundayOfMotherEnd : min($sundayOfMotherEnd, $seasonEnd);
+        if ($childStart < $envelopeStart || $childEnd > $envelopeEnd) {
+            throw new UnprocessableEntityHttpException('Ce bloc de semaines déborde la période mère.');
         }
-        // …et rester UNE semaine (≤ 7 jours — le clamp saison peut la rogner, jamais
-        // l'allonger). Sans cette garde, un « enfant » de 2 mois hériterait le
-        // venue_closed date-blind sur toute sa fenêtre (revue #262 round 2).
-        $days = (int) new DateTimeImmutable($childStart)->diff(new DateTimeImmutable($childEnd))->format('%a') + 1;
-        if ($days > 7) {
-            throw new UnprocessableEntityHttpException('Une semaine enfant couvre au plus 7 jours (lundi→dimanche).');
+
+        // 2) Bornes PLEINES : début un lundi, fin un dimanche — SAUF le clamp saison (le bloc
+        //    peut commencer au 1er jour de la saison ou finir au dernier, même hors lun/dim).
+        //    Une plage de dates continue étant sans trou par construction, ces deux bornes
+        //    suffisent à garantir des semaines calendaires ENTIÈRES et CONTIGUËS.
+        $startsOnMonday = 1 === (int) $childStartDate->format('N');
+        $endsOnSunday = 7 === (int) $childEndDate->format('N');
+        $startClamped = null !== $seasonStart && $childStart === $seasonStart;
+        $endClamped = null !== $seasonEnd && $childEnd === $seasonEnd;
+        if ((!$startsOnMonday && !$startClamped) || (!$endsOnSunday && !$endClamped)) {
+            throw new UnprocessableEntityHttpException('Un bloc couvre des semaines entières, du lundi au dimanche.');
         }
         // Anti-CHEVAUCHEMENT entre semaines d'une même mère (pas seulement le même
         // lundi) : deux plans de semaine qui se recouvrent = deux overlays actifs
