@@ -93,7 +93,7 @@ Deux temps que l'écran actuel **écrase sur une seule page** :
 1. **« Import FBI par API » — impossible aujourd'hui, mais FBI est une SOURCE de plein droit.** L'API FFBB
    expose un index `rencontres` **vide pour les vrais clubs** (documents de test uniquement au niveau
    national ; 0 hit pour un club réel) — mesuré deux fois, cf.
-   [`api-ffbb-app-reconnaissance.md`](api-ffbb-app-reconnaissance.md) et `backend/docs/ffbb-api.md`.
+   [`api-ffbb-app-reconnaissance.md`](../../docs/archive/api-ffbb-app-reconnaissance.md) et `backend/docs/ffbb-api.md`.
    **Le seul CANAL d'entrée des rencontres reste l'export Excel FBI manuel** (déjà implémenté) ; on ne peut
    PAS supprimer le geste « télécharger le xlsx » ni la re-saisie manuelle dans FBI — limites **fédérales**,
    pas de notre code. → Ne rien promettre d'automatique côté FBI. **Mais (décision fondateur 2026-08-17) le

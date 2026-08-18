@@ -1,5 +1,7 @@
 # Complétion automatique des informations club — les deux sources FFBB, champ par champ
 
+> 🗄 **ARCHIVÉ le 2026-08-18** (déplacé de `specs/evolution/`) : les lots qu'il nourrissait (P2-19, P2-18, P2-20, fiche club lecture seule) sont tous soldés — trace dans `specs/courantes/etat-des-lieux.md`. Reste une **référence de mesure figée** (club réel `ARA0069036`), coûteuse à refaire — citée par `ffbb-appariement-source-de-verite.md` et `backend/docs/ffbb-api.md`.
+
 > **Livrable de cadrage** (demande fondateur 2026-08-04), sœur de
 > [`api-ffbb-app-reconnaissance.md`](api-ffbb-app-reconnaissance.md) (P2-19, qui couvrait engagements/
 > compétitions/rencontres). Ici : **tout ce qui peut alimenter la fiche club** — l'écran « Informations

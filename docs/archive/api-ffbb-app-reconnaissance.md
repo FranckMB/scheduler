@@ -1,10 +1,12 @@
 # Reconnaissance de l'API FFBB — P2-19
 
+> 🗄 **ARCHIVÉ le 2026-08-18** (déplacé de `specs/evolution/`) : les lots qu'il nourrissait (P2-19, P2-18, P2-20, fiche club lecture seule) sont tous soldés — trace dans `specs/courantes/etat-des-lieux.md`. Reste une **référence de mesure figée** (club réel `ARA0069036`), coûteuse à refaire — citée par `ffbb-appariement-source-de-verite.md` et `backend/docs/ffbb-api.md`.
+
 > ✅ **SOLDÉ (2026-08-04)** — toutes les actions de ce cadrage sont livrées : engagements/compétitions
 > exploités (P1-4 PR F), salles exploitées (P2-20), `rencontres` re-testé (toujours un index de test).
 > Le fichier reste comme **référence de mesure** pour P2-18 et P4-35 qui le citent — rien à exécuter ici.
 
-> **Livrable de cadrage**, pas du code. Alimente [P1-4](roadmap.md) (module matchs) et P2-18 (resynchronisation FFBB).
+> **Livrable de cadrage**, pas du code. Alimente [P1-4](../../specs/evolution/roadmap.md) (module matchs) et P2-18 (resynchronisation FFBB).
 > Mesures faites le **2026-08-02** sur le club réel **`ARA0069036`** (B Charpennes Croix Luizet).
 >
 > 📎 **Les sorties brutes de l'API sont dans [`api-ffbb-app-traces.md`](api-ffbb-app-traces.md)** — une section par route,

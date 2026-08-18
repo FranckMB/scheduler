@@ -1,10 +1,10 @@
 # La FFBB comme source, le gestionnaire comme juge — besoin tranché
 
-> **Besoin fondateur, 2026-08-02.** Posé à la lecture des traces de [P2-19](api-ffbb-app-reconnaissance.md),
+> **Besoin fondateur, 2026-08-02.** Posé à la lecture des traces de [P2-19](../../docs/archive/api-ffbb-app-reconnaissance.md),
 > puis **tranché point par point** au fil d'un échange de challenge. Les §1 à §4 sont des **décisions**, pas des
 > propositions : ne pas les re-poser sans fait nouveau. Le §7 est ouvert.
 >
-> Endpoints et sorties réelles : [`api-ffbb-app-reconnaissance.md`](api-ffbb-app-reconnaissance.md) · [`api-ffbb-app-traces.md`](api-ffbb-app-traces.md)
+> Endpoints et sorties réelles : [`api-ffbb-app-reconnaissance.md`](../../docs/archive/api-ffbb-app-reconnaissance.md) · [`api-ffbb-app-traces.md`](../../docs/archive/api-ffbb-app-traces.md)
 
 ---
 
