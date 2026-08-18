@@ -105,25 +105,41 @@ echo '<le-token>' | docker login ghcr.io -u <ton-user-github> --password-stdin
 history -d $(history 1 | awk '{print $1}')   # efface la ligne du token de l'historique
 ```
 
-### 1.5 TLS + domaine (Caddy)
+### 1.5 TLS + domaines (Caddy)
 
-⬜ DNS : enregistrement A du domaine → IP de la VM.
+**Deux domaines, deux rôles** (convention `.claude/rules/landing.md`) : le domaine **nu**
+sert la page de vente, le sous-domaine **`app.`** sert l'application. Caddy tourne SUR la
+VM, hors Docker : c'est la seule porte d'entrée, il écoute en 443 et gère seul le
+certificat Let's Encrypt.
+
+⬜ DNS : enregistrements A `amateo.app`, `www.amateo.app` et `app.amateo.app` → IP de la VM.
 
 ⬜ Sur la VM :
 
 ```bash
 sudo apt install -y caddy
-sudo tee /etc/caddy/Caddyfile > /dev/null <<'EOF'
-TON-DOMAINE.example.com {
-    reverse_proxy 127.0.0.1:8081
-}
-EOF
+# Modèle versionné dans le dépôt — à recopier tel quel (adapter les domaines si besoin) :
+sudo cp docs/ops/Caddyfile.example /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-C'est tout : Caddy obtient et renouvelle le certificat Let's Encrypt seul.
-(8081 = `FRONTEND_PORT` de `.env.prod`, seul port publié par la stack, sur
-localhost uniquement.)
+Le modèle : [`Caddyfile.example`](Caddyfile.example). Trois blocs — la page (`file_server`
+sur des fichiers du disque), la redirection `www`, et l'app (`reverse_proxy` vers 8081 =
+`FRONTEND_PORT` de `.env.prod`, seul port publié par la stack, sur localhost uniquement).
+
+⚠ **La page de vente est déposée par le workflow de déploiement** (`landing/` → 
+`$DEPLOY_PATH/landing`, §1.6) : le dossier n'existe donc qu'**après le premier déploiement**.
+Avant lui, le domaine nu répond 404 — c'est normal, pas une panne de Caddy.
+
+⚠ **Droits de lecture** : Caddy tourne sous l'utilisateur `caddy`, pas sous l'utilisateur de
+déploiement. Il lui faut la traversée sur `$DEPLOY_PATH` et la lecture sur `landing/` :
+
+```bash
+sudo chmod o+x /srv/clubscheduler            # traverser, sans lire le reste
+sudo chmod -R o+rX /srv/clubscheduler/landing
+```
+
+Vérifier plutôt que supposer : `sudo -u caddy cat /srv/clubscheduler/landing/index.html | head -1`.
 
 ### 1.6 Armer le workflow de déploiement
 

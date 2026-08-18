@@ -14,8 +14,10 @@ paths:
   commune. Les deux zones se ressemblent par **convention**, jamais par dépendance. Dupliquer une
   couleur ici est le comportement VOULU.
 - **Marque, liens et coordonnées vivent dans `config.js` SEUL** — jamais en dur dans `index.html`.
-  Le nom commercial n'est pas tranché (chaîne INPI, cf. `business/administratif-mise-en-prod.md`) :
-  tout ce qui en dépend doit rester modifiable en un point.
+  Le nom commercial **est tranché depuis le 2026-08-15** (produit **Amateo**, éditeur **Maratech**)
+  et `config.js` est recalé dessus ; la règle du point unique reste, elle : c'est elle qui a rendu
+  le renommage gratuit, et c'est elle qui rendra gratuit un changement de domaine.
+  ⚠ `appUrl` s'écrit **sans slash final** — les CTA concatènent (`appUrl + "/register"`).
 - **Deux vhosts, une machine** : le domaine **nu** sert `landing/`, un **sous-domaine** sert l'app.
   Un lien « Se connecter » vers l'app est donc un lien absolu inter-domaines, pas une route.
 - **Passe de design obligatoire** dès qu'on remanie l'apparence — c'est une page **publique** :

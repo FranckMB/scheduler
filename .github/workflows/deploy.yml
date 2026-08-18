@@ -290,6 +290,19 @@ jobs:
           # the VM's copy must never drift from the code being deployed (the
           # first-install copy would otherwise be frozen forever).
           "${SCP[@]}" docker-compose.prod.yml scripts/remote-deploy.sh "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+          # P5-5 — la page de vente (statique pur) part avec la même version que l'app,
+          # donc elle se ROLLBACK avec elle : une copie manuelle aurait créé une seconde
+          # vérité, la page en ligne pouvant dater d'une version que plus personne ne
+          # connaît. Elle n'est PAS servie par la stack Docker mais par Caddy, qui lit ce
+          # dossier depuis le disque (docs/ops/Caddyfile.example).
+          #
+          # Copie dans un dossier NEUF puis bascule : `scp -r` par-dessus l'existant
+          # laisserait vivre un fichier supprimé du dépôt, et servirait une page à moitié
+          # écrite pendant la copie. Le `.old` est gardé un cycle — de quoi revenir à la
+          # main si la bascule tombait au mauvais moment.
+          "${SSH[@]}" "rm -rf '$DEPLOY_PATH/landing.new' '$DEPLOY_PATH/landing.old'"
+          "${SCP[@]}" -r landing "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/landing.new"
+          "${SSH[@]}" "if [ -d '$DEPLOY_PATH/landing' ]; then mv '$DEPLOY_PATH/landing' '$DEPLOY_PATH/landing.old'; fi; mv '$DEPLOY_PATH/landing.new' '$DEPLOY_PATH/landing'"
           # Executed as a FILE, never piped: `docker compose run` reads stdin
           # and would swallow the rest of a piped script (silent half-deploy).
           "${SSH[@]}" "DEPLOY_PATH='$DEPLOY_PATH' VERSION='$VERSION' bash '$DEPLOY_PATH/remote-deploy.sh'"

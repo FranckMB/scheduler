@@ -1,0 +1,31 @@
+# Amateo — configuration Caddy de PRODUCTION (modèle versionné).
+#
+# À copier sur la VM dans /etc/caddy/Caddyfile, puis `sudo systemctl reload caddy`.
+# Caddy tourne SUR la machine, hors Docker : c'est lui qui écoute en 443, obtient
+# et renouvelle seul le certificat Let's Encrypt, et aiguille selon le domaine.
+#
+# Deux sites, deux rôles :
+#   - le domaine NU sert la page de vente — des FICHIERS, aucune application ;
+#   - le sous-domaine `app.` sert l'application — transmise à la stack Docker.
+#
+# ⚠ Le dossier de la page est déposé par le WORKFLOW DE DÉPLOIEMENT
+#   (.github/workflows/deploy.yml), sous DEPLOY_PATH. Il n'existe donc qu'APRÈS
+#   le premier déploiement : avant lui, le domaine nu répondra 404, et c'est normal.
+# ⚠ Caddy doit pouvoir LIRE ce dossier : il tourne sous l'utilisateur `caddy`, pas
+#   sous l'utilisateur de déploiement. Voir docs/ops/deploy.md §1.5.
+
+amateo.app {
+	root * /srv/clubscheduler/landing
+	file_server
+	encode gzip zstd
+}
+
+www.amateo.app {
+	redir https://amateo.app{uri} permanent
+}
+
+app.amateo.app {
+	# 8081 = FRONTEND_PORT de .env.prod, le seul port publié par la stack,
+	# et seulement sur localhost — Caddy est la seule porte d'entrée.
+	reverse_proxy 127.0.0.1:8081
+}
