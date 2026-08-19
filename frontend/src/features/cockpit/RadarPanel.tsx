@@ -28,22 +28,23 @@ import { isoDayOf } from "@/shared/lib/days";
 export const PUBLIC_HOLIDAY_HORIZON_DAYS = 30;
 /**
  * P3-13 — au-delà, une vacance scolaire est « TROP loin pour que je m'en occupe de suite »
- * (fondateur 2026-08-01) : en été, Toussaint et Noël s'affichaient. Valeur choisie par le
- * fondateur.
+ * (fondateur 2026-08-01) : en été, Toussaint et Noël s'affichaient. La valeur est celle du
+ * fondateur — ramenée à 30 j le 2026-08-19 (elle valait 60) : une vacance n'apparaît au radar
+ * que 30 jours avant son début.
  *
  * ⚠ Ce que l'horizon masque, il le masque AUSSI pour les doléances — `RadarCoachWishAction`
  * n'est rendu nulle part ailleurs dans l'application. Arbitrage fondateur 2026-08-01, après
- * que la revue #344 l'a soulevé : « on ne les sollicite pas au-delà de 60 j, en général ça
- * se fait 3 semaines avant les vacances ». Le cas n'existe donc pas dans l'usage réel, et
- * aucun second point d'entrée n'est à créer.
+ * que la revue #344 l'a soulevé : « en général ça se fait 3 semaines avant les vacances » —
+ * la sollicitation tient donc largement dans les 30 j. Le cas d'une collecte plus lointaine
+ * n'existe pas dans l'usage réel, et aucun second point d'entrée n'est à créer.
  *
  * Deux échappatoires subsistent, chacune pour ne jamais faire disparaître un travail
  * ENGAGÉ : une période qui porte un plan est rendue en carte « en cours »
  * (`inProgressEntries`), et une vacance qui porte une CAMPAGNE garde sa carte — son badge
- * « x à traiter » n'existe nulle part ailleurs. En pratique une campagne vit dans les 60 j,
+ * « x à traiter » n'existe nulle part ailleurs. En pratique une campagne vit dans les 30 j,
  * donc c'est un filet, pas un chemin.
  */
-export const SCHOOL_HOLIDAY_HORIZON_DAYS = 60;
+export const SCHOOL_HOLIDAY_HORIZON_DAYS = 30;
 /**
  * P4-68 — au-delà, une fermeture de gymnase n'est pas encore un to-do (même
  * doctrine que les fériés). Une indispo DÉJÀ commencée reste affichée : son

@@ -34,7 +34,7 @@ let schedulesData: { id?: string; schedulePlanId: string; status?: string }[] | 
 // useDeleteSchedule, une par une. Spy partagé : les tests dédiés vérifient les ids supprimés.
 const deleteScheduleMutateAsync = vi.fn().mockResolvedValue(undefined);
 // #10 C2 — les campagnes de doléances, indexées par période. Mockées ici parce qu'une
-// vacance qui en porte une ÉCHAPPE à l'horizon 60 j (revue #344 : cette carte est la seule
+// vacance qui en porte une ÉCHAPPE à l'horizon 30 j (revue #344 : cette carte est la seule
 // surface qui rende le badge « x à traiter »).
 let campaignsData: unknown[] | undefined = [];
 // P4-68 — indispos gymnase (carte du radar) + leur impact serveur. Vides par défaut :
@@ -150,7 +150,7 @@ const expandCard = async (user: ReturnType<typeof userEvent.setup>, title: strin
 
 describe("RadarPanel", () => {
   // P3-13 — l'horloge injectable, dès son premier usage. Les fixtures sont ancrées en
-  // 2999 pour ne jamais périmer ; sans horloge pilotable, l'horizon 60 j les masquerait
+  // 2999 pour ne jamais périmer ; sans horloge pilotable, l'horizon 30 j les masquerait
   // TOUTES et il faudrait repasser les dates en relatif — donc des tests dont on ne peut
   // plus lire la situation. Ici on déplace « aujourd'hui » à 21 jours des vacances.
   beforeEach(() => {
@@ -376,6 +376,17 @@ describe("RadarPanel", () => {
     expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
   });
 
+  // B5 (fondateur 2026-08-19) — l'horizon des vacances scolaires est ramené à 30 j : une vacance
+  // à 45 j n'apparaît plus au radar (l'ancien horizon de 60 j la laissait passer).
+  it("masque une vacance à 45 j — horizon ramené à 30 j", () => {
+    setTodayOverride("2998-10-01");
+    // startDate à 45 j : au-delà des 30 j retenus, en deçà des anciens 60 j.
+    const at45: SchoolHoliday = { id: "h45", label: "Vacances à 45 j", holidayType: "noel", startDate: "2998-11-15", endDate: "2998-11-29", schoolYear: "2998-2999" };
+    renderRadar({ holidays: [at45] });
+    expect(screen.queryByText("Vacances à 45 j")).not.toBeInTheDocument();
+    expect(screen.getByText(/Rien à l'horizon/)).toBeInTheDocument();
+  });
+
   // (b) AUD-UXS-04 — le REVERS de l'horizon ci-dessus. Une vacance déjà commencée reste
   // affichée volontairement (elle demande toujours un geste), mais « Dans N j » devient
   // alors NÉGATIF : le cockpit annonçait « Vacances d'Été · Dans -35 j » sur des données
@@ -532,7 +543,7 @@ describe("RadarPanel", () => {
     expect(screen.queryByText(/Rien à l'horizon/)).not.toBeInTheDocument();
   });
 
-  // L'horizon 60 j effaçait la SEULE surface qui rende le badge « x à traiter » et le
+  // L'horizon vacances effaçait la SEULE surface qui rende le badge « x à traiter » et le
   // bouton « Solliciter les coachs » — or la collecte vit précisément du délai.
   it("garde une vacance lointaine qui porte déjà une campagne de doléances", () => {
     setTodayOverride("2998-10-01"); // à 96 j : hors horizon
