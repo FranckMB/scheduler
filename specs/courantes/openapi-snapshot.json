@@ -4488,146 +4488,6 @@
                 }
             }
         },
-        "/api/club_users": {
-            "get": {
-                "operationId": "api_club_users_get_collection",
-                "tags": [
-                    "ClubUser"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "ClubUser collection",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "type": "object",
-                                    "description": "ClubUser.jsonld collection.",
-                                    "allOf": [
-                                        {
-                                            "$ref": "#/components/schemas/HydraCollectionBaseSchema"
-                                        },
-                                        {
-                                            "type": "object",
-                                            "required": [
-                                                "member"
-                                            ],
-                                            "properties": {
-                                                "member": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "$ref": "#/components/schemas/ClubUser.jsonld"
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    ]
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/ClubUser"
-                                    }
-                                }
-                            },
-                            "text/html": {
-                                "schema": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/components/schemas/ClubUser.html"
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                "summary": "Retrieves the collection of ClubUser resources.",
-                "description": "Retrieves the collection of ClubUser resources.",
-                "parameters": [
-                    {
-                        "name": "page",
-                        "in": "query",
-                        "description": "The collection page number",
-                        "required": false,
-                        "deprecated": false,
-                        "schema": {
-                            "type": "integer",
-                            "default": 1
-                        },
-                        "style": "form",
-                        "explode": true
-                    }
-                ]
-            }
-        },
-        "/api/club_users/{id}": {
-            "get": {
-                "operationId": "api_club_users_id_get",
-                "tags": [
-                    "ClubUser"
-                ],
-                "responses": {
-                    "200": {
-                        "description": "ClubUser resource",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ClubUser.jsonld"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ClubUser"
-                                }
-                            },
-                            "text/html": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ClubUser.html"
-                                }
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not found",
-                        "content": {
-                            "application/ld+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error.jsonld"
-                                }
-                            },
-                            "application/problem+json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            },
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/Error"
-                                }
-                            }
-                        },
-                        "links": {}
-                    }
-                },
-                "summary": "Retrieves a ClubUser resource.",
-                "description": "Retrieves a ClubUser resource.",
-                "parameters": [
-                    {
-                        "name": "id",
-                        "in": "path",
-                        "description": "ClubUser identifier",
-                        "required": true,
-                        "deprecated": false,
-                        "schema": {
-                            "type": "string"
-                        },
-                        "style": "simple",
-                        "explode": false
-                    }
-                ]
-            }
-        },
         "/api/venue-usage-stats": {
             "get": {
                 "operationId": "getVenueUsageStats",
@@ -20215,124 +20075,6 @@
                     }
                 ]
             },
-            "ClubUser": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "version": {
-                        "default": 0,
-                        "type": "integer"
-                    },
-                    "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "updatedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "userId": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "role": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "joinedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "isActive": {
-                        "default": false,
-                        "type": "boolean"
-                    }
-                }
-            },
-            "ClubUser.html": {
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "version": {
-                        "default": 0,
-                        "type": "integer"
-                    },
-                    "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "updatedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "userId": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "role": {
-                        "default": "",
-                        "type": "string"
-                    },
-                    "joinedAt": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "isActive": {
-                        "default": false,
-                        "type": "boolean"
-                    }
-                }
-            },
-            "ClubUser.jsonld": {
-                "allOf": [
-                    {
-                        "$ref": "#/components/schemas/HydraItemBaseSchema"
-                    },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "id": {
-                                "default": "",
-                                "type": "string"
-                            },
-                            "version": {
-                                "default": 0,
-                                "type": "integer"
-                            },
-                            "createdAt": {
-                                "type": "string",
-                                "format": "date-time"
-                            },
-                            "updatedAt": {
-                                "type": "string",
-                                "format": "date-time"
-                            },
-                            "userId": {
-                                "default": "",
-                                "type": "string"
-                            },
-                            "role": {
-                                "default": "",
-                                "type": "string"
-                            },
-                            "joinedAt": {
-                                "type": "string",
-                                "format": "date-time"
-                            },
-                            "isActive": {
-                                "default": false,
-                                "type": "boolean"
-                            }
-                        }
-                    }
-                ]
-            },
             "Coach": {
                 "type": "object",
                 "properties": {
@@ -23048,7 +22790,8 @@
                     "intensity": {
                         "enum": [
                             "HARD",
-                            "PREFERRED"
+                            "PREFERRED",
+                            "OFF"
                         ],
                         "type": [
                             "string",
@@ -27859,20 +27602,7 @@
                         "type": "string"
                     },
                     "mode": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "dayOverrides": {
-                        "description": "Masque manuel jour ISO (1..7) \u2192 OPEN|CLOSED, ou null. Le front le lit tel quel \u2014 il ne\nred\u00e9rive jamais la composition (celle-ci vit dans PlanVenueClosures, servie par le radar).",
-                        "type": [
-                            "array",
-                            "null"
-                        ],
-                        "items": {
-                            "type": "string"
-                        }
+                        "type": "string"
                     }
                 }
             },
@@ -27909,24 +27639,11 @@
                             "DISABLED",
                             "BLANK"
                         ],
-                        "description": "Le mode est FACULTATIF (une ligne peut n'exister que pour son masque) : plus de\n`NotBlank`. INHERIT n'est pas une valeur accept\u00e9e \u2014 c'est le d\u00e9faut, mat\u00e9rialis\u00e9 par\nl'ABSENCE de ligne (DELETE pour y revenir), ou ici par un `mode` nul.",
+                        "description": "INHERIT n'est pas une valeur accept\u00e9e : c'est le d\u00e9faut, mat\u00e9rialis\u00e9 par l'ABSENCE\nde ligne. Pour revenir aux cr\u00e9neaux de saison on supprime l'override (DELETE).",
                         "type": [
                             "string",
                             "null"
                         ]
-                    },
-                    "dayOverrides": {
-                        "description": "Masque manuel SPARSE : jour ISO (1..7) \u2192 OPEN|CLOSED. Entr\u00e9e BRUTE non valid\u00e9e (la colonne\nJSON est inscriptible) : les valeurs sont `mixed` jusqu'\u00e0 {@see validateMask}, qui refuse\ntoute cl\u00e9 hors 1..7 et toute valeur hors OPEN|CLOSED. NULL/[] = aucun jour forc\u00e9.",
-                        "type": [
-                            "array",
-                            "null"
-                        ],
-                        "items": {
-                            "type": [
-                                "string",
-                                "null"
-                            ]
-                        }
                     }
                 }
             },
@@ -27959,20 +27676,7 @@
                         "type": "string"
                     },
                     "mode": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
-                    "dayOverrides": {
-                        "description": "Masque manuel jour ISO (1..7) \u2192 OPEN|CLOSED, ou null. Le front le lit tel quel \u2014 il ne\nred\u00e9rive jamais la composition (celle-ci vit dans PlanVenueClosures, servie par le radar).",
-                        "type": [
-                            "array",
-                            "null"
-                        ],
-                        "items": {
-                            "type": "string"
-                        }
+                        "type": "string"
                     }
                 }
             },
@@ -28009,20 +27713,7 @@
                                 "type": "string"
                             },
                             "mode": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ]
-                            },
-                            "dayOverrides": {
-                                "description": "Masque manuel jour ISO (1..7) \u2192 OPEN|CLOSED, ou null. Le front le lit tel quel \u2014 il ne\nred\u00e9rive jamais la composition (celle-ci vit dans PlanVenueClosures, servie par le radar).",
-                                "type": [
-                                    "array",
-                                    "null"
-                                ],
-                                "items": {
-                                    "type": "string"
-                                }
+                                "type": "string"
                             }
                         }
                     }
@@ -28479,10 +28170,6 @@
         {
             "name": "Club",
             "description": "Resource 'Club' operations."
-        },
-        {
-            "name": "ClubUser",
-            "description": "Resource 'ClubUser' operations."
         },
         {
             "name": "CoachPlayerMembership",

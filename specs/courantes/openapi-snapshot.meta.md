@@ -1,4 +1,4 @@
-Last verified @ 2026-08-19 (régénéré ce jour — **P2-44 PR-1** : +1 path `POST /api/schedule_plans/{id}/transcribe-from-socle` (naissance par copie du socle, entrée `CustomRoutesOpenApiFactory` + regen `api:openapi:export`) → **168 paths** ; `info.title` « Amateo API » ✓, `VenuePeriodOverride.mode` nullable + `dayOverrides` ✓) — *(un stamp REMPLACE, il ne s'empile pas ; le détail des régénérations vit dans le changelog ci-dessous et dans git)*
+Last verified @ 2026-08-20 (régénéré ce jour — **P4-103** : −2 paths `/api/club_users` et `/api/club_users/{id}` (ressource générique retirée, aucun consommateur). ⚑ La régénération a aussi rattrapé une péremption ANTÉRIEURE : l'intensité `OFF` livrée par P2-42 n'était jamais entrée dans le snapshot — preuve qu'un snapshot ne se régénère pas « quand on y pense », mais à chaque changement de ressource)
 
 Changements récents :
 - **P2-44 PR-1 — naissance par copie du socle (2026-08-19)** : **+1 path** —

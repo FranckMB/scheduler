@@ -139,18 +139,29 @@ final class ManagementRoleTest extends WebTestCase
     }
 
     /**
-     * A5/A6: membership writes are REMOVED from the ClubUser API entirely (only
-     * GetCollection/Get remain) — closing self-escalation (POST role=owner),
-     * last-owner demotion (PUT isActive=false) and approval-bypass at once.
-     * Legitimate flows use AuthController (create) + MembershipController
-     * (approve). Every write verb must therefore be 405 Method Not Allowed, for
-     * a management member too (it is not a permission gate but a missing route).
+     * A5/A6 puis P4-103 : la ressource générique `ClubUser` n'existe PLUS DU TOUT.
+     *
+     * Les écritures avaient d'abord été retirées (fermant l'auto-promotion `POST role=owner`,
+     * la rétrogradation du dernier propriétaire et le contournement d'approbation) en laissant
+     * `GetCollection`/`Get`. L'audit des routes non consommées (2026-08-20) a montré que
+     * personne ne lisait cette liste : le front passe par `/api/memberships/*`. Une surface qui
+     * énumère `userId`/`role`/`isActive` d'un club sans qu'aucun écran ne s'en serve est une
+     * surface qu'on retire.
+     *
+     * ⚑ L'assertion a CHANGÉ DE NATURE, et c'est délibéré. Elle disait « ces verbes rendent
+     * 405 » — un 405 n'a de sens que tant qu'un GET existe à ce chemin. Elle dit maintenant
+     * « ce chemin n'existe pas », ce qui est plus fort et reste vrai. La garantie métier
+     * (« un membre ne fabrique pas une adhésion ») est portée par les VRAIES routes, gardées
+     * par `MemberRoleTest` (bloquant lui aussi) : `/role`, `/deactivate`, `/reactivate`,
+     * `/approve`. On n'a donc rien perdu en supprimant — on a cessé de garder un mort.
      *
      * @return list<array{0: string, 1: string}>
      */
     public static function clubUserWriteVerbs(): array
     {
         return [
+            ['GET', '/api/club_users'],
+            ['GET', '/api/club_users/' . self::DUMMY_ID],
             ['POST', '/api/club_users'],
             ['PUT', '/api/club_users/' . self::DUMMY_ID],
             ['DELETE', '/api/club_users/' . self::DUMMY_ID],
@@ -272,16 +283,16 @@ final class ManagementRoleTest extends WebTestCase
     }
 
     #[DataProvider('clubUserWriteVerbs')]
-    public function testClubUserWritesAreRemoved(string $method, string $url): void
+    public function testTheGenericClubUserSurfaceDoesNotExist(string $method, string $url): void
     {
-        // Even a management member gets 405 — the write routes no longer exist.
+        // Même un membre de gestion ne trouve RIEN ici : ni écriture, ni lecture.
         [$adminToken] = $this->register('MGF');
         $this->client->request($method, $url, [], [], [
             'HTTP_AUTHORIZATION' => 'Bearer ' . $adminToken,
             'CONTENT_TYPE' => 'application/ld+json',
         ], '{"userId":"' . self::DUMMY_ID . '","role":"owner","isActive":true}');
 
-        self::assertResponseStatusCodeSame(405, \sprintf('%s %s must be method-not-allowed (write removed)', $method, $url));
+        self::assertResponseStatusCodeSame(404, \sprintf('%s %s ne doit exister sous AUCUN verbe (surface retirée, P4-103)', $method, $url));
     }
 
     /**
