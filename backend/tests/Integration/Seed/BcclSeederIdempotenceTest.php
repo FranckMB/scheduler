@@ -384,12 +384,14 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
      *    plan, portant sa datée `venue_closed` (FACILITY/HARD sur Matéo, config datée) ;
      *  - la RÉPONSE ENTAMÉE : un segment-enfant (parent = l'incident, 07→27/09) né AVEC son plan
      *    CLOSURE, plan NON validé (chosen NULL) et SANS version (0 schedule) — un travail en cours ;
-     *  - ses réglages : 9 TeamPeriodOverride (8 équipes actives à 2 séances/sem, « Training
-     *    Individuel » décochée), 1 ConstraintPeriodOverride (« SM2 · au moins 1 à Matéo » décochée),
-     *    0 VenuePeriodOverride (la fermeture agit par l'état effectif, pas par un override).
+     *  - ses réglages : 12 TeamPeriodOverride (8 équipes actives à 2 séances/sem, « Training
+     *    Individuel » + les 3 équipes « Academie » décochées — BYE pendant l'incident),
+     *    1 ConstraintPeriodOverride (« SM2 · au moins 1 à Matéo » décochée), 0 VenuePeriodOverride
+     *    (la fermeture agit par l'état effectif, pas par un override).
      *
-     * Falsifiable : retirer le décochage de « SM2 · au moins 1 à Matéo » du seed, ou une des 9
-     * lignes d'équipe, ou la datée `venue_closed`, rend ce test ROUGE en nommant l'invariant.
+     * Falsifiable : retirer le décochage de « SM2 · au moins 1 à Matéo » du seed, ou une des 12
+     * lignes d'équipe (les 3 « Academie » comprises), ou la datée `venue_closed`, rend ce test
+     * ROUGE en nommant l'invariant.
      */
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
@@ -472,14 +474,19 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
             array_map('strval', $activeTpo),
             'exactement les 8 équipes actives à 2 séances/semaine',
         );
-        $inactiveTpo = $this->connection->fetchFirstColumn(
+        $inactiveTpo = array_map('strval', $this->connection->fetchFirstColumn(
             'SELECT t.name FROM team_period_override o JOIN team t ON t.id = o.team_id '
             . 'WHERE o.schedule_plan_id = ? AND o.is_active = false',
             [$planId],
+        ));
+        sort($inactiveTpo, \SORT_STRING);
+        self::assertSame(
+            ['Academie U13-U15', 'Academie U18', 'Academie U9-U11', 'Training Individuel'],
+            $inactiveTpo,
+            '« Training Individuel » et les 3 équipes « Academie » sont décochées (BYE pendant l\'incident)',
         );
-        self::assertSame(['Training Individuel'], array_map('strval', $inactiveTpo), '« Training Individuel » est la seule équipe décochée');
         $totalTpo = (int) $this->connection->fetchOne('SELECT COUNT(*) FROM team_period_override WHERE schedule_plan_id = ?', [$planId]);
-        self::assertSame(9, $totalTpo, 'aucune autre ligne d\'équipe que ces 9');
+        self::assertSame(12, $totalTpo, 'aucune autre ligne d\'équipe que ces 12 (8 actives + 4 décochées)');
 
         $deactivated = $this->connection->fetchFirstColumn(
             'SELECT c.name FROM constraint_period_override o JOIN "constraint" c ON c.id = o.constraint_id '
@@ -497,11 +504,12 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
     /**
      * « Incident Matéo » — la grille du plan d'adaptation reste la COPIE de saison pour tous les
      * gymnases SAUF JDR, dont la grille de plan est EXPLICITE (retouches réelles du gestionnaire,
-     * re-snapshot du 2026-08-19) : exactement 18 créneaux JDR portés PAR CE PLAN, dont les caps 2
-     * sur lun→ven à 17:30 et à 19:00. Idempotence : deux runs laissent 18 créneaux (purge+réinsertion).
+     * re-snapshot du 2026-08-19) : exactement 19 créneaux JDR portés PAR CE PLAN, dont les caps 2
+     * sur lun→ven à 17:30 et à 19:00, ET le nouveau créneau MERCREDI 16:00→17:30 (90 min, cap 1).
+     * Idempotence : deux runs laissent 19 créneaux (purge+réinsertion).
      *
-     * Falsifiable : remettre la capacity de JDR lun→ven 19:00 à 1 rend ce test ROUGE en nommant le
-     * compte de créneaux JDR à cap 2 (5 attendus par horaire, un par jour ouvré).
+     * Falsifiable : remettre la capacity de JDR lun→ven 19:00 à 1, ou retirer le créneau mercredi
+     * 16:00, rend ce test ROUGE en nommant l'invariant manquant.
      */
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
@@ -510,7 +518,7 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
         $club = $this->seeder->run($this->em, BcclSeedProfile::dev());
         $planId = $this->mateoIncidentPlanId($club->getId());
 
-        self::assertSame(18, $this->jdrPlanSlotCount($planId), 'la grille de plan JDR compte exactement 18 créneaux explicites');
+        self::assertSame(19, $this->jdrPlanSlotCount($planId), 'la grille de plan JDR compte exactement 19 créneaux explicites');
 
         $capTwoAt = fn (string $start): int => (int) $this->connection->fetchOne(
             'SELECT COUNT(*) FROM venue_training_slot s JOIN venue v ON v.id = s.venue_id '
@@ -521,9 +529,18 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
         self::assertSame(5, $capTwoAt('17:30'), 'lun→ven à 17:30 : un créneau JDR à cap 2 par jour ouvré');
         self::assertSame(5, $capTwoAt('19:00'), 'lun→ven à 19:00 : un créneau JDR à cap 2 par jour ouvré');
 
-        // Idempotence : un second run purge+réinsère, la grille JDR reste à 18 (pas de doublon).
+        // Le nouveau créneau du gestionnaire : mercredi (jour ISO 3) 16:00→17:30, 90 min, cap 1.
+        $wed1600 = (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM venue_training_slot s JOIN venue v ON v.id = s.venue_id '
+            . 'WHERE s.schedule_plan_id = ? AND v.name = \'JDR\' AND s.day_of_week = 3 '
+            . 'AND to_char(s.start_time, \'HH24:MI\') = \'16:00\' AND s.duration_minutes = 90 AND s.capacity = 1',
+            [$planId],
+        );
+        self::assertSame(1, $wed1600, 'la grille JDR porte le créneau mercredi 16:00→17:30 (90 min, cap 1)');
+
+        // Idempotence : un second run purge+réinsère, la grille JDR reste à 19 (pas de doublon).
         $this->seeder->run($this->em, BcclSeedProfile::dev());
-        self::assertSame(18, $this->jdrPlanSlotCount($this->mateoIncidentPlanId($club->getId())), 'un second seed laisse 18 créneaux JDR de plan');
+        self::assertSame(19, $this->jdrPlanSlotCount($this->mateoIncidentPlanId($club->getId())), 'un second seed laisse 19 créneaux JDR de plan');
     }
 
     /**
