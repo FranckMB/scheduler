@@ -28,11 +28,14 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost/ || exit 1
 
-# prod — same runtime, but the edge conf WITHOUT the /engine/ debug proxy: the
-# solver has no auth of its own and must never be reachable from the internet.
+# prod — même runtime, avec `nginx.prod.conf`.
+# ⚠ Cet étage se justifiait par une conf prod « sans le proxy /engine/ de debug ». Ce proxy a
+# été retiré du DEV aussi le 2026-07-31 : depuis, les deux confs sont IDENTIQUES aux
+# commentaires près (vérifié au diff le 2026-08-19, audit DOC-32). Le dédoublement ne porte
+# donc plus aucune différence — fusion à instruire (P4-118), pas au détour d'une PR de doc.
 FROM runtime AS prod
 COPY docker/frontend/nginx.prod.conf /etc/nginx/conf.d/default.conf
 
-# Default (last) stage = dev runtime, so plain `docker build` / dev compose
-# keep building the conf WITH /engine/. CI builds prod via --target prod.
+# Étage par défaut (le dernier) = runtime dev, pour que `docker build` nu et le compose dev
+# prennent `nginx.conf`. La CI construit la prod via --target prod.
 FROM runtime
