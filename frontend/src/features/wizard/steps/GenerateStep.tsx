@@ -180,7 +180,9 @@ export function GenerateStep() {
     // bug fondateur 2026-08-19 — en période, on PORTE l'écran sur le plan de la période :
     // il n'atterrit plus sur le plan de saison et n'affiche que les versions de la période.
     // En saison, `scopePlanId` est nul → comportement inchangé.
-    return <PlanningPage embedded scopePlanId={periodMode ? periodPlanId : null} />;
+    // P2-43 volet (v) — on passe l'entrée de calendrier de la période : PlanningPage y lit l'état
+    // de fermeture des gymnases pour MARQUER (jamais offrir) les fenêtres vides fermées.
+    return <PlanningPage embedded scopePlanId={periodMode ? periodPlanId : null} calendarEntryId={periodMode ? calendarEntryId : null} />;
   }
 
   return (

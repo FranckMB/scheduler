@@ -10,8 +10,8 @@ import { useWizardStore } from "@/features/wizard/store";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
 import { usePriorityTiers } from "@/features/matches/queries";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
-import { useSchedulePlans } from "@/features/cockpit/queries";
-import { useReservations, useTeamPeriodOverrides, useVenuePeriodOverrides, useWizardTeamTagAssignments, useWizardTeamTags } from "@/features/wizard/queries";
+import { useEntryConflicts, useSchedulePlans } from "@/features/cockpit/queries";
+import { useReservations, useTeamPeriodOverrides, useWizardTeamTagAssignments, useWizardTeamTags } from "@/features/wizard/queries";
 import { coachFullName } from "@/shared/lib/coachName";
 import { readFailed, readLoading } from "@/shared/lib/readState";
 import { toast } from "@/shared/stores/toastStore";
@@ -33,6 +33,7 @@ import { GenerationWaiting } from "./GenerationWaiting";
 import { buildTagTeamIds } from "./lib/applicableConstraints";
 import { topSeveritySummary } from "./lib/diagnosticsSummary";
 import { computeDrift } from "./lib/drift";
+import { computeClosedWindows } from "./lib/closedWindows";
 import { computeEmptySlots, isEmptySlotId } from "./lib/emptySlots";
 import { violationHighlightSlotIds } from "./lib/violationHighlight";
 import { buildClubView } from "./lib/clubView";
@@ -117,8 +118,12 @@ function EmptyState({ title, description }: { title: string; description: string
  *  ne montre QUE les versions de ce plan (une période), y atterrit, en tire son titre et sa
  *  toolbar, et ne retombe JAMAIS sur le plan de saison (fail-closed, doctrine PeriodAnchor).
  *  Null (le défaut, et la page `/planning` autonome) ⇒ comportement STRICTEMENT inchangé :
- *  `pickLandingScheduleId` y reste légitime. */
-export function PlanningPage({ embedded = false, scopePlanId = null }: { embedded?: boolean; scopePlanId?: string | null } = {}) {
+ *  `pickLandingScheduleId` y reste légitime.
+ *
+ *  `calendarEntryId` (P2-43 volet v) — l'entrée de calendrier de la PÉRIODE affichée, passée par
+ *  `GenerateStep` en embarqué (elle l'a déjà en main). Null (page autonome) ⇒ dérivée du plan de
+ *  la version affichée. Sert à LIRE l'état de fermeture des gymnases servi par le backend. */
+export function PlanningPage({ embedded = false, scopePlanId = null, calendarEntryId = null }: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null } = {}) {
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
   const { data: me } = useMe();
   // §4bis pt 2 — solde de crédits sur « Régénérer » (Découverte bridée seulement).
@@ -229,22 +234,39 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
   // `reservation-*` : aucun PATCH slot ne doit les viser), sur la MÊME couche que le
   // payload du solveur : socle = réservations permanentes, période = celles de son plan.
   const isFailed = "FAILED" === displayed?.status;
+  // P2-43 volet (v) — l'état de fermeture des gymnases SERVI par le backend pour la PÉRIODE
+  // affichée (`GET /calendar-entries/{id}/conflicts`, foyer unique déjà consommé par le wizard).
+  // L'entrée de calendrier : prop en embarqué (Génération l'a en main), sinon dérivée du plan de
+  // la version affichée — JAMAIS le socle (une version de saison n'a pas d'entrée de période).
+  const { data: allSchedulePlans } = useSchedulePlans();
+  const periodPlan =
+    null !== displayed && !isSeasonPlanType(displayed.planType) && null !== displayed.schedulePlanId
+      ? ((allSchedulePlans ?? []).find((p) => p.id === displayed.schedulePlanId) ?? null)
+      : null;
+  const periodEntryId = calendarEntryId ?? periodPlan?.calendarEntryId ?? null;
+  const entryConflicts = useEntryConflicts(periodEntryId);
+  const conflictsUnresolved = readLoading(entryConflicts) || readFailed(entryConflicts);
+  // FAIL-CLOSED sur l'OFFRE : on n'ARME pas un geste cible tant que l'état de fermeture n'est pas
+  // connu (le moteur refuserait un placement sur un couple fermé). Le socle n'a rien à attendre ;
+  // une version de PÉRIODE dont le plan n'est pas encore résolu compte comme non résolue (on ne
+  // DEVINE pas l'absence de fermeture). Fail-CLOSED sur l'offre, fail-OPEN sur l'affichage.
+  const periodPlanPending = null !== displayed && !isSeasonPlanType(displayed.planType) && null === calendarEntryId && undefined === allSchedulePlans;
+  const closuresResolved = !periodPlanPending && (null === periodEntryId || !conflictsUnresolved);
   // P2-15 — un gymnase DÉSACTIVÉ pour la période garde ses créneaux en base (le backend
   // les écarte du payload, il ne les supprime pas) : sans ce filtre, l'écran de génération
   // affichait TOUS les gymnases du club alors qu'un seul sert — « du bruit pour rien ».
   // On filtre à la SOURCE : la grille, ses fenêtres vides et le sélecteur en dérivent tous.
-  // FAIL-CLOSED : lecture ratée sans cache ⇒ on ne masque rien (P4-20). Déclaré ICI (et
-  // non plus après les slots) : les réservations affichées sur un FAILED suivent le même
-  // filtre — le backend les écarte aussi du payload d'une période (`reservationsInScope`).
-  const venueOverrides = useVenuePeriodOverrides(slotLayerId);
+  // On lit l'état SERVI (`disabledVenueIds`), plus de re-dérivation locale depuis les overrides
+  // (le wizard a migré de même — règle d'or). FAIL-CLOSED sur l'AFFICHAGE (P4-20) : lecture ratée
+  // / pas encore résolue ⇒ on ne masque rien.
+  const disabledVenueIds = useMemo(
+    () => new Set(conflictsUnresolved ? [] : (entryConflicts.data?.disabledVenueIds ?? [])),
+    [conflictsUnresolved, entryConflicts.data],
+  );
   // P2-30 (dérive) : les overrides d'équipe de la PÉRIODE (seuil/désactivation) — mêmes hooks
   // que le wizard. Sur le socle (slotLayerId=null) le hook est inerte → `computeDrift` reçoit
   // `null` et lit le seuil de saison.
   const teamOverridesQuery = useTeamPeriodOverrides(slotLayerId);
-  const disabledVenueIds = useMemo(
-    () => new Set(readFailed(venueOverrides) || readLoading(venueOverrides) ? [] : (venueOverrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId)),
-    [venueOverrides],
-  );
   const reservationsQuery = useReservations(slotLayerId, isFailed);
   const reservationSlots = useMemo<Slot[]>(
     () => !isFailed || null === validScheduleId ? [] : (reservationsQuery.data ?? []).filter((r) => !disabledVenueIds.has(r.venueId)).map((r) => ({
@@ -370,7 +392,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
   const selectedSchedule = displayed;
   // Suppression d'un planning SECONDAIRE (overlay) depuis l'en-tête (retour fondateur
   // 2026-07-19) : l'entrée de calendrier de son plan (jamais pour le socle SEASON).
-  const { data: allSchedulePlans } = useSchedulePlans();
+  // `allSchedulePlans` est déjà lu plus haut (dérivation de la fermeture de période).
   const overlayDeleteEntryId =
     null !== selectedSchedule && !isSeasonPlanType(selectedSchedule.planType) && null !== selectedSchedule.schedulePlanId
       ? ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule.schedulePlanId)?.calendarEntryId ?? null)
@@ -565,6 +587,14 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
     [viewMode, slots, emptySlots],
   );
 
+  // P2-43 volet (v) — les couples (gymnase, jour) FERMÉS de la période, lus de l'état SERVI. La
+  // grille en MARQUE ses fenêtres vides (inertes + nommées) et l'offre les exclut. Vide sur le
+  // socle ou tant que les conflits ne sont pas résolus (fail-open sur l'affichage).
+  const closedWindows = useMemo(
+    () => computeClosedWindows(conflictsUnresolved ? undefined : entryConflicts.data, (venueId) => lookups.venues.get(venueId)?.name ?? "Gymnase"),
+    [conflictsUnresolved, entryConflicts.data, lookups],
+  );
+
   // --- P2-30 : mode cible, éviction, dérive, undo -----------------------------------------
   const teamNameOf = (teamId: string): string => lookups.teams.get(teamId)?.name ?? "une équipe";
 
@@ -626,11 +656,29 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
       requestAnimationFrame(() => (document.querySelector(`[data-slot-id="${source}"] button`) as HTMLElement | null)?.focus?.());
     }
   };
+  // P2-43 volet (v) — l'OFFRE est fail-closed : tant que l'état de fermeture d'une période n'est
+  // pas résolu, on n'ARME pas de geste cible (on ne sait pas quelles cases le moteur refusera).
+  // Le socle et une période aux conflits déjà lus arment normalement (comportement inchangé).
+  const guardArm = (): boolean => {
+    if (!closuresResolved) {
+      toast.error("Vérification des fermetures de gymnase en cours — réessayez dans un instant.");
+      return false;
+    }
+    return true;
+  };
   // Armer/désarmer le déplacement d'un créneau depuis son panneau (toggle).
-  const armMove = (slotId: string) => setTargetMode((cur) => (cur?.kind === "move" && cur.sourceSlotId === slotId ? null : { kind: "move", sourceSlotId: slotId }));
+  const armMove = (slotId: string) => {
+    if (!guardArm()) {
+      return;
+    }
+    setTargetMode((cur) => (cur?.kind === "move" && cur.sourceSlotId === slotId ? null : { kind: "move", sourceSlotId: slotId }));
+  };
   // Armer le placement d'une équipe à la dérive (le panneau de détail se ferme : pas de source).
   // On fige le contexte (version + vue) pour que le geste tombe si l'un change (P4-119 d).
   const armPlace = (teamId: string) => {
+    if (!guardArm()) {
+      return;
+    }
     setSelectedSlotId(null);
     setTargetMode({ kind: "place", teamId, scheduleId: validScheduleId, view: viewMode });
   };
@@ -777,6 +825,11 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
     doMove(sourceSlotId, { dayOfWeek: targetSlot.dayOfWeek, startTime: toHourMinute(targetSlot.startTime), venueId: targetSlot.venueId }, targetSlot.id);
   };
 
+  // P2-43 volet (v) — la CEINTURE de l'offre (défense en profondeur) : un couple (gymnase, jour)
+  // fermé n'est jamais une cible, même si un bouton fuyait. La grille filtre déjà l'offre ; ceci
+  // garde le geste côté page.
+  const isClosedTarget = (venueId: string, dayOfWeek: number): boolean => closedWindows.has(`${venueId}|${dayOfWeek}`);
+
   // Un clic sur une case de la grille EN mode cible (la grille route tout ici). La page décide :
   // annuler (re-clic source), déplacer/placer sur une case libre, ou évincer (via l'essai).
   const onPickTarget = (cellSlotId: string) => {
@@ -789,7 +842,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
     }
     if (isEmptySlotId(cellSlotId)) {
       const win = gridSlots.find((s) => s.id === cellSlotId);
-      if (undefined === win) {
+      if (undefined === win || isClosedTarget(win.venueId, win.dayOfWeek)) {
         return;
       }
       const position = { dayOfWeek: win.dayOfWeek, startTime: toHourMinute(win.startTime), venueId: win.venueId };
@@ -802,7 +855,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
     }
     // Case OCCUPÉE.
     const targetSlot = slots.find((s) => s.id === cellSlotId);
-    if (undefined === targetSlot) {
+    if (undefined === targetSlot || isClosedTarget(targetSlot.venueId, targetSlot.dayOfWeek)) {
       return;
     }
     if (targetMode.kind === "move") {
@@ -1380,6 +1433,9 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
                           }
                           onPickTarget={onPickTarget}
                           onCancelTarget={cancelTarget}
+                          // P2-43 volet (v) — les couples fermés de la période : cases vides
+                          // MARQUÉES (inertes + nommées), jamais offertes en cible.
+                          closedWindows={closedWindows}
                         />
                         )}
                       </div>

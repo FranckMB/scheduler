@@ -35,7 +35,7 @@ vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: { setS
 // Le stub RECORD la portée reçue (data-scope) : c'est le CÂBLAGE GenerateStep→PlanningPage
 // qu'on épingle ici (que la portée passée == le plan de période). Le RENDU scopé lui-même
 // — atterrissage, titre, toolbar — est gardé sur le composant RÉEL dans PlanningPage.test.tsx.
-vi.mock("@/features/planning/PlanningPage", () => ({ PlanningPage: (props: { embedded?: boolean; scopePlanId?: string | null }) => <div data-testid="planning" data-scope={props.scopePlanId ?? ""} /> }));
+vi.mock("@/features/planning/PlanningPage", () => ({ PlanningPage: (props: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null }) => <div data-testid="planning" data-scope={props.scopePlanId ?? ""} data-entry={props.calendarEntryId ?? ""} /> }));
 vi.mock("@/features/planning/GenerationWaiting", () => ({ GenerationWaiting: () => <div /> }));
 vi.mock("../lib/useStepValidation", () => ({ useStepValidation: () => ({ errors: [], warnings: [], pending: false }) }));
 vi.mock("../store", () => ({ useWizardStore: () => ({ mode: h.mode, calendarEntryId: h.entryId }) }));
@@ -191,6 +191,9 @@ describe("GenerateStep — mode période : l'écran embarqué est scopé au plan
     renderStep();
 
     expect(screen.getByTestId("planning")).toHaveAttribute("data-scope", "plan-p");
+    // P2-43 volet (v) — l'entrée de calendrier de la période est passée : PlanningPage y lit
+    // l'état de fermeture des gymnases pour MARQUER les fenêtres vides fermées.
+    expect(screen.getByTestId("planning")).toHaveAttribute("data-entry", "entry-1");
     expect(screen.queryByRole("button", { name: /Générer le planning de période/i })).not.toBeInTheDocument();
   });
 
@@ -228,5 +231,7 @@ describe("GenerateStep — mode saison : rien ne change (NR)", () => {
     renderStep();
 
     expect(screen.getByTestId("planning")).toHaveAttribute("data-scope", "");
+    // En saison, aucune entrée de période n'est passée (pas de fermetures de période à lire).
+    expect(screen.getByTestId("planning")).toHaveAttribute("data-entry", "");
   });
 });

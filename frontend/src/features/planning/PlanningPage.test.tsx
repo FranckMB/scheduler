@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { SchedulePlan } from "@/features/cockpit/api";
+import type { EntryConflictsResponse, SchedulePlan } from "@/features/cockpit/api";
 import { useToastStore } from "@/shared/stores/toastStore";
 import { renderWithProviders } from "@/test/utils";
 
@@ -133,13 +133,16 @@ vi.mock("@/shared/lib/scheduleStream", () => ({
   isScheduleStreamConnected: () => false,
 }));
 
-const { meState, renameSpy, plansState, venueOverridesState, reservationsState, teamOverridesState } = vi.hoisted(() => ({
+const { meState, renameSpy, plansState, conflictsState, reservationsState, teamOverridesState } = vi.hoisted(() => ({
   meState: { chosenScheduleId: null as string | null },
   renameSpy: vi.fn(),
   // Typé sur le VRAI contrat : un type inline recopié laisserait passer un champ ajouté à
   // `SchedulePlan` sans que ces fixtures soient recalées (revue #339 round 3).
   plansState: { plans: [] as SchedulePlan[] },
-  venueOverridesState: { rows: [] as { id: string; venueId: string; mode: string }[], isError: false },
+  // P2-43 volet (v) — l'état de fermeture SERVI (`/calendar-entries/{id}/conflicts`) : c'est
+  // désormais LUI qui porte `disabledVenueIds` (plus la re-dérivation des overrides) ET les
+  // couples fermés que la grille MARQUE. `data: undefined` = query non résolue (fail-open).
+  conflictsState: { data: undefined as EntryConflictsResponse | undefined, isError: false },
   // Réservations servies sur un planning FAILED (pseudo-créneaux lecture seule).
   reservationsState: { rows: [] as { id: string; schedulePlanId: string | null; teamId: string; venueId: string; dayOfWeek: number; startTime: string; durationMinutes: number }[] },
   // P2-30 : les overrides d'équipe de la période (seuil/désactivation de dérive).
@@ -150,7 +153,6 @@ const { meState, renameSpy, plansState, venueOverridesState, reservationsState, 
 // créneaux en base, l'écran doit malgré tout cesser de l'afficher.
 vi.mock("@/features/wizard/queries", async (orig) => ({
   ...(await orig<typeof import("@/features/wizard/queries")>()),
-  useVenuePeriodOverrides: () => ({ data: venueOverridesState.rows, isError: venueOverridesState.isError }),
   useReservations: () => ({ data: reservationsState.rows }),
   // P2-30 : overrides d'équipe de la période (seuil de dérive). `data` défini → readState ready.
   useTeamPeriodOverrides: () => ({ data: teamOverridesState.rows, isError: false }),
@@ -165,7 +167,25 @@ vi.mock("@/features/wizard/queries", async (orig) => ({
 vi.mock("@/features/cockpit/queries", async (orig) => ({
   ...(await orig<typeof import("@/features/cockpit/queries")>()),
   useSchedulePlans: () => ({ data: plansState.plans }),
+  // P2-43 volet (v) — l'écran lit l'état de fermeture SERVI. Une entrée nulle (socle, ou plan de
+  // période pas encore résolu) = pas de données, comme la vraie query désactivée.
+  useEntryConflicts: (entryId: string | null) => ({ data: null === entryId ? undefined : conflictsState.data, isError: conflictsState.isError, isFetching: false, refetch: vi.fn() }),
 }));
+
+/** Un `EntryConflictsResponse` complet, aux défauts ouverts — les cas ne renseignent que ce qui compte. */
+function makeConflicts(partial: Partial<EntryConflictsResponse> = {}): EntryConflictsResponse {
+  return {
+    entryId: "e",
+    venueIds: [],
+    conflicts: [],
+    closures: [],
+    fullyClosedVenueIds: [],
+    effectiveClosedWeekdays: {},
+    disabledVenueIds: [],
+    seasonPlanChosen: true,
+    ...partial,
+  };
+}
 
 vi.mock("@/features/auth/queries", () => ({
   useMe: () => ({
@@ -187,8 +207,8 @@ beforeEach(() => {
   meState.chosenScheduleId = null;
   renameSpy.mockClear();
   plansState.plans = [];
-  venueOverridesState.rows = [];
-  venueOverridesState.isError = false;
+  conflictsState.data = undefined;
+  conflictsState.isError = false;
   reservationsState.rows = [];
   teamOverridesState.rows = [];
   // Ré-armement explicite : ces trois-là sont réécrits par des cas (couche de période,
@@ -437,7 +457,7 @@ describe("PlanningPage (integration)", () => {
     ]);
     plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
     // La séance par défaut (slot-1) est placée dans venue-1, que l'on désactive ensuite.
-    venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
+    conflictsState.data = makeConflicts({ disabledVenueIds: ["venue-1"] });
     usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
     renderWithProviders(<PlanningPage />);
 
@@ -488,7 +508,7 @@ describe("PlanningPage (integration)", () => {
     ]);
     plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
     vi.mocked(getSlots).mockResolvedValue([]);
-    venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
+    conflictsState.data = makeConflicts({ disabledVenueIds: ["venue-1"] });
     reservationsState.rows = [
       { id: "res-1", schedulePlanId: "ete-plan", teamId: "team-1", venueId: "venue-1", dayOfWeek: 1, startTime: "18:00", durationMinutes: 90 },
     ];
@@ -520,7 +540,7 @@ describe("PlanningPage (integration)", () => {
     vi.mocked(getSlots).mockResolvedValue([
       { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-2", coachId: null, dayOfWeek: 3, startTime: "17:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null },
     ]);
-    venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
+    conflictsState.data = makeConflicts({ disabledVenueIds: ["venue-1"] });
     usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
     renderWithProviders(<PlanningPage />);
 
@@ -785,6 +805,29 @@ describe("PlanningPage (integration)", () => {
     await user.click(await screen.findByRole("button", { name: /Diagnostics du système/ }));
     const warnGroup = await screen.findByRole("button", { name: /Alertes/ });
     expect(within(warnGroup).getByText("1")).toBeInTheDocument();
+  });
+
+  // P2-43 volet (v) — la vue planning d'une PÉRIODE ne doit plus OFFRIR ce que le moteur
+  // refuse : une fenêtre vide sur un couple (gymnase, jour) FERMÉ (état effectif SERVI) est
+  // MARQUÉE « fermé » (inerte + nommée), jamais rendue « vide » offrable. Grain JOUR : c'est le
+  // seul mardi de venue-1 qui est fermé, pas le gymnase entier.
+  it("marque « fermé » (inerte) une fenêtre vide sur un couple gymnase/jour FERMÉ d'une période, au lieu de l'offrir « vide »", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
+    ]);
+    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
+    // venue-1 est fermé le MARDI (jour ISO 2) — la fenêtre ts-2 (mardi 19:00) tombe dessus.
+    conflictsState.data = makeConflicts({ effectiveClosedWeekdays: { "venue-1": { "2": "default-incident" } } });
+    usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
+    renderWithProviders(<PlanningPage />);
+
+    // La séance placée du lundi prouve que la grille a chargé (ancre non-fermée).
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    // La fenêtre du mardi n'est plus OFFERTE (« vide ») — elle est MARQUÉE « fermé » et nommée.
+    expect(screen.queryByText("vide")).not.toBeInTheDocument();
+    const closed = await screen.findByTitle(/Fermé —/);
+    expect(closed).toHaveTextContent(/fermé/i);
+    expect(closed.getAttribute("title")).toMatch(/mardi est fermé/);
   });
 
   // planning lifecycle (§7.1): reopening the version the plan POINTS at, when the
