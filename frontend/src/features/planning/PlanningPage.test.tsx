@@ -1145,6 +1145,106 @@ describe("PlanningPage (integration)", () => {
     });
   });
 
+  // P4-119 (d) — le mode cible (déplacer/placer) SUIT son ancre : le panneau du créneau source
+  // pour un déplacement, l'entrée de dérive pour un placement. Fermer le panneau, changer de vue
+  // ou de version = geste ANNULÉ. Avant ce correctif, l'armement survivait à son panneau et chaque
+  // clic devenait une nouvelle tentative de déplacement — l'utilisateur piégé (fondateur 2026-08-19).
+  describe("P4-119 : le mode cible suit son ancre", () => {
+    const OTHER = "22222222-2222-2222-2222-222222222222";
+
+    beforeEach(() => {
+      useToastStore.setState({ toasts: [] });
+      vi.mocked(moveSlot).mockReset();
+      vi.mocked(placeSlot).mockReset();
+      // Repartir d'une vue et d'une sélection neutres (le store persiste `viewMode`).
+      usePlanningStore.setState({ viewMode: "gymnase", selectedScheduleId: null, selectedSlotId: null });
+    });
+
+    async function armMove(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+      await user.click(await screen.findByText("U11"));
+      await user.click(screen.getByRole("button", { name: /Déplacer/ }));
+      // Armé : le bouton bascule et les fenêtres vides deviennent des cibles « Placer ici »
+      // (rendu STRICTEMENT gouverné par l'état armé — cf. WeekGrid `targetActive`).
+      expect(await screen.findByRole("button", { name: /Choisir la case cible/ })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Placer ici/ })).toBeInTheDocument();
+    }
+
+    it("fermer le panneau du créneau source ANNULE le déplacement", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<PlanningPage />);
+      await armMove(user);
+      await user.click(screen.getByRole("button", { name: "Fermer" }));
+      // Désarmé : plus AUCUNE cible « Placer ici », donc aucune tentative possible au clic suivant.
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(moveSlot)).not.toHaveBeenCalled();
+    });
+
+    it("changer de vue ANNULE le déplacement", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<PlanningPage />);
+      await armMove(user);
+      await user.click(screen.getByRole("button", { name: "Par équipe" }));
+      await user.click(screen.getByRole("button", { name: "Par gymnase" }));
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(moveSlot)).not.toHaveBeenCalled();
+    });
+
+    it("changer de version ANNULE le déplacement", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listSchedules).mockResolvedValue([
+        { id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+        { id: OTHER, name: "Planning B", status: "COMPLETED", score: 9100, createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+      ]);
+      usePlanningStore.setState({ selectedScheduleId: SID });
+      renderWithProviders(<PlanningPage />);
+      await armMove(user);
+      usePlanningStore.setState({ selectedScheduleId: OTHER });
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(moveSlot)).not.toHaveBeenCalled();
+    });
+
+    it("Échap ANNULE le déplacement (a11y — le raccourci existant est préservé)", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<PlanningPage />);
+      await armMove(user);
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(moveSlot)).not.toHaveBeenCalled();
+    });
+
+    it("changer de version ANNULE le placement d'une équipe à la dérive", async () => {
+      const user = userEvent.setup();
+      // U11 attend 2 séances, n'en a qu'une → dérive : le bandeau « séances à replacer » l'affiche.
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
+      vi.mocked(listSchedules).mockResolvedValue([
+        { id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+        { id: OTHER, name: "Planning B", status: "COMPLETED", score: 9100, createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+      ]);
+      usePlanningStore.setState({ selectedScheduleId: SID });
+      renderWithProviders(<PlanningPage />);
+      const banner = await screen.findByRole("region", { name: /séances à replacer/i });
+      await user.click(within(banner).getByRole("button"));
+      // Armé : les fenêtres vides deviennent des cibles « Placer ici ».
+      expect(await screen.findByRole("button", { name: /Placer ici/ })).toBeInTheDocument();
+      usePlanningStore.setState({ selectedScheduleId: OTHER });
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(placeSlot)).not.toHaveBeenCalled();
+    });
+
+    it("changer de vue ANNULE le placement d'une équipe à la dérive", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
+      renderWithProviders(<PlanningPage />);
+      const banner = await screen.findByRole("region", { name: /séances à replacer/i });
+      await user.click(within(banner).getByRole("button"));
+      expect(await screen.findByRole("button", { name: /Placer ici/ })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Par équipe" }));
+      await user.click(screen.getByRole("button", { name: "Par gymnase" }));
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(placeSlot)).not.toHaveBeenCalled();
+    });
+  });
+
   // P2-32 — l'essai (dry-run) qui remplit la modale d'éviction, et les compromis nommés
   // affichés après un geste ÉCRIT accepté (toast suffixé + bandeau dismissible).
   describe("P2-32 : compromis nommés + essai (dry-run)", () => {

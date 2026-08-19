@@ -46,7 +46,7 @@ import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
 import { stalenessMessage } from "./lib/staleness";
 import { isSeasonPlanType, planRepresentative, visibleOverlayVersions } from "./lib/versions";
-import { usePlanningStore } from "./store";
+import { usePlanningStore, type ViewMode } from "./store";
 import { WeekGrid } from "./WeekGrid";
 
 // D-31 : foyer unique dans `api.ts`.
@@ -140,7 +140,10 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
   // (`sourceSlotId`) ; `place` place une séance À LA DÉRIVE pour une équipe (`teamId`). Null =
   // consultation. Le geste 4 (undo, profondeur 1, session) et le raccourci d'éviction vivent
   // AUSSI en état de page — ils ont besoin des noms d'équipes et de l'issue exacte du verdict.
-  const [targetMode, setTargetMode] = useState<{ kind: "move"; sourceSlotId: string } | { kind: "place"; teamId: string } | null>(null);
+  // P4-119 (d) : un placement porte le CONTEXTE où il fut armé (version + vue) — son ancre est
+  // l'entrée de dérive du bandeau, pas un panneau de créneau ; changer de vue ou de version le fait
+  // tomber comme le panneau ferme un déplacement (cf. le désarmement en phase de rendu plus bas).
+  const [targetMode, setTargetMode] = useState<{ kind: "move"; sourceSlotId: string } | { kind: "place"; teamId: string; scheduleId: string | null; view: ViewMode } | null>(null);
   // P2-32 (D6) — la modale d'éviction, désormais alimentée par un ESSAI (dry-run). `checking`
   // pendant que le moteur juge, `accepted` (compromis nommés) ou `refused` (motifs) ensuite.
   // Rien n'est ÉCRIT tant qu'on n'a pas confirmé un état `accepted`.
@@ -593,6 +596,25 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
     return computeDrift(teams.map((t) => ({ id: t.id, sessionsPerWeek: t.sessionsPerWeek })), generatedSlots, overrides);
   }, [displayed, slotLayerId, teamOverridesQuery, teams, generatedSlots]);
 
+  // P4-119 (d) — l'armement d'un geste cible SUIT son ancre et tombe dès qu'elle disparaît, sinon
+  // le mode restait armé et chaque clic devenait une nouvelle tentative de déplacement (fondateur
+  // piégé, 2026-08-19). Un DÉPLACEMENT est ancré au panneau de son créneau source (`selectedSlotId`)
+  // : le fermer, en ouvrir un autre, changer de vue ou de version l'annule — ces trois derniers
+  // vident déjà `selectedSlotId` (cf. store), la seule condition `sourceSlotId !== selectedSlotId`
+  // les couvre tous. Un PLACEMENT est ancré à l'entrée de dérive de son équipe ET au contexte où il
+  // fut armé : l'équipe qui cesse de dériver, un changement de vue ou de version le fait tomber.
+  // Redérivé en phase de RENDU, jamais en effet (le lint du dépôt interdit un setState en effet —
+  // même idiome que `rejectionHandled` plus bas) ; converge (une fois null, la condition est fausse).
+  if (null !== targetMode) {
+    const stale =
+      "move" === targetMode.kind
+        ? targetMode.sourceSlotId !== selectedSlotId
+        : targetMode.scheduleId !== validScheduleId || targetMode.view !== viewMode || !driftEntries.some((d) => d.teamId === targetMode.teamId);
+    if (stale) {
+      setTargetMode(null);
+    }
+  }
+
   const cancelTarget = () => {
     const source = targetMode?.kind === "move" ? targetMode.sourceSlotId : null;
     setTargetMode(null);
@@ -604,9 +626,10 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
   // Armer/désarmer le déplacement d'un créneau depuis son panneau (toggle).
   const armMove = (slotId: string) => setTargetMode((cur) => (cur?.kind === "move" && cur.sourceSlotId === slotId ? null : { kind: "move", sourceSlotId: slotId }));
   // Armer le placement d'une équipe à la dérive (le panneau de détail se ferme : pas de source).
+  // On fige le contexte (version + vue) pour que le geste tombe si l'un change (P4-119 d).
   const armPlace = (teamId: string) => {
     setSelectedSlotId(null);
-    setTargetMode({ kind: "place", teamId });
+    setTargetMode({ kind: "place", teamId, scheduleId: validScheduleId, view: viewMode });
   };
 
   // Déplacer un créneau (éventuellement en évinçant l'occupant de la cible) sous le verdict
