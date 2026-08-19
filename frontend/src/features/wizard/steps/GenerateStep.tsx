@@ -205,10 +205,13 @@ export function GenerateStep() {
             ) : (
               <p className="max-w-md text-sm text-muted-foreground">
                 {timedOut
-                  // AUD-UXC-11 — seule phrase au TUTOIEMENT d'un écran qui vouvoie partout
-                  // ailleurs (« Générez », « vos équipes », « votre planning »).
+                  // AUD-UXC-11 (résidu soldé le 2026-08-19) — cet écran vouvoie partout
+                  // (« Générez », « vos équipes », « votre planning »). La passe précédente avait
+                  // vouvoyé CETTE branche mais laissé sa voisine juste en dessous au tutoiement :
+                  // le lecteur changeait d'interlocuteur selon le type d'échec. C'était le dernier
+                  // tutoiement visible du produit (hors console fondateur).
                   ? "Le service met trop de temps à répondre. Vérifiez que le moteur tourne, puis réessayez."
-                  : (launchReason ?? ("FAILED" === status && failedDiagnostics.isLoading ? "Lecture du motif de l'échec…" : (launchReason ?? "Une erreur est survenue (données ou moteur indisponible). Tu peux réessayer.")))}
+                  : (launchReason ?? ("FAILED" === status && failedDiagnostics.isLoading ? "Lecture du motif de l'échec…" : (launchReason ?? "Une erreur est survenue (données ou moteur indisponible). Vous pouvez réessayer.")))}
               </p>
             )}
           </div>

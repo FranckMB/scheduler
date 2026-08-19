@@ -23,6 +23,26 @@ const openMenu = async (): Promise<void> => {
   await user.click(screen.getByRole("button", { name: /Exporter/ }));
 };
 
+describe("ExportMenu — AUD-FRT-23, on ne promet pas un menu qu'on n'implémente pas", () => {
+  it("expose un GROUPE nommé, jamais un role=menu (le panneau contient des <select>)", async () => {
+    render(<ExportMenu scheduleId="s1" venues={venues} screenFilterCount={0} />);
+    await openMenu();
+
+    // Le panneau est une zone de réglages dépliée, avec un nom pour le lecteur d'écran.
+    expect(screen.getByRole("group", { name: /Options d'export/i })).toBeInTheDocument();
+
+    // ⚑ Le cœur du garde : un role="menu" PROMET la navigation aux flèches (modèle APG) et
+    // n'admet que des menuitem — or ce panneau porte deux <select> et un paragraphe, et
+    // n'écoute aucune flèche. L'annoncer « menu » donnait au lecteur d'écran un mode d'emploi
+    // qui ne répond pas. Falsification : remettre role="menu" sur le panneau rougit ici.
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("menuitem")).toHaveLength(0);
+
+    // Et les formats restent atteignables comme de vrais boutons.
+    expect(screen.getByRole("button", { name: /PDF/i })).toBeInTheDocument();
+  });
+});
+
 describe("ExportMenu — P4-62, l'export annonce son périmètre", () => {
   it("ne dit RIEN quand l'écran n'est pas filtré (aucun écart à signaler)", async () => {
     render(<ExportMenu scheduleId="s1" venues={venues} screenFilterCount={0} />);

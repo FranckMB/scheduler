@@ -83,14 +83,21 @@ export function ExportMenu({
 
   return (
     <div ref={rootRef} className="relative">
-      <Button variant="outline" size="sm" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open}>
+      <Button variant="outline" size="sm" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="export-panel">
         <Download className="size-4" />
         Exporter
       </Button>
       {open ? (
         // z-50: above the WeekGrid frozen headers (z-40 corner / z-30 rows), which
         // otherwise render over the dropdown ("coupent" le menu — revue #204).
-        <div role="menu" className="absolute right-0 z-50 mt-1 w-64 rounded-lg border border-border bg-card p-3 shadow-lg">
+        // AUD-FRT-23 — ce panneau n'est PAS un menu ARIA et ne peut pas l'être : il contient
+        // des <label> et des <Select>, que le modèle menu interdit (un menu ne contient que des
+        // menuitem), et aucune navigation aux flèches n'est implémentée ici. Annoncer « menu »
+        // à un lecteur d'écran, c'est lui promettre un mode d'emploi qui ne répond pas. C'est
+        // une zone de réglages qu'on déplie : role="group" + un nom. La primitive
+        // shared/components/ui/menu.tsx, elle, est un VRAI menu (roving tabindex, flèches) —
+        // c'est elle qu'il faut utiliser le jour où un vrai menu est voulu.
+        <div id="export-panel" role="group" aria-label="Options d'export" className="absolute right-0 z-50 mt-1 w-64 rounded-lg border border-border bg-card p-3 shadow-lg">
           <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="export-scope">
             Périmètre
           </label>
@@ -115,7 +122,6 @@ export function ExportMenu({
               <button
                 key={key}
                 type="button"
-                role="menuitem"
                 disabled={null !== busy || creditsBlocked}
                 onClick={() => void run(key, venueId, view)}
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-50"

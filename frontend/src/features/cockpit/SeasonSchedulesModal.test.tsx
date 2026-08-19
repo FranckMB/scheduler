@@ -171,14 +171,21 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
     expect(screen.queryByRole("button", { name: /^Supprimer/ })).not.toBeInTheDocument();
   });
 
+  // AUD-FRT-23 — la sonde est passée de "menuitem" à "button" + le GROUPE nommé. L'intention du
+  // test n'a pas bougé (le sélecteur se déplie, les 3 formats sont atteignables, PDF déclenche
+  // l'export) : c'est sa façon de la mesurer qui était fausse. Ces boutons s'annonçaient
+  // "menuitem" dans un role="menu" sans aucune navigation aux flèches — un menu ARIA promet ce
+  // clavier-là. On ne promet plus ce qu'on n'implémente pas.
   it("export expands an inline format picker (PDF / Excel / PNG), no clipped dropdown", async () => {
     open([plan({ id: "v1", status: "COMPLETED" })]);
-    expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "PDF" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^Exporter/ }));
-    expect(screen.getByRole("menuitem", { name: "PDF" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Excel" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "PNG" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("menuitem", { name: "PDF" }));
+    expect(screen.getByRole("group", { name: /^Formats d'export/ })).toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PDF" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Excel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PNG" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "PDF" }));
     expect(run).toHaveBeenCalledWith("pdf", null);
   });
 });

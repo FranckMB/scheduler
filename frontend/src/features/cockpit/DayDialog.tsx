@@ -252,7 +252,7 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
         <Button variant="outline" onClick={() => onCreate("cutoff")}>
           Coupure (pas d'entraînement)
         </Button>
-        <Button variant="ghost" disabled title="Période générique (custom) — à venir. Utilise « Signaler une indisponibilité » ou le radar vacances.">
+        <Button variant="ghost" disabled title="Créer une période libre : à venir. En attendant, utilisez « Signaler une indisponibilité » ou le radar vacances.">
           Créer une période…
         </Button>
       </div>
@@ -385,7 +385,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
   const requestAdapt = (target: CalendarEntry) => requestWeekAdapt(target, { alreadySplit: weekChildren.length > 0 });
 
   return (
-    <div className="space-y-2 rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-2">
+    <div className="space-y-2 rounded-md border border-warning/50 bg-warning/10 px-3 py-2">
       <p className="flex items-center gap-2 text-sm">
         {/* Same season emoji as the calendar (🎄/🎃/…) — decorative, the text names it. */}
         <span aria-hidden className="text-base leading-none">{holidayIcon(holiday)}</span>

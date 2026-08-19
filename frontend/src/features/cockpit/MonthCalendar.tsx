@@ -97,7 +97,7 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
                 // School-holiday days get a clear amber BACKGROUND (kept apart from
                 // the accent, which marks "today") so a break is obvious at a glance.
                 // Jours fériés keep only their "F" badge — no background (per product).
-                holiday && cell.inMonth ? "bg-amber-400/30 dark:bg-amber-400/20" : "",
+                holiday && cell.inMonth ? "bg-warning/30 dark:bg-warning/20" : "",
               )}
               aria-label={isPast ? `${dayLabel}, passé (non modifiable)` : dayLabel}
             >
@@ -120,7 +120,7 @@ export function MonthCalendar({ year, month, entries, holidays, publicHolidays, 
                 ))}
               </span>
               {holiday && cell.inMonth ? (
-                <span className="w-full truncate text-[10px] leading-tight text-amber-700 dark:text-amber-300" title={holiday.label}>
+                <span className="w-full truncate text-[10px] leading-tight text-warning" title={holiday.label}>
                   {holiday.label}
                 </span>
               ) : null}

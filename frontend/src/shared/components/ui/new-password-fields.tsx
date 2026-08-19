@@ -44,7 +44,7 @@ export function NewPasswordFields({ password, confirm, onPasswordChange, onConfi
           {RULES.map(({ key, label }) => {
             const ok = checks[key];
             return (
-              <li key={key} className={cn("flex items-center gap-1.5 text-xs", ok ? "text-green-600 dark:text-green-500" : "text-muted-foreground")}>
+              <li key={key} className={cn("flex items-center gap-1.5 text-xs", ok ? "text-success" : "text-muted-foreground")}>
                 {ok ? <Check aria-hidden className="size-3.5" /> : <X aria-hidden className="size-3.5" />}
                 <span>{label}</span>
                 <span className="sr-only">{ok ? " (validé)" : " (manquant)"}</span>
