@@ -4,7 +4,7 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-19 (recalé — **P2-44 PR-2, transcription depuis le socle** : nouveau §6.7 bis re-vérifié contre `wizard/steps/GenerateStep.tsx`, `wizard/queries.ts`/`api.ts`, `planning/PlanningPage.tsx`, `planning/WeekGrid.tsx`, `planning/ToReplaceList.tsx`, `planning/lib/toReplaceReason.ts`, `planning/SeasonComparisonModal.tsx` — bouton « Partir du planning de saison » (plan de période vierge seulement), panneau « Séances à replacer » servi par la route et vivant le temps de la session d'écran, mise en évidence des vides (`emphasizeEmpty`, jamais les cases fermées), modale de consultation du socle ; aucune API touchée par ce lot ; trace datée : `etat-des-lieux.md`). Historique des passes : `git log -p --follow frontend/docs/frontend-spec.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-20 (recalé — **P2-44 PR-3, le comblement** : §6.7 bis gagne le bouton « Combler automatiquement », re-vérifié contre `planning/PlanningPage.tsx`, `planning/api.ts`, `planning/queries.ts` — `useFillSchedule` miroir de `useRegenerate`, visible dès `driftEntries.length > 0`, refus 409/422/429 affichés, aucune régénération de moteur ; trace datée : `etat-des-lieux.md`). Historique des passes : `git log -p --follow frontend/docs/frontend-spec.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
 ---
 
@@ -668,9 +668,21 @@ n'est touchée par ce lot — le front consomme la route `POST
   qu'un socle est consultable (une version de saison pointée existe), indépendamment de la liste
   « à replacer ».
 
-Reste ouvert (`roadmap.md` P2-44 PR-3 à PR-5) : le comblement par solve partiel borné aux séances
-« à replacer », l'entrée du socle transcrit en `previousAssignments` d'un solve complet volontaire,
-et l'agrégation narrative des écarts après un solve complet (recoupe P2-43 (iv)).
+**Comblement — bouton « Combler automatiquement » (P2-44 PR-3, ADR-0004, 2026-08-20)** : sur
+l'écran embarqué (`PlanningPage`), dès que la dérive `driftEntries` (le prédicat SERVI, jamais
+recomposé — même donnée que le bandeau existant) est non vide, un bouton `outline` (icône
+`Sparkles`) apparaît à côté des « séances à replacer » : « Combler automatiquement ». Le clic
+appelle `useFillSchedule` (`queries.ts`), miroir strict de `useRegenerate` — POST
+`schedules/{id}/fill`, invalide `["schedules"]`, sélectionne la V+1 créée en `onSuccess`. Un refus
+serveur (409 non-période/version choisie/génération en cours, 422 complexité/épinglage orphelin,
+429 quota club) est **affiché** via `errorMessage`/toast, jamais muet. Désactivé pendant une
+génération en cours ou sans version valide sélectionnée. **Outil d'appoint** : « Régénérer » (solve
+complet) reste dans la barre d'outils à côté — le comblement ne le remplace pas, il évite un solve
+complet pour le cas courant (un gymnase a fermé, une équipe a repris son volume).
+
+Reste ouvert (`roadmap.md` P2-44 PR-4/PR-5) : l'entrée du socle transcrit en
+`previousAssignments` d'un solve complet volontaire, et l'agrégation narrative des écarts après un
+solve complet (recoupe P2-43 (iv)).
 
 ### 6.8 Loading states et error boundaries
 

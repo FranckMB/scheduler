@@ -205,6 +205,22 @@ final class GenerateScheduleHandler
         $scheduleInput = $overlayEntry instanceof CalendarEntry
             ? $this->constraintBuilder->buildForOverlay($schedule, $overlayEntry)
             : $this->buildFrozenSnapshot($schedule);
+
+        // P2-44 PR-3 (comblement) — solve PARTIEL : les placements de la version SOURCE de la
+        // période sont épinglés HARD dans le payload (jamais persistés en base), seuls les trous
+        // (équipes sous leur volume de séances) restent à placer. Injecté AVANT le hash de
+        // snapshot : contrairement à `previousAssignments` (préférence de convergence), ces
+        // épingles SONT l'entrée figée du solve — le snapshot doit les porter, comme il porte les
+        // verrous d'un overlay ordinaire. N'a lieu que sur un plan de période (overlayEntry).
+        $fillSourceId = $message->getFillSourceScheduleId();
+        $isFill = null !== $fillSourceId && $overlayEntry instanceof CalendarEntry;
+        if ($isFill) {
+            $scheduleInput = $this->constraintBuilder->withPinnedAssignments(
+                $scheduleInput,
+                $this->pinnedSourceSlots((string) $fillSourceId, $schedule),
+            );
+        }
+
         // P5-10 — sérialiser UNE fois : le hash de snapshot ET la taille du payload
         // (métrique de capacité) sortent du même JSON — coût nul vs le hash existant.
         $encodedSnapshot = json_encode($scheduleInput, \JSON_THROW_ON_ERROR);
@@ -225,10 +241,17 @@ final class GenerateScheduleHandler
         // — à CHAQUE régénération, cassant en silence le garde « structure inchangée »
         // (bouton Régénérer grisé, signal « structure modifiée » du cockpit). Seul
         // `$scheduleInput`, l'entrée réelle envoyée au moteur, le porte.
-        $scheduleInput = $this->constraintBuilder->withPreviousAssignments(
-            $scheduleInput,
-            $this->resolvePreviousAssignmentSlots($schedule, $message),
-        );
+        //
+        // P2-44 PR-3 — sauté en mode comblement : le fill épingle DÉJÀ tout le placé en HARD
+        // (ci-dessus), et un HARD n'a pas de variable côté moteur — le terme de stabilité serait
+        // un no-op sur les épingles et n'a aucun placement « précédent » à faire converger pour
+        // les trous (jamais placés). L'ajouter ne ferait que doubler les mêmes placements.
+        if (!$isFill) {
+            $scheduleInput = $this->constraintBuilder->withPreviousAssignments(
+                $scheduleInput,
+                $this->resolvePreviousAssignmentSlots($schedule, $message),
+            );
+        }
 
         $this->diagnosticsRecorder->purgePrevious($schedule);
         $this->entityManager->flush();
@@ -366,6 +389,28 @@ final class GenerateScheduleHandler
         }
 
         if (!$source instanceof Schedule) {
+            return [];
+        }
+
+        return $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy(
+            ['scheduleId' => $source->getId()],
+            ['id' => 'ASC'],
+        );
+    }
+
+    /**
+     * P2-44 PR-3 (comblement) — les placements de la version SOURCE à épingler HARD dans le
+     * payload du solve partiel. Même lignée obligatoire (même `schedulePlanId`) : le contrôleur
+     * l'a déjà garanti, on le RE-vérifie en défense — une source d'un autre plan (le socle sous
+     * un overlay) épinglerait le mauvais planning ; incohérence ⇒ aucune épingle (le solve
+     * repartirait de zéro plutôt que de figer des placements étrangers).
+     *
+     * @return array<ScheduleSlotTemplate>
+     */
+    private function pinnedSourceSlots(string $sourceScheduleId, Schedule $target): array
+    {
+        $source = $this->findSchedule($sourceScheduleId);
+        if (!$source instanceof Schedule || $source->getSchedulePlanId() !== $target->getSchedulePlanId()) {
             return [];
         }
 

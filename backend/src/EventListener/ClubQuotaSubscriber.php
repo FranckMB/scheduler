@@ -23,10 +23,10 @@ use Symfony\Component\RateLimiter\RateLimiterFactory;
  *    de CPU) et le worker Puppeteer. Un club ne doit pas obtenir **trois fois** le budget du
  *    solveur parce qu'il a trois gestionnaires : c'est le club qui consomme, pas la personne.
  *
- * ⚠ **Le cap de génération couvre les TROIS routes qui déclenchent un solve**, pas seulement
- * `/generate`. `/regenerate` et `/regenerate-from` en lancent un tout autant — et c'est par
- * elles que passe le work-loop, donc l'usage réel. Ne capper que `/generate` aurait donné
- * une borne qu'on contourne sans même le vouloir.
+ * ⚠ **Le cap de génération couvre les QUATRE routes qui déclenchent un solve**, pas seulement
+ * `/generate`. `/regenerate`, `/regenerate-from` et `/fill` (le comblement d'une période, P2-44)
+ * en lancent un tout autant — et c'est par elles que passe le work-loop, donc l'usage réel. Ne
+ * capper que `/generate` aurait donné une borne qu'on contourne sans même le vouloir.
  *
  * ⚠ L'export **XLSX n'est pas capté** : il se génère en mémoire, sans worker. Le PDF, lui,
  * mobilise Puppeteer. Le limiteur global suffit à borner un abus de XLSX ; lui coller un cap
@@ -42,6 +42,7 @@ final class ClubQuotaSubscriber implements EventSubscriberInterface
         'generate_schedule',
         'api_schedule_regenerate',
         'api_schedule_regenerate_from',
+        'api_schedule_fill',
     ];
 
     private const string EXPORT_PDF_ROUTE = 'export_pdf';

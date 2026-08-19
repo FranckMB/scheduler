@@ -1,6 +1,6 @@
 # Les 3 types de planning — référence produit
 
-Last verified @ 2026-08-19 (re-vérifié contre `frontend/src/features/wizard/steps/GenerateStep.tsx`, `frontend/src/features/planning/PlanningPage.tsx`, `frontend/src/features/planning/SeasonComparisonModal.tsx` — **P2-44 PR-2** : la transcription depuis le socle gagne son écran, bouton compris ; §2 recalé, « aucun bouton écran » n'est plus vrai). Historique des passes : `git log -p --follow specs/courantes/types-de-planning.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-20 (re-vérifié contre `backend/src/Controller/FillPeriodPlanController.php`, `frontend/src/features/planning/PlanningPage.tsx` — **P2-44 PR-3, le comblement** : §2 gagne le troisième geste « combler » à côté de générer/transcrire, `POST /api/schedules/{id}/fill`). Historique des passes : `git log -p --follow specs/courantes/types-de-planning.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
 > **Rôle de ce document** : la trace durable du modèle métier des plannings, validé avec le
 > fondateur le 2026-07-12. C'est LA référence à consulter avant tout travail sur la
@@ -84,6 +84,17 @@ quelle que soit la largeur de son segment.
   saison » propose la transcription à côté du bouton de génération tant que le plan est vierge
   (`GenerateStep`) ; l'écran embarqué affiche ensuite le panneau « à replacer » et une modale de
   comparaison avec le socle — détail : `frontend/docs/frontend-spec.md` §6.7 bis.
+- **Une fois la V1 née — TROIS gestes désormais (générer / transcrire / combler, P2-44 PR-3)** :
+  après une transcription (ou tout autre solve) qui laisse des séances « à replacer », le
+  gestionnaire n'est plus borné à « régénérer entièrement » ou « déplacer une par une » — un
+  bouton **« Combler automatiquement »** (`PlanningPage`, visible dès que la dérive porte des
+  entrées « à replacer ») déclenche `POST /api/schedules/{id}/fill` : une V+1 où **tout ce qui est
+  déjà placé reste EXACTEMENT en place** (les placements de la version source sont épinglés HARD
+  **dans le payload du solve seulement**, jamais persistés) et le solveur ne place QUE les trous.
+  Miroir « Régénérer » côté rail (savepoint, verrou de génération, Mercure, import — tous
+  réutilisés, zéro changement moteur/contrat) mais borné à une version de PÉRIODE ; le socle se
+  régénère toujours via `/regenerate`. Détail : `backend/docs/backend-inventory.md` §3,
+  `frontend/docs/frontend-spec.md` §6.7 bis.
 - **Manipulation** : structure verrouillée (équipes entières, gymnases/créneaux, coachs) ;
   **exception validée** : le **nombre de séances par équipe** est ajustable — un
   gestionnaire réel passe une équipe de 3 à 2 créneaux, ou supprime les créneaux d'une

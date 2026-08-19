@@ -12936,6 +12936,32 @@
                 "summary": "Birth the period plan V1 as a copy of the season baseline"
             }
         },
+        "/api/schedules/{id}/fill": {
+            "post": {
+                "operationId": "postApiScheduleFill",
+                "tags": [
+                    "Schedules"
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Fill queued \u2014 a new period version that pins the placed sessions and only places the ones to relocate"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "409": {
+                        "description": "Not a period version, version in force, or a generation is already running"
+                    },
+                    "422": {
+                        "description": "Problem too complex, or a pinned session has no matching slot"
+                    },
+                    "429": {
+                        "description": "Club generation quota reached"
+                    }
+                },
+                "summary": "Fill the sessions to relocate on a period version (partial solve, placed sessions kept)"
+            }
+        },
         "/api/schedules/{id}/regenerate": {
             "post": {
                 "operationId": "postApiScheduleRegenerate",
@@ -22765,6 +22791,13 @@
                             "null"
                         ]
                     },
+                    "maxConsecutiveDays": {
+                        "description": "Plafond de JOURS cons\u00e9cutifs d'entra\u00eenement \u2014 pr\u00e9sent pour maxConsecutiveDays uniquement, sinon null.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
                     "isDefault": {
                         "description": "true tant que la r\u00e8gle est au d\u00e9faut (aucune ligne stock\u00e9e) \u2014 le front sait quoi mettre en avant.",
                         "default": true,
@@ -22843,6 +22876,13 @@
                             "null"
                         ]
                     },
+                    "maxConsecutiveDays": {
+                        "description": "Plafond de JOURS cons\u00e9cutifs d'entra\u00eenement \u2014 pr\u00e9sent pour maxConsecutiveDays uniquement, sinon null.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
                     "isDefault": {
                         "description": "true tant que la r\u00e8gle est au d\u00e9faut (aucune ligne stock\u00e9e) \u2014 le front sait quoi mettre en avant.",
                         "default": true,
@@ -22875,6 +22915,13 @@
                             },
                             "maxConsecutive": {
                                 "description": "Plafond de cr\u00e9neaux cons\u00e9cutifs \u2014 pr\u00e9sent pour maxConsecutiveSessions uniquement, sinon null.",
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "maxConsecutiveDays": {
+                                "description": "Plafond de JOURS cons\u00e9cutifs d'entra\u00eenement \u2014 pr\u00e9sent pour maxConsecutiveDays uniquement, sinon null.",
                                 "type": [
                                     "integer",
                                     "null"
@@ -27602,7 +27649,20 @@
                         "type": "string"
                     },
                     "mode": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "dayOverrides": {
+                        "description": "Masque manuel jour ISO (1..7) \u2192 OPEN|CLOSED, ou null. Le front le lit tel quel \u2014 il ne\nred\u00e9rive jamais la composition (celle-ci vit dans PlanVenueClosures, servie par le radar).",
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
                     }
                 }
             },
@@ -27639,11 +27699,24 @@
                             "DISABLED",
                             "BLANK"
                         ],
-                        "description": "INHERIT n'est pas une valeur accept\u00e9e : c'est le d\u00e9faut, mat\u00e9rialis\u00e9 par l'ABSENCE\nde ligne. Pour revenir aux cr\u00e9neaux de saison on supprime l'override (DELETE).",
+                        "description": "Le mode est FACULTATIF (une ligne peut n'exister que pour son masque) : plus de\n`NotBlank`. INHERIT n'est pas une valeur accept\u00e9e \u2014 c'est le d\u00e9faut, mat\u00e9rialis\u00e9 par\nl'ABSENCE de ligne (DELETE pour y revenir), ou ici par un `mode` nul.",
                         "type": [
                             "string",
                             "null"
                         ]
+                    },
+                    "dayOverrides": {
+                        "description": "Masque manuel SPARSE : jour ISO (1..7) \u2192 OPEN|CLOSED. Entr\u00e9e BRUTE non valid\u00e9e (la colonne\nJSON est inscriptible) : les valeurs sont `mixed` jusqu'\u00e0 {@see validateMask}, qui refuse\ntoute cl\u00e9 hors 1..7 et toute valeur hors OPEN|CLOSED. NULL/[] = aucun jour forc\u00e9.",
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
                     }
                 }
             },
@@ -27676,7 +27749,20 @@
                         "type": "string"
                     },
                     "mode": {
-                        "type": "string"
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "dayOverrides": {
+                        "description": "Masque manuel jour ISO (1..7) \u2192 OPEN|CLOSED, ou null. Le front le lit tel quel \u2014 il ne\nred\u00e9rive jamais la composition (celle-ci vit dans PlanVenueClosures, servie par le radar).",
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "type": "string"
+                        }
                     }
                 }
             },
@@ -27713,7 +27799,20 @@
                                 "type": "string"
                             },
                             "mode": {
-                                "type": "string"
+                                "type": [
+                                    "string",
+                                    "null"
+                                ]
+                            },
+                            "dayOverrides": {
+                                "description": "Masque manuel jour ISO (1..7) \u2192 OPEN|CLOSED, ou null. Le front le lit tel quel \u2014 il ne\nred\u00e9rive jamais la composition (celle-ci vit dans PlanVenueClosures, servie par le radar).",
+                                "type": [
+                                    "array",
+                                    "null"
+                                ],
+                                "items": {
+                                    "type": "string"
+                                }
                             }
                         }
                     }

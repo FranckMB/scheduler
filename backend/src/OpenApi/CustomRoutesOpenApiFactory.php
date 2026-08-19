@@ -1757,6 +1757,18 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ],
                 summary: 'Create a new version from an existing one and regenerate it',
             )),
+            '/api/schedules/{id}/fill' => new PathItem(post: new Operation(
+                operationId: 'postApiScheduleFill',
+                tags: ['Schedules'],
+                responses: [
+                    '202' => new Response('Fill queued — a new period version that pins the placed sessions and only places the ones to relocate'),
+                    '401' => $unauthorized,
+                    '409' => new Response('Not a period version, version in force, or a generation is already running'),
+                    '422' => new Response('Problem too complex, or a pinned session has no matching slot'),
+                    '429' => new Response('Club generation quota reached'),
+                ],
+                summary: 'Fill the sessions to relocate on a period version (partial solve, placed sessions kept)',
+            )),
             '/api/teams/reorder' => new PathItem(post: new Operation(
                 operationId: 'postApiTeamsReorder',
                 tags: ['Teams'],

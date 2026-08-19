@@ -1,6 +1,20 @@
-Last verified @ 2026-08-20 (régénéré ce jour — **P4-103** : −2 paths `/api/club_users` et `/api/club_users/{id}` (ressource générique retirée, aucun consommateur). ⚑ La régénération a aussi rattrapé une péremption ANTÉRIEURE : l'intensité `OFF` livrée par P2-42 n'était jamais entrée dans le snapshot — preuve qu'un snapshot ne se régénère pas « quand on y pense », mais à chaque changement de ressource)
+Last verified @ 2026-08-20 (régénéré POST-rebase sur le code fusionné — l'addition de P2-44 PR-3 (+1 `POST /api/schedules/{id}/fill`) ET le retrait P4-103 (−2 `/api/club_users*`, mergé en parallèle) : **167 paths** — chaque branche avait régénéré de son côté, seule la régénération sur l'arbre FUSIONNÉ dit vrai)
 
 Changements récents :
+- **P2-44 PR-3 — le comblement (2026-08-20)** : **+1 path** —
+  `POST /api/schedules/{id}/fill` (202 : V+1 de la version de période mise en file, les placements
+  de la source épinglés HARD dans le payload seul ; 409 pas une version de période / version en
+  vigueur / génération en cours ; 422 problème trop complexe ou épingle orpheline ; 429 quota club).
+  168 → **169 paths**. Contrat backend⇄engine **inchangé** (`CONTRACT_VERSION` 2.13, déjà en
+  vigueur avant cette PR — aucun schéma Pydantic touché : le fill ne fait que réutiliser
+  `slotTemplates` en HARD, un mécanisme déjà porté par le contrat).
+  ⚑ **Drift antérieur ramassé au passage, hors scope de cette PR** : `ImplicitRuleSetting` (schéma
+  de lecture ET `.html`) portait déjà `maxConsecutiveDays` et l'enum `intensity` gagnait `OFF` côté
+  code depuis le commit `b28fdc94` (P2-42/ALIGN-08, « pas N entraînements d'affilée » — 5e règle de
+  bien-être, réglable HARD/PREFERRED/OFF), fusionné sur `main` le 2026-08-19 **avant** cette
+  branche, sans régénération du snapshot à l'époque. Capturé ici par nécessité (une régénération
+  rend l'état RÉEL, pas un diff ciblé) — aucune trace/roadmap due à cette PR pour ce champ, la PR
+  #659 est déjà livrée.
 - **P2-44 PR-1 — naissance par copie du socle (2026-08-19)** : **+1 path** —
   `POST /api/schedule_plans/{id}/transcribe-from-socle` (201 : V1 COMPLETED transcrite de la
   version pointée du socle, filtrée des réglages de période ; liste `toReplace` en réponse ;

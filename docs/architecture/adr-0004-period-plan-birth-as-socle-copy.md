@@ -2,7 +2,7 @@
 
 - **Status**: accepted — Date: 2026-08-19 (besoin fondateur, plan validé en session)
 - Programme **P2-44** ; PR-1 (ce document + le service) livrée 2026-08-19 ; PR-2 (surfaçage écran)
-  livrée 2026-08-19.
+  livrée 2026-08-19 ; PR-3 (le comblement) livrée 2026-08-20.
 
 ## Contexte
 
@@ -77,7 +77,8 @@ route `POST /api/schedule_plans/{id}/transcribe-from-socle`
    seed — aucune colonne neuve, un champ existant réutilisé pour dire « cette version n'est pas née
    d'un solve ».
 6. **Zéro appel moteur, contrat inchangé.** Le service n'émet aucun payload engine ; le contrat
-   backend⇄engine (`CONTRACT_VERSION` 2.12) n'est pas touché par ce lot.
+   backend⇄engine (`CONTRACT_VERSION` — valeur courante : `engine/CONTRACT_VERSION`) n'est pas
+   touché par ce lot.
 
 ### Q6 — vérifié, pas de traitement de dérive supplémentaire
 
@@ -103,18 +104,35 @@ mécanisme de détection de dérive socle↔copie n'est nécessaire pour ce lot.
   rôle+tenant). Axes structurants touchés (CLAUDE.md §7.1) : *generation pipeline* et *planning
   lifecycle*.
 
-## Programme (P2-44) — ce que PR-1+PR-2 ne couvrent pas
+## Programme (P2-44) — ce que PR-1 à PR-3 ne couvrent pas
 
 PR-1 a livré le service et la route seuls, sans écran. **PR-2 (livrée 2026-08-19)** a livré le
 surfaçage front : le bouton « Partir du planning de saison » sur un plan de période vierge
 (`GenerateStep`, refus 409 servi et affiché), le panneau « Séances à replacer » (`ToReplaceList`,
 données servies par PR-1, présentation pure), la mise en évidence des vides (`emphasizeEmpty`,
 `WeekGrid`) et la comparaison visuelle période↔saison en modale de consultation
-(`SeasonComparisonModal`) — détail : `frontend/docs/frontend-spec.md` §6.7 bis. Suite, chacune sa
-PR :
+(`SeasonComparisonModal`) — détail : `frontend/docs/frontend-spec.md` §6.7 bis.
 
-- **PR-3** — comblement : un solve **partiel**, borné aux séances « à replacer », plutôt qu'un
-  choix binaire transcrire-ou-solver-tout.
+**PR-3 (livrée 2026-08-20) — le comblement.** `POST /api/schedules/{id}/fill`
+(`App\Controller\FillPeriodPlanController`) : un solve **partiel** d'une version de plan de
+PÉRIODE, borné aux séances « à replacer », plutôt que le choix binaire transcrire-ou-solver-tout.
+Crée une V+1 (savepoint) et dispatche le rail de génération async **existant** avec un mode fill
+(`GenerateScheduleMessage::fillSourceScheduleId`) : `ScheduleConstraintBuilder::withPinnedAssignments`
+greffe, **dans le payload du solve seul** (jamais persisté en base), les placements de la version
+source en épingles `lockLevel: HARD` — un HARD n'a pas de variable côté moteur (`objective.py`), le
+solveur ne peut donc placer QUE les trous (équipes sous leur `sessionsPerWeek`) ; le handler saute
+`withPreviousAssignments` en mode fill (le terme de stabilité serait un no-op sur du déjà-épinglé).
+Verrou de génération, Mercure, import : gratuits, réutilisés tels quels. **Zéro changement
+moteur, contrat backend⇄engine intact.** Quotas : `ClubQuotaSubscriber` couvre désormais **4 routes de
+solve** (`generate`/`regenerate`/`regenerate-from`/`fill`). Écran : bouton « Combler
+automatiquement » (`PlanningPage`, visible dès qu'une dérive porte des séances « à replacer »).
+NR sémantique (groupe `contract`, job `engine-semantics`) :
+`CrossStack/FillPreservesCopiesAndFillsGapsTest` — falsifie que les placements copiés restent
+INTACTS et que les orphelines sont placées, avec un vrai solveur. Détail :
+`backend/docs/backend-inventory.md` §3, `frontend/docs/frontend-spec.md` §6.7 bis.
+
+Restent :
+
 - **PR-4** — le socle transcrit entre en `previousAssignments` du solve complet quand le
   gestionnaire choisit malgré tout de générer une période (voulue, pas accidentelle) — cohérence
   avec le mécanisme de stabilité déjà en place pour les régénérations de saison (`GenerateScheduleHandler::resolvePreviousAssignmentSlots`,

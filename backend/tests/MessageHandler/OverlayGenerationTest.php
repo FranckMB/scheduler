@@ -9,6 +9,7 @@ use App\Entity\Club;
 use App\Entity\Constraint;
 use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
+use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
 use App\Entity\Team;
 use App\Entity\Venue;
@@ -18,6 +19,7 @@ use App\Enum\CalendarEntryPeriodType;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
+use App\Enum\LockLevel;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
 use App\Message\GenerateScheduleMessage;
@@ -128,6 +130,96 @@ final class OverlayGenerationTest extends KernelTestCase
         );
     }
 
+    /**
+     * P2-44 PR-3 (comblement) — le mode fill épingle HARD les placements de la version SOURCE
+     * DANS le snapshot gelé de la V+1 (le solve partiel les fige), et NE greffe PAS
+     * `previousAssignments` (un HARD n'a pas de variable — le terme de stabilité serait un no-op).
+     * Falsifié dans les deux sens : sans le mode, aucune épingle et le précédent revient.
+     */
+    public function testFillModePinsSourcePlacementsIntoTheSnapshotAndSkipsPreviousAssignments(): void
+    {
+        [$em, $club, $season, $entry] = $this->seedClosureOverlay('ov-fill');
+
+        // Un gymnase ACTIF (dans le roster de la période) pour porter le placement copié.
+        $activeVenueId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $venue = new Venue;
+        $venue->setId($activeVenueId);
+        $venue->setClubId($club->getId());
+        $venue->setSeasonId($season->getId());
+        $venue->setName('Gym ouvert');
+        $venue->setCanSplit(false);
+        $venue->setSource('manual');
+        $em->persist($venue);
+
+        $teamId = $em->getRepository(Team::class)->findOneBy(['clubId' => $club->getId()])?->getId();
+        self::assertIsString($teamId);
+
+        $planId = $this->planIdOf($entry);
+
+        // La version SOURCE (COMPLETED) et SON placement — c'est lui qu'on doit retrouver épinglé.
+        $source = new Schedule;
+        $source->setClubId($club->getId());
+        $source->setSeasonId($season->getId());
+        $source->setName('Source');
+        $source->setStatus(ScheduleStatus::COMPLETED);
+        $source->setSchedulePlanId($planId);
+        $source->setVersionNumber(1); // en prod linkSchedule numérote ; ici on fixe deux V distinctes
+        $em->persist($source);
+        $em->flush();
+
+        $placement = new ScheduleSlotTemplate;
+        $placement->setClubId($club->getId());
+        $placement->setSeasonId($season->getId());
+        $placement->setScheduleId($source->getId());
+        $placement->setTeamId($teamId);
+        $placement->setVenueId($activeVenueId);
+        $placement->setDayOfWeek(2);
+        $placement->setStartTime(new DateTimeImmutable('18:00'));
+        $placement->setDurationMinutes(90);
+        $placement->setLockLevel(LockLevel::NONE); // la source peut être NONE : le fill FIGE en HARD
+        $em->persist($placement);
+
+        // La V+1 à combler.
+        $target = new Schedule;
+        $target->setClubId($club->getId());
+        $target->setSeasonId($season->getId());
+        $target->setName('Comblement');
+        $target->setStatus(ScheduleStatus::PENDING);
+        $target->setSchedulePlanId($planId);
+        $target->setVersionNumber(2);
+        $em->persist($target);
+        $em->flush();
+        $sourceId = $source->getId();
+        $targetId = $target->getId();
+        $em->clear();
+        $this->clearGuc();
+
+        $engineResult = json_encode(['status' => 'completed', 'score' => 1, 'slots' => [], 'diagnostics' => []], \JSON_THROW_ON_ERROR);
+        $sentPayload = $this->runHandler($em, $club->getId(), $targetId, $engineResult, $sourceId);
+
+        // Le payload RÉELLEMENT envoyé au moteur porte l'épingle en HARD, et AUCUN previousAssignments.
+        $pins = array_values(array_filter(
+            $sentPayload['slotTemplates'] ?? [],
+            static fn (array $s): bool => ($s['teamId'] ?? null) === $teamId && ($s['venueId'] ?? null) === $activeVenueId,
+        ));
+        self::assertCount(1, $pins, 'le placement de la source doit être épinglé dans le payload du comblement');
+        self::assertSame(LockLevel::HARD->value, $pins[0]['lockLevel'], 'le comblement FIGE le placé en HARD');
+        self::assertArrayNotHasKey('previousAssignments', $sentPayload, 'le comblement épingle déjà tout en HARD — pas de terme de stabilité');
+
+        // Et le snapshot GELÉ porte l'épingle (elle EST l'entrée figée du solve partiel).
+        $this->scopeGucToClub($club->getId());
+        $em->clear();
+        $reloaded = $em->getRepository(Schedule::class)->find($targetId);
+        self::assertInstanceOf(Schedule::class, $reloaded);
+        self::assertSame(ScheduleStatus::COMPLETED, $reloaded->getStatus());
+        $snapshotPins = array_values(array_filter(
+            $reloaded->getSnapshotData()['slotTemplates'] ?? [],
+            static fn (array $s): bool => ($s['teamId'] ?? null) === $teamId && ($s['venueId'] ?? null) === $activeVenueId,
+        ));
+        self::assertCount(1, $snapshotPins, 'l\'épingle du comblement vit dans le snapshot gelé');
+        self::assertSame(LockLevel::HARD->value, $snapshotPins[0]['lockLevel']);
+    }
+
     public function testOverlayWithMissingPeriodFailsCleanly(): void
     {
         [$em, $club, $season, $entry] = $this->seedClosureOverlay('ov-missing');
@@ -227,17 +319,27 @@ final class OverlayGenerationTest extends KernelTestCase
         return [$em, $club, $season, $entry];
     }
 
-    private function runHandler(EntityManagerInterface $em, string $clubId, string $scheduleId, string $engineResult): void
+    /**
+     * @return array<string, mixed> le payload RÉELLEMENT envoyé au moteur (pour l'inspecter)
+     */
+    private function runHandler(EntityManagerInterface $em, string $clubId, string $scheduleId, string $engineResult, ?string $fillSourceScheduleId = null): array
     {
         $container = self::getContainer();
         $hub = $this->createMock(HubInterface::class);
         $hub->method('publish')->willReturn('id');
 
+        $sent = [];
+        $client = new MockHttpClient(function (string $method, string $url, array $options) use ($engineResult, &$sent): MockResponse {
+            $sent = json_decode((string) ($options['body'] ?? '{}'), true, 512, \JSON_THROW_ON_ERROR);
+
+            return new MockResponse($engineResult, ['http_code' => 200]);
+        });
+
         $handler = new GenerateScheduleHandler(
             $em,
             $container->get(ScheduleConstraintBuilder::class),
             $container->get(ScheduleResultImporter::class),
-            new EngineClient(new MockHttpClient(new MockResponse($engineResult, ['http_code' => 200])), new RequestIdContext),
+            new EngineClient($client, new RequestIdContext),
             new ScheduleProgressPublisher($hub),
             new ScheduleDiagnosticsRecorder($em, $container->get(DiagnosticMessageBuilder::class)),
             new SolverMetricsMapper,
@@ -247,6 +349,8 @@ final class OverlayGenerationTest extends KernelTestCase
             $container->get(SchedulePlanProvisioner::class),
         );
 
-        $handler(new GenerateScheduleMessage(scheduleId: $scheduleId, clubId: $clubId));
+        $handler(new GenerateScheduleMessage(scheduleId: $scheduleId, clubId: $clubId, fillSourceScheduleId: $fillSourceScheduleId));
+
+        return $sent;
     }
 }

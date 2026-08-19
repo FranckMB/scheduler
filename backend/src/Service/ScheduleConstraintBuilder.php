@@ -617,6 +617,86 @@ final class ScheduleConstraintBuilder
     }
 
     /**
+     * P2-44 PR-3 (comblement) — greffe, DANS LE PAYLOAD SEUL, les placements d'une version
+     * SOURCE de la même période comme épingles HARD (des `slotTemplates`), sur un payload
+     * d'overlay DÉJÀ construit. « Tout ce qui est déjà placé reste EXACTEMENT en place, seuls
+     * les trous — les équipes sous leur volume de séances — sont placés par le solveur. ».
+     *
+     * Rien n'est persisté en base (décision fondateur : les verrous de la copie sont déjà HARD
+     * révocables) ; ces épingles ne vivent QUE le temps de ce solve partiel. `lockLevel` est
+     * FORCÉ HARD quel que soit celui de la source — un HARD n'a pas de variable côté moteur
+     * (`objective.py`), donc les placements figés ne bougent pas ET ne re-paient pas le terme de
+     * stabilité (c'est pourquoi le handler saute `withPreviousAssignments` en mode fill). Le
+     * comblement n'a besoin d'AUCUN changement moteur : le solveur place le RESTE des séances par
+     * équipe (`sessionsPerWeek` du payload) une fois les épingles honorées.
+     *
+     * Deux garde-fous, mêmes doctrines que `buildForPeriodPlan` :
+     *  - FILTRÉ au roster du payload (équipes + gymnases) : une source qui nomme une entité hors
+     *    sélection de période serait un id fantôme rendant le solve INFEASIBLE ;
+     *  - DÉDUPLIQUÉ par placement (équipe, gymnase, jour, heure) contre les épingles DÉJÀ
+     *    présentes — les `Reservation` du plan sortent en HARD depuis `buildForOverlay`, et la
+     *    copie transcrite reprend ces mêmes placements : sans dédup, l'équipe se retrouverait
+     *    avec DEUX épingles pour UNE séance (compte de séances faussé / sur-contrainte).
+     *
+     * @param array<string, mixed>        $payload
+     * @param array<ScheduleSlotTemplate> $sourceSlots placements de la version source à figer
+     *
+     * @return array<string, mixed>
+     */
+    public function withPinnedAssignments(array $payload, array $sourceSlots): array
+    {
+        if ([] === $sourceSlots) {
+            return $payload;
+        }
+
+        $rosterTeams = [];
+        foreach ($payload['teams'] ?? [] as $team) {
+            if (\is_array($team) && isset($team['id'])) {
+                $rosterTeams[(string) $team['id']] = true;
+            }
+        }
+        $rosterVenues = [];
+        foreach ($payload['venues'] ?? [] as $venue) {
+            if (\is_array($venue) && isset($venue['id'])) {
+                $rosterVenues[(string) $venue['id']] = true;
+            }
+        }
+
+        $existingSlots = \is_array($payload['slotTemplates'] ?? null) ? $payload['slotTemplates'] : [];
+        $seen = [];
+        foreach ($existingSlots as $pin) {
+            if (\is_array($pin)) {
+                $seen[$this->pinKey((string) ($pin['teamId'] ?? ''), (string) ($pin['venueId'] ?? ''), (int) ($pin['dayOfWeek'] ?? -1), (string) ($pin['startTime'] ?? ''))] = true;
+            }
+        }
+
+        $pins = [];
+        foreach ($sourceSlots as $slot) {
+            if (!isset($rosterTeams[$slot->getTeamId()], $rosterVenues[$slot->getVenueId()])) {
+                continue; // hors sélection de période : jamais un id fantôme au moteur
+            }
+            $serialized = $this->serializeSlotTemplate($slot);
+            $serialized['lockLevel'] = LockLevel::HARD->value; // le comblement FIGE le placé
+            $key = $this->pinKey((string) $serialized['teamId'], (string) $serialized['venueId'], (int) $serialized['dayOfWeek'], (string) $serialized['startTime']);
+            if (isset($seen[$key])) {
+                continue; // déjà épinglé (réservation) — pas de double épingle pour une séance
+            }
+            $seen[$key] = true;
+            $pins[] = $serialized;
+        }
+
+        $payload['slotTemplates'] = array_merge($existingSlots, $pins);
+
+        return $payload;
+    }
+
+    /** Identité d'un placement épinglé (heure normalisée H:i — la source peut porter les secondes). */
+    private function pinKey(string $teamId, string $venueId, int $dayOfWeek, string $startTime): string
+    {
+        return $teamId . '|' . $venueId . '|' . $dayOfWeek . '|' . substr($startTime, 0, 5);
+    }
+
+    /**
      * Sérialise les groupes de mutualisation en `{id, teamIds, commonSessions}`. Les membres
      * sont filtrés au ROSTER du payload (une équipe désactivée pour la période sort du payload,
      * son id serait fantôme dans le groupe) ; un groupe qui tombe sous 2 membres est ABANDONNÉ
