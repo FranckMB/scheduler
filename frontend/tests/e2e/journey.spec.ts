@@ -73,10 +73,11 @@ test("full journey: wizard → generation → validated planning → cockpit", a
   // The embedded planning replaces the launcher once a schedule is COMPLETED.
   await expect(page.getByText("SM1").first()).toBeVisible({ timeout: 180_000 });
 
-  // --- Validate from the REAL planning page (validating inside the embedded
-  // wizard view flips it back to the launcher: VALIDATED is not COMPLETED).
-  await page.goto("/planning");
-  await expect(page.getByText("SM1").first()).toBeVisible({ timeout: 15_000 });
+  // --- Validate INSIDE the embedded wizard view — since the landing rule of
+  // 2026-08-19 the embedded screen derives what it shows from the PLAN (the
+  // most recent version, chosen included), so validating no longer flips it
+  // back to the launcher. And /planning is consultation-only now: the write
+  // gestures (Valider/Rouvrir/Régénérer) live exclusively in the wizard.
   await page.getByRole("button", { name: "Valider" }).click();
   // The confirm dialog (role=dialog "Valider le planning") always opens — wait
   // for it, confirm, then assert the toolbar flipped to the VALIDATED state
