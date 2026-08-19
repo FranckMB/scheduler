@@ -393,3 +393,19 @@ export function useRegenerate() {
     onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
   });
 }
+
+/**
+ * P2-44 PR-3 (comblement) — « Combler automatiquement » sur une version de PÉRIODE : crée une V+1
+ * dont le serveur épingle HARD les placements de la source, et place les séances à replacer. Miroir
+ * strict de {@link useRegenerate} : une nouvelle version apparaît (refetch de la liste), le motif du
+ * refus serveur (409/422 nommés) est affiché plutôt qu'un échec anonyme. L'appelant sélectionne la
+ * V+1 dans son onSuccess (comme « Régénérer »).
+ */
+export function useFillSchedule() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => planningApi.fillSchedule(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
+  });
+}

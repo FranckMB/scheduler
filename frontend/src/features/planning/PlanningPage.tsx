@@ -1,6 +1,6 @@
 import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarX2, CheckCircle2, GitCompare, Loader2, Lock, Pencil, Star, Undo2, X } from "lucide-react";
+import { AlertTriangle, CalendarX2, CheckCircle2, GitCompare, Loader2, Lock, Pencil, Sparkles, Star, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
@@ -40,7 +40,7 @@ import { buildClubView } from "./lib/clubView";
 import { ClubViewTable } from "./ClubViewTable";
 import { availableResourceGroups, buildGrid, DAYS, type Lookups, slotGroupKey, toHourMinute } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useLockSlot, useMoveDryRun, useMoveSlot, usePlaceSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useFillSchedule, useLockSlot, useMoveDryRun, useMoveSlot, usePlaceSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
@@ -334,6 +334,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
   const placeMutation = usePlaceSlot();
   const regenerateMutation = useRegenerate();
   const regenerateOverlayMutation = useRegenerateOverlay();
+  const fillMutation = useFillSchedule();
   const validateMutation = useValidateSchedule();
   const reopenMutation = useReopenSchedule();
   const deleteMutation = useDeleteSchedule();
@@ -1298,6 +1299,31 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
               onPlace={armPlace}
               activeTeamId={targetMode?.kind === "place" ? targetMode.teamId : null}
             />
+          ) : null}
+
+          {/* P2-44 PR-3 (ADR-0004) — LE COMBLEMENT : sur une version de PÉRIODE qui a des séances
+              à replacer (le prédicat SERVI de la dérive, jamais recomposé ici), un solve PARTIEL
+              qui FIGE le placé et ne place que les trous. Outil d'appoint — « Régénérer » (solve
+              complet) reste dans la barre d'outils. La V+1 est sélectionnée à la réussite ; les
+              refus (409/422) sont servis et affichés par le hook. */}
+          {!isGenerating && !isReadOnly && null !== slotLayerId && driftEntries.length > 0 ? (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={null === validScheduleId || fillMutation.isPending}
+                onClick={() => {
+                  if (null === validScheduleId) {
+                    return;
+                  }
+                  fillMutation.mutate(validScheduleId, { onSuccess: (created) => setSelectedScheduleId(created.id) });
+                }}
+              >
+                <Sparkles className="size-4" />
+                Combler automatiquement
+              </Button>
+              <span className="text-xs text-muted-foreground">Place les séances à replacer sans toucher au reste du planning.</span>
+            </div>
           ) : null}
 
           {/* P2-30 (geste 2) + P2-32 (geste 3) — UN SEUL bandeau combiné : en tête le raccourci

@@ -6,7 +6,7 @@ import type { EntryConflictsResponse, SchedulePlan } from "@/features/cockpit/ap
 import { useToastStore } from "@/shared/stores/toastStore";
 import { renderWithProviders } from "@/test/utils";
 
-import { EngineTimeoutError, EngineVerificationInterruptedError, getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError, validateSchedule } from "./api";
+import { EngineTimeoutError, EngineVerificationInterruptedError, fillSchedule, getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError, validateSchedule } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -88,6 +88,7 @@ vi.mock("./api", () => {
   EngineTimeoutError,
   EngineVerificationInterruptedError,
   reopenSchedule: vi.fn(),
+  fillSchedule: vi.fn(() => Promise.resolve({ id: "sched-fill" })),
   listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }])),
   getSlots: vi.fn(() =>
     Promise.resolve([
@@ -1186,6 +1187,50 @@ describe("PlanningPage (integration)", () => {
       await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
 
       await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-1", dayOfWeek: 2, startTime: "19:00", venueId: "venue-1" }));
+    });
+
+    it("P2-44 comblement : une version de PÉRIODE à la dérive offre « Combler automatiquement » → fillSchedule sur SA version", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listSchedules).mockResolvedValue([
+        { id: SID, name: "Reprise été V1", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
+      ]);
+      plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Reprise d'été", startDate: "2026-08-17", calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: true }];
+      // U11 attend 2 séances, n'en a qu'une (slot-1) → 1 à replacer : le prédicat SERVI de la dérive.
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
+      vi.mocked(fillSchedule).mockResolvedValue({ id: "sched-fill" });
+      usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
+      renderWithProviders(<PlanningPage />);
+
+      await screen.findByText("U11"); // la grille a chargé (séance placée) — ancre stable
+      const fillButton = await screen.findByRole("button", { name: /Combler automatiquement/i });
+      await user.click(fillButton);
+
+      await vi.waitFor(() => expect(vi.mocked(fillSchedule)).toHaveBeenCalledWith(SID));
+    });
+
+    it("P2-44 : « Combler automatiquement » n'apparaît PAS sur le socle (saison), même à la dérive", async () => {
+      // Socle par défaut (SEASON) : U11 attend 2, n'en a qu'une → le bandeau dérive s'affiche, mais
+      // le comblement est un geste de PÉRIODE — jamais offert sur la saison (qui se régénère).
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
+      renderWithProviders(<PlanningPage />);
+
+      await screen.findByRole("region", { name: /séances à replacer/i });
+      expect(screen.queryByRole("button", { name: /Combler automatiquement/i })).not.toBeInTheDocument();
+    });
+
+    it("P2-44 : sans séance à replacer, une version de période n'offre PAS le comblement", async () => {
+      vi.mocked(listSchedules).mockResolvedValue([
+        { id: SID, name: "Reprise été V1", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
+      ]);
+      plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Reprise d'été", startDate: "2026-08-17", calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: true }];
+      // U11 attend 1 séance et l'a (slot-1 par défaut) → aucune à replacer → rien à combler.
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 1 }]);
+      usePlanningStore.setState({ selectedScheduleId: SID });
+      renderWithProviders(<PlanningPage />);
+
+      // L'en-tête porte le nom du PLAN de période affiché : ancrage stable que l'écran a chargé.
+      await screen.findByRole("heading", { name: "Reprise d'été" });
+      expect(screen.queryByRole("button", { name: /Combler automatiquement/i })).not.toBeInTheDocument();
     });
 
     it("le bandeau dérive n'apparaît PAS hors planning COMPLETED", async () => {

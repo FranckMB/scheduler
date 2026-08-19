@@ -688,6 +688,15 @@ export const regenerateFromVersion = (id: string): Promise<{ id: string }> => ap
  *  from the current structure, carrying the version's HARD-locked slots. */
 export const regenerate = (id: string): Promise<{ id: string }> => api.post(`schedules/${id}/regenerate`).json();
 
+/**
+ * P2-44 PR-3 (comblement) — un solve PARTIEL d'une version de plan de PÉRIODE : les placements
+ * de {@link id} sont épinglés HARD par le serveur (tout ce qui est placé reste EXACTEMENT en
+ * place) et le solveur ne place QUE les séances à replacer (équipes sous leur volume). Crée une
+ * V+1 (savepoint) et renvoie son id ; le rail de génération existant prend le relais. Un refus
+ * (409 non-période/choisie/génération en cours, 422 complexité/épinglage orphelin) remonte tel
+ * quel — le hook l'affiche. */
+export const fillSchedule = (id: string): Promise<{ id: string }> => api.post(`schedules/${id}/fill`).json();
+
 /** planning-versions (overlay versions): create a new overlay version (DRAFT) UNDER a
  *  period's plan (ADR-0002 C4: a version names its plan) — the caller then generates it.
  *  A period's plan may hold several versions. */
