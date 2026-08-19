@@ -359,10 +359,18 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid'], 'un avertissement n’invalide rien');
         self::assertSame([], $data['conflicts'], 'les contraintes du gymnase désactivé sont retirées du jeu validé');
-        self::assertCount(2, $data['warnings']);
+        // P4-57 — on compte les avertissements DE CE SUJET, plus la totalité de la réponse.
+        // Compter tout faisait de ce test l'otage de n'importe quel warning voisin : il a
+        // rougi le jour où la prévention « gymnase sans créneau » est arrivée, alors qu'elle
+        // disait vrai et ne le concernait pas. Un test doit échouer sur SON sujet.
+        $aboutDisabledVenue = array_values(array_filter(
+            $data['warnings'],
+            static fn (string $warning): bool => str_contains($warning, 'désactivé pour cette période'),
+        ));
+        self::assertCount(2, $aboutDisabledVenue);
         self::assertStringContainsString(
             '« SM1 impose Barros » vise le gymnase Barros',
-            implode(' | ', $data['warnings']),
+            implode(' | ', $aboutDisabledVenue),
             'l’avertissement doit nommer LA CONTRAINTE et LE GYMNASE',
         );
     }
@@ -400,13 +408,19 @@ final class ValidateConstraintsTest extends WebTestCase
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid']);
         self::assertSame([], $data['errors'], 'la datée visant le gymnase désactivé est retirée, donc plus rien à valider');
-        // P2-9 PR A ajoute le volet capacité : ce test garde son assertion EXACTE sur SES
-        // warnings (revue #341 round 2 — `assertContains` avait relâché la garantie « un
-        // seul warning », qui est précisément ce que ce test épingle).
+        // Ce test garde son assertion EXACTE sur SES warnings (revue #341 round 2 —
+        // `assertContains` avait relâché la garantie « un seul warning », qui est précisément
+        // ce que ce test épingle).
+        //
+        // ⚑ P4-57 — le filtre est devenu POSITIF. Il excluait « ce qui parle de gymnases »,
+        // donc il fallait l'allonger à chaque famille de warning nouvelle : il a rougi à
+        // l'arrivée des préventions pré-solve, qui disaient vrai et ne le concernaient pas.
+        // Retenir ce qui porte SA marque (« désactivé pour cette période ») garde la même
+        // garantie sans hériter du bruit des voisins.
         self::assertSame(
             ['« SM1 exige 2 séances à Barros » vise le gymnase Barros, désactivé pour cette période : elle ne sera pas appliquée.'],
-            array_values(array_filter($data['warnings'], static fn (string $w): bool => !str_contains($w, 'gymnases'))),
-            'exactement UN warning de sélection ; ceux de capacité sont filtrés, ils ont leur propre NR',
+            array_values(array_filter($data['warnings'], static fn (string $w): bool => str_contains($w, 'désactivé pour cette période'))),
+            'exactement UN warning de SÉLECTION ; les autres familles ont leurs propres NR',
         );
     }
 
@@ -420,7 +434,13 @@ final class ValidateConstraintsTest extends WebTestCase
 
         self::assertResponseStatusCodeSame(200);
         self::assertTrue($data['valid']);
-        self::assertSame([], $data['warnings'], 'sans désactivation, aucune contrainte n’est écartée');
+        // P4-57 — l'assertion porte sur SON sujet (aucune contrainte écartée), plus sur le
+        // vide global : le message le disait déjà, l'assertion ne le suivait pas.
+        self::assertSame(
+            [],
+            array_values(array_filter($data['warnings'], static fn (string $w): bool => str_contains($w, 'désactivé pour cette période'))),
+            'sans désactivation, aucune contrainte n’est écartée',
+        );
     }
 
     /**
