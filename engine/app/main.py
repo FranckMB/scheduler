@@ -151,10 +151,28 @@ class ImplicitConstraintSyncRequest(SerializableModel):
 
 
 def read_contract_version() -> str:
+    """Version du contrat parlée par CE build — le fichier `engine/CONTRACT_VERSION` fait foi.
+
+    ⚑ AUD-ENG-35 — ce fichier manquant est une ERREUR DE BUILD, pas un cas courant : le
+    Dockerfile le copie explicitement (`docker/engine/Dockerfile:12`). L'ancien repli rendait
+    `settings.contract_version` (défaut "2.0") et l'engine annonçait alors tranquillement « 2.0 »
+    au lieu de refuser de servir. Or le garde de contrat est **MAJOR-only** : « 2.0 » et « 2.12 »
+    partagent la même majeure, donc un build amputé de son fichier de version passait le
+    handshake — et resolvait des payloads 2.12 en se croyant d'accord.
+
+    Les trois endpoints échouent BRUYAMMENT quand les majeures divergent, avec ce motif écrit
+    juste au-dessus d'eux : « a major bump on one side must fail loud rather than produce a
+    subtly wrong plan ». Être bruyant sur le désaccord mais silencieux sur « je ne connais pas
+    ma propre version » était la contradiction. On échoue donc ici aussi.
+    """
     try:
         return CONTRACT_VERSION_PATH.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
-        return settings.contract_version
+    except FileNotFoundError as exc:  # pragma: no cover - build cassé, pas un chemin courant
+        raise RuntimeError(
+            f"CONTRACT_VERSION introuvable ({CONTRACT_VERSION_PATH}) : ce build est incomplet. "
+            "Ce fichier EST la version que l'engine parle au backend ; sans lui, aucune version "
+            "ne peut être annoncée honnêtement. Vérifier le COPY du Dockerfile."
+        ) from exc
 
 
 def read_implicit_rules() -> ImplicitConstraintSyncRequest:
