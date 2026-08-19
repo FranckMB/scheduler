@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { pickDefaultSchedule, pickLandingScheduleId } from "./lib/pickLandingSchedule";
 
+// FRONTIÈRE (bug fondateur 2026-08-19) : le repli sur une version de SAISON — « ignore
+// les overlays » — est le contrat de la page `/planning` AUTONOME, où l'atterrissage par
+// défaut EST le socle. Il reste juste ici. La régression corrigée en 2026-08-19 concernait
+// l'écran EMBARQUÉ (étape Génération) rendu SANS portée : là, la portée `scopePlanId` de
+// PlanningPage court-circuite `pickLandingScheduleId` pour atterrir dans la période. Ces
+// deux chemins sont distincts — ce test garde le premier, PlanningPage.test.tsx le second.
+
 type S = { id: string; status: string; createdAt: string; planType: string | null; schedulePlanId: string | null; isChosen?: boolean };
 
 // « En vigueur » se lit sur la version elle-même (isChosen) — plus de pointeur passé

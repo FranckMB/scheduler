@@ -1413,3 +1413,64 @@ describe("PlanningPage (integration)", () => {
     });
   });
 });
+
+// bug fondateur 2026-08-19 — l'écran EMBARQUÉ (étape Génération) d'une adaptation de période
+// affichait le plan de SAISON (titre, badge « principal », versions de saison) au lieu de la
+// période : `pickLandingScheduleId` retombait sur le socle, et une sélection laissée par un
+// autre écran survivait. La PORTÉE (`scopePlanId`) corrige cela : l'écran ne connaît QUE les
+// versions de ce plan, y atterrit, en tire titre/toolbar, et ne retombe JAMAIS sur la saison.
+describe("PlanningPage — portée période (embedded + scopePlanId)", () => {
+  const seasonV = (id: string, over: Partial<Schedule> = {}): Schedule => ({ id, name: "Planning A", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", ...over });
+  const overlayV = (id: string, createdAt: string, over: Partial<Schedule> = {}): Schedule => ({ id, name: "Ajustement", status: "COMPLETED", score: null, createdAt, updatedAt: createdAt, planType: "CLOSURE", schedulePlanId: "ete-plan", ...over });
+  const etePlan: SchedulePlan = { id: "ete-plan", type: "CLOSURE", name: "Ajustement gymnase", startDate: "2026-09-07", calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: true };
+
+  it("une sélection de SAISON périmée dans le planningStore ne survit PAS — atterrit dans la période, titre = période, sans badge « principal »", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      seasonV("season-v1"),
+      overlayV("ov-1", "2026-09-10T00:00:00Z"),
+      overlayV("ov-2", "2026-09-11T00:00:00Z"),
+    ]);
+    plansState.plans = [etePlan];
+    // Sélection de saison laissée par un autre écran (le cœur du bug).
+    usePlanningStore.setState({ selectedScheduleId: "season-v1" });
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" />);
+
+    // Le titre est celui de la PÉRIODE, jamais « Planning A » (la saison)…
+    expect(await screen.findByRole("heading", { name: "Ajustement gymnase" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Planning A" })).not.toBeInTheDocument();
+    // …le badge « principal » (réservé au socle) ne peut pas apparaître…
+    expect(screen.queryByText("principal")).not.toBeInTheDocument();
+    // …et la sélection périmée a bien été remplacée par une version DE LA PÉRIODE.
+    await waitFor(() => expect(["ov-1", "ov-2"]).toContain(usePlanningStore.getState().selectedScheduleId));
+  });
+
+  it("les 2 versions COMPLETED de la période sont listées (V1, V2), la plus récente affichée, et AUCUNE version de saison", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      seasonV("season-v1"),
+      overlayV("ov-1", "2026-09-10T00:00:00Z"),
+      overlayV("ov-2", "2026-09-11T00:00:00Z"),
+    ]);
+    plansState.plans = [etePlan];
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" />);
+
+    const select = await screen.findByRole("combobox", { name: /version du planning/i });
+    // Deux versions, celles de la période — pas la version de saison (3e schedule).
+    const options = within(select).getAllByRole("option");
+    expect(options).toHaveLength(2);
+    expect(options.map((o) => o.textContent)).toEqual([expect.stringMatching(/^V1 — /), expect.stringMatching(/^V2 — /)]);
+    // La plus récente (ov-2) est affichée par défaut.
+    await waitFor(() => expect(select).toHaveValue("ov-2"));
+  });
+
+  it("plan de période SANS version : état vide EXPLICITE, jamais une version de saison", async () => {
+    // La période n'a aucune version ; la saison en a une (le repli fautif d'avant).
+    vi.mocked(listSchedules).mockResolvedValue([seasonV("season-v1")]);
+    plansState.plans = [etePlan];
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" />);
+
+    expect(await screen.findByText(/Aucune version pour cette période/i)).toBeInTheDocument();
+    // Ni la grille de saison, ni son titre.
+    expect(screen.queryByText("U11")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Planning A" })).not.toBeInTheDocument();
+  });
+});

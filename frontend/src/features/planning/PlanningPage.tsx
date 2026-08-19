@@ -45,7 +45,7 @@ import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
 import { stalenessMessage } from "./lib/staleness";
-import { isSeasonPlanType } from "./lib/versions";
+import { isSeasonPlanType, planRepresentative, visibleOverlayVersions } from "./lib/versions";
 import { usePlanningStore } from "./store";
 import { WeekGrid } from "./WeekGrid";
 
@@ -111,8 +111,14 @@ function EmptyState({ title, description }: { title: string; description: string
 }
 
 /** `embedded` = rendered inside the wizard's Génération step, where the sticky
- *  wizard header + footer eat extra vertical space, so the grid must be shorter. */
-export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) {
+ *  wizard header + footer eat extra vertical space, so the grid must be shorter.
+ *
+ *  `scopePlanId` (bug fondateur 2026-08-19) — la PORTÉE d'affichage : non-null ⇒ l'écran
+ *  ne montre QUE les versions de ce plan (une période), y atterrit, en tire son titre et sa
+ *  toolbar, et ne retombe JAMAIS sur le plan de saison (fail-closed, doctrine PeriodAnchor).
+ *  Null (le défaut, et la page `/planning` autonome) ⇒ comportement STRICTEMENT inchangé :
+ *  `pickLandingScheduleId` y reste légitime. */
+export function PlanningPage({ embedded = false, scopePlanId = null }: { embedded?: boolean; scopePlanId?: string | null } = {}) {
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
   const { data: me } = useMe();
   // §4bis pt 2 — solde de crédits sur « Régénérer » (Découverte bridée seulement).
@@ -162,15 +168,39 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // la saison de travail, plus de copie inline qui pourrait diverger.
   const workingSeason = useWorkingSeason();
 
+  // Portée d'affichage (bug fondateur 2026-08-19). `scoped` ⇒ l'écran ne connaît QUE les
+  // versions de ce plan de période : le socle et les autres périodes n'entrent ni dans
+  // l'atterrissage, ni dans la toolbar, ni dans le titre. Sans portée, tout est inchangé.
+  const scoped = null !== scopePlanId;
+  const scopeVersions = useMemo(() => (scoped ? visibleOverlayVersions(schedules, scopePlanId) : null), [scoped, schedules, scopePlanId]);
+  // La version sur laquelle atterrir DANS la portée : la représentante du plan (pointée si
+  // choisie, sinon la dernière COMPLETED), et à défaut la dernière version quelle qu'elle soit
+  // — une génération EN VOL doit s'afficher (l'écran rend alors son attente), pas un vide.
+  const scopeLandingId = scoped ? (planRepresentative(scopeVersions ?? [])?.id ?? (scopeVersions ?? []).at(-1)?.id ?? null) : null;
+
   // Keep a valid selection: default to the season base plan, else the latest
   // completed. A selection archived concurrently (sibling validation in another
-  // tab) is invalid too — the selector has no option for it.
-  const validScheduleId = schedules.some((s) => s.id === selectedScheduleId) ? selectedScheduleId : null;
+  // tab) is invalid too — the selector has no option for it. En portée, la sélection
+  // n'est valide que si elle appartient À la portée : une sélection de saison laissée
+  // par un autre écran ne survit donc pas (le bug d'origine).
+  const selectionInScope = !scoped || (null !== scopeVersions && scopeVersions.some((s) => s.id === selectedScheduleId));
+  const validScheduleId = schedules.some((s) => s.id === selectedScheduleId) && selectionInScope ? selectedScheduleId : null;
   useEffect(() => {
-    if (null === validScheduleId && schedules.length > 0) {
+    if (null !== validScheduleId) {
+      return;
+    }
+    if (scoped) {
+      // Fail-closed : on atterrit DANS la portée, ou nulle part — JAMAIS via
+      // pickLandingScheduleId (qui retomberait sur le socle).
+      if (null !== scopeLandingId && scopeLandingId !== selectedScheduleId) {
+        setSelectedScheduleId(scopeLandingId);
+      }
+      return;
+    }
+    if (schedules.length > 0) {
       setSelectedScheduleId(pickLandingScheduleId(schedules));
     }
-  }, [validScheduleId, schedules, chosenScheduleId, setSelectedScheduleId]);
+  }, [validScheduleId, scoped, scopeLandingId, selectedScheduleId, schedules, chosenScheduleId, setSelectedScheduleId]);
 
   // La COUCHE de créneaux de la version affichée (#8) : le socle lit la grille de
   // saison, une période lit la sienne. Dérivée ici, avant les requêtes, pour que
@@ -363,9 +393,14 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // l'en-tête retomber sur un générique — ou pire, sur le plan de SAISON alors qu'on regarde
   // une période —, on lit dès maintenant la version que cet effet va choisir : la MÊME
   // fonction, donc le même résultat, sans flash et sans deviner (revue #339 round 3).
-  const headerSchedule = selectedSchedule ?? schedules.find((s) => s.id === pickLandingScheduleId(schedules)) ?? null;
-  const displayedPlan: { id: string; name: string } | null =
-    null === headerSchedule || isSeasonPlanType(headerSchedule.planType)
+  // En portée, l'en-tête ne retombe JAMAIS sur le socle : il lit la version de la période
+  // (ou celle sur laquelle l'atterrissage va se poser), et son plan est CELUI de la portée.
+  const headerSchedule = scoped
+    ? (selectedSchedule ?? (null !== scopeLandingId ? (schedules.find((s) => s.id === scopeLandingId) ?? null) : null))
+    : (selectedSchedule ?? schedules.find((s) => s.id === pickLandingScheduleId(schedules)) ?? null);
+  const displayedPlan: { id: string; name: string } | null = scoped
+    ? ((allSchedulePlans ?? []).find((p) => p.id === scopePlanId) ?? null)
+    : null === headerSchedule || isSeasonPlanType(headerSchedule.planType)
       ? (me?.seasonPlan ?? null)
       : ((allSchedulePlans ?? []).find((p) => p.id === headerSchedule.schedulePlanId) ?? null);
   // Le TITRE tolère un plan non encore résolu (collection des plans en vol) : la photo
@@ -1004,8 +1039,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             {/* ADR-0002 inv. 12: THE plan's name lives here, on the plan — not in the version selector. */}
             <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">{planningTitle}</h1>
             {/* « principal » qualifie LE planning de la saison (le plan SEASON), par
-                opposition aux plannings secondaires de période — pas la version choisie. */}
-            {null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType) ? (
+                opposition aux plannings secondaires de période — pas la version choisie.
+                En portée période, il ne peut jamais apparaître (la portée n'expose aucune
+                version de saison — bug fondateur 2026-08-19). */}
+            {!scoped && null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType) ? (
               <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
                 <Star className="size-3" />
                 principal
@@ -1054,13 +1091,19 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       })()}
 
 
-      {0 === schedules.length ? (
+      {scoped && (null === scopeVersions || 0 === scopeVersions.length) ? (
+        // Portée sans aucune version : état vide EXPLICITE, jamais un repli sur une version
+        // de saison (fail-closed — bug fondateur 2026-08-19). Le lanceur vit à l'étape
+        // Génération ; ici on nomme l'absence plutôt que de montrer autre chose.
+        <EmptyState title="Aucune version pour cette période" description="Générez le planning de cette période pour le voir apparaître ici." />
+      ) : 0 === schedules.length ? (
         <EmptyState title="Aucun planning" description="Passez par l'assistant pour saisir vos données et générer un premier planning." />
       ) : (
         <>
           <div className="mb-4">
             <PlanningToolbar
               schedules={schedules}
+              scopePlanId={scopePlanId}
               selectedScheduleId={validScheduleId}
               onSelectSchedule={setSelectedScheduleId}
               viewMode={viewMode}
