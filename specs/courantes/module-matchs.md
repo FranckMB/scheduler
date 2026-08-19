@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-08-18 (re-vérifié contre `backend/src/Deletion/CascadePlan.php` + `backend/src/Deletion/DeletionImpactCounter.php` — **DOC-2 SOLDÉ** : la section « équipe engagée » gagne son pendant côté SALLE — supprimer un gymnase dépointe `Fixture.venueId` y compris sur un match déjà déclaré à la fédération, le geste n'est PAS refusé (le match redevient « à placer », donc récupérable) mais il est ANNONCÉ et compté à part avant confirmation ; le match SURVIT, gardé par `DeletionImpactParityTest`) — *(historique des passes retiré le 2026-08-19, audit DOC-33 : 2 entrées empilées. Un stamp REMPLACE, il ne s'empile pas ; l'historique vit dans git : `git log -p --follow specs/courantes/module-matchs.md`)*
+Last verified @ 2026-08-19 (**re-vérifié au code, rien de faux** — le rail matchs a bien son propre solve (`POST /place-matches`, endpoint confirmé côté engine) ✓ et son verrou DÉDIÉ, distinct de celui de génération : `backend/src/Service/MatchPlacementLock.php:18` ✓ (ADR-0003). Redaté suite à l'édition de la ligne de stamp par la passe DOC-33)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés

@@ -95,6 +95,12 @@ fusion, applique le test maison (`specs/evolution/duplications-de-verite.md`) :
    fait utile, et l'info la plus précieuse (« vérifié quand, contre quoi ») s'y noyait.
    L'historique des passes vit dans **git** (`git log -p --follow <fichier>`), et une décision
    prise en chemin vit dans `etat-des-lieux.md` — jamais dans un stamp.
+   ⚠ **Toucher la ligne de stamp EST une édition du fichier** : `DocStampFreshnessTest` compare
+   le stamp à la dernière édition du fichier en git, sans distinguer l'en-tête du contenu. Donc
+   si tu aplatis ou réécris un stamp, tu dois **re-vérifier les affirmations du fichier dans la
+   même passe et redater** — sinon le garde rougit, et il a raison. (Constaté le 2026-08-19 :
+   la passe DOC-33 a fait rougir 3 fichiers exactement comme ça.) Et il ne rougit qu'APRÈS
+   commit, puisqu'il lit une date git : le lancer avant ne prouve rien.
 
 ### Fraîcheur — le balayage TOUCHÉ, plus une ROTATION bornée
 
