@@ -122,8 +122,8 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
   });
 
   it("eye on a finished PERIOD overlay opens it on the planning page (never the wizard)", async () => {
-    // A COMPLETED overlay is a finished period plan → consult it, not the wizard
-    // (whose generate step renders the season plan, not the overlay).
+    // A COMPLETED overlay is a finished period plan → consult it read-only, not the
+    // wizard (the wizard's generation step is for finishing/resuming an OPEN plan).
     open([plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", planType: "CLOSURE", schedulePlanId: "p1" })]);
     await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
     expect(setSelectedScheduleId).toHaveBeenCalledWith("o1");
