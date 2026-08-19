@@ -7,13 +7,17 @@ namespace App\Tests\Integration\Service;
 use App\Deletion\CascadePlan;
 use App\Deletion\DeletionImpactCounter;
 use App\Entity\Club;
+use App\Entity\Coach;
 use App\Entity\Fixture;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\SchedulePlan;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
+use App\Entity\SharedTrainingGroup;
+use App\Entity\SharedTrainingGroupTeam;
 use App\Entity\Team;
+use App\Entity\TeamCoach;
 use App\Entity\Venue;
 use App\Entity\VenueTrainingSlot;
 use App\Enum\FixtureHomeAway;
@@ -22,6 +26,7 @@ use App\Enum\LockLevel;
 use App\Enum\SchedulePlanType;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
+use App\Enum\TeamCoachRole;
 use App\Service\EntityCascadeDeleter;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
@@ -221,6 +226,130 @@ final class DeletionImpactParityTest extends KernelTestCase
         self::assertNotNull($this->em->getRepository(Reservation::class)->find($periodReservation->getId()), 'la réservation d’une PÉRIODE ne part pas avec un créneau de saison');
     }
 
+    /**
+     * AUD-BCK-15 — la cascade d'une ÉQUIPE, EXÉCUTÉE en base, avec la seule règle métier qui
+     * lui soit propre : le sort des groupes de mutualisation.
+     *
+     * Jusqu'ici `forTeam()` n'était vérifié qu'en STRUCTURE (annoncé == plan). C'est
+     * insuffisant pour du code qui DÉTRUIT : la structure dit qu'une étape existe, pas
+     * qu'elle fait ce qu'elle promet. Et `SharedTrainingGroupPruneStep` — « un groupe qui
+     * tombe sous deux membres part avec ses lignes restantes » — n'avait AUCUN test : la
+     * règle de survie d'un groupe mutualisé n'était vérifiée nulle part.
+     *
+     * Trois groupes, pour que la règle soit falsifiable dans les deux sens :
+     *   - un DUO avec l'équipe supprimée → il tombe, et la ligne du survivant part avec ;
+     *   - un TRIO avec l'équipe supprimée → il SURVIT, à deux membres exactement ;
+     *   - un duo SANS elle → il ne bouge pas (la frontière tient).
+     */
+    public function testDeletingATeamPrunesItsSharedGroupsAndKeepsTheOthers(): void
+    {
+        [$club, $season] = $this->seed();
+        $venue = $this->venue($club, $season, 'Matéo');
+        $doomed = $this->team($club, $season, forcedVenueId: $venue->getId());
+        $mate = $this->team($club, $season, forcedVenueId: $venue->getId());
+        $third = $this->team($club, $season, forcedVenueId: $venue->getId());
+        $stranger = $this->team($club, $season, forcedVenueId: $venue->getId());
+
+        // Un duo : sans l'équipe supprimée, « s'entraîner ensemble » n'a plus de sens.
+        $duo = $this->sharedGroup($club, $season, [$doomed, $mate]);
+        // Un trio : il reste deux équipes, donc il garde son sens.
+        $trio = $this->sharedGroup($club, $season, [$doomed, $mate, $third]);
+        // Un duo étranger : l'équipe supprimée n'y est pas.
+        $untouched = $this->sharedGroup($club, $season, [$mate, $stranger]);
+
+        // Une réservation, pour vérifier au passage qu'une étape ordinaire du plan agit bien.
+        $this->em->persist((new Reservation)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setTeamId($doomed->getId())->setVenueId($venue->getId())->setDayOfWeek(1)
+            ->setStartTime(new DateTimeImmutable('18:00'))->setDurationMinutes(90));
+        $this->em->flush();
+
+        $impact = self::getContainer()->get(DeletionImpactCounter::class)->forTeam($doomed);
+        $announced = [];
+        foreach ($impact->lines as $line) {
+            $announced[$line['key']] = $line['count'];
+        }
+
+        // Le COMPTE annoncé est le nombre de groupes où l'équipe FIGURE — pas le nombre de
+        // groupes qui vont tomber. C'est délibéré (cf. le docblock de l'étape) : annoncer la
+        // survie exigerait de rejouer la règle dans le compteur, donc de la tenir à deux
+        // endroits — précisément ce que le plan unique de P3-16 supprime.
+        self::assertSame(2, $announced['team_shared_group'] ?? 0, 'les 2 groupes où elle figure sont annoncés, pas le 3e');
+        self::assertSame(1, $announced['team_reservation'] ?? 0, 'la réservation est annoncée');
+
+        self::getContainer()->get(EntityCascadeDeleter::class)->purgeChildrenOfTeam($doomed);
+        $this->em->flush();
+        $this->em->clear();
+
+        // Le duo est parti — groupe ET lignes, y compris celle du membre survivant.
+        self::assertNull($this->em->getRepository(SharedTrainingGroup::class)->find($duo), 'un duo amputé n\'a plus de sens : il part');
+        self::assertSame(0, $this->countBy(SharedTrainingGroupTeam::class, 'groupId', $duo), 'ses lignes partent avec lui, pas seulement celle de l\'équipe supprimée');
+
+        // Le trio survit, à DEUX membres : la règle est un seuil, pas une suppression en chaîne.
+        self::assertNotNull($this->em->getRepository(SharedTrainingGroup::class)->find($trio), 'un trio amputé reste un groupe');
+        self::assertSame(2, $this->countBy(SharedTrainingGroupTeam::class, 'groupId', $trio), 'il lui reste exactement ses deux autres équipes');
+
+        // Le groupe étranger n'a pas bougé d'un pouce.
+        self::assertNotNull($this->em->getRepository(SharedTrainingGroup::class)->find($untouched));
+        self::assertSame(2, $this->countBy(SharedTrainingGroupTeam::class, 'groupId', $untouched), 'un groupe sans elle ne perd rien');
+
+        // Et l'équipe supprimée ne figure plus dans AUCUN groupe.
+        self::assertSame(0, $this->countBy(SharedTrainingGroupTeam::class, 'teamId', $doomed->getId()));
+        self::assertSame(0, $this->countBy(Reservation::class, 'teamId', $doomed->getId()));
+    }
+
+    /**
+     * AUD-BCK-15 — la cascade d'un COACH, exécutée en base.
+     *
+     * Son plan mêle deux gestes que la structure seule ne distingue pas : ce qui est
+     * SUPPRIMÉ (le lien équipe-coach) et ce qui est DÉTACHÉ (la séance placée garde son
+     * créneau, elle perd juste son coach ; la doléance survit à son auteur). Confondre les
+     * deux détruirait un planning au lieu d'en retirer un nom.
+     */
+    public function testDeletingACoachDetachesRatherThanDestroysWhatMustSurvive(): void
+    {
+        [$club, $season] = $this->seed();
+        $venue = $this->venue($club, $season, 'Matéo');
+        $team = $this->team($club, $season, forcedVenueId: $venue->getId());
+        $schedule = $this->schedule($club, $season);
+
+        $coach = (new Coach)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setFirstName('Alex')->setLastName('Martin')->setIsActive(true);
+        $this->em->persist($coach);
+        $this->em->flush();
+
+        $this->em->persist((new TeamCoach)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setTeamId($team->getId())->setCoachId($coach->getId())->setRole(TeamCoachRole::MAIN)->setIsRequired(true));
+        $placed = (new ScheduleSlotTemplate)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setScheduleId($schedule->getId())->setTeamId($team->getId())->setVenueId($venue->getId())
+            ->setDayOfWeek(1)->setStartTime(new DateTimeImmutable('18:00'))->setDurationMinutes(90)
+            ->setCoachId($coach->getId());
+        $this->em->persist($placed);
+        $this->em->flush();
+
+        $impact = self::getContainer()->get(DeletionImpactCounter::class)->forCoach($coach);
+        $announced = [];
+        foreach ($impact->lines as $line) {
+            $announced[$line['key']] = $line['count'];
+        }
+        self::assertSame(1, $announced['coach_team'] ?? 0, 'le lien équipe-coach est annoncé');
+        self::assertSame(1, $announced['coach_slot'] ?? 0, 'la séance qui perdra son coach est annoncée');
+
+        self::getContainer()->get(EntityCascadeDeleter::class)->purgeChildrenOfCoach($coach);
+        $this->em->flush();
+        $this->em->clear();
+
+        // SUPPRIMÉ : le lien n'a pas de sens sans son coach.
+        self::assertSame(0, $this->countBy(TeamCoach::class, 'coachId', $coach->getId()));
+
+        // DÉTACHÉ : la séance reste EXACTEMENT où elle est, sans son coach. C'est toute la
+        // différence — supprimer ici trouerait le planning d'un club pour un départ de coach.
+        $reloaded = $this->em->getRepository(ScheduleSlotTemplate::class)->find($placed->getId());
+        self::assertNotNull($reloaded, 'une séance placée ne disparaît pas avec son coach');
+        self::assertNull($reloaded->getCoachId(), 'elle perd son coach, pas son créneau');
+        self::assertSame(1, $reloaded->getDayOfWeek());
+        self::assertSame($venue->getId(), $reloaded->getVenueId());
+    }
+
     protected function setUp(): void
     {
         self::bootKernel();
@@ -318,6 +447,23 @@ final class DeletionImpactParityTest extends KernelTestCase
         $this->em->flush();
 
         return $team;
+    }
+
+    /** Un groupe de mutualisation et ses membres. @param list<Team> $teams */
+    private function sharedGroup(Club $club, Season $season, array $teams): string
+    {
+        $group = (new SharedTrainingGroup)->setClubId($club->getId())->setSeasonId($season->getId())
+            ->setCommonSessions(1);
+        $this->em->persist($group);
+        $this->em->flush();
+
+        foreach ($teams as $team) {
+            $this->em->persist((new SharedTrainingGroupTeam)->setClubId($club->getId())->setSeasonId($season->getId())
+                ->setGroupId($group->getId())->setTeamId($team->getId()));
+        }
+        $this->em->flush();
+
+        return $group->getId();
     }
 
     private function schedule(Club $club, Season $season): Schedule
