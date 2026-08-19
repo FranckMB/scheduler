@@ -14,7 +14,6 @@ class Settings(BaseSettings):
 
     app_name: str = Field(default="engine")
     app_version: str = Field(default="1.0")
-    contract_version: str = Field(default="2.0")
     environment: str = Field(default="dev")
     log_level: str = Field(default="info")
     # Sentry error capture (ENGINE_SENTRY_DSN). Empty = SDK disabled (no-op init):

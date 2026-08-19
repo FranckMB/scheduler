@@ -20,6 +20,8 @@ from __future__ import annotations
 import pathlib
 import re
 
+import pytest
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 CONTRACT_VERSION_FILE = REPO_ROOT / "engine" / "CONTRACT_VERSION"
 INVENTORY_DOC = REPO_ROOT / "engine" / "docs" / "engine-inventory.md"
@@ -154,3 +156,32 @@ def test_docs_quoting_the_solver_tiers_cite_the_real_values() -> None:
         f"moteur ({expected}) : {stale}. Un agent qui les lit planifie sur un budget qui "
         "n'existe pas — meme motif que la version de contrat (D-37)."
     )
+
+
+def test_a_missing_contract_file_fails_loud_instead_of_announcing_2_0(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AUD-ENG-35 — sans son fichier de version, l'engine REFUSE, il n'invente pas.
+
+    Le repli d'origine rendait `settings.contract_version` (défaut « 2.0 ») quand
+    `engine/CONTRACT_VERSION` manquait. Ça paraît anodin — ça ne l'est pas : le garde de
+    contrat des trois endpoints est **MAJOR-only**, or « 2.0 » et « 2.12 » partagent la
+    même majeure. Un build amputé de son fichier passait donc le handshake et résolvait
+    des payloads 2.12 en se croyant d'accord avec le backend.
+
+    Le code dit lui-même, juste au-dessus des endpoints : « a major bump on one side must
+    fail loud rather than produce a subtly wrong plan ». Être bruyant sur le désaccord mais
+    muet sur « je ne connais pas ma propre version » était la contradiction.
+
+    Falsification : rétablir le `return settings.contract_version` rend ce test rouge.
+    """
+    from app import main
+
+    monkeypatch.setattr(main, "CONTRACT_VERSION_PATH", pathlib.Path("/nonexistent/CONTRACT_VERSION"))
+
+    with pytest.raises(RuntimeError) as excinfo:
+        main.read_contract_version()
+
+    message = str(excinfo.value)
+    assert "CONTRACT_VERSION" in message, "l'erreur doit nommer le fichier manquant"
+    assert "2.0" not in message, "surtout ne pas suggérer une version de repli"
