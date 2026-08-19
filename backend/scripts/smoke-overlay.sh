@@ -65,17 +65,24 @@ cleanup() {
 trap cleanup EXIT
 
 # A short future closure period (dates obviously smoke-ish).
-START=$(date -d "next monday + 21 days" +%Y-%m-%d)
+# ⚠ The window must stay CLEAR of every period plan the dev seed now ships
+# (reprises 2026-08-17→30 and the Matéo adaptation 2026-09-07→27, BcclSeeder
+# sections 12-13): PeriodWindowUniquenessGuard 409s any overlap at plan birth.
+# "+49 days" lands mid-October today and keeps sliding forward with real time,
+# past every seeded window.
+START=$(date -d "next monday + 49 days" +%Y-%m-%d)
 END=$(date -d "$START + 4 days" +%Y-%m-%d)
 
 info "creating a CLOSURE period $START → $END"
-ENTRY_ID=$(curl -sf -X POST "$API_BASE/calendar_entries" "${auth[@]}" \
-  -d "{\"kind\":\"period\",\"periodType\":\"closure\",\"title\":\"Smoke overlay\",\"startDate\":\"$START\",\"endDate\":\"$END\"}" | jget id)
-[ -n "$ENTRY_ID" ] && [ "$ENTRY_ID" != "null" ] || die "calendar entry creation failed"
+ENTRY_BODY=$(curl -s -X POST "$API_BASE/calendar_entries" "${auth[@]}" \
+  -d "{\"kind\":\"period\",\"periodType\":\"closure\",\"title\":\"Smoke overlay\",\"startDate\":\"$START\",\"endDate\":\"$END\"}")
+ENTRY_ID=$(printf '%s' "$ENTRY_BODY" | jget id)
+[ -n "$ENTRY_ID" ] && [ "$ENTRY_ID" != "null" ] || die "calendar entry creation failed — response: $ENTRY_BODY"
 
 info "adapting: the period plan is born from the gesture (POST /schedule_plans)"
-PLAN_ID=$(curl -sf -X POST "$API_BASE/schedule_plans" "${auth[@]}" -d "{\"calendarEntryId\":\"$ENTRY_ID\"}" | jget id)
-[ -n "$PLAN_ID" ] && [ "$PLAN_ID" != "null" ] || die "period plan creation failed"
+PLAN_BODY=$(curl -s -X POST "$API_BASE/schedule_plans" "${auth[@]}" -d "{\"calendarEntryId\":\"$ENTRY_ID\"}")
+PLAN_ID=$(printf '%s' "$PLAN_BODY" | jget id)
+[ -n "$PLAN_ID" ] && [ "$PLAN_ID" != "null" ] || die "period plan creation failed — response: $PLAN_BODY"
 
 info "creating an overlay version under plan $PLAN_ID"
 SCHEDULE_ID=$(curl -sf -X POST "$API_BASE/schedules" "${auth[@]}" -d "{\"schedulePlanId\":\"$PLAN_ID\",\"status\":\"DRAFT\"}" | jget id)
