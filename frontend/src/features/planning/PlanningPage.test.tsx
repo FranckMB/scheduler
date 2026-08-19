@@ -1786,3 +1786,44 @@ describe("PlanningPage — atterrissage EMBARQUÉ = version la plus récente, pa
     await waitFor(() => expect(usePlanningStore.getState().selectedScheduleId).toBe("s-v1"));
   });
 });
+
+/**
+ * P2-44 (PR-2) — surfaçage de la transcription depuis le socle. Sur l'écran de génération d'une
+ * période (embarqué + porté), la liste « à replacer » SERVIE par la route s'affiche (le front ne
+ * redérive rien), un bouton ouvre la comparaison avec le socle, et les vides sont mis en évidence.
+ */
+describe("PlanningPage — transcription depuis le socle (P2-44)", () => {
+  const seasonV: Schedule = { id: "season-v1", name: "Planning A", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true };
+  const overlayV: Schedule = { id: "ov-1", name: "Toussaint", status: "COMPLETED", score: null, createdAt: "2026-09-10T00:00:00Z", updatedAt: "2026-09-10T00:00:00Z", planType: "CLOSURE", schedulePlanId: "ete-plan" };
+  const toReplace = [{ teamId: "team-1", dayOfWeek: 3, startTime: "18:00:00", venueId: "venue-1", reason: "venue_closed" }];
+
+  beforeEach(() => {
+    vi.mocked(listSchedules).mockResolvedValue([seasonV, overlayV]);
+  });
+
+  it("affiche le panneau « à replacer » (équipe, gymnase, RAISON en clair) servi par la route", async () => {
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" toReplace={toReplace} />);
+
+    const region = await screen.findByRole("region", { name: /non reprises/i });
+    expect(within(region).getByText("U11")).toBeInTheDocument();
+    expect(within(region).getByText(/Gymnase Alpha/)).toBeInTheDocument();
+    expect(within(region).getByText("Fermeture du gymnase")).toBeInTheDocument();
+  });
+
+  it("« Comparer avec la saison » ouvre une modale de consultation du socle", async () => {
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" toReplace={toReplace} />);
+
+    const btn = await screen.findByRole("button", { name: /Comparer avec la saison/i });
+    await userEvent.click(btn);
+    expect(await screen.findByRole("dialog", { name: /saison/i })).toBeInTheDocument();
+  });
+
+  it("hors écran de génération de période (page autonome) : ni panneau ni bouton de comparaison", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([seasonV]);
+    renderWithProviders(<PlanningPage />);
+
+    await screen.findByText("Planning A");
+    expect(screen.queryByRole("region", { name: /non reprises/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Comparer avec la saison/i })).not.toBeInTheDocument();
+  });
+});

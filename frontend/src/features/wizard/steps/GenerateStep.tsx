@@ -1,7 +1,9 @@
 import { IN_FLIGHT_STATUSES } from "@/features/planning/lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Rocket } from "lucide-react";
+import { AlertTriangle, CopyPlus, Rocket } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+
+import type { ToReplaceEntry } from "@/features/planning/lib/toReplaceReason";
 
 import { anchorIsWritable, useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
 import { isSeasonPlanType } from "@/features/planning/lib/versions";
@@ -15,7 +17,7 @@ import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
 import { errorMessage } from "@/shared/lib/errorMessage";
 
 import { useStepValidation } from "../lib/useStepValidation";
-import { useLaunchGeneration, useScheduleStatus } from "../queries";
+import { useLaunchGeneration, useScheduleStatus, useTranscribeFromSocle } from "../queries";
 import { useWizardStore } from "../store";
 import { BlockerList } from "./BlockerList";
 
@@ -53,6 +55,12 @@ export function GenerateStep() {
   const blockers = recapValidation.errors;
   const gateClosed = blockers.length > 0 || true === recapValidation.pending;
   const launch = useLaunchGeneration();
+  // P2-44 — « Partir du planning de saison » : transcription du socle vers la V1 d'un plan de
+  // période vierge (ADR-0004). La liste « à replacer » SERVIE par la route vit tant que la session
+  // d'écran vit : on la garde ici et on la passe à l'écran embarqué (le front ne redérive rien).
+  const transcribe = useTranscribeFromSocle();
+  const [toReplace, setToReplace] = useState<ToReplaceEntry[] | null>(null);
+  const [transcribeReason, setTranscribeReason] = useState<string | null>(null);
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
   // Le motif exact rendu par le serveur au dernier essai (null = message générique).
@@ -180,13 +188,30 @@ export function GenerateStep() {
     }
   };
 
+  // P2-44 — transcrire la version pointée du socle vers la V1 (plan de période vierge). Aucun
+  // solveur ; le refus (409 socle non pointé, 409 plan déjà versionné) est SERVI et affiché, jamais
+  // muet. La liste « à replacer » de la réponse est gardée pour l'écran embarqué.
+  const startTranscription = async () => {
+    if (null === periodPlanId || !periodAnchorReady || transcribe.isPending) {
+      return;
+    }
+    setTranscribeReason(null);
+    try {
+      const result = await transcribe.mutateAsync(periodPlanId);
+      setToReplace(result.toReplace);
+    } catch (error) {
+      setTranscribeReason(await errorMessage(error));
+    }
+  };
+
   if (showPlanning) {
     // bug fondateur 2026-08-19 — en période, on PORTE l'écran sur le plan de la période :
     // il n'atterrit plus sur le plan de saison et n'affiche que les versions de la période.
     // En saison, `scopePlanId` est nul → comportement inchangé.
     // P2-43 volet (v) — on passe l'entrée de calendrier de la période : PlanningPage y lit l'état
     // de fermeture des gymnases pour MARQUER (jamais offrir) les fenêtres vides fermées.
-    return <PlanningPage embedded scopePlanId={periodMode ? periodPlanId : null} calendarEntryId={periodMode ? calendarEntryId : null} />;
+    // P2-44 — `toReplace` (session d'écran) alimente le panneau + la mise en évidence des vides.
+    return <PlanningPage embedded scopePlanId={periodMode ? periodPlanId : null} calendarEntryId={periodMode ? calendarEntryId : null} toReplace={toReplace} />;
   }
 
   return (
@@ -263,10 +288,24 @@ export function GenerateStep() {
               Impossible de charger la période — la génération est bloquée.
             </LoadErrorHint>
           ) : null}
-          <Button size="lg" onClick={start} disabled={creditsBlocked || gateClosed || (periodMode && (!periodEntry || !periodAnchorReady))}>
-            <Rocket className="size-4" />
-            {periodMode ? "Générer le planning de période" : "Lancer la génération"}{creditSuffix}
-          </Button>
+          <div className="flex flex-col items-center gap-3 sm:flex-row">
+            <Button size="lg" onClick={start} disabled={creditsBlocked || gateClosed || (periodMode && (!periodEntry || !periodAnchorReady))}>
+              <Rocket className="size-4" />
+              {periodMode ? "Générer le planning de période" : "Lancer la génération"}{creditSuffix}
+            </Button>
+            {/* P2-44 — plan de période VIERGE (zéro version) : la V1 peut naître comme une COPIE du
+                socle, sans solveur (ADR-0004). Absent d'un plan déjà versionné (la garde `length`)
+                et de la saison. Le solve reste offert à côté — la transcription est une alternative. */}
+            {periodMode && 0 === periodPlanVersions.length ? (
+              <Button size="lg" variant="outline" onClick={startTranscription} disabled={!periodEntry || !periodAnchorReady || transcribe.isPending}>
+                <CopyPlus className="size-4" />
+                Partir du planning de saison
+              </Button>
+            ) : null}
+          </div>
+          {null !== transcribeReason ? (
+            <p className="max-w-sm rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-foreground">{transcribeReason}</p>
+          ) : null}
         </div>
       )}
     </div>

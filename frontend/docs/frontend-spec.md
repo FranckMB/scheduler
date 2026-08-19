@@ -4,7 +4,7 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-19 (recalé — **fix terrain P4-119 (a+b+d) + P2-43 volet (v), même journée** : §6.7 recalé sur trois points — **(1)** le timeout CLIENT du move/place/dry-run s'aligne désormais **45 s** au-dessus du budget serveur réel (`MOVE_VERDICT_TIMEOUT_MS`, `frontend/src/features/planning/api.ts`), contre le défaut ky (~10 s) qui abandonnait AVANT la réponse moteur (nginx 499) alors que le moteur avait tranché `valid` une seconde plus tard ; **(2)** un abandon CÔTÉ CLIENT devient une 3ᵉ cause distincte `interrupted` (`EngineVerificationInterruptedError`) — « La vérification a été interrompue avant la réponse — réessayez. » — jamais confondue avec `unreachable` (panne réseau/5xx réelle) ni `timeout` (504 serveur `engine_timeout`), aussi bien sur la modale d'éviction (`EvictConfirmDialog`, état `failed`) que sur un move/place DIRECT (toast dédié) ; **(3)** la grille marque désormais les cases vides d'un gymnase FERMÉ comme **inertes et nommées** (« Fermé — … », `computeClosedWindows`/`WeekGrid.tsx`) au lieu de les offrir en vrais boutons « Placer ici » que le serveur refusait ensuite (état effectif lu via `useEntryConflicts`, jamais recomposé) ; le mode déplacer/placer se **DÉSARME** désormais si son panneau source/vue/version change (P4-119 d, `PlanningPage.tsx`) au lieu de rester armé sur une nouvelle cible non voulue — re-vérifié contre `api.ts`, `EvictConfirmDialog.tsx`, `PlanningPage.tsx`, `WeekGrid.tsx`, `lib/closedWindows.ts` ; trace datée : `etat-des-lieux.md`) ; précédemment : 2026-08-18 (re-vérifié contre `store.ts`/`lib/clubView.ts`/`ClubViewTable.tsx`/`PlanningPage.tsx`/`PlanningToolbar.tsx`/`ResourceFilter.tsx`/`ExportMenu.tsx`/`queries.ts` et, côté serveur, `ExportPdfController`/`Export\ExportView`/`PdfGenerator`/`frontend/worker.js` — **P3-20, lot SOLDÉ** : §6.2 gagne la 5ᵉ vue « Par club » (matrice équipes × jours, rendu à part, mêmes gestes que la grille, limite du placement sur case vide annoncée) et §6.5 la vue de l'IMAGE au choix (`view` en liste blanche, le PNG photographiant la section 2 déjà rendue) ; trace datée : `etat-des-lieux.md`) — *(historique des passes précédentes retiré le 2026-08-19, audit DOC-33 : 20 entrées empilées faisaient de ce stamp un mur de 9 Ko qu'un agent traverse avant d'atteindre le contenu. Il vit dans git : `git log -p --follow frontend/docs/frontend-spec.md`)*
+Last verified @ 2026-08-19 (recalé — **P2-44 PR-2, transcription depuis le socle** : nouveau §6.7 bis re-vérifié contre `wizard/steps/GenerateStep.tsx`, `wizard/queries.ts`/`api.ts`, `planning/PlanningPage.tsx`, `planning/WeekGrid.tsx`, `planning/ToReplaceList.tsx`, `planning/lib/toReplaceReason.ts`, `planning/SeasonComparisonModal.tsx` — bouton « Partir du planning de saison » (plan de période vierge seulement), panneau « Séances à replacer » servi par la route et vivant le temps de la session d'écran, mise en évidence des vides (`emphasizeEmpty`, jamais les cases fermées), modale de consultation du socle ; aucune API touchée par ce lot ; trace datée : `etat-des-lieux.md`). Historique des passes : `git log -p --follow frontend/docs/frontend-spec.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
 ---
 
@@ -624,6 +624,53 @@ par un CRUD brut sur la ressource :
   **bas-droit**, le badge de lentille (icône d'origine) en **bas-gauche** — les deux alignés au
   pixel sur le même axe horizontal (retour fondateur : le haut-gauche du badge empiétait sur le
   nom d'équipe).
+
+### 6.7 bis Transcription depuis le socle — bouton, panneau « à replacer », comparaison (P2-44 PR-2, ADR-0004)
+
+Sur un plan de PÉRIODE **vierge** (aucune version), l'étape Génération du wizard
+(`wizard/steps/GenerateStep.tsx`) propose une alternative au solve complet : la V1 peut naître
+d'une **transcription sans solveur** du socle pointé (backend livré en PR-1,
+[ADR-0004](../../docs/architecture/adr-0004-period-plan-birth-as-socle-copy.md)). Aucune API
+n'est touchée par ce lot — le front consomme la route `POST
+/api/schedule_plans/{id}/transcribe-from-socle` déjà en place.
+
+- **Bouton « Partir du planning de saison »** (`CopyPlus`, variante `outline`, à côté du bouton de
+  génération) : rendu **seulement** quand le plan de période n'a **aucune** version
+  (`0 === periodPlanVersions.length` — la même garde que le backend, jamais une redérivation
+  d'une règle différente). Le clic appelle `useTranscribeFromSocle` (`wizard/queries.ts`), qui
+  invalide `["schedules"]` et `["calendar-entries"]` pour que l'écran embarqué atterrisse sur la
+  V1 fraîchement créée (règle « embarqué = la version la plus récente », déjà en place). Un refus
+  serveur (409 socle non pointé, 409 plan déjà versionné) est **affiché**, jamais muet
+  (`errorMessage`, même patron que le reste du wizard) — pas de bouton « Générer » qui échoue en
+  silence.
+- **Liste « Séances à replacer »** (`ToReplaceList.tsx`) : les entrées de la réponse
+  (`PeriodTranscriptionResult.toReplace` — équipe/jour/heure/gymnase/raison) sont **SERVIES**, le
+  front ne redérive rien ; seul le libellé de la raison (`venue_closed`/`venue_disabled`/
+  `team_reduced` → « Fermeture du gymnase »/etc., `lib/toReplaceReason.ts`) est une PRÉSENTATION
+  pure (régime autorisé, comme `matches/lib/diagnostic.ts`), pas une redérivation de règle. Portée
+  de vie **délibérée** : cette liste est un état de la SESSION D'ÉCRAN (passée en prop de
+  `GenerateStep` à `PlanningPage`, `toReplace`) — la réponse ne peut pas être re-servie (la route
+  crée la V1 une seule fois ; la rappeler sur un plan déjà versionné rendrait 409), donc après une
+  navigation c'est le `DriftBanner` déjà existant qui prend le relais (il redit, par nature, les
+  équipes sous leur quota) plutôt qu'une redérivation ad hoc ici. Le panneau et le bouton
+  « Comparer avec la saison » ne s'affichent que sur l'écran de génération d'une période
+  (`embedded && scoped` dans `PlanningPage.tsx`), jamais en page autonome (`/planning`).
+- **Vides mis en évidence** (`WeekGrid` prop `emphasizeEmpty`) : quand la liste « à replacer »
+  n'est pas vide, les créneaux VIDES de la grille passent en style « repérable » (bordure pleine
+  accent, fond teinté, `aria-label` nommé « Créneau vide à combler… ») pour que le gestionnaire
+  voie où recaser les séances non reprises. Cède le pas au surlignage **conflit** (`flagged`,
+  jamais les deux à la fois) et **ne s'applique jamais à une case FERMÉE** — la case fermée sort
+  avant cette branche (§6.7, marquage P2-43 volet v).
+- **Modale « Comparer avec la saison »** (`SeasonComparisonModal.tsx`) : une CONSULTATION en
+  lecture seule de la version de saison POINTÉE (le socle transcrit), réutilisant `buildGrid` +
+  `WeekGrid` avec `onSelectSlot` inerte — aucun geste d'écriture, aucun mode cible. A11y modale via
+  le composant `Modal` partagé (`shared/components/ui/modal`). Le bouton qui l'ouvre apparaît dès
+  qu'un socle est consultable (une version de saison pointée existe), indépendamment de la liste
+  « à replacer ».
+
+Reste ouvert (`roadmap.md` P2-44 PR-3 à PR-5) : le comblement par solve partiel borné aux séances
+« à replacer », l'entrée du socle transcrit en `previousAssignments` d'un solve complet volontaire,
+et l'agrégation narrative des écarts après un solve complet (recoupe P2-43 (iv)).
 
 ### 6.8 Loading states et error boundaries
 

@@ -1,7 +1,8 @@
 # ADR-0004 — L'adaptation naît comme une COPIE du socle (transcription, pas un solve)
 
 - **Status**: accepted — Date: 2026-08-19 (besoin fondateur, plan validé en session)
-- Programme **P2-44** ; PR-1 (ce document + le service) livrée 2026-08-19.
+- Programme **P2-44** ; PR-1 (ce document + le service) livrée 2026-08-19 ; PR-2 (surfaçage écran)
+  livrée 2026-08-19.
 
 ## Contexte
 
@@ -102,13 +103,16 @@ mécanisme de détection de dérive socle↔copie n'est nécessaire pour ce lot.
   rôle+tenant). Axes structurants touchés (CLAUDE.md §7.1) : *generation pipeline* et *planning
   lifecycle*.
 
-## Programme (P2-44) — ce que PR-1 ne couvre pas
+## Programme (P2-44) — ce que PR-1+PR-2 ne couvrent pas
 
-PR-1 livre le service et la route seuls, sans écran. Suite, chacune sa PR :
+PR-1 a livré le service et la route seuls, sans écran. **PR-2 (livrée 2026-08-19)** a livré le
+surfaçage front : le bouton « Partir du planning de saison » sur un plan de période vierge
+(`GenerateStep`, refus 409 servi et affiché), le panneau « Séances à replacer » (`ToReplaceList`,
+données servies par PR-1, présentation pure), la mise en évidence des vides (`emphasizeEmpty`,
+`WeekGrid`) et la comparaison visuelle période↔saison en modale de consultation
+(`SeasonComparisonModal`) — détail : `frontend/docs/frontend-spec.md` §6.7 bis. Suite, chacune sa
+PR :
 
-- **PR-2** — surfaçage front : bouton « Transcrire depuis le socle » sur un plan de période vierge,
-  modale listant « à replacer » (la donnée existe déjà côté serveur depuis PR-1), comparaison
-  visuelle période↔saison.
 - **PR-3** — comblement : un solve **partiel**, borné aux séances « à replacer », plutôt qu'un
   choix binaire transcrire-ou-solver-tout.
 - **PR-4** — le socle transcrit entre en `previousAssignments` du solve complet quand le

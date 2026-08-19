@@ -1,6 +1,6 @@
 import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarX2, CheckCircle2, Loader2, Lock, Pencil, Star, Undo2, X } from "lucide-react";
+import { AlertTriangle, CalendarX2, CheckCircle2, GitCompare, Loader2, Lock, Pencil, Star, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
@@ -46,8 +46,11 @@ import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
 import { stalenessMessage } from "./lib/staleness";
+import type { ToReplaceEntry } from "./lib/toReplaceReason";
 import { isSeasonPlanType, planRepresentative, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
+import { SeasonComparisonModal } from "./SeasonComparisonModal";
 import { usePlanningStore, type ViewMode } from "./store";
+import { ToReplaceList } from "./ToReplaceList";
 import { WeekGrid } from "./WeekGrid";
 
 // D-31 : foyer unique dans `api.ts`.
@@ -122,8 +125,12 @@ function EmptyState({ title, description }: { title: string; description: string
  *
  *  `calendarEntryId` (P2-43 volet v) — l'entrée de calendrier de la PÉRIODE affichée, passée par
  *  `GenerateStep` en embarqué (elle l'a déjà en main). Null (page autonome) ⇒ dérivée du plan de
- *  la version affichée. Sert à LIRE l'état de fermeture des gymnases servi par le backend. */
-export function PlanningPage({ embedded = false, scopePlanId = null, calendarEntryId = null }: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null } = {}) {
+ *  la version affichée. Sert à LIRE l'état de fermeture des gymnases servi par le backend.
+ *
+ *  `toReplace` (P2-44 PR-2) — les séances du socle NON reprises par une transcription, SERVIES par
+ *  la route et passées par `GenerateStep` (session d'écran). Non-vide ⇒ panneau « à replacer » +
+ *  mise en évidence des vides. Null (page autonome, ou pas de transcription) ⇒ rien de tout ça. */
+export function PlanningPage({ embedded = false, scopePlanId = null, calendarEntryId = null, toReplace = null }: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null; toReplace?: ToReplaceEntry[] | null } = {}) {
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
   const { data: me } = useMe();
   // §4bis pt 2 — solde de crédits sur « Régénérer » (Découverte bridée seulement).
@@ -140,6 +147,8 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
   // origine de verrou). Fermer le panneau ÉTEINT la lentille : pas d'état fantôme.
   const [locksPanelOpen, setLocksPanelOpen] = useState(false);
   const [lockLens, setLockLens] = useState(false);
+  // P2-44 (PR-2) — la modale « Comparer avec la saison » (consultation du socle).
+  const [compareOpen, setCompareOpen] = useState(false);
   // P2-30 (geste 1/2) — le mode cible « click-click ». `move` déplace un créneau existant
   // (`sourceSlotId`) ; `place` place une séance À LA DÉRIVE pour une équipe (`teamId`). Null =
   // consultation. Le geste 4 (undo, profondeur 1, session) et le raccourci d'éviction vivent
@@ -1101,6 +1110,14 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
     return <FullPageSpinner />;
   }
 
+  // P2-44 (PR-2) — le surfaçage de la transcription ne vit QUE sur l'écran de génération d'une
+  // période (embarqué + porté) : le panneau « à replacer » (servi, jamais redérivé), la mise en
+  // évidence des vides quand il est non-vide, et la comparaison avec le socle pointé.
+  const transcriptionSurface = embedded && scoped;
+  const emphasizeEmpty = transcriptionSurface && null !== toReplace && toReplace.length > 0;
+  const seasonComparisonId = transcriptionSurface ? (planRepresentative(visibleSeasonPlans(schedules))?.id ?? null) : null;
+  const venueNameOf = (venueId: string): string => lookups.venues.get(venueId)?.name ?? "Gymnase";
+
   const planningTitle = displayedPlanName ?? "Planning";
   // Nom du fichier exporté = nom du PLAN affiché (retour fondateur 2026-07-18).
   // Il lisait `selectedSchedule.name`, c'est-à-dire le nom de la VERSION — que les
@@ -1255,6 +1272,22 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
               filterSlot={<ResourceFilter viewMode={viewMode} groups={resourceGroups} selected={resourceFilter} onToggle={toggleResource} onClear={clearResourceFilter} />}
             />
           </div>
+
+          {/* P2-44 (PR-2) — après une transcription depuis le socle : la comparaison avec le
+              planning de saison (consultation) et la liste « à replacer » servie par la route.
+              Le bouton apparaît dès qu'un socle est consultable ; le panneau, quand la route a
+              renvoyé des séances non reprises (session d'écran — voir ToReplaceList). */}
+          {null !== seasonComparisonId ? (
+            <div className="mb-4">
+              <Button variant="outline" size="sm" onClick={() => setCompareOpen(true)}>
+                <GitCompare className="size-4" />
+                Comparer avec la saison
+              </Button>
+            </div>
+          ) : null}
+          {null !== toReplace && toReplace.length > 0 ? (
+            <ToReplaceList entries={toReplace} teamName={teamNameOf} venueName={venueNameOf} />
+          ) : null}
 
           {/* P2-30 (geste 3) — les équipes à la dérive : un clic ARME le placement (mode cible).
               COMPLETED + modifiable seulement. */}
@@ -1457,6 +1490,9 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
                           // P2-43 volet (v) — les couples fermés de la période : cases vides
                           // MARQUÉES (inertes + nommées), jamais offertes en cible.
                           closedWindows={closedWindows}
+                          // P2-44 (PR-2) — après une transcription, les « trous » sont mis en
+                          // évidence (jamais les cases fermées) pour qu'on voie où combler.
+                          emphasizeEmpty={emphasizeEmpty}
                         />
                         )}
                       </div>
@@ -1613,6 +1649,11 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
         }}
         onCancel={() => setRegenerateFromOpen(false)}
       />
+
+      {/* P2-44 (PR-2) — « Comparer avec la saison » : consultation lecture seule du socle pointé. */}
+      {compareOpen && null !== seasonComparisonId ? (
+        <SeasonComparisonModal seasonScheduleId={seasonComparisonId} viewMode={viewMode} onClose={() => setCompareOpen(false)} />
+      ) : null}
     </div>
   );
 }

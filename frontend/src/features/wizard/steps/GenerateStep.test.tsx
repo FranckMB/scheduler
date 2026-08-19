@@ -19,6 +19,8 @@ const h = {
   // AUD-FRT-09 — spy STABLE : le harnais en recréait un à chaque rendu, donc l'argument
   // du lancement était inobservable. On ne pouvait pas voir ce que l'écran demandait.
   launch: vi.fn().mockResolvedValue("sched-1"),
+  // P2-44 — la transcription depuis le socle (spy stable, même raison que `launch`).
+  transcribe: vi.fn().mockResolvedValue({ id: "sched-t", versionNumber: 1, copiedCount: 5, toReplace: [{ teamId: "t1", dayOfWeek: 3, startTime: "18:00:00", venueId: "v1", reason: "venue_closed" }] }),
 };
 
 vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { club: { name: "BCCL" } } }) }));
@@ -35,8 +37,12 @@ vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: { setS
 // Le stub RECORD la portée reçue (data-scope) : c'est le CÂBLAGE GenerateStep→PlanningPage
 // qu'on épingle ici (que la portée passée == le plan de période). Le RENDU scopé lui-même
 // — atterrissage, titre, toolbar — est gardé sur le composant RÉEL dans PlanningPage.test.tsx.
-vi.mock("@/features/planning/PlanningPage", () => ({ PlanningPage: (props: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null }) => <div data-testid="planning" data-scope={props.scopePlanId ?? ""} data-entry={props.calendarEntryId ?? ""} /> }));
+// Le stub RECORD aussi le nombre d'entrées « à replacer » reçues (data-toreplace) : c'est le
+// CÂBLAGE GenerateStep→PlanningPage de la transcription (P2-44) qu'on épingle ici.
+vi.mock("@/features/planning/PlanningPage", () => ({ PlanningPage: (props: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null; toReplace?: unknown[] | null }) => <div data-testid="planning" data-scope={props.scopePlanId ?? ""} data-entry={props.calendarEntryId ?? ""} data-toreplace={String((props.toReplace ?? []).length)} /> }));
 vi.mock("@/features/planning/GenerationWaiting", () => ({ GenerationWaiting: () => <div /> }));
+// P2-44 — errorMessage mocké pour un motif SERVI observable (le 409 socle non pointé s'affiche).
+vi.mock("@/shared/lib/errorMessage", () => ({ errorMessage: async (e: unknown) => (e as { reason?: string }).reason ?? "Une erreur est survenue" }));
 vi.mock("../lib/useStepValidation", () => ({ useStepValidation: () => ({ errors: [], warnings: [], pending: false }) }));
 vi.mock("../store", () => ({ useWizardStore: () => ({ mode: h.mode, calendarEntryId: h.entryId }) }));
 vi.mock("../queries", () => ({
@@ -44,6 +50,8 @@ vi.mock("../queries", () => ({
   // harnais pilote via h.status (FAILED = échec de SOLVE).
   useLaunchGeneration: () => ({ isPending: false, isError: false, mutateAsync: h.launch, reset: vi.fn() }),
   useScheduleStatus: () => ({ data: null === h.status ? undefined : { status: h.status } }),
+  // P2-44 — la transcription depuis le socle.
+  useTranscribeFromSocle: () => ({ isPending: false, mutateAsync: h.transcribe, reset: vi.fn() }),
 }));
 
 import { GenerateStep } from "./GenerateStep";
@@ -70,6 +78,8 @@ beforeEach(() => {
   h.schedules = [];
   h.setSelected.mockClear();
   h.launch.mockClear();
+  h.transcribe.mockClear();
+  h.transcribe.mockResolvedValue({ id: "sched-t", versionNumber: 1, copiedCount: 5, toReplace: [{ teamId: "t1", dayOfWeek: 3, startTime: "18:00:00", venueId: "v1", reason: "venue_closed" }] });
 });
 
 /**
@@ -271,5 +281,70 @@ describe("GenerateStep — mode saison : rien ne change (NR)", () => {
     expect(screen.getByTestId("planning")).toHaveAttribute("data-scope", "");
     // En saison, aucune entrée de période n'est passée (pas de fermetures de période à lire).
     expect(screen.getByTestId("planning")).toHaveAttribute("data-entry", "");
+  });
+
+  it("mode saison : aucun bouton « Partir du planning de saison » (transcription = plans de période)", () => {
+    h.mode = "season";
+    h.schedules = [];
+    renderStep();
+    expect(screen.getByRole("button", { name: /Lancer la génération/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Partir du planning de saison/i })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * P2-44 (ADR-0004) — « Partir du planning de saison » : sur un plan de PÉRIODE VIERGE, un bouton
+ * transcrit la version pointée du socle vers la V1, sans solveur. La donnée « à replacer » servie
+ * par la route est passée à l'écran embarqué (le front ne redérive rien). Un plan déjà versionné
+ * n'offre pas le bouton ; un socle non pointé (409) explique au lieu d'échouer en silence.
+ */
+describe("GenerateStep — transcription depuis le socle (P2-44)", () => {
+  beforeEach(() => {
+    h.mode = "period";
+    h.entryId = "entry-1";
+    h.planId = "plan-p";
+    h.schedules = [];
+  });
+
+  it("plan de période VIERGE : le bouton s'affiche à côté de « Générer le planning de période »", () => {
+    renderStep();
+    expect(screen.getByRole("button", { name: /Générer le planning de période/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Partir du planning de saison/i })).toBeInTheDocument();
+  });
+
+  it("clic : transcrit le plan de période, puis l'écran embarqué reçoit la liste « à replacer »", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderStep();
+
+    await user.click(screen.getByRole("button", { name: /Partir du planning de saison/i }));
+    expect(h.transcribe).toHaveBeenCalledWith("plan-p");
+
+    // La V1 transcrite apparaît dans la liste des versions (refetch) → l'écran embarqué s'affiche,
+    // porté sur le plan de période ET porteur de la liste « à replacer » servie par la route.
+    h.schedules = [{ id: "sched-t", status: "COMPLETED", createdAt: "2026-09-10T00:00:00Z", planType: "CLOSURE", schedulePlanId: "plan-p" }];
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <GenerateStep />
+      </QueryClientProvider>,
+    );
+
+    const planning = screen.getByTestId("planning");
+    expect(planning).toHaveAttribute("data-scope", "plan-p");
+    expect(planning).toHaveAttribute("data-toreplace", "1");
+  });
+
+  it("plan de période DÉJÀ versionné : pas de bouton de transcription (backend refuserait de toute façon)", () => {
+    h.schedules = [{ id: "ov-1", status: "COMPLETED", createdAt: "2026-09-10T00:00:00Z", planType: "CLOSURE", schedulePlanId: "plan-p" }];
+    renderStep();
+    expect(screen.queryByRole("button", { name: /Partir du planning de saison/i })).not.toBeInTheDocument();
+  });
+
+  it("socle non pointé (409) : le bouton EXPLIQUE la raison servie, jamais un échec muet", async () => {
+    h.transcribe.mockRejectedValueOnce({ reason: "Choisissez d'abord un planning de saison en vigueur." });
+    const user = userEvent.setup();
+    renderStep();
+
+    await user.click(screen.getByRole("button", { name: /Partir du planning de saison/i }));
+    expect(await screen.findByText("Choisissez d'abord un planning de saison en vigueur.")).toBeInTheDocument();
   });
 });
