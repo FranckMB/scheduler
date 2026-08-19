@@ -128,10 +128,13 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
     }
 
     /**
-     * P5-17 — chaque RÉSERVATION seedée (pin durable HARD) retrouve son créneau dans la
-     * transcription pointée, verrouillé HARD (exactement ce qu'un import de résultat solveur
-     * produirait). Une réservation ORPHELINE — sans créneau transcrit apparié — trahit une
-     * transcription incomplète, et ce test la nomme.
+     * P5-17 — chaque RÉSERVATION DE BASE seedée (pin durable HARD, plan NULL) retrouve son
+     * créneau dans la transcription de SAISON pointée, verrouillé HARD (exactement ce qu'un
+     * import de résultat solveur produirait). Une réservation ORPHELINE — sans créneau transcrit
+     * apparié — trahit une transcription incomplète, et ce test la nomme.
+     *
+     * P5-13 : la clause `schedule_plan_id IS NULL` cible les seules réservations de BASE ; celles
+     * des reprises sont portées par leur plan de période et vérifiées par leur propre test.
      */
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
@@ -141,7 +144,7 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
 
         $orphans = $this->connection->fetchAllAssociative(
             'SELECT r.team_id, r.venue_id, r.day_of_week, r.start_time FROM reservation r '
-            . 'WHERE r.club_id = ? AND NOT EXISTS ( '
+            . 'WHERE r.club_id = ? AND r.schedule_plan_id IS NULL AND NOT EXISTS ( '
             . 'SELECT 1 FROM schedule_slot_template t '
             . 'JOIN schedule_plan sp ON sp.chosen_schedule_id = t.schedule_id '
             . 'WHERE sp.type = \'SEASON\' AND sp.club_id = r.club_id '
@@ -238,6 +241,159 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
         self::assertSame([], array_values(array_unique($violations)), 'une règle dure du seed contredit le planning réel qu\'il transcrit');
     }
 
+    /**
+     * P5-13 — chaque plan de REPRISE pointe (chosen) une version COMPLETED transcrivant sa
+     * semaine au bon nombre de créneaux (25 pour le 17 août, 38 pour le 24 août), et porte ses
+     * groupes de mutualisation ANCRÉS au plan : {SM1,SM2}+{SF1,SF2} le 17 (SF séparées ⇒ absentes
+     * le 24), {SM1,SM2} seul le 24.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testEachRepriseWeekPlanPointsCompletedTranscriptionWithItsGroups(): void
+    {
+        $club = $this->seeder->run($this->em, BcclSeedProfile::dev());
+
+        foreach ([['Reprise du 17 août', 25, 2], ['Reprise du 24 août', 38, 1]] as [$planName, $expectedSlots, $expectedGroups]) {
+            $row = $this->connection->fetchAssociative(
+                'SELECT s.status, (SELECT COUNT(*) FROM schedule_slot_template t WHERE t.schedule_id = s.id) AS slot_count '
+                . 'FROM schedule_plan sp JOIN schedule s ON s.id = sp.chosen_schedule_id '
+                . 'WHERE sp.club_id = ? AND sp.name = ? AND sp.type = \'HOLIDAY\'',
+                [$club->getId(), $planName],
+            );
+            self::assertNotFalse($row, \sprintf('le plan « %s » pointe une version choisie', $planName));
+            self::assertSame('COMPLETED', (string) $row['status'], \sprintf('« %s » pointe une version COMPLETED', $planName));
+            self::assertSame($expectedSlots, (int) $row['slot_count'], \sprintf('« %s » transcrit %d séances', $planName, $expectedSlots));
+
+            $groupCount = (int) $this->connection->fetchOne(
+                'SELECT COUNT(*) FROM shared_training_group g JOIN schedule_plan sp ON sp.id = g.schedule_plan_id '
+                . 'WHERE sp.club_id = ? AND sp.name = ?',
+                [$club->getId(), $planName],
+            );
+            self::assertSame($expectedGroups, $groupCount, \sprintf('« %s » porte %d groupe(s) de mutualisation', $planName, $expectedGroups));
+        }
+
+        // {SF1,SF2} n'est mutualisé QUE la semaine du 17 : aucun groupe de la semaine du 24 ne
+        // contient SF1 ni SF2 (elles s'y entraînent séparément).
+        $sfGroupsWeek24 = (int) $this->connection->fetchOne(
+            'SELECT COUNT(DISTINCT gt.group_id) FROM shared_training_group_team gt '
+            . 'JOIN schedule_plan sp ON sp.id = gt.schedule_plan_id '
+            . 'JOIN team t ON t.id = gt.team_id '
+            . 'WHERE sp.club_id = ? AND sp.name = ? AND t.name IN (\'SF1\', \'SF2\')',
+            [$club->getId(), 'Reprise du 24 août'],
+        );
+        self::assertSame(0, $sfGroupsWeek24, 'SF1/SF2 ne sont pas mutualisées la semaine du 24 août');
+
+        // {SM1,SM2} l'est LES DEUX semaines : chaque plan a un groupe couvrant exactement SM1 et SM2.
+        foreach (['Reprise du 17 août', 'Reprise du 24 août'] as $planName) {
+            $smMembers = (int) $this->connection->fetchOne(
+                'SELECT COUNT(*) FROM shared_training_group_team gt '
+                . 'JOIN schedule_plan sp ON sp.id = gt.schedule_plan_id '
+                . 'JOIN team t ON t.id = gt.team_id '
+                . 'WHERE sp.club_id = ? AND sp.name = ? AND t.name IN (\'SM1\', \'SM2\')',
+                [$club->getId(), $planName],
+            );
+            self::assertSame(2, $smMembers, \sprintf('« %s » mutualise SM1 et SM2', $planName));
+        }
+    }
+
+    /**
+     * NR (P5-13) — LES SEMAINES DE REPRISE TRANSCRITES RESPECTENT LES RÈGLES DURES D'ÉQUIPE
+     * QU'ELLES N'ONT PAS DÉCOCHÉES.
+     *
+     * Miroir période de {@see testTheTranscribedRealScheduleSatisfiesEveryHardTeamRule}, avec un
+     * amendement essentiel : une contrainte DÉCOCHÉE pour le plan (ConstraintPeriodOverride
+     * isActive=false) n'est PAS exigée — c'est précisément le mécanisme qui rend une reprise
+     * cohérente avec les règles de saison qu'elle contredit (SM1 hors mardi/jeudi, etc.). Toute
+     * règle dure d'équipe (jour/horaire) NON décochée doit, elle, être satisfaite par chaque
+     * séance transcrite de la semaine.
+     *
+     * PORTÉE ASSUMÉE (identique au test de saison) : seules les contraintes de portée ÉQUIPE
+     * sont couvertes ; la résolution des règles CLUB par tag vit dans le builder, pas dans le seed.
+     *
+     * Falsifiable : retirer un décochage du seed (p. ex. « SM1 · uniquement mardi, jeudi » de la
+     * semaine du 17) rend ce test ROUGE en nommant la séance du lundi de SM1.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testTranscribedReprisePlansSatisfyEveryHardTeamRuleHonouringOverrides(): void
+    {
+        $this->seeder->run($this->em, BcclSeedProfile::dev());
+
+        /** @var list<array{team: string, day: int, start: string, name: string, family: string, config: string}> $rows */
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT t.name AS team, s.day_of_week AS day, to_char(s.start_time, \'HH24:MI\') AS start, '
+            . 'c.name AS name, c.family AS family, c.config::text AS config '
+            . 'FROM "constraint" c '
+            . 'JOIN team t ON t.id = c.scope_target_id '
+            . 'JOIN schedule_slot_template s ON s.team_id = t.id '
+            . 'JOIN schedule sc ON sc.id = s.schedule_id '
+            . 'JOIN schedule_plan p ON p.id = sc.schedule_plan_id AND p.type = \'HOLIDAY\' AND sc.id = p.chosen_schedule_id '
+            . 'WHERE c.calendar_entry_id IS NULL AND c.scope = \'TEAM\' AND c.rule_type = \'HARD\' '
+            . 'AND c.family IN (\'DAY\', \'TIME\') '
+            // Une règle DÉCOCHÉE pour ce plan (isActive=false) n'est pas exigée.
+            . 'AND NOT EXISTS (SELECT 1 FROM constraint_period_override o '
+            . 'WHERE o.schedule_plan_id = p.id AND o.constraint_id = c.id AND o.is_active = false)',
+        );
+        self::assertNotSame([], $rows, 'le seed doit produire des règles dures d\'équipe ET des semaines de reprise transcrites — sinon ce test ne garde rien');
+
+        $violations = [];
+        foreach ($rows as $row) {
+            /** @var array<string, mixed> $config */
+            $config = json_decode($row['config'], true, 512, \JSON_THROW_ON_ERROR);
+            $day = (int) $row['day'];
+            $start = (string) $row['start'];
+
+            $allowed = $config['allowedDays'] ?? null;
+            if (\is_array($allowed) && !\in_array($day, array_map('intval', $allowed), true)) {
+                $violations[] = \sprintf('%s le jour %d — « %s »', $row['team'], $day, $row['name']);
+            }
+            $forbidden = $config['forbiddenDays'] ?? null;
+            if (\is_array($forbidden) && \in_array($day, array_map('intval', $forbidden), true)) {
+                $violations[] = \sprintf('%s le jour %d — « %s »', $row['team'], $day, $row['name']);
+            }
+            $min = $config['minStartTime'] ?? null;
+            if (\is_string($min) && $start < $min) {
+                $violations[] = \sprintf('%s à %s — « %s »', $row['team'], $start, $row['name']);
+            }
+            $max = $config['maxStartTime'] ?? null;
+            if (\is_string($max) && $start > $max) {
+                $violations[] = \sprintf('%s à %s — « %s »', $row['team'], $start, $row['name']);
+            }
+        }
+
+        self::assertSame([], array_values(array_unique($violations)), 'une règle dure NON décochée du seed contredit une semaine de reprise transcrite');
+    }
+
+    /**
+     * P5-13 — les reprises et le compte Nicolas ne visent QUE le profil dev. Le club de
+     * DÉMONSTRATION ne porte aucun plan de période (HOLIDAY/CLOSURE), aucune entrée calendrier,
+     * et le compte gestionnaire Nicolas n'existe pas.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDemoSeedCarriesNoRepriseNorNicolasAccount(): void
+    {
+        $club = $this->seeder->run($this->em, BcclSeedProfile::demo('demo-pass-reprise'));
+
+        $periodPlans = (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM schedule_plan WHERE club_id = ? AND type IN (\'HOLIDAY\', \'CLOSURE\')',
+            [$club->getId()],
+        );
+        self::assertSame(0, $periodPlans, 'la démo ne porte aucun plan de période');
+
+        $entries = (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM calendar_entry WHERE club_id = ?',
+            [$club->getId()],
+        );
+        self::assertSame(0, $entries, 'la démo ne pose aucune entrée calendrier');
+
+        $nicolas = $this->connection->fetchOne(
+            'SELECT 1 FROM app_user WHERE email = ?',
+            ['nicolas.barilleau@bccl.fr'],
+        );
+        self::assertFalse($nicolas, 'la démo ne crée pas le compte gestionnaire Nicolas');
+    }
+
     protected function setUp(): void
     {
         $adminUrl = $_SERVER['DATABASE_ADMIN_URL'] ?? getenv('DATABASE_ADMIN_URL');
@@ -267,7 +423,9 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
         parent::tearDown();
     }
 
-    /** @return array{clubs:int, teams:int, slots:int, reservations:int, schedules:int, slotTemplates:int} */
+    /**
+     * @return array{clubs:int, teams:int, slots:int, reservations:int, schedules:int, slotTemplates:int, clubUsers:int, calendarEntries:int, schedulePlans:int, sharedGroups:int, sharedGroupTeams:int, venuePeriodOverrides:int, teamPeriodOverrides:int, constraintPeriodOverrides:int}
+     */
     private function counts(): array
     {
         return [
@@ -280,6 +438,18 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
             // par plan+provenance) ni doubler ses 90 créneaux (purge l.853 + réinsertion).
             'schedules' => $this->rowsIn('schedule'),
             'slotTemplates' => $this->rowsIn('schedule_slot_template'),
+            // P5-13 : le compte gestionnaire additionnel (Nicolas), les deux entrées-semaines
+            // + leur mère, les plans de reprise et TOUS leurs réglages ancrés au plan
+            // (mutualisation, overrides gymnase/équipe/contrainte) entrent dans la mesure —
+            // find-or-create / purge-recréation partout, deux runs = mêmes comptes.
+            'clubUsers' => $this->rowsIn('club_user'),
+            'calendarEntries' => $this->rowsIn('calendar_entry'),
+            'schedulePlans' => $this->rowsIn('schedule_plan'),
+            'sharedGroups' => $this->rowsIn('shared_training_group'),
+            'sharedGroupTeams' => $this->rowsIn('shared_training_group_team'),
+            'venuePeriodOverrides' => $this->rowsIn('venue_period_override'),
+            'teamPeriodOverrides' => $this->rowsIn('team_period_override'),
+            'constraintPeriodOverrides' => $this->rowsIn('constraint_period_override'),
         ];
     }
 
