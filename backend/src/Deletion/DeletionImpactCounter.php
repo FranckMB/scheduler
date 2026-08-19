@@ -147,7 +147,16 @@ final readonly class DeletionImpactCounter
         /** @var list<string> $chosen */
         $chosen = array_values(array_filter(array_map(
             static fn (SchedulePlan $plan): ?string => $plan->getChosenScheduleId(),
-            $this->entityManager->getRepository(SchedulePlan::class)->findBy(['seasonId' => $target->seasonId]),
+            // AUD-BCK-17 — clubId EXPLICITE, comme partout ailleurs dans ce compteur. Les filtres
+            // Doctrine sont désactivés ici (cf. docblock de classe) : la borne club+saison portée
+            // par chaque étape EST la frontière, ce n'est pas une ceinture de plus. Sans effet
+            // pratique aujourd'hui (une saison appartient à un club, et le COUNT final re-borne
+            // club+saison), mais c'était le SEUL endroit du lot où la convention cassait — et une
+            // convention qui souffre une exception cesse d'en être une.
+            $this->entityManager->getRepository(SchedulePlan::class)->findBy([
+                'clubId' => $target->clubId,
+                'seasonId' => $target->seasonId,
+            ]),
         )));
         if ([] === $chosen) {
             return 0;
