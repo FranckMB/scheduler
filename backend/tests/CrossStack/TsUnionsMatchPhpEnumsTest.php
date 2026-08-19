@@ -54,6 +54,12 @@ final class TsUnionsMatchPhpEnumsTest extends TestCase
         'ConstraintScope' => 'wizard/api.ts',
         'ConstraintRuleType' => 'wizard/api.ts',
         'TeamTagAxis' => 'wizard/api.ts',
+        // AUD-FRT-22 (2026-08-19) — TeamLevel manquait à cette liste alors que l'union TS
+        // existait depuis longtemps dans wizard/api.ts : le niveau d'une équipe traversait
+        // donc la frontière sans qu'aucun côté ne garde l'autre. C'est un enum de PÉRIMÈTRE
+        // ENGAGÉ (§7.1) — une valeur ajoutée côté PHP et oubliée côté TS rendrait un niveau
+        // affiché comme inconnu sur l'écran des équipes.
+        'TeamLevel' => 'wizard/api.ts',
         'FixtureStatus' => 'matches/api.ts',
         'TeamLinkType' => 'matches/api.ts',
     ];
@@ -134,7 +140,11 @@ final class TsUnionsMatchPhpEnumsTest extends TestCase
         $source = file_get_contents($path);
         self::assertIsString($source, \sprintf('Illisible : %s', $path));
 
-        $found = preg_match(\sprintf('/export type %s = ([^;]+);/', preg_quote($unionName, '/')), $source, $matches);
+        // AUD-FRT-22 — `=\s*` et non `= ` : une union assez longue est écrite sur PLUSIEURS lignes
+        // (`export type TeamLevel =\n  | "ELITE"…`), et l'ancienne regex, qui exigeait une espace
+        // juste après le `=`, ne la voyait pas. Le garde lit le code tel qu'il est écrit ; il
+        // n'impose pas un formatage au fichier qu'il surveille.
+        $found = preg_match(\sprintf('/export type %s =\s*([^;]+);/', preg_quote($unionName, '/')), $source, $matches);
         self::assertSame(1, $found, \sprintf(
             'L\'union `%s` a disparu de %s — si elle a été renommée, mettre à jour self::MIRRORED plutôt que de retirer la surveillance.',
             $unionName,

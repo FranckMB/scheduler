@@ -67,4 +67,45 @@ export default defineConfig([
       ],
     },
   },
+  // AUD-FRT-21 — GELER la direction des dépendances : `shared/` est la couche du DESSOUS,
+  // elle ne remonte pas vers `features/`. L'audit du 2026-08-19 a compté 8 remontées dans
+  // 6 fichiers, installées une par une sans que rien ne les voie : c'est la SILENCE de la
+  // dérive qui est le problème, pas les 8 cas.
+  //
+  // Cette règle ne les résorbe pas — elle empêche la 9e. Les 8 existantes sont listées en
+  // dette explicite juste en dessous, chacune nommée : une exception qu'on doit écrire est
+  // une exception qu'on voit, et qui coûte assez cher pour qu'on préfère la corriger.
+  // Résorption tracée en P4-119 (déplacer ce qui est PARTAGÉ vers `shared/`, ce qui est
+  // PLANNING vers `features/planning/`) — pas au détour d'un lot de finitions.
+  {
+    files: ['src/shared/**/*.{ts,tsx}'],
+    ignores: [
+      // Les TESTS de shared/ peuvent lire les features : la contrainte porte sur le graphe de
+      // dépendances LIVRÉ, pas sur ce qu'un test a le droit d'observer. Un helper partagé
+      // (`days`, `time`) gagne à être vérifié contre l'usage RÉEL qu'en font planning/wizard —
+      // l'interdire pousserait à re-décrire l'usage dans le test, donc à le laisser dériver.
+      '**/*.test.{ts,tsx}',
+      // Dette AUD-FRT-21, à résorber (P4-119) — aucune ligne à AJOUTER ici.
+      'src/shared/lib/socle.ts',                    // useMe
+      'src/shared/lib/scheduleStream.ts',           // ScheduleStatus + isTerminalStatus (planning)
+      'src/shared/hooks/useApplyDemoClock.ts',      // useMe
+      'src/shared/hooks/useApplyClubTheme.ts',      // useMe
+      'src/shared/credits/useCredits.ts',           // useMe + ClubEntitlements
+      'src/shared/components/ui/delete-confirm.tsx' // DeletionImpact (wizard)
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/features/*', '../features/*', '../../features/*', '../../../features/*'],
+              message:
+                "shared/ est SOUS features/ : il ne doit pas en dépendre. Ce qui est partagé descend dans shared/ ; ce qui appartient à une feature reste chez elle. (AUD-FRT-21 — si tu crois avoir un cas légitime, c'est probablement que le code partagé est mal placé.)",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ])
