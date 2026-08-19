@@ -416,6 +416,38 @@ describe("RadarPanel", () => {
     expect(screen.getByRole("button", { name: "Reprendre" })).toBeInTheDocument();
   });
 
+  // Défaut 4 (doublon « Vacances d'été ») : le radar dédoublonne le feed scolaire d'une
+  // vacance dès qu'une ENTRÉE calendrier porte SON lien (`schoolHolidayId`). C'est ce lien
+  // que le seed et le serveur posent désormais (côté backend) ; ici on garde qu'AVEC lui il
+  // n'y a qu'UNE carte, et que SANS lui le doublon revient — falsifiable dans les deux sens.
+  describe("dédoublonnage feed scolaire ⇄ entrée matérialisée (schoolHolidayId)", () => {
+    // Une entrée vacances matérialisée (plan en cours) → carte « en cours » (Reprendre) ;
+    // le feed scolaire de la MÊME vacance → carte « Adapter ». Le lien fusionne les deux.
+    const pendingHolidayPlan: SchedulePlan = { id: "pl-h1", type: "HOLIDAY", name: "Plan", startDate: FUTURE, calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: false };
+
+    it("AVEC le lien : le feed est dédoublonné — UNE seule carte pour la vacance", () => {
+      plansData = [pendingHolidayPlan];
+      renderRadar({
+        holidays: [holiday], // h1, fenêtre FUTURE..FUTURE_END
+        entries: [closure({ id: "e-ete", periodType: "holiday", title: "Vacances de Noël", schoolHolidayId: "h1", startDate: FUTURE, endDate: FUTURE_END })],
+      });
+      // La carte de l'entrée matérialisée reste ; celle du feed scolaire (« Adapter ») disparaît.
+      expect(screen.getByText("Planning en cours — à finaliser")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Adapter" })).not.toBeInTheDocument();
+    });
+
+    it("SANS le lien : le doublon revient — DEUX cartes (feed scolaire + entrée)", () => {
+      plansData = [pendingHolidayPlan];
+      renderRadar({
+        holidays: [holiday],
+        entries: [closure({ id: "e-ete", periodType: "holiday", title: "Vacances de Noël", schoolHolidayId: null, startDate: FUTURE, endDate: FUTURE_END })],
+      });
+      // L'entrée matérialisée ET le feed scolaire (« Adapter ») coexistent : c'est le doublon.
+      expect(screen.getByText("Planning en cours — à finaliser")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Adapter" })).toBeInTheDocument();
+    });
+  });
+
   // (b) « 0/7 semaines couvertes alors que 3 sont derrière — on gère l'avenir, pas le
   // présent. » Les semaines RÉVOLUES sortent du dénominateur ; la semaine ENTAMÉE y reste,
   // il lui reste des jours (revue #344 : « commencé » n'est pas « fini »).

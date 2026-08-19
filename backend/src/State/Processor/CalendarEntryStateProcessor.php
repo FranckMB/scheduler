@@ -7,6 +7,7 @@ namespace App\State\Processor;
 use App\ApiResource\CalendarEntryResource;
 use App\Dto\CalendarEntryInput;
 use App\Entity\CalendarEntry;
+use App\Entity\Club;
 use App\Entity\CoachWish;
 use App\Entity\CoachWishCampaign;
 use App\Entity\Constraint;
@@ -14,6 +15,7 @@ use App\Entity\PeriodReminderLog;
 use App\Enum\CalendarEntryKind;
 use App\Enum\CalendarEntryPeriodType;
 use App\Enum\CalendarEntryStatus;
+use App\Repository\SchoolHolidayPeriodRepository;
 use App\Service\ManagementAccessGuard;
 use App\Service\OverlayManager;
 use App\Service\PeriodWindowUniquenessGuard;
@@ -45,6 +47,7 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         private readonly OverlayManager $overlayManager,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly PeriodWindowUniquenessGuard $windowUniquenessGuard,
+        private readonly SchoolHolidayPeriodRepository $schoolHolidayRepository,
     ) {
         parent::__construct($entityManager, $requestStack, $seasonResolver, $seasonAccessGuard, $managementAccessGuard);
     }
@@ -66,7 +69,9 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         $entity->setEndDate($this->parseDate($input->endDate));
         $entity->setIsDisruptive($input->isDisruptive ?? false);
         $entity->setPeriodType($this->parsePeriodType($input->periodType));
-        $entity->setSchoolHolidayId($input->schoolHolidayId);
+        // Un lien explicite est respecté ; sinon on l'auto-résout depuis les vacances
+        // scolaires de la zone du club (une seule vérité serveur — le front n'arbitre pas).
+        $entity->setSchoolHolidayId($input->schoolHolidayId ?? $this->autoLinkedHolidayId($input));
         $entity->setParentEntryId($input->parentEntryId);
         $entity->setStatus($this->parseStatus($input->status));
         $entity->setCreatedBy($input->createdBy);
@@ -506,6 +511,39 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             }
             $this->entityManager->flush();
         }
+    }
+
+    /**
+     * Une entrée VACANCES racine créée SANS lien explicite reçoit le lien vers la vacance
+     * scolaire de la ZONE du club dont la fenêtre chevauche la sienne. Le cockpit apparie ses
+     * cartes sur ce lien (RadarPanel, DayDialog) : sans lui, une vacance matérialisée « à la
+     * main » et le feed scolaire s'affichaient en DEUX cartes « Vacances d'été ». Une seule
+     * vérité côté serveur — le front n'invente pas la règle (règle d'or frontend.md).
+     *
+     * Bornée : une HOLIDAY RACINE seulement (une fermeture n'est pas une vacance ; une
+     * semaine-enfant n'ancre rien — `isHolidayAnchor` = racine + schoolHolidayId). Sans zone,
+     * sans club en contexte, ou sans vacance chevauchante → pas de lien (NULL).
+     */
+    private function autoLinkedHolidayId(CalendarEntryInput $input): ?string
+    {
+        if (CalendarEntryPeriodType::HOLIDAY !== $this->parsePeriodType($input->periodType) || null !== $input->parentEntryId) {
+            return null;
+        }
+        if (null === $input->startDate || null === $input->endDate) {
+            return null;
+        }
+        $request = $this->requestStack->getCurrentRequest();
+        $clubId = $request?->attributes->get('_club_id') ?? $request?->headers->get('X-Club-Id');
+        if (!\is_string($clubId)) {
+            return null;
+        }
+        $zone = $this->entityManager->getRepository(Club::class)->find($clubId)?->getSchoolZone();
+        if (null === $zone || '' === $zone) {
+            return null;
+        }
+        $matches = $this->schoolHolidayRepository->findByZoneAndWindow($zone, new DateTimeImmutable($input->startDate), new DateTimeImmutable($input->endDate));
+
+        return [] === $matches ? null : $matches[0]->getId();
     }
 
     private function parseKind(?string $value): CalendarEntryKind

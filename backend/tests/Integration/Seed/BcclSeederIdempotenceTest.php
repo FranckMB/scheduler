@@ -310,6 +310,53 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
     }
 
     /**
+     * Défaut 4 (doublon « Vacances d'été ») — la mère « Vacances d'été » est un ANCRAGE de
+     * vacances scolaires : elle porte `school_holiday_id` pointant la vacance « été » de la ZONE
+     * du club (dépt 69 → A), et sa fenêtre est celle de la vacance CLAMPÉE à la saison. Sans ce
+     * lien, le cockpit affichait DEUX « Vacances d'été » (feed scolaire + cette entrée).
+     *
+     * Les migrations créent la table de référence mais ne la peuplent pas en test : on garantit
+     * la ligne « été » que le seed doit rattacher. Idempotence : un second run garde le lien.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testSummerRepriseMotherCarriesSchoolHolidayLink(): void
+    {
+        // Donnée de référence globale (sans RLS) : la vacance d'été de la zone A recouvrant
+        // l'été 2026 (04/07 → 31/08), telle que le feed officiel la porte (année 2025-2026).
+        $this->connection->executeStatement(
+            'INSERT INTO school_holiday_period (id, created_at, zone, label, holiday_type, start_date, end_date, school_year) '
+            . 'VALUES (:id, now(), \'A\', \'Vacances d\'\'Été\', \'ete\', \'2026-07-04\', \'2026-08-31\', \'2025-2026\') '
+            . 'ON CONFLICT (zone, holiday_type, school_year) DO UPDATE SET start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date',
+            ['id' => '11111111-1111-4111-8111-111111111111'],
+        );
+        $holidayId = (string) $this->connection->fetchOne(
+            'SELECT id FROM school_holiday_period WHERE zone = \'A\' AND holiday_type = \'ete\' AND school_year = \'2025-2026\'',
+        );
+
+        $club = $this->seeder->run($this->em, BcclSeedProfile::dev());
+
+        $mother = $this->connection->fetchAssociative(
+            'SELECT school_holiday_id, to_char(start_date, \'YYYY-MM-DD\') AS s, to_char(end_date, \'YYYY-MM-DD\') AS e '
+            . 'FROM calendar_entry WHERE club_id = ? AND parent_entry_id IS NULL AND title = ?',
+            [$club->getId(), 'Vacances d\'été'],
+        );
+        self::assertNotFalse($mother, 'la mère « Vacances d\'été » existe');
+        self::assertSame($holidayId, (string) $mother['school_holiday_id'], 'la mère porte le lien vers la vacance scolaire été de sa zone');
+        // Fenêtre = celle de la vacance (04/07→31/08) CLAMPÉE à la saison (début 15/07).
+        self::assertSame('2026-07-15', (string) $mother['s'], 'début clampé au début de saison');
+        self::assertSame('2026-08-31', (string) $mother['e'], 'fin = fin des vacances (dans la saison)');
+
+        // Idempotence : un second run garde le lien (find-or-create, aucun doublon).
+        $this->seeder->run($this->em, BcclSeedProfile::dev());
+        $secondLink = (string) $this->connection->fetchOne(
+            'SELECT school_holiday_id FROM calendar_entry WHERE club_id = ? AND parent_entry_id IS NULL AND title = ?',
+            [$club->getId(), 'Vacances d\'été'],
+        );
+        self::assertSame($holidayId, $secondLink, 'un second seed garde le lien');
+    }
+
+    /**
      * NR (P5-13) — LES SEMAINES DE REPRISE TRANSCRITES RESPECTENT LES RÈGLES DURES D'ÉQUIPE
      * QU'ELLES N'ONT PAS DÉCOCHÉES.
      *
