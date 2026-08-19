@@ -6,7 +6,7 @@ import type { EntryConflictsResponse, SchedulePlan } from "@/features/cockpit/ap
 import { useToastStore } from "@/shared/stores/toastStore";
 import { renderWithProviders } from "@/test/utils";
 
-import { EngineTimeoutError, EngineVerificationInterruptedError, getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError } from "./api";
+import { EngineTimeoutError, EngineVerificationInterruptedError, getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError, validateSchedule } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -919,7 +919,7 @@ describe("PlanningPage (integration)", () => {
     });
   });
 
-  it("« Valider » → lands on the planning view", async () => {
+  it("« Valider » RESTE sur l'écran embarqué — aucune navigation (l'accusé est la toolbar qui bascule)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<PlanningPage embedded />); // Option A : Valider vit dans le wizard (embedded)
     await screen.findByText("U11");
@@ -927,7 +927,10 @@ describe("PlanningPage (integration)", () => {
     // Toolbar "Valider" opens the confirm dialog; confirm inside it.
     await user.click(screen.getByRole("button", { name: /valider/i }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Valider" }));
-    expect(navigate).toHaveBeenCalledWith("/planning");
+    // 2026-08-19 : le succès ne navigue PLUS vers /planning (écran muet en
+    // option A) — on reste, la toolbar bascule sur « Rouvrir » (journey e2e).
+    await waitFor(() => expect(vi.mocked(validateSchedule)).toHaveBeenCalled());
+    expect(navigate).not.toHaveBeenCalledWith("/planning");
   });
 
   // F2b — retouche du rail : le geste PARLE (toast + surlignage du conflit) et déverrouiller
