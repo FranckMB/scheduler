@@ -1,4 +1,4 @@
-Last verified @ 2026-08-18 (JSON **régénéré** — indisponibilité de gymnase informative : `VenuePeriodOverride` gagne `dayOverrides`) ; précédemment : 2026-08-18 (JSON **régénéré** — la 4ᵉ route `deletion-impact`, celle du créneau, entre au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — suppression sûre : les 3 routes `deletion-impact` entrent au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — bien-être PAR PÉRIODE, PR1 backend : `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId`)
+Last verified @ 2026-08-18 (JSON **régénéré** — indisponibilité de gymnase informative : `VenuePeriodOverride` gagne `dayOverrides`) — *(historique des passes retiré le 2026-08-19, audit DOC-33 : 3 entrées empilées. Un stamp REMPLACE, il ne s'empile pas ; l'historique vit dans git : `git log -p --follow specs/courantes/openapi-snapshot.meta.md`)*
 
 Changements récents :
 - **Indisponibilité de gymnase informative — PR1 backend (2026-08-18)** : `VenuePeriodOverride`
