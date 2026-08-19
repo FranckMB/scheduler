@@ -41,11 +41,17 @@ reinstall: .env ## Force reinstall dependencies
 	rm -f .installed
 	$(MAKE) .installed
 
-build: .env ## Build all Docker images
+# `docker compose build` seul ne RECRÉE pas les conteneurs vivants : ils continuent
+# de servir l'ancienne image (piège vécu le 2026-08-18 — :8081 servait un dist périmé
+# malgré un build frais). D'où le `up -d` qui suit : les services dont l'image a
+# changé sont recréés, les autres ne bougent pas.
+build: .env ## Build all Docker images AND recreate the running containers on them
 	$(DOCKER_COMPOSE) build
+	$(DOCKER_COMPOSE) up -d
 
-rebuild: .env ## Rebuild all Docker images without cache
+rebuild: .env ## Rebuild all Docker images without cache AND recreate the containers
 	$(DOCKER_COMPOSE) build --no-cache
+	$(DOCKER_COMPOSE) up -d
 
 status: .env ## Show Docker services status
 	$(DOCKER_COMPOSE) ps
