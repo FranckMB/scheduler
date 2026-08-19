@@ -1,6 +1,6 @@
 # Project Map — Amateo (engine + backend)
 
-Last verified @ 2026-08-18 (recalé ce jour : the period-owned-grid `VenuePeriodOverride` paragraph now
+Last verified @ 2026-08-19 (**rotation de fraîcheur** — UNE affirmation FAUSSE : la landing était donnée « en prod : vhost nginx dédié », alors qu'elle est servie par **Caddy** sur la VM (`file_server`, cf. `docs/ops/Caddyfile.example` et `deploy.md` §1.5) ; les deux nginx du compose écoutent en 80 DERRIÈRE lui. ⚠ Dérive introduite par MA propre passe P5-5 : j'avais corrigé la ligne de roadmap et `deploy.md` sans grepper `project-map` — exactement la règle de cohérence inter-fichiers du skill, que j'ai enfreinte. Vérifiées vraies au passage : PHP >=8.4 et Symfony 7.4.* (`composer.json`), React 19 (`package.json`), Python 3.12 (`docker/engine/Dockerfile`), `tests/` et `contracts/` toujours des placeholders VIDES) ; précédemment : 2026-08-18 (recalé ce jour : the period-owned-grid `VenuePeriodOverride` paragraph now
 describes informative unavailability — `mode` is nullable, a new `dayOverrides` day mask composes
 with the incident-derived default in `PlanVenueClosures::effectiveStateForPlan/Entry`, and the
 morning's P2-37 reactivation lockout (422 on POST/PUT/DELETE) is superseded, accepted again
@@ -17,7 +17,9 @@ backend/   PHP 8.4 · Symfony 7.4 · API Platform 4.3 · Doctrine ORM 3.6 · Mes
 engine/    Python 3.12 · FastAPI · OR-Tools CP-SAT
 frontend/  TS · React 19 · Vite · TW4  (active: auth · planning work-loop · wizard)
 landing/   Page de vente publique — HTML/CSS statique PUR (zéro build, AUCUN lien avec frontend/) ;
-           marque + liens dans landing/config.js (une source) ; en prod : vhost nginx dédié (P5-5)
+           marque + liens dans landing/config.js (une source) ; en prod : servie par CADDY sur la VM
+           (`file_server`, docs/ops/Caddyfile.example) — PAS un vhost nginx : les deux nginx du compose
+           écoutent en 80 DERRIÈRE Caddy, qui tient la TLS et aiguille par domaine (P5-5)
 specs/     Living specs (initiales / courantes / evolution) — see specs/README.md
 docs/      This documentation set + docs/technique/
 docker/    Per-service Dockerfiles (php, frontend, pdf-worker, postgres, …) + edge nginx confs

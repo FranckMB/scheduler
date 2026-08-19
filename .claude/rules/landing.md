@@ -18,8 +18,11 @@ paths:
   et `config.js` est recalé dessus ; la règle du point unique reste, elle : c'est elle qui a rendu
   le renommage gratuit, et c'est elle qui rendra gratuit un changement de domaine.
   ⚠ `appUrl` s'écrit **sans slash final** — les CTA concatènent (`appUrl + "/register"`).
-- **Deux vhosts, une machine** : le domaine **nu** sert `landing/`, un **sous-domaine** sert l'app.
+- **Deux domaines, une machine** : le domaine **nu** sert `landing/`, un **sous-domaine** sert l'app.
   Un lien « Se connecter » vers l'app est donc un lien absolu inter-domaines, pas une route.
+  ⚠ Ce ne sont **pas des vhosts nginx** : c'est **Caddy**, sur la VM et hors compose, qui tient la TLS
+  et aiguille par domaine (`docs/ops/Caddyfile.example` — `file_server` pour la page, `reverse_proxy`
+  pour l'app). Les deux nginx du compose écoutent en 80 DERRIÈRE lui.
 - **Passe de design obligatoire** dès qu'on remanie l'apparence — c'est une page **publique** :
   agent `ui-ux-pro-max`, bornée à l'apparence, elle ne valide rien
   (`../../frontend/docs/frontend-strategy.md`, règle du 2026-08-11).
