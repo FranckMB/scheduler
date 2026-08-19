@@ -96,19 +96,26 @@ final class ImplicitRuleSettingRepository extends ServiceEntityRepository
             'clubId' => $clubId,
             'seasonId' => $seasonId,
             'planId' => $schedulePlanId,
-            'defaultIntensity' => ImplicitRuleIntensity::HARD->value,
         ];
+        // ⚑ P2-42 — le défaut est porté PAR CLÉ, plus par un paramètre unique. Avec un seul
+        // `:defaultIntensity` à HARD, la règle opt-in `maxConsecutiveDays` naissait ACTIVE sur
+        // chaque plan de période : le club ne l'avait pas demandée en saison, elle s'imposait
+        // quand même à ses vacances. Une règle qui s'allume toute seule est exactement ce que
+        // l'intensité OFF existe pour empêcher.
         foreach ($keys as $i => $key) {
-            $valuesPlaceholders[] = \sprintf('(:k%d)', $i);
+            $valuesPlaceholders[] = \sprintf('(:k%d, :d%d)', $i, $i);
             $params['k' . $i] = $key->value;
+            $params['d' . $i] = $key->isOptIn()
+                ? ImplicitRuleIntensity::OFF->value
+                : ImplicitRuleIntensity::HARD->value;
         }
 
         $this->getEntityManager()->getConnection()->executeStatement(
             'INSERT INTO implicit_rule_setting '
             . '(id, version, created_at, updated_at, club_id, season_id, schedule_plan_id, rule_key, intensity, params) '
             . 'SELECT gen_random_uuid(), 1, now(), now(), :clubId, :seasonId, :planId, k.rule_key, '
-            . 'COALESCE(s.intensity, :defaultIntensity), s.params '
-            . 'FROM (VALUES ' . implode(', ', $valuesPlaceholders) . ') AS k(rule_key) '
+            . 'COALESCE(s.intensity, k.default_intensity), s.params '
+            . 'FROM (VALUES ' . implode(', ', $valuesPlaceholders) . ') AS k(rule_key, default_intensity) '
             . 'LEFT JOIN implicit_rule_setting s '
             . 'ON s.club_id = :clubId AND s.season_id = :seasonId AND s.schedule_plan_id IS NULL AND s.rule_key = k.rule_key '
             . 'WHERE NOT EXISTS (SELECT 1 FROM implicit_rule_setting e WHERE e.schedule_plan_id = :planId)',

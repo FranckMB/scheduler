@@ -19,10 +19,10 @@ vi.mock("@/features/auth/queries", () => ({ useWorkingSeason: () => workingSeaso
 
 const RESOLVED = (over: Partial<Record<ImplicitRuleSetting["ruleKey"], Partial<ImplicitRuleSetting>>> = {}): ImplicitRuleSetting[] =>
   [
-    { ruleKey: "coachRestDay", intensity: "HARD", minRestDays: 1, maxConsecutive: null, isDefault: true },
-    { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
-    { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, isDefault: true },
-    { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+    { ruleKey: "coachRestDay", intensity: "HARD", minRestDays: 1, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
+    { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
+    { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, maxConsecutiveDays: null, isDefault: true },
+    { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
   ].map((s) => ({ ...s, ...over[s.ruleKey as ImplicitRuleSetting["ruleKey"]] }) as ImplicitRuleSetting);
 
 function renderPanel(ui: ReactElement) {
@@ -181,16 +181,16 @@ describe("ImplicitRulesPanel — atterrissage ciblé (ruleTarget)", () => {
  * lit la bonne couche (et que les deux caches ne se contaminent pas).
  */
 const SEASON = (): ImplicitRuleSetting[] => [
-  { ruleKey: "coachRestDay", intensity: "PREFERRED", minRestDays: 2, maxConsecutive: null, isDefault: true },
-  { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
-  { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, isDefault: true },
-  { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+  { ruleKey: "coachRestDay", intensity: "PREFERRED", minRestDays: 2, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
+  { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
+  { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, maxConsecutiveDays: null, isDefault: true },
+  { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
 ];
 const PERIOD = (): ImplicitRuleSetting[] => [
-  { ruleKey: "coachRestDay", intensity: "HARD", minRestDays: 4, maxConsecutive: null, isDefault: false },
-  { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
-  { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, isDefault: true },
-  { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+  { ruleKey: "coachRestDay", intensity: "HARD", minRestDays: 4, maxConsecutive: null, maxConsecutiveDays: null, isDefault: false },
+  { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
+  { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, maxConsecutiveDays: null, isDefault: true },
+  { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
 ];
 
 describe("ImplicitRulesPanel — portée par période", () => {

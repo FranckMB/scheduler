@@ -35,6 +35,7 @@ EXPECTED_WEIGHTS = {
     "salarie_violation": -6,
     "chain_violation": -6,
     "age_violation": -6,
+    "consecutive_days_violation": -6,
     # V10 — malus par séance sous le quota hebdomadaire.
     "missing_session": -1000,
 }
@@ -48,7 +49,7 @@ class LevelTwoObjectiveTest(unittest.TestCase):
 
     def test_fixed_weights_and_formula_version_are_locked(self):
         self.assertEqual(EXPECTED_WEIGHTS, dict(LEVEL_2_OBJECTIVE_WEIGHTS))
-        self.assertEqual("T24_LEVEL_2_FIXED_WEIGHTS_V10", SCORE_FORMULA_VERSION)
+        self.assertEqual("T24_LEVEL_2_FIXED_WEIGHTS_V11", SCORE_FORMULA_VERSION)
 
         with self.assertRaises(TypeError):
             LEVEL_2_OBJECTIVE_WEIGHTS["S"] = 1

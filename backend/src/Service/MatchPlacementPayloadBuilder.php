@@ -52,7 +52,7 @@ final class MatchPlacementPayloadBuilder
      * Elle DOIT valoir exactement la valeur du fichier — gardé par
      * `PayloadVersionMatchesContractVersionTest`.
      */
-    public const string CONTRACT_VERSION = '2.12';
+    public const string CONTRACT_VERSION = '2.13';
 
     public function __construct(
         private readonly EntityManagerInterface $entityManager,

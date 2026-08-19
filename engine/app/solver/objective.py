@@ -26,7 +26,11 @@ from .model import _format_time, _time_to_minutes
 AssignmentLike = Any
 BoolVarLike = Any
 
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V10"
+# V11 (P2-42) — la table gagne `consecutive_days_violation`. Le bump est OBLIGATOIRE même
+# si le nouveau terme est INERTE par défaut (la règle naît HARD, donc sans terme soft) :
+# garder V10 ferait désigner DEUX tables de poids différentes par un seul identifiant,
+# et cet identifiant ne sert qu'à ça. Cf. l'en-tête du module.
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V11"
 
 LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     {
@@ -92,6 +96,10 @@ LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
         "salarie_violation": -6,
         "chain_violation": -6,
         "age_violation": -6,
+        # P2-42 — « cette ÉQUIPE ne s'entraîne pas N jours d'affilée », réglée PREFERRED.
+        # Même masse que ses quatre sœurs : une règle de bien-être ne vaut pas plus qu'une
+        # autre, et à −6 elle ne peut pas rentabiliser la suppression d'une séance (≥ 21).
+        "consecutive_days_violation": -6,
         # V10 — malus PAR séance SOUS le quota hebdomadaire (une équipe à 1 sur 2 demandées
         # paie −1000 ; 2 manquantes = −2000). Construit dans build_schedule via
         # ``add_missing_session_penalty`` (patron overload_day), passé en soft_terms.
@@ -242,6 +250,7 @@ BONUS_WEIGHT_NAMES = (
     "salarie_violation",
     "chain_violation",
     "age_violation",
+    "consecutive_days_violation",
     # V10 — littéral « une séance de plus manque au quota », passé en soft_terms depuis
     # add_missing_session_penalty (jamais un bonus par assignment : aucun champ ne le porte).
     "missing_session",

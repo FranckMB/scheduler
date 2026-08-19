@@ -8,10 +8,13 @@ import type { Constraint, ImplicitRuleSetting, SharedTrainingGroup } from "../ap
 import { PRODUCT_RULES, WELLBEING_RULES } from "./ImplicitRulesPanel";
 
 const RESOLVED_IMPLICIT_RULES: ImplicitRuleSetting[] = [
-  { ruleKey: "coachRestDay", intensity: "HARD", minRestDays: 1, maxConsecutive: null, isDefault: true },
-  { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
-  { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, isDefault: true },
-  { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, isDefault: true },
+  { ruleKey: "coachRestDay", intensity: "HARD", minRestDays: 1, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
+  { ruleKey: "salarieDistribution", intensity: "HARD", minRestDays: null, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
+  { ruleKey: "maxConsecutiveSessions", intensity: "HARD", minRestDays: null, maxConsecutive: 3, maxConsecutiveDays: null, isDefault: true },
+  { ruleKey: "ageAscending", intensity: "HARD", minRestDays: null, maxConsecutive: null, maxConsecutiveDays: null, isDefault: true },
+  // P2-42 — la 5e règle est servie par l'API même NON RÉGLÉE, avec l'intensité OFF : sans
+  // cette ligne, l'écran ne la montrerait pas et le gestionnaire ne pourrait jamais l'activer.
+  { ruleKey: "maxConsecutiveDays", intensity: "OFF", minRestDays: null, maxConsecutive: null, maxConsecutiveDays: 3, isDefault: true },
 ];
 
 const h = vi.hoisted(() => ({
@@ -1051,7 +1054,17 @@ describe("ConstraintsStep — période : choisir, nommer, atteindre", () => {
     expect(minimum?.detail).toMatch(/cible/i);
 
     // Les 4 règles réglables, dans l'ordre du contrat moteur 2.7.
-    expect(WELLBEING_RULES.map((r) => r.ruleKey)).toEqual(["coachRestDay", "salarieDistribution", "maxConsecutiveSessions", "ageAscending"]);
+    expect(WELLBEING_RULES.map((r) => r.ruleKey)).toEqual([
+      "coachRestDay",
+      "salarieDistribution",
+      "maxConsecutiveSessions",
+      // P2-42 — la 5e, ajoutée DÉLIBÉRÉMENT à ce gel : elle affirme au gestionnaire qu'une
+      // équipe ne s'entraînera pas N jours de suite, et `test_consecutive_days.py` prouve
+      // côté moteur que c'est vrai. Le gel n'est pas là pour interdire l'ajout, il est là
+      // pour qu'aucun ajout ne passe SANS qu'on relise ce que le solveur fait vraiment.
+      "maxConsecutiveDays",
+      "ageAscending",
+    ]);
   });
 });
 

@@ -480,8 +480,10 @@ export const deleteConstraint = (id: string): Promise<void> => api.delete(`const
  * que le gestionnaire choisit ; les bornes de seuil et le couple règle↔seuil restent jugés par
  * le serveur (422). Voir `App\ApiResource\ImplicitRuleSettingResource`.
  */
-export type ImplicitRuleKey = "coachRestDay" | "salarieDistribution" | "maxConsecutiveSessions" | "ageAscending";
-export type ImplicitRuleIntensity = "HARD" | "PREFERRED";
+export type ImplicitRuleKey = "coachRestDay" | "salarieDistribution" | "maxConsecutiveSessions" | "ageAscending" | "maxConsecutiveDays";
+/** ⚠ `OFF` n'existe que pour les règles OPT-IN (P2-42) : la règle est proposée mais NON
+ *  appliquée tant que le club ne l'active pas. Les règles historiques n'ont que 2 crans. */
+export type ImplicitRuleIntensity = "HARD" | "PREFERRED" | "OFF";
 
 export interface ImplicitRuleSetting {
   ruleKey: ImplicitRuleKey;
@@ -490,6 +492,9 @@ export interface ImplicitRuleSetting {
   minRestDays: number | null;
   /** Plafond de créneaux consécutifs — non-null UNIQUEMENT pour maxConsecutiveSessions. */
   maxConsecutive: number | null;
+  /** Plafond de JOURS consécutifs — non-null UNIQUEMENT pour maxConsecutiveDays (à ne pas
+   *  confondre avec `maxConsecutive`, qui compte des CRÉNEAUX dans une journée). */
+  maxConsecutiveDays: number | null;
   /** true tant que la règle est au défaut (aucune ligne stockée) : pilote « Réinitialiser ». */
   isDefault: boolean;
 }
@@ -498,6 +503,7 @@ export interface ImplicitRuleSettingPayload {
   intensity: ImplicitRuleIntensity;
   minRestDays?: number;
   maxConsecutive?: number;
+  maxConsecutiveDays?: number;
   /**
    * ADR-0002 inv. 5 — la PORTÉE, lue du CORPS par le PUT : null/absent = saison ; un UUID = la
    * copie d'un plan de période. Le GET la lit en query, le DELETE aussi ; le PUT dans le corps.

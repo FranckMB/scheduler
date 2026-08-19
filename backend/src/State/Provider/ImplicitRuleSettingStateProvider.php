@@ -52,7 +52,9 @@ final class ImplicitRuleSettingStateProvider implements ProviderInterface
             foreach (ImplicitRuleKey::cases() as $ruleKey) {
                 $out[] = ImplicitRuleSettingResource::fromResolved(
                     $ruleKey,
-                    $resolved[$ruleKey->value],
+                    // Une règle opt-in non réglée n'est PAS dans le bloc résolu (elle ne part
+                    // pas au moteur) — mais elle doit rester visible et activable (P2-42).
+                    $resolved[$ruleKey->value] ?? ImplicitRuleResolver::inactiveEntry($ruleKey),
                     !isset($stored[$ruleKey->value]),
                 );
             }
@@ -67,7 +69,7 @@ final class ImplicitRuleSettingStateProvider implements ProviderInterface
 
         return ImplicitRuleSettingResource::fromResolved(
             $ruleKey,
-            $resolved[$ruleKey->value],
+            $resolved[$ruleKey->value] ?? ImplicitRuleResolver::inactiveEntry($ruleKey),
             !isset($stored[$ruleKey->value]),
         );
     }

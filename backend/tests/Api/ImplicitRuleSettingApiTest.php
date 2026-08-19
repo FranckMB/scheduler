@@ -32,7 +32,7 @@ final class ImplicitRuleSettingApiTest extends WebTestCase
 
     private EntityManagerInterface $em;
 
-    public function testCollectionAlwaysResolvesTheFourRulesWithDefaults(): void
+    public function testCollectionAlwaysResolvesTheFiveRulesWithDefaults(): void
     {
         [$user] = $this->seed();
 
@@ -41,12 +41,17 @@ final class ImplicitRuleSettingApiTest extends WebTestCase
 
         $rules = $this->members();
         self::assertSame(
-            ['ageAscending', 'coachRestDay', 'maxConsecutiveSessions', 'salarieDistribution'],
+            ['ageAscending', 'coachRestDay', 'maxConsecutiveDays', 'maxConsecutiveSessions', 'salarieDistribution'],
             $this->sortedKeys($rules),
-            'la collection résout TOUJOURS les 4 règles, défauts compris',
+            'la collection résout TOUJOURS les 5 règles, défauts compris',
         );
         foreach ($rules as $rule) {
-            self::assertSame('HARD', $rule['intensity'], 'sans réglage, tout est au défaut HARD');
+            // ⚑ P2-42 — la règle OPT-IN est SERVIE mais éteinte. Deux besoins opposés tenus
+            // ensemble : le payload moteur l'omet (donc elle ne s'applique pas), l'API la
+            // montre (donc le gestionnaire peut l'allumer). L'omettre ici la rendrait
+            // inaccessible : proposée nulle part, activable jamais.
+            $expected = 'maxConsecutiveDays' === $rule['ruleKey'] ? 'OFF' : 'HARD';
+            self::assertSame($expected, $rule['intensity'], 'sans réglage : HARD, sauf une opt-in qui naît OFF');
             self::assertTrue($rule['isDefault']);
         }
     }
@@ -163,7 +168,7 @@ final class ImplicitRuleSettingApiTest extends WebTestCase
 
         $this->client->request('GET', '/api/implicit_rule_settings?schedulePlanId=' . $planId, [], [], $auth);
         $rules = $this->members();
-        self::assertCount(4, $rules, 'la portée plan garde TOUJOURS ses 4 règles (invariant 4 lignes)');
+        self::assertCount(5, $rules, 'la portée plan garde TOUJOURS ses 4 règles (invariant 4 lignes)');
         $planRule = $this->member('coachRestDay');
         self::assertSame('PREFERRED', $planRule['intensity'], 'DELETE re-copie la valeur SAISON, pas le défaut moteur');
         self::assertSame(2, $planRule['minRestDays']);

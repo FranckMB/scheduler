@@ -72,7 +72,7 @@ Colonnes : le **front** l'émet-il ? · le **backend** le transmet/transforme-t-
 | **`maxEndTime`** (« Fini avant X h ») | ✅ « Fini avant » | passe | ✅ fenêtre dure (fin ≤ borne) | ✅ **aligné** *(ALIGN-04)* |
 | **`minAtVenueId`** + `minAtVenueCount` (« au moins N à ») | ✅ « au moins N » | passe (validation fail-fast) | ✅ plancher dur, fail-soft si inatteignable | ✅ **aligné** *(ALIGN-05)* |
 | **`spacing`** (espacer les jours) | *implicite* (aucune saisie) | — | ✅ malus soft jours consécutifs | ✅ **aligné** *(ALIGN-06, règle implicite)* |
-| **`max_consecutive_days`** (« pas 3 jours d'affilée », **dur**) | ❌ | ❌ | ❌ (seul le `spacing` soft existe) | 🔴 **angle mort triple** |
+| **`maxConsecutiveDays`** (« pas N jours d'affilée », **dur ou soft**) | ✅ panneau Bien-être (3 crans : Inactive / Objectif / Obligatoire) | passe dans `implicitRules` — **omis quand la règle est OFF** | ✅ contrainte dure ou malus −6 | ✅ **aligné** *(P2-42, 2026-08-19 — l'angle mort triple d'ALIGN-08 est fermé)* |
 
 ## 3. Synthèse — scissions & angles morts
 
