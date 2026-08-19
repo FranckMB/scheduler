@@ -1886,8 +1886,11 @@ final class BcclSeeder
      * délibérément NON seedés : on fige l'état « avant génération », pas ses essais.
      *
      * Tout est find-or-create / purge-recréation à chaque run (idempotent). La grille du plan est
-     * la COPIE de la grille de saison (Matéo compris) — contrairement aux reprises (section 12)
-     * qui reconstruisent une grille custom : ici la fermeture agit par l'ÉTAT EFFECTIF (la datée
+     * la COPIE de la grille de saison (Matéo compris) pour TOUS les gymnases SAUF JDR, dont la
+     * grille de plan est EXPLICITE — retouches réelles du gestionnaire figées le 2026-08-19
+     * (re-snapshot, pas une invention) : 18 créneaux réinsérés après la copie. Contrairement aux
+     * reprises (section 12) qui reconstruisent la grille de TOUS les gymnases : ici seul JDR est
+     * retouché ; la fermeture de Matéo agit par l'ÉTAT EFFECTIF (la datée
      * `venue_closed`), pas par la grille. La purge de VenueTrainingSlot par club/saison
      * (section « VENUE TRAINING SLOTS ») emporte la copie de plan et provisionPeriodPlan ne
      * re-copie qu'à la NAISSANCE : on re-matérialise donc la copie saison à chaque run (sinon la
@@ -1988,6 +1991,39 @@ final class BcclSeeder
         foreach ($venues as $venue) {
             $this->schedulePlanProvisioner->copySeasonalSlotsForVenue($planId, $venue->getId());
         }
+
+        // --- Sauf JDR : sa grille de plan est EXPLICITE (18 créneaux). Retouches réelles du
+        // gestionnaire (2026-08-19) — la copie de saison ne suffit plus pour JDR ; re-snapshot,
+        // pas une invention. On purge les copies JDR et on réinsère (idempotent : purge+réinsertion
+        // à chaque run, comme la section 12). [jour ISO, 'HH:MM', durée, capacity] :
+        //  - lun→ven (1-5) : 17:30 (90, cap 2) · 19:00 (90, cap 2) · 20:30 (120, cap 1) ;
+        //  - sam (6)       : 09:00 · 10:15 · 11:30 (75, cap 1). ---
+        $jdr = $venues['vJdr'];
+        foreach ($manager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $planId, 'venueId' => $jdr->getId()]) as $jdrPlanSlot) {
+            $manager->remove($jdrPlanSlot);
+        }
+        $manager->flush();
+        /** @var list<array{int, string, int, int}> $jdrGrid */
+        $jdrGrid = [[6, '09:00', 75, 1], [6, '10:15', 75, 1], [6, '11:30', 75, 1]];
+        foreach ([1, 2, 3, 4, 5] as $day) {
+            $jdrGrid[] = [$day, '17:30', 90, 2];
+            $jdrGrid[] = [$day, '19:00', 90, 2];
+            $jdrGrid[] = [$day, '20:30', 120, 1];
+        }
+        foreach ($jdrGrid as [$day, $start, $duration, $capacity]) {
+            $slot = new VenueTrainingSlot;
+            $slot->setClubId($clubId);
+            $slot->setSeasonId($season->getId());
+            $slot->setVenueId($jdr->getId());
+            $slot->setDayOfWeek($day);
+            $slot->setStartTime(new DateTimeImmutable($start));
+            $slot->setDurationMinutes($duration);
+            $slot->setCapacity($capacity);
+            $slot->setGroupLabel(null);
+            $slot->setSchedulePlanId($planId);
+            $manager->persist($slot);
+        }
+        $manager->flush();
 
         // --- Réglages EN COURS (find-or-create par (plan, équipe)) : 8 équipes actives à 2
         // séances/semaine, « Training Individuel » décochée. AUCUNE autre ligne. Le plan est
