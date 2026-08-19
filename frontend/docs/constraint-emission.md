@@ -1,5 +1,7 @@
 # Émission des contraintes (frontend) + alignement 3 couches
 
+Last verified @ 2026-08-19 (**premier stamp** — ce doc portait la table d'alignement 3 couches sans aucune date de vérification (audit DOC-31). Vérifié clé par clé aux TROIS couches : `minStartTime`, `maxEndTime`, `allowedDays`, `forbiddenDays`, `minAtVenueId`, `forcedVenueId` sont émises par `ConstraintsStep`, admises par la liste blanche de `ConstraintConfigValidator` et lues par `engine/app/solver/constraints.py` — aucune clé émise que le backend droppe, aucune clé validée que l'engine ignore.)
+
 > **But** : (1) lister ce que le **wizard émet** réellement, et (2) mettre les **3 couches côte à côte**
 > (frontend → backend → engine) pour repérer les **scissions** et les **angles morts** — les cas où
 > « ce que le front veut » n'est **pas** écrit par le backend ou **pas** compris par l'engine.

@@ -1,5 +1,7 @@
 # Vocabulaire des contraintes — ce que l'engine comprend
 
+Last verified @ 2026-08-19 (**premier stamp** — ce doc d'alignement n'en portait AUCUN, il était donc invérifiable par date alors qu'il se déclare « source de vérité » du vocabulaire moteur (audit DOC-31). Vérifié : les **dix familles** du tableau ont toutes leur implémentation dans `engine/app/solver/` — `VENUE_AT_MOST_ONE`, `TEAM_NO_OVERLAP`, `COACH_NO_OVERLAP`, `COACH_PLAYER_NO_OVERLAP`, `MIN_SESSIONS`, `COACH_REST_DAY`, `SALARIE_DISTRIBUTION`, `MAX_CONSECUTIVE_SESSIONS`, `ONE_SESSION_PER_DAY`, `AGE_ASCENDING` (fonctions `add_*_constraints`). ⚠ Fausse alerte évitée en vérifiant : un grep des libellés EN MAJUSCULES rend 0 pour cinq d'entre elles — le code les nomme en snake_case. Chercher la mauvaise forme et conclure au mensonge aurait été plus rapide que juste.)
+
 > **But** : lister **exhaustivement** tout le vocabulaire (familles + clés de `config`) que le
 > solveur CP-SAT (`engine/app/solver`) sait **parser et appliquer**. Source de vérité côté engine.
 > Chaque entrée donne le **mécanisme** (dur/soft), le **ruleType** qui l'active, et un **exemple BCCL**.

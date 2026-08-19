@@ -36,12 +36,28 @@ final class DocStampFreshnessTest extends TestCase
 {
     private const string ROOT = __DIR__ . '/../../../..';
 
-    /** Les documents dont la fraîcheur engage un agent qui les lit sans relire le code. */
+    /**
+     * Les documents dont la fraîcheur engage un agent qui les lit sans relire le code.
+     *
+     * ⚑ AUD-DOC-31 (2026-08-19) — les `<zone>/docs/` sont entrés ici APRÈS coup, et c'est la
+     * leçon : la migration doc du 2026-08-18 a sorti six documents de `specs/courantes/` vers
+     * leur zone, et ils ont quitté ce garde EN SILENCE. Dont `backend/docs/backend-inventory.md`,
+     * le récidiviste cinq fois de DOC-04 — la protection durement acquise contre lui s'était
+     * rétractée sur lui, sans que rien ne le dise. Déplacer un fichier peut le faire sortir
+     * d'un filet : le filet doit suivre.
+     *
+     * Des GLOBS de zone, et non une liste : un doc de zone créé demain est surveillé d'office.
+     * Les fichiers encore sans stamp sont exemptés NOMMÉMENT ci-dessous — visibles, comptés,
+     * et à résorber (P4-120), plutôt qu'invisibles.
+     */
     private const array WATCHED = [
         'specs/courantes/*.md',
         'specs/README.md',
         'docs/project-map.md',
         'docs/testing/testing-strategy.md',
+        'backend/docs/*.md',
+        'engine/docs/*.md',
+        'frontend/docs/*.md',
     ];
 
     /**
@@ -55,6 +71,25 @@ final class DocStampFreshnessTest extends TestCase
         'specs/courantes/etat-des-lieux.md' => 'journal de traces datées ligne par ligne',
         // Snapshot généré : sa fraîcheur se prouve par le snapshot lui-même, pas par une date.
         'specs/courantes/openapi-snapshot.json' => 'artefact généré, pas de la prose',
+        // ── Dette AUD-DOC-31 / P4-120 ────────────────────────────────────────────────────
+        // Ces docs de zone n'ont JAMAIS porté de stamp : ils ne vivaient pas dans
+        // `specs/courantes/`, donc la migration ne leur a rien retiré — ce n'est pas une
+        // régression, c'est un trou préexistant que l'élargissement du garde rend enfin
+        // VISIBLE. Chacun sort de cette liste le jour où quelqu'un le vérifie et le date :
+        // poser un stamp sans avoir vérifié serait précisément le mensonge que ce test
+        // traque. Aucune ligne ne s'AJOUTE ici — un doc de zone neuf naît avec son stamp.
+        'backend/docs/commands.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'backend/docs/constraint-config-keys.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'backend/docs/constraint-coverage.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'backend/docs/constraints.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'backend/docs/ffbb-api.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'backend/docs/generation-flow.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'backend/docs/RLS.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'backend/docs/schedule-generation-guide.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'backend/docs/TENANT.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'engine/docs/business.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'engine/docs/nominal-flow.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        'engine/docs/solver-errors.md' => 'jamais stampé (antérieur au garde) — P4-120',
     ];
 
     public function testEveryWatchedDocumentCarriesAStamp(): void
