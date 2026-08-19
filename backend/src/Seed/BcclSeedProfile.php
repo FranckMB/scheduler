@@ -65,10 +65,16 @@ final readonly class BcclSeedProfile
     ];
 
     /**
-     * @param list<array{firstName: string, lastName: string}>|null $coachNames             remplacement 1-à-1, null = noms du seed
-     * @param bool                                                  $transcribeRealSchedule P5-17 : à `true`, le plan SEASON pointe une
-     *                                                                                      version COMPLETED transcrivant le planning réel
-     *                                                                                      (dev SEULEMENT — la démo reste avant génération)
+     * @param list<array{firstName: string, lastName: string}>|null                             $coachNames             remplacement 1-à-1, null = noms du seed
+     * @param bool                                                                              $transcribeRealSchedule P5-17 : à `true`, le plan SEASON pointe une
+     *                                                                                                                  version COMPLETED transcrivant le planning réel
+     *                                                                                                                  (dev SEULEMENT — la démo reste avant génération)
+     * @param bool                                                                              $seedReprisePeriods     P5-13 : à `true`, le seed ajoute deux plans de
+     *                                                                                                                  reprise (17 et 24 août) sous une mère « Vacances
+     *                                                                                                                  d'été » (dev SEULEMENT)
+     * @param list<array{email: string, firstName: string, lastName: string, password: string}> $additionalManagers     gestionnaires (User + ClubUser admin) EN PLUS du
+     *                                                                                                                  gestionnaire principal — find-or-create par email,
+     *                                                                                                                  jamais écrasés (dev SEULEMENT ; [] ailleurs)
      */
     private function __construct(
         public string $clubName,
@@ -82,6 +88,8 @@ final readonly class BcclSeedProfile
         public bool $isDemo,
         public ?array $coachNames,
         public bool $transcribeRealSchedule,
+        public bool $seedReprisePeriods,
+        public array $additionalManagers,
     ) {}
 
     public static function dev(): self
@@ -98,6 +106,14 @@ final readonly class BcclSeedProfile
             isDemo: false,
             coachNames: null,
             transcribeRealSchedule: true,
+            // P5-13 — le club dev porte, EN PLUS du planning de saison, deux plans de reprise
+            // (17 et 24 août) et le compte gestionnaire Nicolas. Dev SEULEMENT.
+            seedReprisePeriods: true,
+            additionalManagers: [
+                // Mot de passe EN CLAIR, hashé au seed (patron du gestionnaire principal
+                // ci-dessus). Find-or-create par email, jamais écrasé s'il existe déjà.
+                ['email' => 'nicolas.barilleau@bccl.fr', 'firstName' => 'Nicolas', 'lastName' => 'Barilleau', 'password' => 'NicolasB'],
+            ],
         );
     }
 
@@ -133,6 +149,9 @@ final readonly class BcclSeedProfile
             coachNames: self::FICTIONAL_COACHES,
             // Charge à jeter : on mesure la GÉNÉRATION, pas un planning pré-transcrit.
             transcribeRealSchedule: false,
+            // Ni plans de reprise ni gestionnaire additionnel : c'est un club de charge.
+            seedReprisePeriods: false,
+            additionalManagers: [],
         );
     }
 
@@ -155,6 +174,9 @@ final readonly class BcclSeedProfile
             // La démo reste « avant première génération » : l'écran de démonstration part
             // sur le wizard/Récap, sans planning pré-pointé.
             transcribeRealSchedule: false,
+            // La démo ne porte ni plan de période ni compte Nicolas (dev SEULEMENT).
+            seedReprisePeriods: false,
+            additionalManagers: [],
         );
     }
 }

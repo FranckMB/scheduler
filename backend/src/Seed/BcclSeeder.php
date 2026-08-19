@@ -4,27 +4,36 @@ declare(strict_types=1);
 
 namespace App\Seed;
 
+use App\Entity\CalendarEntry;
 use App\Entity\Club;
 use App\Entity\ClubUser;
 use App\Entity\Coach;
 use App\Entity\CoachPlayerMembership;
 use App\Entity\Constraint;
+use App\Entity\ConstraintPeriodOverride;
 use App\Entity\ImplicitRuleSetting;
 use App\Entity\PriorityTier;
 use App\Entity\Reservation;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Entity\Season;
+use App\Entity\SharedTrainingGroup;
+use App\Entity\SharedTrainingGroupTeam;
 use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\SubscriptionPlan;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\User;
 use App\Entity\Venue;
+use App\Entity\VenuePeriodOverride;
 use App\Entity\VenueTrainingSlot;
+use App\Enum\CalendarEntryKind;
+use App\Enum\CalendarEntryPeriodType;
+use App\Enum\CalendarEntryStatus;
 use App\Enum\ConstraintFamily;
 use App\Enum\ConstraintRuleType;
 use App\Enum\ConstraintScope;
@@ -37,6 +46,7 @@ use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
+use App\Enum\VenuePeriodMode;
 use App\Service\Basketball\CategoryCatalog;
 use App\Service\LeagueResolver;
 use App\Service\ScheduleConstraintBuilder;
@@ -299,6 +309,10 @@ final class BcclSeeder
             $manager->persist($clubUser);
         }
         $manager->flush();
+
+        // P5-13 — gestionnaires ADDITIONNELS du profil (Nicolas en dev). Find-or-create par
+        // email, jamais écrasés : même patron que le gestionnaire principal ci-dessus.
+        $this->seedAdditionalManagers($manager, $club, $profile);
 
         // ============================================================
         // SECTION 2 — VENUES
@@ -1248,7 +1262,27 @@ final class BcclSeeder
             $this->pointSeasonPlanAtRealSchedule($manager, $season, $clubId, $teams, $venues, $additionalSlots);
         }
 
+        // ============================================================
+        // SECTION 12 — PLANS DE REPRISE (P5-13, profil dev)
+        // ============================================================
+        // Placée APRÈS la transcription de saison (le socle est pointé d'abord) : deux plans
+        // de PÉRIODE (semaines 17 et 24 août) sous une mère « Vacances d'été » sans plan,
+        // chacun né avec son plan, sa grille reconstruite, ses overrides et sa version pointée.
+        if ($profile->seedReprisePeriods) {
+            $this->seedReprisePeriods($manager, $club, $season, $clubId, $teams, $venues);
+        }
+
         return $club;
+    }
+
+    /**
+     * Clé de placement d'un créneau (équipe:gymnase:jour:HH:MM) — même identité que
+     * l'importer ({@see App\Service\ScheduleResultImporter::placementKey}), pour dériver
+     * les verrous. Partagée par la transcription de saison (section 11) et les reprises (P5-13).
+     */
+    private function placementKey(string $teamId, string $venueId, int $day, string $start): string
+    {
+        return \sprintf('%s:%s:%d:%s', $teamId, $venueId, $day, substr($start, 0, 5));
     }
 
     /**
@@ -1272,7 +1306,8 @@ final class BcclSeeder
     ): void {
         // Clé de placement d'un créneau (équipe:gymnase:jour:HH:MM) — même identité que
         // l'importer (ScheduleResultImporter::placementKey), pour dériver les verrous.
-        $placementKey = static fn (string $teamId, string $venueId, int $day, string $start): string => \sprintf('%s:%s:%d:%s', $teamId, $venueId, $day, substr($start, 0, 5));
+        // Méthode partagée avec la section reprises (P5-13), promue en callable de première classe.
+        $placementKey = $this->placementKey(...);
 
         // Placements des RÉSERVATIONS seedées : un créneau transcrit qui coïncide porte un
         // verrou HARD/RESERVATION (exactement ce qu'un import de résultat solveur produit) ;
@@ -1450,6 +1485,522 @@ final class BcclSeeder
         $schedule->setConstraintsChangedSinceGeneration(false);
         $schedule->setResourcesChangedSinceGeneration(false);
         $manager->flush();
+    }
+
+    /**
+     * P5-13 — gestionnaires ADDITIONNELS d'un profil (Nicolas en dev) : chacun un couple
+     * User (email vérifié, mot de passe hashé au seed) + ClubUser admin actif. Find-or-create
+     * par email — un compte déjà présent n'est JAMAIS écrasé (mot de passe, nom conservés),
+     * exactement comme le gestionnaire principal. `[]` (démo/charge) = no-op.
+     */
+    private function seedAdditionalManagers(EntityManagerInterface $manager, Club $club, BcclSeedProfile $profile): void
+    {
+        foreach ($profile->additionalManagers as $spec) {
+            $existingUser = $manager->getRepository(User::class)->findOneBy(['email' => $spec['email']]);
+            if ($existingUser instanceof User) {
+                $user = $existingUser;
+            } else {
+                $user = new User;
+                $user->setEmail($spec['email']);
+                $user->setFirstName($spec['firstName']);
+                $user->setLastName($spec['lastName']);
+                // Pré-vérifié (la porte de login rejette emailVerifiedAt null), mot de passe
+                // en clair hashé ici — patron exact du gestionnaire principal.
+                $user->setEmailVerifiedAt(new DateTimeImmutable);
+                $user->setPasswordHash($this->passwordHasher->hashPassword($user, $spec['password']));
+                $manager->persist($user);
+                $manager->flush();
+            }
+
+            $existingClubUser = $manager->getRepository(ClubUser::class)->findOneBy([
+                'clubId' => $club->getId(),
+                'userId' => $user->getId(),
+            ]);
+            if (null === $existingClubUser) {
+                $clubUser = new ClubUser;
+                $clubUser->setClubId($club->getId());
+                $clubUser->setUserId($user->getId());
+                $clubUser->setRole('admin');
+                $clubUser->setIsActive(true);
+                $manager->persist($clubUser);
+                $manager->flush();
+            }
+        }
+    }
+
+    /**
+     * P5-13 — les deux plans de REPRISE (dev) : une mère « Vacances d'été » (entrée racine
+     * PERIOD/holiday SANS plan, fenêtre du référentiel clampée à la saison) + deux
+     * entrées-semaines sœurs, chacune née avec SON plan. Tout est find-or-create / reconstruit
+     * à chaque run (idempotent). Décisions fondateur 2026-08-19.
+     *
+     * @param array<string, Team>  $teams
+     * @param array<string, Venue> $venues
+     */
+    private function seedReprisePeriods(EntityManagerInterface $manager, Club $club, Season $season, string $clubId, array $teams, array $venues): void
+    {
+        // Fenêtre de la mère : les vacances d'été, clampées à la saison (jamais hors de ses
+        // bornes). La mère est une entrée RACINE sans plan — la garde d'unicité de fenêtre ne
+        // la voit pas (elle ne joint que les entrées PORTANT un plan), et ses deux semaines
+        // partagent sa racine, donc ne se heurtent ni à elle ni entre elles.
+        $summerStart = new DateTimeImmutable('2026-07-15');
+        $summerEnd = new DateTimeImmutable('2026-08-31');
+        $motherStart = $season->getStartDate() > $summerStart ? $season->getStartDate() : $summerStart;
+        $motherEnd = $season->getEndDate() < $summerEnd ? $season->getEndDate() : $summerEnd;
+
+        $mother = $manager->getRepository(CalendarEntry::class)->findOneBy([
+            'clubId' => $clubId,
+            'seasonId' => $season->getId(),
+            'title' => 'Vacances d\'été',
+            'parentEntryId' => null,
+        ]);
+        if (!$mother instanceof CalendarEntry) {
+            $mother = new CalendarEntry;
+            $mother->setClubId($clubId);
+            $mother->setSeasonId($season->getId());
+            $mother->setKind(CalendarEntryKind::PERIOD);
+            $mother->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
+            $mother->setTitle('Vacances d\'été');
+            $mother->setStartDate($motherStart);
+            $mother->setEndDate($motherEnd);
+            $mother->setStatus(CalendarEntryStatus::ACTIVE);
+            $manager->persist($mother);
+            $manager->flush();
+        }
+
+        foreach ($this->repriseWeeks() as $week) {
+            $this->seedRepriseWeek($manager, $season, $clubId, $teams, $venues, $mother->getId(), $week);
+        }
+    }
+
+    /**
+     * Une semaine de reprise : entrée-enfant + plan (renommé), grille du plan reconstruite,
+     * overrides gymnase/équipe/contrainte, groupes de mutualisation, réservations, puis la
+     * version transcrite pointée (validée). Tout idempotent.
+     *
+     * @param array<string, Team>                                                                                                                                                                                                               $teams
+     * @param array<string, Venue>                                                                                                                                                                                                              $venues
+     * @param array{title: string, monday: string, sunday: string, activeVenues: list<string>, sessions: list<array{string, string, int, string, int}>, groups: list<array{teams: list<string>, k: int}>, deactivatedConstraints: list<string>} $week
+     */
+    private function seedRepriseWeek(EntityManagerInterface $manager, Season $season, string $clubId, array $teams, array $venues, string $motherId, array $week): void
+    {
+        $monday = new DateTimeImmutable($week['monday']);
+        $sunday = new DateTimeImmutable($week['sunday']);
+
+        // --- Entrée-enfant (semaine), née de la mère ---
+        $child = $manager->getRepository(CalendarEntry::class)->findOneBy([
+            'clubId' => $clubId,
+            'parentEntryId' => $motherId,
+            'startDate' => $monday,
+        ]);
+        if (!$child instanceof CalendarEntry) {
+            $child = new CalendarEntry;
+            $child->setClubId($clubId);
+            $child->setSeasonId($season->getId());
+            $child->setKind(CalendarEntryKind::PERIOD);
+            $child->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
+            $child->setTitle($week['title']);
+            $child->setStartDate($monday);
+            $child->setEndDate($sunday);
+            $child->setParentEntryId($motherId);
+            $child->setStatus(CalendarEntryStatus::ACTIVE);
+            $manager->persist($child);
+            $manager->flush();
+        }
+
+        // --- Plan de la semaine (naissance seule : copie la grille de saison + les 4 règles
+        // bien-être, ancre les réglages) puis renommage post-naissance (inv. 12). ---
+        $planId = $this->schedulePlanProvisioner->provisionPeriodPlan($child->getId());
+        if (null === $planId) {
+            throw new RuntimeException(\sprintf('La semaine de reprise « %s » (holiday) n\'a pas reçu de plan.', $week['title']));
+        }
+        // Renommage compare-and-set : idempotent (no-op au 2e run), esquive le season_filter.
+        $manager->getConnection()->executeStatement(
+            'UPDATE schedule_plan SET name = :name, updated_at = now(), version = version + 1 WHERE id = :id AND name <> :name',
+            ['name' => $week['title'], 'id' => $planId],
+        );
+
+        // --- Grille du plan RECONSTRUITE À CHAQUE RUN. La purge des VenueTrainingSlot par
+        // club/saison (section « VENUE TRAINING SLOTS ») emporte les copies de plan, et
+        // provisionPeriodPlan ne re-copie qu'à la NAISSANCE : sans reconstruction, la grille
+        // serait vide (2e run) ou aux horaires de saison (1er run). On purge la grille du plan
+        // et on insère celle de la semaine — capacity = nombre de séances sur le créneau (2 sur
+        // un créneau mutualisé). ---
+        foreach ($manager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $planId]) as $planSlot) {
+            $manager->remove($planSlot);
+        }
+        $manager->flush();
+        /** @var array<string, array{venue: string, day: int, start: string, duration: int, capacity: int}> $gridSlots */
+        $gridSlots = [];
+        foreach ($week['sessions'] as [$teamName, $venueVar, $day, $start, $duration]) {
+            $key = $venueVar . '|' . $day . '|' . $start;
+            if (!isset($gridSlots[$key])) {
+                $gridSlots[$key] = ['venue' => $venueVar, 'day' => $day, 'start' => $start, 'duration' => $duration, 'capacity' => 0];
+            }
+            ++$gridSlots[$key]['capacity'];
+        }
+        foreach ($gridSlots as $gridSlot) {
+            $slot = new VenueTrainingSlot;
+            $slot->setClubId($clubId);
+            $slot->setSeasonId($season->getId());
+            $slot->setVenueId($venues[$gridSlot['venue']]->getId());
+            $slot->setDayOfWeek($gridSlot['day']);
+            $slot->setStartTime(new DateTimeImmutable($gridSlot['start']));
+            $slot->setDurationMinutes($gridSlot['duration']);
+            $slot->setCapacity($gridSlot['capacity']);
+            $slot->setGroupLabel(null);
+            $slot->setSchedulePlanId($planId);
+            $manager->persist($slot);
+        }
+        $manager->flush();
+
+        // --- Gymnases hors semaine : VenuePeriodOverride mode=DISABLED (find-or-create). ---
+        foreach ($venues as $venueVar => $venue) {
+            if (\in_array($venueVar, $week['activeVenues'], true)) {
+                continue;
+            }
+            $override = $manager->getRepository(VenuePeriodOverride::class)->findOneBy([
+                'schedulePlanId' => $planId,
+                'venueId' => $venue->getId(),
+            ]);
+            if (!$override instanceof VenuePeriodOverride) {
+                $override = new VenuePeriodOverride;
+                $override->setClubId($clubId);
+                $override->setSeasonId($season->getId());
+                $override->setSchedulePlanId($planId);
+                $override->setVenueId($venue->getId());
+                $manager->persist($override);
+            }
+            $override->setMode(VenuePeriodMode::DISABLED);
+        }
+        $manager->flush();
+
+        // --- Équipes : hors semaine → isActive=false ; en semaine → isActive=true +
+        // sessionsPerWeek recalé (find-or-create). Puis le plan est marqué « sélection
+        // d'équipes initialisée » pour que le wizard ne re-seede pas son défaut. ---
+        $sessionsPerTeam = [];
+        foreach ($week['sessions'] as [$teamName]) {
+            $sessionsPerTeam[$teamName] = ($sessionsPerTeam[$teamName] ?? 0) + 1;
+        }
+        foreach ($teams as $teamName => $team) {
+            $isActive = isset($sessionsPerTeam[$teamName]);
+            $teamOverride = $manager->getRepository(TeamPeriodOverride::class)->findOneBy([
+                'schedulePlanId' => $planId,
+                'teamId' => $team->getId(),
+            ]);
+            if (!$teamOverride instanceof TeamPeriodOverride) {
+                $teamOverride = new TeamPeriodOverride;
+                $teamOverride->setClubId($clubId);
+                $teamOverride->setSeasonId($season->getId());
+                $teamOverride->setSchedulePlanId($planId);
+                $teamOverride->setTeamId($team->getId());
+                $manager->persist($teamOverride);
+            }
+            $teamOverride->setIsActive($isActive);
+            $teamOverride->setSessionsPerWeek($isActive ? $sessionsPerTeam[$teamName] : null);
+        }
+        $manager->flush();
+        $this->schedulePlanProvisioner->markPlanTeamSelectionInitialized($planId);
+
+        // --- Mutualisation : groupes {équipes, K} ANCRÉS au plan. Purge + recréation (les
+        // membres n'ont pas de clé naturelle par-composition, purger est le plus sûr). ---
+        foreach ($manager->getRepository(SharedTrainingGroup::class)->findBy(['schedulePlanId' => $planId]) as $existingGroup) {
+            foreach ($manager->getRepository(SharedTrainingGroupTeam::class)->findBy(['groupId' => $existingGroup->getId()]) as $existingMember) {
+                $manager->remove($existingMember);
+            }
+            $manager->remove($existingGroup);
+        }
+        $manager->flush();
+        foreach ($week['groups'] as $group) {
+            $sharedGroup = new SharedTrainingGroup;
+            $sharedGroup->setClubId($clubId);
+            $sharedGroup->setSeasonId($season->getId());
+            $sharedGroup->setSchedulePlanId($planId);
+            $sharedGroup->setCommonSessions($group['k']);
+            $manager->persist($sharedGroup);
+            foreach ($group['teams'] as $teamName) {
+                $member = new SharedTrainingGroupTeam;
+                $member->setClubId($clubId);
+                $member->setSeasonId($season->getId());
+                $member->setSchedulePlanId($planId);
+                $member->setGroupId($sharedGroup->getId());
+                $member->setTeamId($teams[$teamName]->getId());
+                $manager->persist($member);
+            }
+        }
+        $manager->flush();
+
+        // --- Contraintes de saison contredites par le réel de la semaine : décochées PAR PLAN
+        // (ConstraintPeriodOverride isActive=false ; la saison reste intacte). Le nom fait la
+        // clé — une contrainte introuvable LÈVE (un décochage qui ne vise rien serait muet). ---
+        foreach ($week['deactivatedConstraints'] as $constraintName) {
+            $constraint = $manager->getRepository(Constraint::class)->findOneBy(['clubId' => $clubId, 'name' => $constraintName]);
+            if (!$constraint instanceof Constraint) {
+                throw new RuntimeException(\sprintf('Reprise « %s » : contrainte de saison « %s » introuvable (renommée ?) — le décochage ne vise rien.', $week['title'], $constraintName));
+            }
+            $constraintOverride = $manager->getRepository(ConstraintPeriodOverride::class)->findOneBy([
+                'schedulePlanId' => $planId,
+                'constraintId' => $constraint->getId(),
+            ]);
+            if (!$constraintOverride instanceof ConstraintPeriodOverride) {
+                $constraintOverride = new ConstraintPeriodOverride;
+                $constraintOverride->setClubId($clubId);
+                $constraintOverride->setSeasonId($season->getId());
+                $constraintOverride->setSchedulePlanId($planId);
+                $constraintOverride->setConstraintId($constraint->getId());
+                $manager->persist($constraintOverride);
+            }
+            $constraintOverride->setIsActive(false);
+        }
+        $manager->flush();
+
+        // --- Réservations : une par séance-équipe, clé PORTANT le schedulePlanId (une réservation
+        // de base, plan NULL, ne doit pas être confondue avec celle d'une reprise). ---
+        foreach ($week['sessions'] as [$teamName, $venueVar, $day, $start, $duration]) {
+            $startTime = new DateTimeImmutable($start);
+            $existing = $manager->getRepository(Reservation::class)->findOneBy([
+                'schedulePlanId' => $planId,
+                'teamId' => $teams[$teamName]->getId(),
+                'venueId' => $venues[$venueVar]->getId(),
+                'dayOfWeek' => $day,
+                'startTime' => $startTime,
+            ]);
+            if (!$existing instanceof Reservation) {
+                $reservation = new Reservation;
+                $reservation->setClubId($clubId);
+                $reservation->setSeasonId($season->getId());
+                $reservation->setSchedulePlanId($planId);
+                $reservation->setTeamId($teams[$teamName]->getId());
+                $reservation->setVenueId($venues[$venueVar]->getId());
+                $reservation->setDayOfWeek($day);
+                $reservation->setStartTime($startTime);
+                $reservation->setDurationMinutes($duration);
+                $manager->persist($reservation);
+            }
+        }
+        $manager->flush();
+
+        // --- Version transcrite + validation (pointeur). ---
+        $this->pointPeriodPlanAtReprise($manager, $season, $clubId, $planId, $child, $week['sessions'], $teams, $venues);
+    }
+
+    /**
+     * Le plan de PÉRIODE pointe une version COMPLETED transcrivant la semaine de reprise,
+     * sans solveur — miroir période de {@see pointSeasonPlanAtRealSchedule}. Snapshot par
+     * {@see ScheduleConstraintBuilder::buildForPeriodPlan} (overrides du plan compris), verrous
+     * dérivés des réservations (toutes coïncident ⇒ HARD/RESERVATION), 3 marqueurs de péremption
+     * remis à zéro. Idempotent (find-or-create de la version par plan+provenance ; les créneaux
+     * de la version sont réinsérés après la purge club/saison de la section slot-templates).
+     *
+     * @param list<array{string, string, int, string, int}> $sessions
+     * @param array<string, Team>                           $teams
+     * @param array<string, Venue>                          $venues
+     */
+    private function pointPeriodPlanAtReprise(EntityManagerInterface $manager, Season $season, string $clubId, string $planId, CalendarEntry $child, array $sessions, array $teams, array $venues): void
+    {
+        // Réservations DE CE PLAN → clés de placement (dérivation des verrous, comme l'import).
+        $reservationPlacements = [];
+        foreach ($manager->getRepository(Reservation::class)->findBy(['schedulePlanId' => $planId]) as $reservation) {
+            $reservationPlacements[$this->placementKey($reservation->getTeamId(), $reservation->getVenueId(), $reservation->getDayOfWeek(), $reservation->getStartTime()->format('H:i'))] = true;
+        }
+
+        // Find-or-create de la version transcrite : clé (plan, provenance).
+        $schedule = $manager->getRepository(Schedule::class)->findOneBy([
+            'schedulePlanId' => $planId,
+            'solverVersion' => self::SEED_TRANSCRIPTION_MARKER,
+        ]);
+        if (!$schedule instanceof Schedule) {
+            $schedule = new Schedule;
+            $schedule->setClubId($clubId);
+            $schedule->setSeasonId($season->getId());
+            $schedule->setSchedulePlanId($planId);
+            $schedule->setName($this->schedulePlanProvisioner->versionNameFor($planId));
+            $schedule->setStatus(ScheduleStatus::COMPLETED);
+            $schedule->setSolverVersion(self::SEED_TRANSCRIPTION_MARKER);
+            $manager->persist($schedule);
+            $this->schedulePlanProvisioner->linkSchedule($schedule);
+        }
+
+        // Snapshot = la structure COURANTE du plan de période (scheduleId null = pré-génération,
+        // les Reservation portées par le plan tiennent lieu de verrous durables) : « Régénérer »
+        // honnêtement grisé, tant que rien n'a bougé.
+        $payload = $this->constraintBuilder->buildForPeriodPlan($clubId, $season->getId(), $planId, $child);
+        $schedule->setSnapshotData($payload);
+        $schedule->setSnapshotHash(hash('sha256', json_encode($payload, \JSON_THROW_ON_ERROR)));
+        $schedule->setStatus(ScheduleStatus::COMPLETED);
+        $manager->flush();
+
+        // VALIDER = POINTER : le plan de période nomme cette version sa choisie.
+        $this->schedulePlanProvisioner->choose($schedule);
+
+        // Créneaux de la version : coachId null ; verrou dérivé des réservations (toutes les
+        // séances de reprise en portent une ⇒ HARD/RESERVATION). La purge club/saison de la
+        // section slot-templates a déjà vidé les créneaux : réinsertion franche, idempotente.
+        foreach ($sessions as [$teamName, $venueVar, $day, $start, $duration]) {
+            $team = $teams[$teamName];
+            $venueId = $venues[$venueVar]->getId();
+            $isReserved = isset($reservationPlacements[$this->placementKey($team->getId(), $venueId, $day, $start)]);
+
+            $slot = new ScheduleSlotTemplate;
+            $slot->setClubId($clubId);
+            $slot->setSeasonId($season->getId());
+            $slot->setScheduleId($schedule->getId());
+            $slot->setTeamId($team->getId());
+            $slot->setVenueId($venueId);
+            $slot->setCoachId(null);
+            $slot->setDayOfWeek($day);
+            $slot->setStartTime(new DateTimeImmutable($start));
+            $slot->setDurationMinutes($duration);
+            $slot->setLockLevel($isReserved ? LockLevel::HARD : LockLevel::NONE);
+            $slot->setLockOrigin($isReserved ? LockOrigin::RESERVATION : null);
+            $manager->persist($slot);
+        }
+        $manager->flush();
+
+        // Miroir de ScheduleResultImporter : une version fraîchement transcrite n'est pas périmée.
+        $schedule->setManuallyEditedSinceGeneration(false);
+        $schedule->setConstraintsChangedSinceGeneration(false);
+        $schedule->setResourcesChangedSinceGeneration(false);
+        $manager->flush();
+    }
+
+    /**
+     * Les deux semaines de reprise, EN DONNÉE (transcription de
+     * business/5-donnees/plannings-bccl/planning-reprise-{17,24}-aout.txt). Une 3ᵉ semaine
+     * future = une entrée de plus ici, pas du code. Séances : [équipe, gymnase, jour ISO,
+     * 'HH:MM', durée]. capacity de grille et sessionsPerWeek se DÉRIVENT des séances.
+     *
+     * @return list<array{title: string, monday: string, sunday: string, activeVenues: list<string>, sessions: list<array{string, string, int, string, int}>, groups: list<array{teams: list<string>, k: int}>, deactivatedConstraints: list<string>}>
+     */
+    private function repriseWeeks(): array
+    {
+        return [
+            // ===================== SEMAINE DU 17 AOÛT — Armand seul =====================
+            // 20 créneaux de 75 min, 25 séances-équipe, 11 équipes.
+            [
+                'title' => 'Reprise du 17 août',
+                'monday' => '2026-08-17',
+                'sunday' => '2026-08-23',
+                'activeVenues' => ['vArmand'],
+                'sessions' => [
+                    // LUNDI
+                    ['U13F1', 'vArmand', 1, '17:00', 75],
+                    ['U18F1', 'vArmand', 1, '18:15', 75],
+                    ['SM3', 'vArmand', 1, '19:30', 75],
+                    ['SM1', 'vArmand', 1, '20:45', 75],
+                    ['SM2', 'vArmand', 1, '20:45', 75],
+                    // MARDI
+                    ['U18M1', 'vArmand', 2, '17:00', 75],
+                    ['U15M1', 'vArmand', 2, '18:15', 75],
+                    ['U21M1', 'vArmand', 2, '19:30', 75],
+                    ['SM1', 'vArmand', 2, '20:45', 75],
+                    ['SM2', 'vArmand', 2, '20:45', 75],
+                    // MERCREDI
+                    ['U15F1', 'vArmand', 3, '17:00', 75],
+                    ['U18F1', 'vArmand', 3, '18:15', 75],
+                    ['SF1', 'vArmand', 3, '19:30', 75],
+                    ['SF2', 'vArmand', 3, '19:30', 75],
+                    ['SM3', 'vArmand', 3, '20:45', 75],
+                    // JEUDI
+                    ['U13F1', 'vArmand', 4, '17:00', 75],
+                    ['U18M1', 'vArmand', 4, '18:15', 75],
+                    ['U21M1', 'vArmand', 4, '19:30', 75],
+                    ['SM1', 'vArmand', 4, '20:45', 75],
+                    ['SM2', 'vArmand', 4, '20:45', 75],
+                    // VENDREDI
+                    ['U15M1', 'vArmand', 5, '17:00', 75],
+                    ['U15F1', 'vArmand', 5, '18:15', 75],
+                    ['SF1', 'vArmand', 5, '19:30', 75],
+                    ['SF2', 'vArmand', 5, '19:30', 75],
+                    ['SM3', 'vArmand', 5, '20:45', 75],
+                ],
+                'groups' => [
+                    ['teams' => ['SM1', 'SM2'], 'k' => 3],
+                    ['teams' => ['SF1', 'SF2'], 'k' => 2],
+                ],
+                // Règles de saison que le réel de la semaine contredit (vérifiées séance par séance) :
+                //  - SM1 · uniquement mardi, jeudi : SM1 s'entraîne aussi le LUNDI.
+                //  - Senior +22 Compétition ≥ 20:00 : SM3/SF1/SF2 à 19:30.
+                //  - SF2 · pas vendredi : SF2 s'entraîne le vendredi.
+                //  - SM2 · au moins 1 à Matéo : Matéo est fermé (0 séance possible à Matéo).
+                'deactivatedConstraints' => [
+                    'SM1 · uniquement mardi, jeudi',
+                    'Groupe Senior (+ de 22) + Compétition (hors loisir) · pas avant 20:00',
+                    'SF2 · pas vendredi',
+                    'SM2 · au moins 1 à Matéo',
+                ],
+            ],
+            // ===================== SEMAINE DU 24 AOÛT — Armand + JDR =====================
+            // 35 créneaux, 38 séances-équipe, 16 équipes.
+            [
+                'title' => 'Reprise du 24 août',
+                'monday' => '2026-08-24',
+                'sunday' => '2026-08-30',
+                'activeVenues' => ['vArmand', 'vJdr'],
+                'sessions' => [
+                    // LUNDI
+                    ['U13F1', 'vArmand', 1, '17:30', 90],
+                    ['U21M1', 'vArmand', 1, '19:30', 90],
+                    ['SM1', 'vArmand', 1, '20:30', 90],
+                    ['SM2', 'vArmand', 1, '20:30', 90],
+                    ['U15M1', 'vJdr', 1, '17:15', 60],
+                    ['U15M2', 'vJdr', 1, '18:15', 75],
+                    ['U18F1', 'vJdr', 1, '19:30', 75],
+                    ['SF2', 'vJdr', 1, '20:45', 75],
+                    // MARDI
+                    ['U13M1', 'vArmand', 2, '17:30', 90],
+                    ['U18M1', 'vArmand', 2, '19:30', 90],
+                    ['SF2', 'vArmand', 2, '20:30', 90],
+                    ['U15M2', 'vJdr', 2, '17:15', 60],
+                    ['U15F1', 'vJdr', 2, '18:15', 75],
+                    ['SF1', 'vJdr', 2, '19:30', 75],
+                    ['SM1', 'vJdr', 2, '20:45', 75],
+                    ['SM2', 'vJdr', 2, '20:45', 75],
+                    // MERCREDI
+                    ['U15M1', 'vArmand', 3, '17:30', 90],
+                    ['U21M1', 'vArmand', 3, '19:30', 90],
+                    ['SM3', 'vArmand', 3, '20:30', 90],
+                    ['U15F1', 'vJdr', 3, '17:15', 60],
+                    ['U18M1', 'vJdr', 3, '18:15', 75],
+                    ['U18F2', 'vJdr', 3, '19:30', 75],
+                    ['SF1', 'vJdr', 3, '20:45', 75],
+                    // JEUDI
+                    ['U13F2', 'vArmand', 4, '17:30', 90],
+                    ['U18M1', 'vArmand', 4, '19:30', 90],
+                    ['U18F2', 'vArmand', 4, '20:30', 90],
+                    ['U13M1', 'vJdr', 4, '17:15', 60],
+                    ['U13F1', 'vJdr', 4, '18:15', 75],
+                    ['U18F1', 'vJdr', 4, '19:30', 75],
+                    ['SM1', 'vJdr', 4, '20:45', 105],
+                    ['SM2', 'vJdr', 4, '20:45', 105],
+                    // VENDREDI
+                    ['U15F2', 'vArmand', 5, '17:30', 90],
+                    ['U15F1', 'vArmand', 5, '19:30', 90],
+                    ['SM3', 'vArmand', 5, '20:30', 90],
+                    ['U13F1', 'vJdr', 5, '17:15', 60],
+                    ['U15M1', 'vJdr', 5, '18:15', 75],
+                    ['U18F1', 'vJdr', 5, '19:30', 75],
+                    ['U21M1', 'vJdr', 5, '20:45', 75],
+                ],
+                'groups' => [
+                    // SF1/SF2 sont SÉPARÉES cette semaine : seul {SM1,SM2} reste mutualisé.
+                    ['teams' => ['SM1', 'SM2'], 'k' => 3],
+                ],
+                // Règles de saison contredites (vérifiées séance par séance) :
+                //  - SM1 · uniquement mardi, jeudi : SM1 s'entraîne aussi le LUNDI.
+                //  - Senior +22 Compétition ≥ 20:00 : SF1 à 19:30 (mardi).
+                //  - Groupe U15 · pas après 19:00 : U15F1 à 19:30 (vendredi).
+                //  - Groupe Jeune (U13-U18) · pas après 19:50 : U18F2 à 20:30 (jeudi).
+                //  - SM2 · au moins 1 à Matéo : Matéo est fermé.
+                'deactivatedConstraints' => [
+                    'SM1 · uniquement mardi, jeudi',
+                    'Groupe Senior (+ de 22) + Compétition (hors loisir) · pas avant 20:00',
+                    'Groupe U15 · pas après 19:00',
+                    'Groupe Jeune (U13-U18) · pas après 19:50',
+                    'SM2 · au moins 1 à Matéo',
+                ],
+            ],
+        ];
     }
 
     /**
