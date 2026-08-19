@@ -1,63 +1,15 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-19 (recalé — **P2-43 volets (i)+(ii), même journée que l'incident Matéo** :
-le §6bis « Gymnases » gagne l'annotation d'état effectif du sélecteur de gymnase (désactivé /
-indisponible toute la période / fermé {jours}) et le message d'inactivité de la modale d'édition
-d'un créneau posé sur un jour fermé — re-vérifié contre `PeriodStructure.tsx` ; trace datée :
-`etat-des-lieux.md`) ; précédemment : 2026-08-19 (recalé — **P2-41 PR-C frontend livrée, le lot P2-41 SE SOLDE (PR-B +
-PR-C), retiré de la roadmap** — §5bis recale le choix des semaines : `WeekPickerDialog` propose
-désormais des SEGMENTS précochés, scindables et fusionnables (`segmentsFromOffer`, `lib/date.ts`),
-serveur et écran alignés — re-vérifié contre `frontend/src/features/cockpit/lib/date.ts`,
-`frontend/src/features/cockpit/WeekPickerDialog.tsx`, `frontend/src/features/cockpit/queries.ts`,
-`frontend/src/features/cockpit/RadarPanel.tsx`, `frontend/src/features/cockpit/DayDialog.tsx`).
-Précédemment : 2026-08-18 (recalé — vérification du 18 au soir, commit passé minuit : **P2-41 PR-B backend livrée, l'item RESTE ouvert
-pour le picker** — §5bis note que le serveur accepte désormais les SEGMENTS (bloc de semaines
-pleines et contiguës comme un seul enfant/un seul plan, ADR-0002) alors que `WeekPickerDialog` ne
-les propose pas encore — re-vérifié contre `backend/src/State/Processor/CalendarEntryStateProcessor.php`
-et `frontend/src/features/cockpit/WeekPickerDialog.tsx` (comportement écran
-inchangé)). Précédemment ce même jour : **P2-40 livré — le picker de semaines EXCLUT les
-semaines gouvernées par des vacances, retiré de la roadmap** — §5bis gagne le détail : fonctions
-pures `holidayWindows`/`closureWeeksOffer` (`lib/date.ts`), le fait `holidayCovered` de
-`decideWeekAdapt` (retire le chemin « d'un bloc », ouvre toujours le picker), l'état `holiday` de
-`WeekPickerDialog` (ligne d'info, semaines hors vacances, bouton « Consigner l'indisponibilité »
-sur le chemin pending sans semaine offerte) — re-vérifié contre `lib/date.ts`,
-`lib/useWeekAdapt.ts`, `WeekPickerDialog.tsx`, `RadarPanel.tsx`, `DayDialog.tsx` et leurs témoins.
-Précédemment ce même jour : **indisponibilité de gymnase informative, PR2 front
-— lot P2-37 SOLDÉ, retiré de la roadmap** — le §Gymnases (tableau §6bis) rattrape l'écran : rangée
-de 7 coches jour par gymnase (état EFFECTIF servi + provenance en info-bulle), l'écriture de la
-coche (helpers purs `wizard/lib/venueDays.ts` — jamais de recomposition front), les gestes
-gymnase entier (Désactiver/**Réactiver** qui REVIENT sur un gymnase entièrement fermé — le
-surfaçage transitoire du 2026-08-18 matin qui le cachait est retiré —, « Réactiver malgré
-l'indisponibilité », « Revenir au défaut »), le gel sous DISABLED (coches conservées), le bandeau
-étendu aux jours décochés à la main, et le récap (`RecapStep.tsx`) qui lit désormais l'état
-EFFECTIF (`effectiveClosedWeekdays` + `disabledVenueIds`) plutôt que les fermetures brutes —
-re-vérifié contre `frontend/src/features/wizard/steps/PeriodStructure.tsx`,
-`frontend/src/features/wizard/lib/venueDays.ts`, `frontend/src/features/wizard/steps/RecapStep.tsx`,
-`frontend/src/features/wizard/queries.ts`, `frontend/src/features/cockpit/api.ts`,
-`frontend/src/features/wizard/api.ts`. Précédemment ce même jour : **indisponibilité de gymnase
-informative, PR1 backend (décision fondateur du soir)** — le corollaire §9ter.e est réécrit : le
-verrou P2-37 D2 (réactiver un gymnase entièrement fermé refusé en 422) est **SUPPLANTÉ** —
-`VenuePeriodOverride.mode` devient NULLABLE et gagne un masque manuel jour `dayOverrides` (jour
-ISO 1..7 → OPEN|CLOSED), composé avec le défaut dérivé de l'incident dans la maison unique
-`PlanVenueClosures::effectiveStateForPlan/Entry` ; POST/PUT/DELETE sont de nouveau acceptés sur un
-gymnase entièrement fermé (DELETE purge mode ET masque) — re-vérifié contre
-`backend/src/Service/PlanVenueClosures.php`, `backend/src/Entity/VenuePeriodOverride.php`,
-`backend/src/Enum/VenueDayState.php`, `backend/src/Dto/VenuePeriodOverrideInput.php`,
-`backend/src/Service/OrphanPinGuard.php`, `backend/src/State/Processor/ReservationStateProcessor.php`,
-`backend/src/Controller/CalendarEntryConflictsController.php`. Précédemment ce même jour :
-**P2-36 livré (les deux tranches, une seule PR) —
-retiré de la roadmap**, `etat-des-lieux.md` §3 — §5bis gagne le détail de la décision d'ouverture
-du sélecteur de semaines : `decideWeekAdapt` (`lib/useWeekAdapt.ts`) devient la maison unique, à
-cinq branches nommées (`single-week`/`already-split`/`loading`/`block-generated`/`weeks`), et son
-extension aux deux surfaces qui bypassaient jusque-là le picker (« Ajuster »/« Adapter » depuis la
-liste du jour, `DayDialog`, et la carte d'indisponibilité du radar, `RadarPanel`) — re-vérifié
-contre `lib/useWeekAdapt.ts`, `WeekPickerDialog.tsx`, `DayDialog.tsx`, `RadarPanel.tsx` et leurs
-témoins. Précédemment ce même jour : **P2-38 PR3 front, LOT SOLDÉ (3 PR)** — §5bis gagne le
-paragraphe « Refus de chevauchement sur « Adapter » » : le 409 `window_already_planned`
-(`PeriodWindowUniquenessGuard`, PR2 backend) s'affiche désormais À L'ENDROIT DU GESTE au lieu
-d'être avalé par le filet global — re-vérifié contre `DayDialog.tsx`, `RadarPanel.tsx`,
-`WeekPickerDialog.tsx`, `WindowAlreadyPlannedNotice.tsx`, `lib/useWeekAdapt.ts`, `cockpit/api.ts`
-et `cockpit/queries.ts`. Précédemment ce même jour : **P2-37 PR2 front, LOT SOLDÉ** — le §Gymnases décrit désormais le surfaçage écran d'un gymnase ENTIÈREMENT fermé : l'interrupteur Désactiver/Réactiver laisse place à la raison en clair, annoncée avant tout clic (une fermeture PARTIELLE ne change rien à l'écran — témoin dédié) ; sa grille reste modifiable — décision vérifiée au code, pas une omission — re-vérifié contre `PeriodStructure.tsx`. Précédemment ce même jour (P2-37 PR1 backend) : le corollaire `OrphanPinGuard` — deux occurrences, §Gymnases et §e — disait qu'un épinglage HARD/une réservation orpheline bloque TOUJOURS la génération sur un jour fermé ; c'est devenu partiellement faux, P2-37 PR1 backend distingue désormais fermeture TOTALE (dérivée des dates fermées, exclue comme un gymnase désactivé, non bloquante) et fermeture PARTIELLE (reste bloquante) — réactiver un gymnase entièrement fermé (POST/PUT/DELETE `VenuePeriodOverride`) est aussi refusé en 422 ; précédemment : 2026-08-16 (corrigé ce jour : le §d citait `ManualEditController`/`manual-edit/one-time`/`temporaryLock` comme couvrant déjà le grain fin « juste ce mardi-là » — les deux sont retirés (P4-86, contrat 2.9), la phrase affirmait une capacité qui n'existe plus ; précédemment : 2026-08-14 (statut posé ce jour ; contenu recalé jusqu'au 2026-08-14 par les livraisons elles-mêmes : `GET /api/calendar-entries/{id}/conflicts` sert `closures` depuis P2-22 PR 1 (§6) et le surfaçage écran de la PR 2 (détail : `frontend-wizard.md`) est intégralement livré — le lot P2-22 est clos ; précédemment recalé jusqu'au 2026-08-06 : radar borné à l'avenir actionnable P3-13/15c/11 · bandeau de période et diagnostics contextuels P4-38/39 · gymnase désactivé qui ne bloque plus la génération, 2026-08-06)))
+Last verified @ 2026-08-19 (recalé — **suite de la journée de test réel BCCL, lot A+B5** : B5,
+l'horizon des vacances au radar passe de 60 à 30 j (`SCHOOL_HOLIDAY_HORIZON_DAYS`, décision
+fondateur du jour) ; A3, la carte de couverture d'une fermeture (§5.1, §5bis) ne compte plus que
+les semaines AJUSTABLES (« 0/4 ») — les semaines gouvernées par des vacances s'affichent grisées
+avec leur raison, jamais cliquables ; A2, le libellé de segment (`segmentLabel`) omet l'année
+quand la fenêtre est dans la saison affichée — re-vérifié contre
+`frontend/src/features/cockpit/RadarPanel.tsx`, `frontend/src/features/cockpit/lib/date.ts`,
+`frontend/src/features/cockpit/lib/useWeekAdapt.ts`, `frontend/src/features/cockpit/WeekPickerDialog.tsx`,
+`frontend/src/features/cockpit/DayDialog.tsx`. L'historique des passes précédentes (P2-36 à P2-43)
+vit dans `git log -p --follow` ce fichier et ses traces datées dans `etat-des-lieux.md` §3.
 
 > **Statut** : **approche arrêtée** (décisions tranchées §9) — **livrée** ; cf. [`etat-des-lieux.md`](etat-des-lieux.md) §1.2.
 > **Pas un plan** — pas de tâches, pas d'effort chiffré ; l'exécution se planifiera palier par palier (§8).
@@ -392,11 +344,13 @@ a un CTA.** C'est la version généralisée des alertes J-14 de la vision d'orig
 
 Une to-do n'est pas un inventaire. Trois règles, décidées par le fondateur le 2026-08-01 :
 
-- **Horizon des vacances : 60 jours** (`SCHOOL_HOLIDAY_HORIZON_DAYS`). Sans lui, en été, la
-  Toussaint et Noël s'affichaient : « c'est TROP loin pour que je m'en occupe de suite ».
-  Les jours fériés avaient déjà le leur (30 j). ⚠ L'horizon ne masque que les vacances
-  **intactes** : dès qu'un plan existe, la période devient une carte « en cours » qui y
-  échappe — cacher un travail commencé serait bien pire que le bruit corrigé.
+- **Horizon des vacances : 30 jours** (`SCHOOL_HOLIDAY_HORIZON_DAYS`, réduit de 60 à 30 le
+  2026-08-19 — décision fondateur B5 : une vacance n'apparaît au radar que 30 j avant son
+  début). Sans lui, en été, la Toussaint et Noël s'affichaient : « c'est TROP loin pour que
+  je m'en occupe de suite ». Les jours fériés avaient déjà le leur (30 j — les deux horizons
+  sont désormais alignés). ⚠ L'horizon ne masque que les vacances **intactes** : dès qu'un
+  plan existe, la période devient une carte « en cours » qui y échappe — cacher un travail
+  commencé serait bien pire que le bruit corrigé.
 - **Les semaines RÉVOLUES sont écartées** — de la couverture d'une période découpée
   (« 0/7 couvertes » alors que 3 étaient derrière), des semaines offertes à la création, et
   des semaines proposées à la sollicitation des coachs. « On gère l'avenir, pas le
@@ -428,8 +382,10 @@ Une to-do n'est pas un inventaire. Trois règles, décidées par le fondateur le
 ⚠ **L'horizon masque aussi les doléances** — `RadarCoachWishAction` n'est rendu nulle part
 ailleurs dans l'application. Soulevé par la revue #344, **tranché par le fondateur le
 2026-08-01** : « on ne les sollicite pas au-delà de 60 j, en général ça se fait 3 semaines
-avant les vacances ». Le cas n'existe pas dans l'usage réel, **aucun second point d'entrée
-n'est à créer** (décision fermée — [`etat-des-lieux.md`](etat-des-lieux.md) §2).
+avant les vacances » — l'horizon vaut aujourd'hui **30 j** (B5, 2026-08-19), la décision de
+ne pas créer de second point d'entrée n'en est pas changée. Le cas n'existe pas dans l'usage
+réel, **aucun second point d'entrée n'est à créer** (décision fermée —
+[`etat-des-lieux.md`](etat-des-lieux.md) §2).
 Demeure un filet : une vacance qui porte **déjà** une campagne garde sa carte quelle que
 soit sa distance, son badge « x à traiter » n'ayant pas d'autre surface — on ne fait jamais
 disparaître un travail engagé. Pour la même raison, « Doléances » et « Solliciter les
@@ -490,7 +446,12 @@ l'horloge. Le **serveur** garde l'heure réelle (P4-16 reste ouverte pour lui).
     multi-semaines porte une phrase pédagogique (présentation, pas décision) sur le sur-ferme du
     solveur si ses semaines diffèrent. La carte de couverture (radar, `DayDialog`) regroupe les
     créneaux par enfant (`groupCoverageSlots`) — une puce par segment plutôt qu'une par semaine ; la
-    puce « + créer » d'une semaine manquante reste, elle, à la semaine.
+    puce « + créer » d'une semaine manquante reste, elle, à la semaine. **Le libellé omet l'année
+    quand la fenêtre est dans la saison affichée** (A2, 2026-08-19) : `segmentLabel` (`lib/date.ts`)
+    reçoit la saison (`WeekPickerDialog`/`DayDialog` la transmettent) et n'écrit l'année que si la
+    fenêtre déborde de la saison — ou que la saison est inconnue, pour ne pas désambiguïser à tort.
+    Le nom SERVEUR du plan n'est pas touché, seul cet affichage. Filet CSS (`min-w-0` + `truncate`,
+    texte complet en `title`) pour que le libellé long ne déborde plus de son item.
   - **La décision d'ouvrir ce picker (P2-36, 2026-08-18)** vit dans une seule fonction pure,
     `decideWeekAdapt` (`lib/useWeekAdapt.ts`) — le radar et le DayDialog la dupliquaient avec des
     entrées différentes, corriger un seul côté garantissait un écart, et le défaut qu'elle ferme :
@@ -542,6 +503,18 @@ l'horloge. Le **serveur** garde l'heure réelle (P4-16 reste ouverte pour lui).
     reste la garde P2-38 (409 `window_already_planned`, dans les deux sens) dès qu'un PLAN existe ;
     la garde serveur n'est **pas** étendue (sa doctrine : « on ne borne que le PLAN, jamais le
     FAIT »).
+  - **La carte de couverture d'une fermeture prolonge la même exclusion (A3, 2026-08-19).**
+    P2-40 ne bornait que le PICKER ; la carte de couverture du radar/`DayDialog`
+    (`motherWeekSlots`, `RadarPanel.tsx`) comptait encore TOUTES les semaines de la fenêtre, y
+    compris celles déjà exclues de l'offre — un « 0/7 couvertes » qui incluait 3 semaines que le
+    gestionnaire ne pouvait de toute façon pas cocher. Elle lit désormais le même foyer UNIQUE
+    (`offerFor`, exposé par `useWeekAdapt`) : le dénominateur ne porte plus que les semaines
+    **AJUSTABLES** (« 0/4 »), et une semaine gouvernée par des vacances s'affiche **grisée** avec
+    sa raison (« sem. du X · gérée par [vacances] »), jamais cliquable ; un enfant déjà créé sur
+    cette semaine reste, lui, ajustable. La carte elle-même ne s'affiche plus pour une semaine
+    sous vacances non couverte — ce n'est pas un travail restant, le rappel vit dans le planning
+    des vacances (§5.1). Aucune re-dérivation : `motherWeekSlots` lit la sortie d'`offerFor`,
+    il ne recalcule rien.
   - **L'été s'adapte comme les autres vacances** (E2, 2026-07-18) : l'exclusion `ete` a été
     **levée** (`isAdaptableHoliday` supprimé) et les dates sont **clampées à la saison**. Seul cas
     restant sans « Adapter » : une fenêtre **entièrement hors** de la saison de travail — la

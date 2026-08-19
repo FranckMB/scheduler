@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CalendarEntry, SchedulePlan, SchoolHoliday } from "./api";
 import { setTodayOverride } from "@/shared/lib/clock";
 
-import { addDays, frDateShort, mondayOf, todayISO } from "./lib/date";
+import { addDays, frDateShort, frDateShortNoYear, mondayOf, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
@@ -34,7 +34,7 @@ let schedulesData: { id?: string; schedulePlanId: string; status?: string }[] | 
 // useDeleteSchedule, une par une. Spy partagé : les tests dédiés vérifient les ids supprimés.
 const deleteScheduleMutateAsync = vi.fn().mockResolvedValue(undefined);
 // #10 C2 — les campagnes de doléances, indexées par période. Mockées ici parce qu'une
-// vacance qui en porte une ÉCHAPPE à l'horizon 60 j (revue #344 : cette carte est la seule
+// vacance qui en porte une ÉCHAPPE à l'horizon 30 j (revue #344 : cette carte est la seule
 // surface qui rende le badge « x à traiter »).
 let campaignsData: unknown[] | undefined = [];
 // P4-68 — indispos gymnase (carte du radar) + leur impact serveur. Vides par défaut :
@@ -150,7 +150,7 @@ const expandCard = async (user: ReturnType<typeof userEvent.setup>, title: strin
 
 describe("RadarPanel", () => {
   // P3-13 — l'horloge injectable, dès son premier usage. Les fixtures sont ancrées en
-  // 2999 pour ne jamais périmer ; sans horloge pilotable, l'horizon 60 j les masquerait
+  // 2999 pour ne jamais périmer ; sans horloge pilotable, l'horizon 30 j les masquerait
   // TOUTES et il faudrait repasser les dates en relatif — donc des tests dont on ne peut
   // plus lire la situation. Ici on déplace « aujourd'hui » à 21 jours des vacances.
   beforeEach(() => {
@@ -376,6 +376,17 @@ describe("RadarPanel", () => {
     expect(screen.getByText("Vacances de Noël")).toBeInTheDocument();
   });
 
+  // B5 (fondateur 2026-08-19) — l'horizon des vacances scolaires est ramené à 30 j : une vacance
+  // à 45 j n'apparaît plus au radar (l'ancien horizon de 60 j la laissait passer).
+  it("masque une vacance à 45 j — horizon ramené à 30 j", () => {
+    setTodayOverride("2998-10-01");
+    // startDate à 45 j : au-delà des 30 j retenus, en deçà des anciens 60 j.
+    const at45: SchoolHoliday = { id: "h45", label: "Vacances à 45 j", holidayType: "noel", startDate: "2998-11-15", endDate: "2998-11-29", schoolYear: "2998-2999" };
+    renderRadar({ holidays: [at45] });
+    expect(screen.queryByText("Vacances à 45 j")).not.toBeInTheDocument();
+    expect(screen.getByText(/Rien à l'horizon/)).toBeInTheDocument();
+  });
+
   // (b) AUD-UXS-04 — le REVERS de l'horizon ci-dessus. Une vacance déjà commencée reste
   // affichée volontairement (elle demande toujours un geste), mais « Dans N j » devient
   // alors NÉGATIF : le cockpit annonçait « Vacances d'Été · Dans -35 j » sur des données
@@ -426,6 +437,35 @@ describe("RadarPanel", () => {
     expect(screen.getByText("0/3 semaines à venir couverte")).toBeInTheDocument();
     await expandCard(user, "Barros en travaux");
     expect(screen.getAllByRole("button", { name: /sem\. du/ })).toHaveLength(3);
+  });
+
+  // A3 (P2-40) — une fermeture qui chevauche des vacances : les semaines gouvernées par les
+  // vacances ne sont PAS ajustables par la fermeture (le picker les écarte déjà via
+  // closureWeeksOffer). Le compte de couverture ne doit donc porter QUE les semaines ajustables
+  // (« 0/4 », pas « 0/7 »), et les semaines sous vacances s'affichent GRISÉES avec leur raison,
+  // jamais cliquables.
+  it("compte les seules semaines ajustables et grise celles gouvernées par des vacances", async () => {
+    const user = userEvent.setup();
+    const w1s = mondayOf("2999-01-04"); // lundi
+    const weeks = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(w1s, 7 * i));
+    setTodayOverride(w1s); // les 7 semaines sont à venir
+    // Vacances d'été gouvernant les 3 premières semaines (lun→dim pleines).
+    schoolHolidaysData = { zone: "A", items: [{ id: "ete", label: "Vacances d'été", holidayType: "ete", startDate: weeks[0], endDate: addDays(weeks[2], 6), schoolYear: "2998-2999" }] };
+    renderRadar({
+      entries: [
+        closure({ id: "m1", title: "Matéo indisponible", startDate: w1s, endDate: addDays(weeks[6], 6) }),
+        // Un segment-enfant (non validé) couvre les 4 semaines ajustables (S4→S7).
+        closure({ id: "seg", title: "Matéo — bloc", parentEntryId: "m1", startDate: weeks[3], endDate: addDays(weeks[6], 6) }),
+      ],
+    });
+
+    // Le dénominateur exclut les 3 semaines de vacances : 4 ajustables, pas 7.
+    expect(screen.getByText("0/4 semaines à venir couverte")).toBeInTheDocument();
+
+    await expandCard(user, "Matéo indisponible");
+    // Les 3 semaines sous vacances sont grisées avec leur raison, et jamais cliquables.
+    expect(screen.getAllByText(/gérée par Vacances d'été/)).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /gérée par/ })).toBeNull();
   });
 
   it("efface la carte de couverture quand toutes ses semaines sont derrière", () => {
@@ -503,7 +543,7 @@ describe("RadarPanel", () => {
     expect(screen.queryByText(/Rien à l'horizon/)).not.toBeInTheDocument();
   });
 
-  // L'horizon 60 j effaçait la SEULE surface qui rende le badge « x à traiter » et le
+  // L'horizon vacances effaçait la SEULE surface qui rende le badge « x à traiter » et le
   // bouton « Solliciter les coachs » — or la collecte vit précisément du délai.
   it("garde une vacance lointaine qui porte déjà une campagne de doléances", () => {
     setTodayOverride("2998-10-01"); // à 96 j : hors horizon
@@ -550,8 +590,8 @@ describe("RadarPanel", () => {
     expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
     expect(screen.queryByText(new RegExp(`du ${frDateShort(w1s)} `))).toBeNull();
     // P2-41 — les deux semaines restantes (la révolue écartée) forment UN segment débutant au
-    // lundi de la 2ᵉ semaine.
-    expect(screen.getByText(new RegExp(`Semaines du ${frDateShort(addDays(w1s, 7))} `))).toBeInTheDocument();
+    // lundi de la 2ᵉ semaine. A2 — la fenêtre tient dans la saison → le libellé omet l'année.
+    expect(screen.getByText(new RegExp(`Semaines du ${frDateShortNoYear(addDays(w1s, 7))} `))).toBeInTheDocument();
   });
 
   // « Commencé » n'est pas « fini », à l'échelle VACANCE aussi : le filtre de période

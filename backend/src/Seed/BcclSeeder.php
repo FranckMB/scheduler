@@ -1992,11 +1992,12 @@ final class BcclSeeder
             $this->schedulePlanProvisioner->copySeasonalSlotsForVenue($planId, $venue->getId());
         }
 
-        // --- Sauf JDR : sa grille de plan est EXPLICITE (18 créneaux). Retouches réelles du
+        // --- Sauf JDR : sa grille de plan est EXPLICITE (19 créneaux). Retouches réelles du
         // gestionnaire (2026-08-19) — la copie de saison ne suffit plus pour JDR ; re-snapshot,
         // pas une invention. On purge les copies JDR et on réinsère (idempotent : purge+réinsertion
         // à chaque run, comme la section 12). [jour ISO, 'HH:MM', durée, capacity] :
         //  - lun→ven (1-5) : 17:30 (90, cap 2) · 19:00 (90, cap 2) · 20:30 (120, cap 1) ;
+        //  - mer (3)       : 16:00 (90, cap 1) — créneau ajouté par le gestionnaire ;
         //  - sam (6)       : 09:00 · 10:15 · 11:30 (75, cap 1). ---
         $jdr = $venues['vJdr'];
         foreach ($manager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $planId, 'venueId' => $jdr->getId()]) as $jdrPlanSlot) {
@@ -2004,7 +2005,7 @@ final class BcclSeeder
         }
         $manager->flush();
         /** @var list<array{int, string, int, int}> $jdrGrid */
-        $jdrGrid = [[6, '09:00', 75, 1], [6, '10:15', 75, 1], [6, '11:30', 75, 1]];
+        $jdrGrid = [[6, '09:00', 75, 1], [6, '10:15', 75, 1], [6, '11:30', 75, 1], [3, '16:00', 90, 1]];
         foreach ([1, 2, 3, 4, 5] as $day) {
             $jdrGrid[] = [$day, '17:30', 90, 2];
             $jdrGrid[] = [$day, '19:00', 90, 2];
@@ -2026,13 +2027,15 @@ final class BcclSeeder
         $manager->flush();
 
         // --- Réglages EN COURS (find-or-create par (plan, équipe)) : 8 équipes actives à 2
-        // séances/semaine, « Training Individuel » décochée. AUCUNE autre ligne. Le plan est
-        // marqué « sélection d'équipes initialisée » pour que l'ouverture du wizard ne re-seede
-        // pas son défaut par-dessus (sinon ces 9 lignes seraient écrasées). ---
+        // séances/semaine ; « Training Individuel » ET les 3 équipes « Academie » décochées (BYE
+        // pendant l'incident). AUCUNE autre ligne (12 au total). Le plan est marqué « sélection
+        // d'équipes initialisée » pour que l'ouverture du wizard ne re-seede pas son défaut
+        // par-dessus (sinon ces 12 lignes seraient écrasées). ---
         $teamOverrides = [
             'U18F1' => true, 'U18M1' => true, 'U15M1' => true, 'U15F1' => true,
             'U13M1' => true, 'U13F1' => true, 'U13F2' => true, 'U13M2' => true,
             'Training Individuel' => false,
+            'Academie U9-U11' => false, 'Academie U13-U15' => false, 'Academie U18' => false,
         ];
         foreach ($teamOverrides as $teamName => $isActive) {
             $team = $teams[$teamName];

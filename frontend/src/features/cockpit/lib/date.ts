@@ -66,6 +66,13 @@ export function frDateShort(iso: string): string {
   return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 }
 
+/** Compact French date WITHOUT the year, e.g. "2026-12-19" → "19 déc." — for labels whose
+ *  window is known to sit inside the current season (A2 : the year is then just noise). */
+export function frDateShortNoYear(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
+}
+
 /** Whole days from `from` to `to` (ISO), floored, negative if `to` is before `from`. */
 export function daysUntil(from: string, to: string): number {
   const a = Date.parse(`${from}T00:00:00`);
@@ -272,13 +279,21 @@ export function segmentWeekCount(segment: WeekSegment): number {
   return Math.round(daysUntil(segment.monday, lastMonday) / 7) + 1;
 }
 
-/** Libellé du segment dans le picker — présentation, pas décision. */
-export function segmentLabel(segment: WeekSegment): string {
+/**
+ * Libellé du segment dans le picker — présentation, pas décision.
+ *
+ * A2 — quand la saison est connue ET que la fenêtre du segment tient DEDANS, l'année est du bruit
+ * (le radar déborde) : on l'omet. Dès que la fenêtre sort de la saison affichée — ou que la saison
+ * est inconnue — on garde l'année, qui lève l'ambiguïté. Pure géométrie, aucune règle redérivée.
+ */
+export function segmentLabel(segment: WeekSegment, season?: { startDate: string; endDate: string }): string {
+  const inSeason = undefined !== season && segment.startDate >= season.startDate && segment.endDate <= season.endDate;
+  const fmt = inSeason ? frDateShortNoYear : frDateShort;
   const count = segmentWeekCount(segment);
   if (count > 1) {
-    return `Semaines du ${frDateShort(segment.startDate)} au ${frDateShort(segment.endDate)} — d'un bloc (${count} semaines)`;
+    return `Semaines du ${fmt(segment.startDate)} au ${fmt(segment.endDate)} — d'un bloc (${count} semaines)`;
   }
-  return segment.partial ? `Semaine du ${frDateShort(segment.startDate)} (entamée)` : `Semaine du ${frDateShort(segment.startDate)}`;
+  return segment.partial ? `Semaine du ${fmt(segment.startDate)} (entamée)` : `Semaine du ${fmt(segment.startDate)}`;
 }
 
 /** Scinde un segment multi-semaines en ses semaines OFFERTES, chacune un segment de taille 1 (pleine). */

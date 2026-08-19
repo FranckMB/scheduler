@@ -275,6 +275,7 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
           startDate={pickerFor.startDate}
           endDate={pickerFor.endDate}
           weeks={pickerOffer.offered}
+          season={workingSeason}
           excludedRanges={pickerOffer.excludedRanges}
           busy={createWeekChildren.isPending}
           state={pickerState}
@@ -554,6 +555,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           startDate={pendingMother.startDate}
           endDate={pendingMother.endDate}
           weeks={periodWeeksToAdjust(pendingMother.startDate, pendingMother.endDate, workingSeason, pendingMother.periodType, today)}
+          season={workingSeason}
           busy={createHoliday.isPending || createWeekChildren.isPending}
           onPickSegments={(segments) => pickWeeksPending(pendingMother, segments)}
           onAdaptWhole={() => adaptWholePending(pendingMother)}
@@ -569,6 +571,7 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
           startDate={pickerFor.startDate}
           endDate={pickerFor.endDate}
           weeks={periodWeeksToAdjust(pickerFor.startDate, pickerFor.endDate, workingSeason, "holiday", today)}
+          season={workingSeason}
           busy={createWeekChildren.isPending}
           state={pickerState}
           block={{ ...blockInfo, deleting: blockDeleting, deleteFailed: blockDeleteFailed, onDeleteVersions: deleteBlockVersionsAndSplit }}
