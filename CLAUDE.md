@@ -29,8 +29,10 @@ scoring objective. **Backend** orchestrates/persists/exposes the API, **engine**
 **Boundaries (critical — never cross):** `frontend → backend` via `/api/*` · `backend → engine` via
 `POST http://engine:8000/generate` · `backend → frontend` via Mercure SSE topic
 `club:{clubId}:schedule:{scheduleId}` · **engine is reactive, it NEVER calls the backend** ·
-**frontend NEVER calls the engine directly** (le proxy `/engine` du nginx DEV est un outil de debug,
-pas un chemin applicatif — absent de `nginx.prod.conf`).
+**frontend NEVER calls the engine directly** — et **aucun proxy `/engine` n'existe nulle part** :
+celui du nginx DEV a été SUPPRIMÉ le 2026-07-31 parce qu'il exposait le solveur **sans
+authentification** à quiconque atteignait le port 8081, tunnel de démo compris. Ne pas le rétablir
+« pour debugger » : `docker compose exec engine …` fait le travail (`docker/frontend/nginx.conf:96-102`).
 
 ## 3. Key commands
 

@@ -88,6 +88,19 @@ fusion, applique le test maison (`specs/evolution/duplications-de-verite.md`) :
 4. **Claimed ≠ implemented.** Docs must state what the code *does*, not what is planned. If a mechanism is prepared but inactive (e.g. an RLS template never executed), the doc must say "prepared, NOT active" explicitly. Aspirational statements go to `specs/evolution/`, nowhere else.
 5. **Cross-file consistency.** When you change a fact, grep for its other occurrences (`grep -rn` on the key term across `CLAUDE.md`, `docs/`, `*/AGENTS.md`, `specs/courantes/`) and fix or remove them all — half-updated facts created the priority-7/8 contradiction (DOC-01).
 6. **Stamp what you verified.** Files carrying `Last verified @ <sha|date>`: bump the stamp **only for files whose claims you actually re-checked this pass** — a stamp is a proof of verification, not a courtesy.
+   ⚑ **Un stamp REMPLACE, il ne s'empile pas** (audit DOC-33, 2026-08-19). Écris la vérification
+   COURANTE — la date, et ce que tu as confronté — puis **efface celle d'avant** : pas de chaîne
+   de « ; précédemment : … ». La pile avait atteint **49 entrées et 24 Ko sur UNE ligne** dans
+   `backend/docs/backend-inventory.md` : un agent traversait 24 Ko d'historique avant le premier
+   fait utile, et l'info la plus précieuse (« vérifié quand, contre quoi ») s'y noyait.
+   L'historique des passes vit dans **git** (`git log -p --follow <fichier>`), et une décision
+   prise en chemin vit dans `etat-des-lieux.md` — jamais dans un stamp.
+   ⚠ **Toucher la ligne de stamp EST une édition du fichier** : `DocStampFreshnessTest` compare
+   le stamp à la dernière édition du fichier en git, sans distinguer l'en-tête du contenu. Donc
+   si tu aplatis ou réécris un stamp, tu dois **re-vérifier les affirmations du fichier dans la
+   même passe et redater** — sinon le garde rougit, et il a raison. (Constaté le 2026-08-19 :
+   la passe DOC-33 a fait rougir 3 fichiers exactement comme ça.) Et il ne rougit qu'APRÈS
+   commit, puisqu'il lit une date git : le lancer avant ne prouve rien.
 
 ### Fraîcheur — le balayage TOUCHÉ, plus une ROTATION bornée
 

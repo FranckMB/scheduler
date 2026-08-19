@@ -1,4 +1,4 @@
-Last verified @ 2026-08-18 (JSON **régénéré** — indisponibilité de gymnase informative : `VenuePeriodOverride` gagne `dayOverrides`) ; précédemment : 2026-08-18 (JSON **régénéré** — la 4ᵉ route `deletion-impact`, celle du créneau, entre au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — suppression sûre : les 3 routes `deletion-impact` entrent au contrat) ; précédemment : 2026-08-18 (JSON **régénéré** — bien-être PAR PÉRIODE, PR1 backend : `ImplicitRuleSetting.ImplicitRuleSettingInput` gagne `schedulePlanId`)
+Last verified @ 2026-08-19 (**re-vérifié contre le snapshot** — le bloc `shared_training_groups` annoncé y est ; **une imprécision de libellé corrigée** : « 5 paths ajoutés » se lit maintenant « 5 OPÉRATIONS sur 2 paths », ce que le JSON porte réellement (GET+POST sur la collection, GET+PUT+DELETE sur l'item) — le compte de 5 était juste, c'est le mot « paths » qui ne l'était pas. Redaté suite à l'édition de la ligne de stamp par la passe DOC-33)
 
 Changements récents :
 - **Indisponibilité de gymnase informative — PR1 backend (2026-08-18)** : `VenuePeriodOverride`
@@ -40,7 +40,7 @@ Changements récents :
   (GET collection/item, POST, PUT, DELETE, scopée club+saison, filtre `schedulePlanId`) —
   déclarer que N équipes s'entraînent ENSEMBLE (EXACTEMENT `commonSessions` séances communes).
   Le DTO d'entrée porte `teamIds` (2..10), `commonSessions` (≥ 1), `schedulePlanId` (nullable =
-  socle/période). Set-diff : **5 paths ajoutés** (`/api/shared_training_groups`,
+  socle/période). Set-diff : **5 opérations ajoutées sur 2 paths** (`/api/shared_training_groups`,
   `/api/shared_training_groups/{id}` × méthodes). Contrat backend⇄engine bumpé **2.11 → 2.12** :
   nouveau bloc d'entrée `sharedTrainings` du payload `/generate` + `/validate-assignments`,
   diagnostic `shared_training_not_honored`.

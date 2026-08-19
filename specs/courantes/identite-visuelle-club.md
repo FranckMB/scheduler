@@ -1,6 +1,6 @@
 # Identité visuelle par club (logo + couleur d'accent)
 
-Last verified @ 2026-08-18 (aucun changement de FOND : seuls les chemins vers `frontend-spec.md` sont recalés, ce fichier ayant rejoint `frontend/docs/` — les affirmations sur la marque et la scène d'attente sont inchangées et restent vraies) ; précédemment : 2026-08-17 (re-vérifié contre `GenerationWaiting.tsx`/`GenerateStep.tsx`/`PlanningPage.tsx` : l'écran d'attente de génération ne montre plus le logo/l'initiale du club — voir décision ci-dessous)
+Last verified @ 2026-08-19 (**re-vérifié au code, rien de faux** — `Club.accentColorDark` (accent sombre distinct) existe bien dans l'entité ✓ ; la décision fondateur du 2026-08-17 « l'écran d'attente n'affiche PLUS le logo du club » est TENUE : `GenerationWaiting.tsx` ne porte aucun rendu de logo, sa seule occurrence du mot est le commentaire qui acte la décision (`:23`) ✓. Redaté parce que la passe DOC-33 a édité la ligne de stamp elle-même — et que le garde de fraîcheur compare le stamp à la dernière édition du FICHIER, sans distinguer le contenu de son en-tête : il a rougi, à juste titre)
 
 > **LIVRÉ (2026-07-02)** — accent par club + logo + extraction 3 couleurs + écran « Gestion du club ». Détail livré ci-dessous ; ce qui reste ⬜ est du confort (voir « Questions ouvertes »).
 >
