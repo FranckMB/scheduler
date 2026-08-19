@@ -359,6 +359,12 @@ jobs:
       - name: PeriodPlanBirthTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/PeriodPlanBirthTest.php --group phase1'
 
+      # « L'adaptation naît comme une copie du socle » (axes generation pipeline + planning
+      # lifecycle) : la V1 d'un plan de période transcrit la version pointée du socle, filtrée des
+      # réglages/fermetures de la période — falsifié dans les deux sens, avec la liste « à replacer ».
+      - name: PeriodCopyBirthTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/PeriodCopyBirthTest.php --group phase1'
+
       - name: SeasonVersionUniquenessTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SeasonVersionUniquenessTest.php --group phase1'
 

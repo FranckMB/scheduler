@@ -1,6 +1,6 @@
 # Les 3 types de planning — référence produit
 
-Last verified @ 2026-08-19 (re-vérifié contre `frontend/src/features/cockpit/lib/date.ts` et `frontend/src/features/cockpit/WeekPickerDialog.tsx` — **P2-41 PR-C frontend** : le picker propose désormais des SEGMENTS précochés, scindables et fusionnables — le lot P2-41 (PR-B backend 2026-08-18 + PR-C frontend 2026-08-19) est intégralement livré, la règle transverse ci-dessous est réelle des deux côtés) — *(historique des passes retiré le 2026-08-19, audit DOC-33 : 3 entrées empilées. Un stamp REMPLACE, il ne s'empile pas ; l'historique vit dans git : `git log -p --follow specs/courantes/types-de-planning.md`)*
+Last verified @ 2026-08-19 (re-vérifié contre `backend/src/Service/PeriodPlanTranscriber.php` et `backend/src/Controller/TranscribePeriodPlanController.php` — **P2-44 PR-1** : une V1 de plan de période peut désormais naître d'une transcription sans solveur du socle pointé, filtrée de la sélection de période, backend seul, aucun écran encore). Historique des passes : `git log -p --follow specs/courantes/types-de-planning.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
 > **Rôle de ce document** : la trace durable du modèle métier des plannings, validé avec le
 > fondateur le 2026-07-12. C'est LA référence à consulter avant tout travail sur la
@@ -72,9 +72,15 @@ quelle que soit la largeur de son segment.
   fermé, etc.) — **aucun plan n'existe encore** (ADR-0002 amendé 2026-07-24 : le plan naît
   du geste d'ADAPTER, la déclaration n'est qu'un fait au calendrier, le radar en lit
   l'impact par les contraintes datées) ; (2) **le gestionnaire décide** de traiter cette
-  indispo (« Adapter ») — **c'est là que le plan naît** (`POST /schedule_plans`) ;
-  (3) l'outil découpe **automatiquement** en autant de plannings que de **semaines
+  indispo (« Adapter ») — **c'est là que le plan naît** (`POST /schedule_plans`), sans
+  version ; (3) l'outil découpe **automatiquement** en autant de plannings que de **semaines
   englobées** ; (4) il gère le premier, est **notifié** des suivants à compléter.
+- **Naissance de la V1 — deux voies (P2-44, [ADR-0004](../../docs/architecture/adr-0004-period-plan-birth-as-socle-copy.md), backend seul, 2026-08-19)** :
+  un plan de période vierge peut obtenir sa V1 par le **solve complet** habituel (`generate`), ou
+  par **transcription sans solveur** (`POST /api/schedule_plans/{id}/transcribe-from-socle`) — le
+  socle POINTÉ recopié à l'identique, moins ce que la sélection de période filtre (équipe
+  désactivée, gymnase/jour fermé, réduction de séances), verrous HARD révocables, séances qui ne
+  passent plus nommées « à replacer ». Aucun bouton écran pour l'instant (PR-2 du programme).
 - **Manipulation** : structure verrouillée (équipes entières, gymnases/créneaux, coachs) ;
   **exception validée** : le **nombre de séances par équipe** est ajustable — un
   gestionnaire réel passe une équipe de 3 à 2 créneaux, ou supprime les créneaux d'une

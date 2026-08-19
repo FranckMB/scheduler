@@ -87,6 +87,11 @@ Ce qu'il faut retenir en toute session :
 `Security/EngagedTeamGuardTest` (périmètre engagé) ·
 `Security/PeriodPlanBirthTest` (naissance du plan — ADR-0002 ; depuis P2-38, garde aussi le refus
 409 `window_already_planned` dans les deux sens quand deux plans de période se chevauchent) ·
+`Security/PeriodCopyBirthTest` (l'adaptation naît comme une COPIE du socle : la V1 d'un plan de
+période transcrit la version POINTÉE du socle filtrée des réglages/fermetures — falsifié dans les
+deux sens ; séance saine copiée+verrouillée, jour fermé/gymnase désactivé/équipe réduite « à
+replacer » avec leur raison, réduction déterministe [dernières de la semaine], plan déjà versionné
+refusé 409, route sous les gardes rôle+tenant) ·
 `Security/SeasonVersionUniquenessTest` (socle en vigueur unique) ·
 `Security/SeasonPlanInForceTest` (SocleGuard, défense en profondeur) ·
 `Security/PeriodGatePayloadParityTest` (gate pré-solve == payload) ·

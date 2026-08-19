@@ -1,6 +1,10 @@
-Last verified @ 2026-08-19 (**rotation de fraîcheur** — re-vérifié contre `openapi-snapshot.json` vivant : **167 paths**, `info.title` = « Amateo API » ✓, `VenuePeriodOverride.mode` bien `["string","null"]` et `dayOverrides` bien présent ✓. **Rien de faux** ; **aucune régénération due par cette PR** (fix planning lifecycle + auto-link `schoolHolidayId` — `CalendarEntry.schoolHolidayId` existait déjà au schéma, aucune ressource/contrôleur/DTO ne change de forme, diff vérifié contre `backend/src/Controller/`, `backend/src/ApiResource/`, `backend/src/Dto/` — vide sur cette branche)) — *(historique des passes précédentes retiré : un stamp REMPLACE, il ne s'empile pas ; le détail de chaque régénération vit dans le changelog « Changements récents » ci-dessous, jamais dans le stamp — et dans git : `git log -p --follow specs/courantes/openapi-snapshot.meta.md`)*
+Last verified @ 2026-08-19 (régénéré ce jour — **P2-44 PR-1** : +1 path `POST /api/schedule_plans/{id}/transcribe-from-socle` (naissance par copie du socle, entrée `CustomRoutesOpenApiFactory` + regen `api:openapi:export`) → **168 paths** ; `info.title` « Amateo API » ✓, `VenuePeriodOverride.mode` nullable + `dayOverrides` ✓) — *(un stamp REMPLACE, il ne s'empile pas ; le détail des régénérations vit dans le changelog ci-dessous et dans git)*
 
 Changements récents :
+- **P2-44 PR-1 — naissance par copie du socle (2026-08-19)** : **+1 path** —
+  `POST /api/schedule_plans/{id}/transcribe-from-socle` (201 : V1 COMPLETED transcrite de la
+  version pointée du socle, filtrée des réglages de période ; liste `toReplace` en réponse ;
+  409 : plan déjà versionné / plan SEASON / socle non pointé). 167 → **168 paths**.
 - **Indisponibilité de gymnase informative — PR1 backend (2026-08-18)** : `VenuePeriodOverride`
   (schéma de lecture ET `VenuePeriodOverrideInput`) — `mode` devient **nullable** (perd `default: ""`
   côté lecture, quitte `required` côté écriture : une ligne peut n'exister que pour son masque) et
