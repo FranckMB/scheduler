@@ -32,6 +32,8 @@ interface WeekPickerDialogProps {
   endDate: string;
   /** Semaines lun→dim OFFERTES couvrant la fenêtre de la mère, clampées à la saison. */
   weeks: WeekWindow[];
+  /** A2 — la saison affichée : un libellé de segment DANS la saison omet l'année (sinon la garde). */
+  season?: { startDate: string; endDate: string };
   busy: boolean;
   /**
    * P2-36/P2-40 — état NOMMÉ du picker : `weeks` (choix, l'existant), `loading` (plans/plannings/
@@ -77,7 +79,7 @@ interface WeekPickerDialogProps {
  * P2-36 : le dialogue s'OUVRE toujours et NOMME sa raison (`state`) — « en chargement » ≠ « déjà
  * générée d'un bloc » — au lieu de basculer en bloc sans un mot.
  */
-export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state = "weeks", block, excludedRanges = [], onPickSegments, onAdaptWhole, onRecordOnly, onClose, conflict, onOpenConflict }: WeekPickerDialogProps) {
+export function WeekPickerDialog({ title, startDate, endDate, weeks, season, busy, state = "weeks", block, excludedRanges = [], onPickSegments, onAdaptWhole, onRecordOnly, onClose, conflict, onOpenConflict }: WeekPickerDialogProps) {
   // Segments dérivés de l'offre + fenêtre, PUIS mutés localement par scinder/fusionner.
   const [segments, setSegments] = useState<WeekSegment[]>(() => segmentsFromOffer(weeks, startDate, endDate));
   const [checked, setChecked] = useState<Set<string>>(() => new Set(segments.map((s) => s.monday)));
@@ -154,13 +156,17 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state
     <ul className="mt-4 space-y-2">
       {segments.map((seg, index) => {
         const multi = segmentWeekCount(seg) > 1;
-        const label = segmentLabel(seg);
+        const label = segmentLabel(seg, season);
         return (
           <li key={seg.monday} className="rounded-md border border-border px-3 py-2 text-sm">
             <div className="flex items-start justify-between gap-2">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={checked.has(seg.monday)} onChange={() => toggle(seg.monday)} />
-                <span>{label}</span>
+              {/* A2 — filet CSS : le libellé long tronque proprement (min-w-0 + truncate) et
+                  garde son texte complet en `title`, il ne déborde plus de son item. */}
+              <label className="flex min-w-0 items-center gap-2">
+                <input type="checkbox" className="size-4 shrink-0 accent-[var(--accent)]" checked={checked.has(seg.monday)} onChange={() => toggle(seg.monday)} />
+                <span className="truncate" title={label}>
+                  {label}
+                </span>
               </label>
               <div className="flex shrink-0 gap-1">
                 {index > 0 ? (

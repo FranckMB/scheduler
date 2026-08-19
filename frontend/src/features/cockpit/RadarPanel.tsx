@@ -718,6 +718,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           startDate={pendingMother.startDate}
           endDate={pendingMother.endDate}
           weeks={pendingOffer.offered}
+          season={workingSeason}
           excludedRanges={pendingOffer.excludedRanges}
           state={pendingPickerState}
           busy={createHoliday.isPending || createClosureFromUnavailability.isPending || createWeekChildren.isPending}
@@ -736,6 +737,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           startDate={pickerFor.startDate}
           endDate={pickerFor.endDate}
           weeks={pickerOffer.offered}
+          season={workingSeason}
           excludedRanges={pickerOffer.excludedRanges}
           busy={createWeekChildren.isPending}
           state={pickerState}

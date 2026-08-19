@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CalendarEntry, SchedulePlan, SchoolHoliday } from "./api";
 import { setTodayOverride } from "@/shared/lib/clock";
 
-import { addDays, frDateShort, mondayOf, todayISO } from "./lib/date";
+import { addDays, frDateShort, frDateShortNoYear, mondayOf, todayISO } from "./lib/date";
 import { RadarPanel } from "./RadarPanel";
 
 const createHolidayMutate = vi.fn();
@@ -550,8 +550,8 @@ describe("RadarPanel", () => {
     expect(screen.getByText("Quelles semaines ajuster ?")).toBeInTheDocument();
     expect(screen.queryByText(new RegExp(`du ${frDateShort(w1s)} `))).toBeNull();
     // P2-41 — les deux semaines restantes (la révolue écartée) forment UN segment débutant au
-    // lundi de la 2ᵉ semaine.
-    expect(screen.getByText(new RegExp(`Semaines du ${frDateShort(addDays(w1s, 7))} `))).toBeInTheDocument();
+    // lundi de la 2ᵉ semaine. A2 — la fenêtre tient dans la saison → le libellé omet l'année.
+    expect(screen.getByText(new RegExp(`Semaines du ${frDateShortNoYear(addDays(w1s, 7))} `))).toBeInTheDocument();
   });
 
   // « Commencé » n'est pas « fini », à l'échelle VACANCE aussi : le filtre de période

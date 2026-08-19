@@ -356,6 +356,21 @@ describe("segmentLabel / segmentWeekCount / splitSegment / mergeSegments (P2-41)
     expect(segmentLabel(plein)).toBe("Semaine du 7 sept. 2026");
   });
 
+  // A2 — un libellé DANS la saison courante omet l'année (le radar déborde sinon) ; il la garde
+  // dès que la fenêtre sort de la saison affichée, où l'année lève l'ambiguïté.
+  it("omet l'année quand la fenêtre tient dans la saison, la garde sinon", () => {
+    const season = { startDate: "2026-08-01", endDate: "2027-07-31" };
+    expect(segmentLabel(bloc, season)).toBe("Semaines du 7 sept. au 27 sept. — d'un bloc (3 semaines)");
+    expect(segmentLabel(entame, season)).toBe("Semaine du 31 août (entamée)");
+
+    // Fenêtre hors de la saison affichée → l'année reste (désambiguïsation).
+    const otherSeason = { startDate: "2027-01-01", endDate: "2027-12-31" };
+    expect(segmentLabel(bloc, otherSeason)).toBe("Semaines du 7 sept. 2026 au 27 sept. 2026 — d'un bloc (3 semaines)");
+
+    // Sans saison connue → comportement historique (année conservée).
+    expect(segmentLabel(bloc)).toBe("Semaines du 7 sept. 2026 au 27 sept. 2026 — d'un bloc (3 semaines)");
+  });
+
   it("compte les semaines d'un segment (span, y compris par-dessus un trou fusionné)", () => {
     expect(segmentWeekCount(entame)).toBe(1);
     expect(segmentWeekCount(bloc)).toBe(3);
