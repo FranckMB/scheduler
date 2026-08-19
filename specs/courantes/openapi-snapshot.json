@@ -12936,6 +12936,32 @@
                 "summary": "Birth the period plan V1 as a copy of the season baseline"
             }
         },
+        "/api/schedules/{id}/fill": {
+            "post": {
+                "operationId": "postApiScheduleFill",
+                "tags": [
+                    "Schedules"
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Fill queued \u2014 a new period version that pins the placed sessions and only places the ones to relocate"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "409": {
+                        "description": "Not a period version, version in force, or a generation is already running"
+                    },
+                    "422": {
+                        "description": "Problem too complex, or a pinned session has no matching slot"
+                    },
+                    "429": {
+                        "description": "Club generation quota reached"
+                    }
+                },
+                "summary": "Fill the sessions to relocate on a period version (partial solve, placed sessions kept)"
+            }
+        },
         "/api/schedules/{id}/regenerate": {
             "post": {
                 "operationId": "postApiScheduleRegenerate",
@@ -22765,6 +22791,13 @@
                             "null"
                         ]
                     },
+                    "maxConsecutiveDays": {
+                        "description": "Plafond de JOURS cons\u00e9cutifs d'entra\u00eenement \u2014 pr\u00e9sent pour maxConsecutiveDays uniquement, sinon null.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
                     "isDefault": {
                         "description": "true tant que la r\u00e8gle est au d\u00e9faut (aucune ligne stock\u00e9e) \u2014 le front sait quoi mettre en avant.",
                         "default": true,
@@ -22843,6 +22876,13 @@
                             "null"
                         ]
                     },
+                    "maxConsecutiveDays": {
+                        "description": "Plafond de JOURS cons\u00e9cutifs d'entra\u00eenement \u2014 pr\u00e9sent pour maxConsecutiveDays uniquement, sinon null.",
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
                     "isDefault": {
                         "description": "true tant que la r\u00e8gle est au d\u00e9faut (aucune ligne stock\u00e9e) \u2014 le front sait quoi mettre en avant.",
                         "default": true,
@@ -22875,6 +22915,13 @@
                             },
                             "maxConsecutive": {
                                 "description": "Plafond de cr\u00e9neaux cons\u00e9cutifs \u2014 pr\u00e9sent pour maxConsecutiveSessions uniquement, sinon null.",
+                                "type": [
+                                    "integer",
+                                    "null"
+                                ]
+                            },
+                            "maxConsecutiveDays": {
+                                "description": "Plafond de JOURS cons\u00e9cutifs d'entra\u00eenement \u2014 pr\u00e9sent pour maxConsecutiveDays uniquement, sinon null.",
                                 "type": [
                                     "integer",
                                     "null"
