@@ -22,7 +22,7 @@ import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import { type Compromise, EngineTimeoutError, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
+import { type Compromise, EngineTimeoutError, EngineVerificationInterruptedError, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
 import { CompromiseList } from "./CompromiseList";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { DriftBanner } from "./DriftBanner";
@@ -475,13 +475,16 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
       ? { status: "rejected", violations: moveMutation.error.violations }
       : moveMutation.error instanceof GenerationInProgressError
         ? { status: "blocked" }
-        : // P2-30 : verrou de cible / cible incohérente sont TOASTÉS (message serveur propre),
-          // pas rendus en panneau — ni un « moteur injoignable » ni un refus de légalité.
-          moveMutation.error instanceof TargetLockedError || moveMutation.error instanceof SlotEditError
-          ? { status: "idle" }
-          : null !== moveMutation.error && undefined !== moveMutation.error
-            ? { status: "error" }
-            : { status: "idle" };
+        : // P4-119 (b) : l'attente coupée CÔTÉ CLIENT a son propre message — jamais « moteur injoignable ».
+          moveMutation.error instanceof EngineVerificationInterruptedError
+          ? { status: "interrupted" }
+          : // P2-30 : verrou de cible / cible incohérente sont TOASTÉS (message serveur propre),
+            // pas rendus en panneau — ni un « moteur injoignable » ni un refus de légalité.
+            moveMutation.error instanceof TargetLockedError || moveMutation.error instanceof SlotEditError
+            ? { status: "idle" }
+            : null !== moveMutation.error && undefined !== moveMutation.error
+              ? { status: "error" }
+              : { status: "idle" };
 
   // Changer de créneau sélectionné efface le verdict du précédent — sinon un refus resterait
   // affiché sous un autre créneau.
@@ -698,6 +701,9 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
             setHighlightSlotIds(violationHighlightSlotIds(error.violations, slots));
           } else if (error instanceof GenerationInProgressError) {
             toast.error("Une génération est en cours pour ce club — réessayez ensuite.");
+          } else if (error instanceof EngineVerificationInterruptedError) {
+            // P4-119 (b) : attente coupée côté client — on NOMME l'interruption, jamais « indisponible ».
+            toast.error("La vérification a été interrompue avant la réponse — réessayez.");
           } else if (error instanceof TargetLockedError || error instanceof SlotEditError || error instanceof EngineTimeoutError) {
             toast.error(error.message);
           } else {
@@ -739,10 +745,13 @@ export function PlanningPage({ embedded = false, scopePlanId = null }: { embedde
             toast.error("Une génération est en cours pour ce club — réessayez ensuite.");
             return;
           }
-          // ÉCHEC de l'essai lui-même (moteur trop lent → EngineTimeoutError, ou indisponible) :
-          // la modale RESTE ouverte et NOMME la cause, avec [Réessayer]. Rien n'est tranché —
-          // demande fondateur : ne jamais se fermer en silence sur un échec de la vérification.
-          setEvictDialog({ phase: "failed", sourceSlotId, targetSlot, failureKind: error instanceof EngineTimeoutError ? "timeout" : "unreachable" });
+          // ÉCHEC de l'essai lui-même : la modale RESTE ouverte et NOMME la cause, avec [Réessayer].
+          // Rien n'est tranché — demande fondateur : ne jamais se fermer en silence. Trois causes
+          // DISTINCTES (P4-119 b) : le serveur a jugé le moteur trop lent (504 → `timeout`), l'attente
+          // a été coupée CÔTÉ CLIENT (`interrupted`, surtout pas « indisponible » : rien ne le prouve),
+          // ou une vraie panne réseau/5xx (`unreachable`).
+          const failureKind = error instanceof EngineTimeoutError ? "timeout" : error instanceof EngineVerificationInterruptedError ? "interrupted" : "unreachable";
+          setEvictDialog({ phase: "failed", sourceSlotId, targetSlot, failureKind });
         },
       },
     );

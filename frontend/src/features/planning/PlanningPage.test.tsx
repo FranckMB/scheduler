@@ -6,7 +6,7 @@ import type { SchedulePlan } from "@/features/cockpit/api";
 import { useToastStore } from "@/shared/stores/toastStore";
 import { renderWithProviders } from "@/test/utils";
 
-import { EngineTimeoutError, getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError } from "./api";
+import { EngineTimeoutError, EngineVerificationInterruptedError, getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -70,6 +70,14 @@ vi.mock("./api", () => {
       this.name = "EngineTimeoutError";
     }
   }
+  // La vérification INTERROMPUE côté client (timeout ky / abort) — classe RÉELLE pour que
+  // `error instanceof EngineVerificationInterruptedError` branche vers le message honnête.
+  class EngineVerificationInterruptedError extends Error {
+    constructor() {
+      super("verification_interrupted");
+      this.name = "EngineVerificationInterruptedError";
+    }
+  }
   return {
   OverlaysExistError,
   MoveRejectedError,
@@ -77,6 +85,7 @@ vi.mock("./api", () => {
   TargetLockedError,
   SlotEditError,
   EngineTimeoutError,
+  EngineVerificationInterruptedError,
   reopenSchedule: vi.fn(),
   listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }])),
   getSlots: vi.fn(() =>
@@ -1242,6 +1251,75 @@ describe("PlanningPage (integration)", () => {
       await user.click(screen.getByRole("button", { name: "Par gymnase" }));
       await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
       expect(vi.mocked(placeSlot)).not.toHaveBeenCalled();
+    });
+  });
+
+  // P4-119 (b) — l'abandon/timeout CÔTÉ CLIENT (le front raccroche avant la réponse serveur) ne
+  // doit JAMAIS s'afficher « le moteur est indisponible » : c'est un mensonge (le moteur répondait
+  // `valid` une seconde après le raccroché, nginx 499). On NOMME l'interruption. « Indisponible »
+  // reste réservé à une vraie panne réseau/5xx du backend.
+  describe("P4-119 : abandon client ≠ moteur indisponible (message honnête)", () => {
+    const twoTeams = [
+      { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 1 },
+      { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1, sessionsPerWeek: 1 },
+    ];
+    const twoSlots = [
+      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE" as const, lockOrigin: null },
+      { id: "slot-2", scheduleId: SID, teamId: "team-2", venueId: "venue-1", coachId: null, dayOfWeek: 3, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE" as const, lockOrigin: null },
+    ];
+
+    beforeEach(() => {
+      useToastStore.setState({ toasts: [] });
+      vi.mocked(moveSlot).mockReset();
+      vi.mocked(placeSlot).mockReset();
+    });
+
+    async function armMoveFrom(user: ReturnType<typeof userEvent.setup>, label: string): Promise<void> {
+      await user.click(await screen.findByText(label));
+      await user.click(screen.getByRole("button", { name: /Déplacer/ }));
+    }
+
+    it("essai (case occupée) INTERROMPU côté client → la modale NOMME l'interruption, jamais « indisponible »", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      vi.mocked(moveSlot).mockRejectedValueOnce(new EngineVerificationInterruptedError());
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+
+      const dialog = await screen.findByRole("dialog");
+      expect(await within(dialog).findByText(/interrompue avant la réponse/i)).toBeInTheDocument();
+      // Le mensonge d'origine ne doit PLUS apparaître.
+      expect(within(dialog).queryByText(/moteur est indisponible/i)).not.toBeInTheDocument();
+      // Rien n'est tranché : ni oui (pas d'éviction), et [Réessayer] reste offert.
+      expect(await within(dialog).findByRole("button", { name: /Réessayer/ })).toBeInTheDocument();
+      expect(within(dialog).queryByRole("button", { name: /Déplacer et évincer/ })).not.toBeInTheDocument();
+    });
+
+    it("déplacement (case vide) INTERROMPU côté client → le panneau NOMME l'interruption, jamais « indisponible »", async () => {
+      const user = userEvent.setup();
+      vi.mocked(moveSlot).mockRejectedValueOnce(new EngineVerificationInterruptedError());
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+
+      // Le panneau du créneau source (toujours ouvert) porte le verdict : interruption NOMMÉE.
+      expect(await screen.findByText(/interrompue avant la réponse/i)).toBeInTheDocument();
+      expect(screen.queryByText(/moteur est indisponible/i)).not.toBeInTheDocument();
+    });
+
+    it("placement d'une équipe à la dérive INTERROMPU côté client → toast « interrompue », jamais « indisponible »", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
+      vi.mocked(placeSlot).mockRejectedValueOnce(new EngineVerificationInterruptedError());
+      renderWithProviders(<PlanningPage />);
+      const banner = await screen.findByRole("region", { name: /séances à replacer/i });
+      await user.click(within(banner).getByRole("button"));
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+
+      await waitFor(() => expect(useToastStore.getState().toasts.some((t) => /interrompue avant la réponse/i.test(t.message))).toBe(true));
+      expect(useToastStore.getState().toasts.every((t) => !/indisponible/i.test(t.message))).toBe(true);
     });
   });
 

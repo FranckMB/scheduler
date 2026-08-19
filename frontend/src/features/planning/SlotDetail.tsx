@@ -24,6 +24,9 @@ export type MoveFeedback =
   | { status: "pending" }
   | { status: "rejected"; violations: MoveViolation[] }
   | { status: "blocked" }
+  // P4-119 (b) : l'attente a été coupée CÔTÉ CLIENT avant la réponse — DISTINCT d'un moteur muet
+  // (`error`) : on ne sait rien de la santé du moteur, on le dit sans l'accuser.
+  | { status: "interrupted" }
   | { status: "error" };
 
 interface SlotDetailProps {
@@ -242,6 +245,12 @@ export function SlotDetail({ cell, slot, venues, categoryLabel, constraints, tag
           {"blocked" === moveState.status ? (
             <p className="rounded-md border border-warning/40 bg-warning/10 p-2 text-sm text-muted-foreground" role="alert">
               Une génération est en cours pour ce club — réessayez le déplacement une fois qu’elle est terminée.
+            </p>
+          ) : null}
+
+          {"interrupted" === moveState.status ? (
+            <p className="rounded-md border border-warning/40 bg-warning/10 p-2 text-sm text-muted-foreground" role="alert">
+              La vérification a été interrompue avant la réponse — rien n’a été modifié, réessayez.
             </p>
           ) : null}
 

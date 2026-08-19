@@ -27,11 +27,18 @@ import { CompromiseList } from "./CompromiseList";
 
 export type EvictDialogPhase = "checking" | "accepted" | "refused" | "failed";
 
-/** Pourquoi l'essai a échoué (état `failed`) : le moteur a été trop lent, ou il est indisponible. */
-export type EvictFailureKind = "timeout" | "unreachable";
+/**
+ * Pourquoi l'essai a échoué (état `failed`) — trois causes DISTINCTES, jamais confondues (P4-119 b) :
+ *  - `timeout`     : le SERVEUR a tranché « moteur trop lent » (504 `engine_timeout`) ;
+ *  - `interrupted` : l'attente a été coupée CÔTÉ CLIENT avant la réponse — on n'a AUCUNE preuve de
+ *                    panne (le moteur répondait peut-être `valid`), donc surtout pas « indisponible » ;
+ *  - `unreachable` : une vraie panne réseau / 5xx du backend — LÀ le moteur est bien indisponible.
+ */
+export type EvictFailureKind = "timeout" | "interrupted" | "unreachable";
 
 const FAILURE_MESSAGE: Record<EvictFailureKind, string> = {
   timeout: "La vérification n'a pas abouti — le moteur n'a pas répondu à temps. Réessayez.",
+  interrupted: "La vérification a été interrompue avant la réponse — réessayez.",
   unreachable: "La vérification n'a pas abouti — le moteur est indisponible. Réessayez.",
 };
 
@@ -82,9 +89,12 @@ export function EvictConfirmDialog({ open, phase, occupantName, compromises, vio
 
         <div className="mt-2 min-h-0 overflow-y-auto text-sm">
           {"checking" === phase ? (
+            // Attente HONNÊTE (P4-119 b) : le moteur peut mettre plusieurs dizaines de secondes sur
+            // un club dense — on le DIT, plutôt que de laisser croire à un gel puis de mentir « moteur
+            // indisponible » si le front raccroche. La borne suit le budget client (cf. api.ts).
             <div className="flex items-center gap-2 text-muted-foreground" role="status">
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              Vérification…
+              Vérification en cours — le moteur calcule, cela peut prendre jusqu'à 45 s.
             </div>
           ) : null}
 
