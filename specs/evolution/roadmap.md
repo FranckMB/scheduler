@@ -1,4 +1,4 @@
-# Roadmap (59) — ce qui reste à faire
+# Roadmap (60) — ce qui reste à faire
 
 > **Ce fichier ne tient QUE l'ouvert.** Bugs, évolutions, dettes techniques : tout ce qu'on trace pour ne pas
 > l'oublier un jour. Rien de livré n'y figure — un item livré **quitte** ce fichier et laisse sa trace dans
@@ -147,6 +147,7 @@
 
 | # | Sujet | Impact | Effort | Note |
 |---|-------|:---:|:---:|---|
+| SEC-13 | **Le garde « saison archivée » se résout du HEADER, pas de la saison du plan ÉCRIT** | 🟡 | S | Observé par la security-review de P2-44 PR-1 (2026-08-19), défaut SYSTÉMIQUE préexistant — pas propre à la nouvelle route : `SeasonAccessGuard::assertWritable` lit la saison du header `X-Season-Id` (repli « saison courante », toujours inscriptible) alors que la cible de l'écriture est un plan qui porte SA saison — en omettant le header, un gestionnaire pourrait écrire sur un plan d'une saison ARCHIVÉE en passant sous le garde 409. Concerne TOUS les contrôleurs `SeasonScopedWriteInterface` (Regenerate, Reopen, Validate, Generate, Transcribe…). Fix : le garde dérive la saison de la RESSOURCE ciblée quand elle en porte une, le header ne servant qu'aux collections ; NR = étendre `Security/SeasonReadonlyTest` (step bloquant) avec le cas « plan de saison archivée ciblé sans header » |
 | P4-121 | **« C'est une entrée-mère de vacances » se réimplémente à chaque site — aucune maison unique** | ⚪ | S | Constaté en corrigeant le doublon radar du 2026-08-19 (fix `CalendarEntryStateProcessor::autoLinkedHolidayId`) : le prédicat « cette entrée ANCRE une vacance scolaire » vit en **4 endroits divergents** — `frontend/src/features/cockpit/lib/markers.ts:19` (`isHolidayAnchor` = racine + `schoolHolidayId` non nul), `frontend/src/features/cockpit/RadarPanel.tsx:254` (dédoublonnage radar : filtre sur `schoolHolidayId` non nul SEUL, sans vérifier `parentEntryId`), `frontend/src/features/cockpit/DayDialog.tsx:322` (retrouver l'entrée déjà matérialisée : même filtre partiel), `backend/src/State/Processor/CalendarEntryStateProcessor.php:529` (`autoLinkedHolidayId` : racine + `periodType === HOLIDAY`, sans regarder `schoolHolidayId`). Le fix du 19/08 n'a réparé que **le lien manquant** (le CAS qui produisait le doublon) — il n'a pas touché à la dispersion du prédicat lui-même : un futur site qui invente sa propre variante (oubliant `parentEntryId`, ou testant le mauvais champ) redonnera le même doublon ailleurs. Geste : un registre unique (miroir déclaré si le frontend doit le garder synchrone, ou tout ramener côté backend et servir un champ dérivé) — même famille que la règle d'or frontend.md « le front n'invente jamais une règle métier » |
 
 ### Retour terrain du 2026-08-15 (la confiance dans ce qu'on lit à l'écran)
