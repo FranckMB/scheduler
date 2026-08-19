@@ -154,7 +154,7 @@ DRAFT ──generate──▶ PENDING ──▶ GENERATING ──▶ COMPLETED
 - **Unions** : `ScheduleStatus` reste à **5** statuts (`planning/api.ts`, `wizard/api.ts`) — « validé » n'en est pas un.
 - **API/hooks** : `reopenSchedule()` + `useReopenSchedule()` ; `useValidateSchedule`. Le pointeur se lit sur `/api/me` (`seasonPlan.chosenScheduleId`) et, par version, sur le champ de lecture `Schedule.isChosen`.
 - **PlanningToolbar** :
-  - Boutons contextuels : **« Valider »** si `COMPLETED` et non choisie (→ ouvre la **modale** §3.3bis) · **« Rouvrir »** si la version est choisie (+ indicateur 🔒 « Lecture seule »).
+  - Boutons contextuels : **« Valider »** si `COMPLETED` et non choisie (→ ouvre la **modale** §3.3bis) · **« Rouvrir »** si la version est choisie (+ indicateur 🔒 « Lecture seule ») · **« Régénérer »** sinon. **Bornés à `embedded`** (fix terrain 2026-08-19, défaut 2 — Option A) : la page `/planning` autonome ne les affiche **plus**, elle **consulte** ; ces trois gestes ne vivent plus que dans l'étape Génération du wizard (`PlanningPage embedded`). Détail du contrat de routage (plan pointé → `/planning`, non pointé → wizard mode déclaré) et du libellé d'état différencié : `frontend/docs/frontend-spec.md` §6.6bis.
   - Badge statut **traduit** (FR) pour les 5 statuts (voir §5).
   - Badge **« Planning principal »** vs **« Secondaire »**.
   - **Nom éditable** en ligne **uniquement si la version n'est pas choisie** (verrou total) ; le **nom du plan** se renomme par `PUT /api/schedule_plans/{id}`.

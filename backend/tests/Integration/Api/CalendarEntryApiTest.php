@@ -11,6 +11,7 @@ use App\Entity\Constraint;
 use App\Entity\ConstraintPeriodOverride;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
+use App\Entity\SchoolHolidayPeriod;
 use App\Entity\Season;
 use App\Entity\User;
 use App\Enum\CalendarEntryKind;
@@ -499,6 +500,70 @@ final class CalendarEntryApiTest extends WebTestCase
         self::assertNotContains('Secret B', $titles);
     }
 
+    /**
+     * Défaut 4(b) — une entrée VACANCES racine créée SANS lien dont la fenêtre chevauche une
+     * vacance scolaire de la ZONE du club reçoit le lien automatiquement (une seule vérité
+     * serveur). Le radar dédoublonne alors le feed scolaire et cette entrée.
+     */
+    public function testHolidayEntryWithoutLinkAutoLinksToOverlappingSchoolHoliday(): void
+    {
+        [$user, $club] = $this->seed('CE20');
+        $holidayId = $this->seedSchoolHoliday($club, 'A', 'hiver', '2026-02-07', '2026-02-22', '2025-2026');
+
+        $this->post($user, $club, [
+            'kind' => 'period',
+            'title' => 'Vacances d\'hiver',
+            'startDate' => '2026-02-09',
+            'endDate' => '2026-02-20',
+            'periodType' => 'holiday',
+        ]);
+
+        self::assertResponseStatusCodeSame(201);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame($holidayId, $data['schoolHolidayId'] ?? null, 'une vacance sans lien reçoit celui de la vacance scolaire chevauchante de sa zone');
+    }
+
+    public function testHolidayEntryWithoutOverlapStaysUnlinked(): void
+    {
+        [$user, $club] = $this->seed('CE21');
+        $this->seedSchoolHoliday($club, 'A', 'hiver', '2026-02-07', '2026-02-22', '2025-2026');
+
+        // Fenêtre de mai : ne chevauche AUCUNE vacance scolaire de la zone.
+        $this->post($user, $club, [
+            'kind' => 'period',
+            'title' => 'Stage de mai',
+            'startDate' => '2026-05-04',
+            'endDate' => '2026-05-10',
+            'periodType' => 'holiday',
+        ]);
+
+        self::assertResponseStatusCodeSame(201);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertNull($data['schoolHolidayId'] ?? null, 'sans vacance scolaire chevauchante, aucun lien n\'est posé');
+    }
+
+    public function testExplicitSchoolHolidayLinkIsRespected(): void
+    {
+        [$user, $club] = $this->seed('CE22');
+        $overlapping = $this->seedSchoolHoliday($club, 'A', 'hiver', '2026-02-07', '2026-02-22', '2025-2026');
+        $explicit = $this->seedSchoolHoliday($club, 'A', 'printemps', '2026-04-04', '2026-04-19', '2025-2026');
+
+        // Fenêtre chevauchant « hiver », mais lien EXPLICITE vers « printemps » : le client fait foi.
+        $this->post($user, $club, [
+            'kind' => 'period',
+            'title' => 'Vacances',
+            'startDate' => '2026-02-09',
+            'endDate' => '2026-02-20',
+            'periodType' => 'holiday',
+            'schoolHolidayId' => $explicit,
+        ]);
+
+        self::assertResponseStatusCodeSame(201);
+        $data = json_decode((string) $this->client->getResponse()->getContent(), true);
+        self::assertSame($explicit, $data['schoolHolidayId'] ?? null, 'un lien explicite n\'est jamais écrasé par l\'auto-résolution');
+        self::assertNotSame($overlapping, $data['schoolHolidayId'] ?? null);
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -542,6 +607,26 @@ final class CalendarEntryApiTest extends WebTestCase
             ...$this->authHeaders($user, $club),
             'CONTENT_TYPE' => 'application/ld+json',
         ], json_encode($payload, \JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * Pose la ZONE scolaire du club ET une ligne de référence `school_holiday_period` (globale,
+     * sans RLS) pour cette zone — de quoi éprouver l'auto-résolution du lien à la création.
+     */
+    private function seedSchoolHoliday(Club $club, string $zone, string $type, string $start, string $end, string $year): string
+    {
+        $this->scopeGucToClub($club->getId());
+        $managed = $this->em->getRepository(Club::class)->find($club->getId());
+        self::assertInstanceOf(Club::class, $managed);
+        $managed->setSchoolZone($zone);
+
+        $holiday = new SchoolHolidayPeriod;
+        $holiday->setZone($zone)->setLabel('Vacances')->setHolidayType($type)
+            ->setStartDate(new DateTimeImmutable($start))->setEndDate(new DateTimeImmutable($end))->setSchoolYear($year);
+        $this->em->persist($holiday);
+        $this->em->flush();
+
+        return $holiday->getId();
     }
 
     private function activeSeasonId(Club $club): string

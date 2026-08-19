@@ -287,6 +287,22 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.getByRole("button", { name: "Par coach" })).toBeInTheDocument();
   });
 
+  // NR (défaut 2/3, axe planning lifecycle) — Option A : /planning autonome CONSULTE.
+  // Sans le sélecteur de version (masqué hors `embedded`), les gestes d'ÉCRITURE
+  // Valider / Rouvrir / Régénérer ne s'offrent plus : ils vivent dans l'étape
+  // Génération du wizard. Offrir « Valider » sans pouvoir choisir une version était
+  // le défaut. Falsifiable : les mêmes gestes RESTENT offerts en embedded (tests ci-dessus).
+  it("standalone /planning (not embedded) n'offre NI Valider NI Régénérer sur une version terminée non validée", () => {
+    renderToolbar(schedule("COMPLETED"), { embedded: false });
+    expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Régénérer" })).not.toBeInTheDocument();
+  });
+
+  it("standalone /planning (not embedded) n'offre PAS Rouvrir sur la version en vigueur", () => {
+    renderToolbar(schedule("COMPLETED", { isChosen: true }), { embedded: false });
+    expect(screen.queryByRole("button", { name: /rouvrir/i })).not.toBeInTheDocument();
+  });
+
   it("n'affiche le score du solveur NULLE PART, embedded compris (P4-39)", () => {
     // Décision fondateur : « ça ne sert à rien pour le gestionnaire ». Le mode embedded est
     // celui qui l'affichait — c'est donc LUI qu'il faut interroger : le vérifier en

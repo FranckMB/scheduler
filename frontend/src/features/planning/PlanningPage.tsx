@@ -356,8 +356,11 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
         onSuccess: () => {
           setValidateOverlayCount(null);
           setValidateOpen(false);
-          // Validated → land on the (now read-only) planning view.
-          navigate("/planning");
+          // Validated → STAY where the gesture lives. Valider n'existe plus
+          // qu'en écran embarqué (option A, 2026-08-19 : /planning consulte) ;
+          // naviguer vers /planning atterrissait sur un écran désormais MUET
+          // (ni badge ni Rouvrir) — rester ici fait basculer la toolbar sur
+          // « Rouvrir », le seul accusé visible de la validation.
         },
         onError: (error) => {
           if (error instanceof OverlaysExistError) {
@@ -378,7 +381,22 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
       {
         onSuccess: () => {
           setReopenOverlayCount(null);
-          // Reopened to rework the plan → back to the wizard's generation step.
+          // RÈGLE : toute navigation vers /wizard DÉCLARE son mode — aucun héritage du mode
+          // ambiant du localStorage. Sans quoi rouvrir un overlay ouvrait la SAISON (ou la
+          // mauvaise période) : `jumpTo("generate")` SEUL laissait le mode persisté décider.
+          // On le dérive de la version rouverte : plan non-SEASON → mode période ancré sur SON
+          // entrée (schedulePlanId → plan → calendarEntryId) ; plan SEASON → mode saison.
+          const reopened = displayed; // === selectedSchedule ; `displayed` est en portée ici
+          const reopenedEntryId =
+            null !== reopened && !isSeasonPlanType(reopened.planType) && null !== reopened.schedulePlanId
+              ? ((allSchedulePlans ?? []).find((p) => p.id === reopened.schedulePlanId)?.calendarEntryId ?? null)
+              : null;
+          if (null !== reopenedEntryId) {
+            useWizardStore.getState().startPeriodMode(reopenedEntryId);
+          } else {
+            useWizardStore.getState().exitPeriodMode();
+          }
+          // Reopened to rework the plan → the wizard's generation step (mode already declared).
           useWizardStore.getState().jumpTo("generate");
           navigate("/wizard");
         },
@@ -1527,8 +1545,8 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
       <ConfirmDialog
         open={reopenOverlayCount !== null}
         destructive
-        title="Rouvrir le planning principal ?"
-        description={`Rouvrir ce planning principal supprimera ${reopenOverlayCount ?? 0} planning${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} secondaire${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
+        title={`Rouvrir « ${displayedPlanName ?? "ce planning"} » ?`}
+        description={`Rouvrir « ${displayedPlanName ?? "ce planning"} » supprimera ${reopenOverlayCount ?? 0} planning${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} secondaire${(reopenOverlayCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
         confirmLabel="Rouvrir et supprimer"
         confirmPhrase="modifier mon planning de saison"
         onConfirm={() => reopen(true)}
@@ -1567,7 +1585,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
 
       <ConfirmDialog
         open={validateOverlayCount !== null}
-        title="Valider cette version et remplacer le planning principal ?"
+        title={`Valider « ${displayedPlanName ?? "cette version"} » et remplacer le planning principal ?`}
         description={`Cette version deviendra le planning principal ; ${validateOverlayCount ?? 0} planning${(validateOverlayCount ?? 0) > 1 ? "s" : ""} de période bâti${(validateOverlayCount ?? 0) > 1 ? "s" : ""} sur l'ancien principal ser${(validateOverlayCount ?? 0) > 1 ? "ont" : "a"} supprimé${(validateOverlayCount ?? 0) > 1 ? "s" : ""} (à refaire ensuite).`}
         confirmLabel="Valider et remplacer"
         destructive

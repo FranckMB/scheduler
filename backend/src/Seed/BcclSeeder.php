@@ -47,6 +47,7 @@ use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
 use App\Enum\TeamLevel;
 use App\Enum\VenuePeriodMode;
+use App\Repository\SchoolHolidayPeriodRepository;
 use App\Service\Basketball\CategoryCatalog;
 use App\Service\LeagueResolver;
 use App\Service\ScheduleConstraintBuilder;
@@ -91,6 +92,7 @@ final class BcclSeeder
         private readonly LogoStorage $logoStorage,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly ScheduleConstraintBuilder $constraintBuilder,
+        private readonly SchoolHolidayPeriodRepository $schoolHolidayRepository,
     ) {}
 
     public function run(EntityManagerInterface $manager, BcclSeedProfile $profile): Club
@@ -1559,6 +1561,27 @@ final class BcclSeeder
         $motherStart = $season->getStartDate() > $summerStart ? $season->getStartDate() : $summerStart;
         $motherEnd = $season->getEndDate() < $summerEnd ? $season->getEndDate() : $summerEnd;
 
+        // La mère « Vacances d'été » est un ANCRAGE des vacances scolaires d'été (isHolidayAnchor) :
+        // le radar apparie ses cartes sur `schoolHolidayId`. Sans le lien, le cockpit affichait DEUX
+        // « Vacances d'été » (le feed scolaire + cette entrée). On lit la vacance été de la ZONE du
+        // club qui chevauche la fenêtre, et on prend SA fenêtre clampée à la saison (plutôt que des
+        // dates en dur) — deux vacances été peuvent tomber dans une saison (juil. N et juil. N+1),
+        // seule celle qui recouvre la fenêtre de reprise nous concerne.
+        $summerHoliday = null;
+        $zone = $club->getSchoolZone();
+        if (null !== $zone && '' !== $zone) {
+            foreach ($this->schoolHolidayRepository->findByZoneAndWindow($zone, $motherStart, $motherEnd) as $candidate) {
+                if ('ete' === $candidate->getHolidayType()) {
+                    $summerHoliday = $candidate;
+                    break;
+                }
+            }
+        }
+        if (null !== $summerHoliday) {
+            $motherStart = $summerHoliday->getStartDate() > $season->getStartDate() ? $summerHoliday->getStartDate() : $season->getStartDate();
+            $motherEnd = $summerHoliday->getEndDate() < $season->getEndDate() ? $summerHoliday->getEndDate() : $season->getEndDate();
+        }
+
         $mother = $manager->getRepository(CalendarEntry::class)->findOneBy([
             'clubId' => $clubId,
             'seasonId' => $season->getId(),
@@ -1575,7 +1598,15 @@ final class BcclSeeder
             $mother->setStartDate($motherStart);
             $mother->setEndDate($motherEnd);
             $mother->setStatus(CalendarEntryStatus::ACTIVE);
+            if (null !== $summerHoliday) {
+                $mother->setSchoolHolidayId($summerHoliday->getId());
+            }
             $manager->persist($mother);
+            $manager->flush();
+        } elseif (null !== $summerHoliday && null === $mother->getSchoolHolidayId()) {
+            // Mère d'un seed antérieur, sans lien : on la raccroche (idempotent — au 2ᵉ run elle
+            // est déjà liée, donc no-op).
+            $mother->setSchoolHolidayId($summerHoliday->getId());
             $manager->flush();
         }
 

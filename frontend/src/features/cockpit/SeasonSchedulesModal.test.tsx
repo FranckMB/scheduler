@@ -102,7 +102,23 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
   it("represents each planning by its latest FINISHED version, never a failed/in-flight one", () => {
     // v2 is FAILED and v3 GENERATING → the principal row must fall back to the finished v1.
     open([plan({ id: "v1", status: "COMPLETED", createdAt: "2026-07-01T10:00:00+00:00" }), plan({ id: "v2", status: "FAILED", createdAt: "2026-07-02T10:00:00+00:00" }), plan({ id: "v3", status: "GENERATING", createdAt: "2026-07-03T10:00:00+00:00" })]);
-    expect(screen.getByText("Terminé")).toBeInTheDocument(); // v1's COMPLETED label, not FAILED/GENERATING
+    // v1's COMPLETED-not-validated state (« Terminé · à valider »), not FAILED/GENERATING.
+    expect(screen.getByText("Terminé · à valider")).toBeInTheDocument();
+    expect(screen.queryByText("Échec")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Génération/)).not.toBeInTheDocument();
+  });
+
+  // NR (défaut 1, axe planning lifecycle) : une LIGNE est un PLAN — son état lu du PLAN,
+  // pas du statut brut de la version. Un plan validé (pointé) et un plan terminé-non-validé,
+  // tous deux COMPLETED, doivent se lire DIFFÉREMMENT — le socle validé n'était plus
+  // discernable d'un overlay simplement terminé.
+  it("distingues à l'état un plan VALIDÉ d'un plan terminé-non-validé (même statut COMPLETED)", () => {
+    open([
+      plan({ id: "v1", status: "COMPLETED", isChosen: true }), // socle en vigueur
+      plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", isChosen: false, planType: "CLOSURE", schedulePlanId: "p1" }),
+    ]);
+    expect(screen.getByText("Validé")).toBeInTheDocument();
+    expect(screen.getByText("Terminé · à valider")).toBeInTheDocument();
   });
 
   it("eye on the planning in force opens the planning page", async () => {
@@ -121,14 +137,25 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
     expect(navigate).toHaveBeenCalledWith("/wizard");
   });
 
-  it("eye on a finished PERIOD overlay opens it on the planning page (never the wizard)", async () => {
-    // A COMPLETED overlay is a finished period plan → consult it read-only, not the
-    // wizard (the wizard's generation step is for finishing/resuming an OPEN plan).
-    open([plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", planType: "CLOSURE", schedulePlanId: "p1" })]);
+  it("eye on a VALIDATED (pointed) PERIOD overlay opens it on the planning page (read-only)", async () => {
+    // Plan POINTÉ = une version en vigueur → consultation lecture seule sur /planning.
+    open([plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", isChosen: true, planType: "CLOSURE", schedulePlanId: "p1" })]);
     await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
     expect(setSelectedScheduleId).toHaveBeenCalledWith("o1");
     expect(navigate).toHaveBeenCalledWith("/planning");
-    expect(jumpTo).not.toHaveBeenCalled();
+    expect(startPeriodMode).not.toHaveBeenCalled();
+  });
+
+  it("eye on a terminé-NON-validé PERIOD overlay resumes it in the wizard's period mode (never /planning)", async () => {
+    // ADR-0002 (défaut 2) : plan NON pointé → wizard, mode période DÉCLARÉ ancré sur SON
+    // entrée + étape Génération, comme la branche socle. Un overlay terminé mais pas encore
+    // validé se FINIT/valide au wizard, il ne se consulte pas en lecture seule.
+    open([plan({ id: "o1", name: "Vacances Toussaint", status: "COMPLETED", isChosen: false, planType: "CLOSURE", schedulePlanId: "p1" })]);
+    await userEvent.click(screen.getByRole("button", { name: /^Consulter/ }));
+    expect(startPeriodMode).toHaveBeenCalledWith("entry-1"); // p1 → entry-1 (mock useSchedulePlans)
+    expect(jumpTo).toHaveBeenCalledWith("generate");
+    expect(navigate).toHaveBeenCalledWith("/wizard");
+    expect(navigate).not.toHaveBeenCalledWith("/planning");
   });
 
   // B1 (retour fondateur 2026-07-19) : un plan de période créé mais SANS version
