@@ -56,7 +56,58 @@ class SharedTrainingGroupStateProvider extends AbstractStateProvider
 
         $qb->orderBy('e.id', 'ASC');
 
-        return array_map([$this, 'mapEntityToOutput'], $qb->getQuery()->getResult());
+        /** @var list<SharedTrainingGroup> $groups */
+        $groups = $qb->getQuery()->getResult();
+
+        // AUD-BCK-16 — les membres des groupes en UNE requête, pas une par groupe. Le mapper
+        // unitaire (item) garde son chemin direct ; ici la collection les charge en lot, sinon
+        // le nombre de requêtes suit le nombre de groupes du club. Volume borné par le métier
+        // aujourd'hui — mais un N+1 qu'on laisse est un N+1 qu'on découvre en prod le jour où
+        // la mutualisation prend.
+        $teamIdsByGroup = $this->teamIdsOfMany(array_map(static fn (SharedTrainingGroup $g): string => $g->getId(), $groups));
+
+        return array_map(
+            static fn (SharedTrainingGroup $group): SharedTrainingGroupResource => SharedTrainingGroupResource::fromEntity(
+                $group,
+                $teamIdsByGroup[$group->getId()] ?? [],
+            ),
+            $groups,
+        );
+    }
+
+    /**
+     * Les ids d'équipe de PLUSIEURS groupes, en une requête (AUD-BCK-16).
+     *
+     * Même tri que {@see teamIdsOf} — `teamId` croissant — pour que la collection et l'item
+     * rendent EXACTEMENT la même liste : deux ordres différents pour un même groupe seraient
+     * un écart invisible au test unitaire et visible à l'écran.
+     *
+     * @param list<string> $groupIds
+     *
+     * @return array<string, list<string>>
+     */
+    private function teamIdsOfMany(array $groupIds): array
+    {
+        if ([] === $groupIds) {
+            return [];
+        }
+
+        /** @var list<array{groupId: string, teamId: string}> $rows */
+        $rows = $this->entityManager->getRepository(SharedTrainingGroupTeam::class)
+            ->createQueryBuilder('t')
+            ->select('t.groupId', 't.teamId')
+            ->where('t.groupId IN (:groupIds)')
+            ->setParameter('groupIds', $groupIds)
+            ->orderBy('t.teamId', 'ASC')
+            ->getQuery()
+            ->getScalarResult();
+
+        $byGroup = [];
+        foreach ($rows as $row) {
+            $byGroup[$row['groupId']][] = $row['teamId'];
+        }
+
+        return $byGroup;
     }
 
     /**
