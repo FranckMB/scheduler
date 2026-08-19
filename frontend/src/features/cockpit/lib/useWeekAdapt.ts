@@ -436,6 +436,10 @@ export function useWeekAdapt(adapt: (entryId: string) => void, childrenResolved 
   return {
     requestAdapt,
     needsPicker,
+    // P2-40 — foyer UNIQUE de l'offre de semaines (closureWeeksOffer pour une fermeture,
+    // periodWeeksToAdjust sinon), exposé aux surfaces pour qu'elles ne redérivent JAMAIS
+    // l'exclusion des semaines sous vacances (A3 : la carte de couverture s'en sert).
+    offerFor,
     pickerState,
     pickerOffer,
     pendingOffer,

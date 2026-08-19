@@ -12,7 +12,7 @@ import { cn } from "@/shared/lib/utils";
 
 import type { CalendarEntry, CalendarEntryPeriodType, PublicHoliday, SchoolHoliday } from "./api";
 import { useCreateVenueClosure, useEntryConflicts, useEntryConflictsList, useSchedulePlans } from "./queries";
-import { clampRangeToSeason, daysUntil, frDateShort, groupCoverageSlots, isActionableWeek, periodWeeksToAdjust, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
+import { clampRangeToSeason, daysUntil, frDateShort, groupCoverageSlots, isActionableWeek, todayISO, weeksCovering, type WeekWindow } from "./lib/date";
 import { seasonLockTitle, useSocleValidated } from "./lib/socle";
 import { unavailabilitiesToAlert } from "./lib/venueUnavailabilityRadar";
 import { useWeekAdapt } from "./lib/useWeekAdapt";
@@ -50,6 +50,14 @@ export const SCHOOL_HOLIDAY_HORIZON_DAYS = 60;
  * `daysUntil` est négatif, donc sous l'horizon, et elle demande toujours un geste.
  */
 export const VENUE_UNAVAILABILITY_HORIZON_DAYS = 30;
+
+/** Une semaine d'une période mère découpée : son enfant (ou null si à créer/manquante) et, pour
+ *  une fermeture chevauchant des vacances, les libellés des vacances qui la gouvernent (A3). */
+interface MotherWeekSlot {
+  week: WeekWindow;
+  child: CalendarEntry | null;
+  governedBy: string[] | null;
+}
 
 interface RadarPanelProps {
   entries: CalendarEntry[];
@@ -102,7 +110,7 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
 
   // P2-5 E1 : flux de découpage partagé (radar + DayDialog) — voir requestAdapt.
   // Chemin `pending` : la mère vacances naît SEULEMENT à la confirmation du picker.
-  const { pickerFor, setPickerFor, pendingMother, setPendingMother, openPendingPicker, needsPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, recordPendingOnly, createOneWeek, windowConflict, resetWindowConflict, requestAdapt: requestWeekAdapt, pickerState, pickerOffer, pendingOffer, pendingPickerState, blockInfo, blockDeleting, blockDeleteFailed, deleteBlockVersionsAndSplit } = useWeekAdapt(adapt);
+  const { pickerFor, setPickerFor, pendingMother, setPendingMother, openPendingPicker, needsPicker, createWeekChildren, createHoliday, adaptBlock, pickWeeks, pickWeeksPending, adaptWholePending, recordPendingOnly, createOneWeek, windowConflict, resetWindowConflict, requestAdapt: requestWeekAdapt, offerFor, pickerState, pickerOffer, pendingOffer, pendingPickerState, blockInfo, blockDeleting, blockDeleteFailed, deleteBlockVersionsAndSplit } = useWeekAdapt(adapt);
   // #10 — la todo-list des doléances d'une période de vacances (ouverte sur la MÈRE).
   const [wishesEntry, setWishesEntry] = useState<CalendarEntry | null>(null);
   // #10 C2 — les campagnes de collecte, indexées par période (une requête pour tout le
@@ -177,34 +185,50 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   // créer », une semaine décochée devenait à jamais implanifiable). Visible tant
   // que la DERNIÈRE fenêtre (mère ou enfants — une semaine pleine déborde la
   // mère) n'est pas passée ; tout couvert → la carte s'efface (to-do).
-  const motherWeekSlots = (m: CalendarEntry): { week: WeekWindow; child: CalendarEntry | null }[] => {
+  const motherWeekSlots = (m: CalendarEntry): MotherWeekSlot[] => {
     // P3-13 (b) — les semaines RÉVOLUES ne comptent ni ne s'offrent : « 0/7 couvertes »
     // quand 3 étaient derrière décrivait un travail impossible. ⚠ RÉVOLUE, pas
     // « commencée » (revue #344) : une semaine dont il reste des jours porte encore du
     // travail — une fermeture du mercredi serait devenue implanifiable dès le lundi.
     // Filtre appliqué en SORTIE, donc aux deux branches ci-dessous.
-    const stillOpen = (slots: { week: WeekWindow; child: CalendarEntry | null }[]) => slots.filter(({ week }) => isActionableWeek(week, today));
+    const stillOpen = (slots: MotherWeekSlot[]) => slots.filter(({ week }) => isActionableWeek(week, today));
     const children = childrenByParent.get(m.id) ?? [];
     if (null === workingSeason) {
       // Saison inconnue : pas de calcul des manquantes — les enfants existants font foi.
-      return stillOpen(children.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c })));
+      return stillOpen(children.map((c) => ({ week: { startDate: c.startDate, endDate: c.endDate, monday: c.startDate }, child: c, governedBy: null })));
     }
-    // Filet #262 + revue C F1 : on itère TOUTES les semaines calendaires et on garde
-    // une semaine si elle porte un enfant EXISTANT (toujours visible/gérable) OU si
-    // elle est OFFERTE à la création (periodAdjustWeeks écarte la semaine partielle
-    // d'une vacance démarrant Ven/Sam/Dim). Une semaine partielle SANS enfant
-    // disparaît (pas de chip « + créer ») ; AVEC enfant, elle reste (jamais orpheline).
-    const offeredMondays = new Set(periodWeeksToAdjust(m.startDate, m.endDate, workingSeason, m.periodType, today).map((w) => w.monday));
+    // A3 (P2-40) — l'OFFRE vient du foyer UNIQUE (`offerFor`) : pour une fermeture il écarte les
+    // semaines gouvernées par des vacances (elles ne sont pas ajustables par elle), pour tout
+    // autre type c'est l'offre historique. Aucune re-dérivation ici : on LIT sa sortie.
+    const offer = offerFor(m.startDate, m.endDate, m.periodType);
+    const offeredMondays = new Set(offer.offered.map((w) => w.monday));
+    // Les libellés d'une semaine GOUVERNÉE par des vacances, lus des blocs exclus de l'offre.
+    const governingLabels = (week: WeekWindow): string[] | null => {
+      const range = offer.excludedRanges.find((r) => r.startDate <= week.endDate && r.endDate >= week.startDate);
+      return range?.labels ?? null;
+    };
+    // Filet #262 + revue C F1 : on itère TOUTES les semaines calendaires et on garde une semaine
+    // si elle porte un enfant EXISTANT (toujours visible/gérable), si elle est OFFERTE à la
+    // création (periodAdjustWeeks écarte la semaine partielle d'une vacance démarrant Ven/Sam/Dim),
+    // OU si elle est GOUVERNÉE par des vacances (grisée, informative). Une semaine partielle SANS
+    // rien de tout ça disparaît (pas de chip « + créer »).
     return stillOpen(
       weeksCovering(m.startDate, m.endDate, workingSeason)
-        .map((week) => ({ week, child: children.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null }))
-        .filter(({ week, child }) => null !== child || offeredMondays.has(week.monday)),
+        .map((week) => {
+          const child = children.find((c) => c.startDate <= week.endDate && c.endDate >= week.startDate) ?? null;
+          // Un enfant l'emporte : une semaine portée par un plan est ajustable, jamais grisée.
+          const governedBy = null !== child ? null : governingLabels(week);
+          return { week, child, governedBy };
+        })
+        .filter(({ week, child, governedBy }) => null !== child || offeredMondays.has(week.monday) || null !== governedBy),
     );
   };
   // La carte de couverture vit tant qu'il RESTE une semaine à venir non couverte. Le
   // garde-fou `lastEnd < today` d'avant est devenu redondant : une mère entièrement
   // passée n'a plus aucun slot, donc plus aucun `some` vrai.
-  const splitMothers = roots.filter((e) => childrenByParent.has(e.id) && motherWeekSlots(e).some(({ child }) => null === child || !activeByEntry.has(child.id)));
+  // A3 — une semaine GOUVERNÉE par des vacances n'est pas un travail restant (le rappel vit dans
+  // le planning des vacances) : seule une semaine AJUSTABLE non couverte garde la carte à l'écran.
+  const splitMothers = roots.filter((e) => childrenByParent.has(e.id) && motherWeekSlots(e).some(({ child, governedBy }) => null === governedBy && (null === child || !activeByEntry.has(child.id))));
 
   // Semaines ORPHELINES D'AFFICHAGE : une semaine dont la mère ne porte AUCUNE
   // carte de couverture — mère sortie de la fenêtre radar (finie), OU écartée
@@ -473,14 +497,19 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
           Visible tant qu'une semaine n'est pas couverte. */}
       {splitMothers.map((m) => {
         const slots = motherWeekSlots(m);
-        const covered = slots.filter(({ child }) => null !== child && activeByEntry.has(child.id)).length;
+        // A3 — deux populations : les semaines AJUSTABLES (que cette période peut couvrir) et les
+        // semaines GOUVERNÉES par des vacances (informatives, grisées). Le compte ne porte QUE les
+        // ajustables — « 0/4 » et non « 0/7 » quand 3 semaines sont sous vacances.
+        const adjustableSlots = slots.filter(({ governedBy }) => null === governedBy);
+        const governedSlots = slots.filter(({ governedBy }) => null !== governedBy);
+        const covered = adjustableSlots.filter(({ child }) => null !== child && activeByEntry.has(child.id)).length;
         const impactCount = splitImpactCountByEntry.get(m.id) ?? 0;
         // ⚠ Le compteur de semaines ne porte QUE les semaines encore actionnables, alors
         // que le nombre de séances touchées vient du serveur, qui l'évalue sur TOUTE la
         // plage de la mère (revue #344). Les juxtaposer sans le dire laissait évaluer le
         // travail restant au double de ce que la carte permet de corriger : la phrase
         // nomme donc chaque périmètre au lieu de les faire passer pour le même.
-        const coverageDetail = `${covered}/${slots.length} semaine${slots.length > 1 ? "s" : ""} à venir couverte${covered > 1 ? "s" : ""}${impactCount > 0 ? ` · ${impactCount} séance${impactCount > 1 ? "s" : ""} touchée${impactCount > 1 ? "s" : ""} sur toute la période` : ""}`;
+        const coverageDetail = `${covered}/${adjustableSlots.length} semaine${adjustableSlots.length > 1 ? "s" : ""} à venir couverte${covered > 1 ? "s" : ""}${impactCount > 0 ? ` · ${impactCount} séance${impactCount > 1 ? "s" : ""} touchée${impactCount > 1 ? "s" : ""} sur toute la période` : ""}`;
         return (
           // La SEULE carte repliée par défaut : ses N puces de semaine sont ce qui allonge
           // vraiment le radar (P3-13 d, arbitrage fondateur 2026-08-01).
@@ -509,8 +538,8 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
             {/* P2-41 — groupé PAR ENFANT : un enfant-segment sur N semaines = UNE puce (son
                 libellé « du X au Y »). Une semaine MANQUANTE (child null) reste individuelle — le
                 geste « + créer » est ponctuel, à la semaine (décision ferme). Le compte
-                « N/M couvertes » ci-dessus reste au niveau semaine (calculé sur `slots`). */}
-            {groupCoverageSlots(slots).map((group) => {
+                « N/M couvertes » ci-dessus reste au niveau semaine (calculé sur les ajustables). */}
+            {groupCoverageSlots(adjustableSlots).map((group) => {
               const child = group.child;
               if (null === child) {
                 return (
@@ -545,6 +574,13 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
                 </Button>
               );
             })}
+            {/* A3 — les semaines gouvernées par des vacances : grisées, NON cliquables, avec leur
+                raison. Le rappel d'ajustement vit dans le planning des vacances, pas ici. */}
+            {governedSlots.map(({ week, governedBy }) => (
+              <span key={`gov-${week.monday}`} className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">
+                {`sem. du ${frDateShort(week.startDate)} · gérée par ${(governedBy ?? []).join(", ")}`}
+              </span>
+            ))}
           </RadarCard>
         );
       })}

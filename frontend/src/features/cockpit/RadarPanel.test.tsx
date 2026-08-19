@@ -428,6 +428,35 @@ describe("RadarPanel", () => {
     expect(screen.getAllByRole("button", { name: /sem\. du/ })).toHaveLength(3);
   });
 
+  // A3 (P2-40) — une fermeture qui chevauche des vacances : les semaines gouvernées par les
+  // vacances ne sont PAS ajustables par la fermeture (le picker les écarte déjà via
+  // closureWeeksOffer). Le compte de couverture ne doit donc porter QUE les semaines ajustables
+  // (« 0/4 », pas « 0/7 »), et les semaines sous vacances s'affichent GRISÉES avec leur raison,
+  // jamais cliquables.
+  it("compte les seules semaines ajustables et grise celles gouvernées par des vacances", async () => {
+    const user = userEvent.setup();
+    const w1s = mondayOf("2999-01-04"); // lundi
+    const weeks = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(w1s, 7 * i));
+    setTodayOverride(w1s); // les 7 semaines sont à venir
+    // Vacances d'été gouvernant les 3 premières semaines (lun→dim pleines).
+    schoolHolidaysData = { zone: "A", items: [{ id: "ete", label: "Vacances d'été", holidayType: "ete", startDate: weeks[0], endDate: addDays(weeks[2], 6), schoolYear: "2998-2999" }] };
+    renderRadar({
+      entries: [
+        closure({ id: "m1", title: "Matéo indisponible", startDate: w1s, endDate: addDays(weeks[6], 6) }),
+        // Un segment-enfant (non validé) couvre les 4 semaines ajustables (S4→S7).
+        closure({ id: "seg", title: "Matéo — bloc", parentEntryId: "m1", startDate: weeks[3], endDate: addDays(weeks[6], 6) }),
+      ],
+    });
+
+    // Le dénominateur exclut les 3 semaines de vacances : 4 ajustables, pas 7.
+    expect(screen.getByText("0/4 semaines à venir couverte")).toBeInTheDocument();
+
+    await expandCard(user, "Matéo indisponible");
+    // Les 3 semaines sous vacances sont grisées avec leur raison, et jamais cliquables.
+    expect(screen.getAllByText(/gérée par Vacances d'été/)).toHaveLength(3);
+    expect(screen.queryByRole("button", { name: /gérée par/ })).toBeNull();
+  });
+
   it("efface la carte de couverture quand toutes ses semaines sont derrière", () => {
     const w1s = mondayOf("2999-01-04");
     setTodayOverride(addDays(w1s, 21)); // trois semaines plus tard
