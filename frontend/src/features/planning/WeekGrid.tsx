@@ -66,6 +66,13 @@ interface WeekGridProps {
   onPickTarget?: (cellSlotId: string) => void;
   /** Échap en mode cible : sortir sans rien toucher (le focus revient côté page). */
   onCancelTarget?: () => void;
+  /**
+   * P2-44 (PR-2) — met les créneaux VIDES en évidence (les « trous » à combler après une
+   * transcription depuis le socle) : état visuel discret mais repérable ET nommé (a11y). N'affecte
+   * JAMAIS une case FERMÉE (inerte depuis P2-43 v — elle sort avant cette branche). Absent/false =
+   * rendu strictement inchangé.
+   */
+  emphasizeEmpty?: boolean;
 }
 
 /**
@@ -74,7 +81,7 @@ interface WeekGridProps {
  * a sticky grid item is clamped to its own cell, so it detaches once that narrow
  * cell scrolls out of view.
  */
-export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds, onToggleLock, lockLens = false, targetMode, onPickTarget, onCancelTarget, closedWindows }: WeekGridProps) {
+export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds, onToggleLock, lockLens = false, targetMode, onPickTarget, onCancelTarget, closedWindows, emphasizeEmpty = false }: WeekGridProps) {
   const { columns, dayGroups, rows, cells } = model;
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -319,16 +326,22 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                 </button>
               );
             }
+            // P2-44 — la mise en évidence des vides cède le pas au surlignage CONFLIT (`flagged`) :
+            // deux anneaux ne se superposent pas. NOMMÉE (aria-label) pour être repérable à l'AT.
+            const emphasized = emphasizeEmpty && !flagged;
             return (
               <div
                 key={cell.key}
                 title={`Créneau vide · ${cell.venueLabel} · ${cell.startLabel}–${cell.endLabel}`}
+                aria-label={emphasized ? `Créneau vide à combler · ${cell.venueLabel} · ${cell.startLabel}–${cell.endLabel}` : undefined}
                 className={cn(
                   "z-10 m-px flex items-center justify-center overflow-hidden rounded border border-dashed border-muted-foreground/40 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70 transition",
                   dimmed ? "opacity-30" : "",
                   flagged ? "border-warning ring-2 ring-warning text-warning" : "",
                   // Une fenêtre vide n'a aucun verrou : sous la lentille, elle s'estompe.
                   lensActive ? "opacity-40" : "",
+                  // Discret mais repérable : bordure pleine + fond teinté accent + texte accent.
+                  emphasized ? "border-solid border-accent bg-accent/10 text-accent" : "",
                 )}
                 style={emptyStyle}
               >

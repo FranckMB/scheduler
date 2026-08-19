@@ -778,3 +778,20 @@ export function useLaunchGeneration() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
   });
 }
+
+/**
+ * P2-44 (ADR-0004) — « Partir du planning de saison » : transcrit la version pointée du socle vers
+ * la V1 d'un plan de PÉRIODE vierge, SANS solveur. On invalide la liste des versions ET le
+ * calendrier : l'écran embarqué atterrit alors sur la nouvelle V1 (règle « embarqué = la plus
+ * récente »). Le résultat porte la liste « à replacer », que l'appelant garde pour l'afficher.
+ */
+export function useTranscribeFromSocle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (schedulePlanId: string) => wizardApi.transcribeFromSocle(schedulePlanId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
+    },
+  });
+}

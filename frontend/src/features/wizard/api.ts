@@ -2,6 +2,7 @@ import { HTTPError } from "ky";
 
 import { api } from "@/shared/api/client";
 import { collection, collectionAll } from "@/shared/api/collection";
+import type { ToReplaceEntry } from "@/features/planning/lib/toReplaceReason";
 import { sortByName } from "@/shared/lib/nameOrder";
 
 export type Gender = "M" | "F" | "MIXTE";
@@ -593,6 +594,26 @@ export async function validateConstraints(calendarEntryId?: string): Promise<Val
 export const createSchedule = (schedulePlanId?: string): Promise<{ id: string }> =>
   api.post("schedules", { json: { status: "DRAFT", ...(schedulePlanId ? { schedulePlanId } : {}) } }).json();
 export const generateSchedule = (id: string): Promise<unknown> => api.post(`schedules/${id}/generate`).json();
+
+// --- P2-44 : transcription depuis le socle (ADR-0004) ---
+
+/**
+ * Le résultat de `POST /schedule_plans/{id}/transcribe-from-socle` : la V1 d'un plan de PÉRIODE
+ * VIERGE naît comme une COPIE de la version pointée du socle, filtrée de la sélection de période
+ * (ADR-0004). La réponse porte la liste « à replacer » — les séances du socle NON reprises avec
+ * leur raison, SERVIE par le backend ; le front ne redérive rien. La clé JSON de l'id est `id`
+ * (comme toute création de version), pas `scheduleId`.
+ */
+export interface PeriodTranscription {
+  id: string;
+  versionNumber: number;
+  copiedCount: number;
+  toReplace: ToReplaceEntry[];
+}
+
+/** Transcrit la version pointée du socle vers la V1 d'un plan de période vierge. */
+export const transcribeFromSocle = (schedulePlanId: string): Promise<PeriodTranscription> =>
+  api.post(`schedule_plans/${schedulePlanId}/transcribe-from-socle`).json<PeriodTranscription>();
 
 export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
 export const getSchedule = (id: string): Promise<{ id: string; status: ScheduleStatus }> => api.get(`schedules/${id}`).json();

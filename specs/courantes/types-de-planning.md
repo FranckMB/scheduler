@@ -1,6 +1,6 @@
 # Les 3 types de planning — référence produit
 
-Last verified @ 2026-08-19 (re-vérifié contre `backend/src/Service/PeriodPlanTranscriber.php` et `backend/src/Controller/TranscribePeriodPlanController.php` — **P2-44 PR-1** : une V1 de plan de période peut désormais naître d'une transcription sans solveur du socle pointé, filtrée de la sélection de période, backend seul, aucun écran encore). Historique des passes : `git log -p --follow specs/courantes/types-de-planning.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-19 (re-vérifié contre `frontend/src/features/wizard/steps/GenerateStep.tsx`, `frontend/src/features/planning/PlanningPage.tsx`, `frontend/src/features/planning/SeasonComparisonModal.tsx` — **P2-44 PR-2** : la transcription depuis le socle gagne son écran, bouton compris ; §2 recalé, « aucun bouton écran » n'est plus vrai). Historique des passes : `git log -p --follow specs/courantes/types-de-planning.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
 > **Rôle de ce document** : la trace durable du modèle métier des plannings, validé avec le
 > fondateur le 2026-07-12. C'est LA référence à consulter avant tout travail sur la
@@ -75,12 +75,15 @@ quelle que soit la largeur de son segment.
   indispo (« Adapter ») — **c'est là que le plan naît** (`POST /schedule_plans`), sans
   version ; (3) l'outil découpe **automatiquement** en autant de plannings que de **semaines
   englobées** ; (4) il gère le premier, est **notifié** des suivants à compléter.
-- **Naissance de la V1 — deux voies (P2-44, [ADR-0004](../../docs/architecture/adr-0004-period-plan-birth-as-socle-copy.md), backend seul, 2026-08-19)** :
+- **Naissance de la V1 — deux voies (P2-44, [ADR-0004](../../docs/architecture/adr-0004-period-plan-birth-as-socle-copy.md), 2026-08-19)** :
   un plan de période vierge peut obtenir sa V1 par le **solve complet** habituel (`generate`), ou
   par **transcription sans solveur** (`POST /api/schedule_plans/{id}/transcribe-from-socle`) — le
   socle POINTÉ recopié à l'identique, moins ce que la sélection de période filtre (équipe
   désactivée, gymnase/jour fermé, réduction de séances), verrous HARD révocables, séances qui ne
-  passent plus nommées « à replacer ». Aucun bouton écran pour l'instant (PR-2 du programme).
+  passent plus nommées « à replacer ». **Écran (PR-2)** : un bouton « Partir du planning de
+  saison » propose la transcription à côté du bouton de génération tant que le plan est vierge
+  (`GenerateStep`) ; l'écran embarqué affiche ensuite le panneau « à replacer » et une modale de
+  comparaison avec le socle — détail : `frontend/docs/frontend-spec.md` §6.7 bis.
 - **Manipulation** : structure verrouillée (équipes entières, gymnases/créneaux, coachs) ;
   **exception validée** : le **nombre de séances par équipe** est ajustable — un
   gestionnaire réel passe une équipe de 3 à 2 créneaux, ou supprime les créneaux d'une

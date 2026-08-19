@@ -401,4 +401,29 @@ describe("WeekGrid", () => {
       expect(offers).toHaveLength(1);
     });
   });
+
+  // P2-44 (PR-2) — après une transcription, on met les « trous » (fenêtres vides) EN ÉVIDENCE
+  // pour que le gestionnaire voie de lui-même où combler ; les cases FERMÉES restent inertes.
+  describe("mise en évidence des vides (emphasizeEmpty, P2-44)", () => {
+    const emptyWindow: Slot = { ...slot, id: "empty:w1", teamId: "", dayOfWeek: 2, startTime: "19:00:00" };
+    const model = buildGrid([emptyWindow], "gymnase", lookups);
+
+    it("emphasizeEmpty : une fenêtre vide devient repérable ET nommée (a11y)", () => {
+      render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} emphasizeEmpty />);
+      expect(screen.getByLabelText(/Créneau vide à combler/)).toBeInTheDocument();
+    });
+
+    it("sans emphasizeEmpty : le rendu est inchangé (pas de nom « à combler »)", () => {
+      render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} />);
+      expect(screen.queryByLabelText(/à combler/)).not.toBeInTheDocument();
+      expect(screen.getByText("vide")).toBeInTheDocument();
+    });
+
+    it("une case FERMÉE n'est JAMAIS mise en évidence, même avec emphasizeEmpty", () => {
+      const closed = new Map<string, string>([["v1|2", "le mardi est fermé"]]);
+      render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} emphasizeEmpty closedWindows={closed} />);
+      expect(screen.queryByLabelText(/à combler/)).not.toBeInTheDocument();
+      expect(screen.getByText(/fermé/i)).toBeInTheDocument();
+    });
+  });
 });
