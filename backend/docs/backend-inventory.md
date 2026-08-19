@@ -3,7 +3,7 @@
 > Backward inventory of the existing backend (Symfony 7.4 + API Platform). This document
 > describes what exists in the codebase at the time of verification — it is not a roadmap.
 
-Last verified @ 2026-08-19 (re-vérifié contre `backend/src/Service/PeriodPlanTranscriber.php`, `backend/src/Controller/TranscribePeriodPlanController.php` et `backend/src/Service/PeriodTranscriptionResult.php` — nouvelle route `POST /api/schedule_plans/{id}/transcribe-from-socle` [ADR-0004] documentée §3 ; gates, verrous et marqueur de provenance confrontés au code). Historique des passes : `git log -p --follow backend/docs/backend-inventory.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-20 (**P4-103** — audit des routes API sans appelant. Vérifié : les 150 routes du rail club confrontées à `frontend/src`, aux scripts et aux e2e ; UNE seule était vraiment morte (`ClubUser`, retirée ici), les trois autres candidates étant des faux positifs — `/api/ffbb-logos/…` dont l'URL est STOCKÉE en base et rendue en `<img src>`, plus deux routes de plomberie API Platform. Le snapshot OpenAPI régénéré au passage a révélé une SECONDE péremption : l'intensité `OFF` de P2-42 n'y était jamais entrée. Re-vérifié aussi : les quatre routes `deletion-impact` correspondent toujours au snapshot)
 
 ---
 
@@ -93,7 +93,7 @@ Doctrine correspondantes vivent dans `backend/src/Entity/` et utilisent des UUID
 | 4 | Venue | `/api/venues` | Salles / lieux de pratique | |
 | 5 | Coach | `/api/coaches` | Entraîneurs | |
 | 6 | User | `/api/users` | Utilisateurs | |
-| 7 | ClubUser | `/api/club-users` | Membres du club (rôles) | |
+| 7 | ClubUser | *(plus d'API)* | Membres du club (rôles) — la ressource générique a été **RETIRÉE le 2026-08-20 (P4-103)** : lecture seule, elle listait `userId`/`role`/`isActive` **sans aucun consommateur**, le front passant par `/api/memberships/*`. Surface retirée, garantie conservée par `MemberRoleTest` | |
 | 8 | Sport | `/api/sports` | Types de sports | |
 | 9 | SportCategory | `/api/sport-categories` | Catégories d'âge | |
 | 10 | PriorityTier | `/api/priority-tiers` | Niveaux de priorité (S/A/B/C/D) | |
