@@ -82,7 +82,7 @@ Ce qu'il faut retenir en toute session :
 `Security/MercureHardeningTest` (Mercure durci) ·
 `Security/ManagementRoleTest` (écriture = management par défaut) ·
 `Security/ApiRateLimitTest` (throttle par user) ·
-`Security/ClubQuotaTest` (caps métier PAR CLUB, les 3 routes de solve) ·
+`Security/ClubQuotaTest` (caps métier PAR CLUB, les 4 routes de solve — dont `/fill`, le comblement de période P2-44) ·
 `Security/SuperAdminAccessTest` (frontière SA0) ·
 `Security/EngagedTeamGuardTest` (périmètre engagé) ·
 `Security/PeriodPlanBirthTest` (naissance du plan — ADR-0002 ; depuis P2-38, garde aussi le refus

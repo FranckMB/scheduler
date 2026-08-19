@@ -98,9 +98,9 @@ final class ClubQuotaTest extends WebTestCase
     /**
      * ⚠ Le trou que l'item de roadmap ne voyait pas : il ne parlait que de `POST /generate`.
      *
-     * `/regenerate` et `/regenerate-from` déclenchent un solve tout autant — et ce sont
-     * ELLES que le work-loop emprunte, donc l'usage réel. Un cap posé sur la seule première
-     * route se contourne sans même le vouloir.
+     * `/regenerate`, `/regenerate-from` et `/fill` (le comblement d'une période, P2-44)
+     * déclenchent un solve tout autant — et ce sont ELLES que le work-loop emprunte, donc
+     * l'usage réel. Un cap posé sur la seule première route se contourne sans même le vouloir.
      */
     public function testRegenerateRoutesDrawFromTheSameBudget(): void
     {
@@ -112,6 +112,7 @@ final class ClubQuotaTest extends WebTestCase
 
         self::assertSame(429, $this->call($token, 'POST', '/api/schedules/00000000-0000-4000-8000-000000000001/regenerate'), '/regenerate doit puiser dans le même seau que /generate');
         self::assertSame(429, $this->call($token, 'POST', '/api/schedules/00000000-0000-4000-8000-000000000001/regenerate-from'), '/regenerate-from aussi');
+        self::assertSame(429, $this->call($token, 'POST', '/api/schedules/00000000-0000-4000-8000-000000000001/fill'), '/fill (comblement de période) puise dans le même seau : c\'est un 4e déclencheur de solve');
     }
 
     protected function setUp(): void
