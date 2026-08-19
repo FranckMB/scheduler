@@ -8,7 +8,6 @@ import { isSeasonPlanType } from "@/features/planning/lib/versions";
 import { GenerationWaiting } from "@/features/planning/GenerationWaiting";
 import { PlanningPage } from "@/features/planning/PlanningPage";
 import { useDiagnostics, useSchedules } from "@/features/planning/queries";
-import { usePlanningStore } from "@/features/planning/store";
 import { Button } from "@/shared/components/ui/button";
 import { useCredits } from "@/shared/credits/useCredits";
 import { scheduleIdToReuse } from "../lib/retryTarget";
@@ -45,7 +44,6 @@ export function GenerateStep() {
   const periodAnchor = usePeriodAnchor(periodMode ? calendarEntryId : null);
   const periodPlanId = periodAnchor.planId;
   const periodAnchorReady = anchorIsWritable(periodAnchor);
-  const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
 
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
   // Same blockers as the Récap gate — a user already sitting on this step when a
@@ -108,34 +106,40 @@ export function GenerateStep() {
       return;
     }
     settled.current = true;
+    // bug fondateur 2026-08-19 — l'atterrissage de l'écran embarqué vit désormais dans
+    // PlanningPage (dérivé de `embedded` : la version la plus RÉCENTE en portée). On ne pousse
+    // PLUS de sélection ici : ce push, couplé à l'ordre de montage, renvoyait le pointeur (la V1
+    // du seed BCCL) au lieu de la génération fraîche. On garde seulement les invalidations qui
+    // rafraîchissent la liste, le calendrier et le solde après une génération terminée.
     if (periodMode) {
-      // bug fondateur 2026-08-19 — l'écran embarqué se scope au plan de la période
-      // (PlanningPage y atterrit tout seul) : on ne pousse PLUS de sélection ici, on
-      // rafraîchit seulement le calendrier et la liste pour que la nouvelle version
-      // apparaisse (le cockpit lit « la version active » de la période).
       void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
     } else {
-      // Season: point the embedded planning at THIS run's schedule (not a stale
-      // selection a "Voir le plan" click may have left in the planning store).
-      // Guarded by settled.current → runs exactly once, no cascade.
-      if (null !== scheduleId) {
-        setSelectedScheduleId(scheduleId);
-      }
+      // Season : on libère le scheduleId LOCAL (l'écran d'échec/attente se dérive désormais de la
+      // LISTE, plus de ce state) et on rafraîchit le solde de crédits.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setScheduleId(null);
       void queryClient.invalidateQueries({ queryKey: ["me"] });
     }
-  }, [hasCompleted, periodMode, scheduleId, setSelectedScheduleId, queryClient]);
+  }, [hasCompleted, periodMode, queryClient]);
 
   const launching = launch.isPending;
-  const failed = !launching && !showPlanning && (launch.isError || "FAILED" === status || timedOut);
+  // bug fondateur 2026-08-19 — le VERDICT d'échec survit au retour sur l'étape : le dernier run
+  // FAILED du plan en portée (période OU saison), lu de la LISTE, décide de l'écran d'échec — pas
+  // le `scheduleId` LOCAL, nul au remontage (sans quoi un run FAILED redevenait un lanceur muet).
+  // N'entre en jeu QUE sans run local actif ce montage : sinon une reprise EN VOL afficherait
+  // l'échec précédent resté en liste le temps du refetch.
+  const planVersions = periodMode ? periodPlanVersions : schedules.filter((s) => isSeasonPlanType(s.planType));
+  const lastFailedRun = planVersions.filter((s) => "FAILED" === s.status).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1) ?? null;
+  const localRunActive = null !== scheduleId;
+  const failed = !launching && !showPlanning && (launch.isError || "FAILED" === status || (!localRunActive && null !== lastFailedRun) || timedOut);
   // Un solve FAILED a des DIAGNOSTICS en base (le moteur explique : contraintes
   // impossibles, capacité, verrous) — les afficher au lieu du générique
   // « une erreur est survenue » (retour fondateur 2026-08-05 : « en prod ça ne
-  // passera pas »). Chargés seulement dans ce cas ; lancement/timeout gardent
-  // leur motif propre.
-  const failedDiagnostics = useDiagnostics("FAILED" === status ? scheduleId : null);
+  // passera pas »). Le run dont on les lit : le run LOCAL s'il a échoué, sinon (retour sur
+  // l'étape) le dernier FAILED du plan tiré de la liste ; lancement/timeout gardent leur motif propre.
+  const failedRunId = "FAILED" === status ? scheduleId : !localRunActive ? (lastFailedRun?.id ?? null) : null;
+  const failedDiagnostics = useDiagnostics(failedRunId);
   const failureExplanations = (failedDiagnostics.data ?? []).filter((d) => "ERROR" === d.severity);
   const failureSuggestions = failureExplanations.flatMap((d) => (Array.isArray(d.suggestions) ? d.suggestions.filter((x): x is string => "string" === typeof x) : []));
   const waiting = !showPlanning && (launching || (null !== scheduleId && "FAILED" !== status && !timedOut));
