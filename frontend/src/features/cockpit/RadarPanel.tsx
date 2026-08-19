@@ -87,6 +87,11 @@ export function RadarPanel({ entries, holidays, publicHolidays, publicHolidaysLo
   };
 
   const adapt = (entryId: string) => {
+    // Ceinture (bug fondateur 2026-08-19) : purge une sélection planning d'un autre
+    // écran avant d'entrer en mode période — sinon elle survivait jusqu'à l'écran
+    // embarqué. La vraie correction est la portée passée à PlanningPage (A) ; ceci
+    // ferme la porte au cas où.
+    setSelectedScheduleId(null);
     startPeriodMode(entryId);
     navigate("/wizard");
   };

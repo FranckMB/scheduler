@@ -119,6 +119,10 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
       if (null === entryId) {
         return; // plans pas encore chargés — le bouton est désactivé dans ce cas
       }
+      // Ceinture (bug fondateur 2026-08-19) : purge une sélection planning laissée par un
+      // autre écran avant d'entrer en mode période (la vraie correction = la portée de
+      // PlanningPage, qui atterrit sur la période).
+      setSelectedScheduleId(null);
       useWizardStore.getState().startPeriodMode(entryId);
       onClose();
       navigate("/wizard");
@@ -132,6 +136,9 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
     // Le mode période est PERSISTÉ (localStorage) : sans reset, « reprendre le
     // planning de saison » rouvrirait le wizard période et générerait une version
     // du plan de PÉRIODE — mauvaise cible silencieuse (revue #260 round 1).
+    // On purge AUSSI la sélection planning (bug fondateur 2026-08-19) : une sélection de
+    // période laissée ailleurs ne doit pas s'afficher dans l'étape Génération de la SAISON.
+    setSelectedScheduleId(null);
     useWizardStore.getState().exitPeriodMode();
     useWizardStore.getState().jumpTo("generate");
     navigate("/wizard");
