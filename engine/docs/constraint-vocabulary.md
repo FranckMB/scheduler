@@ -150,6 +150,7 @@ supérieur l'emporte dans l'objectif. Le **minimum de séances** du rang est une
 | `MAX_CONSECUTIVE_SESSIONS` | **dur** : une même personne n'est jamais sur les 3 créneaux d'un enchaînement A→B→C le même jour, **tous gymnases confondus** |
 | `ONE_SESSION_PER_DAY` | **dur** : ≤ 1 séance par jour et par équipe, sauf `allowMultipleSessionsPerDay` |
 | `AGE_ASCENDING` | **dur** : à gymnase et jour égaux, une équipe plus jeune ne passe pas après une plus âgée. Exempt si `ageMin` est absent (Loisir, Baby) ou si l'équipe est verrouillée en HARD |
+| `MAX_CONSECUTIVE_DAYS` | **dur ou soft, au choix du club** : une ÉQUIPE ne s'entraîne pas `maxConsecutiveDays` jours de suite (défaut 3, bornes 2-5). ⚠ À ne pas confondre avec `MAX_CONSECUTIVE_SESSIONS`, presque homonyme : celle-là vise une PERSONNE sur des créneaux dos-à-dos DANS UNE JOURNÉE. **Seule règle dont l'absence du payload signifie NON APPLIQUÉE** — les autres retombent sur HARD (P2-42, contrat 2.13) |
 | jour de repos après match | bonus soft (`add_match_day_rest_bonus`) : préfère laisser le lendemain d'un match libre |
 | espacement des jours (`spacing`) | **bonus soft** (`add_spacing_penalty`, poids `−2`) : malus sur deux séances d'une même équipe sur des jours consécutifs (jour, jour+1) — préfère espacer, ne bloque jamais (ALIGN-06) |
 

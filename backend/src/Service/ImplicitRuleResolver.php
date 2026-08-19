@@ -38,10 +38,36 @@ final class ImplicitRuleResolver
     {
         $resolved = [];
         foreach (ImplicitRuleKey::cases() as $ruleKey) {
+            // Une règle opt-in ABSENTE du bloc vaut « non appliquée » : l'émettre avec un
+            // défaut dur reviendrait à l'activer chez tout le monde en silence (P2-42).
+            if ($ruleKey->isOptIn()) {
+                continue;
+            }
             $resolved[$ruleKey->value] = self::defaultEntry($ruleKey);
         }
 
         return $resolved;
+    }
+
+    /**
+     * L'entrée d'AFFICHAGE d'une règle opt-in que le club n'a pas réglée.
+     *
+     * ⚑ P2-42 — deux besoins opposés qu'il faut distinguer, sans quoi la règle est
+     * inutilisable : le PAYLOAD doit l'omettre (le moteur lit l'absence comme « inactive »),
+     * mais l'ÉCRAN doit la montrer, sinon le gestionnaire ne peut jamais l'activer. D'où
+     * cette entrée `OFF` servie à l'API et jamais au moteur.
+     *
+     * @return array<string, mixed>
+     */
+    public static function inactiveEntry(ImplicitRuleKey $ruleKey): array
+    {
+        $entry = ['intensity' => 'OFF'];
+        $paramKey = $ruleKey->paramKey();
+        if (null !== $paramKey) {
+            $entry[$paramKey] = $ruleKey->paramDefault();
+        }
+
+        return $entry;
     }
 
     /** @return array<string, mixed> */
@@ -108,9 +134,16 @@ final class ImplicitRuleResolver
         $resolved = [];
         foreach (ImplicitRuleKey::cases() as $ruleKey) {
             $setting = $stored[$ruleKey->value] ?? null;
-            $resolved[$ruleKey->value] = null === $setting
-                ? self::defaultEntry($ruleKey)
-                : self::entryFrom($ruleKey, $setting->getIntensity(), $setting->getParams());
+            if (null === $setting) {
+                // Opt-in non réglée : elle n'entre PAS dans le payload (P2-42). Le moteur
+                // lit l'absence comme « règle inactive », pas comme « défaut dur ».
+                if ($ruleKey->isOptIn()) {
+                    continue;
+                }
+                $resolved[$ruleKey->value] = self::defaultEntry($ruleKey);
+                continue;
+            }
+            $resolved[$ruleKey->value] = self::entryFrom($ruleKey, $setting->getIntensity(), $setting->getParams());
         }
 
         return $resolved;

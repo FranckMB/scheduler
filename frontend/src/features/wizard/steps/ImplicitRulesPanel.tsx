@@ -90,6 +90,12 @@ export const WELLBEING_RULES: { ruleKey: ImplicitRuleKey; title: string; detail:
   { ruleKey: "coachRestDay", title: "Chaque coach garde un jour de repos", detail: "Au moins le nombre de jours choisi sans séance entre le lundi et le vendredi (les week-ends ne comptent pas)." },
   { ruleKey: "salarieDistribution", title: "Au moins un salarié présent chaque jour ouvré", detail: "Sur chaque jour de la semaine où le club tourne, au moins un coach salarié encadre une séance." },
   { ruleKey: "maxConsecutiveSessions", title: "Jamais trop de créneaux dos-à-dos", detail: "Un même coach n'enchaîne pas plus que le nombre choisi de créneaux d'affilée — qu'il les encadre ou qu'il y joue." },
+  {
+    ruleKey: "maxConsecutiveDays",
+    title: "Jamais plusieurs jours d'affilée",
+    detail:
+      "Une même équipe ne s'entraîne pas le nombre de jours choisi à la suite. Attention : demander du repos peut coûter une séance à une équipe dont les créneaux disponibles se suivent.",
+  },
   { ruleKey: "ageAscending", title: "Les jeunes avant les grands", detail: "Sur un même gymnase et un même jour, les catégories d'âge se placent du plus jeune au plus âgé." },
 ];
 
@@ -100,26 +106,39 @@ const INTENSITY_CRANS: { value: ImplicitRuleIntensity; label: string }[] = [
   { value: "PREFERRED", label: "Objectif" },
 ];
 
+/** Les règles OPT-IN (P2-42) ont un cran de plus : elles naissent INACTIVES. Les quatre
+ *  historiques s'appliquent dès qu'un club existe et n'ont donc pas d'état « éteint ». */
+const OPT_IN_RULES: ReadonlySet<ImplicitRuleKey> = new Set<ImplicitRuleKey>(["maxConsecutiveDays"]);
+
+function cransFor(ruleKey: ImplicitRuleKey): { value: ImplicitRuleIntensity; label: string }[] {
+  return OPT_IN_RULES.has(ruleKey) ? [{ value: "OFF", label: "Inactive" }, ...INTENSITY_CRANS] : INTENSITY_CRANS;
+}
+
 /** Bornes OFFERTES pour chaque seuil (ergonomie de saisie ; le serveur reste juge, 422). Clés =
  *  le champ du payload, pas un enum métier. */
-const THRESHOLD_BOUNDS: Record<"minRestDays" | "maxConsecutive", { min: number; max: number; label: string }> = {
+const THRESHOLD_BOUNDS: Record<"minRestDays" | "maxConsecutive" | "maxConsecutiveDays", { min: number; max: number; label: string }> = {
   minRestDays: { min: 1, max: 4, label: "Jours de repos minimum" },
   maxConsecutive: { min: 2, max: 6, label: "Créneaux consécutifs maximum" },
+  maxConsecutiveDays: { min: 2, max: 5, label: "Jours d'affilée maximum" },
 };
 
 /** Unité humaine du seuil, pour le repère « Saison : … » (PR2). Pure présentation. */
-const THRESHOLD_UNIT: Record<"minRestDays" | "maxConsecutive", (n: number) => string> = {
+const THRESHOLD_UNIT: Record<"minRestDays" | "maxConsecutive" | "maxConsecutiveDays", (n: number) => string> = {
   minRestDays: (n) => (n > 1 ? "jours" : "jour"),
   maxConsecutive: (n) => (n > 1 ? "créneaux" : "créneau"),
+  maxConsecutiveDays: (n) => (n > 1 ? "jours" : "jour"),
 };
 
 /** Le seuil d'une règle est celui que le serveur a RÉSOLU (non-null) — on ne le devine pas. */
-function thresholdOf(setting: ImplicitRuleSetting): { field: "minRestDays" | "maxConsecutive"; value: number } | null {
+function thresholdOf(setting: ImplicitRuleSetting): { field: "minRestDays" | "maxConsecutive" | "maxConsecutiveDays"; value: number } | null {
   if (null !== setting.minRestDays) {
     return { field: "minRestDays", value: setting.minRestDays };
   }
   if (null !== setting.maxConsecutive) {
     return { field: "maxConsecutive", value: setting.maxConsecutive };
+  }
+  if (null !== setting.maxConsecutiveDays) {
+    return { field: "maxConsecutiveDays", value: setting.maxConsecutiveDays };
   }
   return null;
 }
@@ -148,7 +167,7 @@ export function isWellbeingKey(ruleKey: string | null): ruleKey is ImplicitRuleK
  * saison », pas d'indicateur calculé). Reprend les libellés d'intensité du panneau (jamais l'enum).
  */
 function seasonReference(setting: ImplicitRuleSetting): string {
-  const intensity = INTENSITY_CRANS.find((cran) => cran.value === setting.intensity)?.label ?? setting.intensity;
+  const intensity = cransFor(setting.ruleKey).find((cran) => cran.value === setting.intensity)?.label ?? setting.intensity;
   const threshold = thresholdOf(setting);
 
   return null === threshold ? `Saison : ${intensity}` : `Saison : ${intensity}, ${threshold.value} ${THRESHOLD_UNIT[threshold.field](threshold.value)}`;
@@ -197,7 +216,7 @@ function WellbeingRuleRow({
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <div role="group" aria-label={`Intensité — ${meta.title}`} className="inline-flex overflow-hidden rounded-md border border-border">
-          {INTENSITY_CRANS.map((cran) => {
+          {cransFor(setting.ruleKey).map((cran) => {
             const active = setting.intensity === cran.value;
             return (
               <button

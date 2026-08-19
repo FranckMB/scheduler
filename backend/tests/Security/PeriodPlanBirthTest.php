@@ -120,7 +120,12 @@ final class PeriodPlanBirthTest extends WebTestCase
         $this->scopeGucToClub($club->getId());
         $this->em->clear();
         $copies = $this->em->getRepository(ImplicitRuleSetting::class)->findBy(['schedulePlanId' => $planId]);
-        self::assertCount(4, $copies, 'un plan naît avec SA copie des 4 règles bien-être (copie totale)');
+        // P2-42 — CINQ règles depuis l'arrivée de `maxConsecutiveDays`. La copie reste TOTALE
+        // (toutes les clés, pas seulement celles que le club a réglées) : c'est ce qui rend la
+        // période indépendante de la saison. Ce qui change, c'est l'intensité de naissance —
+        // la règle opt-in naît OFF, vérifié juste en dessous : sans quoi une règle que le club
+        // n'a jamais demandée s'imposerait à toutes ses périodes.
+        self::assertCount(5, $copies, 'un plan naît avec SA copie des 5 règles bien-être (copie totale)');
 
         $byKey = [];
         foreach ($copies as $copy) {
@@ -128,7 +133,17 @@ final class PeriodPlanBirthTest extends WebTestCase
         }
         $keys = array_keys($byKey);
         sort($keys);
-        self::assertSame(['ageAscending', 'coachRestDay', 'maxConsecutiveSessions', 'salarieDistribution'], $keys);
+        self::assertSame(['ageAscending', 'coachRestDay', 'maxConsecutiveDays', 'maxConsecutiveSessions', 'salarieDistribution'], $keys);
+
+        // ⚑ P2-42 — la règle OPT-IN naît OFF, jamais HARD. Le matérialiseur posait un seul
+        // défaut pour toutes les clés : une règle que le club n'avait pas demandée en saison
+        // s'imposait alors à chacune de ses périodes. Falsification : rendre le défaut unique
+        // (HARD pour tout le monde) rougit ici.
+        self::assertSame(
+            ImplicitRuleIntensity::OFF,
+            $byKey['maxConsecutiveDays']->getIntensity(),
+            'une règle opt-in non réglée en saison ne s\'allume pas toute seule sur une période',
+        );
 
         // La déviation de saison est COPIÉE ; une règle au défaut copie HARD / params null.
         self::assertSame(ImplicitRuleIntensity::PREFERRED, $byKey['coachRestDay']->getIntensity());

@@ -13,12 +13,12 @@ final class ImplicitConstraintConfigTest extends TestCase
 {
     private ImplicitConstraintConfig $config;
 
-    public function testGetConfigReturnsTwelveImplicitConstraints(): void
+    public function testGetConfigReturnsThirteenImplicitConstraints(): void
     {
         $result = $this->config->getConfig();
 
         // 6 règles du produit + 4 de bien-être + 2 extensions futures désactivées (D-43 étendu).
-        self::assertCount(12, $result);
+        self::assertCount(13, $result);
         self::assertArrayHasKey('venueAtMostOne', $result);
         self::assertArrayHasKey('coachNoOverlap', $result);
         self::assertArrayHasKey('coachPlayerNoOverlap', $result);
@@ -122,11 +122,11 @@ final class ImplicitConstraintConfigTest extends TestCase
         self::assertStringContainsString('not a hard floor', $result['minSessions']['description']);
     }
 
-    public function testGetConstraintsArrayReturnsTwelveIndexedEntries(): void
+    public function testGetConstraintsArrayReturnsThirteenIndexedEntries(): void
     {
         $result = $this->config->getConstraintsArray();
 
-        self::assertCount(12, $result);
+        self::assertCount(13, $result);
         self::assertSame('VENUE_AT_MOST_ONE', $result[0]['type']);
     }
 

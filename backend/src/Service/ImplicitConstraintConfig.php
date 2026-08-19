@@ -17,8 +17,12 @@ final class ImplicitConstraintConfig
      * 2.3 → 2.4 (P2-28 PR 2) : l'inventaire passe de 5 à 12 règles — les 6 « règles du produit »
      * immuables, les 4 de « bien-être » réglables (contrat 2.7), et 2 extensions futures encore
      * DÉSACTIVÉES (stubs moteur `travel_feasibility` / `required_bridge`).
+     *
+     * 2.4 → 2.5 (P2-42) : 13e règle, `maxConsecutiveDays` — la première dont l'intensité par
+     * défaut est `OFF`. Ce n'est pas un détail de forme : les douze autres SONT appliquées dès
+     * qu'un club existe, celle-ci ne l'est que si on la demande.
      */
-    public const string RULESET_VERSION = '2.4';
+    public const string RULESET_VERSION = '2.5';
 
     /**
      * L'inventaire des règles implicites, aligné sur `engine/implicit_rules.json` (mêmes
@@ -109,6 +113,18 @@ final class ImplicitConstraintConfig
                 'family' => 'WELLNESS',
                 'defaultIntensity' => 'HARD',
                 'description' => 'Younger teams train no later than older ones on the same venue and day (exempt when a team has no ageMin or is hard-locked)',
+            ],
+            'maxConsecutiveDays' => [
+                'type' => ImplicitConstraint::MAX_CONSECUTIVE_DAYS->value,
+                'enabled' => true,
+                'family' => 'WELLNESS',
+                // Seule règle implicite dont l'absence signifie NON APPLIQUÉE, et non « HARD par
+                // défaut » : les quatre autres existaient AVANT d'être réglables, leur défaut dur
+                // reproduit leur comportement d'origine. Celle-ci est neuve — la faire naître dure
+                // changerait le planning de tous les clubs sans qu'ils aient rien demandé (mesuré :
+                // une équipe à 4 séances/semaine en perdait une). Un club l'active, sinon rien.
+                'defaultIntensity' => 'OFF',
+                'description' => 'A team never trains maxConsecutiveDays days in a row (default 3, range 2-5). Opt-in: absent from the payload, the rule is not applied at all.',
             ],
             'travelFeasibility' => [
                 'type' => ImplicitConstraint::TRAVEL_FEASIBILITY->value,

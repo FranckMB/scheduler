@@ -47,6 +47,10 @@ class ImplicitRuleSettingResource
     #[Groups(['read'])]
     public ?int $maxConsecutive = null;
 
+    /** Plafond de JOURS consécutifs d'entraînement — présent pour maxConsecutiveDays uniquement, sinon null. */
+    #[Groups(['read'])]
+    public ?int $maxConsecutiveDays = null;
+
     /** true tant que la règle est au défaut (aucune ligne stockée) — le front sait quoi mettre en avant. */
     #[Groups(['read'])]
     public bool $isDefault = true;
@@ -63,6 +67,7 @@ class ImplicitRuleSettingResource
         $dto->intensity = (string) ($resolvedEntry['intensity'] ?? '');
         $dto->minRestDays = ImplicitRuleKey::COACH_REST_DAY === $ruleKey ? (int) ($resolvedEntry['minRestDays'] ?? 0) : null;
         $dto->maxConsecutive = ImplicitRuleKey::MAX_CONSECUTIVE_SESSIONS === $ruleKey ? (int) ($resolvedEntry['maxConsecutive'] ?? 0) : null;
+        $dto->maxConsecutiveDays = ImplicitRuleKey::MAX_CONSECUTIVE_DAYS === $ruleKey ? (int) ($resolvedEntry['maxConsecutiveDays'] ?? 0) : null;
         $dto->isDefault = $isDefault;
 
         return $dto;

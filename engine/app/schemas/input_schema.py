@@ -151,6 +151,26 @@ class MaxConsecutiveSessionsRuleSchema(SerializableModel):
     max_consecutive: int = Field(default=3, ge=2, le=6, alias="maxConsecutive")
 
 
+class MaxConsecutiveDaysRuleSchema(SerializableModel):
+    """Implicit rule 3e (P2-42) — une ÉQUIPE ne s'entraîne pas ``maxConsecutiveDays``
+    jours de suite.
+
+    ⚠ À ne PAS confondre avec :attr:`MaxConsecutiveSessionsRuleSchema`, dont le nom est
+    presque le même et le sujet complètement différent : celle-là contraint une PERSONNE
+    sur des créneaux dos-à-dos DANS LA MÊME JOURNÉE (fin d'un créneau == début du suivant).
+    Celle-ci contraint une ÉQUIPE sur des JOURS d'une semaine. Sujet différent, axe
+    différent — l'audit ALIGN-08 a montré qu'on pouvait croire le besoin couvert en lisant
+    le seul nom de l'autre.
+
+    Défaut 3 = le besoin BCCL littéral (« pas 3 entraînements d'affilée »). 2 permet à un
+    club d'exiger un jour de creux entre deux séances ; au-delà de 5 la règle n'a plus de
+    prise sur une semaine de 7 jours.
+    """
+
+    intensity: Literal["HARD", "PREFERRED"] = "HARD"
+    max_consecutive_days: int = Field(default=3, ge=2, le=5, alias="maxConsecutiveDays")
+
+
 class ImplicitRulesSchema(SerializableModel):
     """Réglage par club des 4 règles implicites « bien-être ». Chaque champ est
     optionnel : absent = défaut (HARD, seuils historiques). L'ABSENCE TOTALE du bloc
@@ -162,6 +182,7 @@ class ImplicitRulesSchema(SerializableModel):
         default=None, alias="maxConsecutiveSessions"
     )
     age_ascending: IntensityRuleSchema | None = Field(default=None, alias="ageAscending")
+    max_consecutive_days: MaxConsecutiveDaysRuleSchema | None = Field(default=None, alias="maxConsecutiveDays")
 
 
 class PreviousAssignmentSchema(SerializableModel):

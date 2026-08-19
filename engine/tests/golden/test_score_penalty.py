@@ -50,10 +50,10 @@ def test_hard_only_team_no_penalty() -> None:
     assert result.score >= 0, f"score should be >= 0 (HARD-only team not penalized), got {result.score}"
 
 
-def test_score_formula_version_is_v10() -> None:
-    """Guard: version bumped to V10 when comfort weights were recalibrated below a bare
+def test_score_formula_version_is_v11() -> None:
+    """Guard: version bumped to V11 when comfort weights were recalibrated below a bare
     session and the per-session missing_session penalty was added (le remplissage prime)."""
-    assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V10", f"expected V10, got {SCORE_FORMULA_VERSION!r}"
+    assert SCORE_FORMULA_VERSION == "T24_LEVEL_2_FIXED_WEIGHTS_V11", f"expected V11, got {SCORE_FORMULA_VERSION!r}"
 
 
 def test_unplaced_penalty_unchanged() -> None:

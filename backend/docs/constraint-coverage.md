@@ -25,7 +25,7 @@
 | « Uniquement tel(s) jour(s) » | DAY `allowedDays` (whitelist, HARD) | ✅ | Vétérans le vendredi uniquement |
 | **« Au moins une séance tel jour »** | DAY `forcedDays` (engine-only, **pas exposé dans l'UI**) | 🟡 | — (le moteur sait, le wizard ne l'émet pas) |
 | **« Espacer les séances d'un jour »** / « pas 2 jours d'affilée » | règle **implicite soft** `spacing` (poids −2, malus sur jours consécutifs) — activée pour toutes les équipes, ne bloque jamais | ✅ soft *(ALIGN-06)* | besoin BCCL « implicite » — préféré, pas garanti |
-| **« Pas 3 entraînements d'affilée »** (dur) | pas de `max_consecutive_days` (contrainte dure d'écart) | ❌ | besoin BCCL, non couvert (le soft `spacing` ne le garantit pas) |
+| **« Pas 3 entraînements d'affilée »** (dur) | règle implicite `maxConsecutiveDays` (5e règle bien-être, contrat 2.13) | ✅ | **Livrée le 2026-08-19 (P2-42 / ALIGN-08)** — réglable HARD (garantie) ou PREFERRED (objectif), seuil 2-5, **OFF par défaut** : un club l'active, sinon rien ne change. Prouvée par `engine/tests/semantic/test_consecutive_days.py` |
 
 ## Axe GYMNASE
 
@@ -70,7 +70,7 @@ Les 3 angles morts historiques d'alignement sont désormais couverts :
 
 ## Synthèse des trous restants (❌ / 🟡)
 
-1. **« Pas 3 entraînements d'affilée » / écart dur** (❌) — le soft `spacing` **préfère** espacer mais ne garantit rien ; une contrainte **dure** `max_consecutive_days` reste non modélisée.
+1. ~~« Pas 3 entraînements d'affilée » / écart dur~~ — **RÉSORBÉ le 2026-08-19** (P2-42) : la règle implicite `maxConsecutiveDays` pose la contrainte dure que le soft `spacing` ne garantissait pas. Le nudge `spacing` reste : il départage des ex æquo sur les PAIRES de jours, la règle garantit sur les suites — deux travaux différents.
 2. **Minimum de séances garanti** (🟡) — `MIN_SESSIONS` est une cible soft ; à trancher si un plancher dur est voulu (risque d'INFEASIBLE si capacité insuffisante).
 3. **« Au moins une séance tel jour »** (🟡) — le moteur sait (`forcedDays`) mais le wizard ne l'expose pas.
 

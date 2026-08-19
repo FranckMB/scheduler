@@ -161,6 +161,7 @@ def make_payload(
     coaches: list[dict[str, Any]] | None = None,
     seed: int = 42,
     timeout: int = 30,
+    implicit_rules: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Assemble a minimal but contract-accurate payload."""
     return {
@@ -180,6 +181,10 @@ def make_payload(
         "coaches": coaches or [],
         "slotTemplates": slot_templates or [],
         "constraints": constraints or [],
+        # P2-42 — bloc OPTIONNEL : absent, le payload est byte-identique à ce qu'il était
+        # (les règles implicites retombent alors sur leurs défauts historiques). Ne le
+        # poser que lorsqu'un test règle explicitement une règle.
+        **({"implicitRules": implicit_rules} if implicit_rules else {}),
         "priorityTiers": priority_tiers
         or [
             {"id": 1, "label": "S", "orToolsWeight": 10000, "defaultMinSessions": 2},
