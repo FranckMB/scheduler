@@ -46,7 +46,7 @@ import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
 import { stalenessMessage } from "./lib/staleness";
-import { isSeasonPlanType, planRepresentative, visibleOverlayVersions } from "./lib/versions";
+import { isSeasonPlanType, planRepresentative, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
 import { usePlanningStore, type ViewMode } from "./store";
 import { WeekGrid } from "./WeekGrid";
 
@@ -128,7 +128,6 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
   const { data: me } = useMe();
   // §4bis pt 2 — solde de crédits sur « Régénérer » (Découverte bridée seulement).
   const credits = useCredits();
-  const chosenScheduleId = me?.seasonPlan?.chosenScheduleId ?? null;
   const { viewMode, selectedScheduleId, selectedSlotId, resourceFilter, setViewMode, setSelectedScheduleId, setSelectedSlotId, toggleResource, clearResourceFilter } =
     usePlanningStore();
   const [highlightSlotIds, setHighlightSlotIds] = useState<Set<string>>(new Set());
@@ -181,10 +180,23 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
   // l'atterrissage, ni dans la toolbar, ni dans le titre. Sans portée, tout est inchangé.
   const scoped = null !== scopePlanId;
   const scopeVersions = useMemo(() => (scoped ? visibleOverlayVersions(schedules, scopePlanId) : null), [scoped, schedules, scopePlanId]);
-  // La version sur laquelle atterrir DANS la portée : la représentante du plan (pointée si
-  // choisie, sinon la dernière COMPLETED), et à défaut la dernière version quelle qu'elle soit
-  // — une génération EN VOL doit s'afficher (l'écran rend alors son attente), pas un vide.
-  const scopeLandingId = scoped ? (planRepresentative(scopeVersions ?? [])?.id ?? (scopeVersions ?? []).at(-1)?.id ?? null) : null;
+  // La version sur laquelle atterrir (règle ARBITRÉE fondateur 2026-08-19). EMBARQUÉ (étape
+  // Génération) ⇒ la version la plus RÉCENTE du plan en portée — période via la portée, saison
+  // via les versions de saison —, génération EN VOL comprise : le gestionnaire doit revoir la
+  // génération qu'il vient de lancer, pas le pointeur (le seed BCCL, V1 transcrite POINTÉE,
+  // ramenait sinon toujours la V1). NON embarqué (`/planning` autonome, cockpit) ⇒ POINTEUR
+  // d'abord, STRICTEMENT inchangé (frontière de `pickLanding.test.ts`). Fail-closed en portée :
+  // on atterrit DANS la portée ou nulle part, JAMAIS via `pickLandingScheduleId` (socle).
+  const landingScheduleId = useMemo(() => {
+    if (scoped) {
+      const versions = scopeVersions ?? [];
+      return embedded ? (versions.at(-1)?.id ?? null) : (planRepresentative(versions)?.id ?? versions.at(-1)?.id ?? null);
+    }
+    if (embedded) {
+      return visibleSeasonPlans(schedules).at(-1)?.id ?? null;
+    }
+    return schedules.length > 0 ? pickLandingScheduleId(schedules) : null;
+  }, [scoped, embedded, scopeVersions, schedules]);
 
   // Keep a valid selection: default to the season base plan, else the latest
   // completed. A selection archived concurrently (sibling validation in another
@@ -197,18 +209,10 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
     if (null !== validScheduleId) {
       return;
     }
-    if (scoped) {
-      // Fail-closed : on atterrit DANS la portée, ou nulle part — JAMAIS via
-      // pickLandingScheduleId (qui retomberait sur le socle).
-      if (null !== scopeLandingId && scopeLandingId !== selectedScheduleId) {
-        setSelectedScheduleId(scopeLandingId);
-      }
-      return;
+    if (null !== landingScheduleId && landingScheduleId !== selectedScheduleId) {
+      setSelectedScheduleId(landingScheduleId);
     }
-    if (schedules.length > 0) {
-      setSelectedScheduleId(pickLandingScheduleId(schedules));
-    }
-  }, [validScheduleId, scoped, scopeLandingId, selectedScheduleId, schedules, chosenScheduleId, setSelectedScheduleId]);
+  }, [validScheduleId, landingScheduleId, selectedScheduleId, setSelectedScheduleId]);
 
   // La COUCHE de créneaux de la version affichée (#8) : le socle lit la grille de
   // saison, une période lit la sienne. Dérivée ici, avant les requêtes, pour que
@@ -418,11 +422,10 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
   // l'en-tête retomber sur un générique — ou pire, sur le plan de SAISON alors qu'on regarde
   // une période —, on lit dès maintenant la version que cet effet va choisir : la MÊME
   // fonction, donc le même résultat, sans flash et sans deviner (revue #339 round 3).
-  // En portée, l'en-tête ne retombe JAMAIS sur le socle : il lit la version de la période
-  // (ou celle sur laquelle l'atterrissage va se poser), et son plan est CELUI de la portée.
-  const headerSchedule = scoped
-    ? (selectedSchedule ?? (null !== scopeLandingId ? (schedules.find((s) => s.id === scopeLandingId) ?? null) : null))
-    : (selectedSchedule ?? schedules.find((s) => s.id === pickLandingScheduleId(schedules)) ?? null);
+  // L'en-tête lit dès maintenant la version que l'effet d'atterrissage va choisir (la MÊME
+  // fonction, donc le même résultat, sans flash) : en portée, la version de la période — jamais
+  // le socle ; hors portée, l'atterrissage embarqué/pointeur selon le contexte.
+  const headerSchedule = selectedSchedule ?? (null !== landingScheduleId ? (schedules.find((s) => s.id === landingScheduleId) ?? null) : null);
   const displayedPlan: { id: string; name: string } | null = scoped
     ? ((allSchedulePlans ?? []).find((p) => p.id === scopePlanId) ?? null)
     : null === headerSchedule || isSeasonPlanType(headerSchedule.planType)

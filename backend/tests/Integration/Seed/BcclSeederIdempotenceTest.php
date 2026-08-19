@@ -495,6 +495,38 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
     }
 
     /**
+     * « Incident Matéo » — la grille du plan d'adaptation reste la COPIE de saison pour tous les
+     * gymnases SAUF JDR, dont la grille de plan est EXPLICITE (retouches réelles du gestionnaire,
+     * re-snapshot du 2026-08-19) : exactement 18 créneaux JDR portés PAR CE PLAN, dont les caps 2
+     * sur lun→ven à 17:30 et à 19:00. Idempotence : deux runs laissent 18 créneaux (purge+réinsertion).
+     *
+     * Falsifiable : remettre la capacity de JDR lun→ven 19:00 à 1 rend ce test ROUGE en nommant le
+     * compte de créneaux JDR à cap 2 (5 attendus par horaire, un par jour ouvré).
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testMateoIncidentPlanCarriesExplicitJdrGrid(): void
+    {
+        $club = $this->seeder->run($this->em, BcclSeedProfile::dev());
+        $planId = $this->mateoIncidentPlanId($club->getId());
+
+        self::assertSame(18, $this->jdrPlanSlotCount($planId), 'la grille de plan JDR compte exactement 18 créneaux explicites');
+
+        $capTwoAt = fn (string $start): int => (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM venue_training_slot s JOIN venue v ON v.id = s.venue_id '
+            . 'WHERE s.schedule_plan_id = ? AND v.name = \'JDR\' AND s.day_of_week BETWEEN 1 AND 5 '
+            . 'AND to_char(s.start_time, \'HH24:MI\') = ? AND s.capacity = 2',
+            [$planId, $start],
+        );
+        self::assertSame(5, $capTwoAt('17:30'), 'lun→ven à 17:30 : un créneau JDR à cap 2 par jour ouvré');
+        self::assertSame(5, $capTwoAt('19:00'), 'lun→ven à 19:00 : un créneau JDR à cap 2 par jour ouvré');
+
+        // Idempotence : un second run purge+réinsère, la grille JDR reste à 18 (pas de doublon).
+        $this->seeder->run($this->em, BcclSeedProfile::dev());
+        self::assertSame(18, $this->jdrPlanSlotCount($this->mateoIncidentPlanId($club->getId())), 'un second seed laisse 18 créneaux JDR de plan');
+    }
+
+    /**
      * P5-13 — les reprises et le compte Nicolas ne visent QUE le profil dev. Le club de
      * DÉMONSTRATION ne porte aucun plan de période (HOLIDAY/CLOSURE), aucune entrée calendrier
      * (l'incident Matéo compris), et le compte gestionnaire Nicolas n'existe pas.
@@ -586,6 +618,33 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
     private function rowsIn(string $table): int
     {
         return (int) $this->connection->fetchOne('SELECT COUNT(*) FROM ' . $table);
+    }
+
+    /**
+     * Le plan d'ajustement de l'incident Matéo : porté par le segment-enfant (parent = l'entrée
+     * racine « Matéo indisponible (travaux) »).
+     */
+    private function mateoIncidentPlanId(string $clubId): string
+    {
+        $planId = $this->connection->fetchOne(
+            'SELECT sp.id FROM schedule_plan sp '
+            . 'JOIN calendar_entry seg ON seg.id = sp.calendar_entry_id '
+            . 'JOIN calendar_entry root ON root.id = seg.parent_entry_id '
+            . 'WHERE sp.club_id = ? AND root.title = ? AND root.parent_entry_id IS NULL',
+            [$clubId, 'Matéo indisponible (travaux)'],
+        );
+        self::assertNotFalse($planId, 'le plan d\'ajustement de l\'incident Matéo existe');
+
+        return (string) $planId;
+    }
+
+    private function jdrPlanSlotCount(string $planId): int
+    {
+        return (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM venue_training_slot s JOIN venue v ON v.id = s.venue_id '
+            . 'WHERE s.schedule_plan_id = ? AND v.name = \'JDR\'',
+            [$planId],
+        );
     }
 
     /**

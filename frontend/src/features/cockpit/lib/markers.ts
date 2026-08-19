@@ -31,7 +31,19 @@ export const isHolidayWeekChild = (e: CalendarEntry): boolean => null !== e.pare
 /** Emoji marker for a calendar entry (event / period). */
 export const entryIcon = (e: CalendarEntry): string => {
   if (e.kind === "period") {
-    return e.periodType === "cutoff" ? "🛑" : "⛔";
+    if (e.periodType === "cutoff") {
+      return "🛑";
+    }
+    // Une VACANCE (mère comme enfant) ne porte JAMAIS ⛔ : le surlignage amber de la vacance
+    // scolaire (et son emoji de saison) la marque déjà — un ⛔ en plus la ferait passer pour une
+    // interdiction. Retour fondateur 2026-07-24, étendu à la MÈRE le 2026-08-19 : la doctrine ne
+    // masquait que les enfants (`isHolidayWeekChild`) et `isHolidayAnchor` ne couvre que la mère
+    // AVEC schoolHolidayId ; une mère holiday sans ancrage recevait encore ⛔ ici. Pas de marqueur
+    // — l'amber suffit ; les FERMETURES gardent leur ⛔ (seule trace au calendrier).
+    if (e.periodType === "holiday") {
+      return "";
+    }
+    return "⛔";
   }
   return e.isDisruptive ? "🚫" : "🎉";
 };

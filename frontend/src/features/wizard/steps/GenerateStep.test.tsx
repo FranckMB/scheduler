@@ -224,6 +224,44 @@ describe("GenerateStep — mode période : l'écran embarqué est scopé au plan
   });
 });
 
+/**
+ * bug fondateur 2026-08-19 (trou antérieur) — le VERDICT d'échec doit survivre au retour sur
+ * l'étape. `failed`/`failedDiagnostics`/`waiting` dérivaient du `scheduleId` LOCAL, nul au
+ * remontage : un run FAILED redevenait un lanceur MUET, le motif du moteur perdu. On les fait
+ * dériver du dernier run FAILED du plan en portée, lu de la LISTE (saison comprise).
+ */
+describe("GenerateStep — un run FAILED survit au retour sur l'étape (dérivé de la LISTE)", () => {
+  const errDiag = [{ id: "d1", severity: "ERROR", message: "Le planning n'a pas pu être généré : capacité insuffisante.", suggestions: ["Ajoutez de la disponibilité de gymnase."] }];
+
+  beforeEach(() => {
+    h.status = null; // aucun run LOCAL ce montage — c'est tout l'enjeu
+    h.diagnostics = errDiag;
+  });
+
+  it("SAISON : un run FAILED en liste (sans scheduleId local) rouvre l'écran d'échec expliqué, pas le lanceur", () => {
+    // RED avant le fix : failed dérivait du statut local (nul) → le lanceur restait, muet.
+    h.mode = "season";
+    h.schedules = [{ id: "s-fail", status: "FAILED", createdAt: "2026-02-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }];
+    renderStep();
+
+    expect(screen.getByText(/n'a pas abouti/)).toBeInTheDocument();
+    expect(screen.getByText(/capacité insuffisante/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Lancer la génération/i })).not.toBeInTheDocument();
+  });
+
+  it("PÉRIODE : le run FAILED de la période en liste rouvre l'écran d'échec au retour", () => {
+    h.mode = "period";
+    h.entryId = "entry-1";
+    h.planId = "plan-p";
+    h.schedules = [{ id: "p-fail", status: "FAILED", createdAt: "2026-09-10T00:00:00Z", planType: "CLOSURE", schedulePlanId: "plan-p" }];
+    renderStep();
+
+    expect(screen.getByText(/n'a pas abouti/)).toBeInTheDocument();
+    expect(screen.getByText(/capacité insuffisante/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Générer le planning de période/i })).not.toBeInTheDocument();
+  });
+});
+
 describe("GenerateStep — mode saison : rien ne change (NR)", () => {
   it("l'écran embarqué de saison n'a pas de portée (scopePlanId nul)", () => {
     h.mode = "season";

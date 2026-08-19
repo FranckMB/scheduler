@@ -1695,3 +1695,49 @@ describe("PlanningPage — portée période (embedded + scopePlanId)", () => {
     expect(screen.queryByRole("heading", { name: "Planning A" })).not.toBeInTheDocument();
   });
 });
+
+// Règle ARBITRÉE fondateur (2026-08-19) : l'écran EMBARQUÉ de l'étape Génération atterrit sur la
+// version la plus RÉCENTE du plan en portée (en vol comprise) — le gestionnaire doit revoir la
+// génération qu'il vient de lancer. Le POINTEUR ne l'emporte que sur `/planning` autonome et au
+// cockpit (non embarqué). Le seed BCCL (V1 transcrite POINTÉE) rendait le bug visible : toute
+// retombée « pointeur d'abord » ramenait la V1, jamais la V2 fraîche.
+describe("PlanningPage — atterrissage EMBARQUÉ = version la plus récente, pas le pointeur", () => {
+  const seasonV = (id: string, createdAt: string, over: Partial<Schedule> = {}): Schedule => ({ id, name: "Planning A", status: "COMPLETED", score: null, createdAt, updatedAt: createdAt, planType: "SEASON", schedulePlanId: "season-plan", ...over });
+  const overlayV = (id: string, createdAt: string, over: Partial<Schedule> = {}): Schedule => ({ id, name: "Ajustement", status: "COMPLETED", score: null, createdAt, updatedAt: createdAt, planType: "CLOSURE", schedulePlanId: "ete-plan", ...over });
+  const etePlan: SchedulePlan = { id: "ete-plan", type: "CLOSURE", name: "Ajustement gymnase", startDate: "2026-09-07", calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: true };
+
+  it("SAISON embarquée : une V1 POINTÉE plus ancienne cède la place à la V2 plus récente", async () => {
+    // RED avant le fix : l'embarqué saison atterrissait via `pickLandingScheduleId` (pointeur
+    // d'abord) → la V1 `isChosen`. La génération fraîche ne s'affichait jamais.
+    vi.mocked(listSchedules).mockResolvedValue([
+      seasonV("s-v1", "2026-01-01T00:00:00Z", { isChosen: true }),
+      seasonV("s-v2", "2026-02-01T00:00:00Z"),
+    ]);
+    renderWithProviders(<PlanningPage embedded />);
+
+    await waitFor(() => expect(usePlanningStore.getState().selectedScheduleId).toBe("s-v2"));
+  });
+
+  it("PÉRIODE embarquée : une version POINTÉE plus ancienne cède la place à la plus récente", async () => {
+    // RED avant le fix : la portée atterrissait via `planRepresentative` (pointeur d'abord) → ov-1.
+    vi.mocked(listSchedules).mockResolvedValue([
+      seasonV("s-v1", "2026-01-01T00:00:00Z"),
+      overlayV("ov-1", "2026-09-10T00:00:00Z", { isChosen: true }),
+      overlayV("ov-2", "2026-09-11T00:00:00Z"),
+    ]);
+    plansState.plans = [etePlan];
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" />);
+
+    await waitFor(() => expect(usePlanningStore.getState().selectedScheduleId).toBe("ov-2"));
+  });
+
+  it("NON embarqué (`/planning` autonome) : le POINTEUR gagne — comportement inchangé (frontière NR)", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      seasonV("s-v1", "2026-01-01T00:00:00Z", { isChosen: true }),
+      seasonV("s-v2", "2026-02-01T00:00:00Z"),
+    ]);
+    renderWithProviders(<PlanningPage />);
+
+    await waitFor(() => expect(usePlanningStore.getState().selectedScheduleId).toBe("s-v1"));
+  });
+});
