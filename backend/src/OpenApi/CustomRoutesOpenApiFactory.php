@@ -1721,6 +1721,20 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ],
                 summary: 'Un-point the plan so it can be regenerated',
             )),
+            '/api/schedule_plans/{id}/transcribe-from-socle' => new PathItem(post: new Operation(
+                operationId: 'postApiSchedulePlanTranscribeFromSocle',
+                tags: ['Schedules'],
+                responses: [
+                    '201' => $this->jsonResponse('V1 created as a COMPLETED transcription of the season plan pointed version, filtered by the period settings (disabled teams/venues, effective closed weekdays, reduced sessions). Sessions that no longer fit are NOT copied and are returned as the to-replace list (team, weekday, start time, origin venue, reason). No solver call, the plan is NOT pointed.', [
+                        'scheduleId' => ['type' => 'string', 'format' => 'uuid'],
+                        'toReplace' => ['type' => 'array', 'items' => ['type' => 'object']],
+                    ]),
+                    '401' => $unauthorized,
+                    '404' => $notFound,
+                    '409' => new Response('The plan already has versions, is a SEASON plan, or the season plan has no pointed version to transcribe'),
+                ],
+                summary: 'Birth the period plan V1 as a copy of the season baseline',
+            )),
             '/api/schedules/{id}/regenerate' => new PathItem(post: new Operation(
                 operationId: 'postApiScheduleRegenerate',
                 tags: ['Schedules'],

@@ -13037,6 +13037,45 @@
                 ]
             }
         },
+        "/api/schedule_plans/{id}/transcribe-from-socle": {
+            "post": {
+                "operationId": "postApiSchedulePlanTranscribeFromSocle",
+                "tags": [
+                    "Schedules"
+                ],
+                "responses": {
+                    "201": {
+                        "description": "V1 created as a COMPLETED transcription of the season plan pointed version, filtered by the period settings (disabled teams/venues, effective closed weekdays, reduced sessions). Sessions that no longer fit are NOT copied and are returned as the to-replace list (team, weekday, start time, origin venue, reason). No solver call, the plan is NOT pointed.",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "scheduleId": {
+                                        "type": "string",
+                                        "format": "uuid"
+                                    },
+                                    "toReplace": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "404": {
+                        "description": "Resource not found"
+                    },
+                    "409": {
+                        "description": "The plan already has versions, is a SEASON plan, or the season plan has no pointed version to transcribe"
+                    }
+                },
+                "summary": "Birth the period plan V1 as a copy of the season baseline"
+            }
+        },
         "/api/schedules/{id}/regenerate": {
             "post": {
                 "operationId": "postApiScheduleRegenerate",
