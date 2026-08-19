@@ -1272,6 +1272,17 @@ final class BcclSeeder
             $this->seedReprisePeriods($manager, $club, $season, $clubId, $teams, $venues);
         }
 
+        // ============================================================
+        // SECTION 13 — INCIDENT MATÉO (P5-13 « incident Matéo », profil dev)
+        // ============================================================
+        // L'état d'adaptation EN COURS du gestionnaire : l'incident de fermeture de Matéo (le
+        // FAIT — entrée racine + datée `venue_closed`) et le plan d'ajustement qu'il a commencé
+        // sur un segment de 3 semaines (réglages posés, NON validé, sans version). Placée après
+        // les reprises : sa fenêtre (07-27/09) ne recoupe aucun autre plan du seed.
+        if ($profile->seedMateoIncident) {
+            $this->seedMateoIncident($manager, $club, $season, $clubId, $teams, $venues);
+        }
+
         return $club;
     }
 
@@ -1862,6 +1873,179 @@ final class BcclSeeder
         $schedule->setConstraintsChangedSinceGeneration(false);
         $schedule->setResourcesChangedSinceGeneration(false);
         $manager->flush();
+    }
+
+    /**
+     * P5-13 « incident Matéo » — l'état d'adaptation EN COURS du gestionnaire, relevé de la base
+     * réelle du club (2026-08-18) : le FAIT (une entrée RACINE `closure` « Matéo indisponible
+     * (travaux) » + sa datée `venue_closed`, sans plan — une racine ne provisionne rien) et sa
+     * RÉPONSE ENTAMÉE (un segment-enfant de 3 semaines né AVEC son plan d'ajustement, réglages
+     * posés mais NON validé et SANS version — un travail en cours, prêt à générer).
+     *
+     * Les versions générées par le fondateur pendant ses tests sont des artefacts VOLATILES,
+     * délibérément NON seedés : on fige l'état « avant génération », pas ses essais.
+     *
+     * Tout est find-or-create / purge-recréation à chaque run (idempotent). La grille du plan est
+     * la COPIE de la grille de saison (Matéo compris) — contrairement aux reprises (section 12)
+     * qui reconstruisent une grille custom : ici la fermeture agit par l'ÉTAT EFFECTIF (la datée
+     * `venue_closed`), pas par la grille. La purge de VenueTrainingSlot par club/saison
+     * (section « VENUE TRAINING SLOTS ») emporte la copie de plan et provisionPeriodPlan ne
+     * re-copie qu'à la NAISSANCE : on re-matérialise donc la copie saison à chaque run (sinon la
+     * grille serait vide au 2e).
+     *
+     * @param array<string, Team>  $teams
+     * @param array<string, Venue> $venues
+     */
+    private function seedMateoIncident(EntityManagerInterface $manager, Club $club, Season $season, string $clubId, array $teams, array $venues): void
+    {
+        $mateo = $venues['vMateo'];
+        $incidentTitle = 'Matéo indisponible (travaux)';
+
+        // --- Le FAIT : entrée RACINE `closure`, sans plan (une racine ne provisionne rien). ---
+        $incident = $manager->getRepository(CalendarEntry::class)->findOneBy([
+            'clubId' => $clubId,
+            'seasonId' => $season->getId(),
+            'title' => $incidentTitle,
+            'parentEntryId' => null,
+        ]);
+        if (!$incident instanceof CalendarEntry) {
+            $incident = new CalendarEntry;
+            $incident->setClubId($clubId);
+            $incident->setSeasonId($season->getId());
+            $incident->setKind(CalendarEntryKind::PERIOD);
+            $incident->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+            $incident->setTitle($incidentTitle);
+            $incident->setStartDate(new DateTimeImmutable('2026-08-18'));
+            $incident->setEndDate(new DateTimeImmutable('2026-09-30'));
+            $incident->setStatus(CalendarEntryStatus::ACTIVE);
+            $manager->persist($incident);
+            $manager->flush();
+        }
+
+        // --- Sa datée `venue_closed` : FACILITY/HARD sur Matéo, rattachée à l'entrée. Le front
+        // fait 2 POST (entrée puis contrainte) et NOMME la contrainte comme le titre de l'entrée
+        // (useCreateVenueClosure) ; le plan naît donc AVANT elle et garde son nom générique
+        // « Ajustement gymnase … » (jamais recalé sur Matéo). Find-or-create par (club, entrée). ---
+        $closure = $manager->getRepository(Constraint::class)->findOneBy([
+            'clubId' => $clubId,
+            'calendarEntryId' => $incident->getId(),
+        ]);
+        if (!$closure instanceof Constraint) {
+            $closure = new Constraint;
+            $closure->setClubId($clubId);
+            $closure->setSeasonId($season->getId());
+            $closure->setScope(ConstraintScope::FACILITY);
+            $closure->setScopeTargetId($mateo->getId());
+            $closure->setFamily(ConstraintFamily::FACILITY);
+            $closure->setRuleType(ConstraintRuleType::HARD);
+            $closure->setName($incidentTitle);
+            $closure->setConfig(['type' => 'venue_closed', 'startDate' => '2026-08-18', 'endDate' => '2026-09-30']);
+            $closure->setCalendarEntryId($incident->getId());
+            $closure->setIsActive(true);
+            $manager->persist($closure);
+            $manager->flush();
+        }
+
+        // --- La RÉPONSE ENTAMÉE : segment-enfant (parent = l'incident), 3 semaines pleines
+        // lun→dim, né AVEC son plan. Find-or-create par (club, parent, début). ---
+        $segmentStart = new DateTimeImmutable('2026-09-07');
+        $segment = $manager->getRepository(CalendarEntry::class)->findOneBy([
+            'clubId' => $clubId,
+            'parentEntryId' => $incident->getId(),
+            'startDate' => $segmentStart,
+        ]);
+        if (!$segment instanceof CalendarEntry) {
+            $segment = new CalendarEntry;
+            $segment->setClubId($clubId);
+            $segment->setSeasonId($season->getId());
+            $segment->setKind(CalendarEntryKind::PERIOD);
+            $segment->setPeriodType(CalendarEntryPeriodType::CLOSURE);
+            $segment->setTitle('Matéo indisponible (travaux) — semaines du 7 sept. 2026 au 27 sept. 2026');
+            $segment->setStartDate($segmentStart);
+            $segment->setEndDate(new DateTimeImmutable('2026-09-27'));
+            $segment->setParentEntryId($incident->getId());
+            $segment->setStatus(CalendarEntryStatus::ACTIVE);
+            $manager->persist($segment);
+            $manager->flush();
+        }
+
+        // --- Le plan d'ajustement (naissance seule : copie la grille de saison + les 4 règles
+        // bien-être, ancre les réglages). Nom laissé au générique produit à la naissance
+        // (« Ajustement gymnase — du 7 septembre 2026 au 27 septembre 2026 ») : le gymnase n'est
+        // PAS recalé (2 POST du front). PAS de version, PAS de pointeur — travail EN COURS. ---
+        $planId = $this->schedulePlanProvisioner->provisionPeriodPlan($segment->getId());
+        if (null === $planId) {
+            throw new RuntimeException('Le segment d\'ajustement de l\'incident Matéo n\'a pas reçu de plan.');
+        }
+
+        // --- Grille du plan = COPIE de la grille de saison (Matéo compris), re-matérialisée à
+        // chaque run (voir docblock). On NE reconstruit PAS de grille custom : c'est la datée
+        // `venue_closed` qui ferme Matéo par l'état effectif, pas la grille. ---
+        foreach ($manager->getRepository(VenueTrainingSlot::class)->findBy(['schedulePlanId' => $planId]) as $planSlot) {
+            $manager->remove($planSlot);
+        }
+        $manager->flush();
+        foreach ($venues as $venue) {
+            $this->schedulePlanProvisioner->copySeasonalSlotsForVenue($planId, $venue->getId());
+        }
+
+        // --- Réglages EN COURS (find-or-create par (plan, équipe)) : 8 équipes actives à 2
+        // séances/semaine, « Training Individuel » décochée. AUCUNE autre ligne. Le plan est
+        // marqué « sélection d'équipes initialisée » pour que l'ouverture du wizard ne re-seede
+        // pas son défaut par-dessus (sinon ces 9 lignes seraient écrasées). ---
+        $teamOverrides = [
+            'U18F1' => true, 'U18M1' => true, 'U15M1' => true, 'U15F1' => true,
+            'U13M1' => true, 'U13F1' => true, 'U13F2' => true, 'U13M2' => true,
+            'Training Individuel' => false,
+        ];
+        foreach ($teamOverrides as $teamName => $isActive) {
+            $team = $teams[$teamName];
+            $teamOverride = $manager->getRepository(TeamPeriodOverride::class)->findOneBy([
+                'schedulePlanId' => $planId,
+                'teamId' => $team->getId(),
+            ]);
+            if (!$teamOverride instanceof TeamPeriodOverride) {
+                $teamOverride = new TeamPeriodOverride;
+                $teamOverride->setClubId($clubId);
+                $teamOverride->setSeasonId($season->getId());
+                $teamOverride->setSchedulePlanId($planId);
+                $teamOverride->setTeamId($team->getId());
+                $manager->persist($teamOverride);
+            }
+            $teamOverride->setIsActive($isActive);
+            $teamOverride->setSessionsPerWeek($isActive ? 2 : null);
+        }
+        $manager->flush();
+        $this->schedulePlanProvisioner->markPlanTeamSelectionInitialized($planId);
+
+        // --- Une contrainte de saison décochée PAR PLAN : « SM2 · au moins 1 à Matéo » — le
+        // gestionnaire l'a décochée puisque Matéo est fermé (ConstraintPeriodOverride
+        // isActive=false ; la saison reste intacte). Le nom fait la clé — introuvable ⇒ on LÈVE
+        // (un décochage qui ne vise rien serait muet). AUCUN autre override de contrainte. ---
+        $sm2AtMateo = 'SM2 · au moins 1 à ' . $mateo->getName();
+        $constraint = $manager->getRepository(Constraint::class)->findOneBy(['clubId' => $clubId, 'name' => $sm2AtMateo]);
+        if (!$constraint instanceof Constraint) {
+            throw new RuntimeException(\sprintf('Incident Matéo : contrainte de saison « %s » introuvable (renommée ?) — le décochage ne vise rien.', $sm2AtMateo));
+        }
+        $constraintOverride = $manager->getRepository(ConstraintPeriodOverride::class)->findOneBy([
+            'schedulePlanId' => $planId,
+            'constraintId' => $constraint->getId(),
+        ]);
+        if (!$constraintOverride instanceof ConstraintPeriodOverride) {
+            $constraintOverride = new ConstraintPeriodOverride;
+            $constraintOverride->setClubId($clubId);
+            $constraintOverride->setSeasonId($season->getId());
+            $constraintOverride->setSchedulePlanId($planId);
+            $constraintOverride->setConstraintId($constraint->getId());
+            $manager->persist($constraintOverride);
+        }
+        $constraintOverride->setIsActive(false);
+        $manager->flush();
+
+        // VenuePeriodOverride : AUCUN, délibérément. Le défaut vivant dérive la fermeture de Matéo
+        // depuis la datée `venue_closed` de l'incident (VenueClosureDays) — poser un override
+        // serait doubler le mécanisme. Plan laissé NON validé (chosenScheduleId NULL) et SANS
+        // version : on n'appelle donc ni linkSchedule ni choose.
     }
 
     /**

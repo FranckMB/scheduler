@@ -72,6 +72,11 @@ final readonly class BcclSeedProfile
      * @param bool                                                                              $seedReprisePeriods     P5-13 : à `true`, le seed ajoute deux plans de
      *                                                                                                                  reprise (17 et 24 août) sous une mère « Vacances
      *                                                                                                                  d'été » (dev SEULEMENT)
+     * @param bool                                                                              $seedMateoIncident      P5-13 « incident Matéo » : à `true`, le seed pose
+     *                                                                                                                  l'incident de fermeture de Matéo (entrée racine +
+     *                                                                                                                  datée `venue_closed`) et son plan d'adaptation EN
+     *                                                                                                                  COURS (segment né avec son plan, réglages posés,
+     *                                                                                                                  NON validé, sans version) (dev SEULEMENT)
      * @param list<array{email: string, firstName: string, lastName: string, password: string}> $additionalManagers     gestionnaires (User + ClubUser admin) EN PLUS du
      *                                                                                                                  gestionnaire principal — find-or-create par email,
      *                                                                                                                  jamais écrasés (dev SEULEMENT ; [] ailleurs)
@@ -89,6 +94,7 @@ final readonly class BcclSeedProfile
         public ?array $coachNames,
         public bool $transcribeRealSchedule,
         public bool $seedReprisePeriods,
+        public bool $seedMateoIncident,
         public array $additionalManagers,
     ) {}
 
@@ -109,6 +115,9 @@ final readonly class BcclSeedProfile
             // P5-13 — le club dev porte, EN PLUS du planning de saison, deux plans de reprise
             // (17 et 24 août) et le compte gestionnaire Nicolas. Dev SEULEMENT.
             seedReprisePeriods: true,
+            // P5-13 « incident Matéo » — le club dev porte aussi l'état d'adaptation EN COURS du
+            // gestionnaire (fermeture de Matéo + son plan d'ajustement non validé). Dev SEULEMENT.
+            seedMateoIncident: true,
             additionalManagers: [
                 // Mot de passe EN CLAIR, hashé au seed (patron du gestionnaire principal
                 // ci-dessus). Find-or-create par email, jamais écrasé s'il existe déjà.
@@ -151,6 +160,8 @@ final readonly class BcclSeedProfile
             transcribeRealSchedule: false,
             // Ni plans de reprise ni gestionnaire additionnel : c'est un club de charge.
             seedReprisePeriods: false,
+            // Ni incident Matéo : la charge mesure la génération, pas un état d'adaptation figé.
+            seedMateoIncident: false,
             additionalManagers: [],
         );
     }
@@ -176,6 +187,8 @@ final readonly class BcclSeedProfile
             transcribeRealSchedule: false,
             // La démo ne porte ni plan de période ni compte Nicolas (dev SEULEMENT).
             seedReprisePeriods: false,
+            // La démo ne porte pas l'incident Matéo (dev SEULEMENT — elle reste vierge de calendrier).
+            seedMateoIncident: false,
             additionalManagers: [],
         );
     }

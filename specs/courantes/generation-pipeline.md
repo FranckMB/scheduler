@@ -1,6 +1,6 @@
 # Génération d'un planning — conduite normalisée (bout en bout)
 
-Last verified @ 2026-08-19 (**rotation de fraîcheur**, 2ᵉ fichier de la passe. Re-vérifié contre le code : la chaîne `POST /api/schedules/{id}/generate` → Messenger → moteur → import → Mercure ✓ · le topic `club:{clubId}:schedule:{scheduleId}` ✓ · le verrou par club ✓. **UNE affirmation était FAUSSE, et elle envoyait au mauvais endroit** : « aucun abonné Mercure côté frontend, personne ne consomme le flux » — `frontend/src/shared/lib/scheduleStream.ts` (FRT-04) ouvre UN EventSource par session abonné au template du club, authentifié par cookie httpOnly via `GET /api/mercure/auth`. Un dev qui diagnostiquait une génération « qui ne s'affiche pas » était explicitement dissuadé de regarder là. Nuance conservée : le flux est BEST-EFFORT et le polling ralentit au lieu de mourir) — *(historique des passes retiré le 2026-08-19, audit DOC-33 : 1 entrée empilée. Un stamp REMPLACE, il ne s'empile pas ; l'historique vit dans git : `git log -p --follow specs/courantes/generation-pipeline.md`)*
+Last verified @ 2026-08-19 (**fix ancrage génération période**, re-vérifié contre `GenerateStep.tsx`/`PlanningPage.tsx`/`PlanningToolbar.tsx` : §2 « Affichage » recalé — l'écran embarqué porte désormais une **portée** (`scopePlanId`), la portée saison-seule décrite jusque-là étant devenue fausse en mode période depuis le correctif du bug fondateur du jour ; détail : `etat-des-lieux.md` §3) ; précédemment : 2026-08-19 (**rotation de fraîcheur**, 2ᵉ fichier de la passe. Re-vérifié contre le code : la chaîne `POST /api/schedules/{id}/generate` → Messenger → moteur → import → Mercure ✓ · le topic `club:{clubId}:schedule:{scheduleId}` ✓ · le verrou par club ✓. **UNE affirmation était FAUSSE, et elle envoyait au mauvais endroit** : « aucun abonné Mercure côté frontend, personne ne consomme le flux » — `frontend/src/shared/lib/scheduleStream.ts` (FRT-04) ouvre UN EventSource par session abonné au template du club, authentifié par cookie httpOnly via `GET /api/mercure/auth`. Un dev qui diagnostiquait une génération « qui ne s'affiche pas » était explicitement dissuadé de regarder là. Nuance conservée : le flux est BEST-EFFORT et le polling ralentit au lieu de mourir) — *(historique des passes retiré le 2026-08-19, audit DOC-33 : 1 entrée empilée. Un stamp REMPLACE, il ne s'empile pas ; l'historique vit dans git : `git log -p --follow specs/courantes/generation-pipeline.md`)*
 
 > Vérité courante. Décrit ce qui **doit** se passer, zone par zone, quand un
 > gestionnaire lance une génération : ce que fait le frontend, ce que fait le
@@ -56,11 +56,27 @@ via `POST /generate` ; backend → frontend via Mercure SSE `club:{clubId}:sched
   on ne recopie jamais le payload dedans — le serveur reste la source de vérité — et **le polling
   ne meurt pas, il ralentit** tant que le flux est connecté. C'est donc un accélérateur, pas un
   chemin critique : une génération s'affiche même hub éteint.
-- **Affichage** : dès qu'un schedule est `COMPLETED`, `GenerateStep` bascule sur
-  `<PlanningPage embedded />`. La page choisit le plan à ouvrir via
-  `pickLandingScheduleId` (`features/planning/PlanningPage.tsx`) : **jamais un overlay
-  de période**, toujours une version de saison — celle que le plan SEASON **pointe**
-  (`seasonPlan.chosenScheduleId`, ADR-0002), sinon la dernière version de saison terminée.
+- **Affichage** : dès qu'une version existe pour le plan en cours (terminée OU en vol),
+  `GenerateStep` bascule sur `<PlanningPage embedded scopePlanId={...} />`
+  (`features/wizard/steps/GenerateStep.tsx`). **En mode saison**, `scopePlanId` est
+  `null` : la page choisit le plan à ouvrir via `pickLandingScheduleId`
+  (`features/planning/PlanningPage.tsx`) — toujours une version de saison, celle que
+  le plan SEASON **pointe** (`seasonPlan.chosenScheduleId`, ADR-0002), sinon la
+  dernière version de saison terminée ; ce contrat reste **inchangé** et est aussi
+  celui de la page `/planning` autonome (`pickLanding.test.ts`). **En mode période**,
+  `scopePlanId` porte l'id du plan de période : l'écran embarqué ne connaît QUE les
+  versions de CE plan (atterrissage, titre, toolbar, badge « principal » impossible),
+  et une période sans version affiche un état vide **explicite** — jamais un repli sur
+  une version de saison. ⚠ **Corrigé le 2026-08-19** (bug fondateur) : avant cette
+  date, l'écran embarqué n'avait aucune portée en mode période — une sélection
+  laissée par un autre écran du cockpit (ou l'absence de sélection au retour sur
+  l'étape) faisait retomber l'affichage sur le plan de saison (titre, badge
+  « principal », versions de saison), masquant les versions déjà générées de la
+  période et exposant à une double génération. Ceinture ajoutée dans le même
+  correctif : les entrées en mode période (`RadarPanel`, `DayDialog`, la reprise
+  overlay de `SeasonSchedulesModal`) et les sorties vers la génération de saison
+  (`SeasonPlanBanner`, `SeasonSchedulesModal`) purgent la sélection planning au
+  passage. Détail : `specs/courantes/etat-des-lieux.md` §3.
 
 ## 3. Backend — ce qu'il fait
 

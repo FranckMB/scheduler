@@ -359,4 +359,46 @@ describe("WeekGrid", () => {
     expect(screen.getByText("Gymnase Alpha")).toBeInTheDocument();
     expect(await axe(container)).toHaveNoViolations();
   });
+
+  // P2-43 volet (v) — une fenêtre vide sur un couple (gymnase, jour) FERMÉ est MARQUÉE (inerte
+  // + nommée), jamais offerte en « Placer ici ». `closedWindows` porte l'état SERVI (clé
+  // `venueId|jourISO`) : le grain JOUR est respecté, la grille ne re-dérive rien.
+  describe("fenêtres vides fermées (P2-43 volet v)", () => {
+    const occupied: Slot = { ...slot, id: "a", dayOfWeek: 1 };
+    const emptyWindow: Slot = { ...slot, id: "empty:w1", teamId: "", dayOfWeek: 2, startTime: "19:00:00" };
+    const model = buildGrid([occupied, emptyWindow], "gymnase", lookups);
+    const closedWindows = new Map<string, string>([["v1|2", "le mardi est fermé (indisponibilité déclarée)"]]);
+
+    it("case fermée : INERTE et NOMMÉE (« fermé » + title « Fermé — … »), jamais un bouton", () => {
+      const { container } = render(<WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} closedWindows={closedWindows} />);
+
+      const closed = container.querySelector('[title^="Fermé —"]');
+      expect(closed).not.toBeNull();
+      expect(closed?.getAttribute("title")).toMatch(/mardi est fermé/);
+      expect(closed?.textContent).toMatch(/fermé/i);
+      // Marquée, pas offerte : plus de « vide » sur ce couple, et aucun bouton pour lui.
+      expect(screen.queryByText("vide")).not.toBeInTheDocument();
+    });
+
+    it("armé (mode cible), une case fermée NE devient PAS « Placer ici » (offre fail-closed)", () => {
+      const onPickTarget = vi.fn();
+      render(
+        <WeekGrid model={model} selectedSlotId={null} onSelectSlot={vi.fn()} closedWindows={closedWindows} targetMode={{ active: true, sourceSlotId: "a", variant: "move" }} onPickTarget={onPickTarget} onCancelTarget={vi.fn()} />,
+      );
+
+      expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument();
+    });
+
+    it("grain JOUR : le MÊME gymnase un autre jour reste offert « Placer ici »", () => {
+      const otherDay: Slot = { ...slot, id: "empty:w2", teamId: "", dayOfWeek: 4, startTime: "19:00:00" };
+      const m = buildGrid([occupied, emptyWindow, otherDay], "gymnase", lookups);
+      render(
+        <WeekGrid model={m} selectedSlotId={null} onSelectSlot={vi.fn()} closedWindows={closedWindows} targetMode={{ active: true, sourceSlotId: "a", variant: "move" }} onPickTarget={vi.fn()} onCancelTarget={vi.fn()} />,
+      );
+
+      // Jeudi (v1|4) n'est pas fermé → toujours offert ; mardi (v1|2) ne l'est plus.
+      const offers = screen.getAllByRole("button", { name: /Placer ici/ });
+      expect(offers).toHaveLength(1);
+    });
+  });
 });

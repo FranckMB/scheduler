@@ -75,6 +75,9 @@ function DayList({ entries, holiday, publicHoliday, onCreate, onClose }: { entri
   }
   const plansWithVersions = new Set((schedulesQuery.data ?? []).map((s) => s.schedulePlanId));
   const adjust = (entryId: string) => {
+    // Ceinture (bug fondateur 2026-08-19) : purge une sélection planning d'un autre écran
+    // avant d'entrer en mode période (la vraie correction = la portée de PlanningPage).
+    setSelectedScheduleId(null);
     startPeriodMode(entryId);
     onClose();
     navigate("/wizard");
@@ -364,6 +367,9 @@ function HolidayBlock({ holiday, entries, onClose }: { holiday: SchoolHoliday; e
     setWeekToDelete(null);
   };
   const adapt = (entryId: string) => {
+    // Ceinture (bug fondateur 2026-08-19) : purge une sélection planning d'un autre écran
+    // avant d'entrer en mode période (la vraie correction = la portée de PlanningPage).
+    setSelectedScheduleId(null);
     startPeriodMode(entryId);
     onClose();
     navigate("/wizard");

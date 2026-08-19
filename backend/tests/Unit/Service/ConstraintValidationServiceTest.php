@@ -211,6 +211,71 @@ final class ConstraintValidationServiceTest extends TestCase
         self::assertContains('Une contrainte de gymnase doit désigner un gymnase.', $this->service->validate($constraint));
     }
 
+    /**
+     * BUG fondateur (2026-08-19) — une INDISPONIBILITÉ datée de gymnase (`venue_closed`)
+     * faisait rougir le gate « À corriger avant de générer » avec « Une contrainte de
+     * gymnase doit désigner un gymnase », BLOQUANT le bouton Générer. Faux bloqueur : le
+     * gymnase fermé vit dans `scopeTargetId` (pas dans le config), et une fermeture datée ne
+     * produit AUCUNE ligne moteur (elle ferme des jours, `VenueClosureDays`) — le gate ne peut
+     * donc pas bloquer la génération pour elle (parité gate == payload).
+     */
+    public function testDatedVenueClosureIsNotFlaggedForMissingVenueKey(): void
+    {
+        $constraint = new Constraint;
+        $constraint->setScope(ConstraintScope::FACILITY);
+        $constraint->setScopeTargetId(self::VENUE);
+        $constraint->setFamily(ConstraintFamily::FACILITY);
+        $constraint->setRuleType(ConstraintRuleType::HARD);
+        $constraint->setConfig(['type' => 'venue_closed', 'startDate' => '2026-08-18', 'endDate' => '2026-09-30']);
+
+        $errors = $this->service->validate($constraint);
+
+        self::assertNotContains('Une contrainte de gymnase doit désigner un gymnase.', $errors, 'une fermeture datée porte son gymnase dans le scope, pas dans le config — jamais ce faux bloqueur');
+        self::assertSame([], $errors, 'la fermeture datée du fondateur (gymnase + dates cohérentes) est irréprochable pour le gate');
+    }
+
+    /** Un config nu (legacy, sans dates) reste valide : VenueClosureDays ferme alors toute la fenêtre. */
+    public function testDatedVenueClosureWithoutDatesStaysValid(): void
+    {
+        $constraint = (new Constraint)
+            ->setScope(ConstraintScope::FACILITY)
+            ->setScopeTargetId(self::VENUE)
+            ->setFamily(ConstraintFamily::FACILITY)
+            ->setRuleType(ConstraintRuleType::HARD)
+            ->setConfig(['type' => 'venue_closed']);
+
+        self::assertSame([], $this->service->validate($constraint));
+    }
+
+    /** Une fermeture SANS gymnase (scopeTargetId nul) est une vraie erreur — message dédié, sans doublon générique. */
+    public function testVenueClosureWithoutTargetVenueIsRejectedWithADedicatedMessage(): void
+    {
+        $constraint = (new Constraint)
+            ->setScope(ConstraintScope::FACILITY)
+            ->setScopeTargetId(null)
+            ->setFamily(ConstraintFamily::FACILITY)
+            ->setRuleType(ConstraintRuleType::HARD)
+            ->setConfig(['type' => 'venue_closed', 'startDate' => '2026-08-18', 'endDate' => '2026-09-30']);
+
+        $errors = $this->service->validate($constraint);
+
+        self::assertContains('Une fermeture de gymnase doit désigner le gymnase concerné.', $errors);
+        self::assertNotContains('Cette contrainte doit cibler une équipe, un coach ou un gymnase précis.', $errors, 'le message générique cède la place au message dédié de la fermeture');
+    }
+
+    /** Deux dates inversées ferment zéro jour (no-op silencieux dans VenueClosureDays) : on le signale. */
+    public function testVenueClosureWithInvertedDatesIsRejected(): void
+    {
+        $constraint = (new Constraint)
+            ->setScope(ConstraintScope::FACILITY)
+            ->setScopeTargetId(self::VENUE)
+            ->setFamily(ConstraintFamily::FACILITY)
+            ->setRuleType(ConstraintRuleType::HARD)
+            ->setConfig(['type' => 'venue_closed', 'startDate' => '2026-09-30', 'endDate' => '2026-08-18']);
+
+        self::assertContains('La date de début de la fermeture doit précéder sa date de fin.', $this->service->validate($constraint));
+    }
+
     public function testCoachAvailabilityFamilyRequiresCoachIdOrTargetTag(): void
     {
         $constraint = new Constraint;

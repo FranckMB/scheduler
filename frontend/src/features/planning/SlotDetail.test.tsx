@@ -42,6 +42,7 @@ const cell = (locked: boolean): GridCell => ({
   roleTag: null,
   teamLabel: "U11",
   venueLabel: "Gymnase Alpha",
+  venueId: "venue-1",
   venueColor: null,
   coachLabel: "Jean Dupont",
   day: 2,

@@ -3,10 +3,19 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type StubSchedule = { id: string; status: string; createdAt: string; planType: string | null; schedulePlanId: string | null };
+
 const h = {
   status: null as string | null,
   diagnostics: [] as unknown[],
   diagLoading: false,
+  // Mode d'entrée du wizard + résolution de l'ancre de période (calendarEntryId → plan).
+  mode: "season" as "season" | "period",
+  entryId: null as string | null,
+  planId: null as string | null,
+  // La liste des versions (bug fondateur 2026-08-19 — `showPlanning` en dérive en période).
+  schedules: [] as StubSchedule[],
+  setSelected: vi.fn(),
   // AUD-FRT-09 — spy STABLE : le harnais en recréait un à chaque rendu, donc l'argument
   // du lancement était inobservable. On ne pouvait pas voir ce que l'écran demandait.
   launch: vi.fn().mockResolvedValue("sched-1"),
@@ -14,19 +23,22 @@ const h = {
 
 vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { club: { name: "BCCL" } } }) }));
 vi.mock("@/features/cockpit/queries", () => ({
-  useCalendarEntry: () => ({ data: null }),
-  usePeriodAnchor: () => ({ state: "base", planId: null }),
+  useCalendarEntry: () => ({ data: null === h.entryId ? null : { id: h.entryId } }),
+  usePeriodAnchor: () => ("period" === h.mode && null !== h.planId ? { state: "period", planId: h.planId } : { state: "base", planId: null }),
   anchorIsWritable: () => true,
 }));
 vi.mock("@/features/planning/queries", () => ({
-  useSchedules: () => ({ data: [], isLoading: false }),
+  useSchedules: () => ({ data: h.schedules, isLoading: false }),
   useDiagnostics: () => ({ data: h.diagnostics, isLoading: h.diagLoading }),
 }));
-vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: { setSelectedScheduleId: () => void }) => unknown) => sel({ setSelectedScheduleId: () => {} }) }));
-vi.mock("@/features/planning/PlanningPage", () => ({ PlanningPage: () => <div /> }));
+vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: { setSelectedScheduleId: (id: string | null) => void }) => unknown) => sel({ setSelectedScheduleId: h.setSelected }) }));
+// Le stub RECORD la portée reçue (data-scope) : c'est le CÂBLAGE GenerateStep→PlanningPage
+// qu'on épingle ici (que la portée passée == le plan de période). Le RENDU scopé lui-même
+// — atterrissage, titre, toolbar — est gardé sur le composant RÉEL dans PlanningPage.test.tsx.
+vi.mock("@/features/planning/PlanningPage", () => ({ PlanningPage: (props: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null }) => <div data-testid="planning" data-scope={props.scopePlanId ?? ""} data-entry={props.calendarEntryId ?? ""} /> }));
 vi.mock("@/features/planning/GenerationWaiting", () => ({ GenerationWaiting: () => <div /> }));
 vi.mock("../lib/useStepValidation", () => ({ useStepValidation: () => ({ errors: [], warnings: [], pending: false }) }));
-vi.mock("../store", () => ({ useWizardStore: () => ({ mode: "season", calendarEntryId: null }) }));
+vi.mock("../store", () => ({ useWizardStore: () => ({ mode: h.mode, calendarEntryId: h.entryId }) }));
 vi.mock("../queries", () => ({
   // Le lancement rend un id → le composant poll useScheduleStatus, que le
   // harnais pilote via h.status (FAILED = échec de SOLVE).
@@ -44,6 +56,21 @@ function renderStep() {
     </QueryClientProvider>,
   );
 }
+
+// Reset GLOBAL du harnais : la période / le plan / les versions ne doivent pas fuir d'un
+// test à l'autre (les describes historiques posent leurs propres resets — celui-ci couvre
+// les champs qu'ils ne touchent pas, pour tout cas d'ordre d'exécution).
+beforeEach(() => {
+  h.status = null;
+  h.diagnostics = [];
+  h.diagLoading = false;
+  h.mode = "season";
+  h.entryId = null;
+  h.planId = null;
+  h.schedules = [];
+  h.setSelected.mockClear();
+  h.launch.mockClear();
+});
 
 /**
  * NR (retour fondateur 2026-08-05, « en prod ça ne passera pas ») : un solve
@@ -136,5 +163,75 @@ describe("GenerateStep — la reprise après échec ne crée pas de version (AUD
 
     await user.click(await screen.findByRole("button", { name: /Réessayer/ }));
     expect(h.launch).toHaveBeenLastCalledWith({ existingScheduleId: "sched-1" });
+  });
+});
+
+/**
+ * bug fondateur 2026-08-19 — l'étape Génération d'une ADAPTATION de période doit :
+ *  1) montrer l'écran embarqué dès qu'une version de LA PÉRIODE existe (terminée OU en vol),
+ *     même au RETOUR sur l'étape sans scheduleId local — sinon un écran « Générer » vierge
+ *     masquait les versions déjà générées ;
+ *  2) PORTER cet écran sur le plan de la période (`scopePlanId`), pas sur le socle.
+ * On épingle le CÂBLAGE (portée passée + condition d'affichage) ; le rendu scopé lui-même
+ * vit sur le composant réel dans PlanningPage.test.tsx.
+ */
+describe("GenerateStep — mode période : l'écran embarqué est scopé au plan de période", () => {
+  const overlay = (id: string, status: string, createdAt: string): StubSchedule => ({ id, status, createdAt, planType: "CLOSURE", schedulePlanId: "plan-p" });
+
+  beforeEach(() => {
+    h.mode = "period";
+    h.entryId = "entry-1";
+    h.planId = "plan-p";
+  });
+
+  it("de retour sur l'étape avec 2 versions COMPLETED de la période (aucun scheduleId local) : l'écran embarqué s'affiche, porté sur le plan de période", () => {
+    // RED avant le fix : `overlayDone` dérivait du statut LOCAL (nul ici) → showPlanning
+    // faux → le lanceur restait affiché, l'écran embarqué absent.
+    h.schedules = [overlay("ov-1", "COMPLETED", "2026-09-10T00:00:00Z"), overlay("ov-2", "COMPLETED", "2026-09-11T00:00:00Z")];
+    renderStep();
+
+    expect(screen.getByTestId("planning")).toHaveAttribute("data-scope", "plan-p");
+    // P2-43 volet (v) — l'entrée de calendrier de la période est passée : PlanningPage y lit
+    // l'état de fermeture des gymnases pour MARQUER les fenêtres vides fermées.
+    expect(screen.getByTestId("planning")).toHaveAttribute("data-entry", "entry-1");
+    expect(screen.queryByRole("button", { name: /Générer le planning de période/i })).not.toBeInTheDocument();
+  });
+
+  it("une version EN VOL de la période affiche aussi l'écran embarqué porté (retour mi-génération)", () => {
+    h.schedules = [overlay("ov-1", "GENERATING", "2026-09-10T00:00:00Z")];
+    renderStep();
+
+    expect(screen.getByTestId("planning")).toHaveAttribute("data-scope", "plan-p");
+  });
+
+  it("plan de période SANS version : le lanceur reste, jamais l'écran embarqué (aucun repli saison)", () => {
+    // Une version de SAISON existe (le repli fautif d'avant), mais pas de version de la période.
+    h.schedules = [{ id: "season-v1", status: "COMPLETED", createdAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }];
+    renderStep();
+
+    expect(screen.queryByTestId("planning")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Générer le planning de période/i })).toBeInTheDocument();
+  });
+
+  it("la portée ne dépend pas de la largeur : un enfant-SEGMENT scope au même plan qu'un mono-semaine", () => {
+    // Enfant-segment (autre entryId) — l'ancre résout le MÊME type de plan de période :
+    // la portée se dérive du plan, pas de la largeur de la fenêtre.
+    h.entryId = "segment-3";
+    h.schedules = [overlay("ov-seg", "COMPLETED", "2026-09-10T00:00:00Z")];
+    renderStep();
+
+    expect(screen.getByTestId("planning")).toHaveAttribute("data-scope", "plan-p");
+  });
+});
+
+describe("GenerateStep — mode saison : rien ne change (NR)", () => {
+  it("l'écran embarqué de saison n'a pas de portée (scopePlanId nul)", () => {
+    h.mode = "season";
+    h.schedules = [{ id: "s-v1", status: "COMPLETED", createdAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }];
+    renderStep();
+
+    expect(screen.getByTestId("planning")).toHaveAttribute("data-scope", "");
+    // En saison, aucune entrée de période n'est passée (pas de fermetures de période à lire).
+    expect(screen.getByTestId("planning")).toHaveAttribute("data-entry", "");
   });
 });

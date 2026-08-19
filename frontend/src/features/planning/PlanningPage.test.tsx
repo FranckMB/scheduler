@@ -2,11 +2,11 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { SchedulePlan } from "@/features/cockpit/api";
+import type { EntryConflictsResponse, SchedulePlan } from "@/features/cockpit/api";
 import { useToastStore } from "@/shared/stores/toastStore";
 import { renderWithProviders } from "@/test/utils";
 
-import { EngineTimeoutError, getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError } from "./api";
+import { EngineTimeoutError, EngineVerificationInterruptedError, getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -70,6 +70,14 @@ vi.mock("./api", () => {
       this.name = "EngineTimeoutError";
     }
   }
+  // La vérification INTERROMPUE côté client (timeout ky / abort) — classe RÉELLE pour que
+  // `error instanceof EngineVerificationInterruptedError` branche vers le message honnête.
+  class EngineVerificationInterruptedError extends Error {
+    constructor() {
+      super("verification_interrupted");
+      this.name = "EngineVerificationInterruptedError";
+    }
+  }
   return {
   OverlaysExistError,
   MoveRejectedError,
@@ -77,6 +85,7 @@ vi.mock("./api", () => {
   TargetLockedError,
   SlotEditError,
   EngineTimeoutError,
+  EngineVerificationInterruptedError,
   reopenSchedule: vi.fn(),
   listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }])),
   getSlots: vi.fn(() =>
@@ -124,13 +133,16 @@ vi.mock("@/shared/lib/scheduleStream", () => ({
   isScheduleStreamConnected: () => false,
 }));
 
-const { meState, renameSpy, plansState, venueOverridesState, reservationsState, teamOverridesState } = vi.hoisted(() => ({
+const { meState, renameSpy, plansState, conflictsState, reservationsState, teamOverridesState } = vi.hoisted(() => ({
   meState: { chosenScheduleId: null as string | null },
   renameSpy: vi.fn(),
   // Typé sur le VRAI contrat : un type inline recopié laisserait passer un champ ajouté à
   // `SchedulePlan` sans que ces fixtures soient recalées (revue #339 round 3).
   plansState: { plans: [] as SchedulePlan[] },
-  venueOverridesState: { rows: [] as { id: string; venueId: string; mode: string }[], isError: false },
+  // P2-43 volet (v) — l'état de fermeture SERVI (`/calendar-entries/{id}/conflicts`) : c'est
+  // désormais LUI qui porte `disabledVenueIds` (plus la re-dérivation des overrides) ET les
+  // couples fermés que la grille MARQUE. `data: undefined` = query non résolue (fail-open).
+  conflictsState: { data: undefined as EntryConflictsResponse | undefined, isError: false },
   // Réservations servies sur un planning FAILED (pseudo-créneaux lecture seule).
   reservationsState: { rows: [] as { id: string; schedulePlanId: string | null; teamId: string; venueId: string; dayOfWeek: number; startTime: string; durationMinutes: number }[] },
   // P2-30 : les overrides d'équipe de la période (seuil/désactivation de dérive).
@@ -141,7 +153,6 @@ const { meState, renameSpy, plansState, venueOverridesState, reservationsState, 
 // créneaux en base, l'écran doit malgré tout cesser de l'afficher.
 vi.mock("@/features/wizard/queries", async (orig) => ({
   ...(await orig<typeof import("@/features/wizard/queries")>()),
-  useVenuePeriodOverrides: () => ({ data: venueOverridesState.rows, isError: venueOverridesState.isError }),
   useReservations: () => ({ data: reservationsState.rows }),
   // P2-30 : overrides d'équipe de la période (seuil de dérive). `data` défini → readState ready.
   useTeamPeriodOverrides: () => ({ data: teamOverridesState.rows, isError: false }),
@@ -156,7 +167,25 @@ vi.mock("@/features/wizard/queries", async (orig) => ({
 vi.mock("@/features/cockpit/queries", async (orig) => ({
   ...(await orig<typeof import("@/features/cockpit/queries")>()),
   useSchedulePlans: () => ({ data: plansState.plans }),
+  // P2-43 volet (v) — l'écran lit l'état de fermeture SERVI. Une entrée nulle (socle, ou plan de
+  // période pas encore résolu) = pas de données, comme la vraie query désactivée.
+  useEntryConflicts: (entryId: string | null) => ({ data: null === entryId ? undefined : conflictsState.data, isError: conflictsState.isError, isFetching: false, refetch: vi.fn() }),
 }));
+
+/** Un `EntryConflictsResponse` complet, aux défauts ouverts — les cas ne renseignent que ce qui compte. */
+function makeConflicts(partial: Partial<EntryConflictsResponse> = {}): EntryConflictsResponse {
+  return {
+    entryId: "e",
+    venueIds: [],
+    conflicts: [],
+    closures: [],
+    fullyClosedVenueIds: [],
+    effectiveClosedWeekdays: {},
+    disabledVenueIds: [],
+    seasonPlanChosen: true,
+    ...partial,
+  };
+}
 
 vi.mock("@/features/auth/queries", () => ({
   useMe: () => ({
@@ -178,8 +207,8 @@ beforeEach(() => {
   meState.chosenScheduleId = null;
   renameSpy.mockClear();
   plansState.plans = [];
-  venueOverridesState.rows = [];
-  venueOverridesState.isError = false;
+  conflictsState.data = undefined;
+  conflictsState.isError = false;
   reservationsState.rows = [];
   teamOverridesState.rows = [];
   // Ré-armement explicite : ces trois-là sont réécrits par des cas (couche de période,
@@ -428,7 +457,7 @@ describe("PlanningPage (integration)", () => {
     ]);
     plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
     // La séance par défaut (slot-1) est placée dans venue-1, que l'on désactive ensuite.
-    venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
+    conflictsState.data = makeConflicts({ disabledVenueIds: ["venue-1"] });
     usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
     renderWithProviders(<PlanningPage />);
 
@@ -479,7 +508,7 @@ describe("PlanningPage (integration)", () => {
     ]);
     plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
     vi.mocked(getSlots).mockResolvedValue([]);
-    venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
+    conflictsState.data = makeConflicts({ disabledVenueIds: ["venue-1"] });
     reservationsState.rows = [
       { id: "res-1", schedulePlanId: "ete-plan", teamId: "team-1", venueId: "venue-1", dayOfWeek: 1, startTime: "18:00", durationMinutes: 90 },
     ];
@@ -511,7 +540,7 @@ describe("PlanningPage (integration)", () => {
     vi.mocked(getSlots).mockResolvedValue([
       { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-2", coachId: null, dayOfWeek: 3, startTime: "17:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null },
     ]);
-    venueOverridesState.rows = [{ id: "o1", venueId: "venue-1", mode: "DISABLED" }];
+    conflictsState.data = makeConflicts({ disabledVenueIds: ["venue-1"] });
     usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
     renderWithProviders(<PlanningPage />);
 
@@ -776,6 +805,29 @@ describe("PlanningPage (integration)", () => {
     await user.click(await screen.findByRole("button", { name: /Diagnostics du système/ }));
     const warnGroup = await screen.findByRole("button", { name: /Alertes/ });
     expect(within(warnGroup).getByText("1")).toBeInTheDocument();
+  });
+
+  // P2-43 volet (v) — la vue planning d'une PÉRIODE ne doit plus OFFRIR ce que le moteur
+  // refuse : une fenêtre vide sur un couple (gymnase, jour) FERMÉ (état effectif SERVI) est
+  // MARQUÉE « fermé » (inerte + nommée), jamais rendue « vide » offrable. Grain JOUR : c'est le
+  // seul mardi de venue-1 qui est fermé, pas le gymnase entier.
+  it("marque « fermé » (inerte) une fenêtre vide sur un couple gymnase/jour FERMÉ d'une période, au lieu de l'offrir « vide »", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      { id: SID, name: "Période", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "HOLIDAY", schedulePlanId: "ete-plan" },
+    ]);
+    plansState.plans = [{ id: "ete-plan", type: "HOLIDAY", name: "Été", startDate: "2026-08-17", calendarEntryId: "e", chosenScheduleId: null, teamSelectionInitialized: true }];
+    // venue-1 est fermé le MARDI (jour ISO 2) — la fenêtre ts-2 (mardi 19:00) tombe dessus.
+    conflictsState.data = makeConflicts({ effectiveClosedWeekdays: { "venue-1": { "2": "default-incident" } } });
+    usePlanningStore.setState({ selectedScheduleId: SID, viewMode: "gymnase" });
+    renderWithProviders(<PlanningPage />);
+
+    // La séance placée du lundi prouve que la grille a chargé (ancre non-fermée).
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    // La fenêtre du mardi n'est plus OFFERTE (« vide ») — elle est MARQUÉE « fermé » et nommée.
+    expect(screen.queryByText("vide")).not.toBeInTheDocument();
+    const closed = await screen.findByTitle(/Fermé —/);
+    expect(closed).toHaveTextContent(/fermé/i);
+    expect(closed.getAttribute("title")).toMatch(/mardi est fermé/);
   });
 
   // planning lifecycle (§7.1): reopening the version the plan POINTS at, when the
@@ -1145,6 +1197,175 @@ describe("PlanningPage (integration)", () => {
     });
   });
 
+  // P4-119 (d) — le mode cible (déplacer/placer) SUIT son ancre : le panneau du créneau source
+  // pour un déplacement, l'entrée de dérive pour un placement. Fermer le panneau, changer de vue
+  // ou de version = geste ANNULÉ. Avant ce correctif, l'armement survivait à son panneau et chaque
+  // clic devenait une nouvelle tentative de déplacement — l'utilisateur piégé (fondateur 2026-08-19).
+  describe("P4-119 : le mode cible suit son ancre", () => {
+    const OTHER = "22222222-2222-2222-2222-222222222222";
+
+    beforeEach(() => {
+      useToastStore.setState({ toasts: [] });
+      vi.mocked(moveSlot).mockReset();
+      vi.mocked(placeSlot).mockReset();
+      // Repartir d'une vue et d'une sélection neutres (le store persiste `viewMode`).
+      usePlanningStore.setState({ viewMode: "gymnase", selectedScheduleId: null, selectedSlotId: null });
+    });
+
+    async function armMove(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+      await user.click(await screen.findByText("U11"));
+      await user.click(screen.getByRole("button", { name: /Déplacer/ }));
+      // Armé : le bouton bascule et les fenêtres vides deviennent des cibles « Placer ici »
+      // (rendu STRICTEMENT gouverné par l'état armé — cf. WeekGrid `targetActive`).
+      expect(await screen.findByRole("button", { name: /Choisir la case cible/ })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /Placer ici/ })).toBeInTheDocument();
+    }
+
+    it("fermer le panneau du créneau source ANNULE le déplacement", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<PlanningPage />);
+      await armMove(user);
+      await user.click(screen.getByRole("button", { name: "Fermer" }));
+      // Désarmé : plus AUCUNE cible « Placer ici », donc aucune tentative possible au clic suivant.
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(moveSlot)).not.toHaveBeenCalled();
+    });
+
+    it("changer de vue ANNULE le déplacement", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<PlanningPage />);
+      await armMove(user);
+      await user.click(screen.getByRole("button", { name: "Par équipe" }));
+      await user.click(screen.getByRole("button", { name: "Par gymnase" }));
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(moveSlot)).not.toHaveBeenCalled();
+    });
+
+    it("changer de version ANNULE le déplacement", async () => {
+      const user = userEvent.setup();
+      vi.mocked(listSchedules).mockResolvedValue([
+        { id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+        { id: OTHER, name: "Planning B", status: "COMPLETED", score: 9100, createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+      ]);
+      usePlanningStore.setState({ selectedScheduleId: SID });
+      renderWithProviders(<PlanningPage />);
+      await armMove(user);
+      usePlanningStore.setState({ selectedScheduleId: OTHER });
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(moveSlot)).not.toHaveBeenCalled();
+    });
+
+    it("Échap ANNULE le déplacement (a11y — le raccourci existant est préservé)", async () => {
+      const user = userEvent.setup();
+      renderWithProviders(<PlanningPage />);
+      await armMove(user);
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(moveSlot)).not.toHaveBeenCalled();
+    });
+
+    it("changer de version ANNULE le placement d'une équipe à la dérive", async () => {
+      const user = userEvent.setup();
+      // U11 attend 2 séances, n'en a qu'une → dérive : le bandeau « séances à replacer » l'affiche.
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
+      vi.mocked(listSchedules).mockResolvedValue([
+        { id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+        { id: OTHER, name: "Planning B", status: "COMPLETED", score: 9100, createdAt: "2026-01-02T00:00:00Z", updatedAt: "2026-01-02T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" },
+      ]);
+      usePlanningStore.setState({ selectedScheduleId: SID });
+      renderWithProviders(<PlanningPage />);
+      const banner = await screen.findByRole("region", { name: /séances à replacer/i });
+      await user.click(within(banner).getByRole("button"));
+      // Armé : les fenêtres vides deviennent des cibles « Placer ici ».
+      expect(await screen.findByRole("button", { name: /Placer ici/ })).toBeInTheDocument();
+      usePlanningStore.setState({ selectedScheduleId: OTHER });
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(placeSlot)).not.toHaveBeenCalled();
+    });
+
+    it("changer de vue ANNULE le placement d'une équipe à la dérive", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
+      renderWithProviders(<PlanningPage />);
+      const banner = await screen.findByRole("region", { name: /séances à replacer/i });
+      await user.click(within(banner).getByRole("button"));
+      expect(await screen.findByRole("button", { name: /Placer ici/ })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Par équipe" }));
+      await user.click(screen.getByRole("button", { name: "Par gymnase" }));
+      await waitFor(() => expect(screen.queryByRole("button", { name: /Placer ici/ })).not.toBeInTheDocument());
+      expect(vi.mocked(placeSlot)).not.toHaveBeenCalled();
+    });
+  });
+
+  // P4-119 (b) — l'abandon/timeout CÔTÉ CLIENT (le front raccroche avant la réponse serveur) ne
+  // doit JAMAIS s'afficher « le moteur est indisponible » : c'est un mensonge (le moteur répondait
+  // `valid` une seconde après le raccroché, nginx 499). On NOMME l'interruption. « Indisponible »
+  // reste réservé à une vraie panne réseau/5xx du backend.
+  describe("P4-119 : abandon client ≠ moteur indisponible (message honnête)", () => {
+    const twoTeams = [
+      { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 1 },
+      { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1, sessionsPerWeek: 1 },
+    ];
+    const twoSlots = [
+      { id: "slot-1", scheduleId: SID, teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE" as const, lockOrigin: null },
+      { id: "slot-2", scheduleId: SID, teamId: "team-2", venueId: "venue-1", coachId: null, dayOfWeek: 3, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE" as const, lockOrigin: null },
+    ];
+
+    beforeEach(() => {
+      useToastStore.setState({ toasts: [] });
+      vi.mocked(moveSlot).mockReset();
+      vi.mocked(placeSlot).mockReset();
+    });
+
+    async function armMoveFrom(user: ReturnType<typeof userEvent.setup>, label: string): Promise<void> {
+      await user.click(await screen.findByText(label));
+      await user.click(screen.getByRole("button", { name: /Déplacer/ }));
+    }
+
+    it("essai (case occupée) INTERROMPU côté client → la modale NOMME l'interruption, jamais « indisponible »", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue(twoTeams);
+      vi.mocked(getSlots).mockResolvedValue(twoSlots);
+      vi.mocked(moveSlot).mockRejectedValueOnce(new EngineVerificationInterruptedError());
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(screen.getByTitle(/U13 · Gymnase Alpha/));
+
+      const dialog = await screen.findByRole("dialog");
+      expect(await within(dialog).findByText(/interrompue avant la réponse/i)).toBeInTheDocument();
+      // Le mensonge d'origine ne doit PLUS apparaître.
+      expect(within(dialog).queryByText(/moteur est indisponible/i)).not.toBeInTheDocument();
+      // Rien n'est tranché : ni oui (pas d'éviction), et [Réessayer] reste offert.
+      expect(await within(dialog).findByRole("button", { name: /Réessayer/ })).toBeInTheDocument();
+      expect(within(dialog).queryByRole("button", { name: /Déplacer et évincer/ })).not.toBeInTheDocument();
+    });
+
+    it("déplacement (case vide) INTERROMPU côté client → le panneau NOMME l'interruption, jamais « indisponible »", async () => {
+      const user = userEvent.setup();
+      vi.mocked(moveSlot).mockRejectedValueOnce(new EngineVerificationInterruptedError());
+      renderWithProviders(<PlanningPage />);
+      await armMoveFrom(user, "U11");
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+
+      // Le panneau du créneau source (toujours ouvert) porte le verdict : interruption NOMMÉE.
+      expect(await screen.findByText(/interrompue avant la réponse/i)).toBeInTheDocument();
+      expect(screen.queryByText(/moteur est indisponible/i)).not.toBeInTheDocument();
+    });
+
+    it("placement d'une équipe à la dérive INTERROMPU côté client → toast « interrompue », jamais « indisponible »", async () => {
+      const user = userEvent.setup();
+      vi.mocked(getTeams).mockResolvedValue([{ id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 2 }]);
+      vi.mocked(placeSlot).mockRejectedValueOnce(new EngineVerificationInterruptedError());
+      renderWithProviders(<PlanningPage />);
+      const banner = await screen.findByRole("region", { name: /séances à replacer/i });
+      await user.click(within(banner).getByRole("button"));
+      await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
+
+      await waitFor(() => expect(useToastStore.getState().toasts.some((t) => /interrompue avant la réponse/i.test(t.message))).toBe(true));
+      expect(useToastStore.getState().toasts.every((t) => !/indisponible/i.test(t.message))).toBe(true);
+    });
+  });
+
   // P2-32 — l'essai (dry-run) qui remplit la modale d'éviction, et les compromis nommés
   // affichés après un geste ÉCRIT accepté (toast suffixé + bandeau dismissible).
   describe("P2-32 : compromis nommés + essai (dry-run)", () => {
@@ -1411,5 +1632,66 @@ describe("PlanningPage (integration)", () => {
       await user.click(within(panel).getByRole("button", { name: /réduire les verrous manuels/i }));
       await vi.waitFor(() => expect(container.querySelector('[data-lens="MANUAL"]')).toBeNull());
     });
+  });
+});
+
+// bug fondateur 2026-08-19 — l'écran EMBARQUÉ (étape Génération) d'une adaptation de période
+// affichait le plan de SAISON (titre, badge « principal », versions de saison) au lieu de la
+// période : `pickLandingScheduleId` retombait sur le socle, et une sélection laissée par un
+// autre écran survivait. La PORTÉE (`scopePlanId`) corrige cela : l'écran ne connaît QUE les
+// versions de ce plan, y atterrit, en tire titre/toolbar, et ne retombe JAMAIS sur la saison.
+describe("PlanningPage — portée période (embedded + scopePlanId)", () => {
+  const seasonV = (id: string, over: Partial<Schedule> = {}): Schedule => ({ id, name: "Planning A", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", ...over });
+  const overlayV = (id: string, createdAt: string, over: Partial<Schedule> = {}): Schedule => ({ id, name: "Ajustement", status: "COMPLETED", score: null, createdAt, updatedAt: createdAt, planType: "CLOSURE", schedulePlanId: "ete-plan", ...over });
+  const etePlan: SchedulePlan = { id: "ete-plan", type: "CLOSURE", name: "Ajustement gymnase", startDate: "2026-09-07", calendarEntryId: "e-ete", chosenScheduleId: null, teamSelectionInitialized: true };
+
+  it("une sélection de SAISON périmée dans le planningStore ne survit PAS — atterrit dans la période, titre = période, sans badge « principal »", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      seasonV("season-v1"),
+      overlayV("ov-1", "2026-09-10T00:00:00Z"),
+      overlayV("ov-2", "2026-09-11T00:00:00Z"),
+    ]);
+    plansState.plans = [etePlan];
+    // Sélection de saison laissée par un autre écran (le cœur du bug).
+    usePlanningStore.setState({ selectedScheduleId: "season-v1" });
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" />);
+
+    // Le titre est celui de la PÉRIODE, jamais « Planning A » (la saison)…
+    expect(await screen.findByRole("heading", { name: "Ajustement gymnase" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Planning A" })).not.toBeInTheDocument();
+    // …le badge « principal » (réservé au socle) ne peut pas apparaître…
+    expect(screen.queryByText("principal")).not.toBeInTheDocument();
+    // …et la sélection périmée a bien été remplacée par une version DE LA PÉRIODE.
+    await waitFor(() => expect(["ov-1", "ov-2"]).toContain(usePlanningStore.getState().selectedScheduleId));
+  });
+
+  it("les 2 versions COMPLETED de la période sont listées (V1, V2), la plus récente affichée, et AUCUNE version de saison", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([
+      seasonV("season-v1"),
+      overlayV("ov-1", "2026-09-10T00:00:00Z"),
+      overlayV("ov-2", "2026-09-11T00:00:00Z"),
+    ]);
+    plansState.plans = [etePlan];
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" />);
+
+    const select = await screen.findByRole("combobox", { name: /version du planning/i });
+    // Deux versions, celles de la période — pas la version de saison (3e schedule).
+    const options = within(select).getAllByRole("option");
+    expect(options).toHaveLength(2);
+    expect(options.map((o) => o.textContent)).toEqual([expect.stringMatching(/^V1 — /), expect.stringMatching(/^V2 — /)]);
+    // La plus récente (ov-2) est affichée par défaut.
+    await waitFor(() => expect(select).toHaveValue("ov-2"));
+  });
+
+  it("plan de période SANS version : état vide EXPLICITE, jamais une version de saison", async () => {
+    // La période n'a aucune version ; la saison en a une (le repli fautif d'avant).
+    vi.mocked(listSchedules).mockResolvedValue([seasonV("season-v1")]);
+    plansState.plans = [etePlan];
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" />);
+
+    expect(await screen.findByText(/Aucune version pour cette période/i)).toBeInTheDocument();
+    // Ni la grille de saison, ni son titre.
+    expect(screen.queryByText("U11")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Planning A" })).not.toBeInTheDocument();
   });
 });

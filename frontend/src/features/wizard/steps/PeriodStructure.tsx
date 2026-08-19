@@ -446,6 +446,21 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
   // (`effectiveClosedWeekdays`). Le front le LIT ; il ne recompose jamais incident × masque.
   const effectiveClosedWeekdays = conflicts?.effectiveClosedWeekdays;
   const manualDaysFor = (venueId: string): number[] => manualClosedWeekdays(effectiveClosedWeekdays, venueId);
+  // P2-43 volet (ii) — les gymnases DÉSACTIVÉS (mode DISABLED), tels que le SERVEUR les calcule.
+  const disabledSet = new Set(conflicts?.disabledVenueIds ?? []);
+  // L'état effectif que le SÉLECTEUR doit annoncer, par priorité : désactivé (mode) > indisponible
+  // toute la période (fermé total) > fermé {jours} (partiel, masque OU indispo) > rien (ouvert).
+  // Lu de l'état SERVI, jamais recomposé — un gymnase désactivé cessait sinon d'exister à l'écran.
+  const pickerStateLabel = (venueId: string): string => {
+    if (disabledSet.has(venueId)) {
+      return "désactivé";
+    }
+    if (fullyClosed.has(venueId)) {
+      return "indisponible toute la période";
+    }
+    const days = Object.keys(effectiveClosedWeekdays?.[venueId] ?? {}).map(Number).sort((a, b) => a - b);
+    return days.length > 0 ? `fermé ${days.map((d) => DAY_LABELS_LONG[d].toLowerCase()).join(", ")}` : "";
+  };
   const venueSlots = periodSlots.filter((s) => s.venueId === selected.id);
   // Le bandeau rappelle TOUT ce qui ne sert pas : indisponibilités déclarées ET jours décochés
   // à la main (décision C) — sans quoi un jour fermé d'un clic passait inaperçu hors du gymnase
@@ -467,7 +482,12 @@ function PeriodVenuesPanel({ calendarEntryId, schedulePlanId }: { calendarEntryI
           aria-label="Gymnase"
           className="h-9"
           wrapperClassName="w-60"
-          venues={venues.map((v) => ({ id: v.id, name: v.name + (closed.has(v.id) ? " — " + (closureLabelsFor(v.id).join(" · ") || "Indispo cette période") : ""), color: v.color }))}
+          // P2-43 volet (ii) — chaque option porte son état effectif (désactivé / indisponible
+          // toute la période / fermé {jours} / rien), plus seulement la fermeture totale.
+          venues={venues.map((v) => {
+            const state = pickerStateLabel(v.id);
+            return { id: v.id, name: "" === state ? v.name : `${v.name} — ${state}`, color: v.color };
+          })}
           value={selected.id}
           onChange={(e) => {
             setSelectedId(e.target.value);
@@ -804,6 +824,10 @@ function PeriodVenuePanel({
           canSplit={venue.canSplit}
           otherSlots={slots.filter((s) => s.id !== editingSlot.id)}
           reservationsHere={reservations.filter((r) => r.venueId === venue.id && r.dayOfWeek === editingSlot.dayOfWeek && hhmm(r.startTime) === hhmm(editingSlot.startTime))}
+          // P2-43 volet (i) — l'état effectif du gymnase (jour → provenance) + ses fermetures :
+          // l'éditeur DIT qu'un créneau tombe un jour fermé (poser reste permis).
+          effectiveClosed={effectiveClosed}
+          closures={closures}
           onClose={() => onEditSlot(null)}
         />
       ) : null}
@@ -852,6 +876,8 @@ function PeriodSlotEditor({
   canSplit,
   otherSlots,
   reservationsHere,
+  effectiveClosed,
+  closures,
   onClose,
 }: {
   slot: VenueTrainingSlot;
@@ -859,6 +885,10 @@ function PeriodSlotEditor({
   canSplit: boolean;
   otherSlots: VenueTrainingSlot[];
   reservationsHere: { id: string }[];
+  /** P2-43 volet (i) — l'état effectif jour par jour du gymnase (jour ISO → provenance), SERVI. */
+  effectiveClosed: Record<string, "manual" | "default-incident">;
+  /** Les fermetures déclarées du gymnase (pour dater la cause « indisponibilité déclarée »). */
+  closures: Closure[];
   onClose: () => void;
 }) {
   const update = useUpdatePeriodSlot(schedulePlanId);
@@ -878,6 +908,16 @@ function PeriodSlotEditor({
   // Toujours dérivé du cache, et c'est légitime : il sert à la confirmation de DÉPLACEMENT
   // (un autre geste, qui ne détruit pas en cascade), pas à l'annonce de suppression.
   const reservationCount = reservationsHere.length;
+
+  // P2-43 volet (i) — le JOUR édité est-il fermé (état effectif SERVI) ? On ne bloque pas (décision
+  // fondateur : poser reste permis) — on le DIT. La provenance choisit la cause (présentation) ; la
+  // décision « ce jour est fermé » vient du serveur (présence de la clé).
+  const closedProvenance = effectiveClosed[day];
+  const firstClosure = closures[0];
+  const closedCause =
+    "manual" === closedProvenance
+      ? "décoché manuellement"
+      : `indisponibilité déclarée${firstClosure ? ` du ${frDateShort(firstClosure.startDate)} au ${frDateShort(firstClosure.endDate)}` : ""}`;
 
   const doSave = () => {
     const effCapacity = canSplit ? capacity : 1;
@@ -953,6 +993,13 @@ function PeriodSlotEditor({
           </div>
         ) : null}
       </div>
+
+      {/* P2-43 volet (i) — le jour édité est fermé : on le DIT, sans rien bloquer (poser reste permis). */}
+      {undefined !== closedProvenance ? (
+        <p role="note" className="mt-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
+          Créneau inactif — le {DAY_LABELS_LONG[day]?.toLowerCase() ?? `jour ${day}`} est fermé ({closedCause}). Le poser reste possible ; il ne servira pas tant que ce jour reste fermé.
+        </p>
+      ) : null}
 
       {canSplit ? <SharedSlotHint capacity={capacity} /> : null}
       {canSplit ? <GroupLabelField capacity={capacity} value={groupLabel} onChange={setGroupLabel} /> : null}

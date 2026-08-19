@@ -4,7 +4,7 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-18 (re-vérifié contre `store.ts`/`lib/clubView.ts`/`ClubViewTable.tsx`/`PlanningPage.tsx`/`PlanningToolbar.tsx`/`ResourceFilter.tsx`/`ExportMenu.tsx`/`queries.ts` et, côté serveur, `ExportPdfController`/`Export\ExportView`/`PdfGenerator`/`frontend/worker.js` — **P3-20, lot SOLDÉ** : §6.2 gagne la 5ᵉ vue « Par club » (matrice équipes × jours, rendu à part, mêmes gestes que la grille, limite du placement sur case vide annoncée) et §6.5 la vue de l'IMAGE au choix (`view` en liste blanche, le PNG photographiant la section 2 déjà rendue) ; trace datée : `etat-des-lieux.md`) — *(historique des passes précédentes retiré le 2026-08-19, audit DOC-33 : 20 entrées empilées faisaient de ce stamp un mur de 9 Ko qu'un agent traverse avant d'atteindre le contenu. Il vit dans git : `git log -p --follow frontend/docs/frontend-spec.md`)*
+Last verified @ 2026-08-19 (recalé — **fix terrain P4-119 (a+b+d) + P2-43 volet (v), même journée** : §6.7 recalé sur trois points — **(1)** le timeout CLIENT du move/place/dry-run s'aligne désormais **45 s** au-dessus du budget serveur réel (`MOVE_VERDICT_TIMEOUT_MS`, `frontend/src/features/planning/api.ts`), contre le défaut ky (~10 s) qui abandonnait AVANT la réponse moteur (nginx 499) alors que le moteur avait tranché `valid` une seconde plus tard ; **(2)** un abandon CÔTÉ CLIENT devient une 3ᵉ cause distincte `interrupted` (`EngineVerificationInterruptedError`) — « La vérification a été interrompue avant la réponse — réessayez. » — jamais confondue avec `unreachable` (panne réseau/5xx réelle) ni `timeout` (504 serveur `engine_timeout`), aussi bien sur la modale d'éviction (`EvictConfirmDialog`, état `failed`) que sur un move/place DIRECT (toast dédié) ; **(3)** la grille marque désormais les cases vides d'un gymnase FERMÉ comme **inertes et nommées** (« Fermé — … », `computeClosedWindows`/`WeekGrid.tsx`) au lieu de les offrir en vrais boutons « Placer ici » que le serveur refusait ensuite (état effectif lu via `useEntryConflicts`, jamais recomposé) ; le mode déplacer/placer se **DÉSARME** désormais si son panneau source/vue/version change (P4-119 d, `PlanningPage.tsx`) au lieu de rester armé sur une nouvelle cible non voulue — re-vérifié contre `api.ts`, `EvictConfirmDialog.tsx`, `PlanningPage.tsx`, `WeekGrid.tsx`, `lib/closedWindows.ts` ; trace datée : `etat-des-lieux.md`) ; précédemment : 2026-08-18 (re-vérifié contre `store.ts`/`lib/clubView.ts`/`ClubViewTable.tsx`/`PlanningPage.tsx`/`PlanningToolbar.tsx`/`ResourceFilter.tsx`/`ExportMenu.tsx`/`queries.ts` et, côté serveur, `ExportPdfController`/`Export\ExportView`/`PdfGenerator`/`frontend/worker.js` — **P3-20, lot SOLDÉ** : §6.2 gagne la 5ᵉ vue « Par club » (matrice équipes × jours, rendu à part, mêmes gestes que la grille, limite du placement sur case vide annoncée) et §6.5 la vue de l'IMAGE au choix (`view` en liste blanche, le PNG photographiant la section 2 déjà rendue) ; trace datée : `etat-des-lieux.md`) — *(historique des passes précédentes retiré le 2026-08-19, audit DOC-33 : 20 entrées empilées faisaient de ce stamp un mur de 9 Ko qu'un agent traverse avant d'atteindre le contenu. Il vit dans git : `git log -p --follow frontend/docs/frontend-spec.md`)*
 
 ---
 
@@ -412,6 +412,23 @@ par un CRUD brut sur la ressource :
   source elle-même. **Échap** ou un re-clic sur la source sort du mode sans rien toucher (le focus
   y revient). Le clic sur une case est routé par `WeekGrid.onPickTarget` — la PAGE décide (annuler,
   déplacer, évincer, placer) : la grille ne fait que router.
+  - **Case d'un gymnase FERMÉ (P2-43 volet v, 2026-08-19)** : une fenêtre (gymnase, jour)
+    effectivement fermée sur la version de PÉRIODE affichée est **marquée** « Fermé — … » (inerte,
+    jamais un vrai bouton) au lieu d'être offerte comme cible — l'ancien régime affichait 100 % des
+    créneaux vides d'un gymnase fermé comme boutons « Placer ici » que le serveur refusait ensuite
+    (`slot_unavailable`), un aller-retour moteur perdu par clic. L'état vient de
+    `useEntryConflicts` (jamais recomposé côté front — `computeClosedWindows`,
+    `frontend/src/features/planning/lib/closedWindows.ts`) : l'OFFRE (armement du mode cible, filtre
+    de `onPickTarget`) est **fail-closed**, l'AFFICHAGE reste **fail-open** (rien de masqué tant que
+    l'état n'est pas résolu — doctrine « on annonce, on ne cache pas »). `entryId` vient en prop
+    depuis `GenerateStep` en embarqué, sinon dérivé du plan de la version affichée (jamais le
+    socle).
+  - **L'armement suit son ancre, pas l'écran entier (P4-119 d, 2026-08-19)** : un DÉPLACEMENT tombe
+    dès que le panneau du créneau SOURCE se ferme, qu'on change de vue ou de version affichée
+    (`selectedSlotId` quitte la source) ; un PLACEMENT porte le contexte (version + vue) où il fut
+    armé et tombe si l'un change ou si son équipe cesse de dériver. Avant ce correctif, l'armement
+    survivait à la fermeture de son panneau — chaque clic suivant sur un créneau devenait une
+    nouvelle tentative de déplacement non voulue. Échap reste préservé.
   - **Priorités visuelles** : surlignage **conflit** > **mode cible** > **lentille verrous** — la
     lentille se tait tant qu'un conflit règne OU que le mode cible est armé (elle ne doit jamais
     brouiller ni le rouge du conflit, ni la cible en cours de choix).
@@ -438,7 +455,12 @@ par un CRUD brut sur la ressource :
       DIRECT (case libre, sans essai préalable), `EngineTimeoutError` suit le même traitement que
       `TargetLockedError`/`SlotEditError` : toast NOMMÉ (message serveur, jamais un numéro nu), le
       mode cible reste armé pour réessayer. Sur l'ESSAI d'éviction (case occupée), voir l'état
-      `failed` ci-dessous — la modale reste ouverte au lieu de se fermer en silence.
+      `failed` ci-dessous — la modale reste ouverte au lieu de se fermer en silence. **Timeout
+      CLIENT (P4-119 a, incident terrain 2026-08-19)** : le rail move/place/dry-run attend
+      désormais **45 s** (`MOVE_VERDICT_TIMEOUT_MS`, `api.ts`) — snapshot + budget transport moteur
+      20 s + marge bout-en-bout mesurée > 30 s sur un club dense — au lieu du timeout par défaut de
+      ky (~10 s), qui abandonnait la requête (nginx 499) AVANT que le moteur ait tranché : les logs
+      du fondateur montraient un `valid=True` rendu UNE seconde après l'abandon client.
   - **Case occupée → éviction, remplie par un ESSAI (P2-32, décision fermée D6+D8, 2026-08-16)** :
     un clic sur une carte occupée arme `evictDialog` en **`checking`** et lance IMMÉDIATEMENT un
     **dry-run** — `POST /api/schedule-slots/{id}/move` avec `evictSlotId` = l'occupant **et
@@ -457,12 +479,19 @@ par un CRUD brut sur la ressource :
     - Un dry-run **refusé pour une raison MÉTIER** au transport (verrou `target_locked` posé
       entre-temps, génération en cours 409) ferme la modale (`onError`, pas `onSuccess`) et
       toaste le motif — le mode cible reste armé.
-    - **`failed`** (incident terrain 2026-08-17) : l'essai lui-même **N'A PAS ABOUTI** — le moteur
-      a été trop lent (`EngineTimeoutError`, 504 `engine_timeout`) ou est injoignable (502).
-      DISTINCT d'un `refused` : rien n'est tranché, donc la modale **RESTE OUVERTE** au lieu de se
-      fermer en silence — un déplacement pouvait être parfaitement LÉGAL, le backend avait
-      simplement abandonné avant la réponse. Elle NOMME la cause (« La vérification n'a pas
-      abouti — le moteur n'a pas répondu à temps. » / « … est indisponible. ») et propose
+    - **`failed`** (incident terrain 2026-08-17, affiné P4-119 b le 2026-08-19) : l'essai lui-même
+      **N'A PAS ABOUTI** — DISTINCT d'un `refused` : rien n'est tranché, donc la modale **RESTE
+      OUVERTE** au lieu de se fermer en silence. **Trois causes NOMMÉES, jamais confondues**
+      (`EvictFailureKind`, `EvictConfirmDialog.tsx`) : `timeout` — le SERVEUR a tranché « moteur
+      trop lent » (504 `engine_timeout`) → « La vérification n'a pas abouti — le moteur n'a pas
+      répondu à temps. » ; `unreachable` — une vraie panne réseau/5xx du backend → « … le moteur
+      est indisponible. » ; `interrupted` — l'attente a été coupée CÔTÉ CLIENT avant la réponse
+      (timeout `MOVE_VERDICT_TIMEOUT_MS` atteint ou navigation) : **aucune preuve de panne** (le
+      moteur répondait peut-être `valid` juste après), donc surtout PAS « indisponible » → « La
+      vérification a été interrompue avant la réponse — réessayez. » C'est cette 3ᵉ cause qui
+      corrige le bug fondateur du 2026-08-19 : un déplacement parfaitement LÉGAL affichait
+      jusque-là « le moteur est indisponible », un diagnostic FAUX puisque le moteur avait
+      répondu `valid=True` une seconde après l'abandon client. Chaque état propose
       **« Réessayer »**, qui rejoue le dry-run sur la MÊME cible (repasse par `checking`). Demande
       fondateur explicite : ne jamais laisser un échec de vérification silencieux.
 

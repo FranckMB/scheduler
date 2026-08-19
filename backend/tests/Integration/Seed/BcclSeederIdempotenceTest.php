@@ -75,6 +75,11 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
      * chaque nom suit « <cible> · <prédicat> », et une contrainte ciblant un TAG commence par
      * « Groupe » (le sélecteur de cible du wizard préfixe ainsi les groupes). La convention ne se
      * perd donc pas au fil des éditions du seed.
+     *
+     * EXCEPTION (P5-13 « incident Matéo ») : une fermeture datée `venue_closed` est app-générée
+     * aussi, mais par une AUTRE règle — `useCreateVenueClosure` nomme la contrainte comme le TITRE
+     * de son entrée de fermeture, pas « <cible> · <prédicat> ». On l'exclut donc du motif « · » et
+     * on vérifie à la place sa convention propre : son nom == le titre de l'entrée qu'elle porte.
      */
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
@@ -82,18 +87,26 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
     {
         $club = $this->seeder->run($this->em, BcclSeedProfile::dev());
 
-        /** @var list<array{name: string, config: string}> $rows */
+        /** @var list<array{name: string, config: string, entry_title: ?string}> $rows */
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT name, config FROM "constraint" WHERE club_id = ?',
+            'SELECT c.name, c.config, e.title AS entry_title FROM "constraint" c '
+            . 'LEFT JOIN calendar_entry e ON e.id = c.calendar_entry_id WHERE c.club_id = ?',
             [$club->getId()],
         );
         self::assertNotEmpty($rows, 'le seed pose bien des contraintes');
 
         foreach ($rows as $row) {
             $name = (string) $row['name'];
+            $config = json_decode((string) $row['config'], true);
+
+            // Fermeture datée : nom == titre de son entrée (convention `useCreateVenueClosure`).
+            if (\is_array($config) && 'venue_closed' === ($config['type'] ?? null)) {
+                self::assertSame((string) $row['entry_title'], $name, \sprintf('« %s » est une fermeture datée : son nom doit être le titre de son entrée', $name));
+                continue;
+            }
+
             self::assertMatchesRegularExpression('/^.+ · .+$/u', $name, \sprintf('« %s » ne suit pas « <cible> · <prédicat> »', $name));
 
-            $config = json_decode((string) $row['config'], true);
             if (\is_array($config) && isset($config['targetTag'])) {
                 self::assertStringStartsWith('Groupe ', $name, \sprintf('« %s » cible un tag : le nom doit commencer par « Groupe »', $name));
             }
@@ -365,9 +378,126 @@ final class BcclSeederIdempotenceTest extends KernelTestCase
     }
 
     /**
+     * P5-13 « incident Matéo » — le seed dev fige l'état d'ADAPTATION EN COURS du gestionnaire :
+     *
+     *  - le FAIT : une entrée RACINE `closure` « Matéo indisponible (travaux) » (18/08→30/09) SANS
+     *    plan, portant sa datée `venue_closed` (FACILITY/HARD sur Matéo, config datée) ;
+     *  - la RÉPONSE ENTAMÉE : un segment-enfant (parent = l'incident, 07→27/09) né AVEC son plan
+     *    CLOSURE, plan NON validé (chosen NULL) et SANS version (0 schedule) — un travail en cours ;
+     *  - ses réglages : 9 TeamPeriodOverride (8 équipes actives à 2 séances/sem, « Training
+     *    Individuel » décochée), 1 ConstraintPeriodOverride (« SM2 · au moins 1 à Matéo » décochée),
+     *    0 VenuePeriodOverride (la fermeture agit par l'état effectif, pas par un override).
+     *
+     * Falsifiable : retirer le décochage de « SM2 · au moins 1 à Matéo » du seed, ou une des 9
+     * lignes d'équipe, ou la datée `venue_closed`, rend ce test ROUGE en nommant l'invariant.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function testDevSeedCarriesMateoIncidentAdaptationInProgress(): void
+    {
+        $club = $this->seeder->run($this->em, BcclSeedProfile::dev());
+
+        // --- L'incident (entrée racine closure, sans plan) + sa datée venue_closed ---
+        $incident = $this->connection->fetchAssociative(
+            'SELECT id, period_type, to_char(start_date, \'YYYY-MM-DD\') AS s, to_char(end_date, \'YYYY-MM-DD\') AS e '
+            . 'FROM calendar_entry WHERE club_id = ? AND parent_entry_id IS NULL AND title = ?',
+            [$club->getId(), 'Matéo indisponible (travaux)'],
+        );
+        self::assertNotFalse($incident, 'l\'incident racine « Matéo indisponible (travaux) » existe');
+        self::assertSame('closure', (string) $incident['period_type'], 'l\'incident est une fermeture');
+        self::assertSame('2026-08-18', (string) $incident['s'], 'la fermeture débute le 18 août');
+        self::assertSame('2026-09-30', (string) $incident['e'], 'la fermeture court jusqu\'au 30 septembre');
+        $incidentId = (string) $incident['id'];
+
+        $rootPlans = (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM schedule_plan WHERE calendar_entry_id = ?',
+            [$incidentId],
+        );
+        self::assertSame(0, $rootPlans, 'une entrée racine ne provisionne aucun plan');
+
+        $closure = $this->connection->fetchAssociative(
+            'SELECT c.scope, c.rule_type, c.family, v.name AS venue, c.config::text AS config '
+            . 'FROM "constraint" c JOIN venue v ON v.id = c.scope_target_id '
+            . 'WHERE c.club_id = ? AND c.calendar_entry_id = ?',
+            [$club->getId(), $incidentId],
+        );
+        self::assertNotFalse($closure, 'l\'incident porte sa contrainte datée');
+        self::assertSame('FACILITY', (string) $closure['scope'], 'la datée est de portée FACILITY');
+        self::assertSame('HARD', (string) $closure['rule_type'], 'la datée est HARD');
+        self::assertSame('Matéo', (string) $closure['venue'], 'la datée vise le gymnase Matéo');
+        /** @var array<string, mixed> $closureConfig */
+        $closureConfig = json_decode((string) $closure['config'], true, 512, \JSON_THROW_ON_ERROR);
+        self::assertSame('venue_closed', $closureConfig['type'] ?? null, 'la datée est une fermeture de gymnase');
+        self::assertSame('2026-08-18', $closureConfig['startDate'] ?? null, 'la fermeture datée débute le 18 août');
+        self::assertSame('2026-09-30', $closureConfig['endDate'] ?? null, 'la fermeture datée court jusqu\'au 30 septembre');
+
+        // --- Le segment-enfant né avec son plan CLOSURE, NON validé, SANS version ---
+        $segment = $this->connection->fetchAssociative(
+            'SELECT id, period_type, to_char(start_date, \'YYYY-MM-DD\') AS s, to_char(end_date, \'YYYY-MM-DD\') AS e '
+            . 'FROM calendar_entry WHERE club_id = ? AND parent_entry_id = ?',
+            [$club->getId(), $incidentId],
+        );
+        self::assertNotFalse($segment, 'le segment-enfant d\'adaptation existe');
+        self::assertSame('closure', (string) $segment['period_type'], 'le segment est une fermeture');
+        self::assertSame('2026-09-07', (string) $segment['s'], 'le segment couvre du 7 septembre');
+        self::assertSame('2026-09-27', (string) $segment['e'], 'le segment couvre jusqu\'au 27 septembre');
+        $segmentId = (string) $segment['id'];
+
+        $plan = $this->connection->fetchAssociative(
+            'SELECT id, name, type, chosen_schedule_id, team_selection_initialized '
+            . 'FROM schedule_plan WHERE calendar_entry_id = ?',
+            [$segmentId],
+        );
+        self::assertNotFalse($plan, 'le segment est né AVEC son plan');
+        self::assertSame('CLOSURE', (string) $plan['type'], 'le plan est de type CLOSURE');
+        self::assertSame('Ajustement gymnase — du 7 septembre 2026 au 27 septembre 2026', (string) $plan['name'], 'le plan garde le nom générique (gymnase non recalé)');
+        self::assertNull($plan['chosen_schedule_id'], 'le plan n\'est PAS validé (aucune version pointée)');
+        self::assertTrue((bool) $plan['team_selection_initialized'], 'la sélection d\'équipes est initialisée (le wizard ne re-seede pas)');
+        $planId = (string) $plan['id'];
+
+        $versions = (int) $this->connection->fetchOne(
+            'SELECT COUNT(*) FROM schedule WHERE schedule_plan_id = ?',
+            [$planId],
+        );
+        self::assertSame(0, $versions, 'le plan d\'adaptation ne porte AUCUNE version (travail en cours)');
+
+        // --- Réglages : 9 TPO (8 actives spw=2, 1 décochée), 1 CPO, 0 VPO ---
+        $activeTpo = $this->connection->fetchFirstColumn(
+            'SELECT t.name FROM team_period_override o JOIN team t ON t.id = o.team_id '
+            . 'WHERE o.schedule_plan_id = ? AND o.is_active = true AND o.sessions_per_week = 2 ORDER BY t.name',
+            [$planId],
+        );
+        self::assertSame(
+            ['U13F1', 'U13F2', 'U13M1', 'U13M2', 'U15F1', 'U15M1', 'U18F1', 'U18M1'],
+            array_map('strval', $activeTpo),
+            'exactement les 8 équipes actives à 2 séances/semaine',
+        );
+        $inactiveTpo = $this->connection->fetchFirstColumn(
+            'SELECT t.name FROM team_period_override o JOIN team t ON t.id = o.team_id '
+            . 'WHERE o.schedule_plan_id = ? AND o.is_active = false',
+            [$planId],
+        );
+        self::assertSame(['Training Individuel'], array_map('strval', $inactiveTpo), '« Training Individuel » est la seule équipe décochée');
+        $totalTpo = (int) $this->connection->fetchOne('SELECT COUNT(*) FROM team_period_override WHERE schedule_plan_id = ?', [$planId]);
+        self::assertSame(9, $totalTpo, 'aucune autre ligne d\'équipe que ces 9');
+
+        $deactivated = $this->connection->fetchFirstColumn(
+            'SELECT c.name FROM constraint_period_override o JOIN "constraint" c ON c.id = o.constraint_id '
+            . 'WHERE o.schedule_plan_id = ? AND o.is_active = false',
+            [$planId],
+        );
+        self::assertSame(['SM2 · au moins 1 à Matéo'], array_map('strval', $deactivated), '« SM2 · au moins 1 à Matéo » est la seule contrainte décochée');
+        $totalCpo = (int) $this->connection->fetchOne('SELECT COUNT(*) FROM constraint_period_override WHERE schedule_plan_id = ?', [$planId]);
+        self::assertSame(1, $totalCpo, 'aucun autre override de contrainte');
+
+        $vpo = (int) $this->connection->fetchOne('SELECT COUNT(*) FROM venue_period_override WHERE schedule_plan_id = ?', [$planId]);
+        self::assertSame(0, $vpo, 'aucun VenuePeriodOverride : la fermeture agit par l\'état effectif');
+    }
+
+    /**
      * P5-13 — les reprises et le compte Nicolas ne visent QUE le profil dev. Le club de
-     * DÉMONSTRATION ne porte aucun plan de période (HOLIDAY/CLOSURE), aucune entrée calendrier,
-     * et le compte gestionnaire Nicolas n'existe pas.
+     * DÉMONSTRATION ne porte aucun plan de période (HOLIDAY/CLOSURE), aucune entrée calendrier
+     * (l'incident Matéo compris), et le compte gestionnaire Nicolas n'existe pas.
      */
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]

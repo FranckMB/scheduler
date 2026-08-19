@@ -285,6 +285,9 @@ export interface GridCell {
   roleTag: string | null;
   teamLabel: string;
   venueLabel: string;
+  /** Le gymnase de la cellule (colonne). Sert au repérage des couples (gymnase, jour) FERMÉS
+   *  pour MARQUER les fenêtres vides d'une période (P2-43) — le libellé ne suffit pas (homonymes). */
+  venueId: string;
   venueColor: string | null;
   coachLabel: string;
   day: number;
@@ -449,6 +452,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
             roleTag: null,
             teamLabel,
             venueLabel,
+            venueId: slot.venueId,
             venueColor: venue?.color ?? null,
             coachLabel,
             day: slot.dayOfWeek,
@@ -502,6 +506,7 @@ export function buildGrid(slots: Slot[], viewMode: ViewMode, lookups: Lookups, f
         roleTag,
         teamLabel,
         venueLabel,
+        venueId: slot.venueId,
         venueColor: venue?.color ?? null,
         coachLabel,
         day: slot.dayOfWeek,

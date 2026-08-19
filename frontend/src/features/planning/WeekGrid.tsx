@@ -53,6 +53,14 @@ interface WeekGridProps {
   lockLens?: boolean;
   /** P2-30 : le mode cible click-click. Absent/inactif = grille normale. */
   targetMode?: TargetMode;
+  /**
+   * P2-43 volet (v) — les couples (gymnase, jour) FERMÉS de la période, tels que le SERVEUR les
+   * calcule (`computeClosedWindows`, clé `${venueId}|${jour ISO}` → résumé). MARQUER, pas masquer :
+   * une fenêtre vide sur un couple fermé devient INERTE et NOMMÉE (« Fermé — … »), et n'est JAMAIS
+   * une cible (offre fail-closed). Absent = aucune fermeture (socle, ou état pas encore résolu →
+   * fail-open sur l'AFFICHAGE). Le front LIT cet état, il ne le re-dérive pas (règle d'or).
+   */
+  closedWindows?: Map<string, string>;
   /** Un clic sur une case (vide ou occupée) EN mode cible — l'id de la cible ; la page décide
    *  (déplacer, évincer, placer, ou annuler si c'est la source). */
   onPickTarget?: (cellSlotId: string) => void;
@@ -66,7 +74,7 @@ interface WeekGridProps {
  * a sticky grid item is clamped to its own cell, so it detaches once that narrow
  * cell scrolls out of view.
  */
-export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds, onToggleLock, lockLens = false, targetMode, onPickTarget, onCancelTarget }: WeekGridProps) {
+export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds, onToggleLock, lockLens = false, targetMode, onPickTarget, onCancelTarget, closedWindows }: WeekGridProps) {
   const { columns, dayGroups, rows, cells } = model;
   const gridRef = useRef<HTMLDivElement>(null);
 
@@ -76,22 +84,28 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
   const targetSourceId = targetMode?.sourceSlotId ?? null;
   const isMoveVariant = "move" === targetMode?.variant;
   const isSource = (slotId: string): boolean => targetActive && null !== targetSourceId && slotId === targetSourceId;
+  // P2-43 : le résumé de fermeture d'un couple (gymnase, jour), ou `undefined` s'il est ouvert.
+  const closedReasonOf = (venueId: string, day: number): string | undefined => closedWindows?.get(`${venueId}|${day}`);
   // Une séance VERROUILLÉE n'est pas une cible d'ÉVICTION (D3 : le verrou est souverain — le
-  // backend répondrait 422 target_locked). On l'écarte d'emblée, sauf la source elle-même.
-  const targetDisabled = (slotId: string, locked: boolean): boolean => targetActive && isMoveVariant && locked && slotId !== targetSourceId;
+  // backend répondrait 422 target_locked). Un couple FERMÉ ne l'est pas non plus (P2-43, offre
+  // fail-closed : le moteur refuserait). On les écarte d'emblée, sauf la source elle-même.
+  const targetDisabled = (slotId: string, locked: boolean, closedReason: string | undefined): boolean =>
+    targetActive && slotId !== targetSourceId && ((isMoveVariant && locked) || undefined !== closedReason);
   // Le routage d'un clic de carte : en mode cible → pick (sauf case inerte) ; sinon → sélection.
-  const activateSlot = (slotId: string, locked: boolean): void => {
+  const activateSlot = (slotId: string, locked: boolean, closedReason: string | undefined): void => {
     if (!targetActive) {
       onSelectSlot(slotId);
       return;
     }
-    if (targetDisabled(slotId, locked)) {
+    if (targetDisabled(slotId, locked, closedReason)) {
       return;
     }
     onPickTarget?.(slotId);
   };
-  const cardTitle = (slotId: string, locked: boolean, base: string): string =>
-    targetDisabled(slotId, locked) ? "Ce créneau est verrouillé — déverrouillez-le d'abord" : base;
+  const cardTitle = (slotId: string, locked: boolean, closedReason: string | undefined, base: string): string =>
+    targetDisabled(slotId, locked, closedReason)
+      ? (undefined !== closedReason ? `Fermé — ${closedReason}` : "Ce créneau est verrouillé — déverrouillez-le d'abord")
+      : base;
   // Échap sort du mode cible sans rien toucher (écoute globale : marche quel que soit le focus,
   // et n'impose pas de rôle interactif à la grille — a11y).
   useEffect(() => {
@@ -262,6 +276,29 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
               width: `${100 / cell.laneCount}%`,
               transform: `translateX(${cell.lane * 100}%)`,
             };
+            const closedReason = closedReasonOf(cell.venueId, cell.day);
+            // P2-43 volet (v) — MARQUER, pas masquer (« on annonce, on ne cache pas ») : une
+            // fenêtre vide sur un couple fermé est INERTE et NOMMÉE, jamais un bouton « Placer ici »
+            // (l'offre est fail-closed, quel que soit l'état armé). La colonne n'est masquée
+            // (côté page) que si le gymnase est ENTIÈREMENT fermé ET sans aucune séance placée.
+            if (undefined !== closedReason) {
+              const dayLabel = DAY_LABEL.get(cell.day) ?? "";
+              return (
+                <div
+                  key={cell.key}
+                  title={`Fermé — ${closedReason}`}
+                  aria-label={`${cell.venueLabel}, ${dayLabel} ${cell.startLabel}–${cell.endLabel} — fermé : ${closedReason}`}
+                  className={cn(
+                    "z-10 m-px flex items-center justify-center overflow-hidden rounded border border-dashed border-muted-foreground/30 bg-muted/40 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/60",
+                    dimmed ? "opacity-30" : "",
+                    flagged ? "border-warning ring-2 ring-warning text-warning" : "",
+                  )}
+                  style={emptyStyle}
+                >
+                  fermé
+                </div>
+              );
+            }
             // P2-30 — armé, une fenêtre vide devient un VRAI bouton « Placer ici » (focusable,
             // aria-label nommant gymnase + jour + horaire), cible d'un déplacement/placement.
             if (targetActive) {
@@ -308,6 +345,9 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
             // une carte simple) ; sinon le picto ne vit que sur les rangées verrouillées.
             const origins = cell.members.map((m) => m.lockOrigin);
             const uniformOrigin = lensActive && origins.length > 0 && null !== origins[0] && origins.every((o) => o === origins[0]) ? origins[0] : null;
+            // P2-43 — une carte fusionnée déjà PLACÉE sur un couple depuis fermé (cas périmé) :
+            // ses membres cessent d'être des cibles d'éviction (défense en profondeur de l'offre).
+            const cellClosedReason = closedReasonOf(cell.venueId, cell.day);
             return (
               <div
                 key={cell.key}
@@ -346,9 +386,9 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
                         type="button"
                         data-slot-id={member.slotId}
                         data-target-source={isSource(member.slotId) ? "true" : undefined}
-                        onClick={() => activateSlot(member.slotId, member.locked)}
-                        disabled={targetDisabled(member.slotId, member.locked)}
-                        title={cardTitle(member.slotId, member.locked, `${member.teamLabel} · ${cell.groupLabel} · ${cell.venueLabel} · ${member.coachLabel} · ${cell.startLabel}–${cell.endLabel}`)}
+                        onClick={() => activateSlot(member.slotId, member.locked, cellClosedReason)}
+                        disabled={targetDisabled(member.slotId, member.locked, cellClosedReason)}
+                        title={cardTitle(member.slotId, member.locked, cellClosedReason, `${member.teamLabel} · ${cell.groupLabel} · ${cell.venueLabel} · ${member.coachLabel} · ${cell.startLabel}–${cell.endLabel}`)}
                         className={cn(
                           "flex w-full items-center gap-1 px-1 py-0.5 pr-6 text-left font-medium hover:ring-1 hover:ring-accent disabled:cursor-not-allowed disabled:opacity-50",
                           memberSelected ? "ring-1 ring-accent" : "",
@@ -367,6 +407,7 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
             );
           }
           const selected = cell.slotId === selectedSlotId;
+          const closedReason = closedReasonOf(cell.venueId, cell.day);
           return (
             // Wrapper positionné : la CARTE (bouton de sélection) et le CADENAS (bouton de
             // verrou) sont deux boutons FRÈRES — jamais l'un dans l'autre (HTML invalide). Le
@@ -399,9 +440,9 @@ export function WeekGrid({ model, selectedSlotId, onSelectSlot, highlightSlotIds
             >
               <button
                 type="button"
-                onClick={() => activateSlot(cell.slotId, cell.locked)}
-                disabled={targetDisabled(cell.slotId, cell.locked)}
-                title={cardTitle(cell.slotId, cell.locked, `${cell.teamLabel} · ${cell.venueLabel} · ${cell.coachLabel} · ${cell.startLabel}–${cell.endLabel}`)}
+                onClick={() => activateSlot(cell.slotId, cell.locked, closedReason)}
+                disabled={targetDisabled(cell.slotId, cell.locked, closedReason)}
+                title={cardTitle(cell.slotId, cell.locked, closedReason, `${cell.teamLabel} · ${cell.venueLabel} · ${cell.coachLabel} · ${cell.startLabel}–${cell.endLabel}`)}
                 className="flex min-w-0 flex-1 flex-col items-start px-1 py-0.5 text-left leading-tight disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="flex w-full items-center gap-1 pr-5 font-medium">

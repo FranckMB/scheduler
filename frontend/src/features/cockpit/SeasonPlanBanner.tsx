@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 
 import { useMe } from "@/features/auth/queries";
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
+import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";
 import { Button } from "@/shared/components/ui/button";
 
@@ -27,6 +28,7 @@ interface SeasonPlanBannerProps {
 export function SeasonPlanBanner({ schedules, socleValidated, loading = false, entries = [] }: SeasonPlanBannerProps) {
   const navigate = useNavigate();
   const { data: me } = useMe();
+  const setSelectedScheduleId = usePlanningStore((s) => s.setSelectedScheduleId);
   const [listOpen, setListOpen] = useState(false);
 
   // Le planning de la saison TEL QU'IL EST : la version pointée si le gestionnaire
@@ -54,6 +56,9 @@ export function SeasonPlanBanner({ schedules, socleValidated, loading = false, e
     }
     // Même racine que la modale : un mode période persisté ferait générer le
     // plan de PÉRIODE à la place du socle — reset avant d'ouvrir la génération.
+    // On purge aussi la sélection planning (bug fondateur 2026-08-19) : une sélection
+    // de période laissée ailleurs ne doit pas s'afficher dans l'étape Génération de la SAISON.
+    setSelectedScheduleId(null);
     useWizardStore.getState().exitPeriodMode();
     useWizardStore.getState().jumpTo("generate");
     navigate("/wizard");

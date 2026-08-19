@@ -46,6 +46,9 @@ interface PlanningToolbarProps {
    *  standalone view hides the version selector and the status badge — version
    *  management lives in the wizard, /planning is for consulting. */
   embedded?: boolean;
+  /** Portée d'affichage (bug fondateur 2026-08-19) : non-null ⇒ le sélecteur ne liste QUE
+   *  les versions de ce plan de période (jamais le socle), et l'étoile suit sa lignée. */
+  scopePlanId?: string | null;
 }
 
 /**
@@ -77,6 +80,7 @@ export function PlanningToolbar({
   rightSlot,
   filterSlot,
   embedded = false,
+  scopePlanId = null,
 }: PlanningToolbarProps) {
   const selected = schedules.find((s) => s.id === selectedScheduleId) ?? null;
   // ADR-0002 : « en vigueur » = le plan de CETTE version la pointe — vrai pour le
@@ -85,21 +89,34 @@ export function PlanningToolbar({
   // comparaison contre le pointeur de /api/me remettrait deux vérités en présence.
   const isChosen = true === selected?.isChosen;
   const isOverlay = null !== selected && !isSeasonPlanType(selected.planType);
+  // Portée imposée (écran embarqué scopé au plan de période) : le sélecteur ne liste
+  // QUE ses versions, et non le socle (bug fondateur 2026-08-19). Sans portée, l'ancien
+  // comportement — socle + les versions de la période sélectionnée si on en regarde une.
+  const scoped = null !== scopePlanId;
+  const overlayId = scoped ? scopePlanId : isOverlay && null !== selected?.schedulePlanId ? selected.schedulePlanId : null;
   // ★ = the version whose structure is the currently LOADED context. Season plans:
   // the server pointer (seasonLiveContextId, with a latest-visible fallback for a
   // NULL/stale pointer). Overlays: the latest version of the period (derived).
   // Exactly ONE ★: in overlay context only the period's overlay is starred (never
   // a season plan too), else only the season live-context plan.
   const seasonLiveId = liveContextScheduleId(schedules, null);
-  const overlayLiveId = isOverlay && null !== selected?.schedulePlanId ? liveContextScheduleId(schedules, selected.schedulePlanId) : null;
+  const overlayLiveId = null !== overlayId ? liveContextScheduleId(schedules, overlayId) : null;
   const isStarred = (schedule: Schedule): boolean =>
-    isOverlay ? !isSeasonPlanType(schedule.planType) && schedule.id === overlayLiveId : isSeasonPlanType(schedule.planType) && schedule.id === seasonLiveId;
+    scoped
+      ? schedule.id === overlayLiveId
+      : isOverlay
+        ? !isSeasonPlanType(schedule.planType) && schedule.id === overlayLiveId
+        : isSeasonPlanType(schedule.planType) && schedule.id === seasonLiveId;
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const labels = versionLabels(schedules);
-  // When an overlay is selected, its period's versions get their own V{n} labels.
-  const overlayLabels = isOverlay && null !== selected?.schedulePlanId ? overlayVersionLabels(schedules, selected.schedulePlanId) : null;
+  // The period's versions get their own V{n} labels (scope, or a selected overlay).
+  const overlayLabels = null !== overlayId ? overlayVersionLabels(schedules, overlayId) : null;
   const labelOf = (schedule: Schedule): string => overlayLabels?.get(schedule.id) ?? labels.get(schedule.id) ?? schedule.name;
+  // En portée : SEULES les versions de la période ; sinon socle + versions de l'overlay regardé.
+  const versionOptions: Schedule[] = scoped
+    ? visibleOverlayVersions(schedules, scopePlanId)
+    : [...visibleSeasonPlans(schedules), ...(null !== overlayId ? visibleOverlayVersions(schedules, overlayId) : [])];
   // P2-8 : les permissions viennent du SERVEUR (`capabilities`, même code que les
   // gardes d'écriture) — le front ne re-dérive plus « supprimable / validable /
   // rechargeable ». Fail-closed : un geste ne s'offre que sur `=== true` (cache
@@ -134,12 +151,14 @@ export function PlanningToolbar({
                 whose structure is live), NOT the one being viewed: it stays put when you
                 consult an older version, and "Charger cette version" moves it. No
                 "principal" here: the main plan is a fact carried by the title badge. */}
-            {[...visibleSeasonPlans(schedules), ...(isOverlay && null !== selected?.schedulePlanId ? visibleOverlayVersions(schedules, selected.schedulePlanId) : [])].map((schedule) => (
+            {versionOptions.map((schedule) => (
               <option key={schedule.id} value={schedule.id}>
                 {labelOf(schedule)}
                 {isStarred(schedule) ? " ★" : ""}
                 {true === schedule.isChosen ? " · en vigueur" : ""}
-                {!isSeasonPlanType(schedule.planType) ? " · période" : ""}
+                {/* Hors portée seulement : en portée, tout est « période », le préciser sur
+                    chaque ligne serait du bruit (le titre nomme déjà la période). */}
+                {!scoped && !isSeasonPlanType(schedule.planType) ? " · période" : ""}
               </option>
             ))}
           </select>

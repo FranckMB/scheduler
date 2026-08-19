@@ -1,4 +1,4 @@
-import { HTTPError } from "ky";
+import { HTTPError, TimeoutError } from "ky";
 
 import { api } from "@/shared/api/client";
 import { sortByName } from "@/shared/lib/nameOrder";
@@ -474,6 +474,44 @@ export class EngineTimeoutError extends Error {
 }
 
 /**
+ * P4-119 (b) — la vérification a été INTERROMPUE CÔTÉ CLIENT avant la réponse du serveur : le
+ * timeout de ky a expiré (ou l'appel a été aborté). Le geste n'a PAS abouti, mais on n'a AUCUNE
+ * preuve d'une panne — le moteur peut très bien avoir répondu `valid` une seconde après (constaté :
+ * nginx 499 pendant que le moteur concluait). DISTINCT d'un moteur injoignable (transport 5xx/502)
+ * ET d'un 504 `engine_timeout` (là, le SERVEUR a tranché « trop lent »). L'écran NOMME
+ * l'interruption et propose de réessayer — jamais « le moteur est indisponible », qui serait faux.
+ */
+export class EngineVerificationInterruptedError extends Error {
+  constructor() {
+    super("verification_interrupted");
+    this.name = "EngineVerificationInterruptedError";
+  }
+}
+
+/**
+ * P4-119 (a) — le rail de retouche (déplacer / placer / essai) attend le VERDICT du moteur. Côté
+ * serveur : construction du snapshot PUIS un budget transport de 20 s vers le moteur
+ * (`MoveSlotService::VALIDATE_HTTP_TIMEOUT_SECONDS`), soit un bout-en-bout mesuré > 30 s sur un club
+ * dense. Le timeout client par défaut de ky (10 s) raccrochait AVANT que le serveur ait pu rendre
+ * son verdict (nginx 499, faux « moteur indisponible ») alors que le moteur répondait `valid`. On
+ * l'aligne AU-DESSUS du pire cas serveur : 20 s transport + ~15 s de build observé + ~10 s de marge
+ * réseau = 45 s. Un vrai dépassement moteur revient toujours NOMMÉ (504 `engine_timeout`) bien avant
+ * cette borne — elle ne masque donc jamais un timeout serveur, elle empêche seulement le front de
+ * raccrocher trop tôt.
+ */
+const MOVE_VERDICT_TIMEOUT_MS = 45_000;
+
+/**
+ * Une interruption CÔTÉ CLIENT (timeout de ky, ou abort) — à traduire en
+ * {@link EngineVerificationInterruptedError}. ky lève un `TimeoutError` sur son propre timeout ; un
+ * abort externe donne une erreur nommée `AbortError`. On teste le type ET le nom (robuste quel que
+ * soit le porteur), jamais un `HTTPError` (celui-là porte une vraie réponse serveur).
+ */
+function isClientInterruption(error: unknown): boolean {
+  return error instanceof TimeoutError || (error instanceof Error && ("TimeoutError" === error.name || "AbortError" === error.name));
+}
+
+/**
  * P2-30 D3 — la cible occupée à évincer est VERROUILLÉE (422 `target_locked`) : un verrou est
  * souverain, on ne le libère pas. Le message serveur est déjà humain (« déverrouillez-le
  * d'abord ») — l'écran le montre et RESTE en mode cible pour réessayer ailleurs.
@@ -514,9 +552,13 @@ export async function moveSlot(id: string, patch: SlotMovePatch): Promise<SlotMo
   try {
     // Un 200 {valid:false} (essai REFUSÉ) résout ici SANS lever : seul un 422 (refus réel) devient
     // un MoveRejectedError ci-dessous. `compromises` est normalisé à [] — jamais absent à la lecture.
-    const result = await api.post(`schedule-slots/${id}/move`, { json: patch }).json<SlotMoveResult>();
+    const result = await api.post(`schedule-slots/${id}/move`, { json: patch, timeout: MOVE_VERDICT_TIMEOUT_MS }).json<SlotMoveResult>();
     return { ...result, compromises: result.compromises ?? [] };
   } catch (error) {
+    // P4-119 (b) : un abandon CLIENT (timeout ky / abort) ≠ un moteur en panne — on le NOMME.
+    if (isClientInterruption(error)) {
+      throw new EngineVerificationInterruptedError();
+    }
     if (error instanceof HTTPError) {
       // ky 2.x parse le corps d'erreur sur error.data (re-lire la réponse throw).
       const body = ((error as { data?: unknown }).data ?? {}) as { code?: string; error?: string; violations?: MoveViolation[] };
@@ -551,9 +593,13 @@ export async function moveSlot(id: string, patch: SlotMovePatch): Promise<SlotMo
  */
 export async function placeSlot(scheduleId: string, body: PlaceSlotBody): Promise<PlaceSlotResult> {
   try {
-    const result = await api.post(`schedules/${scheduleId}/place-slot`, { json: body }).json<PlaceSlotResult>();
+    const result = await api.post(`schedules/${scheduleId}/place-slot`, { json: body, timeout: MOVE_VERDICT_TIMEOUT_MS }).json<PlaceSlotResult>();
     return { ...result, compromises: result.compromises ?? [] };
   } catch (error) {
+    // P4-119 (b) : un abandon CLIENT (timeout ky / abort) ≠ un moteur en panne — on le NOMME.
+    if (isClientInterruption(error)) {
+      throw new EngineVerificationInterruptedError();
+    }
     if (error instanceof HTTPError) {
       const data = ((error as { data?: unknown }).data ?? {}) as { code?: string; error?: string; violations?: MoveViolation[] };
       if (422 === error.response.status) {

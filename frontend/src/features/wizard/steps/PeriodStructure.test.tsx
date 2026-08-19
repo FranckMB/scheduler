@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -925,6 +925,78 @@ describe("PeriodVenues — coches jour (indispo informative, 2026-08-18)", () =>
     render(<PeriodVenues calendarEntryId="e1" />);
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent(/décoché/);
+  });
+});
+
+// P2-43 volet (ii) — le sélecteur de gymnase TAISAIT l'état : un gymnase DÉSACTIVÉ (mode) était
+// invisible, une fermeture partielle indistincte d'une totale. Chaque option porte désormais son
+// état effectif SERVI (désactivé / indisponible toute la période / fermé {jours} / rien).
+describe("PeriodVenues — le sélecteur de gymnase porte l'état effectif (P2-43 volet ii)", () => {
+  const picker = () => screen.getByLabelText("Gymnase");
+
+  it("annonce « désactivé » (mode DISABLED — invisible auparavant)", () => {
+    extraVenuesState.value = [{ id: "v2", name: "Gymnase B", color: null, canSplit: false, isActive: true }];
+    conflictState.disabledVenueIds = ["v2"];
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    expect(within(picker()).getByRole("option", { name: "Gymnase B — désactivé" })).toBeInTheDocument();
+  });
+
+  it("annonce « indisponible toute la période » (gymnase entièrement fermé)", () => {
+    conflictState.fullyClosedVenueIds = ["v1"];
+    conflictState.effectiveClosedWeekdays = { v1: { "1": "default-incident", "2": "default-incident", "3": "default-incident", "4": "default-incident", "5": "default-incident", "6": "default-incident", "7": "default-incident" } };
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    expect(within(picker()).getByRole("option", { name: "Gymnase A — indisponible toute la période" })).toBeInTheDocument();
+  });
+
+  it("annonce « fermé {jours} » (fermeture partielle — masque manuel OU indispo déclarée)", () => {
+    conflictState.effectiveClosedWeekdays = { v1: { "6": "default-incident", "7": "manual" } };
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    expect(within(picker()).getByRole("option", { name: "Gymnase A — fermé samedi, dimanche" })).toBeInTheDocument();
+  });
+
+  it("rien pour un gymnase OUVERT (pas de bruit)", () => {
+    render(<PeriodVenues calendarEntryId="e1" />);
+
+    expect(within(picker()).getByRole("option", { name: "Gymnase A" })).toBeInTheDocument();
+  });
+});
+
+// P2-43 volet (i) — la modale d'édition d'un créneau sur un jour fermé ne le disait pas. Décision
+// fondateur (a) : poser reste PERMIS, l'éditeur doit seulement LE DIRE. Aucun blocage nouveau.
+describe("PeriodSlotEditor — dit qu'un créneau tombe un jour fermé (P2-43 volet i)", () => {
+  const openEditor = async () => {
+    render(<PeriodVenues calendarEntryId="e1" />);
+    await userEvent.click(screen.getByTitle(/^20:00 .*modifier$/));
+    return screen.getByRole("dialog");
+  };
+
+  it("indisponibilité déclarée : « Créneau inactif — le mercredi est fermé (indisponibilité déclarée…) »", async () => {
+    // ps1 est un MERCREDI (jour 3) : on ferme le mercredi (indisponibilité déclarée).
+    conflictState.effectiveClosedWeekdays = { v1: { "3": "default-incident" } };
+    conflictState.closures = [{ constraintId: "cc", venueId: "v1", title: "Travaux", startDate: "2026-05-01", endDate: "2026-05-10", weekdays: [3] }];
+    const dialog = await openEditor();
+
+    expect(within(dialog).getByText(/Créneau inactif — le mercredi est fermé/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/indisponibilité déclarée/)).toBeInTheDocument();
+    // Aucun blocage : « Enregistrer » reste actif.
+    expect(within(dialog).getByRole("button", { name: "Enregistrer" })).toBeEnabled();
+  });
+
+  it("décoché à la main : la cause le dit (« décoché manuellement »)", async () => {
+    conflictState.effectiveClosedWeekdays = { v1: { "3": "manual" } };
+    const dialog = await openEditor();
+
+    expect(within(dialog).getByText(/Créneau inactif — le mercredi est fermé/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/décoché manuellement/)).toBeInTheDocument();
+  });
+
+  it("jour OUVERT : aucune mention (pas de bruit, pas de blocage)", async () => {
+    const dialog = await openEditor();
+
+    expect(within(dialog).queryByText(/Créneau inactif/)).not.toBeInTheDocument();
   });
 });
 

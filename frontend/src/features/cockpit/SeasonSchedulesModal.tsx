@@ -107,11 +107,13 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
     return entryByPlan.get(row.schedulePlanId) ?? null;
   };
 
-  // Routing like the banner's "Ouvrir": a period overlay or the season's plan in force
-  // plan is a finished plan → open it read-only on the planning page. Only a
-  // season plan still IN PROGRESS (COMPLETED-not-yet-validated) opens the
-  // wizard's generation step to finish/validate it — an overlay is never sent
-  // there (the wizard's generate step renders the season plan, not the overlay).
+  // Routing like the banner's "Ouvrir": a CLOSED period overlay or the season's plan
+  // in force is a finished plan → open it read-only on the planning page. A season
+  // plan still IN PROGRESS (COMPLETED-not-yet-validated) opens the wizard's
+  // generation step to finish/validate it — a season landing, so `exitPeriodMode`
+  // just below. An OPEN overlay resumes via `startPeriodMode` instead (branch
+  // above): since the fix (bug fondateur 2026-08-19), the wizard's generation step
+  // is scoped to that overlay's plan (`scopePlanId`) and never renders the season.
   const consult = (row: PlanningRow) => {
     if (row.isOverlay && row.isOpen) {
       // Overlay ouvert : reprendre l'ajustement au wizard mode période.
@@ -119,6 +121,10 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
       if (null === entryId) {
         return; // plans pas encore chargés — le bouton est désactivé dans ce cas
       }
+      // Ceinture (bug fondateur 2026-08-19) : purge une sélection planning laissée par un
+      // autre écran avant d'entrer en mode période (la vraie correction = la portée de
+      // PlanningPage, qui atterrit sur la période).
+      setSelectedScheduleId(null);
       useWizardStore.getState().startPeriodMode(entryId);
       onClose();
       navigate("/wizard");
@@ -132,6 +138,9 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
     // Le mode période est PERSISTÉ (localStorage) : sans reset, « reprendre le
     // planning de saison » rouvrirait le wizard période et générerait une version
     // du plan de PÉRIODE — mauvaise cible silencieuse (revue #260 round 1).
+    // On purge AUSSI la sélection planning (bug fondateur 2026-08-19) : une sélection de
+    // période laissée ailleurs ne doit pas s'afficher dans l'étape Génération de la SAISON.
+    setSelectedScheduleId(null);
     useWizardStore.getState().exitPeriodMode();
     useWizardStore.getState().jumpTo("generate");
     navigate("/wizard");

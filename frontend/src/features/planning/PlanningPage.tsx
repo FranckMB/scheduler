@@ -10,8 +10,8 @@ import { useWizardStore } from "@/features/wizard/store";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.
 import { usePriorityTiers } from "@/features/matches/queries";
 import { DeletePlanningButton } from "@/features/cockpit/DeletePlanningButton";
-import { useSchedulePlans } from "@/features/cockpit/queries";
-import { useReservations, useTeamPeriodOverrides, useVenuePeriodOverrides, useWizardTeamTagAssignments, useWizardTeamTags } from "@/features/wizard/queries";
+import { useEntryConflicts, useSchedulePlans } from "@/features/cockpit/queries";
+import { useReservations, useTeamPeriodOverrides, useWizardTeamTagAssignments, useWizardTeamTags } from "@/features/wizard/queries";
 import { coachFullName } from "@/shared/lib/coachName";
 import { readFailed, readLoading } from "@/shared/lib/readState";
 import { toast } from "@/shared/stores/toastStore";
@@ -22,7 +22,7 @@ import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import { type Compromise, EngineTimeoutError, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
+import { type Compromise, EngineTimeoutError, EngineVerificationInterruptedError, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
 import { CompromiseList } from "./CompromiseList";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { DriftBanner } from "./DriftBanner";
@@ -33,6 +33,7 @@ import { GenerationWaiting } from "./GenerationWaiting";
 import { buildTagTeamIds } from "./lib/applicableConstraints";
 import { topSeveritySummary } from "./lib/diagnosticsSummary";
 import { computeDrift } from "./lib/drift";
+import { computeClosedWindows } from "./lib/closedWindows";
 import { computeEmptySlots, isEmptySlotId } from "./lib/emptySlots";
 import { violationHighlightSlotIds } from "./lib/violationHighlight";
 import { buildClubView } from "./lib/clubView";
@@ -45,8 +46,8 @@ import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
 import { pickLandingScheduleId } from "./lib/pickLandingSchedule";
 import { stalenessMessage } from "./lib/staleness";
-import { isSeasonPlanType } from "./lib/versions";
-import { usePlanningStore } from "./store";
+import { isSeasonPlanType, planRepresentative, visibleOverlayVersions } from "./lib/versions";
+import { usePlanningStore, type ViewMode } from "./store";
 import { WeekGrid } from "./WeekGrid";
 
 // D-31 : foyer unique dans `api.ts`.
@@ -111,8 +112,18 @@ function EmptyState({ title, description }: { title: string; description: string
 }
 
 /** `embedded` = rendered inside the wizard's Génération step, where the sticky
- *  wizard header + footer eat extra vertical space, so the grid must be shorter. */
-export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) {
+ *  wizard header + footer eat extra vertical space, so the grid must be shorter.
+ *
+ *  `scopePlanId` (bug fondateur 2026-08-19) — la PORTÉE d'affichage : non-null ⇒ l'écran
+ *  ne montre QUE les versions de ce plan (une période), y atterrit, en tire son titre et sa
+ *  toolbar, et ne retombe JAMAIS sur le plan de saison (fail-closed, doctrine PeriodAnchor).
+ *  Null (le défaut, et la page `/planning` autonome) ⇒ comportement STRICTEMENT inchangé :
+ *  `pickLandingScheduleId` y reste légitime.
+ *
+ *  `calendarEntryId` (P2-43 volet v) — l'entrée de calendrier de la PÉRIODE affichée, passée par
+ *  `GenerateStep` en embarqué (elle l'a déjà en main). Null (page autonome) ⇒ dérivée du plan de
+ *  la version affichée. Sert à LIRE l'état de fermeture des gymnases servi par le backend. */
+export function PlanningPage({ embedded = false, scopePlanId = null, calendarEntryId = null }: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null } = {}) {
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
   const { data: me } = useMe();
   // §4bis pt 2 — solde de crédits sur « Régénérer » (Découverte bridée seulement).
@@ -134,7 +145,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // (`sourceSlotId`) ; `place` place une séance À LA DÉRIVE pour une équipe (`teamId`). Null =
   // consultation. Le geste 4 (undo, profondeur 1, session) et le raccourci d'éviction vivent
   // AUSSI en état de page — ils ont besoin des noms d'équipes et de l'issue exacte du verdict.
-  const [targetMode, setTargetMode] = useState<{ kind: "move"; sourceSlotId: string } | { kind: "place"; teamId: string } | null>(null);
+  // P4-119 (d) : un placement porte le CONTEXTE où il fut armé (version + vue) — son ancre est
+  // l'entrée de dérive du bandeau, pas un panneau de créneau ; changer de vue ou de version le fait
+  // tomber comme le panneau ferme un déplacement (cf. le désarmement en phase de rendu plus bas).
+  const [targetMode, setTargetMode] = useState<{ kind: "move"; sourceSlotId: string } | { kind: "place"; teamId: string; scheduleId: string | null; view: ViewMode } | null>(null);
   // P2-32 (D6) — la modale d'éviction, désormais alimentée par un ESSAI (dry-run). `checking`
   // pendant que le moteur juge, `accepted` (compromis nommés) ou `refused` (motifs) ensuite.
   // Rien n'est ÉCRIT tant qu'on n'a pas confirmé un état `accepted`.
@@ -162,15 +176,39 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // la saison de travail, plus de copie inline qui pourrait diverger.
   const workingSeason = useWorkingSeason();
 
+  // Portée d'affichage (bug fondateur 2026-08-19). `scoped` ⇒ l'écran ne connaît QUE les
+  // versions de ce plan de période : le socle et les autres périodes n'entrent ni dans
+  // l'atterrissage, ni dans la toolbar, ni dans le titre. Sans portée, tout est inchangé.
+  const scoped = null !== scopePlanId;
+  const scopeVersions = useMemo(() => (scoped ? visibleOverlayVersions(schedules, scopePlanId) : null), [scoped, schedules, scopePlanId]);
+  // La version sur laquelle atterrir DANS la portée : la représentante du plan (pointée si
+  // choisie, sinon la dernière COMPLETED), et à défaut la dernière version quelle qu'elle soit
+  // — une génération EN VOL doit s'afficher (l'écran rend alors son attente), pas un vide.
+  const scopeLandingId = scoped ? (planRepresentative(scopeVersions ?? [])?.id ?? (scopeVersions ?? []).at(-1)?.id ?? null) : null;
+
   // Keep a valid selection: default to the season base plan, else the latest
   // completed. A selection archived concurrently (sibling validation in another
-  // tab) is invalid too — the selector has no option for it.
-  const validScheduleId = schedules.some((s) => s.id === selectedScheduleId) ? selectedScheduleId : null;
+  // tab) is invalid too — the selector has no option for it. En portée, la sélection
+  // n'est valide que si elle appartient À la portée : une sélection de saison laissée
+  // par un autre écran ne survit donc pas (le bug d'origine).
+  const selectionInScope = !scoped || (null !== scopeVersions && scopeVersions.some((s) => s.id === selectedScheduleId));
+  const validScheduleId = schedules.some((s) => s.id === selectedScheduleId) && selectionInScope ? selectedScheduleId : null;
   useEffect(() => {
-    if (null === validScheduleId && schedules.length > 0) {
+    if (null !== validScheduleId) {
+      return;
+    }
+    if (scoped) {
+      // Fail-closed : on atterrit DANS la portée, ou nulle part — JAMAIS via
+      // pickLandingScheduleId (qui retomberait sur le socle).
+      if (null !== scopeLandingId && scopeLandingId !== selectedScheduleId) {
+        setSelectedScheduleId(scopeLandingId);
+      }
+      return;
+    }
+    if (schedules.length > 0) {
       setSelectedScheduleId(pickLandingScheduleId(schedules));
     }
-  }, [validScheduleId, schedules, chosenScheduleId, setSelectedScheduleId]);
+  }, [validScheduleId, scoped, scopeLandingId, selectedScheduleId, schedules, chosenScheduleId, setSelectedScheduleId]);
 
   // La COUCHE de créneaux de la version affichée (#8) : le socle lit la grille de
   // saison, une période lit la sienne. Dérivée ici, avant les requêtes, pour que
@@ -196,22 +234,39 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // `reservation-*` : aucun PATCH slot ne doit les viser), sur la MÊME couche que le
   // payload du solveur : socle = réservations permanentes, période = celles de son plan.
   const isFailed = "FAILED" === displayed?.status;
+  // P2-43 volet (v) — l'état de fermeture des gymnases SERVI par le backend pour la PÉRIODE
+  // affichée (`GET /calendar-entries/{id}/conflicts`, foyer unique déjà consommé par le wizard).
+  // L'entrée de calendrier : prop en embarqué (Génération l'a en main), sinon dérivée du plan de
+  // la version affichée — JAMAIS le socle (une version de saison n'a pas d'entrée de période).
+  const { data: allSchedulePlans } = useSchedulePlans();
+  const periodPlan =
+    null !== displayed && !isSeasonPlanType(displayed.planType) && null !== displayed.schedulePlanId
+      ? ((allSchedulePlans ?? []).find((p) => p.id === displayed.schedulePlanId) ?? null)
+      : null;
+  const periodEntryId = calendarEntryId ?? periodPlan?.calendarEntryId ?? null;
+  const entryConflicts = useEntryConflicts(periodEntryId);
+  const conflictsUnresolved = readLoading(entryConflicts) || readFailed(entryConflicts);
+  // FAIL-CLOSED sur l'OFFRE : on n'ARME pas un geste cible tant que l'état de fermeture n'est pas
+  // connu (le moteur refuserait un placement sur un couple fermé). Le socle n'a rien à attendre ;
+  // une version de PÉRIODE dont le plan n'est pas encore résolu compte comme non résolue (on ne
+  // DEVINE pas l'absence de fermeture). Fail-CLOSED sur l'offre, fail-OPEN sur l'affichage.
+  const periodPlanPending = null !== displayed && !isSeasonPlanType(displayed.planType) && null === calendarEntryId && undefined === allSchedulePlans;
+  const closuresResolved = !periodPlanPending && (null === periodEntryId || !conflictsUnresolved);
   // P2-15 — un gymnase DÉSACTIVÉ pour la période garde ses créneaux en base (le backend
   // les écarte du payload, il ne les supprime pas) : sans ce filtre, l'écran de génération
   // affichait TOUS les gymnases du club alors qu'un seul sert — « du bruit pour rien ».
   // On filtre à la SOURCE : la grille, ses fenêtres vides et le sélecteur en dérivent tous.
-  // FAIL-CLOSED : lecture ratée sans cache ⇒ on ne masque rien (P4-20). Déclaré ICI (et
-  // non plus après les slots) : les réservations affichées sur un FAILED suivent le même
-  // filtre — le backend les écarte aussi du payload d'une période (`reservationsInScope`).
-  const venueOverrides = useVenuePeriodOverrides(slotLayerId);
+  // On lit l'état SERVI (`disabledVenueIds`), plus de re-dérivation locale depuis les overrides
+  // (le wizard a migré de même — règle d'or). FAIL-CLOSED sur l'AFFICHAGE (P4-20) : lecture ratée
+  // / pas encore résolue ⇒ on ne masque rien.
+  const disabledVenueIds = useMemo(
+    () => new Set(conflictsUnresolved ? [] : (entryConflicts.data?.disabledVenueIds ?? [])),
+    [conflictsUnresolved, entryConflicts.data],
+  );
   // P2-30 (dérive) : les overrides d'équipe de la PÉRIODE (seuil/désactivation) — mêmes hooks
   // que le wizard. Sur le socle (slotLayerId=null) le hook est inerte → `computeDrift` reçoit
   // `null` et lit le seuil de saison.
   const teamOverridesQuery = useTeamPeriodOverrides(slotLayerId);
-  const disabledVenueIds = useMemo(
-    () => new Set(readFailed(venueOverrides) || readLoading(venueOverrides) ? [] : (venueOverrides.data ?? []).filter((o) => "DISABLED" === o.mode).map((o) => o.venueId)),
-    [venueOverrides],
-  );
   const reservationsQuery = useReservations(slotLayerId, isFailed);
   const reservationSlots = useMemo<Slot[]>(
     () => !isFailed || null === validScheduleId ? [] : (reservationsQuery.data ?? []).filter((r) => !disabledVenueIds.has(r.venueId)).map((r) => ({
@@ -337,7 +392,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   const selectedSchedule = displayed;
   // Suppression d'un planning SECONDAIRE (overlay) depuis l'en-tête (retour fondateur
   // 2026-07-19) : l'entrée de calendrier de son plan (jamais pour le socle SEASON).
-  const { data: allSchedulePlans } = useSchedulePlans();
+  // `allSchedulePlans` est déjà lu plus haut (dérivation de la fermeture de période).
   const overlayDeleteEntryId =
     null !== selectedSchedule && !isSeasonPlanType(selectedSchedule.planType) && null !== selectedSchedule.schedulePlanId
       ? ((allSchedulePlans ?? []).find((p) => p.id === selectedSchedule.schedulePlanId)?.calendarEntryId ?? null)
@@ -363,9 +418,14 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
   // l'en-tête retomber sur un générique — ou pire, sur le plan de SAISON alors qu'on regarde
   // une période —, on lit dès maintenant la version que cet effet va choisir : la MÊME
   // fonction, donc le même résultat, sans flash et sans deviner (revue #339 round 3).
-  const headerSchedule = selectedSchedule ?? schedules.find((s) => s.id === pickLandingScheduleId(schedules)) ?? null;
-  const displayedPlan: { id: string; name: string } | null =
-    null === headerSchedule || isSeasonPlanType(headerSchedule.planType)
+  // En portée, l'en-tête ne retombe JAMAIS sur le socle : il lit la version de la période
+  // (ou celle sur laquelle l'atterrissage va se poser), et son plan est CELUI de la portée.
+  const headerSchedule = scoped
+    ? (selectedSchedule ?? (null !== scopeLandingId ? (schedules.find((s) => s.id === scopeLandingId) ?? null) : null))
+    : (selectedSchedule ?? schedules.find((s) => s.id === pickLandingScheduleId(schedules)) ?? null);
+  const displayedPlan: { id: string; name: string } | null = scoped
+    ? ((allSchedulePlans ?? []).find((p) => p.id === scopePlanId) ?? null)
+    : null === headerSchedule || isSeasonPlanType(headerSchedule.planType)
       ? (me?.seasonPlan ?? null)
       : ((allSchedulePlans ?? []).find((p) => p.id === headerSchedule.schedulePlanId) ?? null);
   // Le TITRE tolère un plan non encore résolu (collection des plans en vol) : la photo
@@ -437,13 +497,16 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       ? { status: "rejected", violations: moveMutation.error.violations }
       : moveMutation.error instanceof GenerationInProgressError
         ? { status: "blocked" }
-        : // P2-30 : verrou de cible / cible incohérente sont TOASTÉS (message serveur propre),
-          // pas rendus en panneau — ni un « moteur injoignable » ni un refus de légalité.
-          moveMutation.error instanceof TargetLockedError || moveMutation.error instanceof SlotEditError
-          ? { status: "idle" }
-          : null !== moveMutation.error && undefined !== moveMutation.error
-            ? { status: "error" }
-            : { status: "idle" };
+        : // P4-119 (b) : l'attente coupée CÔTÉ CLIENT a son propre message — jamais « moteur injoignable ».
+          moveMutation.error instanceof EngineVerificationInterruptedError
+          ? { status: "interrupted" }
+          : // P2-30 : verrou de cible / cible incohérente sont TOASTÉS (message serveur propre),
+            // pas rendus en panneau — ni un « moteur injoignable » ni un refus de légalité.
+            moveMutation.error instanceof TargetLockedError || moveMutation.error instanceof SlotEditError
+            ? { status: "idle" }
+            : null !== moveMutation.error && undefined !== moveMutation.error
+              ? { status: "error" }
+              : { status: "idle" };
 
   // Changer de créneau sélectionné efface le verdict du précédent — sinon un refus resterait
   // affiché sous un autre créneau.
@@ -524,6 +587,14 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     [viewMode, slots, emptySlots],
   );
 
+  // P2-43 volet (v) — les couples (gymnase, jour) FERMÉS de la période, lus de l'état SERVI. La
+  // grille en MARQUE ses fenêtres vides (inertes + nommées) et l'offre les exclut. Vide sur le
+  // socle ou tant que les conflits ne sont pas résolus (fail-open sur l'affichage).
+  const closedWindows = useMemo(
+    () => computeClosedWindows(conflictsUnresolved ? undefined : entryConflicts.data, (venueId) => lookups.venues.get(venueId)?.name ?? "Gymnase"),
+    [conflictsUnresolved, entryConflicts.data, lookups],
+  );
+
   // --- P2-30 : mode cible, éviction, dérive, undo -----------------------------------------
   const teamNameOf = (teamId: string): string => lookups.teams.get(teamId)?.name ?? "une équipe";
 
@@ -558,6 +629,25 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     return computeDrift(teams.map((t) => ({ id: t.id, sessionsPerWeek: t.sessionsPerWeek })), generatedSlots, overrides);
   }, [displayed, slotLayerId, teamOverridesQuery, teams, generatedSlots]);
 
+  // P4-119 (d) — l'armement d'un geste cible SUIT son ancre et tombe dès qu'elle disparaît, sinon
+  // le mode restait armé et chaque clic devenait une nouvelle tentative de déplacement (fondateur
+  // piégé, 2026-08-19). Un DÉPLACEMENT est ancré au panneau de son créneau source (`selectedSlotId`)
+  // : le fermer, en ouvrir un autre, changer de vue ou de version l'annule — ces trois derniers
+  // vident déjà `selectedSlotId` (cf. store), la seule condition `sourceSlotId !== selectedSlotId`
+  // les couvre tous. Un PLACEMENT est ancré à l'entrée de dérive de son équipe ET au contexte où il
+  // fut armé : l'équipe qui cesse de dériver, un changement de vue ou de version le fait tomber.
+  // Redérivé en phase de RENDU, jamais en effet (le lint du dépôt interdit un setState en effet —
+  // même idiome que `rejectionHandled` plus bas) ; converge (une fois null, la condition est fausse).
+  if (null !== targetMode) {
+    const stale =
+      "move" === targetMode.kind
+        ? targetMode.sourceSlotId !== selectedSlotId
+        : targetMode.scheduleId !== validScheduleId || targetMode.view !== viewMode || !driftEntries.some((d) => d.teamId === targetMode.teamId);
+    if (stale) {
+      setTargetMode(null);
+    }
+  }
+
   const cancelTarget = () => {
     const source = targetMode?.kind === "move" ? targetMode.sourceSlotId : null;
     setTargetMode(null);
@@ -566,12 +656,31 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       requestAnimationFrame(() => (document.querySelector(`[data-slot-id="${source}"] button`) as HTMLElement | null)?.focus?.());
     }
   };
+  // P2-43 volet (v) — l'OFFRE est fail-closed : tant que l'état de fermeture d'une période n'est
+  // pas résolu, on n'ARME pas de geste cible (on ne sait pas quelles cases le moteur refusera).
+  // Le socle et une période aux conflits déjà lus arment normalement (comportement inchangé).
+  const guardArm = (): boolean => {
+    if (!closuresResolved) {
+      toast.error("Vérification des fermetures de gymnase en cours — réessayez dans un instant.");
+      return false;
+    }
+    return true;
+  };
   // Armer/désarmer le déplacement d'un créneau depuis son panneau (toggle).
-  const armMove = (slotId: string) => setTargetMode((cur) => (cur?.kind === "move" && cur.sourceSlotId === slotId ? null : { kind: "move", sourceSlotId: slotId }));
+  const armMove = (slotId: string) => {
+    if (!guardArm()) {
+      return;
+    }
+    setTargetMode((cur) => (cur?.kind === "move" && cur.sourceSlotId === slotId ? null : { kind: "move", sourceSlotId: slotId }));
+  };
   // Armer le placement d'une équipe à la dérive (le panneau de détail se ferme : pas de source).
+  // On fige le contexte (version + vue) pour que le geste tombe si l'un change (P4-119 d).
   const armPlace = (teamId: string) => {
+    if (!guardArm()) {
+      return;
+    }
     setSelectedSlotId(null);
-    setTargetMode({ kind: "place", teamId });
+    setTargetMode({ kind: "place", teamId, scheduleId: validScheduleId, view: viewMode });
   };
 
   // Déplacer un créneau (éventuellement en évinçant l'occupant de la cible) sous le verdict
@@ -640,6 +749,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             setHighlightSlotIds(violationHighlightSlotIds(error.violations, slots));
           } else if (error instanceof GenerationInProgressError) {
             toast.error("Une génération est en cours pour ce club — réessayez ensuite.");
+          } else if (error instanceof EngineVerificationInterruptedError) {
+            // P4-119 (b) : attente coupée côté client — on NOMME l'interruption, jamais « indisponible ».
+            toast.error("La vérification a été interrompue avant la réponse — réessayez.");
           } else if (error instanceof TargetLockedError || error instanceof SlotEditError || error instanceof EngineTimeoutError) {
             toast.error(error.message);
           } else {
@@ -681,10 +793,13 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             toast.error("Une génération est en cours pour ce club — réessayez ensuite.");
             return;
           }
-          // ÉCHEC de l'essai lui-même (moteur trop lent → EngineTimeoutError, ou indisponible) :
-          // la modale RESTE ouverte et NOMME la cause, avec [Réessayer]. Rien n'est tranché —
-          // demande fondateur : ne jamais se fermer en silence sur un échec de la vérification.
-          setEvictDialog({ phase: "failed", sourceSlotId, targetSlot, failureKind: error instanceof EngineTimeoutError ? "timeout" : "unreachable" });
+          // ÉCHEC de l'essai lui-même : la modale RESTE ouverte et NOMME la cause, avec [Réessayer].
+          // Rien n'est tranché — demande fondateur : ne jamais se fermer en silence. Trois causes
+          // DISTINCTES (P4-119 b) : le serveur a jugé le moteur trop lent (504 → `timeout`), l'attente
+          // a été coupée CÔTÉ CLIENT (`interrupted`, surtout pas « indisponible » : rien ne le prouve),
+          // ou une vraie panne réseau/5xx (`unreachable`).
+          const failureKind = error instanceof EngineTimeoutError ? "timeout" : error instanceof EngineVerificationInterruptedError ? "interrupted" : "unreachable";
+          setEvictDialog({ phase: "failed", sourceSlotId, targetSlot, failureKind });
         },
       },
     );
@@ -710,6 +825,11 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     doMove(sourceSlotId, { dayOfWeek: targetSlot.dayOfWeek, startTime: toHourMinute(targetSlot.startTime), venueId: targetSlot.venueId }, targetSlot.id);
   };
 
+  // P2-43 volet (v) — la CEINTURE de l'offre (défense en profondeur) : un couple (gymnase, jour)
+  // fermé n'est jamais une cible, même si un bouton fuyait. La grille filtre déjà l'offre ; ceci
+  // garde le geste côté page.
+  const isClosedTarget = (venueId: string, dayOfWeek: number): boolean => closedWindows.has(`${venueId}|${dayOfWeek}`);
+
   // Un clic sur une case de la grille EN mode cible (la grille route tout ici). La page décide :
   // annuler (re-clic source), déplacer/placer sur une case libre, ou évincer (via l'essai).
   const onPickTarget = (cellSlotId: string) => {
@@ -722,7 +842,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     }
     if (isEmptySlotId(cellSlotId)) {
       const win = gridSlots.find((s) => s.id === cellSlotId);
-      if (undefined === win) {
+      if (undefined === win || isClosedTarget(win.venueId, win.dayOfWeek)) {
         return;
       }
       const position = { dayOfWeek: win.dayOfWeek, startTime: toHourMinute(win.startTime), venueId: win.venueId };
@@ -735,7 +855,7 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
     }
     // Case OCCUPÉE.
     const targetSlot = slots.find((s) => s.id === cellSlotId);
-    if (undefined === targetSlot) {
+    if (undefined === targetSlot || isClosedTarget(targetSlot.venueId, targetSlot.dayOfWeek)) {
       return;
     }
     if (targetMode.kind === "move") {
@@ -1004,8 +1124,10 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
             {/* ADR-0002 inv. 12: THE plan's name lives here, on the plan — not in the version selector. */}
             <h1 className="border-l-[3px] border-accent pl-3 text-2xl font-semibold">{planningTitle}</h1>
             {/* « principal » qualifie LE planning de la saison (le plan SEASON), par
-                opposition aux plannings secondaires de période — pas la version choisie. */}
-            {null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType) ? (
+                opposition aux plannings secondaires de période — pas la version choisie.
+                En portée période, il ne peut jamais apparaître (la portée n'expose aucune
+                version de saison — bug fondateur 2026-08-19). */}
+            {!scoped && null !== selectedSchedule && isSeasonPlanType(selectedSchedule.planType) ? (
               <span className="flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
                 <Star className="size-3" />
                 principal
@@ -1054,13 +1176,19 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
       })()}
 
 
-      {0 === schedules.length ? (
+      {scoped && (null === scopeVersions || 0 === scopeVersions.length) ? (
+        // Portée sans aucune version : état vide EXPLICITE, jamais un repli sur une version
+        // de saison (fail-closed — bug fondateur 2026-08-19). Le lanceur vit à l'étape
+        // Génération ; ici on nomme l'absence plutôt que de montrer autre chose.
+        <EmptyState title="Aucune version pour cette période" description="Générez le planning de cette période pour le voir apparaître ici." />
+      ) : 0 === schedules.length ? (
         <EmptyState title="Aucun planning" description="Passez par l'assistant pour saisir vos données et générer un premier planning." />
       ) : (
         <>
           <div className="mb-4">
             <PlanningToolbar
               schedules={schedules}
+              scopePlanId={scopePlanId}
               selectedScheduleId={validScheduleId}
               onSelectSchedule={setSelectedScheduleId}
               viewMode={viewMode}
@@ -1305,6 +1433,9 @@ export function PlanningPage({ embedded = false }: { embedded?: boolean } = {}) 
                           }
                           onPickTarget={onPickTarget}
                           onCancelTarget={cancelTarget}
+                          // P2-43 volet (v) — les couples fermés de la période : cases vides
+                          // MARQUÉES (inertes + nommées), jamais offertes en cible.
+                          closedWindows={closedWindows}
                         />
                         )}
                       </div>
