@@ -179,16 +179,19 @@ export function PlanningToolbar({
             ) : null}
           </span>
         ) : null}
-        {canValidate && !isChosen ? (
+        {embedded && canValidate && !isChosen ? (
           // Choosing a version the plan ALREADY points at is a no-op: the status
           // used to hide this (le statut « validé » n'était pas COMPLETED) ; seul le
           // pointeur dit « en vigueur » désormais, donc on le lui demande directement.
+          // Borné à `embedded` (Option A, bug fondateur 2026-08-19) : sans le sélecteur
+          // (standalone /planning = consultation), offrir Valider laissait valider une
+          // version sans pouvoir en choisir une — le contrat de cet écran est de consulter.
           <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onValidate}>
             <CheckCircle2 className="size-4" />
             Valider
           </Button>
         ) : null}
-        {isChosen ? (
+        {embedded && isChosen ? (
           <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onReopen}>
             <LockOpen className="size-4" />
             Rouvrir
@@ -219,7 +222,10 @@ export function PlanningToolbar({
 
       {/* Row 2 — generation actions, with export right-aligned. */}
       <div className="flex flex-wrap items-center gap-2">
-        {isChosen ? null : (
+        {/* Régénérer est un geste d'ÉCRITURE : borné à `embedded` (Option A, bug fondateur
+            2026-08-19) — /planning autonome consulte, il ne régénère pas (la génération vit
+            dans l'étape Génération du wizard). */}
+        {!embedded || isChosen ? null : (
           // Disabled during a "Charger" restore too (actionBusy) — but the busy
           // LABEL/spinner keys only on isGenerating, so a restore (no solve) does
           // not show a misleading "Génération…".

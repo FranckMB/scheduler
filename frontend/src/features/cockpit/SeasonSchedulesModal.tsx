@@ -100,6 +100,20 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
     const entry = null !== entryId ? entries.find((e) => e.id === entryId) : undefined;
     return entry ? range(entry.startDate, entry.endDate) : null;
   };
+  // ADR-0002 : une LIGNE de cette liste EST un PLAN. L'état affiché est donc celui du
+  // PLAN — pointe-t-il une version (validé/en vigueur) ? —, pas le statut BRUT de la
+  // version : sans quoi un plan validé et un plan terminé-non-validé, tous deux
+  // COMPLETED, se lisaient à l'identique (« Terminé »). Vocabulaire aligné sur la
+  // toolbar (« validé » / « en vigueur »).
+  const stateLabel = (row: PlanningRow): string => {
+    if (row.isChosen) {
+      return "Validé";
+    }
+    if (row.isOpen) {
+      return `${STATUS_LABELS[row.status]} · en cours`;
+    }
+    return "COMPLETED" === row.status ? "Terminé · à valider" : STATUS_LABELS[row.status];
+  };
   const deletableEntryId = (row: PlanningRow): string | null => {
     if (!row.isOverlay || isReadonly || "PENDING" === row.status || "GENERATING" === row.status || null === row.schedulePlanId) {
       return null;
@@ -107,42 +121,36 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
     return entryByPlan.get(row.schedulePlanId) ?? null;
   };
 
-  // Routing like the banner's "Ouvrir": a CLOSED period overlay or the season's plan
-  // in force is a finished plan → open it read-only on the planning page. A season
-  // plan still IN PROGRESS (COMPLETED-not-yet-validated) opens the wizard's
-  // generation step to finish/validate it — a season landing, so `exitPeriodMode`
-  // just below. An OPEN overlay resumes via `startPeriodMode` instead (branch
-  // above): since the fix (bug fondateur 2026-08-19), the wizard's generation step
-  // is scoped to that overlay's plan (`scopePlanId`) and never renders the season.
+  // ADR-0002 — UNE règle de routage, alignée sur l'état du PLAN (pointe-t-il une
+  // version ?) et non sur `isOverlay || isChosen` (deux vérités mêlées) :
+  //  - plan POINTÉ (en vigueur) → /planning, consultation lecture seule ;
+  //  - plan NON pointé → wizard, mode DÉCLARÉ (jamais l'ambiant du localStorage) :
+  //    un overlay ancre le mode période sur SON entrée, le socle repasse en mode
+  //    saison ; les deux atterrissent sur l'étape Génération pour finir/valider.
+  // Le mode est PERSISTÉ (localStorage) : sans le déclarer, « reprendre » ouvrirait
+  // le wizard sur le mode laissé par un autre écran — la saison à la place de
+  // l'adaptation, ou la mauvaise période (revue #260 round 1, bug fondateur 2026-08-19).
+  // On purge AUSSI la sélection planning : une sélection laissée ailleurs ne doit pas
+  // s'afficher dans l'étape Génération. En portée période, PlanningPage atterrit sur la
+  // période (`scopePlanId`) et ne retombe jamais sur la saison.
   const consult = (row: PlanningRow) => {
-    if (row.isOverlay && row.isOpen) {
-      // Overlay ouvert : reprendre l'ajustement au wizard mode période.
-      const entryId = null !== row.schedulePlanId ? (entryByPlan.get(row.schedulePlanId) ?? null) : null;
-      if (null === entryId) {
-        return; // plans pas encore chargés — le bouton est désactivé dans ce cas
-      }
-      // Ceinture (bug fondateur 2026-08-19) : purge une sélection planning laissée par un
-      // autre écran avant d'entrer en mode période (la vraie correction = la portée de
-      // PlanningPage, qui atterrit sur la période).
-      setSelectedScheduleId(null);
-      useWizardStore.getState().startPeriodMode(entryId);
-      onClose();
-      navigate("/wizard");
-      return;
-    }
-    if (row.isOverlay || row.isChosen) {
+    if (row.isChosen) {
       setSelectedScheduleId(row.id);
       navigate("/planning");
       return;
     }
-    // Le mode période est PERSISTÉ (localStorage) : sans reset, « reprendre le
-    // planning de saison » rouvrirait le wizard période et générerait une version
-    // du plan de PÉRIODE — mauvaise cible silencieuse (revue #260 round 1).
-    // On purge AUSSI la sélection planning (bug fondateur 2026-08-19) : une sélection de
-    // période laissée ailleurs ne doit pas s'afficher dans l'étape Génération de la SAISON.
     setSelectedScheduleId(null);
-    useWizardStore.getState().exitPeriodMode();
+    if (row.isOverlay) {
+      const entryId = null !== row.schedulePlanId ? (entryByPlan.get(row.schedulePlanId) ?? null) : null;
+      if (null === entryId) {
+        return; // plans pas encore chargés — le bouton est désactivé dans ce cas
+      }
+      useWizardStore.getState().startPeriodMode(entryId);
+    } else {
+      useWizardStore.getState().exitPeriodMode();
+    }
     useWizardStore.getState().jumpTo("generate");
+    onClose();
     navigate("/wizard");
   };
 
@@ -162,7 +170,7 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
                   {row.label}
                 </p>
                 {period ? <p className="truncate text-xs text-muted-foreground">{period}</p> : null}
-                <p className="text-xs text-muted-foreground">{row.isOpen ? `${STATUS_LABELS[row.status]} · en cours` : STATUS_LABELS[row.status]}</p>
+                <p className="text-xs text-muted-foreground">{stateLabel(row)}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 {row.isOpen ? (

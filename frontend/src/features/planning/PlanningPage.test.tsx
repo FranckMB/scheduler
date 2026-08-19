@@ -10,6 +10,7 @@ import { EngineTimeoutError, EngineVerificationInterruptedError, getDiagnostics,
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
+import { useWizardStore } from "@/features/wizard/store";
 
 // The api layer is mocked (not HTTP): ky + jsdom + MSW disagree on AbortSignal,
 // so we exercise the screen from the api boundary down — queries, PlanningPage
@@ -253,9 +254,10 @@ describe("PlanningPage (integration)", () => {
     // là où il vivait, dans PlanningToolbar.test.
     expect(screen.queryByRole("combobox", { name: /version du planning/i })).not.toBeInTheDocument();
     // « principal » qualifie LE planning de la saison — il s'affiche donc aussi sur
-    // une version de travail, qui reste offerte à la validation.
+    // une version de travail. Option A (bug fondateur 2026-08-19) : /planning autonome
+    // CONSULTE — les gestes d'écriture (Valider/Rouvrir/Régénérer) n'y sont plus offerts.
     expect(screen.getByText("principal")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /valider/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
   });
 
   it("lit les créneaux du SOCLE quand la version affichée est celle de la saison", async () => {
@@ -556,8 +558,9 @@ describe("PlanningPage (integration)", () => {
   });
 
   it("drops « Valider » on the version the plan points at (it is in force) and offers « Rouvrir »", async () => {
+    // Option A : les gestes d'écriture vivent dans l'étape Génération du wizard (embedded).
     vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true }]);
-    renderWithProviders(<PlanningPage />);
+    renderWithProviders(<PlanningPage embedded />);
 
     expect(await screen.findByText("U11")).toBeInTheDocument();
     // Being pointed at IS being validated: the only way forward is « Rouvrir ».
@@ -844,7 +847,7 @@ describe("PlanningPage (integration)", () => {
       const user = userEvent.setup();
       vi.mocked(listSchedules).mockResolvedValue(validated);
       vi.mocked(reopenSchedule).mockRejectedValueOnce(new OverlaysExistError(2, [])).mockResolvedValueOnce({});
-      renderWithProviders(<PlanningPage />);
+      renderWithProviders(<PlanningPage embedded />); // Option A : Rouvrir vit dans le wizard (embedded)
       await screen.findByText("U11");
 
       await user.click(screen.getByRole("button", { name: /rouvrir/i }));
@@ -868,18 +871,57 @@ describe("PlanningPage (integration)", () => {
       const user = userEvent.setup();
       vi.mocked(listSchedules).mockResolvedValue(validated);
       vi.mocked(reopenSchedule).mockResolvedValueOnce({});
-      renderWithProviders(<PlanningPage />);
+      renderWithProviders(<PlanningPage embedded />); // Option A : Rouvrir vit dans le wizard (embedded)
       await screen.findByText("U11");
 
       await user.click(screen.getByRole("button", { name: /rouvrir/i }));
       expect(vi.mocked(reopenSchedule)).toHaveBeenCalledTimes(1);
       expect(navigate).toHaveBeenCalledWith("/wizard");
     });
+
+    // NR (défaut 3, axe planning lifecycle — LE bloquant) : toute navigation vers /wizard
+    // DÉCLARE son mode ; aucun héritage du localStorage. Rouvrir la SAISON repasse en mode
+    // saison même si un mode période traînait. Falsification : sans exitPeriodMode, la
+    // période persistée resterait et le wizard s'ouvrirait sur la mauvaise portée.
+    it("Rouvrir le SOCLE (SEASON) déclare le mode SAISON — une période persistée ne survit pas", async () => {
+      const user = userEvent.setup();
+      // Un mode période traîne du localStorage/écran précédent : le piège exact.
+      useWizardStore.getState().startPeriodMode("stale-entry");
+      vi.mocked(listSchedules).mockResolvedValue(validated);
+      vi.mocked(reopenSchedule).mockResolvedValueOnce({});
+      renderWithProviders(<PlanningPage embedded />); // Option A : Rouvrir vit dans le wizard (embedded)
+      await screen.findByText("U11");
+
+      await user.click(screen.getByRole("button", { name: /rouvrir/i }));
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith("/wizard"));
+      expect(useWizardStore.getState().mode).toBe("season");
+      expect(useWizardStore.getState().calendarEntryId).toBeNull();
+      expect(useWizardStore.getState().stepId).toBe("generate");
+    });
+
+    // NR (défaut 3) — le REVERS : rouvrir un OVERLAY déclare le mode PÉRIODE ancré sur
+    // l'entrée DE CE plan (schedulePlanId → plan → calendarEntryId), jamais la saison.
+    it("Rouvrir un OVERLAY déclare le mode PÉRIODE sur l'entrée de CE plan", async () => {
+      const user = userEvent.setup();
+      // On part en mode saison pour prouver le passage EN période (et la bonne entrée).
+      useWizardStore.getState().exitPeriodMode();
+      const overlayValidated: Schedule[] = [{ id: "ov-1", name: "Ajustement", status: "COMPLETED", score: null, createdAt: "2026-09-10T00:00:00Z", updatedAt: "2026-09-10T00:00:00Z", planType: "CLOSURE", schedulePlanId: "ete-plan", isChosen: true }];
+      vi.mocked(listSchedules).mockResolvedValue(overlayValidated);
+      plansState.plans = [{ id: "ete-plan", type: "CLOSURE", name: "Ajustement gymnase", startDate: "2026-09-07", calendarEntryId: "e-ete", chosenScheduleId: "ov-1", teamSelectionInitialized: true }];
+      vi.mocked(reopenSchedule).mockResolvedValueOnce({});
+      renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" />);
+
+      await user.click(await screen.findByRole("button", { name: /rouvrir/i }));
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith("/wizard"));
+      expect(useWizardStore.getState().mode).toBe("period");
+      expect(useWizardStore.getState().calendarEntryId).toBe("e-ete");
+      expect(useWizardStore.getState().stepId).toBe("generate");
+    });
   });
 
   it("« Valider » → lands on the planning view", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<PlanningPage />);
+    renderWithProviders(<PlanningPage embedded />); // Option A : Valider vit dans le wizard (embedded)
     await screen.findByText("U11");
 
     // Toolbar "Valider" opens the confirm dialog; confirm inside it.
