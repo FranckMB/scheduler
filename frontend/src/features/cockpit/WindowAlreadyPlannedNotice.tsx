@@ -12,9 +12,9 @@ import { Button } from "@/shared/components/ui/button";
  */
 export function WindowAlreadyPlannedNotice({ message, onOpen }: { message: string; onOpen: () => void }) {
   return (
-    <div className="space-y-2 rounded-md border border-amber-400/60 bg-amber-400/10 px-3 py-2 text-sm text-foreground">
+    <div className="space-y-2 rounded-md border border-warning/60 bg-warning/10 px-3 py-2 text-sm text-foreground">
       <p className="flex items-start gap-2">
-        <CalendarClock aria-hidden className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <CalendarClock aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
         <span>{message}</span>
       </p>
       <div className="flex justify-end">

@@ -164,7 +164,9 @@ export function ClubViewTable({ model, selectedSlotId, onSelectSlot, highlightSl
             <tbody key={group.label ?? `flat-${gi}`}>
               {null !== group.label ? (
                 <tr>
-                  <th scope="colgroup" colSpan={1 + model.dayColumns.length} className="border-b border-border bg-muted/40 px-2 py-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {/* AUD-FRT-26 — rowgroup, pas colgroup : cet en-tête ouvre un <tbody> et chapeaute
+                      les LIGNES qui suivent (les équipes du rang), pas des colonnes. */}
+                  <th scope="rowgroup" colSpan={1 + model.dayColumns.length} className="border-b border-border bg-muted/40 px-2 py-0.5 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {group.label}
                   </th>
                 </tr>

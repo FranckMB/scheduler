@@ -41,16 +41,17 @@ function CompactExport({ scheduleId, label }: { scheduleId: string; label: strin
 
   return (
     <div className="flex items-center gap-1">
-      <Button variant="ghost" size="icon" className="size-8" aria-haspopup="menu" aria-expanded={open} aria-label={`Exporter ${label}`} title="Exporter" onClick={() => setOpen((o) => !o)}>
+      <Button variant="ghost" size="icon" className="size-8" aria-expanded={open} aria-label={`Exporter ${label}`} title="Exporter" onClick={() => setOpen((o) => !o)}>
         <Download className="size-4" />
       </Button>
       {open ? (
-        <div role="menu" className="flex items-center gap-1">
+        // AUD-FRT-23 (2e site, trouvé au grep — l'audit n'avait vu qu'ExportMenu) : une rangée
+        // de boutons de format, sans navigation aux flèches, n'est pas un menu ARIA.
+        <div role="group" aria-label={`Formats d'export de ${label}`} className="flex items-center gap-1">
           {EXPORT_FORMATS.map(({ key, label: fmt }) => (
             <button
               key={key}
               type="button"
-              role="menuitem"
               disabled={null !== busy}
               onClick={() => void run(key, null)}
               className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"

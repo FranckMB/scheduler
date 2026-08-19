@@ -202,7 +202,7 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, busy, state
       {"holiday" === state ? (
         <div className="mt-2 space-y-3 text-sm">
           {excludedRanges.map((range) => (
-            <p key={range.startDate} className="rounded-md border border-amber-400/50 bg-amber-400/10 px-3 py-2 text-foreground">
+            <p key={range.startDate} className="rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-foreground">
               Semaines du {frDateShort(range.startDate)} au {frDateShort(range.endDate)} couvertes par {range.labels.join(", ")} — le rappel vous attend dans son planning.
             </p>
           ))}

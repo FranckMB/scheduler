@@ -289,14 +289,20 @@ export function GenerationWaiting() {
             />
           </div>
 
-          {/* Titre + phrase tournante — région live (annoncée poliment au lecteur d'écran).
-              Le texte habille sur 2-3 lignes dans le couloir laissé libre entre les bandes. */}
-          <div role="status" aria-live="polite" className="flex w-full max-w-md flex-col gap-1">
+          {/* Titre + phrase tournante. Le texte habille sur 2-3 lignes dans le couloir laissé
+              libre entre les bandes.
+              ⚑ AUD-FRT-23/24 — SEUL le titre STABLE est dans la région live. La phrase tourne
+              toutes les 3 s : laissée dans le live, elle faisait annoncer une nouvelle phrase
+              au lecteur d'écran toutes les 3 secondes pendant TOUTE la génération (1 à 3 min
+              couramment, jusqu'à 10 min de budget solveur) — un martèlement qui couvre le reste
+              de la page. Ces phrases sont du décor : elles font patienter l'œil, elles
+              n'apportent aucune information d'état. D'où aria-hidden. */}
+          <div role="status" aria-live="polite" className="w-full max-w-md">
             <p className="text-lg font-medium text-foreground">Génération du planning…</p>
-            <p key={i} className="animate-in fade-in text-sm text-muted-foreground">
-              {PHRASES[i]}
-            </p>
           </div>
+          <p key={i} aria-hidden="true" className="animate-in fade-in w-full max-w-md text-sm text-muted-foreground">
+            {PHRASES[i]}
+          </p>
           <p className="w-full max-w-md text-xs leading-relaxed text-muted-foreground">La génération peut prendre 1 à 3 min selon la taille du club. Vous pouvez laisser cet écran ouvert.</p>
         </div>
       </div>

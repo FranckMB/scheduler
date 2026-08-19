@@ -236,7 +236,10 @@ export function SlotReservationModal({
                 <button
                   type="button"
                   aria-label={`Annuler le retrait de ${teamName.get(r.teamId) ?? "l'équipe"}`}
-                  className="text-muted-foreground hover:text-foreground"
+                  // AUD-A11Y-15 — p-1 : 16 px d'icône + 4 px de part et d'autre = 24 px, le
+                  // minimum WCAG 2.5.8. Ce bouton était le seul des trois du fichier resté nu
+                  // après AUD-A11Y-12 (ses jumeaux :213 et :251 l'avaient déjà).
+                  className="rounded p-1 text-muted-foreground hover:text-foreground"
                   onClick={() => setRemoved((prev) => prev.filter((id) => id !== r.id))}
                 >
                   <Undo2 className="size-4" />

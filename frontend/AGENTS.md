@@ -187,7 +187,8 @@ data; avoiding it would mean duplicating the auth decision into a per-route `loa
 Le corps de texte descend à `text-xs` (0,75 rem = **12 px**) et pas en dessous — pas
 d'échelle arbitraire en `text-[10px]`. **Exception assumée : les GRILLES**
 (`WeekGrid`, `WeekendGrid`, `TypicalWeekendGrid`, `ReservationGrid`, `MonthCalendar`,
-`VenueAvailabilityGrid`), où la densité est la fonction : y agrandir le texte impose
+`VenueAvailabilityGrid`, **`ClubViewTable`** — ajoutée le 2026-08-19, audit A11Y-16 : née
+avec P3-20, elle suivait déjà la convention sans figurer dans la liste), où la densité est la fonction : y agrandir le texte impose
 des lignes plus hautes, donc du défilement dans un écran fait pour tenir en un coup
 d'œil. Décision fondateur du 2026-08-08, avec son pourquoi dans
 `specs/courantes/etat-des-lieux.md` §2.
