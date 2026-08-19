@@ -232,6 +232,41 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         self::assertSame([1, 3, 6], $this->payloadWeekdaysOf($club, $season, $planId, $entry, $venue->getId()), 'les trois créneaux reviennent au payload');
     }
 
+    /**
+     * BUG fondateur (2026-08-19, axe constraint semantics §7.1) — le gate == payload sur une
+     * INDISPONIBILITÉ datée de gymnase (`venue_closed`). Une telle contrainte croisant un plan
+     * d'adaptation faisait rougir le récap « À corriger avant de générer » avec « Une contrainte
+     * de gymnase doit désigner un gymnase », BLOQUANT le bouton Générer — faux bloqueur sur
+     * CHAQUE fermeture déclarée, alors qu'une fermeture datée ne produit AUCUNE ligne moteur
+     * (elle ferme des jours) : le gate ne peut pas bloquer la génération pour elle.
+     *
+     * Ce test rejoue le cas EXACT via le gate HTTP du plan de période : la fermeture est bien
+     * retenue par la sélection (le gymnase n'est pas désactivé), passe sous `validate()`, et NE
+     * rend AUCUNE erreur — ni le faux bloqueur historique, ni son propre message de cible.
+     */
+    public function testDatedVenueClosureDoesNotFalselyBlockThePeriodGate(): void
+    {
+        [$user, $club, $venue, $entry] = $this->seedClosureGateScenario();
+
+        $this->client->request('POST', '/api/constraints/validate', [], [], [
+            'HTTP_AUTHORIZATION' => 'Bearer ' . $this->jwt->create($user),
+            'HTTP_X-Club-Id' => $club->getId(),
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode(['calendarEntryId' => $entry->getId()], \JSON_THROW_ON_ERROR));
+
+        self::assertResponseIsSuccessful('la fermeture datée ne fait plus échouer le récap (422)');
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true, 512, \JSON_THROW_ON_ERROR);
+
+        $allErrors = implode(' | ', array_merge(...array_values($body['errors'] ?: [[]])));
+        self::assertStringNotContainsString('doit désigner un gymnase', $allErrors, 'le faux bloqueur du fondateur a disparu');
+        self::assertStringNotContainsString('Une fermeture de gymnase doit désigner', $allErrors, 'le gymnase fermé est bien porté par le scope');
+        self::assertTrue($body['valid'], 'aucune erreur ni bloqueur : la génération est débloquée');
+
+        // Le NON-régressé, dans l'autre sens : le gymnase existe toujours pour la génération
+        // (la fermeture n'a rien détruit) — la contrainte est bien celle qu'on croit.
+        self::assertNotNull($this->em->getRepository(Venue::class)->find($venue->getId()));
+    }
+
     protected function setUp(): void
     {
         $this->client = self::createClient();
@@ -332,6 +367,88 @@ final class PeriodGatePayloadParityTest extends WebTestCase
         $this->em->flush();
 
         return [$club, $season, $venue, $entry, $planId];
+    }
+
+    /**
+     * Le cas fondateur, minimal : un club + son gestionnaire admin, une saison, un gymnase avec
+     * grille, une période d'adaptation (donc un plan), et UNE fermeture datée du gymnase qui
+     * chevauche la période. Le gymnase n'est PAS désactivé pour la période : la fermeture reste
+     * retenue par la sélection et passe donc sous le gate.
+     *
+     * @return array{0: User, 1: Club, 2: Venue, 3: CalendarEntry}
+     */
+    private function seedClosureGateScenario(): array
+    {
+        $uid = uniqid('', true);
+
+        $club = new Club;
+        $club->setName('Club fermeture ' . $uid);
+        $club->setSlug('fermeture-' . $uid);
+        $club->setTimezone('Europe/Paris');
+        $club->setLocale('fr');
+        $club->setOnboardingCompleted(true);
+        $club->setFfbbClubCode('FER' . strtoupper(substr(md5($uid), 0, 10)));
+        $this->em->persist($club);
+
+        $user = new User;
+        $user->setEmail('fermeture-' . $uid . '@test.com');
+        $user->setFirstName('Fer');
+        $user->setLastName('Meture');
+        $user->setPasswordHash($this->hasher->hashPassword($user, 'pass'));
+        $this->em->persist($user);
+        $this->em->flush();
+
+        $this->scopeGucToClub($club->getId());
+
+        $membership = new ClubUser;
+        $membership->setClubId($club->getId());
+        $membership->setUserId($user->getId());
+        $membership->setRole('admin');
+        $membership->setIsActive(true);
+        $this->em->persist($membership);
+
+        $season = new Season;
+        $season->setClubId($club->getId());
+        $season->setName('2025-2026');
+        $season->setStartDate(new DateTimeImmutable('2025-09-01'));
+        $season->setEndDate(new DateTimeImmutable('2026-06-30'));
+        $season->setStatus(SeasonStatus::ACTIVE);
+        $this->em->persist($season);
+        $this->em->flush();
+
+        $venue = $this->venue($club, $season, 'Gymnase Matéo');
+        foreach ([1, 3] as $day) {
+            $slot = new VenueTrainingSlot;
+            $slot->setClubId($club->getId());
+            $slot->setSeasonId($season->getId());
+            $slot->setVenueId($venue->getId());
+            $slot->setDayOfWeek($day);
+            $slot->setStartTime(new DateTimeImmutable('18:00'));
+            $slot->setDurationMinutes(90);
+            $slot->setCapacity(1);
+            $this->em->persist($slot);
+        }
+        $this->em->flush();
+
+        $entry = new CalendarEntry;
+        $entry->setClubId($club->getId());
+        $entry->setSeasonId($season->getId());
+        $entry->setKind(CalendarEntryKind::PERIOD);
+        $entry->setTitle('Adaptation travaux');
+        $entry->setStartDate(new DateTimeImmutable('2026-08-31'));
+        $entry->setEndDate(new DateTimeImmutable('2026-09-06'));
+        $entry->setPeriodType(CalendarEntryPeriodType::HOLIDAY);
+        $entry->setStatus(CalendarEntryStatus::ACTIVE);
+        $this->em->persist($entry);
+        $this->em->flush();
+
+        $this->planIdOf($entry); // le plan naît du geste (copie la grille)
+
+        // « Matéo indisponible (travaux) » 2026-08-18 → 2026-09-30 : chevauche la période.
+        $this->closure($club, $season, $entry, $venue->getId(), '2026-08-18', '2026-09-30');
+        $this->em->flush();
+
+        return [$user, $club, $venue, $entry];
     }
 
     private function closure(Club $club, Season $season, CalendarEntry $carrier, string $venueId, string $start, string $end): void

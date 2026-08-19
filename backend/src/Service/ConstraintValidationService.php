@@ -37,18 +37,21 @@ final class ConstraintValidationService
         // Validate scope + scope_target_id consistency
         $scope = $constraint->getScope();
         $scopeTargetId = $constraint->getScopeTargetId();
+        $family = $constraint->getFamily();
+        $config = $constraint->getConfig();
 
-        if (ConstraintScope::CLUB !== $scope && null === $scopeTargetId) {
+        // Une fermeture datée de gymnase (`venue_closed`) porte son gymnase dans le
+        // SCOPE, jamais dans le config — elle a donc son propre message de cible manquante
+        // (plus bas), et le contrôle générique lui céderait un DOUBLON.
+        $isVenueClosure = ConstraintFamily::FACILITY === $family && 'venue_closed' === ($config['type'] ?? null);
+
+        if (ConstraintScope::CLUB !== $scope && null === $scopeTargetId && !$isVenueClosure) {
             $errors[] = 'Cette contrainte doit cibler une équipe, un coach ou un gymnase précis.';
         }
 
         if (ConstraintScope::CLUB === $scope && null !== $scopeTargetId) {
             $errors[] = 'Une contrainte « toutes les équipes » ne doit pas cibler une équipe précise.';
         }
-
-        // Validate config based on family
-        $family = $constraint->getFamily();
-        $config = $constraint->getConfig();
 
         switch ($family) {
             case ConstraintFamily::TIME:
@@ -71,6 +74,29 @@ final class ConstraintValidationService
                 break;
 
             case ConstraintFamily::FACILITY:
+                // Une fermeture datée (`venue_closed`) est un cas À PART : le gymnase fermé
+                // vit dans `scopeTargetId`, PAS dans le config, et elle ne produit AUCUNE
+                // ligne moteur (les créneaux du gymnase disparaissent du payload les jours
+                // fermés — `VenueClosureDays` / `ScheduleConstraintBuilder`). Le gate ne peut
+                // donc PAS bloquer la génération pour elle : parité gate == payload. Exiger
+                // ici une clé de gymnase du config était un FAUX bloqueur (bug fondateur
+                // 2026-08-19) tombant sur CHAQUE indisponibilité déclarée. On valide À LA
+                // PLACE ce qui compte pour CE type : le gymnase (scope) et la cohérence des
+                // dates si elles sont là.
+                if ($isVenueClosure) {
+                    if (null === $scopeTargetId) {
+                        $errors[] = 'Une fermeture de gymnase doit désigner le gymnase concerné.';
+                    }
+                    // Dates cohérentes SI présentes : un config nu (donnée legacy) reste
+                    // valide — `VenueClosureDays` ferme alors toute la fenêtre. Deux dates
+                    // inversées, elles, ne ferment aucun jour (no-op silencieux) : on le dit.
+                    $start = $config['startDate'] ?? null;
+                    $end = $config['endDate'] ?? null;
+                    if (\is_string($start) && \is_string($end) && $start > $end) {
+                        $errors[] = 'La date de début de la fermeture doit précéder sa date de fin.';
+                    }
+                    break;
+                }
                 // A FACILITY rule names a VENUE via one of the keys the ENGINE actually
                 // reads: forcedVenueId (must-be-at), preferredVenueId (soft/forced when
                 // HARD), forbiddenVenueId (avoid), or minAtVenueId (au moins N séances
