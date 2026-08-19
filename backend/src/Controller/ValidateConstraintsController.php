@@ -18,6 +18,7 @@ use App\Service\ManagementAccessGuard;
 use App\Service\PayloadCapacityMirror;
 use App\Service\PeriodConstraintSelection;
 use App\Service\PeriodConstraintSelector;
+use App\Service\PreSolvePreventionWarnings;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SeasonResolver;
@@ -57,6 +58,7 @@ final class ValidateConstraintsController extends AbstractController
         private readonly PeriodConstraintSelector $periodConstraintSelector,
         private readonly ScheduleConstraintBuilder $scheduleConstraintBuilder,
         private readonly LoggerInterface $logger,
+        private readonly PreSolvePreventionWarnings $preventionWarnings,
     ) {}
 
     #[Route('/api/constraints/validate', name: 'api_constraints_validate', methods: ['POST'])]
@@ -154,7 +156,15 @@ final class ValidateConstraintsController extends AbstractController
                 $capacityPayload = $this->scheduleConstraintBuilder->buildForClubSeason($clubId, $seasonId);
             }
             if (null !== $capacityPayload) {
-                $warnings = [...$warnings, ...$this->capacityWarnings($capacityPayload)];
+                $warnings = [
+                    ...$warnings,
+                    ...$this->capacityWarnings($capacityPayload),
+                    // P4-57 — les préventions calculées depuis CE payload, donc depuis ce que le
+                    // solveur va réellement recevoir : gymnase sans créneau, équipe qu'aucun
+                    // créneau ne peut accueillir, coach surchargé, contrainte visant une équipe
+                    // absente. Chacune ne se voyait qu'APRÈS génération, en diagnostic.
+                    ...$this->preventionWarnings->detect($capacityPayload),
+                ];
             }
         } catch (Throwable $exception) {
             // Le silence serait indiscernable d'un « la capacité est juste » : on le DIT.
