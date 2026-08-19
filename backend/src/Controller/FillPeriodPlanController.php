@@ -19,6 +19,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\Messenger\MessageBusInterface;
 use Symfony\Component\Routing\Attribute\Route;
 use Throwable;
@@ -139,11 +140,17 @@ final class FillPeriodPlanController extends AbstractController implements Seaso
             ->setStatus(ScheduleStatus::PENDING)
             ->setQueuedAt(new DateTimeImmutable)
             ->setSchedulePlanId($source->getSchedulePlanId());
-        $this->entityManager->wrapInTransaction(function () use ($newSchedule, $entryId): void {
+        $this->entityManager->wrapInTransaction(function () use ($newSchedule, $entryId, $source): void {
             // Sous le verrou de portée du plan de PÉRIODE (sa clé = l'entrée de calendrier, comme la
             // transcription et la validation) : sans lui, deux comblements concurrents créeraient
             // deux V+1 avec le même numéro. `linkSchedule` numérote sous ce verrou.
             $this->schedulePlanProvisioner->lockPlanScope($entryId);
+            // Re-vérification SOUS le verrou (TOCTOU, miroir de /regenerate qui re-vérifie dans
+            // lockPlanScope) : un « Valider » concurrent entre le check d'entrée et ce point
+            // ferait dériver une V+1 d'une version devenue EN VIGUEUR.
+            if ($this->schedulePlanProvisioner->isChosen($source->getId())) {
+                throw new ConflictHttpException('La version choisie est le planning en vigueur. Rouvrez-le avant de combler.');
+            }
             $this->entityManager->persist($newSchedule);
             $this->schedulePlanProvisioner->linkSchedule($newSchedule);
             $this->entityManager->flush();
