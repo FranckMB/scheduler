@@ -63,29 +63,31 @@ export function GenerateStep() {
   const { data: sched } = useScheduleStatus(scheduleId);
   const status = sched?.status ?? null;
 
-  // Season mode keys completion off ANY completed schedule (first launch or
-  // regeneration). Period mode keys strictly off THIS overlay's status.
-  const overlayDone = periodMode && "COMPLETED" === status;
-  // planning-versions: validating archives the COMPLETED siblings — a season
-  // A finished version is a finished version: choosing one no longer rewrites its
-  // status, so COMPLETED alone answers "has this club generated?".
-  const hasCompleted = periodMode ? overlayDone : schedules.some((s) => isSeasonPlanType(s.planType) && "COMPLETED" === s.status);
+  // planning-versions: validating archives the COMPLETED siblings — a finished
+  // version is a finished version: COMPLETED alone answers "has this generated?".
+  //
+  // bug fondateur 2026-08-19 — en mode période, l'affichage NE dépend PLUS du
+  // `scheduleId` LOCAL du montage (nul au RETOUR sur l'étape), mais du PLAN : « il
+  // existe une version de ce plan de période, terminée OU en vol ». Sinon, revenir
+  // avec deux versions COMPLETED laissait un écran « Générer » vierge, et les
+  // adaptations déjà générées n'apparaissaient nulle part.
+  const periodPlanVersions = periodMode && null !== periodPlanId ? schedules.filter((s) => s.schedulePlanId === periodPlanId) : [];
+  const periodHasCompleted = periodPlanVersions.some((s) => "COMPLETED" === s.status);
+  const periodInFlight = periodPlanVersions.some((s) => IN_FLIGHT.includes(s.status));
+  const hasCompleted = periodMode ? periodHasCompleted : schedules.some((s) => isSeasonPlanType(s.planType) && "COMPLETED" === s.status);
   const anyInFlight = schedules.some((s) => IN_FLIGHT.includes(s.status));
-  const showPlanning = periodMode ? overlayDone : hasCompleted || (anyInFlight && null === scheduleId);
+  // Le statut LOCAL couvre l'immédiat après lancement, avant que la liste des versions ne
+  // se rafraîchisse (le nouvel overlay n'y est pas encore) — sinon un flash de « Générer »
+  // entre le POST et le premier refetch.
+  const localActive = null !== status && ("COMPLETED" === status || IN_FLIGHT.includes(status));
+  const showPlanning = periodMode ? periodHasCompleted || periodInFlight || localActive : hasCompleted || (anyInFlight && null === scheduleId);
 
-  // Leaving mid-generation loses the local scheduleId; on return, re-adopt the
-  // period's in-flight overlay instead of offering a concurrent second launch.
-  // ADR-0002 lot D-b : la version en vol d'une période se dérive de SON PLAN
-  // (schedulePlanId), plus d'un pointeur sur l'entrée. Rien à reprendre → « Générer »
-  // crée une version neuve (modèle versions : on n'écrase jamais une version, a
-  // fortiori une version validée qui est en lecture seule).
-  const overlaySchedule = periodMode ? (schedules.find((s) => s.schedulePlanId === periodPlanId && IN_FLIGHT.includes(s.status)) ?? null) : null;
-  useEffect(() => {
-    if (periodMode && null === scheduleId && overlaySchedule) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot resume of an in-flight overlay
-      setScheduleId(overlaySchedule.id);
-    }
-  }, [periodMode, scheduleId, overlaySchedule]);
+  // Anti-double-lancement : « Générer » réutilise l'overlay EN VOL de la période
+  // (schedulePlanId) au lieu d'en lancer un concurrent. On ne réutilise JAMAIS une version
+  // terminée (le modèle versions n'écrase pas) — d'où le filtre IN_FLIGHT strict. L'AFFICHAGE,
+  // lui, se dérive de la portée dans PlanningPage : plus de reprise du scheduleId local pour
+  // « voir » (A le rend inutile — bug fondateur 2026-08-19).
+  const inFlightOverlay = periodMode ? (schedules.find((s) => s.schedulePlanId === periodPlanId && IN_FLIGHT.includes(s.status)) ?? null) : null;
 
   // §2bis warning: the FIRST overlay freezes the socle (editing the baseline
   // afterwards destroys the overlays after an explicit confirm). Gated on the
@@ -106,16 +108,20 @@ export function GenerateStep() {
       return;
     }
     settled.current = true;
-    // Point the embedded planning at THIS run's schedule (not a stale overlay a
-    // "Voir le plan" click may have left selected in the planning store).
-    if (null !== scheduleId) {
-      setSelectedScheduleId(scheduleId);
-    }
     if (periodMode) {
+      // bug fondateur 2026-08-19 — l'écran embarqué se scope au plan de la période
+      // (PlanningPage y atterrit tout seul) : on ne pousse PLUS de sélection ici, on
+      // rafraîchit seulement le calendrier et la liste pour que la nouvelle version
+      // apparaisse (le cockpit lit « la version active » de la période).
       void queryClient.invalidateQueries({ queryKey: ["calendar-entries"] });
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
     } else {
+      // Season: point the embedded planning at THIS run's schedule (not a stale
+      // selection a "Voir le plan" click may have left in the planning store).
       // Guarded by settled.current → runs exactly once, no cascade.
+      if (null !== scheduleId) {
+        setSelectedScheduleId(scheduleId);
+      }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setScheduleId(null);
       void queryClient.invalidateQueries({ queryKey: ["me"] });
@@ -156,7 +162,7 @@ export function GenerateStep() {
               schedulePlanId: periodPlanId ?? undefined,
               // Reprendre la version en vol (anti-double-lancement) ; sinon créer une
               // version neuve sous le plan (lot D-b — plus de pointeur overlay sur l'entrée).
-              existingScheduleId: overlaySchedule?.id ?? undefined,
+              existingScheduleId: inFlightOverlay?.id ?? undefined,
             }
           : { existingScheduleId: reuseId },
       );
@@ -171,7 +177,10 @@ export function GenerateStep() {
   };
 
   if (showPlanning) {
-    return <PlanningPage embedded />;
+    // bug fondateur 2026-08-19 — en période, on PORTE l'écran sur le plan de la période :
+    // il n'atterrit plus sur le plan de saison et n'affiche que les versions de la période.
+    // En saison, `scopePlanId` est nul → comportement inchangé.
+    return <PlanningPage embedded scopePlanId={periodMode ? periodPlanId : null} />;
   }
 
   return (
