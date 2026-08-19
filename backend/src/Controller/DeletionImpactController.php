@@ -105,7 +105,18 @@ final class DeletionImpactController extends AbstractController
     private function denyForeignClub(?string $ownerClubId): ?JsonResponse
     {
         $currentClubId = $this->resolveCurrentClubId($this->requestStack);
-        if (null !== $currentClubId && $ownerClubId !== $currentClubId) {
+
+        // AUD-BCK-17 — fail-CLOSED sur contexte dégradé. Avant, un club non résolu faisait
+        // passer la garde en silence : une défense en profondeur qui s'éteint sans bruit ne
+        // défend rien le jour où on compte sur elle. Le TenantFilter et RLS couvrent déjà ce
+        // cas (sans GUC posé, la base ne rend rien), mais cette garde-ci est justement là
+        // pour ne pas dépendre d'eux. Même réponse que le contrôleur voisin dans la même
+        // situation (`VenueUsageStatsController:63-65`) : on répond pareil à une même cause.
+        if (null === $currentClubId) {
+            return $this->json(['error' => 'No club in context.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        if ($ownerClubId !== $currentClubId) {
             return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
         }
 
