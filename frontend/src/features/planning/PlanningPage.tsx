@@ -366,11 +366,11 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
         onSuccess: () => {
           setValidateOverlayCount(null);
           setValidateOpen(false);
-          // Validated → STAY where the gesture lives. Valider n'existe plus
-          // qu'en écran embarqué (option A, 2026-08-19 : /planning consulte) ;
-          // naviguer vers /planning atterrissait sur un écran désormais MUET
-          // (ni badge ni Rouvrir) — rester ici fait basculer la toolbar sur
-          // « Rouvrir », le seul accusé visible de la validation.
+          // Validated → land on /planning, the screen of the version IN FORCE. Valider
+          // est la SORTIE de l'espace de travail (l'étape Génération du wizard) : le socle
+          // validé devient la version en vigueur, et /planning en porte le badge de statut
+          // et « Rouvrir » (symétrie stricte, 2026-08-20 — Valider ↔ Rouvrir).
+          navigate("/planning");
         },
         onError: (error) => {
           if (error instanceof OverlaysExistError) {

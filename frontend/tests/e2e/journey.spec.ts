@@ -73,20 +73,37 @@ test("full journey: wizard → generation → validated planning → cockpit", a
   // The embedded planning replaces the launcher once a schedule is COMPLETED.
   await expect(page.getByText("SM1").first()).toBeVisible({ timeout: 180_000 });
 
-  // --- Validate INSIDE the embedded wizard view — since the landing rule of
-  // 2026-08-19 the embedded screen derives what it shows from the PLAN (the
-  // most recent version, chosen included), so validating no longer flips it
-  // back to the launcher. And /planning is consultation-only now: the write
-  // gestures (Valider/Rouvrir/Régénérer) live exclusively in the wizard.
+  // --- Valider INSIDE the embedded wizard (generation step) — Valider is the
+  // workspace's EXIT (2026-08-20, symétrie stricte Valider ↔ Rouvrir). The confirm
+  // dialog (role=dialog "Valider le planning") always opens; confirm inside it.
   await page.getByRole("button", { name: "Valider" }).click();
-  // The confirm dialog (role=dialog "Valider le planning") always opens — wait
-  // for it, confirm, then assert the toolbar flipped to the VALIDATED state
-  // ("Rouvrir" replaces "Valider"); never a substring match on "Validé", which
-  // the dialog's own description contains.
   const dialog = page.getByRole("dialog", { name: "Valider le planning" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Valider", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Rouvrir" })).toBeVisible({ timeout: 15_000 });
+
+  // --- Success LANDS on /planning, the screen of the version IN FORCE. The URL
+  // assertion is the falsifiable one: drop the navigation and the test goes red.
+  // « Rouvrir visible » alone would be a FALSE GREEN — it shows in both screens.
+  await expect(page).toHaveURL(/\/planning/, { timeout: 15_000 });
+
+  // --- Consultation contract on /planning: the just-validated planning is displayed
+  // (SM1 still on the grid), the status badge is visible, AND the version selector is
+  // ABSENT — that absence is what proves we left the embedded workspace for /planning
+  // (the selector is a work gesture, embedded-only), not merely that a button flipped.
+  await expect(page.getByText("SM1").first()).toBeVisible();
+  await expect(page.getByText("Terminé").first()).toBeVisible();
+  await expect(page.getByRole("combobox", { name: /version du planning/i })).toHaveCount(0);
+  const reopen = page.getByRole("button", { name: "Rouvrir" });
+  await expect(reopen).toBeVisible();
+
+  // --- Rouvrir closes the cycle: back to the wizard's generation step, the planning
+  // editable again (« Valider » is offered once more, the selector is back). Thus
+  // valider → consulter → rouvrir is proved end to end.
+  await reopen.click();
+  await expect(page).toHaveURL(/\/wizard/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: /Étape 6\/6/ })).toBeVisible();
+  await expect(page.getByText("SM1").first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: "Valider" })).toBeVisible({ timeout: 15_000 });
 
   // --- The home now opens on the temporal cockpit (month calendar), not the
   // work-loop gate: the month navigation is the cockpit's stable marker.

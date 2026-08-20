@@ -42,9 +42,11 @@ interface PlanningToolbarProps {
   /** Resource filter, rendered next to the view switcher on row 1 — its label mirrors the
    *  current view mode, so the two belong together (P4-43). Owned by the page. */
   filterSlot?: ReactNode;
-  /** Wizard-embedded (generation step) vs standalone /planning consultation. The
-   *  standalone view hides the version selector and the status badge — version
-   *  management lives in the wizard, /planning is for consulting. */
+  /** Wizard-embedded (generation step) vs standalone /planning. Standalone /planning is
+   *  the screen of the version IN FORCE: it carries the status badge and « Rouvrir »
+   *  (which returns to the wizard's generation step). The work gestures — version
+   *  selector, Valider, Régénérer, Supprimer — live only in the embedded wizard toolbar;
+   *  Valider is that workspace's exit and lands on /planning. */
   embedded?: boolean;
   /** Portée d'affichage (bug fondateur 2026-08-19) : non-null ⇒ le sélecteur ne liste QUE
    *  les versions de ce plan de période (jamais le socle), et l'étoile suit sa lignée. */
@@ -135,9 +137,11 @@ export function PlanningToolbar({
 
   return (
     <div className="flex w-full flex-col gap-2">
-      {/* Row 1 — which version, its state, and how to view it. Standalone /planning
-          (consultation) hides the version selector and the status badge: version
-          management lives in the wizard's generation step (embedded). */}
+      {/* Row 1 — which version, its state, and how to view it. Standalone /planning is
+          the screen of the version in force: it hides the version SELECTOR (a work
+          gesture, embedded-only) but keeps the status badge. Version management —
+          selecting, validating, regenerating, deleting — lives in the wizard's
+          generation step (embedded). */}
       <div className="flex flex-wrap items-center gap-2">
         {embedded ? (
           <select
@@ -168,7 +172,7 @@ export function PlanningToolbar({
             <Trash2 className="size-4" />
           </Button>
         ) : null}
-        {embedded && selected ? (
+        {null !== selected ? (
           <span className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5">
               {isChosen ? <Lock className="size-3" /> : null}
@@ -183,15 +187,20 @@ export function PlanningToolbar({
           // Choosing a version the plan ALREADY points at is a no-op: the status
           // used to hide this (le statut « validé » n'était pas COMPLETED) ; seul le
           // pointeur dit « en vigueur » désormais, donc on le lui demande directement.
-          // Borné à `embedded` (Option A, bug fondateur 2026-08-19) : sans le sélecteur
-          // (standalone /planning = consultation), offrir Valider laissait valider une
-          // version sans pouvoir en choisir une — le contrat de cet écran est de consulter.
+          // Borné à `embedded` : Valider est un geste de TRAVAIL et la SORTIE de l'espace
+          // de travail — il vit au wizard (où l'on choisit la version), et son succès
+          // atterrit sur /planning. Sur /planning autonome (la version en vigueur), c'est
+          // « Rouvrir » qui prend le relais, pas Valider.
           <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onValidate}>
             <CheckCircle2 className="size-4" />
             Valider
           </Button>
         ) : null}
-        {embedded && isChosen ? (
+        {/* Rouvrir est le geste de l'écran /planning (la version EN VIGUEUR) : borné à
+            `!embedded`. Valider (embedded) et Rouvrir (standalone) sont les deux sorties
+            symétriques — Valider atterrit sur /planning, Rouvrir ramène au wizard étape
+            Génération. Dans le wizard, une version en vigueur ne montre donc plus Rouvrir. */}
+        {!embedded && isChosen ? (
           <Button size="sm" variant="outline" className="h-8" disabled={actionBusy} onClick={onReopen}>
             <LockOpen className="size-4" />
             Rouvrir
@@ -222,9 +231,9 @@ export function PlanningToolbar({
 
       {/* Row 2 — generation actions, with export right-aligned. */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Régénérer est un geste d'ÉCRITURE : borné à `embedded` (Option A, bug fondateur
-            2026-08-19) — /planning autonome consulte, il ne régénère pas (la génération vit
-            dans l'étape Génération du wizard). */}
+        {/* Régénérer est un geste de TRAVAIL : borné à `embedded` — /planning autonome est
+            l'écran de la version en vigueur, il ne régénère pas (la génération vit dans
+            l'étape Génération du wizard). */}
         {!embedded || isChosen ? null : (
           // Disabled during a "Charger" restore too (actionBusy) — but the busy
           // LABEL/spinner keys only on isGenerating, so a restore (no solve) does

@@ -159,10 +159,12 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.getByText("Terminé")).toBeInTheDocument();
   });
 
-  it("offers Rouvrir and hides Régénérer on the version in force (read-only)", () => {
-    // « En vigueur » is the plan's pointer (isChosen), not a status.
+  it("hides Rouvrir (it lives on standalone /planning now) and hides Régénérer on the version in force (read-only)", () => {
+    // « En vigueur » is the plan's pointer (isChosen), not a status. Nouveau contrat
+    // (2026-08-20) : Rouvrir est le geste de l'écran /planning (la version en vigueur),
+    // plus celui de la toolbar embarquée du wizard — voir le test standalone plus bas.
     renderToolbar(schedule("COMPLETED", { isChosen: true }));
-    expect(screen.getByRole("button", { name: /rouvrir/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /rouvrir/i })).not.toBeInTheDocument();
     // The plain "Régénérer" (current structure) is hidden on a read-only version;
     // "Charger cette version" (restore this version's structure) may still show.
     expect(screen.queryByRole("button", { name: "Régénérer" })).not.toBeInTheDocument();
@@ -274,33 +276,34 @@ describe("PlanningToolbar — schedule lifecycle (N3)", () => {
     expect(screen.queryByRole("button", { name: /charger cette version/i })).not.toBeInTheDocument();
   });
 
-  it("standalone /planning (not embedded) hides the version selector and the status badge", () => {
-    // ⚠ Ce test assertait aussi l'absence du score. P4-39 l'ayant retiré PARTOUT, cette
-    // assertion serait devenue vraie quoi qu'il arrive : elle aurait continué de passer
-    // même si la distinction standalone/embedded cassait, en donnant l'illusion de garder
-    // une règle qu'elle ne gardait plus. Elle est déplacée dans le test ci-dessous, où
-    // elle porte sur ce qui est réellement en jeu.
+  it("standalone /planning (not embedded) hides the version selector but SHOWS the status badge", () => {
+    // Nouveau contrat (2026-08-20) : /planning est l'écran de la version EN VIGUEUR. Il
+    // porte le badge de statut (et Rouvrir, cf. plus bas) ; seuls les gestes de TRAVAIL —
+    // le sélecteur de versions, Valider, Régénérer, Supprimer — restent au wizard. Le
+    // sélecteur reste donc masqué, mais le badge, lui, apparaît désormais en standalone.
     renderToolbar(schedule("COMPLETED"), { embedded: false });
     expect(screen.queryByRole("combobox", { name: /version du planning/i })).not.toBeInTheDocument();
-    expect(screen.queryByText("Terminé")).not.toBeInTheDocument();
+    expect(screen.getByText("Terminé")).toBeInTheDocument();
     // View modes remain (consultation still switches gym/coach/team views).
     expect(screen.getByRole("button", { name: "Par coach" })).toBeInTheDocument();
   });
 
-  // NR (défaut 2/3, axe planning lifecycle) — Option A : /planning autonome CONSULTE.
-  // Sans le sélecteur de version (masqué hors `embedded`), les gestes d'ÉCRITURE
-  // Valider / Rouvrir / Régénérer ne s'offrent plus : ils vivent dans l'étape
-  // Génération du wizard. Offrir « Valider » sans pouvoir choisir une version était
-  // le défaut. Falsifiable : les mêmes gestes RESTENT offerts en embedded (tests ci-dessus).
+  // NR (axe planning lifecycle) — nouveau contrat (2026-08-20) : /planning autonome est
+  // l'écran de consultation de la version en vigueur (badge + Rouvrir), mais les gestes de
+  // TRAVAIL — sélecteur, Valider, Régénérer, Supprimer — vivent au wizard (étape
+  // Génération). Falsifiable dans les deux sens : ces mêmes gestes RESTENT offerts en
+  // embedded (tests ci-dessus), et Rouvrir bascule d'embedded vers standalone.
   it("standalone /planning (not embedded) n'offre NI Valider NI Régénérer sur une version terminée non validée", () => {
     renderToolbar(schedule("COMPLETED"), { embedded: false });
     expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Régénérer" })).not.toBeInTheDocument();
   });
 
-  it("standalone /planning (not embedded) n'offre PAS Rouvrir sur la version en vigueur", () => {
+  it("standalone /planning (not embedded) OFFRE Rouvrir sur la version en vigueur", () => {
+    // La sortie symétrique de Valider : /planning porte Rouvrir, qui mène au wizard étape
+    // Génération. Falsification : en embedded, ce même isChosen ne montre PLUS Rouvrir.
     renderToolbar(schedule("COMPLETED", { isChosen: true }), { embedded: false });
-    expect(screen.queryByRole("button", { name: /rouvrir/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /rouvrir/i })).toBeInTheDocument();
   });
 
   it("n'affiche le score du solveur NULLE PART, embedded compris (P4-39)", () => {
