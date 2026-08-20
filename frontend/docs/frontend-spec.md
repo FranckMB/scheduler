@@ -4,12 +4,12 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-20 (recalé — **§6.7 bis, l'auto-transcription sur une fermeture (P2-44
-PR-4, remplace sa description initiale)** re-vérifiée contre `wizard/steps/GenerateStep.tsx` ; et
-**symétrie Valider/Rouvrir** : route `/planning` (§ci-dessus) et §6.6 bis re-vérifiées contre
-`planning/PlanningToolbar.tsx` et `planning/PlanningPage.tsx` — Rouvrir borné à `!embedded` (a
-quitté la toolbar embarquée), badge de statut + pastille « Période » visibles dans les deux modes,
-`validate()` navigue vers `/planning` inconditionnellement ; trace datée : `etat-des-lieux.md`).
+Last verified @ 2026-08-20 (recalé — **§6.7 bis, les écarts NOMMÉS (P2-44 PR-5)** : panneau
+`planning/SocleDeviationPanel.tsx`, hook `useSocleDeviation` et fetcher `getSocleDeviation`
+confrontés au code, ainsi que le câblage de `planning/PlanningPage.tsx` — rendu borné à
+`transcriptionSurface` + `isClosurePeriod` + version `COMPLETED`, prop `isClosurePeriod` passée
+depuis `wizard/steps/GenerateStep.tsx`, invalidation ajoutée aux trois mutations qui invalident
+déjà `["slots"]` ; `ToReplaceList` relu et vérifié INCHANGÉ, les deux panneaux coexistent).
 Historique des passes : `git log -p --follow
 frontend/docs/frontend-spec.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
@@ -718,8 +718,23 @@ génération en cours ou sans version valide sélectionnée. **Outil d'appoint**
 complet) reste dans la barre d'outils à côté — le comblement ne le remplace pas, il évite un solve
 complet pour le cas courant (un gymnase a fermé, une équipe a repris son volume).
 
-Reste ouvert (`roadmap.md` P2-44 PR-5) : l'agrégation narrative des écarts après un solve complet
-ou une transcription (recoupe P2-43 (iv)).
+**Les écarts NOMMÉS — panneau « Écarts avec le planning de saison » (P2-44 PR-5, ADR-0004,
+2026-08-20)** : sur l'écran embarqué (`transcriptionSurface`, donc `embedded && scoped`) d'une
+période de type **FERMETURE** portant une version `COMPLETED`, `SocleDeviationPanel.tsx` affiche
+l'agrégat (« N séances déplacées, M à replacer ») puis le détail ligne à ligne — une déplacée se lit
+`U13F1 · Mar 18h30 Matéo → Jeu 19h00 JDR`. La donnée est **SERVIE** par `GET
+/api/schedules/{id}/socle-deviation` (`useSocleDeviation`, `queries.ts`) : le front ne compare
+**rien** — il ne redérive ni l'appariement ni la raison, il met en forme. Une raison `null` (la
+sélection de période n'explique pas l'absence) se rend **sans étiquette**, jamais avec une cause
+inventée. Le hook est invalidé aux **trois** sites qui invalident déjà `["slots"]` (`useLockSlot`,
+`useMoveSlot`, `usePlaceSlot`) pour que le diff suive un déplacement.
+
+Contrairement à `ToReplaceList`, ce panneau **survit à la navigation** (route de lecture
+re-appelable, pas une réponse de POST). Il **s'ajoute** à `ToReplaceList` sans le remplacer —
+arbitrage fondateur « les deux affichés pour le moment » — d'où deux titres délibérément
+distincts : « **Écarts avec le planning de saison** » (le neuf, qui porte en plus les **déplacées**)
+vs « Séances non reprises du planning de saison » (l'existant, session d'écran). Sur une **vacance**
+la route n'est **jamais appelée** : le comportement PR-2 reste intact à l'octet.
 
 ### 6.8 Loading states et error boundaries
 

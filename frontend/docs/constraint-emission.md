@@ -1,6 +1,6 @@
 # Émission des contraintes (frontend) + alignement 3 couches
 
-Last verified @ 2026-08-19 (**premier stamp** — ce doc portait la table d'alignement 3 couches sans aucune date de vérification (audit DOC-31). Vérifié clé par clé aux TROIS couches : `minStartTime`, `maxEndTime`, `allowedDays`, `forbiddenDays`, `minAtVenueId`, `forcedVenueId` sont émises par `ConstraintsStep`, admises par la liste blanche de `ConstraintConfigValidator` et lues par `engine/app/solver/constraints.py` — aucune clé émise que le backend droppe, aucune clé validée que l'engine ignore.)
+Last verified @ 2026-08-20 (rotation de fraîcheur — table d'alignement 3 couches re-confrontée au code, **tout juste** : les clés `minStartTime`, `maxStartTime`, `maxEndTime`, `allowedDays`, `forbiddenDays`, `forcedVenueId`, `preferredVenueId`, `forbiddenVenueId`, `minAtVenueId`+`minAtVenueCount`, `unavailableDays`, `availableDays`, `fromTime`/`untilTime` sont toutes admises par `backend/src/Service/ConstraintConfigValidator.php` ET lues par `engine/app/solver/constraints.py` ; les deux clés **engine-only** `forcedDays`/`preferredDays` — validées côté backend, jamais émises par le wizard — sont bien lues (`constraints.py` pour l'une, `engine/app/solver/objective.py` pour l'autre), donc aucune clé validée n'est ignorée par le moteur.)
 
 > **But** : (1) lister ce que le **wizard émet** réellement, et (2) mettre les **3 couches côte à côte**
 > (frontend → backend → engine) pour repérer les **scissions** et les **angles morts** — les cas où

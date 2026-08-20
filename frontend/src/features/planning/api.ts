@@ -194,6 +194,44 @@ export interface Slot {
   lockOrigin: LockOrigin | null;
 }
 
+/** Un placement (où, quand) — l'identité d'un écart (P2-44 PR-5) ; ni durée ni coach. */
+export interface SocleDeviationPlacement {
+  dayOfWeek: number;
+  startTime: string;
+  venueId: string;
+}
+
+/** Une séance DÉPLACÉE : du placement du socle (`from`) vers celui de la période (`to`). */
+export interface SocleDeviationMoved {
+  teamId: string;
+  from: SocleDeviationPlacement;
+  to: SocleDeviationPlacement;
+}
+
+/**
+ * Une séance du socle NON REPLACÉE dans la période. `reason` est SERVIE par le backend
+ * (`team_reduced` | `venue_disabled` | `venue_closed`), ou `null` quand la sélection ne l'explique
+ * pas (suppression manuelle) — jamais fabriquée. Le front rend alors la ligne sans étiquette.
+ */
+export interface SocleDeviationUnplaced {
+  teamId: string;
+  dayOfWeek: number;
+  startTime: string;
+  venueId: string;
+  reason: string | null;
+}
+
+/**
+ * P2-44 PR-5 (ADR-0004) — les ÉCARTS NOMMÉS d'une version de plan de FERMETURE vs la version pointée
+ * du socle, SERVIS par `GET /schedules/{id}/socle-deviation`. Deux catégories seulement (déplacée /
+ * non replacée) ; le front NOMME (agrégat + ligne à ligne), il ne redérive RIEN.
+ */
+export interface SocleDeviation {
+  socleScheduleId: string;
+  moved: SocleDeviationMoved[];
+  unplaced: SocleDeviationUnplaced[];
+}
+
 /** Les 7 familles de cause qu'un `session_below_effective_min` peut porter (contrat 2.8,
  *  `DiagnosticCauseSchema.kind`). Fermée côté moteur ; le front la traite en `string` (cf.
  *  `DiagnosticCause.kind`) pour dégrader proprement sur un kind futur qu'il ne connaît pas
@@ -717,6 +755,11 @@ export const listSchedules = (): Promise<Schedule[]> =>
   );
 export const getSchedule = (id: string): Promise<Schedule> => api.get(`schedules/${id}`).json<Schedule>();
 export const getSlots = (scheduleId: string): Promise<Slot[]> => collection<Slot>("schedule_slot_templates", { scheduleId });
+/**
+ * Les écarts NOMMÉS d'une version de plan de FERMETURE vs le socle pointé (P2-44 PR-5). Lecture pure
+ * re-appelable ; le backend calcule, le front présente. Réponse JSON simple (pas une collection).
+ */
+export const getSocleDeviation = (scheduleId: string): Promise<SocleDeviation> => api.get(`schedules/${scheduleId}/socle-deviation`).json<SocleDeviation>();
 export const getDiagnostics = (scheduleId: string): Promise<Diagnostic[]> => collection<Diagnostic>("schedule_diagnostics", { scheduleId });
 export const getTeams = (): Promise<Team[]> => collectionAll<Team>("teams");
 export const getVenues = async (): Promise<Venue[]> => sortByName(await collectionAll<Venue>("venues"));

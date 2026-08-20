@@ -86,6 +86,22 @@ export function useDiagnostics(scheduleId: string | null) {
   });
 }
 
+/**
+ * P2-44 PR-5 — les écarts NOMMÉS d'une version de plan de FERMETURE vs le socle pointé
+ * (`GET /schedules/{id}/socle-deviation`). `scheduleId` NUL désarme la query : l'appelant (la
+ * PlanningPage embarquée) ne l'arme QUE sur une fermeture, version COMPLETED — sur une vacance ou
+ * `/planning` autonome la route n'est JAMAIS appelée. Réinvalidée après move/lock/place (le diff se
+ * relit une fois le placement changé).
+ */
+export function useSocleDeviation(scheduleId: string | null) {
+  return useQuery({
+    queryKey: ["socle-deviation", scheduleId],
+    queryFn: () => planningApi.getSocleDeviation(scheduleId as string),
+    enabled: null !== scheduleId,
+    staleTime: 30_000,
+  });
+}
+
 // Reference data (names + grouping). Long-lived — rarely changes within a session.
 export function useTeams() {
   return useQuery({ queryKey: ["teams"], queryFn: planningApi.getTeams, staleTime: 300_000 });
@@ -131,7 +147,11 @@ export function useLockSlot() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, lockLevel }: { id: string; lockLevel: LockLevel }) => planningApi.lockSlot(id, lockLevel),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["slots"] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["slots"] });
+      // P2-44 PR-5 : un placement qui change rejoue le diff socle↔période.
+      void queryClient.invalidateQueries({ queryKey: ["socle-deviation"] });
+    },
     // Un verrouillage qui échoue (moteur/réseau) restait MUET : le cadenas ne bougeait pas
     // sans un mot. On remonte le motif du serveur (patron useReopenSchedule/useRegenerate).
     onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
@@ -153,6 +173,8 @@ export function useMoveSlot() {
       void queryClient.invalidateQueries({ queryKey: ["slots"] });
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
       void queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
+      // P2-44 PR-5 : un déplacement accepté change les écarts vs le socle — on relit le diff.
+      void queryClient.invalidateQueries({ queryKey: ["socle-deviation"] });
     },
     // Le hook POSSÈDE son feedback (sinon le filet global toaste « Problème de connexion »
     // sur un refus métier) : il tait le métier, ne parle que d'un vrai transport.
@@ -194,6 +216,8 @@ export function usePlaceSlot() {
       void queryClient.invalidateQueries({ queryKey: ["slots"] });
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
       void queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
+      // P2-44 PR-5 : placer une séance à la dérive change les écarts vs le socle — on relit le diff.
+      void queryClient.invalidateQueries({ queryKey: ["socle-deviation"] });
     },
     // Idem move : le hook possède son feedback, le filet global ne double plus (cf. useMoveSlot).
     onError: ownSlotEditFeedback,

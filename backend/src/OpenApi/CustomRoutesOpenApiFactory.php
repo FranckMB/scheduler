@@ -1769,6 +1769,19 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                 ],
                 summary: 'Fill the sessions to relocate on a period version (partial solve, placed sessions kept)',
             )),
+            '/api/schedules/{id}/socle-deviation' => new PathItem(get: new Operation(
+                operationId: 'getApiScheduleSocleDeviation',
+                tags: ['Schedules'],
+                responses: [
+                    '200' => new Response('Named deviations of a CLOSURE period version vs the pointed season plan: `moved` sessions (paired chronologically, season placement → period placement) and `unplaced` sessions (the season remainder, each with a `reason` SERVED from the period selection — team_reduced/venue_disabled/venue_closed, or null when the selection does not explain it). New and unchanged sessions are never reported. Read-only, re-callable.'),
+                    '401' => $unauthorized,
+                    '403' => new Response('Version belongs to another club'),
+                    '404' => $notFound,
+                    '409' => new Response('Version not completed, or the season plan has no pointed version to compare against'),
+                    '422' => new Response('Not a period plan (SEASON), or the period is not a CLOSURE'),
+                ],
+                summary: 'Named deviations of a closure period version vs the season plan, computed server-side',
+            )),
             '/api/teams/reorder' => new PathItem(post: new Operation(
                 operationId: 'postApiTeamsReorder',
                 tags: ['Teams'],

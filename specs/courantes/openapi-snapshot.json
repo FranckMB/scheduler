@@ -13028,6 +13028,35 @@
                 "summary": "Un-point the plan so it can be regenerated"
             }
         },
+        "/api/schedules/{id}/socle-deviation": {
+            "get": {
+                "operationId": "getApiScheduleSocleDeviation",
+                "tags": [
+                    "Schedules"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Named deviations of a CLOSURE period version vs the pointed season plan: `moved` sessions (paired chronologically, season placement \u2192 period placement) and `unplaced` sessions (the season remainder, each with a `reason` SERVED from the period selection \u2014 team_reduced/venue_disabled/venue_closed, or null when the selection does not explain it). New and unchanged sessions are never reported. Read-only, re-callable."
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    },
+                    "403": {
+                        "description": "Version belongs to another club"
+                    },
+                    "404": {
+                        "description": "Resource not found"
+                    },
+                    "409": {
+                        "description": "Version not completed, or the season plan has no pointed version to compare against"
+                    },
+                    "422": {
+                        "description": "Not a period plan (SEASON), or the period is not a CLOSURE"
+                    }
+                },
+                "summary": "Named deviations of a closure period version vs the season plan, computed server-side"
+            }
+        },
         "/api/schedules/{id}/validate": {
             "post": {
                 "operationId": "postApiScheduleValidate",

@@ -176,10 +176,55 @@ COMPLETED du plan de période est une V1 transcrite émet SES placements en `pre
 falsifié dans les deux sens (muter une copie rougit ; ni la séance « à replacer » filtrée à la
 transcription ni un créneau du socle ne fuient).
 
-Reste :
+### PR-5 — les écarts NOMMÉS (2026-08-20) — le programme est clos
 
-- **PR-5** — écarts nommés : après génération (transcrite ou solvée), l'adaptation raconte ce qui a
-  changé vs le socle (« Matéo fermé : N séances déplacées, équipes réduites… ») — recoupe P2-43 (iv).
+Après génération (transcrite, comblée ou solvée), l'écran embarqué d'une période de type
+**FERMETURE** ne se contente plus de laisser comparer deux grilles à l'œil : il **nomme** les
+écarts vs le socle. Route de **LECTURE** `GET /api/schedules/{id}/socle-deviation`
+(`SocleDeviationController` → `SocleDeviationCalculator` → `SocleDeviationResult`), donc
+**re-appelable** — c'est ce qui manquait à `toReplace`, qui n'existe que dans la réponse du POST de
+transcription et meurt à la navigation.
+
+1. **La cible est la VERSION, pas le plan.** L'écran affiche une version précise et une V1
+   transcrite n'a pas le même diff qu'une V+1 comblée ; miroir de `/api/schedules/{id}/fill`. Effet
+   de bord voulu : « un plan sans version » devient un cas IMPOSSIBLE — sans version, pas d'id à
+   appeler.
+2. **Deux catégories, pas quatre** (décision fondateur) : **déplacée** (même équipe, placement
+   différent) et **non replacée** (présente au socle, absente de la période). Les séances
+   **nouvelles** et les **inchangées** ne sont pas rapportées — le gestionnaire veut savoir ce
+   qu'il a perdu et ce qui a bougé, pas relire son planning.
+3. **L'appariement est chronologique et déterministe.** Par équipe : les clés de placement
+   identiques (`team:venue:day:HH:MM`, la clé EXISTANTE de l'import et du seed) sortent comme
+   inchangées ; le reste est trié (jour, heure, gymnase) croissant des deux côtés et apparié
+   **positionnellement** ; le reliquat du socle est « non replacé ». Conséquence VOULUE : une
+   équipe réduite laisse ses **dernières séances de la semaine** non replacées — le même
+   déterminisme que la réduction du transcriber, donc le diff redit ce que la transcription avait
+   annoncé au lieu d'arbitrer autrement. Deux séances échangées en croix sont appariées dans
+   l'ordre de la semaine : le serveur n'invente pas « qui est allée où ».
+4. **La raison est DÉRIVÉE, jamais fabriquée.** Elle vient de la sélection de période
+   (`PeriodConstraintSelector`), avec la précédence du transcriber (`team_reduced` >
+   `venue_disabled` > `venue_closed`), et vaut **`null`** quand la sélection n'explique pas
+   l'absence (suppression manuelle, solve qui n'a pas replacé). Le front rend alors la ligne sans
+   étiquette — un trou avoué plutôt qu'une cause inventée.
+5. **FERMETURES seulement.** Une vacance réécrit sa grille de reprise : comparer ses séances au
+   socle dirait « tout a bougé », du bruit pur. Refus **422 nommé** sur tout autre type de période
+   et sur un plan SEASON ; **409** sur une version non `COMPLETED` ou un socle non pointé.
+   ⚠ Ce dernier 409 n'est pas du code mort bien que l'invariant « pas de génération sans socle en
+   vigueur » le rende impossible à l'étape Génération : cette route est une lecture appelable plus
+   tard, et rouvrir le socle ne détruit que les plans **futurs** — une période déjà commencée peut
+   donc se retrouver face à un socle sans version pointée.
+6. **Lecture ouverte au Membre** — pas de gate management (patron `CalendarEntryConflictsController`),
+   pas de `SeasonScopedWriteInterface` (rien n'est écrit : aucun `persist`, aucun `flush`).
+
+Le panneau front (`SocleDeviationPanel`) porte l'agrégat puis le détail ; il **s'ajoute** à
+`ToReplaceList` sans le remplacer (décision fondateur « les deux affichés pour le moment »), avec
+un titre distinct — « Écarts avec le planning de saison » vs « Séances non reprises du planning de
+saison » — parce que le neuf porte en plus les **déplacées**. NR bloquant
+`Security/SocleDeviationParityTest`. Zéro ligne moteur, `CONTRACT_VERSION` inchangé, aucune
+migration.
+
+**Le programme PR-1 → PR-5 est intégralement livré.** Il ferme aussi P2-43 (iv) « nommer les
+écarts ».
 
 ## Alternatives considérées
 
