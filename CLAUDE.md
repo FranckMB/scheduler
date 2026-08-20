@@ -147,6 +147,16 @@ Detail: `docs/testing/testing-strategy.md`.
 - **Grille de gymnase possédée par la période** (ADR-0002) : les slots d'une période sont une
   **copie** prise à la naissance du plan — jamais d'union avec la saison ; overrides sparse ;
   pin orphelin → 422 (`OrphanPinGuard`).
+- **Le socle commande les plans de période — deux invariants à connaître AVANT de cadrer** (ADR-0002) :
+  (1) **aucune génération de période sans socle EN VIGUEUR** — `SocleGuard` garde les 4 contrôleurs de
+  solve *et* `PeriodPlanTranscriber` (`Security/SeasonPlanInForceTest`) : si l'on est sur l'étape
+  Génération d'une période, le socle a **forcément** une version pointée, donc « et si le socle n'a
+  pas de version ? » est un cas IMPOSSIBLE, jamais un repli à écrire.
+  (2) **valider ou rouvrir le socle DÉTRUIT les plans de période futurs** — versions, plan et réglages
+  ancrés (grille copiée comprise) ; l'**entrée de calendrier survit** et la période retombe « à traiter ».
+  ⚠ Le critère est la **DATE** (`startDate > today`), PAS l'avancement : `findWithPlanNotStarted` ne
+  signifie pas « plan sans version » — un plan futur DÉJÀ généré est balayé lui aussi. Corollaire : la
+  grille copiée ne peut périmer en silence que pour une période **déjà commencée**.
 - **Contrat backend⇄engine** : schemas Pydantic ⇄ payload, version `engine/CONTRACT_VERSION`
   (**2.13**, un seul contrat pour les 3 endpoints `/generate` · `/place-matches` · `/validate-assignments`),
   **sync manuelle, pas de codegen** — gardé par `ContractSchemaTest` +
