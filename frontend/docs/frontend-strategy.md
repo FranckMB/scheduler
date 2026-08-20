@@ -1,6 +1,6 @@
 # Frontend Strategy — TDD, Stack Fixée & Anti-patterns
 
-Last verified @ 2026-08-19 (**rotation de fraîcheur**, 3ᵉ fichier de la passe — re-vérifié contre `frontend/package.json`, `vitest.config.ts` et `src/test/` : **QUATRE versions avaient dérivé** (`jsdom` 29→30, `lucide-react` 1.27→1.31, `@sentry/react` 10.68→10.70, `vite` 8.0→8.2). Correctif de RÈGLE plutôt que de cas : les tables portent désormais la **MAJEURE seule** — une mineure bouge à chaque lot Dependabot et personne ne repasse ici, alors que la majeure porte du sens et ne bouge qu'une fois par an. La version exacte vit dans `package.json` ; la table garde ce qu'il ne dit pas, le RÔLE de chaque outil. Le doc s'imposait « refléter ici en même temps que dans le lockfile » — le même aveu que le cas RLS, et il avait produit la même dérive) — *(historique des passes retiré le 2026-08-19, audit DOC-33 : 1 entrée empilée. Un stamp REMPLACE, il ne s'empile pas ; l'historique vit dans git : `git log -p --follow frontend/docs/frontend-strategy.md`)*
+Last verified @ 2026-08-21 (recalé — **§La passe de design ÉLARGIE aux décisions d'INTERACTION** (décision fondateur du jour) : la règle ne se déclenchait que sur l'apparence et bornait la passe aux écrans PUBLICS, deux limites falsifiées le jour même par le lot C — écran interne, défauts non visuels (rôle ARIA, absence d'échappatoire). Le garde-fou « le skill ne valide rien » est reformulé en « ne MESURE rien » : il ne rend ni ne calcule, mais il TRANCHE une décision contre son corpus de règles, ce que la passe du jour a démontré deux fois. Résultats des deux passes (PR #502 apparence, lot C interaction) consignés dans la section. Historique des passes : `git log -p --follow frontend/docs/frontend-strategy.md`.)
 
 > **Statut : le rebuild est LIVRÉ.** Les formulations « pour le rebuild » ci-dessous sont
 > historiques ; le document reste la référence vivante des **versions de la stack**, des
@@ -107,29 +107,52 @@ Le pack `ui-ux-pro-max` est installé (décision fondateur révisée le 2026-08-
 contexte permanent, ce sont des doctrines contradictoires à chaque session — c'est le motif qui
 avait fait écarter leur installation, et il tient toujours. Sa valeur est le **crible ponctuel**.
 
-**Règle : une passe de design se lance quand un écran change d'APPARENCE ou naît.**
+**Règle (élargie le 2026-08-21, décision fondateur) : une passe de design se lance quand un écran
+naît, change d'APPARENCE, **ou qu'une décision d'INTERACTION est arrêtée**.**
+
+L'énoncé d'origine ne parlait que d'apparence, et bornait la passe aux écrans **publics**. Les deux
+limites sont tombées le 2026-08-21 sur le lot C (l'écran de chargement bloquant) : écran **interne**
+au wizard, et défauts qui n'avaient rien de visuel — voir la ligne de résultats ci-dessous.
 
 | Cas | Passe design |
 |---|---|
-| Nouvel écran, nouvelle page publique, refonte visuelle | **oui** |
+| Nouvel écran, nouvelle page (publique **ou interne**), refonte visuelle | **oui** |
 | Changement de mise en page, de couleurs, de typographie | **oui** |
-| Correctif de comportement, test, renommage, refactor | non |
+| **Décision d'interaction** : ce qui bloque, ce qui attend, ce qui prend le focus, ce qui s'annonce à un lecteur d'écran, ce dont on peut sortir | **oui** |
+| Correctif de comportement sans décision d'écran, test, renommage, refactor | non |
 | Correction d'un bug UI **déjà identifié** | non — on corrige, et on pose un garde |
+
+⚑ **La passe se lance AVANT que la décision soit figée**, pas en relecture après coup : sur le lot C
+elle a renversé un choix déjà arbitré par le fondateur (voir ci-dessous). Passée après
+l'implémentation, elle aurait coûté une réécriture.
 
 **Dans un agent**, pas dans le fil principal : une passe sur plusieurs écrans consomme beaucoup
 de contexte et ne doit remonter que ses findings. Les agents `general-purpose` et `coder` portent
 l'outil `Skill` ; `Explore`, `planner` et les `cavecrew-*` ne l'ont pas.
 
-⚠ **Le skill ne VALIDE rien, et l'écrire ici évite de le croire.** Il lit du code et des
-décisions de design ; il ne rend aucune page et ne mesure rien. Mesuré le 2026-08-11 : sa base de
+⚠ **Le skill ne MESURE rien, et l'écrire ici évite de le croire.** Il lit du code et des décisions
+de design ; il ne rend aucune page, ne calcule aucun contraste, ne mesure aucun débordement. Ce
+qu'il sait faire, en revanche, c'est **confronter une décision à un corpus de règles** — et là il
+tranche (lot C, ci-dessous). Distinguer les deux est ce qui rend la règle utilisable : on
+l'interroge sur des CHOIX, jamais sur un RENDU. Mesuré le 2026-08-11 : sa base de
 99 règles UX ne contient **rien** sur la hauteur d'une modale — sa seule règle « modale » porte
 sur la confirmation d'un geste destructif, et sa ligne la plus proche dit « no horizontal
 scroll », l'axe opposé. **Il n'aurait pas attrapé le défaut de reflow du même jour.** Ce qui
 valide, ce sont les gardes : Vitest, l'e2e Playwright, les tests d'a11y.
 
-Ce qu'il apporte quand on le sollicite, mesuré sur la landing (PR #502) : 2 échecs WCAG de
-contraste invisibles aux gardes jsdom, 2 bugs de rendu, une rupture de ton, et 17 tirets
-cadratins de cadence IA.
+Ce qu'il apporte quand on le sollicite, mesuré deux fois :
+
+- **Landing, PR #502** (apparence) : 2 échecs WCAG de contraste invisibles aux gardes jsdom, 2 bugs
+  de rendu, une rupture de ton, et 17 tirets cadratins de cadence IA.
+- **Lot C, 2026-08-21** (interaction) : il a renversé **deux décisions déjà arbitrées**. (1) Le rôle
+  ARIA du voile : `role="alertdialog"` écarté au profit de `role="status"` + `aria-live="polite"` —
+  `alert`/`alertdialog` est réservé à ce qui exige une attention immédiate, vole le focus, et
+  PROMET un dialogue dont on peut sortir. (2) La règle « on ne relâche jamais les clics » écartée :
+  `progressive-loading` et `escape-routes` interdisent un blocage long sans issue — d'où l'abandon
+  explicite qui annule la requête, seule sortie qui ne rouvre pas le trou de concurrence. Il a aussi
+  listé sept manques (barème `z-index`, retour du focus, flou trompeur, contraste par thème, chemin
+  d'échec, chiffres tabulaires, `inert`). **Aucun de ces défauts n'était visuel** — c'est pourquoi la
+  règle ne parle plus seulement d'apparence.
 
 ---
 

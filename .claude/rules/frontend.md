@@ -45,8 +45,12 @@ paths:
   qu'en **Playwright**. Un test jsdom sur ces sujets est vert par construction — il n'atteste rien.
 - **TDD obligatoire**, RED prouvé avant l'implémentation
   ([`../../frontend/docs/frontend-strategy.md`](../../frontend/docs/frontend-strategy.md) §1).
-- **Passe de design `ui-ux-pro-max`** (dans un agent, bornée à l'apparence, elle ne valide rien)
-  dès qu'un écran **public** est créé ou remanié — même doc, règle du 2026-08-11.
+- **Passe de design `ui-ux-pro-max`** (dans un agent — elle ne MESURE rien, mais elle TRANCHE une
+  décision contre son corpus) dès qu'un écran naît, change d'apparence, **ou qu'une décision
+  d'INTERACTION est arrêtée** : ce qui bloque, ce qui attend, ce qui prend le focus, ce qui
+  s'annonce à un lecteur d'écran, ce dont on peut sortir. **Public ET interne.** Se lance **AVANT**
+  que la décision soit figée — même doc, règle du 2026-08-11 **élargie le 2026-08-21** (le lot C a
+  falsifié les deux bornes d'origine : écran interne, défauts non visuels).
 - **Muter la PROD, pas le mock** : un test qui n'exerce que son double ne garde rien.
   `readState`/`PeriodAnchor` pour react-query (« vacuité crédible » — `AGENTS.md` §readState).
 - **Tout tourne dans Docker**, frontend compris : les 12 cibles de `frontend/Makefile` passent par
