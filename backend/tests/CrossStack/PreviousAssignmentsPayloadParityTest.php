@@ -21,6 +21,7 @@ use App\MessageHandler\GenerateScheduleHandler;
 use App\Service\ClubGenerationLock;
 use App\Service\DiagnosticMessageBuilder;
 use App\Service\EngineClient;
+use App\Service\PeriodPlanTranscriber;
 use App\Service\RequestIdContext;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\ScheduleDiagnosticsRecorder;
@@ -203,6 +204,64 @@ final class PreviousAssignmentsPayloadParityTest extends KernelTestCase
         $runB = $this->runCapture($club->getId(), $targetB->getId(), $socle->getId());
         self::assertIsArray($runB['payload']);
         self::assertArrayNotHasKey('previousAssignments', $runB['payload'], 'une source hors lignée (le socle) est rejetée');
+    }
+
+    /**
+     * P2-44 PR-4 — un plan de PÉRIODE dont la dernière (et seule) COMPLETED est une V1 TRANSCRITE
+     * (marqueur produit {@see PeriodPlanTranscriber::TRANSCRIPTION_MARKER}) : le solve COMPLET qui
+     * suit émet SES placements en `previousAssignments`. Falsifié dans les DEUX sens :
+     *   (1) chaque copie de la V1 apparaît — parité stricte, muter une copie rend le test rouge ;
+     *   (2) une séance FILTRÉE « à replacer » (absente de la V1) et un slot du SOCLE ne fuient
+     *       JAMAIS — le précédent est de la lignée du plan de période, pas du socle (ADR-0002).
+     */
+    public function testTranscribedV1IsPreviousAndNeitherToReplaceNorSocleLeaks(): void
+    {
+        [$club, $season, $venueId, $teamIds] = $this->seed('pa-transcribed');
+
+        // Socle (plan SEASON, COMPLETED). Il porte DEUX séances : l'une (jour 1) sera copiée dans
+        // la V1 transcrite, l'autre (jour 6) est la séance « à replacer » que la transcription
+        // FILTRE. Aucune ne doit fuir DEPUIS le socle dans le précédent d'un overlay de période.
+        $seasonPlanId = $this->seasonPlanIdOf($season);
+        $socle = $this->schedule($club, $season, $seasonPlanId, ScheduleStatus::COMPLETED, 1);
+        $this->slot($socle, $teamIds[0], $venueId, 1, '18:00:00');
+        $this->slot($socle, $teamIds[1], $venueId, 6, '20:00:00'); // « à replacer » — filtrée à la transcription
+
+        // Période + son plan. Sa DERNIÈRE (et unique) COMPLETED est la V1 TRANSCRITE : elle ne porte
+        // QUE la séance copiée (jour 1, verrouillée HARD), jamais la « à replacer » (jour 6).
+        $entry = $this->holidayPeriod($club, $season);
+        $overlayPlanId = $this->planIdOf($entry);
+        $transcribedV1 = $this->schedule($club, $season, $overlayPlanId, ScheduleStatus::COMPLETED, 1);
+        $transcribedV1->setSolverVersion(PeriodPlanTranscriber::TRANSCRIPTION_MARKER);
+        $this->slot($transcribedV1, $teamIds[0], $venueId, 1, '18:00:00', LockLevel::HARD);
+        $this->em->flush();
+        // La source EST bien une V1 transcrite (marqueur produit) — c'est le scénario gardé.
+        self::assertSame(PeriodPlanTranscriber::TRANSCRIPTION_MARKER, $transcribedV1->getSolverVersion());
+
+        // Solve COMPLET sous le plan de PÉRIODE, SANS source explicite : le repli prend la dernière
+        // COMPLETED du plan = la V1 transcrite.
+        $target = $this->schedule($club, $season, $overlayPlanId, ScheduleStatus::PENDING, 2);
+        $run = $this->runCapture($club->getId(), $target->getId(), null);
+        $payload = $run['payload'];
+        self::assertIsArray($payload);
+        self::assertArrayHasKey('previousAssignments', $payload, 'la V1 transcrite (dernière COMPLETED) fournit le précédent');
+
+        // (1) parité stricte bidirectionnelle : émis == EXACTEMENT les placements de la V1 transcrite.
+        $expected = array_map($this->slotToBlock(...), $this->sourceSlots($transcribedV1->getId()));
+        self::assertEqualsCanonicalizing(
+            $expected,
+            $payload['previousAssignments'],
+            'le précédent émis == les placements de la V1 transcrite (falsifié dans les deux sens)',
+        );
+
+        // (2) la séance « à replacer » (jour 6) et le slot du socle qui la porte ne fuient JAMAIS.
+        $days = array_column($payload['previousAssignments'], 'dayOfWeek');
+        self::assertSame([1], $days, 'le précédent est exactement la copie de la V1 transcrite (jour 1)');
+        self::assertNotContains(6, $days, 'la séance « à replacer », filtrée à la transcription, n\'entre pas dans le précédent');
+        self::assertNotContains(
+            ['teamId' => $teamIds[1], 'venueId' => $venueId, 'dayOfWeek' => 6, 'startTime' => '20:00:00'],
+            $payload['previousAssignments'],
+            'un slot du socle ne fuit pas dans le précédent de l\'overlay',
+        );
     }
 
     protected function setUp(): void

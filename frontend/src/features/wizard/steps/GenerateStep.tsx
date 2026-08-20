@@ -1,10 +1,12 @@
 import { IN_FLIGHT_STATUSES } from "@/features/planning/lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
+import { HTTPError } from "ky";
 import { AlertTriangle, CopyPlus, Rocket } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import type { ToReplaceEntry } from "@/features/planning/lib/toReplaceReason";
 
+import { useMe } from "@/features/auth/queries";
 import { anchorIsWritable, useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
 import { isSeasonPlanType } from "@/features/planning/lib/versions";
 import { GenerationWaiting } from "@/features/planning/GenerationWaiting";
@@ -15,6 +17,7 @@ import { useCredits } from "@/shared/credits/useCredits";
 import { scheduleIdToReuse } from "../lib/retryTarget";
 import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
 import { errorMessage } from "@/shared/lib/errorMessage";
+import { isManagementRole } from "@/shared/lib/roles";
 
 import { useStepValidation } from "../lib/useStepValidation";
 import { useLaunchGeneration, useScheduleStatus, useTranscribeFromSocle } from "../queries";
@@ -42,6 +45,13 @@ export function GenerateStep() {
   const { mode, calendarEntryId } = useWizardStore();
   const periodMode = "period" === mode;
   const { data: periodEntry } = useCalendarEntry(periodMode ? calendarEntryId : null);
+  // P2-44 PR-4 — l'auto-transcription ne vise QUE les fermetures (arbitrage fondateur 2026-08-20 :
+  // une vacance reste un planning TOUT nouveau, régénéré de zéro — le geste y demeure MANUEL).
+  const isClosurePeriod = "closure" === periodEntry?.periodType;
+  // Miroir d'AFFICHAGE (le serveur reste seul juge — SEC-07) : on ne déclenche pas une écriture
+  // vouée au 403 chez un Membre. Parité tenue par `ManagementRolesMatchBackendTest`.
+  const { data: me } = useMe();
+  const canManage = isManagementRole(me?.role);
   // ADR-0002 C4 : une version se crée SOUS le plan de sa période — résolu depuis l'entrée.
   const periodAnchor = usePeriodAnchor(periodMode ? calendarEntryId : null);
   const periodPlanId = periodAnchor.planId;
@@ -203,6 +213,40 @@ export function GenerateStep() {
       setTranscribeReason(await errorMessage(error));
     }
   };
+
+  // P2-44 PR-4 (arbitrage fondateur 2026-08-20) — sur une FERMETURE vierge, la V1 transcrite doit
+  // DÉJÀ être là, prête au déplacement manuel : on la déclenche à l'arrivée sur l'étape (mutation
+  // FRONT, jamais un GET qui écrit). Ref one-shot PAR PLAN : StrictMode et re-rendus ne rejouent
+  // pas. Le 409 « déjà versionné » (remontage / second onglet / StrictMode) est BÉNIN — le serveur
+  // est l'autorité (garde relue sous verrou) : on réconcilie la liste, sans bandeau rouge. Les
+  // autres échecs gardent le rendu d'erreur (`transcribeReason`), comme le geste manuel.
+  const autoTranscribedPlan = useRef<string | null>(null);
+  useEffect(() => {
+    if (!periodMode || !isClosurePeriod || schedulesLoading || 0 !== periodPlanVersions.length || null === periodPlanId || !periodAnchorReady || !canManage) {
+      return;
+    }
+    if (autoTranscribedPlan.current === periodPlanId) {
+      return;
+    }
+    autoTranscribedPlan.current = periodPlanId;
+    const planId = periodPlanId;
+    void (async () => {
+      setTranscribeReason(null);
+      try {
+        const result = await transcribe.mutateAsync(planId);
+        setToReplace(result.toReplace);
+      } catch (error) {
+        if (error instanceof HTTPError && 409 === error.response.status) {
+          void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+          return;
+        }
+        setTranscribeReason(await errorMessage(error));
+      }
+    })();
+    // `transcribe`/`queryClient` sont stables (react-query) ; les dépendances utiles sont les
+    // conditions de déclenchement — l'effet ne doit pas rejouer sur l'identité des hooks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodMode, isClosurePeriod, schedulesLoading, periodPlanVersions.length, periodPlanId, periodAnchorReady, canManage]);
 
   if (showPlanning) {
     // bug fondateur 2026-08-19 — en période, on PORTE l'écran sur le plan de la période :
