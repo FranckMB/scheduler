@@ -1,15 +1,13 @@
 # Accueil « cockpit temporel » — mise au clair (préliminaire calendriers secondaires)
 
-Last verified @ 2026-08-19 (recalé — **suite de la journée de test réel BCCL, lot A+B5** : B5,
-l'horizon des vacances au radar passe de 60 à 30 j (`SCHOOL_HOLIDAY_HORIZON_DAYS`, décision
-fondateur du jour) ; A3, la carte de couverture d'une fermeture (§5.1, §5bis) ne compte plus que
-les semaines AJUSTABLES (« 0/4 ») — les semaines gouvernées par des vacances s'affichent grisées
-avec leur raison, jamais cliquables ; A2, le libellé de segment (`segmentLabel`) omet l'année
-quand la fenêtre est dans la saison affichée — re-vérifié contre
-`frontend/src/features/cockpit/RadarPanel.tsx`, `frontend/src/features/cockpit/lib/date.ts`,
-`frontend/src/features/cockpit/lib/useWeekAdapt.ts`, `frontend/src/features/cockpit/WeekPickerDialog.tsx`,
-`frontend/src/features/cockpit/DayDialog.tsx`. L'historique des passes précédentes (P2-36 à P2-43)
-vit dans `git log -p --follow` ce fichier et ses traces datées dans `etat-des-lieux.md` §3.
+Last verified @ 2026-08-20 (recalé — le **§6bis Gymnases** cessait de renvoyer vers une « question
+ouverte » qui était en fait TRANCHÉE : la grille d'un gymnase entièrement fermé reste modifiable
+(décision fondateur du 2026-08-18), désormais consignée en décision FERMÉE dans
+`etat-des-lieux.md` §2 et retirée de la roadmap. Le COMPORTEMENT décrit, lui, est re-vérifié et
+inchangé : le `<fieldset disabled>` de la grille ne gèle que sur le mode `DISABLED` de l'override,
+jamais sur une fermeture (`frontend/src/features/wizard/steps/PeriodStructure.tsx`). L'historique
+des passes précédentes vit dans `git log -p --follow` ce fichier et ses traces datées dans
+`etat-des-lieux.md` §3.
 
 > **Statut** : **approche arrêtée** (décisions tranchées §9) — **livrée** ; cf. [`etat-des-lieux.md`](etat-des-lieux.md) §1.2.
 > **Pas un plan** — pas de tâches, pas d'effort chiffré ; l'exécution se planifiera palier par palier (§8).
@@ -655,8 +653,9 @@ l'override, jamais sur une fermeture (`PeriodStructure.tsx`). Geler la grille au
 restriction que le SERVEUR n'impose pas (seule la réservation reste refusée en 422, au grain jour
 EFFECTIF — le mode override, lui, est accepté depuis la décision fondateur du 2026-08-18 ; jamais un
 geste de grille) — le front serait devenu plus strict que le serveur, ce que la règle d'or interdit.
-L'écran le dit : « Vous pouvez rouvrir des jours ci-dessous, ou le préparer pour la suite. » Si ce
-point mérite d'être tranché autrement, c'est une question ouverte, `roadmap.md` §Dette. |
+L'écran le dit : « Vous pouvez rouvrir des jours ci-dessous, ou le préparer pour la suite. » ⚑ **Ce
+point est TRANCHÉ, pas ouvert** : décision fondateur du 2026-08-18 — la grille reste modifiable, ne pas
+rouvrir sans besoin terrain (`etat-des-lieux.md` §2). |
 | Coachs | **Hérités, lecture seule** (lien équipe↔coach préservé) |
 | **Contraintes** | **Active.** Pré-remplie avec **l'exception** (ex. De Barros indispo sur la fenêtre) ; le gestionnaire **ajoute les contraintes propres à la période** (« du coup U13 passe le mercredi ») et **hérite les contraintes permanentes du socle**, chacune **cochable/décochable** pour la fenêtre. DIFF `ConstraintPeriodOverride` épars : une ligne n'existe que pour une **déviation** du défaut (le socle et le `isActive` propre de la contrainte ne sont **jamais** touchés). **Défaut selon le type de période :** <br>• **Fermeture** (closure) → **tout gardé** (on décoche ce qui gêne). <br>• **Reprise** (holiday) → défaut **intelligent qui suit les équipes** : contrainte **club/coach** gardée, contrainte **d'équipe** gardée seulement si l'équipe reprend (décochée si l'équipe est en pause), contrainte **de gymnase** décochée (pas de créneaux socle en reprise). Calculé (pas de seed persisté), miroir back/front. |
 | Récap | Résumé de la **période** (fenêtre + exceptions + contraintes) |
