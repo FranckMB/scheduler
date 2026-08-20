@@ -1,6 +1,6 @@
 # Vocabulaire des contraintes — ce que l'engine comprend
 
-Last verified @ 2026-08-19 (**premier stamp** — ce doc d'alignement n'en portait AUCUN, il était donc invérifiable par date alors qu'il se déclare « source de vérité » du vocabulaire moteur (audit DOC-31). Vérifié : les **dix familles** du tableau ont toutes leur implémentation dans `engine/app/solver/` — `VENUE_AT_MOST_ONE`, `TEAM_NO_OVERLAP`, `COACH_NO_OVERLAP`, `COACH_PLAYER_NO_OVERLAP`, `MIN_SESSIONS`, `COACH_REST_DAY`, `SALARIE_DISTRIBUTION`, `MAX_CONSECUTIVE_SESSIONS`, `ONE_SESSION_PER_DAY`, `AGE_ASCENDING` (fonctions `add_*_constraints`). ⚠ Fausse alerte évitée en vérifiant : un grep des libellés EN MAJUSCULES rend 0 pour cinq d'entre elles — le code les nomme en snake_case. Chercher la mauvaise forme et conclure au mensonge aurait été plus rapide que juste.)
+Last verified @ 2026-08-20 (rotation de fraîcheur — **une contradiction interne CORRIGÉE** : la section « Ce que l'engine NE comprend PAS » déclarait encore `max_consecutive_days` « non modélisé » alors que le tableau des règles implicites du même document le documente comme livré, et que `add_max_consecutive_days_constraints` existe (`engine/app/solver/constraints.py:1309`) depuis P2-42, fusionné le 2026-08-19 — le doc mentait dans une moitié et disait vrai dans l'autre. Re-vérifié aussi : les familles implicites du tableau ont toutes leur `add_*` dans `engine/app/solver/constraints.py` — le tableau en compte **onze** avec `MAX_CONSECUTIVE_DAYS`, le stamp précédent n'en annonçait que dix. ⚠ Piège conservé du stamp précédent : un grep des libellés EN MAJUSCULES rend 0 pour plusieurs d'entre elles, le code les nomme en snake_case — chercher la mauvaise forme et conclure au mensonge serait plus rapide que juste.)
 
 > **But** : lister **exhaustivement** tout le vocabulaire (familles + clés de `config`) que le
 > solveur CP-SAT (`engine/app/solver`) sait **parser et appliquer**. Source de vérité côté engine.
@@ -181,6 +181,10 @@ verrou avec les contraintes **saisies** et émet un `constraint_not_honored` de 
 
 ## Ce que l'engine NE comprend PAS (à ce jour)
 
-- **`max_consecutive_days`** / « pas 3 jours d'affilée » (contrainte **dure** d'écart) — non modélisé ; seul l'**espacement soft** (`spacing`, ci-dessus) et le repos post-match existent.
+*Rien à ce jour.* Le seul manque que cette section listait — « pas N jours d'affilée » — **est
+modélisé depuis P2-42** (`add_max_consecutive_days_constraints`,
+`engine/app/solver/constraints.py:1309`, réglable HARD/PREFERRED/OFF, défaut 3 jours, bornes 2-5) :
+voir la ligne `MAX_CONSECUTIVE_DAYS` du tableau des règles implicites ci-dessus. La section reste
+en place — un nouveau manque constaté s'y écrit, il ne se dilue pas dans le reste du document.
 
 **Verrous** : `engine/tests/semantic/constraint_matrix.py` (matrice UI↔engine) + `docs/architecture/constraint-matrix.md` (jumeau humain de l'**offre du wizard**). Ce document-ci couvre le vocabulaire **engine complet**, y compris ce que le wizard n'émet pas encore.

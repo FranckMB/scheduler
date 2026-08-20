@@ -1,6 +1,15 @@
-Last verified @ 2026-08-20 (régénéré POST-rebase sur le code fusionné — l'addition de P2-44 PR-3 (+1 `POST /api/schedules/{id}/fill`) ET le retrait P4-103 (−2 `/api/club_users*`, mergé en parallèle) : **167 paths** — chaque branche avait régénéré de son côté, seule la régénération sur l'arbre FUSIONNÉ dit vrai)
+Last verified @ 2026-08-20 (régénéré après `docker compose restart php-fpm` — piège opcache, `backend/AGENTS.md` §17 — pour la nouvelle route de lecture `GET /api/schedules/{id}/socle-deviation` (P2-44 PR-5) : **167 → 168 paths**, addition PURE, aucun path retiré, aucun schéma existant modifié)
 
 Changements récents :
+- **P2-44 PR-5 — les écarts NOMMÉS vs le socle (2026-08-20)** : **+1 path** —
+  `GET /api/schedules/{id}/socle-deviation` (200 : `socleScheduleId` + `moved[]` {teamId, from, to}
+  + `unplaced[]` {teamId, dayOfWeek, startTime, venueId, reason **nullable**} ; 422 plan SEASON ou
+  période qui n'est pas une FERMETURE ; 409 version non COMPLETED ou socle non pointé ; 404/403
+  tenant). 167 → **168 paths**. ⚑ `reason` est **nullable par conception** — la sélection de période
+  n'explique pas toujours une absence (suppression manuelle, solve qui n'a pas replacé), et le
+  serveur préfère un trou avoué à une cause fabriquée : un client qui type ce champ non-nullable
+  code faux. Route de LECTURE (aucune écriture), **ouverte au Membre** — pas de gate management.
+  Contrat backend⇄engine **inchangé** (`CONTRACT_VERSION` 2.13, zéro appel moteur).
 - **P2-44 PR-3 — le comblement (2026-08-20)** : **+1 path** —
   `POST /api/schedules/{id}/fill` (202 : V+1 de la version de période mise en file, les placements
   de la source épinglés HARD dans le payload seul ; 409 pas une version de période / version en
