@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { HTTPError } from "ky";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StubSchedule = { id: string; status: string; createdAt: string; planType: string | null; schedulePlanId: string | null };
@@ -13,6 +14,12 @@ const h = {
   mode: "season" as "season" | "period",
   entryId: null as string | null,
   planId: null as string | null,
+  // P2-44 PR-4 — le TYPE de la période (l'auto-transcription ne vise QUE les fermetures) et le
+  // rôle courant (miroir d'affichage : une écriture vouée au 403 chez un Membre ne part pas).
+  entryPeriodType: undefined as string | undefined,
+  role: "admin" as string,
+  // P2-44 PR-4 — la liste des versions en vol (l'auto-transcription attend qu'elle soit chargée).
+  schedulesLoading: false,
   // La liste des versions (bug fondateur 2026-08-19 — `showPlanning` en dérive en période).
   schedules: [] as StubSchedule[],
   setSelected: vi.fn(),
@@ -23,14 +30,14 @@ const h = {
   transcribe: vi.fn().mockResolvedValue({ id: "sched-t", versionNumber: 1, copiedCount: 5, toReplace: [{ teamId: "t1", dayOfWeek: 3, startTime: "18:00:00", venueId: "v1", reason: "venue_closed" }] }),
 };
 
-vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { club: { name: "BCCL" } } }) }));
+vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { club: { name: "BCCL" }, role: h.role } }) }));
 vi.mock("@/features/cockpit/queries", () => ({
-  useCalendarEntry: () => ({ data: null === h.entryId ? null : { id: h.entryId } }),
+  useCalendarEntry: () => ({ data: null === h.entryId ? null : { id: h.entryId, periodType: h.entryPeriodType } }),
   usePeriodAnchor: () => ("period" === h.mode && null !== h.planId ? { state: "period", planId: h.planId } : { state: "base", planId: null }),
   anchorIsWritable: () => true,
 }));
 vi.mock("@/features/planning/queries", () => ({
-  useSchedules: () => ({ data: h.schedules, isLoading: false }),
+  useSchedules: () => ({ data: h.schedules, isLoading: h.schedulesLoading }),
   useDiagnostics: () => ({ data: h.diagnostics, isLoading: h.diagLoading }),
 }));
 vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: { setSelectedScheduleId: (id: string | null) => void }) => unknown) => sel({ setSelectedScheduleId: h.setSelected }) }));
@@ -75,6 +82,9 @@ beforeEach(() => {
   h.mode = "season";
   h.entryId = null;
   h.planId = null;
+  h.entryPeriodType = undefined;
+  h.role = "admin";
+  h.schedulesLoading = false;
   h.schedules = [];
   h.setSelected.mockClear();
   h.launch.mockClear();
@@ -346,5 +356,77 @@ describe("GenerateStep — transcription depuis le socle (P2-44)", () => {
 
     await user.click(screen.getByRole("button", { name: /Partir du planning de saison/i }));
     expect(await screen.findByText("Choisissez d'abord un planning de saison en vigueur.")).toBeInTheDocument();
+  });
+});
+
+/**
+ * P2-44 PR-4 (arbitrage fondateur 2026-08-20) — sur l'étape Génération d'un plan de FERMETURE
+ * (`closure`) VIERGE, le planning de saison transcrit doit DÉJÀ être là, sans clic : la
+ * transcription part AUTOMATIQUEMENT à l'arrivée (mutation front, jamais un GET qui écrit).
+ *
+ * Arbitrages FIGÉS gardés ici :
+ *  · auto pour les FERMETURES seulement — les VACANCES (`holiday`) gardent le geste MANUEL ;
+ *  · rôle Membre : rien ne part (miroir d'affichage, on n'envoie pas une écriture vouée au 403) ;
+ *  · une version déjà présente ⇒ pas de tir (le plan n'est plus vierge) ;
+ *  · liste en vol ⇒ on attend (pas de tir sur une vacuité crédible) ;
+ *  · le 409 « déjà versionné » (StrictMode / remontage / second onglet) est BÉNIN : aucun bandeau
+ *    rouge — le serveur est l'autorité, la liste se réconcilie.
+ */
+describe("GenerateStep — auto-transcription des FERMETURES vierges (P2-44 PR-4)", () => {
+  beforeEach(() => {
+    h.mode = "period";
+    h.entryId = "entry-1";
+    h.planId = "plan-p";
+    h.entryPeriodType = "closure";
+    h.role = "admin";
+    h.schedules = [];
+  });
+
+  it("fermeture vierge, gestionnaire : transcrit AUTOMATIQUEMENT à l'arrivée (sans clic), une seule fois", async () => {
+    renderStep();
+    await waitFor(() => expect(h.transcribe).toHaveBeenCalledWith("plan-p"));
+    // Ref one-shot par plan : un seul tir, jamais une rafale à chaque re-rendu.
+    expect(h.transcribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("VACANCE vierge : ne transcrit PAS (le geste reste MANUEL) — le bouton demeure", async () => {
+    h.entryPeriodType = "holiday";
+    renderStep();
+    // Laisser les effets s'appliquer : rien ne doit partir.
+    await Promise.resolve();
+    expect(h.transcribe).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Partir du planning de saison/i })).toBeInTheDocument();
+  });
+
+  it("fermeture DÉJÀ versionnée : ne transcrit pas (le plan n'est plus vierge)", async () => {
+    h.schedules = [{ id: "ov-1", status: "COMPLETED", createdAt: "2026-09-10T00:00:00Z", planType: "CLOSURE", schedulePlanId: "plan-p" }];
+    renderStep();
+    await Promise.resolve();
+    expect(h.transcribe).not.toHaveBeenCalled();
+  });
+
+  it("fermeture vierge, rôle MEMBRE : ne transcrit pas (miroir d'affichage, on n'envoie pas un 403)", async () => {
+    h.role = "member";
+    renderStep();
+    await Promise.resolve();
+    expect(h.transcribe).not.toHaveBeenCalled();
+  });
+
+  it("liste des versions EN VOL : ne transcrit pas tant que la donnée charge", async () => {
+    h.schedulesLoading = true;
+    renderStep();
+    await Promise.resolve();
+    expect(h.transcribe).not.toHaveBeenCalled();
+  });
+
+  it("409 « déjà versionné » : BÉNIN — aucun bandeau d'erreur affiché", async () => {
+    h.transcribe.mockRejectedValueOnce(
+      new HTTPError(new Response("{}", { status: 409 }), new Request("http://t/api/schedule_plans/plan-p/transcribe-from-socle"), {} as never),
+    );
+    renderStep();
+    await waitFor(() => expect(h.transcribe).toHaveBeenCalled());
+    // Le rendu d'erreur de la transcription (bandeau rouge `transcribeReason`) ne s'affiche pas.
+    expect(screen.queryByText(/Une erreur est survenue/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Conflit/)).not.toBeInTheDocument();
   });
 });

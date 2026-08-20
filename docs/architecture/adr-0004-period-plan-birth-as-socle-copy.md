@@ -2,7 +2,9 @@
 
 - **Status**: accepted — Date: 2026-08-19 (besoin fondateur, plan validé en session)
 - Programme **P2-44** ; PR-1 (ce document + le service) livrée 2026-08-19 ; PR-2 (surfaçage écran)
-  livrée 2026-08-19 ; PR-3 (le comblement) livrée 2026-08-20.
+  livrée 2026-08-19 ; PR-3 (le comblement) livrée 2026-08-20 ; PR-4 (la transcription devient le
+  DÉFAUT sur une fermeture) livrée 2026-08-20 — remplace la description initiale de PR-4, voir
+  §Programme.
 
 ## Contexte
 
@@ -104,7 +106,7 @@ mécanisme de détection de dérive socle↔copie n'est nécessaire pour ce lot.
   rôle+tenant). Axes structurants touchés (CLAUDE.md §7.1) : *generation pipeline* et *planning
   lifecycle*.
 
-## Programme (P2-44) — ce que PR-1 à PR-3 ne couvrent pas
+## Programme (P2-44) — ce que PR-1 à PR-4 ne couvrent pas
 
 PR-1 a livré le service et la route seuls, sans écran. **PR-2 (livrée 2026-08-19)** a livré le
 surfaçage front : le bouton « Partir du planning de saison » sur un plan de période vierge
@@ -131,12 +133,51 @@ NR sémantique (groupe `contract`, job `engine-semantics`) :
 INTACTS et que les orphelines sont placées, avec un vrai solveur. Détail :
 `backend/docs/backend-inventory.md` §3, `frontend/docs/frontend-spec.md` §6.7 bis.
 
-Restent :
+**PR-4 (livrée 2026-08-20) — la transcription devient le DÉFAUT sur une fermeture, remplace la
+description initiale de PR-4.** Le besoin cadré n'était pas « injecter le socle transcrit dans
+`previousAssignments` d'un solve complet volontaire » (ce mécanisme est en réalité déjà couvert
+par le repli générique de `GenerateScheduleHandler::resolvePreviousAssignmentSlots` — une V1
+transcrite `COMPLETED` est une version du plan comme une autre, elle EST déjà éligible à la
+dernière-COMPLETED du plan) mais un besoin d'écran, dans les mots du fondateur : « voir ce que ça
+lui coûte d'avoir un plan sans le gymnase, et il va l'adapter en conservant au maximum les
+créneaux tels quels ». Décisions tranchées (fondateur, session de cadrage 2026-08-20) :
 
-- **PR-4** — le socle transcrit entre en `previousAssignments` du solve complet quand le
-  gestionnaire choisit malgré tout de générer une période (voulue, pas accidentelle) — cohérence
-  avec le mécanisme de stabilité déjà en place pour les régénérations de saison (`GenerateScheduleHandler::resolvePreviousAssignmentSlots`,
-  contrat 2.11).
+1. **Défaut = CLOSURE seulement.** À l'arrivée sur l'étape Génération d'un plan de période de type
+   FERMETURE (`CalendarEntryPeriodType::CLOSURE`) **sans aucune version**, la transcription se
+   déclenche automatiquement — le planning de saison amputé des contraintes de la période est déjà
+   à l'écran, prêt au déplacement manuel, sans que le gestionnaire ait à cliquer le bouton manuel
+   de PR-2. Les trois issues restent atteignables : déplacer à la main, combler (PR-3), tout
+   remanier (solve complet).
+2. **HOLIDAY exclu, à l'octet près.** Une reprise de vacances garde le comportement PR-2/PR-3
+   inchangé (le bouton manuel « Partir du planning de saison », rien d'automatique). Deux raisons :
+   décision de sens (« les vacances sont TOTALEMENT différentes d'un incident de saison, c'est un
+   planning TOUT nouveau, régénérer de zéro y est accepté, je ne veux pas de copie du socle ici »)
+   et raison **technique** établie au cadrage : une reprise dont la grille est réécrite (créneaux
+   déplacés en journée) verrait les séances du soir du socle copiées en verrous HARD **hors
+   grille** — `OrphanPinGuard::firstOrphanMessage` (appelé par `GenerateScheduleController` ET
+   `FillPeriodPlanController`) refuserait alors **422 « Régénérer » ET « Combler »** ; l'auto-
+   transcription y enfermerait le gestionnaire au lieu de l'aider.
+3. **Mutation FRONT, jamais un GET qui écrit.** Le déclencheur vit dans `GenerateStep.tsx` (effet
+   à l'arrivée sur l'étape, ref one-shot par plan — StrictMode/remontage ne rejouent pas), bornée
+   au rôle de gestion (miroir d'affichage, le serveur reste seul juge). Le 409 « plan déjà
+   versionné » d'un double appel (StrictMode, remontage, second onglet) est traité comme
+   **bénin** : le serveur relit sa garde sous verrou, le front réconcilie la liste des versions
+   sans bandeau rouge.
+4. **Zéro retrait.** Le bouton manuel de PR-2 n'est ni supprimé ni relibellé — sa condition
+   d'affichage existante (`0 === periodPlanVersions.length`) le fait simplement disparaître de
+   lui-même dès qu'une V1 existe (transcrite ou non) ; il reste le seul geste sur une reprise de
+   vacances.
+
+**Zéro changement `backend/src/`, zéro ligne moteur, `CONTRACT_VERSION` inchangé.** NR : le
+mécanisme générique « une V1 transcrite est une COMPLETED comme une autre, donc éligible au
+repli `previousAssignments` » n'était pas explicitement gardé — `CrossStack/PreviousAssignmentsPayloadParityTest`
+(fichier déjà step de `blocking-tests`) gagne le cas dédié : un solve complet dont la dernière
+COMPLETED du plan de période est une V1 transcrite émet SES placements en `previousAssignments`,
+falsifié dans les deux sens (muter une copie rougit ; ni la séance « à replacer » filtrée à la
+transcription ni un créneau du socle ne fuient).
+
+Reste :
+
 - **PR-5** — écarts nommés : après génération (transcrite ou solvée), l'adaptation raconte ce qui a
   changé vs le socle (« Matéo fermé : N séances déplacées, équipes réduites… ») — recoupe P2-43 (iv).
 
