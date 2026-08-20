@@ -478,6 +478,22 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
   // conditionné au plan résolu : on ne propose pas un geste dont on n'a pas la cible.
   const displayedPlanName = displayedPlan?.name ?? headerSchedule?.name ?? null;
   const isGenerating = null !== selectedSchedule && IN_FLIGHT.includes(selectedSchedule.status);
+  // Lot C (défaut terrain fondateur 2026-08-21) — l'écran de génération s'affiche dès qu'une
+  // version DU PLAN EN PORTÉE est en vol, en saison comme en période. `isGenerating` ne dérive
+  // que de la SÉLECTION : au lancement, la nouvelle version PENDING naît alors que la sélection
+  // embarquée pointe encore l'ancienne COMPLETED (ou rien, le temps que la liste se rafraîchisse)
+  // — ce trou tombait sinon sur le petit voile « Chargement des créneaux… » (branche `slotsBusy`),
+  // au lieu du MÊME écran qu'en saison. La portée est une VRAIE borne : en portée période, les
+  // versions de CE plan (`schedulePlanId`) seul ; sinon, celles de la saison — une version en vol
+  // d'un autre plan (autre période, ou la saison quand on est en portée période) NE la déclenche PAS.
+  // DÉCISION FONDATEUR 2026-08-21 (assumée) : pendant une régénération, un gestionnaire qui
+  // sélectionne manuellement une ancienne version COMPLETED voit l'écran d'attente jusqu'à la fin
+  // du vol — c'est la lettre de la règle (« une version du plan en portée est en vol »).
+  const scopeInFlight = useMemo(
+    () => schedules.some((s) => (scoped ? s.schedulePlanId === scopePlanId : isSeasonPlanType(s.planType)) && IN_FLIGHT.includes(s.status)),
+    [schedules, scoped, scopePlanId],
+  );
+  const showGenerationWaiting = isGenerating || scopeInFlight;
   // Read-only = its plan points at it: this version IS the calendar in force.
   const isReadOnly = true === selectedSchedule?.isChosen;
   const regenerateDisabled =
@@ -1401,7 +1417,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
             </p>
           ) : null}
 
-          {isGenerating ? (
+          {showGenerationWaiting ? (
             <GenerationWaiting />
           ) : 0 === slots.length ? (
             isFailed ? (

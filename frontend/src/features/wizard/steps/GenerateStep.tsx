@@ -161,6 +161,14 @@ export function GenerateStep() {
   const failureExplanations = (failedDiagnostics.data ?? []).filter((d) => "ERROR" === d.severity);
   const failureSuggestions = failureExplanations.flatMap((d) => (Array.isArray(d.suggestions) ? d.suggestions.filter((x): x is string => "string" === typeof x) : []));
   const waiting = !showPlanning && (launching || (null !== scheduleId && "FAILED" !== status && !timedOut));
+  // Lot C (défaut terrain fondateur 2026-08-21) — la fenêtre LOCALE que seul GenerateStep connaît :
+  // entre le POST et le premier refetch de la liste, la version fraîche n'est pas encore dans
+  // `schedules`, donc la portée de PlanningPage ne peut pas encore la voir. Or `showPlanning` inclut
+  // `localActive` (le poll local voit le run en vol) : sans garde, on délègue à l'embarqué, qui
+  // flashe alors son voile « Chargement des créneaux… ». On rend l'écran d'attente ICI pendant ce
+  // trou ; passé le refetch, PlanningPage prend le relais via sa règle de portée (`scopeInFlight`).
+  const localGenerationInFlight = null !== scheduleId && null !== status && IN_FLIGHT.includes(status) && !schedules.some((s) => s.id === scheduleId);
+  const embeddedWaiting = launching || localGenerationInFlight;
 
   const start = async () => {
     // Garde anti-course : en mode période, ne jamais lancer sans le plan résolu — sinon le POST
@@ -249,6 +257,11 @@ export function GenerateStep() {
   }, [periodMode, isClosurePeriod, schedulesLoading, periodPlanVersions.length, periodPlanId, periodAnchorReady, canManage]);
 
   if (showPlanning) {
+    // Lot C — pendant la fenêtre locale (POST→premier refetch), la version fraîche n'est pas encore
+    // dans la liste : l'écran d'attente prime sur l'embarqué, qui ne pourrait que flasher son voile.
+    if (embeddedWaiting) {
+      return <GenerationWaiting />;
+    }
     // bug fondateur 2026-08-19 — en période, on PORTE l'écran sur le plan de la période :
     // il n'atterrit plus sur le plan de saison et n'affiche que les versions de la période.
     // En saison, `scopePlanId` est nul → comportement inchangé.

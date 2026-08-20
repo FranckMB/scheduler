@@ -47,7 +47,7 @@ vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: { setS
 // Le stub RECORD aussi le nombre d'entrées « à replacer » reçues (data-toreplace) : c'est le
 // CÂBLAGE GenerateStep→PlanningPage de la transcription (P2-44) qu'on épingle ici.
 vi.mock("@/features/planning/PlanningPage", () => ({ PlanningPage: (props: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null; toReplace?: unknown[] | null }) => <div data-testid="planning" data-scope={props.scopePlanId ?? ""} data-entry={props.calendarEntryId ?? ""} data-toreplace={String((props.toReplace ?? []).length)} /> }));
-vi.mock("@/features/planning/GenerationWaiting", () => ({ GenerationWaiting: () => <div /> }));
+vi.mock("@/features/planning/GenerationWaiting", () => ({ GenerationWaiting: () => <div data-testid="generation-waiting" /> }));
 // P2-44 — errorMessage mocké pour un motif SERVI observable (le 409 socle non pointé s'affiche).
 vi.mock("@/shared/lib/errorMessage", () => ({ errorMessage: async (e: unknown) => (e as { reason?: string }).reason ?? "Une erreur est survenue" }));
 vi.mock("../lib/useStepValidation", () => ({ useStepValidation: () => ({ errors: [], warnings: [], pending: false }) }));
@@ -428,5 +428,60 @@ describe("GenerateStep — auto-transcription des FERMETURES vierges (P2-44 PR-4
     // Le rendu d'erreur de la transcription (bandeau rouge `transcribeReason`) ne s'affiche pas.
     expect(screen.queryByText(/Une erreur est survenue/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Conflit/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Lot C, PR-1 (défaut terrain fondateur 2026-08-21) — « quand je lance une génération sur un
+ * overlay, un petit chargement mouline au lieu du MÊME écran qu'en saison ».
+ *
+ * Cause 2 : `showPlanning` inclut `localActive` (:99), donc dès que le poll local voit le run EN
+ * VOL — mais AVANT que la liste des versions ne se rafraîchisse (la version fraîche pas encore
+ * dedans) —, `showPlanning` gagne et GenerateStep délègue à l'embarqué, qui ne peut pas encore
+ * voir la version (elle n'est pas dans sa portée) et flashe son voile « Chargement des créneaux… ».
+ *
+ * La règle de portée vit dans PlanningPage (`scopeInFlight`, gardée dans PlanningPage.test) ;
+ * GenerateStep n'ajoute QUE la fenêtre LOCALE que lui seul connaît (POST→premier refetch).
+ */
+describe("GenerateStep — fenêtre locale POST→refetch : l'écran d'attente prime sur l'embarqué (lot C)", () => {
+  const overlay = (id: string, status: string, createdAt: string): StubSchedule => ({ id, status, createdAt, planType: "CLOSURE", schedulePlanId: "plan-p" });
+
+  beforeEach(() => {
+    h.mode = "period";
+    h.entryId = "entry-1";
+    h.planId = "plan-p";
+  });
+
+  it("version fraîche EN VOL pas encore dans la liste → l'écran d'attente, jamais l'embarqué", async () => {
+    // La liste ne contient pas encore la version fraîche (le refetch n'a pas eu lieu).
+    h.schedules = [];
+    const user = userEvent.setup();
+    const { rerender } = renderStep();
+
+    // Au repos : le lanceur. Le clic pose le scheduleId LOCAL (launch → "sched-1").
+    await user.click(screen.getByRole("button", { name: /Générer le planning de période/i }));
+
+    // Le poll local voit le run EN VOL — la version n'est TOUJOURS pas dans la liste.
+    // RED avant le fix : `localActive` fait gagner `showPlanning` → l'embarqué (data-testid
+    // "planning") s'affiche, l'écran d'attente jamais.
+    h.status = "GENERATING";
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <GenerateStep />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId("generation-waiting")).toBeInTheDocument();
+    expect(screen.queryByTestId("planning")).not.toBeInTheDocument();
+  });
+
+  it("NR : de retour avec 2 versions COMPLETED de la période (aucun run local) → l'embarqué, pas l'attente", () => {
+    // Le correctif du 2026-08-19 : deux COMPLETED affichent le planning. La fenêtre locale ne
+    // doit pas le faire régresser (aucun scheduleId local, aucun statut en vol).
+    h.schedules = [overlay("ov-1", "COMPLETED", "2026-09-10T00:00:00Z"), overlay("ov-2", "COMPLETED", "2026-09-11T00:00:00Z")];
+    renderStep();
+
+    expect(screen.getByTestId("planning")).toBeInTheDocument();
+    expect(screen.queryByTestId("generation-waiting")).not.toBeInTheDocument();
   });
 });
