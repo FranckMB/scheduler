@@ -4,11 +4,13 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-20 (recalé — **symétrie Valider/Rouvrir** : route `/planning` (§ci-dessus)
-et §6.6 bis re-vérifiées contre `planning/PlanningToolbar.tsx` et `planning/PlanningPage.tsx` —
-Rouvrir borné à `!embedded` (a quitté la toolbar embarquée), badge de statut + pastille « Période »
-visibles dans les deux modes, `validate()` navigue vers `/planning` inconditionnellement ; trace
-datée : `etat-des-lieux.md`). Historique des passes : `git log -p --follow
+Last verified @ 2026-08-20 (recalé — **§6.7 bis, l'auto-transcription sur une fermeture (P2-44
+PR-4, remplace sa description initiale)** re-vérifiée contre `wizard/steps/GenerateStep.tsx` ; et
+**symétrie Valider/Rouvrir** : route `/planning` (§ci-dessus) et §6.6 bis re-vérifiées contre
+`planning/PlanningToolbar.tsx` et `planning/PlanningPage.tsx` — Rouvrir borné à `!embedded` (a
+quitté la toolbar embarquée), badge de statut + pastille « Période » visibles dans les deux modes,
+`validate()` navigue vers `/planning` inconditionnellement ; trace datée : `etat-des-lieux.md`).
+Historique des passes : `git log -p --follow
 frontend/docs/frontend-spec.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
 ---
@@ -640,7 +642,7 @@ par un CRUD brut sur la ressource :
   pixel sur le même axe horizontal (retour fondateur : le haut-gauche du badge empiétait sur le
   nom d'équipe).
 
-### 6.7 bis Transcription depuis le socle — bouton, panneau « à replacer », comparaison (P2-44 PR-2, ADR-0004)
+### 6.7 bis Transcription depuis le socle — bouton, panneau « à replacer », comparaison (P2-44 PR-2/PR-4, ADR-0004)
 
 Sur un plan de PÉRIODE **vierge** (aucune version), l'étape Génération du wizard
 (`wizard/steps/GenerateStep.tsx`) propose une alternative au solve complet : la V1 peut naître
@@ -649,10 +651,31 @@ d'une **transcription sans solveur** du socle pointé (backend livré en PR-1,
 n'est touchée par ce lot — le front consomme la route `POST
 /api/schedule_plans/{id}/transcribe-from-socle` déjà en place.
 
+- **Auto-déclenchement sur une FERMETURE (P2-44 PR-4, 2026-08-20).** Sur un plan de période dont
+  le type est FERMETURE (`"closure" === periodType`) et qui n'a **aucune** version, la
+  transcription part **automatiquement** à l'arrivée sur l'étape — le gestionnaire n'a plus à
+  cliquer le bouton manuel : le planning de saison amputé des contraintes de la période est déjà
+  à l'écran, prêt au déplacement manuel. Implémentation : un `useEffect` dans `GenerateStep.tsx`
+  gardé par une **ref one-shot par plan** (`autoTranscribedPlan`, StrictMode/remontage/second
+  onglet ne rejouent pas le déclenchement une fois la ref posée) et par le **rôle de gestion**
+  (`isManagementRole(me?.role)`, miroir d'AFFICHAGE — le serveur reste seul juge, la parité est
+  tenue par `ManagementRolesMatchBackendTest`) — c'est une **mutation FRONT**, jamais un GET qui
+  écrit. Le 409 « plan déjà versionné » d'un double appel concurrent est traité comme **bénin** :
+  le serveur relit sa garde sous verrou, le front invalide `["schedules"]` et réconcilie la liste
+  sans bandeau rouge (seuls les autres échecs restent rendus via `transcribeReason`, comme le
+  geste manuel). Les VACANCES (type HOLIDAY) gardent le comportement PR-2 à l'octet près — décision
+  de sens fondateur (« un planning tout nouveau, pas de copie du socle ») **et** raison technique :
+  une reprise dont la grille est réécrite (créneaux déplacés en journée) verrait les séances du
+  soir du socle copiées en verrous HARD **hors grille** — `OrphanPinGuard::firstOrphanMessage`
+  (backend, appelé par `GenerateScheduleController` ET `FillPeriodPlanController`) refuserait
+  alors **422 « Régénérer » ET « Combler »**, enfermant le gestionnaire au lieu de l'aider.
 - **Bouton « Partir du planning de saison »** (`CopyPlus`, variante `outline`, à côté du bouton de
   génération) : rendu **seulement** quand le plan de période n'a **aucune** version
   (`0 === periodPlanVersions.length` — la même garde que le backend, jamais une redérivation
-  d'une règle différente). Le clic appelle `useTranscribeFromSocle` (`wizard/queries.ts`), qui
+  d'une règle différente). **Ni retiré ni relibellé par PR-4** — il disparaît de lui-même dès
+  qu'une V1 existe (transcrite automatiquement ou non) et reste le SEUL chemin sur une reprise de
+  vacances (et sur une fermeture, le geste de repli si l'auto-déclenchement a échoué en dehors du
+  cas bénin ci-dessus). Le clic appelle `useTranscribeFromSocle` (`wizard/queries.ts`), qui
   invalide `["schedules"]` et `["calendar-entries"]` pour que l'écran embarqué atterrisse sur la
   V1 fraîchement créée (règle « embarqué = la version la plus récente », déjà en place). Un refus
   serveur (409 socle non pointé, 409 plan déjà versionné) est **affiché**, jamais muet
@@ -695,9 +718,8 @@ génération en cours ou sans version valide sélectionnée. **Outil d'appoint**
 complet) reste dans la barre d'outils à côté — le comblement ne le remplace pas, il évite un solve
 complet pour le cas courant (un gymnase a fermé, une équipe a repris son volume).
 
-Reste ouvert (`roadmap.md` P2-44 PR-4/PR-5) : l'entrée du socle transcrit en
-`previousAssignments` d'un solve complet volontaire, et l'agrégation narrative des écarts après un
-solve complet (recoupe P2-43 (iv)).
+Reste ouvert (`roadmap.md` P2-44 PR-5) : l'agrégation narrative des écarts après un solve complet
+ou une transcription (recoupe P2-43 (iv)).
 
 ### 6.8 Loading states et error boundaries
 

@@ -1,6 +1,6 @@
 # Les 3 types de planning — référence produit
 
-Last verified @ 2026-08-20 (re-vérifié contre `backend/src/Controller/FillPeriodPlanController.php`, `frontend/src/features/planning/PlanningPage.tsx` — **P2-44 PR-3, le comblement** : §2 gagne le troisième geste « combler » à côté de générer/transcrire, `POST /api/schedules/{id}/fill`). Historique des passes : `git log -p --follow specs/courantes/types-de-planning.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-20 (re-vérifié contre `frontend/src/features/wizard/steps/GenerateStep.tsx` — **P2-44 PR-4** : §2 gagne l'auto-déclenchement de la transcription sur une fermeture, §3 gagne l'exclusion assumée des vacances (geste manuel conservé, raison de sens + raison technique `OrphanPinGuard`) ; re-vérifié aussi contre `backend/src/Controller/FillPeriodPlanController.php`, `frontend/src/features/planning/PlanningPage.tsx` — **P2-44 PR-3, le comblement** : §2 gagne le troisième geste « combler » à côté de générer/transcrire, `POST /api/schedules/{id}/fill`). Historique des passes : `git log -p --follow specs/courantes/types-de-planning.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
 > **Rôle de ce document** : la trace durable du modèle métier des plannings, validé avec le
 > fondateur le 2026-07-12. C'est LA référence à consulter avant tout travail sur la
@@ -83,7 +83,11 @@ quelle que soit la largeur de son segment.
   passent plus nommées « à replacer ». **Écran (PR-2)** : un bouton « Partir du planning de
   saison » propose la transcription à côté du bouton de génération tant que le plan est vierge
   (`GenerateStep`) ; l'écran embarqué affiche ensuite le panneau « à replacer » et une modale de
-  comparaison avec le socle — détail : `frontend/docs/frontend-spec.md` §6.7 bis.
+  comparaison avec le socle — détail : `frontend/docs/frontend-spec.md` §6.7 bis. **Sur une
+  fermeture, la transcription est désormais le DÉFAUT (P2-44 PR-4, 2026-08-20)** : elle se
+  déclenche automatiquement à l'arrivée sur l'étape, sans clic — le bouton manuel reste le geste de
+  repli. **Restriction assumée** : ce défaut ne s'applique QU'aux périodes de type fermeture — voir
+  §3 pour les vacances, qui gardent le bouton manuel à l'octet près.
 - **Une fois la V1 née — TROIS gestes désormais (générer / transcrire / combler, P2-44 PR-3)** :
   après une transcription (ou tout autre solve) qui laisse des séances « à replacer », le
   gestionnaire n'est plus borné à « régénérer entièrement » ou « déplacer une par une » — un
@@ -109,6 +113,14 @@ quelle que soit la largeur de son segment.
 
 ## 3. Planning de reprise (vacances)
 
+- **La transcription du socle (§2) reste MANUELLE ici, à l'octet près (P2-44 PR-4, décision
+  fondateur 2026-08-20)** : contrairement à une fermeture, une reprise de vacances n'obtient
+  jamais sa V1 automatiquement — le bouton « Partir du planning de saison » reste le seul chemin.
+  Deux raisons : de sens (« les vacances sont TOTALEMENT différentes d'un incident de saison,
+  c'est un planning TOUT nouveau, régénérer de zéro y est accepté, je ne veux pas de copie du
+  socle ici ») et technique (une reprise dont la grille est réécrite en journée verrait les
+  séances du soir du socle copiées en verrous HARD hors grille — `OrphanPinGuard` refuserait
+  alors 422 « Régénérer » ET « Combler », enfermant le gestionnaire).
 - **Séquence** : depuis le cockpit (radar vacances ou clic sur un jour de vacances), le
   gestionnaire **choisit les semaines** à travailler parmi celles des vacances → chaque
   sélection ouvre le wizard en mode période → génération. **Chaque semaine cochée naît
