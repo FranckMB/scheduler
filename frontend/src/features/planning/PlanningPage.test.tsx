@@ -1939,3 +1939,99 @@ describe("PlanningPage — écarts NOMMÉS vs le socle (P2-44 PR-5)", () => {
     expect(vi.mocked(getSocleDeviation)).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * Lot C, PR-1 (défaut terrain fondateur 2026-08-21) — « quand je lance une génération sur un
+ * overlay, un petit chargement mouline au lieu du MÊME écran qu'en saison ». Cause 1 : `isGenerating`
+ * dérive de la SEULE sélection (:480). Au lancement, une nouvelle version PENDING naît alors que la
+ * sélection embarquée pointe encore l'ancienne COMPLETED → `isGenerating` faux → on tombait sur le
+ * voile « Chargement des créneaux… » de la branche `slotsBusy`.
+ *
+ * Règle posée (maison unique ici) : l'écran de génération s'affiche dès qu'une version DU PLAN EN
+ * PORTÉE est en vol — saison comme période. La portée est une VRAIE borne : une version en vol d'un
+ * autre plan ne la déclenche pas.
+ */
+describe("PlanningPage — écran de génération dès qu'une version EN PORTÉE est en vol (lot C)", () => {
+  const seasonV = (id: string, status: Schedule["status"], createdAt: string): Schedule => ({ id, name: "Planning A", status, score: null, createdAt, updatedAt: createdAt, planType: "SEASON", schedulePlanId: "season-plan" });
+  const overlayV = (id: string, status: Schedule["status"], createdAt: string): Schedule => ({ id, name: "Fermeture", status, score: null, createdAt, updatedAt: createdAt, planType: "CLOSURE", schedulePlanId: "plan-p" });
+  const closurePlan: SchedulePlan = { id: "plan-p", type: "CLOSURE", name: "Fermeture", startDate: "2026-09-10", calendarEntryId: "e-p", chosenScheduleId: null, teamSelectionInitialized: true };
+
+  // DÉCISION FONDATEUR 2026-08-21 (assumée) : pendant une régénération de saison, sélectionner
+  // manuellement une ancienne version COMPLETED montre malgré tout l'écran d'attente jusqu'à la
+  // fin du vol — c'est la lettre de la règle (« une version du plan en portée est en vol »).
+  it("standalone saison : une version en vol affiche l'attente même si la sélection pointe une ancienne COMPLETED", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([seasonV("v1", "COMPLETED", "2026-01-01T00:00:00Z"), seasonV("v2", "PENDING", "2026-01-02T00:00:00Z")]);
+    usePlanningStore.setState({ selectedScheduleId: "v1" });
+    renderWithProviders(<PlanningPage />);
+
+    // RED avant le fix : `isGenerating` (faux sur la COMPLETED sélectionnée) laissait la grille.
+    expect(await screen.findByText(/génération du planning/i)).toBeInTheDocument();
+  });
+
+  it("falsification saison : une version de PÉRIODE en vol ne déclenche PAS l'attente (la portée est une borne)", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([seasonV("v1", "COMPLETED", "2026-01-01T00:00:00Z"), overlayV("ov-pending", "PENDING", "2026-01-02T00:00:00Z")]);
+    usePlanningStore.setState({ selectedScheduleId: "v1" });
+    renderWithProviders(<PlanningPage />);
+
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    expect(screen.queryByText(/génération du planning/i)).not.toBeInTheDocument();
+  });
+
+  it("période portée : une version du plan en vol affiche l'attente même sur une ancienne COMPLETED sélectionnée", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([overlayV("ov-1", "COMPLETED", "2026-09-10T00:00:00Z"), overlayV("ov-2", "PENDING", "2026-09-11T00:00:00Z")]);
+    plansState.plans = [closurePlan];
+    usePlanningStore.setState({ selectedScheduleId: "ov-1" });
+    renderWithProviders(<PlanningPage embedded scopePlanId="plan-p" calendarEntryId="e-p" />);
+
+    expect(await screen.findByText(/génération du planning/i)).toBeInTheDocument();
+  });
+
+  /**
+   * Retour fondateur 2026-08-21, en relisant PR-1 : l'écran d'attente REMPLACE le contenu — les
+   * bannières et les gestes ne doivent pas flotter au-dessus. Toutes les gardes qui se taisent
+   * « pendant une génération » lisent donc `showGenerationWaiting`, pas `isGenerating` seul.
+   *
+   * ⚠ Le premier test est le TÉMOIN : sans lui, le second serait vide de sens (une bannière absente
+   * parce qu'elle n'aurait de toute façon jamais eu de quoi s'afficher).
+   */
+  function twoTeamsOneUnplaced(): void {
+    vi.mocked(getTeams).mockResolvedValue([
+      { id: "team-1", name: "U11", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 0, sessionsPerWeek: 1 },
+      { id: "team-2", name: "U13", sportCategoryId: "cat-1", priorityTierId: 1, tierOrder: 1, sessionsPerWeek: 1 },
+    ]);
+    vi.mocked(getSlots).mockResolvedValue([
+      { id: "slot-1", scheduleId: "ov-1", teamId: "team-1", venueId: "venue-1", coachId: null, dayOfWeek: 1, startTime: "18:00:00", durationMinutes: 90, lockLevel: "NONE", lockOrigin: null },
+    ]);
+  }
+
+  it("TÉMOIN — sans version en vol, la bannière de dérive s'affiche bien (sinon le test suivant ne prouverait rien)", async () => {
+    twoTeamsOneUnplaced();
+    vi.mocked(listSchedules).mockResolvedValue([overlayV("ov-1", "COMPLETED", "2026-09-10T00:00:00Z")]);
+    plansState.plans = [closurePlan];
+    usePlanningStore.setState({ selectedScheduleId: "ov-1" });
+    renderWithProviders(<PlanningPage embedded scopePlanId="plan-p" calendarEntryId="e-p" />);
+
+    expect(await screen.findByRole("region", { name: "Séances à replacer" })).toBeInTheDocument();
+  });
+
+  it("l'écran d'attente REMPLACE le contenu : aucune bannière de dérive ne flotte au-dessus", async () => {
+    twoTeamsOneUnplaced();
+    vi.mocked(listSchedules).mockResolvedValue([overlayV("ov-1", "COMPLETED", "2026-09-10T00:00:00Z"), overlayV("ov-2", "PENDING", "2026-09-11T00:00:00Z")]);
+    plansState.plans = [closurePlan];
+    usePlanningStore.setState({ selectedScheduleId: "ov-1" });
+    renderWithProviders(<PlanningPage embedded scopePlanId="plan-p" calendarEntryId="e-p" />);
+
+    expect(await screen.findByText(/génération du planning/i)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Séances à replacer" })).not.toBeInTheDocument();
+  });
+
+  it("falsification période : en portée période, une génération de SAISON en vol ne déclenche PAS l'attente", async () => {
+    vi.mocked(listSchedules).mockResolvedValue([overlayV("ov-1", "COMPLETED", "2026-09-10T00:00:00Z"), seasonV("s-pending", "PENDING", "2026-09-11T00:00:00Z")]);
+    plansState.plans = [closurePlan];
+    usePlanningStore.setState({ selectedScheduleId: "ov-1" });
+    renderWithProviders(<PlanningPage embedded scopePlanId="plan-p" calendarEntryId="e-p" />);
+
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    expect(screen.queryByText(/génération du planning/i)).not.toBeInTheDocument();
+  });
+});

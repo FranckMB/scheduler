@@ -31,6 +31,15 @@ paths:
 - 🔴 **L'image tooling COPIE le code — la rebâtir AVANT tout test**, sinon la suite valide une
   version périmée et passe : `docker compose --profile tools build frontend-tooling`
   (`make -C frontend install` le fait). **Deux faux verts dans la même session le 2026-08-11.**
+  ⚠ **`docker compose --profile tools run frontend-tooling …` NE rebâtit PAS** — `run` démarre
+  l'image telle qu'elle est. C'est le piège : la commande a l'air de « lancer les tests sur le
+  code », elle les lance sur la dernière image CUITE. Repris une 3ᵉ fois le 2026-08-21.
+  **Le signal qui le trahit, à connaître par cœur** : vous ajoutez N tests, et le total
+  affiché ne bouge pas (« Tests 119 passed » avant ET après en avoir écrit deux). Un compte
+  INCHANGÉ après un ajout ne veut jamais dire « mes tests passent » — il veut dire **« mes tests
+  n'existent pas dans l'image »**. Même chose pour une correction de source : un test qui reste
+  rouge/vert *à l'identique* après une modification qui aurait dû le retourner accuse l'image,
+  pas le code. Lisez le COMPTE avant de lire le verdict.
 - 🔴 **Le service `frontend` (Nginx :8081) sert un `dist` CUIT dans son image** — pas de bind
   mount. Un `vite build` dans le conteneur tooling est jeté. Avant un e2e qui doit voir ta
   modification : `docker compose build frontend && docker compose up -d --force-recreate frontend`.
