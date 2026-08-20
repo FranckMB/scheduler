@@ -20,4 +20,8 @@ enum AuditAction: string
     case SEASON_RESET = 'season.reset';
     case SEASON_PURGED = 'season.purged';
     case CLUB_PURGED = 'club.purged';
+    // P2-4 — le raccourci démo du register : émission d'une session démo + remplacement
+    // du club démo précédent. Tracé GLOBALEMENT (club_id null) pour rester lisible même
+    // après la suppression des lignes club détruites (M-3).
+    case DEMO_SHORTCUT = 'demo.shortcut';
 }

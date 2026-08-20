@@ -39,6 +39,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Lexik\Bundle\JWTAuthenticationBundle\Services\JWTTokenManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\Clock\ClockInterface;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Mailer\MailerInterface;
@@ -86,6 +87,13 @@ final class AuthController extends AbstractController
         private readonly string $turnstileSiteKey,
         private readonly MailFrom $mailFrom,
         private readonly ProductIdentity $productIdentity,
+        #[Autowire(param: 'kernel.debug')]
+        private readonly bool $debug,
+        // P2-4 (revue sécu) — l'adresse démo, exposée au front SEULEMENT en debug pour
+        // qu'il ne tente le raccourci démo QUE sur cette adresse. Maison unique côté
+        // controller démo : DevDemoRegisterController::$demoAnimatorEmail (même param).
+        #[Autowire(param: 'app.demo_animator_email')]
+        private readonly string $demoAnimatorEmail,
     ) {}
 
     #[Route('/api/register', name: 'api_register', methods: ['POST'])]
@@ -212,11 +220,24 @@ final class AuthController extends AbstractController
      * inactif (aucune sitekey configurée) → le front rend strictement l'écran
      * actuel, sans widget ni script tiers. Publique par le préfixe ^/api/register
      * de security.yaml.
+     *
+     * P2-4 — champ ADDITIF `demoShortcut` : vrai en debug (démo), le front tente
+     * alors le raccourci démo après le 202 du register (DevDemoRegisterController,
+     * lui-même gardé par kernel.debug). Faux en prod → le front garde strictement
+     * l'écran « vérifiez votre e-mail ». Le rail register reste par ailleurs intact.
      */
     #[Route('/api/register/config', name: 'api_register_config', methods: ['GET'])]
     public function registerConfig(): JsonResponse
     {
-        return $this->json(['turnstileSiteKey' => '' !== $this->turnstileSiteKey ? $this->turnstileSiteKey : null]);
+        return $this->json([
+            'turnstileSiteKey' => '' !== $this->turnstileSiteKey ? $this->turnstileSiteKey : null,
+            'demoShortcut' => $this->debug,
+            // Exposée SEULEMENT en debug : en prod (demoShortcut=false) elle est nulle,
+            // donc aucun oracle. Le front ne tente le raccourci que si l'adresse saisie
+            // est CETTE adresse — le mot de passe d'un vrai prospect ne part jamais vers
+            // la route dev.
+            'demoEmail' => $this->debug ? strtolower($this->demoAnimatorEmail) : null,
+        ]);
     }
 
     #[Route('/api/register/verify', name: 'api_register_verify', methods: ['POST'])]

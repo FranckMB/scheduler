@@ -47,6 +47,24 @@ final class ProdSecretGuard
                 throw new RuntimeException(\sprintf('%s still equals the value committed in backend/.env — override it in an untracked backend/.env.prod.local (or the runtime environment) before deploying to prod.', $key));
             }
         }
+
+        // M-1: APP_DEBUG is NOT a committed secret to match — it is a switch that must
+        // stay OFF in prod. `.env.prod` ships APP_DEBUG=0, but Dotenv does NOT override a
+        // real env var, so an orchestrator-set APP_DEBUG=1 would light up kernel.debug —
+        // and with it EVERY dev route (the demo-register shortcut and the three other
+        // /api/dev/* routes) plus full stack traces. Fail closed on the RESOLVED value.
+        // Read from the passed snapshot ($_SERVER + $_ENV at Kernel::boot) only, never
+        // getenv: Symfony's runtime writes the effective APP_DEBUG back into $_SERVER, and
+        // the getenv fallback would false-trip the dev/test container (debug on there).
+        $debug = strtolower(self::asString($runtimeVars['APP_DEBUG'] ?? ''));
+        if ('1' === $debug || 'true' === $debug) {
+            throw new RuntimeException('APP_DEBUG is enabled in prod — dev-only routes and stack traces would be exposed. Set APP_DEBUG=0 (leave the committed backend/.env.prod default in place) before deploying to prod.');
+        }
+    }
+
+    private static function asString(mixed $value): string
+    {
+        return \is_scalar($value) ? (string) $value : '';
     }
 
     /**

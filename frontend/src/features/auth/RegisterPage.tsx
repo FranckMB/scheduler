@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { apiErrorMessage } from "@/shared/api/errors";
 import { Button } from "@/shared/components/ui/button";
@@ -12,7 +12,7 @@ import { cn } from "@/shared/lib/utils";
 import { isPasswordValid } from "@/shared/lib/passwordPolicy";
 
 import { AuthLayout } from "./AuthLayout";
-import { useRegister, useRegisterConfig } from "./queries";
+import { useDevDemoRegister, useRegister, useRegisterConfig } from "./queries";
 import { TurnstileWidget } from "./TurnstileWidget";
 
 // Miroir du serveur (AuthController: filter_var FILTER_VALIDATE_EMAIL) pour un
@@ -32,10 +32,19 @@ const SPORTS: { id: string; label: string; icon: string; enabled: boolean }[] = 
 
 export function RegisterPage() {
   const register = useRegister();
+  const navigate = useNavigate();
+  // P2-4 — le raccourci démo (tenté après le 202 quand le serveur l'annonce).
+  const demoRegister = useDevDemoRegister();
   // P5-3b — sitekey Turnstile (serveur). Absente (config null OU fetch en échec)
   // → Turnstile inactif : l'écran reste strictement l'actuel, sans widget tiers.
   const { data: registerCfg } = useRegisterConfig();
   const turnstileSiteKey = registerCfg?.turnstileSiteKey ?? null;
+  // P2-4 — vrai en démo (kernel.debug serveur). Absent/false → écran actuel intact.
+  const demoShortcut = registerCfg?.demoShortcut ?? false;
+  // P2-4 (revue sécu) — l'adresse démo (serveur, en debug seulement). Le raccourci
+  // n'est tenté QUE si l'adresse saisie est CELLE-LÀ : le mot de passe d'un vrai
+  // prospect ne part jamais vers la route dev. Nulle en prod → jamais de tentative.
+  const demoEmail = registerCfg?.demoEmail ?? null;
   // Étape 1 = choix du sport (basket présélectionné), étape 2 = les champs du sport.
   // Le sport n'est PAS envoyé au serveur : le seul choix est basket, que createClub
   // pose côté serveur. Au 2e sport, le threader (payload → token → createClub).
@@ -87,6 +96,45 @@ export function RegisterPage() {
         // P5-3b — threadé seulement s'il existe (Turnstile inactif → aucun champ).
         ...(null !== turnstileToken ? { turnstileToken } : {}),
       });
+      // P2-4 — en démo, on enchaîne SANS détour visible : le raccourci matérialise le
+      // club et ouvre la session. 2xx → on entre dans l'app (club non onboardé →
+      // wizard). 409 → bannière explicite, SELON la cause serveur. Tout autre échec
+      // (422 adresse non-démo, 404 hors debug, panne) → fallback SILENCIEUX vers l'écran
+      // « vérifiez votre e-mail » : le rail register reste vrai.
+      // ⚠ Le raccourci n'est tenté QUE si l'adresse saisie EST l'adresse démo — sinon le
+      // mot de passe d'un vrai prospect serait posté une 2e fois vers une route dev.
+      if (demoShortcut && null !== demoEmail && form.email.trim().toLowerCase() === demoEmail.toLowerCase()) {
+        try {
+          await demoRegister.mutateAsync({
+            email: form.email,
+            password: form.password,
+            ara: form.ara.toUpperCase(),
+            clubName: form.club_name,
+          });
+          navigate("/", { replace: true });
+          return;
+        } catch (demoErr) {
+          const err = demoErr as { response?: { status?: number }; data?: { error?: unknown } };
+          const status = err.response?.status;
+          // Conséquence de la vérification du mot de passe (le raccourci ne l'écrase
+          // plus) : une faute de frappe → 401. On le NOMME et on reste sur le
+          // formulaire (le fondateur corrige et retape) — surtout pas d'éjection vers
+          // /login (le client ky exempte cette route, cf. shared/api/client.ts).
+          if (401 === status) {
+            setError("Mot de passe incorrect pour le compte de démonstration.");
+            return;
+          }
+          if (409 === status) {
+            // Le serveur est l'autorité sur la CAUSE (error code) — on ne fait que
+            // choisir le libellé (présentation), sans re-dériver la règle métier.
+            setError(err.data?.error === "teardown_refused"
+              ? "Impossible de remplacer votre club de démonstration précédent. Réessayez, ou contactez le support."
+              : "Ce code FFBB est déjà utilisé par un autre club : nous ne le remplaçons pas.");
+            return;
+          }
+          // 422/404/autre : on retombe sur l'écran d'e-mail, sans rien dire.
+        }
+      }
       setSent(true);
     } catch (err) {
       setError(await apiErrorMessage(err));

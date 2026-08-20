@@ -39,6 +39,11 @@ parameters:
     # navigateur ne l'envoie qu'à l'API, jamais aux assets ni aux exports.
     app.jwt_cookie_name: 'BEARER'
     app.jwt_cookie_path: '/api'
+    # P2-4 — le compte animateur du raccourci démo du register
+    # (DevDemoRegisterController). MAISON UNIQUE : référence la constante de la
+    # commande support `app:demo:create`, pour que les deux chemins qui posent
+    # is_demo parlent du MÊME login. Jamais un littéral dupliqué.
+    app.demo_animator_email: !php/const App\Command\DemoCreateCommand::DEFAULT_ANIMATOR_EMAIL
     # DÉFAUT `true` — fail-closed délibéré : une variable oubliée en production
     # donne un cookie `Secure` (correct), alors que l'inverse donnerait un jeton
     # en clair sur le réseau sans que rien ne le signale. C'est le DEV qui la met
