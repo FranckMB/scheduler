@@ -4,7 +4,12 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-20 (recalé — **P2-44 PR-3, le comblement** : §6.7 bis gagne le bouton « Combler automatiquement », re-vérifié contre `planning/PlanningPage.tsx`, `planning/api.ts`, `planning/queries.ts` — `useFillSchedule` miroir de `useRegenerate`, visible dès `driftEntries.length > 0`, refus 409/422/429 affichés, aucune régénération de moteur ; trace datée : `etat-des-lieux.md`). Historique des passes : `git log -p --follow frontend/docs/frontend-spec.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-20 (recalé — **symétrie Valider/Rouvrir** : route `/planning` (§ci-dessus)
+et §6.6 bis re-vérifiées contre `planning/PlanningToolbar.tsx` et `planning/PlanningPage.tsx` —
+Rouvrir borné à `!embedded` (a quitté la toolbar embarquée), badge de statut + pastille « Période »
+visibles dans les deux modes, `validate()` navigue vers `/planning` inconditionnellement ; trace
+datée : `etat-des-lieux.md`). Historique des passes : `git log -p --follow
+frontend/docs/frontend-spec.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
 ---
 
@@ -70,7 +75,7 @@ découpage sûr et **aucun n'est optionnel** quand on ajoute une route :
 | `/reset-password/:token` | Saisie du nouveau mot de passe (`POST /api/password/reset`) | Public | `AuthLayout` |
 | `/waiting` | Attente d'approbation (`WaitingApprovalPage`) — poll `/api/me` toutes les 5 s, redirige vers `/` dès `membershipStatus === "active"` | Token requis | `AuthLayout` |
 | `/` | **Cockpit temporel** (`CockpitPage`) : bandeau planning principal (Ouvrir/**Modifier** = reopen · Tous les plannings) · calendrier mensuel des exceptions · radar (à traiter). **Débloqué dès `me.seasonPlan.hasFinishedVersion`** (le plan de saison porte ≥1 version terminée — dérivé, indépendant du pointeur : rouvrir ne re-verrouille pas) ; sinon redirige vers `/wizard`. **Palier B** : CTAs radar « Adapter » actifs (→ wizard mode période) ; « Voir le plan » (overlay généré → consultation) ; « Modifier » le socle avec overlays → **confirmation proportionnée** (409 `overlays_exist` → dialog « supprimera N secondaires »). Overlays exclus du sélecteur de plannings (badge « Période ») | Required | `AppLayout` |
-| `/planning` | **Consultation pure** (`PlanningPage`, `embedded=false`, fix terrain 2026-08-19 défaut 2) : grille `WeekGrid` (un planning **FAILED** sans créneau y montre les **réservations** en pseudo-créneaux HARD lecture seule — couche socle/période du payload, gymnases désactivés filtrés, bandeau « seuls vos créneaux réservés sont affichés » + état vide dédié sans réservation — retour fondateur 2026-08-06), toolbar (**sélecteur de versions** « V3 — 10 juil. 14:32 » — versions non renommables, suppression d'une version de travail avec confirmation), **nom du planning éditable au header** (porté par le plan, `PUT /api/schedule_plans/{id}`), bandeau divergence structure, diagnostics, détail créneau. **Valider/Rouvrir/Régénérer sont bornés à `embedded`** (`PlanningToolbar.tsx`) — cet écran n'écrit plus le cycle de vie, seule l'étape Génération du wizard (embarquée) le fait ; « le plan pointe la version et ses sœurs sont supprimées » (ADR-0002 inv. 1) reste vrai côté serveur, juste inatteignable d'ici | Required | `AppLayout` |
+| `/planning` | **L'écran de la version EN VIGUEUR** (`PlanningPage`, `embedded=false`, symétrie stricte 2026-08-20) : grille `WeekGrid` (un planning **FAILED** sans créneau y montre les **réservations** en pseudo-créneaux HARD lecture seule — couche socle/période du payload, gymnases désactivés filtrés, bandeau « seuls vos créneaux réservés sont affichés » + état vide dédié sans réservation — retour fondateur 2026-08-06), toolbar (badge de statut + pastille « Période » visibles ici comme en mode wizard ; **sélecteur de versions**, lui, reste réservé au wizard), **nom du planning éditable au header** (porté par le plan, `PUT /api/schedule_plans/{id}`), bandeau divergence structure, diagnostics, détail créneau. **« Rouvrir » vit ici** (`!embedded`, `PlanningToolbar.tsx`) — il ramène à l'étape Génération du wizard ; **Valider/Régénérer/Supprimer restent bornés à `embedded`** (gestes de travail, wizard seul) — « le plan pointe la version et ses sœurs sont supprimées » (ADR-0002 inv. 1) se déclenche depuis le wizard et atterrit ici en succès | Required | `AppLayout` |
 | `/matchs` | **Module matchs** (`MatchesPage`) : placement des rencontres domicile (grille week-end), radar de conflits coach/joueur, import FBI (`ImportFbiDialog`) | Required | `AppLayout` |
 | `/wizard` | Assistant de saisie 6 étapes : Équipes → Gymnases → Coachs → Contraintes → Récapitulatif → Génération (`AuthGuard` y redirige tant que `me.seasonPlan.hasFinishedVersion === false`, c.-à-d. tant que le club n'a jamais généré) | Required | `AppLayout` |
 | `/club` | Identité du club : logo (upload + recadrage `LogoCropper` + suppression), couleur d'accent (+ palette), **section « Informations du club »** (champs FFBB — voir ci-dessous, admin) **et section « Demandes »** (approbation des adhésions `pending`, admin — l'ancienne route `/pending-members` a été repliée ici) | Required | `AppLayout` |
@@ -342,21 +347,31 @@ Le gestionnaire ne voit jamais le concept de `club_id` ou `season_id`. Le fronte
 
 ### 6.6 bis Cycle de vie du planning (le pointeur du plan)
 
+- **Valider ↔ Rouvrir sont les deux sorties symétriques du cycle de vie** (arbitrage fondateur,
+  symétrie stricte 2026-08-20) : Valider vit dans l'espace de travail (wizard, `embedded`) et en
+  est la SORTIE — son succès navigue vers `/planning` ; Rouvrir vit sur `/planning` autonome
+  (`!embedded`, l'écran de la version en vigueur) et en est la sortie inverse — il ramène au
+  wizard. Le badge de statut et la pastille « Période », eux, sont visibles dans les DEUX modes
+  (`PlanningToolbar.tsx`) : conséquence assumée, la pastille « Période » apparaît donc aussi en
+  standalone sur un overlay.
 - Un planning `COMPLETED` peut être **validé** (bouton « Valider » de la toolbar, visible
   seulement `embedded` — voir §route `/planning` ci-dessus) → modale de confirmation
   (`ValidateDialog`, avertit si des alertes subsistent, nomme le plan réel dans son titre) →
   `POST /api/schedules/{id}/validate` → **le plan pointe cette version** et **ses versions sœurs
   sont supprimées** (ADR-0002 inv. 1) ; le planning passe en **lecture seule** (grille non
   éditable, renommage et régénération masqués). Le statut, lui, **reste `COMPLETED`** : « validé »
-  se lit sur le pointeur (`Schedule.isChosen`).
-- « Rouvrir » (`POST /api/schedules/{id}/reopen`, bouton `embedded` uniquement) **dépointe** le
-  plan (inv. 2) : la version survit et redevient éditable. Toute navigation qui suit **déclare
-  son mode** (fix terrain 2026-08-19 défaut 3, `PlanningPage.tsx` `reopen()`) — jamais un
-  `jumpTo("generate")` nu qui laisserait le mode ambiant du `localStorage` décider : la version
-  rouverte est résolue (`schedulePlanId` → plan → `calendarEntryId`) et le wizard s'ouvre en mode
-  période (`startPeriodMode`) si ce plan n'est pas `SEASON`, en mode saison (`exitPeriodMode`) sinon.
+  se lit sur le pointeur (`Schedule.isChosen`). Le succès navigue vers `/planning`
+  (`PlanningPage.tsx`, `validate()` `onSuccess`) — vaut pour le socle saison comme pour un plan
+  de période.
+- « Rouvrir » (`POST /api/schedules/{id}/reopen`, bouton `/planning` autonome uniquement,
+  `!embedded`) **dépointe** le plan (inv. 2) : la version survit et redevient éditable. Toute
+  navigation qui suit **déclare son mode** (fix terrain 2026-08-19 défaut 3, `PlanningPage.tsx`
+  `reopen()`) — jamais un `jumpTo("generate")` nu qui laisserait le mode ambiant du `localStorage`
+  décider : la version rouverte est résolue (`schedulePlanId` → plan → `calendarEntryId`) et le
+  wizard s'ouvre en mode période (`startPeriodMode`) si ce plan n'est pas `SEASON`, en mode saison
+  (`exitPeriodMode`) sinon.
   La même règle route `SeasonSchedulesModal.consult()` (« Plannings de la saison ») : plan
-  **pointé** → `/planning` (consultation) ; plan **non pointé** → `/wizard`, mode déclaré pareil.
+  **pointé** → `/planning` ; plan **non pointé** → `/wizard`, mode déclaré pareil.
 - Il n'existe **pas** de « Définir principal » : le pointeur se déplace **en validant**, et par rien
   d'autre (`set-baseline` supprimé, inv. 18). Le ★ de la saison = `seasonPlan.chosenScheduleId`
   de `/api/me`.

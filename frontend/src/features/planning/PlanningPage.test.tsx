@@ -248,15 +248,16 @@ describe("PlanningPage (integration)", () => {
 
     expect(await screen.findByText("U11")).toBeInTheDocument();
     expect(await screen.findByText("Jean Dupont")).toBeInTheDocument();
-    // Standalone /planning (consultation) hides the toolbar's version selector and
-    // status badge — see PlanningToolbar.test. ⚠ L'assertion sur le score a été retirée
-    // ici : P4-39 l'ayant supprimé partout, elle ne distinguait plus rien (elle serait
-    // restée verte même si le standalone se mettait à tout afficher). Le score est gardé
-    // là où il vivait, dans PlanningToolbar.test.
+    // Standalone /planning (consultation) hides the toolbar's version SELECTOR — see
+    // PlanningToolbar.test (le badge de statut, lui, s'affiche désormais en standalone).
+    // ⚠ L'assertion sur le score a été retirée ici : P4-39 l'ayant supprimé partout, elle
+    // ne distinguait plus rien (elle serait restée verte même si le standalone se mettait
+    // à tout afficher). Le score est gardé là où il vivait, dans PlanningToolbar.test.
     expect(screen.queryByRole("combobox", { name: /version du planning/i })).not.toBeInTheDocument();
-    // « principal » qualifie LE planning de la saison — il s'affiche donc aussi sur
-    // une version de travail. Option A (bug fondateur 2026-08-19) : /planning autonome
-    // CONSULTE — les gestes d'écriture (Valider/Rouvrir/Régénérer) n'y sont plus offerts.
+    // « principal » qualifie LE planning de la saison — il s'affiche donc aussi sur une
+    // version de travail. Nouveau contrat (2026-08-20) : sur /planning autonome, les gestes
+    // de TRAVAIL (Valider/Régénérer/Supprimer/sélecteur) vivent au wizard ; cette version
+    // n'est pas en vigueur, donc pas de Rouvrir non plus — d'où l'absence de Valider ici.
     expect(screen.getByText("principal")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
   });
@@ -558,15 +559,28 @@ describe("PlanningPage (integration)", () => {
     expect(screen.queryByText("Gymnase Alpha")).not.toBeInTheDocument();
   });
 
-  it("drops « Valider » on the version the plan points at (it is in force) and offers « Rouvrir »", async () => {
-    // Option A : les gestes d'écriture vivent dans l'étape Génération du wizard (embedded).
+  it("standalone /planning : sur la version EN VIGUEUR, offre « Rouvrir » et le badge, jamais « Valider »", async () => {
+    // Nouveau contrat (2026-08-20) : /planning est l'écran de la version en vigueur —
+    // il porte le badge de statut et « Rouvrir » (qui mène au wizard étape Génération).
     vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true }]);
-    renderWithProviders(<PlanningPage embedded />);
+    renderWithProviders(<PlanningPage />);
 
     expect(await screen.findByText("U11")).toBeInTheDocument();
     // Being pointed at IS being validated: the only way forward is « Rouvrir ».
     expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /rouvrir/i })).toBeInTheDocument();
+    expect(screen.getByText("Terminé")).toBeInTheDocument();
+  });
+
+  it("embarqué (wizard) : sur la version EN VIGUEUR, n'offre PLUS « Rouvrir » (déplacé sur /planning) ni « Valider »", async () => {
+    // La falsification symétrique : en embedded, la version en vigueur ne montre ni
+    // Valider (no-op) ni Rouvrir (le geste vit désormais sur /planning autonome).
+    vi.mocked(listSchedules).mockResolvedValue([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true }]);
+    renderWithProviders(<PlanningPage embedded />);
+
+    expect(await screen.findByText("U11")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /valider/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /rouvrir/i })).not.toBeInTheDocument();
   });
 
   // F2c : une contrainte a changé depuis la génération → planning PÉRIMÉ (pas faux). Une seule
@@ -848,7 +862,7 @@ describe("PlanningPage (integration)", () => {
       const user = userEvent.setup();
       vi.mocked(listSchedules).mockResolvedValue(validated);
       vi.mocked(reopenSchedule).mockRejectedValueOnce(new OverlaysExistError(2, [])).mockResolvedValueOnce({});
-      renderWithProviders(<PlanningPage embedded />); // Option A : Rouvrir vit dans le wizard (embedded)
+      renderWithProviders(<PlanningPage />); // Nouveau contrat (2026-08-20) : Rouvrir vit sur /planning autonome
       await screen.findByText("U11");
 
       await user.click(screen.getByRole("button", { name: /rouvrir/i }));
@@ -872,7 +886,7 @@ describe("PlanningPage (integration)", () => {
       const user = userEvent.setup();
       vi.mocked(listSchedules).mockResolvedValue(validated);
       vi.mocked(reopenSchedule).mockResolvedValueOnce({});
-      renderWithProviders(<PlanningPage embedded />); // Option A : Rouvrir vit dans le wizard (embedded)
+      renderWithProviders(<PlanningPage />); // Nouveau contrat (2026-08-20) : Rouvrir vit sur /planning autonome
       await screen.findByText("U11");
 
       await user.click(screen.getByRole("button", { name: /rouvrir/i }));
@@ -890,7 +904,7 @@ describe("PlanningPage (integration)", () => {
       useWizardStore.getState().startPeriodMode("stale-entry");
       vi.mocked(listSchedules).mockResolvedValue(validated);
       vi.mocked(reopenSchedule).mockResolvedValueOnce({});
-      renderWithProviders(<PlanningPage embedded />); // Option A : Rouvrir vit dans le wizard (embedded)
+      renderWithProviders(<PlanningPage />); // Nouveau contrat (2026-08-20) : Rouvrir vit sur /planning autonome
       await screen.findByText("U11");
 
       await user.click(screen.getByRole("button", { name: /rouvrir/i }));
@@ -910,7 +924,7 @@ describe("PlanningPage (integration)", () => {
       vi.mocked(listSchedules).mockResolvedValue(overlayValidated);
       plansState.plans = [{ id: "ete-plan", type: "CLOSURE", name: "Ajustement gymnase", startDate: "2026-09-07", calendarEntryId: "e-ete", chosenScheduleId: "ov-1", teamSelectionInitialized: true }];
       vi.mocked(reopenSchedule).mockResolvedValueOnce({});
-      renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" />);
+      renderWithProviders(<PlanningPage scopePlanId="ete-plan" />); // Nouveau contrat : Rouvrir vit sur /planning autonome
 
       await user.click(await screen.findByRole("button", { name: /rouvrir/i }));
       await waitFor(() => expect(navigate).toHaveBeenCalledWith("/wizard"));
@@ -920,18 +934,18 @@ describe("PlanningPage (integration)", () => {
     });
   });
 
-  it("« Valider » RESTE sur l'écran embarqué — aucune navigation (l'accusé est la toolbar qui bascule)", async () => {
+  it("« Valider » atterrit sur /planning — la sortie de l'espace de travail vers l'écran en vigueur", async () => {
     const user = userEvent.setup();
-    renderWithProviders(<PlanningPage embedded />); // Option A : Valider vit dans le wizard (embedded)
+    renderWithProviders(<PlanningPage embedded />); // Valider vit dans le wizard (embedded), sa SORTIE est /planning
     await screen.findByText("U11");
 
     // Toolbar "Valider" opens the confirm dialog; confirm inside it.
     await user.click(screen.getByRole("button", { name: /valider/i }));
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Valider" }));
-    // 2026-08-19 : le succès ne navigue PLUS vers /planning (écran muet en
-    // option A) — on reste, la toolbar bascule sur « Rouvrir » (journey e2e).
+    // Nouveau contrat (2026-08-20) : le succès NAVIGUE vers /planning — le socle validé
+    // devient la version en vigueur, consultable, portant le badge et « Rouvrir » (journey e2e).
     await waitFor(() => expect(vi.mocked(validateSchedule)).toHaveBeenCalled());
-    expect(navigate).not.toHaveBeenCalledWith("/planning");
+    expect(navigate).toHaveBeenCalledWith("/planning");
   });
 
   // F2b — retouche du rail : le geste PARLE (toast + surlignage du conflit) et déverrouiller
