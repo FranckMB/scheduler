@@ -493,6 +493,11 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
     () => schedules.some((s) => (scoped ? s.schedulePlanId === scopePlanId : isSeasonPlanType(s.planType)) && IN_FLIGHT.includes(s.status)),
     [schedules, scoped, scopePlanId],
   );
+  // ⚑ Cette dérivation est la SEULE porte : tout ce qui se tait ou se grise « pendant une
+  // génération » la lit — bannières (dérive, périmé, échec), barre d'outils, suppression
+  // d'overlay, comparaison. Lire `isGenerating` seul laisserait ces gestes flotter AU-DESSUS de
+  // l'écran d'attente, alors que la règle dit qu'il REMPLACE le contenu (retour fondateur
+  // 2026-08-21, en relisant PR-1).
   const showGenerationWaiting = isGenerating || scopeInFlight;
   // Read-only = its plan points at it: this version IS the calendar in force.
   const isReadOnly = true === selectedSchedule?.isChosen;
@@ -1212,7 +1217,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
             {/* Supprimer : plannings SECONDAIRES uniquement (jamais le socle), et
                 jamais pendant une génération en vol (la cascade emporterait la version
                 en cours de solve — revue B2 F3) → retour cockpit. */}
-            {null !== overlayDeleteEntryId && workingSeason && !workingSeason.isReadonly && !isGenerating ? (
+            {null !== overlayDeleteEntryId && workingSeason && !workingSeason.isReadonly && !showGenerationWaiting ? (
               <DeletePlanningButton calendarEntryId={overlayDeleteEntryId} schedulePlanId={selectedSchedule?.schedulePlanId ?? null} title={displayedPlanName ?? "ce planning"} onDeleted={() => navigate("/")} iconOnly />
             ) : null}
           </>
@@ -1227,7 +1232,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
           nomme sa/ses cause(s) ; sur un planning validé (lecture seule) elle propose « rouvrir
           puis régénérer », jamais un geste qui finirait en 409. Voir lib/staleness. */}
       {(() => {
-        const stale = isGenerating || null === selectedSchedule
+        const stale = showGenerationWaiting || null === selectedSchedule
           ? null
           : stalenessMessage({
             manuallyEdited: true === selectedSchedule.manuallyEditedSinceGeneration,
@@ -1261,7 +1266,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
               onSelectSchedule={setSelectedScheduleId}
               viewMode={viewMode}
               onViewMode={setViewMode}
-              isGenerating={isGenerating || regenerateMutation.isPending || regenerateOverlayMutation.isPending}
+              isGenerating={showGenerationWaiting || regenerateMutation.isPending || regenerateOverlayMutation.isPending}
               actionBusy={actionBusy}
               disableRegenerate={regenerateDisabled}
               outputCredits={null === credits ? null : { count: credits.remaining, blocked: !credits.canGenerate }}
@@ -1285,7 +1290,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
               onRegenerateFrom={() => setRegenerateFromOpen(true)}
               embedded={embedded}
               rightSlot={
-                null !== validScheduleId && !isGenerating && slots.length > 0 ? (
+                null !== validScheduleId && !showGenerationWaiting && slots.length > 0 ? (
                   <ExportMenu
                     scheduleId={validScheduleId}
                     venues={venues}
@@ -1328,7 +1333,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
 
           {/* P2-30 (geste 3) — les équipes à la dérive : un clic ARME le placement (mode cible).
               COMPLETED + modifiable seulement. */}
-          {!isGenerating && !isReadOnly ? (
+          {!showGenerationWaiting && !isReadOnly ? (
             <DriftBanner
               entries={driftEntries}
               teamName={teamNameOf}
@@ -1342,7 +1347,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
               qui FIGE le placé et ne place que les trous. Outil d'appoint — « Régénérer » (solve
               complet) reste dans la barre d'outils. La V+1 est sélectionnée à la réussite ; les
               refus (409/422) sont servis et affichés par le hook. */}
-          {!isGenerating && !isReadOnly && null !== slotLayerId && driftEntries.length > 0 ? (
+          {!showGenerationWaiting && !isReadOnly && null !== slotLayerId && driftEntries.length > 0 ? (
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
@@ -1402,7 +1407,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
           {/* Ce planning a été généré quand un gymnase servait encore la période : ses
               séances restent affichées ET exportées, mais elles ne décrivent plus la
               période telle qu'elle est réglée. On le dit plutôt que de les escamoter. */}
-          {!isGenerating && staleVenueSessions > 0 ? (
+          {!showGenerationWaiting && staleVenueSessions > 0 ? (
             <p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-foreground">
               {staleVenueSessions} séance(s) de ce planning sont placées dans un gymnase désactivé depuis pour cette période — régénérez-la pour qu'elles en sortent.
             </p>
@@ -1411,7 +1416,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
           {/* Génération en échec : la grille ne montre que les RÉSERVATIONS (pseudo-créneaux
               lecture seule) — on le dit, sinon elles passeraient pour un planning généré.
               Et l'export ne les contient pas : il rend les créneaux du serveur (§7.2 pt 3). */}
-          {!isGenerating && isFailed && slots.length > 0 && 0 === generatedSlots.length ? (
+          {!showGenerationWaiting && isFailed && slots.length > 0 && 0 === generatedSlots.length ? (
             <p className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-foreground">
               La génération a échoué : aucun créneau n'a été placé. Seuls vos créneaux réservés sont affichés — ils restent acquis quoi qu'il arrive. Les exports sont vides pour ce planning.
             </p>
