@@ -255,7 +255,8 @@ export function GenerateStep() {
     // P2-43 volet (v) — on passe l'entrée de calendrier de la période : PlanningPage y lit l'état
     // de fermeture des gymnases pour MARQUER (jamais offrir) les fenêtres vides fermées.
     // P2-44 — `toReplace` (session d'écran) alimente le panneau + la mise en évidence des vides.
-    return <PlanningPage embedded scopePlanId={periodMode ? periodPlanId : null} calendarEntryId={periodMode ? calendarEntryId : null} toReplace={toReplace} />;
+    // P2-44 PR-5 — `isClosurePeriod` arme les écarts NOMMÉS vs le socle (fermeture seulement).
+    return <PlanningPage embedded scopePlanId={periodMode ? periodPlanId : null} calendarEntryId={periodMode ? calendarEntryId : null} toReplace={toReplace} isClosurePeriod={periodMode && isClosurePeriod} />;
   }
 
   return (

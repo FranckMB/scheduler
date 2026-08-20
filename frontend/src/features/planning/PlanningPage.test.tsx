@@ -6,7 +6,7 @@ import type { EntryConflictsResponse, SchedulePlan } from "@/features/cockpit/ap
 import { useToastStore } from "@/shared/stores/toastStore";
 import { renderWithProviders } from "@/test/utils";
 
-import { EngineTimeoutError, EngineVerificationInterruptedError, fillSchedule, getDiagnostics, getSlots, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError, validateSchedule } from "./api";
+import { EngineTimeoutError, EngineVerificationInterruptedError, fillSchedule, getDiagnostics, getSlots, getSocleDeviation, getTeams, getTrainingSlots, getVenues, listSchedules, lockSlot, moveSlot, MoveRejectedError, OverlaysExistError, placeSlot, reopenSchedule, TargetLockedError, validateSchedule } from "./api";
 import type { Schedule } from "./api";
 import { PlanningPage } from "./PlanningPage";
 import { usePlanningStore } from "./store";
@@ -96,6 +96,8 @@ vi.mock("./api", () => {
     ]),
   ),
   getConstraints: vi.fn(() => Promise.resolve([])),
+  // P2-44 PR-5 : par défaut aucun écart (le panneau ne rend rien) — les cas dédiés surchargent.
+  getSocleDeviation: vi.fn(() => Promise.resolve({ socleScheduleId: "socle", moved: [], unplaced: [] })),
   getDiagnostics: vi.fn(() =>
     Promise.resolve([
       { id: "diag-1", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, ruleKey: null, message: "Conflit de gymnase.", suggestions: [], causes: [], openCandidates: null },
@@ -235,6 +237,8 @@ beforeEach(() => {
     { id: "diag-1", scheduleId: SID, type: "conflict", severity: "ERROR", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, ruleKey: null, message: "Conflit de gymnase.", suggestions: [], causes: [], openCandidates: null },
     { id: "diag-unused-slot-venue-1-2-19:00", scheduleId: SID, type: "unused_slot", severity: "WARNING", teamId: null, venueId: "venue-1", coachId: null, dayOfWeek: null, startTime: null, ruleKey: null, message: "Créneau disponible non utilisé : Gymnase Alpha (mardi de 19:00 à 20:30).", suggestions: [], causes: [], openCandidates: null },
   ]);
+  // P2-44 PR-5 : ré-armement (mockResolvedValue survit) — défaut « aucun écart », les cas surchargent.
+  vi.mocked(getSocleDeviation).mockResolvedValue({ socleScheduleId: "socle", moved: [], unplaced: [] });
   navigate.mockClear();
   usePlanningStore.setState({ viewMode: "gymnase", selectedScheduleId: null, selectedSlotId: null, resourceFilter: [] });
 });
@@ -1884,5 +1888,54 @@ describe("PlanningPage — transcription depuis le socle (P2-44)", () => {
     await screen.findByText("Planning A");
     expect(screen.queryByRole("region", { name: /non reprises/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Comparer avec la saison/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("PlanningPage — écarts NOMMÉS vs le socle (P2-44 PR-5)", () => {
+  const seasonV: Schedule = { id: "season-v1", name: "Planning A", status: "COMPLETED", score: null, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan", isChosen: true };
+  const closureV: Schedule = { id: "ov-1", name: "Toussaint", status: "COMPLETED", score: null, createdAt: "2026-09-10T00:00:00Z", updatedAt: "2026-09-10T00:00:00Z", planType: "CLOSURE", schedulePlanId: "ete-plan" };
+  const toReplace = [{ teamId: "team-1", dayOfWeek: 3, startTime: "18:00:00", venueId: "venue-1", reason: "venue_closed" }];
+  const deviation = {
+    socleScheduleId: "socle",
+    moved: [{ teamId: "team-1", from: { dayOfWeek: 2, startTime: "18:30", venueId: "venue-1" }, to: { dayOfWeek: 4, startTime: "19:00", venueId: "venue-1" } }],
+    unplaced: [{ teamId: "team-1", dayOfWeek: 5, startTime: "20:00", venueId: "venue-1", reason: "team_reduced" }],
+  };
+
+  beforeEach(() => {
+    vi.mocked(listSchedules).mockResolvedValue([seasonV, closureV]);
+    vi.mocked(getSocleDeviation).mockClear();
+  });
+
+  it("sur une FERMETURE embarquée + COMPLETED : les DEUX panneaux coexistent (décision fondateur)", async () => {
+    vi.mocked(getSocleDeviation).mockResolvedValue(deviation);
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" isClosurePeriod toReplace={toReplace} />);
+
+    // Le NOUVEAU panneau (déplacées + non replacées), SERVI par la route.
+    const ecarts = await screen.findByRole("region", { name: /écarts avec le planning de saison/i });
+    expect(within(ecarts).getByText(/1 séance déplacée/i)).toBeInTheDocument();
+    expect(within(ecarts).getByText(/1 à replacer/i)).toBeInTheDocument();
+    // L'ANCIEN panneau « à replacer » reste rendu, distinct (les deux affichés).
+    expect(screen.getByRole("region", { name: /non reprises/i })).toBeInTheDocument();
+    expect(vi.mocked(getSocleDeviation)).toHaveBeenCalledWith("ov-1");
+  });
+
+  it("sur une VACANCE (isClosurePeriod faux) : la route socle-deviation n'est JAMAIS appelée", async () => {
+    vi.mocked(getSocleDeviation).mockResolvedValue(deviation);
+    renderWithProviders(<PlanningPage embedded scopePlanId="ete-plan" toReplace={toReplace} />);
+
+    // Le panneau « à replacer » (PR-2) reste, PR-2 inchangée à l'octet.
+    await screen.findByRole("region", { name: /non reprises/i });
+    expect(screen.queryByRole("region", { name: /écarts avec le planning de saison/i })).not.toBeInTheDocument();
+    expect(vi.mocked(getSocleDeviation)).not.toHaveBeenCalled();
+  });
+
+  it("sur /planning autonome (non embarqué) : ni panneau d'écarts ni appel de la route", async () => {
+    vi.mocked(getSocleDeviation).mockResolvedValue(deviation);
+    vi.mocked(listSchedules).mockResolvedValue([seasonV]);
+    renderWithProviders(<PlanningPage />);
+
+    await screen.findByText("Planning A");
+    expect(screen.queryByRole("region", { name: /écarts avec le planning de saison/i })).not.toBeInTheDocument();
+    expect(vi.mocked(getSocleDeviation)).not.toHaveBeenCalled();
   });
 });

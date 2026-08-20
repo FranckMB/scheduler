@@ -40,7 +40,7 @@ import { buildClubView } from "./lib/clubView";
 import { ClubViewTable } from "./ClubViewTable";
 import { availableResourceGroups, buildGrid, DAYS, type Lookups, slotGroupKey, toHourMinute } from "./lib/grid";
 import { PlanningToolbar } from "./PlanningToolbar";
-import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useFillSchedule, useLockSlot, useMoveDryRun, useMoveSlot, usePlaceSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
+import { useCategories, useCoachPlayers, useCoaches, useConstraints, useDeleteSchedule, useDiagnostics, useFillSchedule, useLockSlot, useMoveDryRun, useMoveSlot, usePlaceSlot, useRegenerate, useRegenerateFromVersion, useRegenerateOverlay, useReopenSchedule, useSchedules, useSlots, useSocleDeviation, useTeamCoaches, useTeams, useTrainingSlots, useValidateSchedule, useVenues } from "./queries";
 import { ResourceFilter } from "./ResourceFilter";
 import { SlotDetail, type MoveFeedback } from "./SlotDetail";
 
@@ -50,6 +50,7 @@ import type { ToReplaceEntry } from "./lib/toReplaceReason";
 import { isSeasonPlanType, planRepresentative, visibleOverlayVersions, visibleSeasonPlans } from "./lib/versions";
 import { SeasonComparisonModal } from "./SeasonComparisonModal";
 import { usePlanningStore, type ViewMode } from "./store";
+import { SocleDeviationPanel } from "./SocleDeviationPanel";
 import { ToReplaceList } from "./ToReplaceList";
 import { WeekGrid } from "./WeekGrid";
 
@@ -129,8 +130,13 @@ function EmptyState({ title, description }: { title: string; description: string
  *
  *  `toReplace` (P2-44 PR-2) — les séances du socle NON reprises par une transcription, SERVIES par
  *  la route et passées par `GenerateStep` (session d'écran). Non-vide ⇒ panneau « à replacer » +
- *  mise en évidence des vides. Null (page autonome, ou pas de transcription) ⇒ rien de tout ça. */
-export function PlanningPage({ embedded = false, scopePlanId = null, calendarEntryId = null, toReplace = null }: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null; toReplace?: ToReplaceEntry[] | null } = {}) {
+ *  mise en évidence des vides. Null (page autonome, ou pas de transcription) ⇒ rien de tout ça.
+ *
+ *  `isClosurePeriod` (P2-44 PR-5) — la période affichée est une FERMETURE (`GenerateStep` lit déjà
+ *  `periodEntry.periodType`, le serveur reste seul juge — la route refuse 422 sinon). SEUL déclencheur
+ *  du panneau « Écarts avec le planning de saison » : sur une vacance ou `/planning` autonome, la route
+ *  n'est JAMAIS appelée. */
+export function PlanningPage({ embedded = false, scopePlanId = null, calendarEntryId = null, toReplace = null, isClosurePeriod = false }: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null; toReplace?: ToReplaceEntry[] | null; isClosurePeriod?: boolean } = {}) {
   const { data: schedules = [], isLoading: schedulesLoading } = useSchedules();
   const { data: me } = useMe();
   // §4bis pt 2 — solde de crédits sur « Régénérer » (Découverte bridée seulement).
@@ -228,6 +234,13 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
   // l'écran et l'export montrent les mêmes créneaux vides.
   const displayed = schedules.find((s) => s.id === validScheduleId) ?? null;
   const slotLayerId = null !== displayed && !isSeasonPlanType(displayed.planType) ? (displayed.schedulePlanId ?? null) : null;
+
+  // P2-44 PR-5 — les écarts NOMMÉS vs le socle. Armés UNIQUEMENT sur l'écran embarqué et porté
+  // (`transcriptionSurface`), d'une FERMETURE (le serveur reste seul juge — 422 sinon), et d'une
+  // version TERMINÉE. Sur une vacance ou `/planning` autonome, `scheduleId` reste nul → la route
+  // n'est JAMAIS appelée. Le calcul est SERVI ; le front NOMME (agrégat + lignes), il ne redérive rien.
+  const socleDeviationArmed = embedded && scoped && isClosurePeriod && null !== displayed && "COMPLETED" === displayed.status;
+  const { data: socleDeviation = null } = useSocleDeviation(socleDeviationArmed ? validScheduleId : null);
 
   // Requête des créneaux de la version affichée. On garde la requête ENTIÈRE (pas juste
   // `data`) : son `isFetching` voile la grille pendant qu'elle (re)charge — sinon, en
@@ -1288,6 +1301,13 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
           ) : null}
           {null !== toReplace && toReplace.length > 0 ? (
             <ToReplaceList entries={toReplace} teamName={teamNameOf} venueName={venueNameOf} />
+          ) : null}
+
+          {/* P2-44 PR-5 — les écarts NOMMÉS vs le socle (déplacées + non replacées), SERVIS par la
+              route ; le panneau s'AJOUTE à « à replacer » (décision fondateur : les deux affichés).
+              Ne rend rien tant qu'il n'y a aucun écart. */}
+          {null !== socleDeviation ? (
+            <SocleDeviationPanel moved={socleDeviation.moved} unplaced={socleDeviation.unplaced} teamName={teamNameOf} venueName={venueNameOf} />
           ) : null}
 
           {/* P2-30 (geste 3) — les équipes à la dérive : un clic ARME le placement (mode cible).

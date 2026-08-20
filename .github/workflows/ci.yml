@@ -365,6 +365,14 @@ jobs:
       - name: PeriodCopyBirthTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/PeriodCopyBirthTest.php --group phase1'
 
+      # P2-44 PR-5 (axes generation pipeline + planning lifecycle) : les écarts NOMMÉS entre une
+      # version affichée d'un plan de FERMETURE et la version pointée du socle — séances déplacées
+      # (appariement chronologique) et non replacées (raison SERVIE par la sélection, null quand
+      # inexpliquée). Falsifié dans les deux sens, plus les refus (422 saison/vacances, 409 non
+      # COMPLETED / socle non pointé, tenant) et la lecture ouverte au Membre.
+      - name: SocleDeviationParityTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SocleDeviationParityTest.php --group phase1'
+
       - name: SeasonVersionUniquenessTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SeasonVersionUniquenessTest.php --group phase1'
 
