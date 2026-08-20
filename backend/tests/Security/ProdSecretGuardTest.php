@@ -41,6 +41,38 @@ final class ProdSecretGuardTest extends TestCase
         $this->addToAssertionCount(1);
     }
 
+    public function testProdRejectsDebugEnabled(): void
+    {
+        // M-1 : APP_DEBUG=1 posé par l'orchestrateur allumerait les routes dev
+        // (dont le raccourci démo) en prod — le boot doit refuser, tout entrypoint.
+        $vars = ['APP_DEBUG' => '1'] + $this->overridden();
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/APP_DEBUG/');
+        ProdSecretGuard::assertForEnvironment('prod', $vars, $this->envFile);
+    }
+
+    public function testProdRejectsDebugEnabledSpelledTrue(): void
+    {
+        $vars = ['APP_DEBUG' => 'true'] + $this->overridden();
+        $this->expectException(RuntimeException::class);
+        ProdSecretGuard::assertForEnvironment('prod', $vars, $this->envFile);
+    }
+
+    public function testProdAcceptsDebugDisabled(): void
+    {
+        // La valeur committée .env.prod (APP_DEBUG=0) ne trippe jamais le garde.
+        ProdSecretGuard::assertForEnvironment('prod', ['APP_DEBUG' => '0'] + $this->overridden(), $this->envFile);
+        ProdSecretGuard::assertForEnvironment('prod', ['APP_DEBUG' => 'false'] + $this->overridden(), $this->envFile);
+        $this->addToAssertionCount(1);
+    }
+
+    public function testNonProdEnvironmentIsNeverGuardedForDebug(): void
+    {
+        // dev/test tournent légitimement en debug.
+        ProdSecretGuard::assertForEnvironment('dev', ['APP_DEBUG' => '1'] + $this->overridden(), $this->envFile);
+        $this->addToAssertionCount(1);
+    }
+
     public function testNonProdEnvironmentIsNeverGuarded(): void
     {
         // dev/test legitimately run on the committed values.

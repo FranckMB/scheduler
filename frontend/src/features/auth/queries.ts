@@ -114,6 +114,23 @@ export function useVerifyEmail() {
 }
 
 /**
+ * P2-4 — le raccourci démo du register. Miroir EXACT de useVerifyEmail : le serveur
+ * pose un cookie JWT frais, on marque la session ouverte et on invalide `me` (le
+ * club vient de naître). La page enchaîne ensuite la navigation dans l'app.
+ */
+export function useDevDemoRegister() {
+  const setAuthenticated = useAuthStore((state) => state.setAuthenticated);
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: authApi.devDemoRegister,
+    onSuccess: () => {
+      setAuthenticated(true);
+      void queryClient.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+}
+
+/**
  * SEC-16 : la déconnexion passe désormais par le SERVEUR — lui seul peut effacer
  * un cookie httpOnly. L'état local est vidé quoi qu'il arrive (`finally`) : si le
  * réseau tombe, l'écran doit quand même se fermer, et le cookie expirera de

@@ -3,7 +3,7 @@
 > Backward inventory of the existing backend (Symfony 7.4 + API Platform). This document
 > describes what exists in the codebase at the time of verification — it is not a roadmap.
 
-Last verified @ 2026-08-20 (re-vérifié contre `backend/src/Controller/FillPeriodPlanController.php`, `backend/src/Service/ScheduleConstraintBuilder.php::withPinnedAssignments`, `backend/src/MessageHandler/GenerateScheduleHandler.php` et `backend/src/EventListener/ClubQuotaSubscriber.php` — nouvelle route `POST /api/schedules/{id}/fill` [ADR-0004 PR-3, le comblement] documentée §3 ; gates, épinglage HARD payload-only et exclusion mutuelle avec `withPreviousAssignments` confrontés au code). Historique des passes : `git log -p --follow backend/docs/backend-inventory.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33). ; précédemment : 2026-08-20 (**P4-103** — audit des routes API sans appelant. Vérifié : les 150 routes du rail club confrontées à `frontend/src`, aux scripts et aux e2e ; UNE seule était vraiment morte (`ClubUser`, retirée ici), les trois autres candidates étant des faux positifs — `/api/ffbb-logos/…` dont l'URL est STOCKÉE en base et rendue en `<img src>`, plus deux routes de plomberie API Platform. Le snapshot OpenAPI régénéré au passage a révélé une SECONDE péremption : l'intensité `OFF` de P2-42 n'y était jamais entrée. Re-vérifié aussi : les quatre routes `deletion-impact` correspondent toujours au snapshot)
+Last verified @ 2026-08-20 (re-vérifié contre `backend/src/Controller/DevDemoRegisterController.php`, `backend/src/Service/DemoClubMaterializer.php`, `backend/src/Command/DemoCreateCommand.php`, `backend/src/Controller/AuthController.php::registerConfig` et `backend/src/Security/ProdSecretGuard.php` — nouvelle route `POST /api/dev/demo-register` [P2-4, le raccourci démo du register] documentée §3 « Module démo » ; ordre des gardes, `DemoClubMaterializer::materialize()`/`teardownPreviousDemo()` extraits de `DemoCreateCommand` et le nouveau refus `APP_DEBUG=1` en prod de `ProdSecretGuard` confrontés au code). Historique des passes : `git log -p --follow backend/docs/backend-inventory.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33). ; précédemment : 2026-08-20 (re-vérifié contre `backend/src/Controller/FillPeriodPlanController.php`, `backend/src/Service/ScheduleConstraintBuilder.php::withPinnedAssignments`, `backend/src/MessageHandler/GenerateScheduleHandler.php` et `backend/src/EventListener/ClubQuotaSubscriber.php` — nouvelle route `POST /api/schedules/{id}/fill` [ADR-0004 PR-3, le comblement] documentée §3 ; gates, épinglage HARD payload-only et exclusion mutuelle avec `withPreviousAssignments` confrontés au code)
 
 ---
 
@@ -396,12 +396,32 @@ Le club de démonstration permanent (BCCL) est créé/réinitialisé par `app:de
 seed dev, substituées de façon positionnelle et déterministe — liste courte = refus,
 `BcclSeedProfile::FICTIONAL_COACHES`). Un club de démonstration **prospect** (à partir d'un code
 FFBB réel) se crée par `app:demo:create` (`src/Command/DemoCreateCommand.php`, options
-`--ffbb`, `--name`, `--animator-email`, `--animator-password`) qui pointe le compte animateur
-dessus. Deux contrôleurs dev-only relaient ces gestes en environnement e2e/test (mêmes garde
+`--ffbb`, `--name`, `--animator-email`, `--animator-password`), dont le cœur (déplacement de
+l'animateur, provisioning, populate FFBB + import des équipes engagées, best-effort synchrone)
+vit dans `DemoClubMaterializer::materialize()` (`src/Service/DemoClubMaterializer.php`). Trois
+contrôleurs dev-only relaient ces gestes en environnement e2e/test/démo (même garde
 `%kernel.debug%`, 404 en prod) : `POST /api/dev/approve-club-request` (`DevClubApprovalController`,
-approuve la demande PENDING de l'appelant) et `POST /api/dev/mark-season-paid`
+approuve la demande PENDING de l'appelant), `POST /api/dev/mark-season-paid`
 (`DevSeasonPaymentController`, marque payée la saison SUIVANTE du club courant — respecte
-l'horloge simulée).
+l'horloge simulée), et depuis le 2026-08-20 **`POST /api/dev/demo-register`**
+(`DevDemoRegisterController`) — le raccourci « effet waouw » : appelé par `RegisterPage` juste
+APRÈS le 202 neutre du vrai register (rail register/verify byte-intact), il fait naître le club
+DU PROSPECT depuis le formulaire réel plutôt qu'un terminal, pour l'adresse démo fixe SEULE
+(`app.demo_animator_email`, MAISON UNIQUE = `DemoCreateCommand::DEFAULT_ANIMATOR_EMAIL`,
+`demo@amateo.fr` — toute autre adresse : 422 sans effet). Ordre des gardes AVANT toute écriture :
+mot de passe d'un compte existant **VÉRIFIÉ, jamais écrasé** (401 sans effet) ; code FFBB visé
+remplaçable seulement s'il porte la propre démo ISOLÉE de l'animateur — un club réel, la démo
+d'un autre animateur ou une démo partagée refusent en 409 ; démontage du club démo précédent de
+l'animateur VALIDÉ intégralement avant la moindre destruction (purge du workspace + suppression
+de la ligne `club`, pour libérer son code FFBB — `DemoClubMaterializer::teardownPreviousDemo()`,
+`DemoTeardownRefusedException` en 409 sinon rien détruit). Une trace d'audit **globale**
+(`AuditAction::DEMO_SHORTCUT`, hors périmètre club — elle doit survivre à la destruction de la
+ligne club) est posée. La route est exposée au front SEULEMENT en debug par
+`GET /api/register/config` (champs additifs `demoShortcut`/`demoEmail`, tous deux
+`false`/`null` en prod). `ProdSecretGuard::assertForEnvironment()` (`src/Security/ProdSecretGuard.php`,
+invoqué depuis `Kernel::boot()`) refuse désormais de démarrer en environnement `prod` avec
+`APP_DEBUG` résolu à `1`/`true` — un verrou qui couvre cette route ET les deux précédentes d'un
+seul coup, indépendamment d'un oubli de garde individuelle.
 
 ### Cockpit temporel (overlays période/événement)
 

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { useAuthStore } from "@/shared/stores/authStore";
+
 import { api } from "./client";
 
 /**
@@ -56,5 +58,53 @@ describe("api client — X-Request-Id", () => {
 
     // v4 strict : version « 4 » et variante 8/9/a/b — la forme que le backend valide.
     expect(seen[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  });
+});
+
+/**
+ * P2-4 (revue sécu) — un 401 ailleurs qu'à la connexion = session périmée → le client
+ * vide l'état et redirige vers /login. MAIS le raccourci démo (`/api/dev/demo-register`)
+ * répond 401 sur un MOT DE PASSE incorrect alors que PERSONNE n'est connecté (l'inscrit
+ * est sur le formulaire). Le confondre avec une session expirée éjecterait le fondateur
+ * vers /login en pleine démo. Cette route est donc exemptée, comme /api/login.
+ */
+describe("api client — 401 handling", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    useAuthStore.getState().setAuthenticated(true);
+  });
+
+  function stub401(): void {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response('{"error":"invalid_credentials"}', { status: 401, headers: { "content-type": "application/json" } })),
+    );
+  }
+
+  it("un 401 sur le raccourci démo n'éjecte PAS la session (ni clear, ni redirect)", async () => {
+    stub401();
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign });
+    useAuthStore.getState().setAuthenticated(true);
+
+    const client = api.extend({ baseUrl: "http://localhost/api/" });
+    await expect(client.post("dev/demo-register").json()).rejects.toBeDefined();
+
+    expect(useAuthStore.getState().isAuthenticated).toBe(true);
+    expect(assign).not.toHaveBeenCalled();
+  });
+
+  it("un 401 sur une AUTRE route éjecte bien la session (l'exemption reste étroite)", async () => {
+    stub401();
+    const assign = vi.fn();
+    vi.stubGlobal("location", { assign });
+    useAuthStore.getState().setAuthenticated(true);
+
+    const client = api.extend({ baseUrl: "http://localhost/api/" });
+    await expect(client.get("teams").json()).rejects.toBeDefined();
+
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    expect(assign).toHaveBeenCalledWith("/login");
   });
 });

@@ -84,10 +84,16 @@ export const api = ky.create({
         }
       },
       (state) => {
-        // 401 on the login endpoint is a normal "bad credentials" — let the caller
-        // handle it. Only treat 401 elsewhere as a stale/expired session.
-        const isLogin = state.request.url.includes("/api/login");
-        if (state.response.status === 401 && !isLogin) {
+        // 401 on an endpoint that AUTHENTICATES a submitted credential is a normal
+        // "bad credentials" the CALLER surfaces — NOT a stale session. Two such
+        // endpoints: /api/login, and the dev demo-register shortcut (P2-4), which
+        // now VERIFIES the demo password instead of overwriting it — a typo returns
+        // 401 while NOBODY is logged in (the user is on the register form). Ejecting
+        // to /login there would look like the app kicked the founder out mid-demo.
+        // Only treat 401 elsewhere as a stale/expired session.
+        const callerHandles401 = state.request.url.includes("/api/login")
+          || state.request.url.includes("/api/dev/demo-register");
+        if (state.response.status === 401 && !callerHandles401) {
           useAuthStore.getState().clear();
           if (typeof window !== "undefined") {
             window.location.assign("/login");

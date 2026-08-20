@@ -154,14 +154,46 @@ export interface RegisterPayload {
 /**
  * P5-3b — config publique de la page d'inscription. `turnstileSiteKey` non-null
  * = Turnstile actif (le front rend le widget) ; null = inactif (écran actuel).
+ * P2-4 — `demoShortcut` vrai en démo (kernel.debug serveur) : le front tente le
+ * raccourci démo après le 202 du register ; faux en prod → écran actuel.
+ * `demoEmail` = l'adresse démo, non-nulle SEULEMENT en debug : le front ne tente le
+ * raccourci que si l'adresse SAISIE est celle-là (jamais le mdp d'un vrai prospect
+ * vers la route dev). Nulle en prod → aucun oracle.
  */
 export interface RegisterConfig {
   turnstileSiteKey: string | null;
+  demoShortcut: boolean;
+  demoEmail: string | null;
 }
 
 /** GET /api/register/config — publique (préfixe ^/api/register). */
 export function registerConfig(): Promise<RegisterConfig> {
   return api.get("register/config").json();
+}
+
+/** P2-4 — le corps du raccourci démo : l'adresse démo + le code FFBB du prospect. */
+export interface DevDemoRegisterPayload {
+  email: string;
+  password: string;
+  ara: string;
+  clubName: string;
+}
+
+/** P2-4 — la route démo pose un cookie JWT et rend le club matérialisé. */
+export interface DevDemoRegisterResponse {
+  membershipStatus: MembershipStatus;
+  clubId: string;
+}
+
+/**
+ * P2-4 — POST /api/dev/demo-register : le raccourci démo (gardé serveur par
+ * kernel.debug ET l'adresse démo). Tenté par la page d'inscription APRÈS le 202
+ * du register quand `demoShortcut` est vrai. 2xx → session ouverte (cookie posé) ;
+ * 422/404 → à traiter comme un fallback silencieux vers l'écran d'e-mail ; 409 →
+ * refus explicite (code FFBB d'un club réel).
+ */
+export function devDemoRegister(body: DevDemoRegisterPayload): Promise<DevDemoRegisterResponse> {
+  return api.post("dev/demo-register", { json: body }).json();
 }
 
 /** Register never authenticates: it returns an identical neutral 202 for a fresh
