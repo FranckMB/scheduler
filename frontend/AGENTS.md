@@ -182,6 +182,37 @@ data; avoiding it would mean duplicating the auth decision into a per-route `loa
   `collection()` unwraps it; `collectionAll()` pages via `?page=N` and dedupes by `id`.
   There is **no `useInfiniteQuery`** anywhere.
 
+### Toute mutation VOILE l'écran — l'exemption se déclare, elle ne se devine pas
+
+Lot C (2026-08-21). `app/ActionVeil.tsx`, monté dans `Providers`, bloque l'écran pendant qu'une
+action rend la main : `inert` natif (React 19) sur le contenu + overlay qui capte les clics **dès
+0 ms**, voile **visible seulement après 250 ms** (sinon il clignote à chaque clic de 90 ms).
+
+- **Le régime est GLOBAL par défaut.** Tu n'as rien à câbler en écrivant une nouvelle mutation :
+  elle voile. C'est le contraire qui se déclare — `meta: { veil: false }` — et une exemption sans
+  raison écrite est une régression déguisée.
+- **Trois contextes**, priorité *long > enregistrement > page* : `meta: { veil: "long" }` pour le
+  rail de retouche (le verdict moteur, > 30 s mesuré sur un club dense) ; le premier chargement
+  d'une requête **sans données en cache** pour « changement de page » ; tout le reste est
+  « enregistrement ». ⚠ Un **refetch d'arrière-plan ne voile jamais** — le prédicat est
+  `undefined === q.state.data`, la même notion que `readState`.
+- **Les seules exemptions légitimes à ce jour** : les 4 mutations de lancement de solve (elles
+  rendent 202 et passent la main à `GenerationWaiting` — les voiler ferait clignoter voile → écran
+  d'attente) et la query `useScheduleStatus` (son premier fetch vit sous cet écran).
+  ⚠ **`useRegenerateFromVersion` n'en fait PAS partie** et ne doit pas y entrer : `/regenerate-from`
+  ne lance **aucun solve** (`RegenerateFromVersionController.php:102-104`, 200 synchrone), c'est un
+  restore **destructif** — le voile est exactement la protection anti-double-clic qu'il réclame.
+- **Deux régimes de sortie.** Contextes courts : au-delà de 10 s on prévient **et on relâche** (une
+  panne réseau ne doit pas rendre l'app inutilisable jusqu'au F5). Contexte long : **jamais de
+  relâche au chrono** — relâcher autoriserait un second déplacement par-dessus le premier ; la
+  sortie est le bouton **« Abandonner ce déplacement »**, qui `abort()` la requête. L'abandon
+  volontaire se distingue par `VerdictAbandonedError extends EngineVerificationInterruptedError` —
+  la classe mère garde ses consommateurs justes par héritage.
+- **Rôles ARIA : deux régimes, c'est voulu.** Sans bouton → `role="status"` + `aria-live="polite"`.
+  Avec le bouton d'abandon, le voile **est** un dialogue → `role="dialog"` + `aria-modal`. Jamais
+  `alertdialog` : rien d'urgent, et il volerait le focus. Seule la phrase **stable** vit dans la
+  région live, la rotation est `aria-hidden` (AUD-FRT-23/24).
+
 ### Taille de texte : plancher 12 px, sauf dans les grilles
 
 Le corps de texte descend à `text-xs` (0,75 rem = **12 px**) et pas en dessous — pas
