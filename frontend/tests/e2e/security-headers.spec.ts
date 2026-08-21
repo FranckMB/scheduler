@@ -1,4 +1,4 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test, type ConsoleMessage } from "./fixtures";
 
 import { registerAndVerify, uniqueAra } from "./support";
 

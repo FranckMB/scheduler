@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /** Seeded dev club (BasketballInit) — full data, but INCOMPLETE onboarding
  * (cockpit state 1: no plan generated yet). Matches are locked until the main

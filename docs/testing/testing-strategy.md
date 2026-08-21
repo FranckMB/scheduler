@@ -87,6 +87,32 @@ Run: `cd engine && make test` (pytest + ruff + mypy, inside the engine container
 
 ---
 
+## 3bis. Les parcours e2e disent POURQUOI quand ils cassent
+
+⚑ **Convention : un spec e2e importe `test` (et `expect`) depuis `./fixtures`, jamais depuis
+`@playwright/test`.** La fixture y est `auto` : elle enregistre les réponses `/api/*` de statut
+≥ 400 et les **attache au rapport quand, et seulement quand, le test tombe**
+(`frontend/tests/e2e/fixtures.ts`).
+
+Elle existe parce que le dépôt a payé son absence : le 2026-08-21, `journey.spec.ts` est tombé
+**deux fois en CI** (PR #684 puis #687) sur `element(s) not found`, trois tentatives chacune, puis
+une relance complète VERTE. Ce message dit ce qui MANQUE à l'écran ; il ne dit pas si le serveur a
+refusé, s'il a répondu 422, ou si c'est la liste qui n'a pas suivi. Deux enquêtes pour rien.
+
+⚠ **Ce n'est pas une assertion, délibérément.** Des 4xx légitimes traversent ces parcours (gardes
+fail-closed, refus de rôle, 404 anti-énumération des pages à token) : en faire un échec
+transformerait un comportement voulu en faux rouge. **On collecte, on n'accuse pas.**
+
+⚠ **Un piège d'environnement à connaître avant d'accuser le code** : les mails partent par le bus,
+donc par le conteneur `messenger-worker` — qui **s'arrête sur son time-limit horaire**. Worker
+mort = aucun mail de vérification = tout parcours qui s'inscrit échoue dans `fetchVerificationToken`,
+un échec qui ressemble à un bug produit. La cible `make -C frontend e2e` le relève d'elle-même
+(`compose up -d --wait`) ; une invocation `npx playwright test` directe, elle, **saute ce
+self-heal** (il est conditionné à l'absence de `E2E_BASE_URL`). Constaté le 2026-08-21 : worker
+arrêté depuis 9 h. Et la boîte Mailpit est désormais **vidée avant chaque inscription**
+(`submitRegister`) — accumulée sur des dizaines de runs locaux, la recherche `to:{email}` finissait
+par ne plus rendre le bon message.
+
 ## 4. How to run locally
 
 ```bash
