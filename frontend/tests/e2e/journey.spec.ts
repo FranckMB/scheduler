@@ -24,7 +24,18 @@ test("full journey: wizard → generation → validated planning → cockpit", a
   await page.getByLabel("Nom de l'équipe").fill("SM1");
   await page.getByLabel("Catégorie").selectOption({ label: "Senior" });
   await page.getByRole("button", { name: "Ajouter l'équipe" }).click();
-  await expect(page.locator('input[value="SM1"]')).toBeVisible();
+  // ⚠ **On lit la VALEUR du champ, pas son attribut.** `input[value="SM1"]` visait l'ATTRIBUT
+  // HTML — un détail d'implémentation de React, qui met à jour la PROPRIÉTÉ `value` et ne
+  // reflète l'attribut qu'au montage. `toHaveValue` lit ce que l'utilisateur voit, et le
+  // champ est désigné par son nom accessible plutôt que par sa forme.
+  //
+  // ⏱ Et le budget est EXPLICITE : la ligne apparaît après un POST + un refetch de la liste.
+  // Les 5 s par défaut de Playwright suffisent sur une machine calme et pas sur un runner
+  // chargé — ce test est tombé TROIS fois en CI ici (PR #684, #687, #689), toujours à cet
+  // endroit, sans qu'AUCUN appel d'API ne réponde ≥ 400 (l'instrumentation de cette PR le
+  // prouve : elle n'a rien eu à attacher). Ce n'était donc pas un refus serveur, mais une
+  // attente trop courte.
+  await expect(page.getByRole("textbox", { name: "Nom", exact: true })).toHaveValue("SM1", { timeout: 20_000 });
   await page.getByRole("button", { name: "Suivant" }).click();
 
   // --- Step 2 · venue + two weekly slots (2 sessions to place).
