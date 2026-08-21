@@ -546,9 +546,30 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
         return [] === $matches ? null : $matches[0]->getId();
     }
 
+    /**
+     * AUD-BCK-14 — **absent → le défaut ; PRÉSENT mais inconnu → 422.**.
+     *
+     * Ces trois parsers repliaient en silence (`?? EVENT`, `?? ACTIVE`, et un `tryFrom()` nu
+     * dont le `null` de l'inconnu se confond avec le `null` de l'absent) : mot pour mot le
+     * motif qu'AUD-BCK-12 a remplacé par un `throw` sur `Constraint`, resté ici. Inatteignable
+     * aujourd'hui — `CalendarEntryInput` porte un `Assert\Choice` sur les trois champs — mais
+     * le jour où l'un saute, une **PÉRIODE devient un ÉVÉNEMENT** enregistré comme tel, ou un
+     * type de période part à NULL : conséquences ADR-0002 (grille possédée par la période,
+     * plans ancrés), et pas un mot. Défense en profondeur : on échoue bruyamment.
+     *
+     * ⚑ **Différence assumée avec le patron de `Constraint`** : là-bas les champs portent
+     * `NotBlank`, donc lever sur `null` est correct. Ici les trois sont FACULTATIFS et ont un
+     * défaut documenté (genre absent = ÉVÉNEMENT, statut absent = ACTIF, type absent = pas de
+     * période) — confondre « absent » et « inconnu » aurait cassé toute création qui s'en
+     * remet aux défauts. Le témoin du test unitaire garde précisément cette distinction.
+     */
     private function parseKind(?string $value): CalendarEntryKind
     {
-        return CalendarEntryKind::tryFrom($value ?? '') ?? CalendarEntryKind::EVENT;
+        if (null === $value) {
+            return CalendarEntryKind::EVENT;
+        }
+
+        return CalendarEntryKind::tryFrom($value) ?? throw $this->unknownEnumValue('kind', $value, CalendarEntryKind::values());
     }
 
     private function parsePeriodType(?string $value): ?CalendarEntryPeriodType
@@ -557,12 +578,16 @@ class CalendarEntryStateProcessor extends AbstractStateProcessor
             return null;
         }
 
-        return CalendarEntryPeriodType::tryFrom($value);
+        return CalendarEntryPeriodType::tryFrom($value) ?? throw $this->unknownEnumValue('periodType', $value, CalendarEntryPeriodType::values());
     }
 
     private function parseStatus(?string $value): CalendarEntryStatus
     {
-        return CalendarEntryStatus::tryFrom($value ?? '') ?? CalendarEntryStatus::ACTIVE;
+        if (null === $value) {
+            return CalendarEntryStatus::ACTIVE;
+        }
+
+        return CalendarEntryStatus::tryFrom($value) ?? throw $this->unknownEnumValue('status', $value, CalendarEntryStatus::values());
     }
 
     private function parseDate(?string $value): DateTimeImmutable
