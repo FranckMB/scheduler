@@ -220,6 +220,36 @@ final class SeasonReadonlyTest extends WebTestCase
     }
 
     /**
+     * SEC-13 — ⚠ LE CONTOURNEMENT, gardé par son propre test (security-review 2026-08-21).
+     *
+     * `uuid_in` de PostgreSQL accepte plusieurs orthographes du même identifiant : sans tirets,
+     * avec accolades, tirets déplacés, majuscules. Une version antérieure du garde pré-filtrait
+     * l'id sur une regex d'UUID CANONIQUE — elle rendait donc `null` (« cible introuvable »,
+     * repli) là où la base, elle, résolvait parfaitement le plan. Le garde ne mordait plus, et
+     * `clear-grid` rendait 200 sur une saison archivée ; `reset-grid` y écrivait des lignes
+     * neuves, l'appel étant rejouable.
+     *
+     * C'est LA forme qui a menti : c'est elle qu'on garde. Un futur pré-filtre plus strict que
+     * Postgres — quelle que soit sa bonne intention — rougira ici.
+     */
+    public function testClearGridOnArchivedPlanWithHyphenlessUuidIsAlso409Archived(): void
+    {
+        [$user, $club, $seasons] = $this->createClubWithThreeSeasons();
+        [$past] = $seasons;
+        $planId = $this->createPeriodPlan($club->getId(), $past->getId());
+
+        $this->client->request('POST', '/api/venue_period_overrides/clear-grid', [], [], $this->authHeaders($user) + [
+            'CONTENT_TYPE' => 'application/json',
+        ], json_encode([
+            // La MÊME cible, écrite autrement. Postgres la résout ; le garde doit la voir aussi.
+            'schedulePlanId' => str_replace('-', '', $planId),
+            'venueId' => $this->uuid(),
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(409);
+        self::assertStringContainsString('This season is archived (read-only).', (string) $this->client->getResponse()->getContent());
+    }
+
+    /**
      * SEC-13 — /fill sur un planning d'une saison archivée, sans header : le refus
      * devient uniforme et NOMMÉ (409 « archived »). Avant, le contrôleur chargeait
      * la version par l'ORM season-filtré : introuvable dans la saison courante,
