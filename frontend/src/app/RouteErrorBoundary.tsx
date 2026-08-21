@@ -5,6 +5,7 @@ import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router";
 import { ForbiddenPage } from "@/app/ForbiddenPage";
 import { OfflineScreen } from "@/app/OfflineScreen";
 import { ServerErrorScreen } from "@/app/ServerErrorScreen";
+import { useOnline } from "@/shared/lib/online";
 
 /**
  * Le filet des erreurs de ROUTE — indispensable depuis le découpage en chunks (P4-6).
@@ -21,14 +22,17 @@ import { ServerErrorScreen } from "@/app/ServerErrorScreen";
  *
  * Les confondre est nuisible dans les deux sens : dire « rechargez » à quelqu'un
  * hors ligne lui fait perdre le shell encore utilisable pour tomber sur la page
- * d'erreur du navigateur. On tranche donc sur `navigator.onLine`, et on offre
+ * d'erreur du navigateur. On tranche donc sur l'état réseau (`useOnline`, la source
+ * de vérité unique — miroir de `navigator.onLine` après le seed du boot), et on offre
  * TOUJOURS un « Réessayer » qui rejoue la navigation sans recharger le document.
  */
 export function RouteErrorBoundary() {
   const error = useRouteError();
   const navigate = useNavigate();
   const chunkFailed = isChunkLoadError(error);
-  const offline = "undefined" !== typeof navigator && false === navigator.onLine;
+  // Source de vérité UNIQUE de l'état réseau (P5-14) : le même juge que la file de mutations. Après
+  // le seed du boot (`main.tsx`), `useOnline()` équivaut à `navigator.onLine` à l'instant de décision.
+  const offline = !useOnline();
   const staleDeploy = chunkFailed && !offline;
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider, useMutation, useQuery } from "@tanstack/react-query";
+import { onlineManager, QueryClient, QueryClientProvider, useMutation, useQuery } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRef, useImperativeHandle, useMemo, type ReactNode, type Ref } from "react";
@@ -80,11 +80,13 @@ beforeEach(() => {
   vi.useFakeTimers();
   useToastStore.setState({ toasts: [] });
   useNavTransition.setState({ token: 0 }); // aucune transition en cours entre deux tests
+  onlineManager.setOnline(true); // onlineManager est un singleton global : on le remet en ligne
 });
 afterEach(() => {
   vi.runOnlyPendingTimers();
   vi.useRealTimers();
   useToastStore.setState({ toasts: [] });
+  onlineManager.setOnline(true); // ne pas laisser un test hors ligne en polluer un autre
 });
 
 describe("ActionVeil — blocage immédiat, voile différé", () => {
@@ -194,6 +196,40 @@ describe("ActionVeil — « Changement de page » : un premier chargement ne voi
     // data présente → pas un premier chargement, même sous une transition : rien ne voile.
     expect(content()).not.toHaveAttribute("inert");
     expect(overlay()).toBeNull();
+  });
+});
+
+describe("ActionVeil — une mutation en PAUSE (hors ligne) ne compte pas comme un geste en vol", () => {
+  // P5-14 (bandeau hors-ligne) : `networkMode: "online"` (défaut) → hors ligne, une mutation ne
+  // DÉMARRE pas, elle part `isPaused: true`. Le voile la comptait comme un geste en vol : l'écran se
+  // bloquait à 0 ms puis, à 10 s, toastait « l'action continue en arrière-plan » — FAUX, rien ne
+  // continue, c'est garé. Le prédicat `saving` exclut désormais les mutations en pause.
+  it("hors ligne, une mutation garée (sans meta) ne voile PAS l'écran", async () => {
+    onlineManager.setOnline(false);
+    const ctl = createRef<Ctl>();
+    const qc = newClient();
+    renderVeil(<MutationProbe ref={ctl} />, qc);
+
+    act(() => ctl.current!.start()); // networkMode "online" par défaut → hors ligne = isPaused
+    await flush();
+
+    // Garée, pas partie : rien ne continue en arrière-plan, donc aucun voile ni à 0 ms ni après.
+    expect(content()).not.toHaveAttribute("inert");
+    expect(overlay()).toBeNull();
+  });
+
+  it("NR contexte LONG inchangé : un déplacement garé (veil:long) voile TOUJOURS", async () => {
+    // ⚠ Le contexte `long` (verdict moteur) N'exclut PAS les pauses : un déplacement sous verdict qui
+    // repartirait plus tard doit rester sous le régime bouton-Abandonner, jamais relâché en silence.
+    onlineManager.setOnline(false);
+    const ctl = createRef<Ctl>();
+    const qc = newClient();
+    renderVeil(<MutationProbe ref={ctl} meta={{ veil: "long" }} register />, qc);
+
+    act(() => ctl.current!.start());
+    await flush();
+
+    expect(content()).toHaveAttribute("inert");
   });
 });
 

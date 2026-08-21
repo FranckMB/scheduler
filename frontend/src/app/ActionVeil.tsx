@@ -110,8 +110,17 @@ function TacticalScene() {
 
 export function ActionVeil({ children }: { children: React.ReactNode }) {
   // false !== veil : voilé PAR DÉFAUT (tout ce qui n'est pas exempté `veil:false`).
+  // ⚠ `saving` EXCLUT les mutations EN PAUSE (P5-14) : `networkMode: "online"` (défaut) → hors ligne,
+  // une mutation ne DÉMARRE pas et part `isPaused: true`. Rien ne continue en arrière-plan, c'est
+  // garé jusqu'au retour du réseau — la voiler bloquerait l'écran pour un geste qui n'est jamais
+  // parti, puis toasterait « l'action continue en arrière-plan » (faux). Le bandeau hors-ligne
+  // (`app/OfflineBanner.tsx`) porte l'état des gestes en attente.
+  // ⚠ TRADE-OFF ASSUMÉ : le contexte `long` (verdict moteur), lui, N'exclut PAS les pauses. Un
+  // déplacement sous verdict qui serait garé (réseau coupé en plein vol) doit RESTER sous le régime
+  // bouton-Abandonner — jamais relâché en silence, sinon un second déplacement concurrent pourrait
+  // partir par-dessus le premier au retour du réseau.
   const longPending = useIsMutating({ predicate: (m) => "long" === m.options.meta?.veil });
-  const savingCount = useIsMutating({ predicate: (m) => false !== m.options.meta?.veil });
+  const savingCount = useIsMutating({ predicate: (m) => false !== m.options.meta?.veil && !m.state.isPaused });
   // Un PREMIER chargement seulement (pas de données en cache) — jamais un refetch d'arrière-plan.
   const firstLoads = useIsFetching({ predicate: (q) => false !== q.options.meta?.veil && undefined === q.state.data });
 

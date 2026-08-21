@@ -1,6 +1,7 @@
+import { onlineManager } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RouteErrorBoundary } from "./RouteErrorBoundary";
 
@@ -20,6 +21,10 @@ describe("RouteErrorBoundary — le filet du découpage", () => {
   beforeEach(() => {
     captureException.mockClear();
     vi.spyOn(console, "error").mockImplementation(() => {});
+    onlineManager.setOnline(true); // état réseau = source de vérité unique (useOnline), on mute la PROD
+  });
+  afterEach(() => {
+    onlineManager.setOnline(true); // singleton global : ne pas laisser un test hors ligne polluer un autre
   });
 
   function renderWithFailingLazy(error: Error) {
@@ -56,7 +61,9 @@ describe("RouteErrorBoundary — le filet du découpage", () => {
     // déploiement — le navigateur ne distingue pas les deux causes. Dire
     // « rechargez » à quelqu'un hors ligne lui fait perdre le shell encore
     // utilisable pour tomber sur la page d'erreur du navigateur.
-    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    // On mute la PROD (le vrai onlineManager), pas `navigator.onLine` : depuis la convergence P5-14,
+    // c'est `useOnline()` (→ onlineManager) qui tranche, pas une lecture directe de `navigator`.
+    onlineManager.setOnline(false);
 
     renderWithFailingLazy(new TypeError("Failed to fetch dynamically imported module: /assets/PlanningPage-abc.js"));
 
@@ -64,7 +71,6 @@ describe("RouteErrorBoundary — le filet du découpage", () => {
     expect(screen.queryByText(/nouvelle version est disponible/i)).toBeNull();
     // Et une issue qui ne dépend pas du réseau du document.
     expect(screen.getByRole("button", { name: /Réessayer/i })).toBeInTheDocument();
-    onLine.mockRestore();
   });
 
   it("toute autre erreur de route reste actionnable (écran 500, pas confondu avec une MAJ)", async () => {
