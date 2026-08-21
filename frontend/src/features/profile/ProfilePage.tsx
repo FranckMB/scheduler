@@ -3,6 +3,7 @@ import { type FormEvent, useState } from "react";
 import { useLogout, useMe } from "@/features/auth/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { FichePage } from "@/shared/components/ui/fiche-page";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { NewPasswordFields } from "@/shared/components/ui/new-password-fields";
@@ -258,7 +259,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-4">
+    <FichePage className="space-y-4">
       <div>
         <h1 className="border-l-[3px] border-accent pl-3 text-xl font-semibold">Profil</h1>
         <p className="text-sm text-muted-foreground">
@@ -269,6 +270,6 @@ export function ProfilePage() {
       <PasswordForm />
       <ExportSection />
       <DangerZone />
-    </div>
+    </FichePage>
   );
 }

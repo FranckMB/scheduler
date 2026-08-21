@@ -105,3 +105,19 @@ describe("ProfilePage — zone de danger (RGPD)", () => {
     expect(cancelEmailMut).toHaveBeenCalled();
   });
 });
+
+/**
+ * P4-107 (3ᵉ tranche) — même cadre que la fiche Club. Le Profil était le plus étroit des
+ * trois (`max-w-lg`, 512 px), soit 27 % de l'écran de référence 1920×1080.
+ */
+describe("largeur de la fiche Profil", () => {
+  it("est cadrée par FichePage, sans largeur concurrente", () => {
+    const { container } = render(<ProfilePage />);
+    const root = container.firstChild as HTMLElement;
+    const widths = root.className.split(/\s+/).filter((token) => token.startsWith("max-w-"));
+
+    expect(widths).toEqual(["max-w-fiche"]);
+    expect(root.className).toContain("mx-auto");
+  });
+});
+

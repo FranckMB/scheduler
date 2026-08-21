@@ -9,6 +9,7 @@ import { MembersSection } from "@/features/club/MembersSection";
 import { AccordionSection } from "@/shared/components/ui/accordion";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
+import { FichePage } from "@/shared/components/ui/fiche-page";
 import { Input } from "@/shared/components/ui/input";
 import { FullPageSpinner, Spinner } from "@/shared/components/ui/spinner";
 import { useCredits } from "@/shared/credits/useCredits";
@@ -638,7 +639,7 @@ function ClubHub({ me }: { me: MeResponse }) {
   // sinon un owner ne voit jamais l'export RGPD (revue PR-2).
   const isManagement = isManagementRole(me.role);
   return (
-    <div className="mx-auto max-w-2xl">
+    <FichePage>
       <h1 className="mb-1 border-l-[3px] border-accent pl-3 text-xl font-semibold">Gestion du club</h1>
       <p className="mb-4 text-sm text-muted-foreground">{me.club?.name ?? "—"}</p>
       <div className="space-y-3">
@@ -699,7 +700,7 @@ function ClubHub({ me }: { me: MeResponse }) {
           </AccordionSection>
         ) : null}
       </div>
-    </div>
+    </FichePage>
   );
 }
 
