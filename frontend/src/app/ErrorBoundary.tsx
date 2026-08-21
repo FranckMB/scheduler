@@ -1,6 +1,8 @@
 import * as Sentry from "@sentry/react";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
+import { ServerErrorScreen } from "@/app/ServerErrorScreen";
+
 interface Props {
   children: ReactNode;
 }
@@ -33,31 +35,12 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!this.state.hasError) {
       return this.props.children;
     }
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background p-6 text-center text-foreground">
-        <h1 className="text-lg font-semibold">Une erreur inattendue s'est produite</h1>
-        <p className="max-w-md text-sm text-muted-foreground">
-          L'application a rencontré un problème. Vos données ne sont pas perdues — réessayez, ou rechargez la page si le problème persiste.
-        </p>
-        <div className="flex gap-2">
-          {/* Retry re-renders the children in place: a transient throw (a racing query,
-              a route-transition blip) recovers without a full reload + re-auth. */}
-          <button
-            type="button"
-            onClick={() => this.setState({ hasError: false })}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
-          >
-            Réessayer
-          </button>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-          >
-            Recharger la page
-          </button>
-        </div>
-      </div>
-    );
+    // P5-14 — l'écran 500 partagé. « Réessayer » re-rend les enfants EN PLACE : un
+    // throw passager (query en course, à-coup de transition) se rétablit sans
+    // rechargement + ré-auth. Toute la mécanique de la classe (componentDidCatch →
+    // Sentry, retry par setState) est conservée — seul le RENDU passe à la primitive.
+    // Monté HORS providers : d'où l'écran 500 (sans FeedbackDialog), pas l'écran
+    // hors-ligne (dont le support a besoin des providers).
+    return <ServerErrorScreen onRetry={() => this.setState({ hasError: false })} />;
   }
 }

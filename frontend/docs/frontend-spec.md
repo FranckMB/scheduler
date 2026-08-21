@@ -4,19 +4,16 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-21 (recalé — **le VOILE bloquant (lot C PR-2), contexte « changement de
-page » : armement au GESTE (pas au store) + blocage DIFFÉRÉ à 250 ms** : `app/ActionVeil.tsx` (dérivé `blocking`) +
-`ActionVeil.css`, son montage dans `app/providers.tsx` (Toaster laissé HORS du wrapper inert), les
-`meta.veil` de `features/planning/queries.ts` et `features/wizard/queries.ts`, `VerdictAbandonedError`
-dans `features/planning/api.ts`, et le déclencheur de transition `shared/stores/navTransitionStore.ts`
-armé depuis les HANDLERS DE CLIC (`WizardLayout`, `PlanningPage`), jamais depuis les actions de store
-(neutres, car appelées aussi au guidage automatique) — tous confrontés au code. Le
-contexte « page » ne s'arme que sur une transition d'étape/vue (jamais au montage) ET ne BLOQUE qu'à
-250 ms, quand le voile est visible ; `enregistrement`/`long` bloquent toujours dès 0 ms. Asymétrie
-gardée par le NR `app/ActionVeil.test.tsx` ; l'armement-au-geste par le NR `features/wizard/WizardPage.test.tsx`. La règle et la liste des exemptions vivent dans
-`frontend/AGENTS.md` (ce document POINTE, il ne recopie pas). La puce voisine « quand l'écran
-d'attente s'affiche » (PR-1) relue : inchangée. Historique des passes : `git log -p --follow
-frontend/docs/frontend-spec.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-21 (recalé — **§6.8 réécrite : les ÉCRANS SYSTÈME (P5-14, tranche
+applicative)** et **§2, le catch-all qui n'est plus une redirection**. Confrontés au code :
+`shared/components/ui/system-screen.tsx` (primitive sans `variant` ni `switch`, rendue sans
+provider, `PRODUCT_NAME` en variable), ses cinq consommateurs (`app/NotFoundPage`,
+`ForbiddenPage`, `OfflineScreen`, `ServerErrorScreen`, le bloc de `features/auth/LoginPage`),
+les deux catch-all de `app/router.tsx`, la porte 403 de `app/RouteErrorBoundary.tsx`, le
+marqueur one-shot de `shared/lib/sessionExpiredNotice.ts` et la branche corrigée
+d'`app/AuthGuard.tsx`. Le §6.7 bis (P2-44 PR-5) et la puce du voile (lot C) relus : inchangés.
+Historique des passes : `git log -p --follow frontend/docs/frontend-spec.md` (un stamp REMPLACE,
+il ne s'empile pas — DOC-33).
 
 ---
 
@@ -94,7 +91,7 @@ découpage sûr et **aucun n'est optionnel** quand on ajoute une route :
 | `/admin` | **Console superadmin** derrière `AdminGuard` → `AdminShell` : santé des services et conteneurs, dépendances externes, journaux (audit · messenger failed · erreurs système). Identité **globale et séparée** — un JWT club ne franchit jamais ce pare-feu, et la session admin ne pose jamais `app.club_id`. Client HTTP dédié (`adminApi`, préfixe `/api/admin`, cookie de session) qui **ne lit jamais** le store JWT club. Contrat : `superadmin-auth.md` | Session SA0 | `AdminShell` |
 | `/admin/*` (inconnue) | Redirige vers `/admin` — **hors du shell lazy**, pour qu'une URL admin inconnue ne télécharge pas la console entière | Session SA0 | — |
 
-> Toute URL authentifiée inconnue (dont l'ancienne `/pending-members`) redirige vers `/` (catch-all `router.tsx`).
+> Toute URL authentifiée inconnue (dont l'ancienne `/pending-members`) **affiche l'écran 404** (`app/NotFoundPage`, catch-all `router.tsx`), dans `AppLayout` — en-tête et navigation conservés, l'accueil à un clic. ⚠ Elle **redirigeait silencieusement** vers `/` jusqu'au 2026-08-21 (P5-14) : un lien périmé téléportait le gestionnaire à l'accueil sans un mot, et l'écran 404 n'avait aucune route où vivre. Idem `/admin/*`, qui rend la 404 de la console. **Inchangé** : un visiteur ANONYME part toujours vers `/login` d'abord, et un club en onboarding vers le wizard — on ne révèle rien à qui n'est pas entré.
 
 ### Guards et redirects (`src/app/AuthGuard.tsx`)
 
@@ -749,13 +746,57 @@ distincts : « **Écarts avec le planning de saison** » (le neuf, qui porte en 
 vs « Séances non reprises du planning de saison » (l'existant, session d'écran). Sur une **vacance**
 la route n'est **jamais appelée** : le comportement PR-2 reste intact à l'octet.
 
-### 6.8 Loading states et error boundaries
+### 6.8 Loading states, error boundaries et ÉCRANS SYSTÈME (P5-14, 2026-08-21)
 
 Chaque route a :
 
 - Un skeleton loader pendant le chargement initial (pas de spinner vide)
 - Un error boundary React qui affiche un message + bouton "Réessayer"
 - Pas de page blanche en cas d'erreur API
+
+**Les écrans système passent tous par UNE primitive** — `shared/components/ui/system-screen.tsx`
+(`SystemScreen`). Elle porte la **forme** et rien d'autre : nom produit (via `PRODUCT_NAME`, jamais
+un littéral), titre, corps, **un** geste principal + un secondaire, et une ligne « Code incident »
+discrète quand le consommateur en fournit une. ⚠ **Aucune prop `variant`, aucun `switch` sur un type
+d'écran** : chaque écran est un CONSOMMATEUR qui apporte sa copie et ses gestes. C'est ce qui tient la
+règle « un seul composant d'état, jamais un deuxième » sans fabriquer un composant fourre-tout.
+⚠ Contrainte dure : la primitive rend **sans aucun provider** — elle sert sous `ErrorBoundary`, monté
+hors providers ; donc pas de `useQuery`, pas de `FeedbackDialog` à l'intérieur.
+
+| Écran | Consommateur | Déclencheur |
+|---|---|---|
+| **404** | `app/NotFoundPage` | catch-all `*` et `/admin/*` (§2) |
+| **403** | `app/ForbiddenPage` | `RouteErrorBoundary` sur une `Response` 403 — **porte générique**, aucun câblage page par page |
+| **Hors ligne** (pleine page) | `app/OfflineScreen` | échec de chunk hors ligne, et échec au boot |
+| **500** | `app/ServerErrorScreen` | crash de rendu (`ErrorBoundary`), et 5xx au boot |
+| **Session expirée** | bloc dans `features/auth/LoginPage` | marqueur one-shot posé par `shared/api/client.ts` |
+
+**La 404 sert AUSSI au refus tenant** — une ressource d'un autre club rend 404, jamais 403 (un 403
+confirmerait son existence). ⚠ **Sa copie doit rester MUETTE sur les droits** : y ajouter « vous n'avez
+pas accès » la transformerait en oracle d'existence. Le commentaire de `NotFoundPage` le dit, parce
+que c'est exactement l'« amélioration » qu'une relecture bien intentionnée ajouterait.
+
+**Le 403 n'a aujourd'hui aucun chemin UI qui le produise** (le front masque les gestes de gestion en
+amont, `shared/lib/roles.ts` ; le 403 saison s'auto-guérit dans `client.ts`). L'écran et sa porte sont
+livrés quand même — décision fondateur : le jour où un Membre atteint une route de gestion, il existe.
+
+**Session expirée — pourquoi un marqueur et pas une page** : le 401 est capté dans `client.ts`, mais
+« Se reconnecter » **EST** le formulaire de `/login` déjà présent ; une page dédiée ajouterait un clic
+pour rien. Le marqueur est **one-shot**, en `sessionStorage`, sous une clé **sans nom de marque**
+(leçon de `clubscheduler:wish-draft:`, piégée par le renommage). ⚠ Surtout **pas** un query param :
+une URL partagée ou mise en favori afficherait le message à tort.
+
+⚠ **`AuthGuard` n'envoie plus les 5xx vers `/login`.** Il le faisait pour TOUTE erreur de `/api/me`,
+réseau compris — donc le serveur tombait et l'application répondait « reconnectez-vous ». Le vrai 401
+est déjà éjecté par `client.ts`. Désormais : hors ligne → écran hors ligne, sinon → écran 500 dont
+« Réessayer » refait le `refetch`.
+
+**Le code d'incident** est l'`X-Request-Id` de corrélation déjà posé sur chaque requête et retenu 10 min
+sur un ≥ 500 — jamais une stack, une exception ou du SQL. Il est déjà joint automatiquement à un
+signalement : l'utilisateur n'a pas à le recopier.
+
+**Hors de cette tranche** : le **bandeau** hors-ligne d'usage normal (maquette fondateur à venir) et la
+**503/maintenance**, qui est un geste d'ops (Caddy `handle_errors`), pas du code applicatif.
 
 ---
 

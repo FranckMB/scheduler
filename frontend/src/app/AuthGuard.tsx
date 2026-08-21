@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 
+import { OfflineScreen } from "@/app/OfflineScreen";
+import { ServerErrorScreen } from "@/app/ServerErrorScreen";
 import { useMe } from "@/features/auth/queries";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 import { useAuthStore } from "@/shared/stores/authStore";
@@ -29,7 +31,7 @@ const ONBOARDING_ALLOWED = ["/wizard", "/profile", "/club", "/confidentialite"];
  */
 export function AuthGuard() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const { data, isLoading, isError } = useMe();
+  const { data, isLoading, isError, refetch } = useMe();
   const location = useLocation();
 
   // First-time club: locked to the wizard until a main plan exists (baseline),
@@ -56,7 +58,16 @@ export function AuthGuard() {
     return <FullPageSpinner />;
   }
   if (isError || !data) {
-    return <Navigate to="/login" replace />;
+    // P5-14 — un VRAI 401 (session périmée) a DÉJÀ vidé l'auth dans client.ts :
+    // il est capté par `!isAuthenticated` plus haut → /login. Atteindre ici avec
+    // `isError` signifie un échec NON-401 : 5xx, réseau coupé, timeout. Ne JAMAIS
+    // rediriger vers /login (le mensonge « reconnectez-vous » quand le serveur
+    // tombe). Réseau coupé → écran hors-ligne ; sinon → écran 500 ; « Réessayer »
+    // relance le fetch de /api/me.
+    if ("undefined" !== typeof navigator && false === navigator.onLine) {
+      return <OfflineScreen onRetry={() => void refetch()} />;
+    }
+    return <ServerErrorScreen onRetry={() => void refetch()} />;
   }
   if (data.membershipStatus !== "active") {
     return <Navigate to="/waiting" replace />;

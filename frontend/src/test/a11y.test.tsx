@@ -13,11 +13,16 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { axe } from "vitest-axe";
 
+import { ForbiddenPage } from "@/app/ForbiddenPage";
+import { NotFoundPage } from "@/app/NotFoundPage";
+import { OfflineScreen } from "@/app/OfflineScreen";
+import { ServerErrorScreen } from "@/app/ServerErrorScreen";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Modal } from "@/shared/components/ui/modal";
 import { Select } from "@/shared/components/ui/select";
+import { SystemScreen } from "@/shared/components/ui/system-screen";
 import { WishRecap } from "@/features/coach-wishes/WishRecap";
 import { WishTeamStep } from "@/features/coach-wishes/WishTeamStep";
 import { sectionKey, type SectionState } from "@/features/coach-wishes/wishSections";
@@ -149,5 +154,36 @@ describe("a11y — Modal focus management (WCAG 2.1.2 / 2.4.3)", () => {
     unmount();
     expect(trigger).toHaveFocus();
     trigger.remove();
+  });
+});
+
+describe("a11y — écrans système (P5-14)", () => {
+  it("SystemScreen (primitive, avec code incident) has no violations", async () => {
+    await expectNoA11yViolations(
+      <SystemScreen
+        title="Arrêt de jeu imprévu."
+        primaryAction={{ label: "Réessayer", onClick: () => {} }}
+        secondaryAction={{ label: "Retour à l'accueil", onClick: () => {} }}
+        incidentId="11111111-2222-4333-8444-555566667777"
+      >
+        Une erreur inattendue s'est produite de notre côté.
+      </SystemScreen>,
+    );
+  });
+
+  it("NotFoundPage (404) has no violations", async () => {
+    await expectNoA11yViolations(<NotFoundPage />);
+  });
+
+  it("ForbiddenPage (403) has no violations", async () => {
+    await expectNoA11yViolations(<ForbiddenPage />);
+  });
+
+  it("OfflineScreen (hors-ligne pleine page) has no violations", async () => {
+    await expectNoA11yViolations(<OfflineScreen onRetry={() => {}} />);
+  });
+
+  it("ServerErrorScreen (500) has no violations", async () => {
+    await expectNoA11yViolations(<ServerErrorScreen onRetry={() => {}} />);
   });
 });
