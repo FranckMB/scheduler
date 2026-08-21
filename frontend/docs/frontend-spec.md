@@ -4,16 +4,14 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-21 (recalé — **§6.8 réécrite : les ÉCRANS SYSTÈME (P5-14, tranche
-applicative)** et **§2, le catch-all qui n'est plus une redirection**. Confrontés au code :
-`shared/components/ui/system-screen.tsx` (primitive sans `variant` ni `switch`, rendue sans
-provider, `PRODUCT_NAME` en variable), ses cinq consommateurs (`app/NotFoundPage`,
-`ForbiddenPage`, `OfflineScreen`, `ServerErrorScreen`, le bloc de `features/auth/LoginPage`),
-les deux catch-all de `app/router.tsx`, la porte 403 de `app/RouteErrorBoundary.tsx`, le
-marqueur one-shot de `shared/lib/sessionExpiredNotice.ts` et la branche corrigée
-d'`app/AuthGuard.tsx`. Le §6.7 bis (P2-44 PR-5) et la puce du voile (lot C) relus : inchangés.
-Historique des passes : `git log -p --follow frontend/docs/frontend-spec.md` (un stamp REMPLACE,
-il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-22 (recalé — **§6.8, le BANDEAU hors-ligne (P5-14 PR-1)** : `app/OfflineBanner.tsx`,
+son montage EN FLUX dans `app/RootShell.tsx`, la source unique `shared/lib/online.ts` et le seed de
+`main.tsx`, la convergence de `RouteErrorBoundary`/`AuthGuard`, et l'exclusion des mutations en PAUSE
+du prédicat `saving` d'`app/ActionVeil.tsx` (`long` relu et vérifié INCHANGÉ) — tous confrontés au code,
+ainsi que les faits de `@tanstack/query-core` 5.101.4 qui fondent la copie (no-op de
+`resumePausedMutations()` hors ligne, absence de persistance). Les puces voisines (écrans système,
+voile) relues : inchangées. Historique des passes : `git log -p --follow frontend/docs/frontend-spec.md`
+(un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
 ---
 
@@ -795,7 +793,47 @@ est déjà éjecté par `client.ts`. Désormais : hors ligne → écran hors lig
 sur un ≥ 500 — jamais une stack, une exception ou du SQL. Il est déjà joint automatiquement à un
 signalement : l'utilisateur n'a pas à le recopier.
 
-**Hors de cette tranche** : le **bandeau** hors-ligne d'usage normal (maquette fondateur à venir) et la
+**Le BANDEAU hors-ligne (livré le 2026-08-22)** — `app/OfflineBanner.tsx`, monté **dans le flux** de
+`RootShell`, avant le contenu : il **empile, il ne recouvre pas** (aucun overlay, aucun z-index), et
+il est monté **une seule fois** pour toutes les routes — page publique de doléances comprise, où le
+coach sans réseau dans un gymnase est le cas nominal. ⚠ Il **ne double pas** `app/OfflineScreen.tsx`,
+la page PLEINE qui sert quand il n'y a **rien derrière** (chunk ou `/api/me` en échec au boot) : deux
+formes, deux portées, elles coexistent sans se contredire.
+
+**Une seule source de vérité pour l'état réseau** : `shared/lib/online.ts` (`useOnline`), qui lit
+l'**`onlineManager` de TanStack** — le même que celui qui décide de mettre les mutations en pause.
+`RouteErrorBoundary` et `AuthGuard` y ont convergé ; plus personne ne lit `navigator.onLine` en
+parallèle, sinon le bandeau et la file pourraient se contredire. ⚠ L'`onlineManager` naît
+**optimiste** (`#online = true`, il ne bascule que sur un événement `window`) : `main.tsx` le **sème**
+depuis `navigator.onLine` avant le render, sans quoi un démarrage hors ligne se croirait en ligne.
+
+**Quatre états, tous dérivés du code — le compteur est le nombre RÉEL de mutations en pause**
+(`useMutationState` sur `m.state.isPaused`), jamais une estimation :
+
+| État | Ce qu'il dit | Geste |
+|---|---|---|
+| hors ligne, rien en attente | « Vous êtes hors ligne. Vos données restent consultables. » | aucun |
+| hors ligne, N en attente | « N modification(s) en attente… **gardez cet onglet ouvert.** » | **aucun** |
+| en ligne, envois en cours | l'envoi reprend | « Envoyer maintenant » **si** des mutations restent en pause |
+| de retour | « De retour en ligne. » (+ « Vos modifications sont parties. » si c'est vrai) | s'efface seul à 5 s |
+
+⚠ **Pourquoi aucun bouton hors ligne** : `resumePausedMutations()` est un **no-op** quand
+`onlineManager.isOnline()` est faux (query-core `queryClient.js:206`). Un bouton y serait un mensonge
+cliquable. ⚠ **Pourquoi « gardez cet onglet ouvert »** : la file vit **en mémoire** — aucun bloc
+`mutations` persisté dans `shared/lib/queryClient.ts`, un rechargement la perd. La **persistance est
+un lot séparé** ; tant qu'elle n'existe pas, la copie ne promet pas plus que ce que le code tient.
+
+⚠ **Une mutation en PAUSE ne voile plus l'écran.** `ActionVeil` la comptait comme un geste en vol :
+hors ligne, un clic bloquait à 0 ms puis annonçait à 10 s que « l'action continue en arrière-plan » —
+**faux**, rien ne continue, elle est garée. Le prédicat `saving` l'exclut désormais. ⚠ Le contexte
+**`long` reste inchangé** : un déplacement sous verdict garé qui repartirait plus tard doit rester
+sous le régime bouton-Abandonner, jamais relâché en silence.
+
+**A11y** : le conteneur visible n'est **pas** une région live ; une région `sr-only` `role="status"`
+`aria-live="polite"` ne reçoit que les **transitions** — le compteur qui s'incrémente ne ré-annonce
+pas (patron AUD-FRT-23/24). La couleur ne porte jamais seule le sens (icône + phrase distinctes).
+
+**Hors de cette tranche** : l'écran « le service de calcul ne répond pas » (PR-2) et la
 **503/maintenance**, qui est un geste d'ops (Caddy `handle_errors`), pas du code applicatif.
 
 ---
