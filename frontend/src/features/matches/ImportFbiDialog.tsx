@@ -77,7 +77,7 @@ export function ImportFbiDialog({ teams, tiers, onClose }: ImportFbiDialogProps)
   const canImport = null !== file && null !== analysis && !importFbi.isPending && !analyzeFbi.isPending;
 
   return (
-    <Modal label="Importer FBI" title="Importer un export FBI" onClose={onClose}>
+    <Modal label="Importer FBI" title="Importer un export FBI" onClose={onClose} size="lg">
       <div className="flex flex-col gap-3">
         <p className="text-xs text-muted-foreground">
           L’export FBI global du club (« Saisie des résultats », .xlsx). Chaque division se relie une seule fois à

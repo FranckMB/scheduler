@@ -125,4 +125,34 @@ test.describe("une modale longue reste atteignable", () => {
       await expect(page.getByRole("dialog")).toBeHidden();
     }
   });
+
+  /**
+   * P4-107 (3ᵉ tranche) — la LARGEUR, sur le seul écran où elle se mesure.
+   *
+   * `modal-size.test.tsx` épingle les classes de chaque palier ; il ne peut pas voir qu'une
+   * classe n'engendre aucun CSS, ni qu'un parent l'écrase. Le catalogue d'actions support est
+   * la modale `xl` du parc (trois tableaux) : à 1920, elle doit atteindre son PLAFOND — et
+   * s'y arrêter. C'est la moitié « et ça cesse de grandir » de la décision, celle qu'un test
+   * de classes ne prouve jamais.
+   */
+  test("palier xl : la modale atteint son plafond de 1152 px sur 1920, et ne le dépasse pas", async ({ page }) => {
+    test.setTimeout(120_000);
+
+    await loginAsSuperAdmin(page, credentials!);
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.goto("/admin?tab=clubs");
+
+    const actions = page.getByRole("button", { name: "Actions" }).first();
+    await expect(actions, "la console doit lister au moins un club").toBeVisible({ timeout: 20_000 });
+    await actions.click();
+
+    const box = await page.getByRole("dialog").boundingBox();
+    expect(box, "la modale n'a pas de boîte mesurable").not.toBeNull();
+    // 72rem = le plafond du palier `xl` (MODAL_WIDTH). Tolérance d'1 px (sous-pixel).
+    expect(
+      Math.round(box!.width),
+      `la modale mesure ${Math.round(box!.width)} px au lieu de 1152. Trop étroite → un palier de l'échelle n'engendre pas de CSS ; trop large → elle continue de grandir avec le viewport, ce que l'échelle interdit.`,
+    ).toBeGreaterThanOrEqual(1151);
+    expect(Math.round(box!.width)).toBeLessThanOrEqual(1153);
+  });
 });

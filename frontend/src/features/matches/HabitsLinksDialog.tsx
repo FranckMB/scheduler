@@ -69,7 +69,7 @@ export function HabitsLinksDialog({ teams, tiers, venues, fixtures, onClose }: H
   };
 
   return (
-    <Modal label="Habitudes et passerelles" title="Habitudes & passerelles" onClose={onClose}>
+    <Modal label="Habitudes et passerelles" title="Habitudes & passerelles" onClose={onClose} size="lg">
       <div className="flex flex-col gap-4">
         <section className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold">Habitudes de match</h3>

@@ -38,3 +38,21 @@ describe("ReleaseNotesPage", () => {
     expect(await screen.findByText(/aucune nouveauté/i)).toBeInTheDocument();
   });
 });
+
+/**
+ * P4-107 (3ᵉ tranche) — la page Nouveautés suit les deux autres fiches. Son contenu est du
+ * TEXTE : c'est la borne de lisibilité de `FichePage` (65 caractères par ligne) qui le tient,
+ * pas la largeur du cadre.
+ */
+describe("largeur de la page Nouveautés", () => {
+  it("est cadrée par FichePage, sans largeur concurrente", () => {
+    mockGet.mockResolvedValue({ seenUpTo: null, items: [] });
+    const { container } = renderWithProviders(<ReleaseNotesPage />);
+    const root = container.firstChild as HTMLElement;
+    const widths = root.className.split(/\s+/).filter((token) => token.startsWith("max-w-"));
+
+    expect(widths).toEqual(["max-w-fiche"]);
+    expect(root.className).toContain("mx-auto");
+  });
+});
+

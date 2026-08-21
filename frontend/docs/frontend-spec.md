@@ -747,6 +747,59 @@ Chaque route a :
 
 ---
 
+### 6.9 Largeurs — écran dense, page fiche, modale (P4-107)
+
+**La règle, en une phrase : la largeur se choisit par le TYPE d'écran, jamais au cas par cas
+dans le fichier qui la subit.** Elle n'était écrite nulle part avant le 2026-08-21 — c'est ce
+silence qui a produit la dérive corrigée par la 3ᵉ tranche de P4-107 (six modales avaient
+bricolé quatre valeurs différentes, deux pages fiche vivaient à une largeur de mobile élargi
+sous un shell devenu pleine largeur).
+
+| Type d'écran | Largeur | Où elle vit |
+|---|---|---|
+| **Dense** (grille de planning, wizard, module matchs, scène d'attente) | **pleine largeur** — le shell ne borne rien (`AppLayout.tsx`, 1ʳᵉ tranche, PR #613) | l'écran lui-même |
+| **Fiche** (Club, Profil, Nouveautés) | **832 px** (`--container-fiche: 52rem`) | `FichePage` (`shared/components/ui/fiche-page.tsx`) |
+| **Texte long** (Confidentialité) | `max-w-2xl` | la page |
+| **Modale** | 4 paliers nommés — 448 / 576 / 768 / 1152 px | `MODAL_WIDTH` (`shared/components/ui/modal.tsx`) |
+
+**Modales — la prop `size`, et rien d'autre.** `Modal` n'a **plus de prop `className`** : choisir
+un palier est le seul geste offert, et `tsc` rougit sur toute récidive. Les paliers montent avec
+le viewport puis **s'arrêtent** (tous atteignent leur plafond dès `lg:`, soit 1024 px de
+viewport : un portable et un 1920 affichent la même largeur) :
+
+- `sm` — confirmation, geste destructif : 448 px, **constant** (elle ne grandit jamais) ;
+- `md` — **défaut**, formulaire de 6 champs au plus : plafond 576 px ;
+- `lg` — formulaire long, liste : plafond 768 px (sous la largeur des fiches) ;
+- `xl` — contenu tabulaire, comparaison de plannings : plafond 1152 px.
+
+`confirm-dialog.tsx` et `EvictConfirmDialog.tsx` recopient le markup du panneau (duplication
+assumée et commentée) mais **lisent `MODAL_WIDTH.sm`** : deux copies du markup, une seule
+échelle.
+
+**Pourquoi un plafond.** La passe de design `ui-ux-pro-max` n'endosse que des échelles qui
+terminent sur une largeur fixe (`DON'T Full-width text on large screens`) : une modale qui
+suivrait indéfiniment le viewport rejouerait sur 1920 px l'anti-pattern qu'on corrige sur 448.
+
+**Pourquoi une borne de lisibilité dans les fiches.** `FichePage` porte `[&_p]:max-w-prose` :
+la seule mesure chiffrée du corpus de design est 65-75 caractères par ligne, et elle vaut à
+l'INTÉRIEUR d'un conteneur plus large — élargir le cadre sans borner les paragraphes
+échangerait un défaut contre un autre. La borne ne vit pas dans `AccordionSection` : il a
+quatre autres consommateurs (écrans du wizard, pleine largeur par conception) qu'elle aurait
+reflowés en silence.
+
+**Ce qui garde quoi.** `modal-size.test.tsx` et `fiche-page.test.tsx` épinglent les CLASSES
+(égalité d'ENSEMBLE : une classe manquante rougit, une classe en trop aussi — c'est elle qui
+attrape une reprise de croissance au-delà du plafond). Ils ne peuvent pas voir qu'une classe
+n'engendre aucun CSS : jsdom n'a pas de moteur de mise en page. Les PIXELS se mesurent en
+Playwright — `tests/e2e/width-calibration.spec.ts` (fiche à 832 px et paragraphe borné, sur
+1920×1080) et `tests/e2e/modal-reachability.spec.ts` (le palier `xl` atteint 1152 px et s'y
+arrête).
+
+⚠ **Reste ouvert** : l'inventaire des écrans DENSES (grille de planning, wizard contraintes,
+module matchs), qui n'est pas traité par cette tranche — `specs/evolution/roadmap.md`, P4-107.
+
+---
+
 ## 7. TanStack Query Strategy
 
 ### Conventions de query keys

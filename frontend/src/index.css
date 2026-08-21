@@ -77,6 +77,13 @@
   --color-success: var(--success);
   --color-ring: var(--ring);
 
+  /* P4-107 (3ᵉ tranche) — largeur des pages « fiche » (Club, Profil, Nouveautés).
+     52rem = 832 px : entre `max-w-3xl` (768) et `max-w-4xl` (896), valeur testée à la main
+     par le fondateur sur 1920×1080. Le shell, lui, reste pleine largeur (1ʳᵉ tranche).
+     Tailwind 4 engendre l'utilitaire `max-w-fiche` depuis ce token ; il se consomme par
+     `FichePage`, jamais en dur. */
+  --container-fiche: 52rem;
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

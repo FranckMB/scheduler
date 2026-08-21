@@ -68,7 +68,7 @@ export function SeasonComparisonModal({ seasonScheduleId, viewMode, onClose }: S
   const model = useMemo(() => buildGrid(slots, viewMode, lookups), [slots, viewMode, lookups]);
 
   return (
-    <Modal label="Planning de saison (consultation)" title="Planning de saison" onClose={onClose} className="max-w-5xl">
+    <Modal label="Planning de saison (consultation)" title="Planning de saison" onClose={onClose} size="xl">
       <p className="mt-1 text-xs text-muted-foreground">Consultation en lecture seule du planning principal, pour comparer avec la période.</p>
       <div className="mt-3 h-[70vh]">
         {/* Consultation : onSelectSlot inerte, aucun geste d'écriture ni mode cible. */}

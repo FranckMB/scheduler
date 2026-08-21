@@ -225,7 +225,7 @@ function FeedbackDetailDialog({ item, onClose }: { item: AdminFeedbackItem; onCl
   };
 
   return (
-    <Modal label="Détail du signalement" title="Signalement" onClose={onClose} className="max-w-2xl">
+    <Modal label="Détail du signalement" title="Signalement" onClose={onClose} size="xl">
       <div className="mt-4 space-y-5 text-sm">
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
           <MetaRow label="Club" value={item.clubName ?? "Club inconnu"} />

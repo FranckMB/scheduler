@@ -2,7 +2,9 @@ import { type ReactNode, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/shared/components/ui/button";
+import { MODAL_WIDTH } from "@/shared/components/ui/modal";
 import { useModalA11y } from "@/shared/lib/useModalA11y";
+import { cn } from "@/shared/lib/utils";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -68,6 +70,8 @@ export function ConfirmDialog({
   // le docblock porte le pourquoi complet. Les deux panneaux sont deux copies du même markup
   // (motif « une vérité, deux endroits ») : toucher l'un sans l'autre laisserait la moitié
   // des modales cassée.
+  // ⚠ La LARGEUR fait exception à cette duplication : elle est lue dans `MODAL_WIDTH`
+  // (palier `sm`), maison unique de l'échelle — deux copies du markup, une seule échelle.
   // Ici les BOUTONS restent HORS de la zone défilante — une confirmation dont on ne voit
   // plus « Confirmer » est pire qu'une modale trop longue.
   return createPortal(
@@ -79,7 +83,7 @@ export function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xl"
+        className={cn("relative flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xl", MODAL_WIDTH.sm)}
       >
         <h2 id={titleId} className="shrink-0 text-lg font-semibold">
           {title}

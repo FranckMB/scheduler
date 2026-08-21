@@ -63,6 +63,7 @@ const DAY_ABBR = new Map(DAYS.map((d) => [d.n, d.label]));
 function ValidateDialog({ hasAlerts, siblingCount, busy, onConfirm, onCancel }: { hasAlerts: boolean; siblingCount: number; busy: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (
     <Modal
+      size="sm"
       label="Valider le planning"
       title={
         <span className="flex items-center gap-2">

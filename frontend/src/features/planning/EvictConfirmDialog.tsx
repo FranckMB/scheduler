@@ -3,7 +3,9 @@ import { useId, useRef } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/shared/components/ui/button";
+import { MODAL_WIDTH } from "@/shared/components/ui/modal";
 import { useModalA11y } from "@/shared/lib/useModalA11y";
+import { cn } from "@/shared/lib/utils";
 
 import type { Compromise, MoveViolation } from "./api";
 import { CompromiseList } from "./CompromiseList";
@@ -81,7 +83,8 @@ export function EvictConfirmDialog({ open, phase, occupantName, compromises, vio
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xl"
+        // Palier `sm` de l'échelle partagée : une confirmation ne grandit pas avec l'écran.
+        className={cn("relative flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-lg border border-border bg-card p-6 text-card-foreground shadow-xl", MODAL_WIDTH.sm)}
       >
         <h2 id={titleId} className="shrink-0 text-lg font-semibold">
           {title}

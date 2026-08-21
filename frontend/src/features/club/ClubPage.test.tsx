@@ -285,3 +285,20 @@ describe("ClubPage", () => {
     expect(screen.queryByText("Par gymnase")).toBeNull();
   });
 });
+
+/**
+ * P4-107 (3ᵉ tranche) — la fiche Club porte le cadre PARTAGÉ, pas une largeur à elle.
+ * Elle vivait à `max-w-2xl` (672 px) sous un shell pleine largeur : sur 1920, la marge
+ * dépassait l'utile. Falsifié dans les deux sens — le cadre attendu doit être là, et
+ * aucune autre largeur ne doit subsister.
+ */
+describe("largeur de la fiche Club", () => {
+  it("est cadrée par FichePage, sans largeur concurrente", () => {
+    const { container } = render(<ClubPage />);
+    const root = container.firstChild as HTMLElement;
+    const widths = root.className.split(/\s+/).filter((token) => token.startsWith("max-w-"));
+
+    expect(widths).toEqual(["max-w-fiche"]);
+    expect(root.className).toContain("mx-auto");
+  });
+});

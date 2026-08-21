@@ -1,4 +1,5 @@
 import { Spinner } from "@/shared/components/ui/spinner";
+import { FichePage } from "@/shared/components/ui/fiche-page";
 
 import { useReleaseNotes } from "./queries";
 
@@ -11,7 +12,7 @@ export function ReleaseNotesPage() {
   const { data, isPending, isError, refetch } = useReleaseNotes();
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <FichePage className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Nouveautés</h1>
         <p className="mt-1 text-sm text-muted-foreground">Ce qui a changé récemment dans l'application.</p>
@@ -41,7 +42,7 @@ export function ReleaseNotesPage() {
           ))}
         </ul>
       )}
-    </div>
+    </FichePage>
   );
 }
 
