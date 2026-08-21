@@ -1,6 +1,6 @@
 # Engine Inventory — Backward Spec
 
-Last verified @ 2026-08-19 (**rotation de fraîcheur** — re-vérifié contre le code, **rien de faux** : `engine/CONTRACT_VERSION` vaut bien **2.12** comme annoncé, et les quatre endpoints documentés (`/generate`, `/place-matches`, `/validate-assignments`, `/implicit-constraints`) correspondent EXACTEMENT aux quatre `@app.post` de `app/main.py` — ni oubli, ni route fantôme. Premier fichier vérifié depuis son déménagement vers `engine/docs/` : il est désormais chez la zone qu'il décrit) — *(historique des passes retiré le 2026-08-19, audit DOC-33 : 3 entrées empilées. Un stamp REMPLACE, il ne s'empile pas ; l'historique vit dans git : `git log -p --follow engine/docs/engine-inventory.md`)*
+Last verified @ 2026-08-21 (recalé par la livraison d'**AUD-ENG-33** — le budget propre du rail verdict. ⚠ Une affirmation FAUSSE corrigée au passage, sans rapport avec ce lot : le §`/place-matches` disait encore « le sémaphore global (`_solve_semaphore`) borne quand même le CPU », vrai avant AUD-ENG-30, faux depuis — c'est `_placement_semaphore` qui borne ce rail. Les numéros de ligne du handler ont été re-vérifiés (`main.py:766`, le doc en citait un périmé) et le tableau des trois budgets de concurrence est neuf. Non re-vérifié cette passe : le reste de l'inventaire, qui n'a pas été confronté ligne à ligne)
 
 > Inventaire BACKWARD de l'existant engine. Reflète le code lu au SHA ci-dessus, pas les features futures.
 > Source de vérité : `engine/app/main.py`, `engine/app/schemas/input_schema.py`, `engine/app/schemas/output_schema.py`, `engine/app/solver/{model,constraints,objective,result_builder}.py`, `engine/app/core/config.py`.
@@ -49,12 +49,30 @@ Last verified @ 2026-08-19 (**rotation de fraîcheur** — re-vérifié contre l
 Le **second problème CP-SAT**, distinct du solve hebdomadaire (ADR-0003 ; comportement produit :
 [`module-matchs.md`](../../specs/courantes/module-matchs.md) §Solveur de placement). Ce qui est propre à l'engine :
 
-- **Handler** : `place_matches(input_data: MatchPlacementInputSchema)` (`main.py:526-545`). Même
+- **Handler** : `place_matches(input_data: MatchPlacementInputSchema)` (`main.py:766`). Même
   garde de contrat que `/generate` — MAJOR seul, 422 sinon : **un seul `CONTRACT_VERSION` pour les
-  deux endpoints**.
+  trois endpoints**.
 - **Verrou par club PRÉFIXÉ** (`f"matches:{club_id}"`) : un solve hebdomadaire long ne bloque pas
-  un placement de 3 s, alors qu'un même verrou l'aurait fait. Le sémaphore global
-  (`_solve_semaphore`) borne quand même le CPU.
+  un placement de 3 s, alors qu'un même verrou l'aurait fait. ⚠ **Et le sémaphore l'est aussi
+  depuis AUD-ENG-30** — la phrase « le sémaphore global `_solve_semaphore` borne quand même le
+  CPU » était vraie avant, et fausse depuis : c'est `_placement_semaphore` qui borne ce rail.
+  Un verrou préfixé sous un sémaphore partagé ne sert à rien, les deux protections se
+  contredisaient et c'est la plus discrète qui gagnait.
+
+**TROIS budgets de concurrence, un par rail** (`main.py:130-139`, réglages dans
+`app/core/config.py`) — la règle est « un budget PROPRE, jamais un budget plus large » :
+
+| Rail | Sémaphore | Défaut | Pourquoi séparé |
+|---|---|---|---|
+| `/generate` | `_solve_semaphore` | 1 | un solve peut tenir 600 s ; deux en parallèle sont exclus **exprès** |
+| `/place-matches` | `_placement_semaphore` | 1 | AUD-ENG-30 — synchrone (ADR-0003), le gestionnaire attend la réponse HTTP |
+| `/validate-assignments` | `_verdict_semaphore` | 1 | **AUD-ENG-33** — budgets asymétriques : le placement dispose de 30 s de solveur quand le verdict abandonne à **20 s** côté client (`MoveSlotService::VALIDATE_HTTP_TIMEOUT_SECONDS`, calé sur 9-9,6 s mesurés sur le club réel). Un placement du club A affamait le verdict LÉGAL du club B |
+
+⚠ **Résidu ASSUMÉ** : à 1, deux verdicts de deux clubs se sérialisent encore — sur la mesure
+connue (~10 s), deux verdicts empilés frôlent les 20 s. Monter à 2 doublerait le CPU pour une
+classe d'incident jamais observée. Les deux tests jumeaux de `tests/test_runtime.py` gardent la
+propriété **et** sa borne : l'un exerce l'endpoint verdict pendant qu'un placement tient son
+jeton, l'autre vérifie que deux placements restent sérialisés.
 - **Solve** : `solve_match_placement(input_data)` dans un thread worker
   (`app/solver/match_placement.py`). Best-effort à poids dominant : aucune HARD violée, le
   non-plaçable ressort **nommé**.

@@ -36,6 +36,27 @@ class Settings(BaseSettings):
     # seul. Le placement est un petit problème daté, sans commune mesure avec le solve
     # hebdomadaire ; le CPU reste borné, il n'est plus borné à UN.
     max_concurrent_placements: int = Field(default=1, ge=1)
+    # AUD-ENG-33 — budget PROPRE au rail verdict. Même classe d'incident qu'ENG-30 ci-dessus,
+    # réintroduite par la porte du voisin : `/validate-assignments` partageait le sémaphore de
+    # `/place-matches` alors que leurs budgets sont ASYMÉTRIQUES, et mesurés —
+    #
+    #   * placement : solveur 30 s (`MatchPlacementPayloadBuilder.php`), transport 60 s ;
+    #   * verdict   : solveur 2 s, transport **20 s** (`MoveSlotService.php`), valeur calée sur
+    #     mesure (« 9 à 9,6 s de calcul réel constatés sur le club réel »).
+    #
+    # Un placement du club A tenant l'unique jeton jusqu'à 30 s faisait donc échouer, par
+    # famine, le verdict LÉGAL du club B — qui abandonne à 20 s. Un club en faisait tomber un
+    # autre, et le gestionnaire lisait un message honnête sur une cause fausse.
+    #
+    # Un budget propre, PAS un budget plus large : élargir `max_concurrent_placements` aurait
+    # aussi autorisé deux placements de 30 s en parallèle, sans garantir qu'un verdict ne se
+    # retrouve pas derrière eux. Coût assumé : au pire 1 génération + 1 placement + 1 verdict,
+    # et le verdict est le plus petit des trois (baseline figée, un seul candidat épinglé).
+    #
+    # ⚠ Résidu ASSUMÉ à 1 : deux verdicts de deux clubs se sérialisent encore. Sur la mesure
+    # connue (~10 s), deux verdicts empilés frôlent les 20 s. On garde 1 — monter à 2 double le
+    # CPU pour une classe d'incident jamais observée, quand celle qu'on corrige est réelle.
+    max_concurrent_verdicts: int = Field(default=1, ge=1)
 
 
 @lru_cache(maxsize=1)
