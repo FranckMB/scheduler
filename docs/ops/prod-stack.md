@@ -57,9 +57,11 @@ personnelles de licenciés, mineurs compris.
 **Pas de bastion.** Un bastion se justifie sur un réseau privé à plusieurs machines, pour avoir un
 point d'entrée unique et audité. Sur une machine unique, l'hôte **EST** ce point d'entrée : ajouter
 un bastion, c'est une seconde machine à patcher et à surveiller pour zéro sécurité de plus.
-⚠ Ce raisonnement suppose l'hébergement **auto-géré** (hypothèse de travail du dépôt, cf. P5-4b et
-[`load-test.md`](load-test.md)). Sur un **Postgres managé**, l'accès passe par le réseau privé du
-fournisseur et ses ACL d'IP — le tunnel ci-dessous n'a alors plus lieu d'être.
+✅ **L'hébergeur est CHOISI : Scaleway, produit Instances** (décision fondateur 2026-08-21) — une
+VM auto-gérée qui porte toute la stack Docker, **pas** de base managée. Le raisonnement ci-dessus
+s'applique donc tel quel. ⚠ Si un jour la base passait sur un **Postgres managé** (Scaleway
+Database ou autre), l'accès passerait par le réseau privé du fournisseur et ses ACL d'IP, et le
+tunnel ci-dessous n'aurait plus lieu d'être — la présente section serait à réécrire, pas à adapter.
 
 Deux gestes, par ordre de préférence :
 

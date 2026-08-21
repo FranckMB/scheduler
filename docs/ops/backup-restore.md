@@ -76,8 +76,10 @@ php bin/console app:db:restore-check     # PREUVE que le dernier dump est restau
 
 - **Hetzner Cloud** : console → serveur → *Backups* → activer (7 slots glissants, ~20 % du prix
   du serveur). Optionnel : snapshot manuel avant chaque grosse opération.
-- **OVH VPS** : options → *Automated Backup* (quotidien) ; **Scaleway** : *Snapshots* +
-  éventuelle politique programmée.
+- ⬜ **Scaleway — l'hébergeur RETENU** (décision fondateur 2026-08-21) : console → *Snapshots*,
+  plus une politique programmée. C'est CETTE ligne qu'il faut cocher ; les autres hébergeurs
+  ci-dessus et ci-dessous ne restent que comme repères si la cible changeait un jour.
+- *(pour mémoire)* **OVH VPS** : options → *Automated Backup* (quotidien).
 - Tester UNE restauration de snapshot vers un serveur temporaire après l'activation — même
   règle que les dumps : non testé = inexistant.
 
