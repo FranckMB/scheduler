@@ -49,6 +49,17 @@ paths:
   (`"files": []` + `references`), donc `--noEmit` voit **zéro fichier**, sort 0 sans rien vérifier,
   et la CI (`tsc -b`) échoue sur ce qu'il a sauté. `make -C frontend lint` fait `tsc -b --force` —
   le `--force` est requis (un `tsbuildinfo` périmé court-circuite le contrôle).
+- 🔴 **axe SAUTE un sous-arbre `inert` — un scan d'a11y sur un écran voilé ne vérifie RIEN.**
+  Découvert le 2026-08-21 en différant le blocage du voile (lot C) : le scan de contraste
+  « wizard · gymnases » tournait pendant que le voile rendait le contenu `inert`, donc axe ne
+  regardait aucun élément de cet écran — **vert, et vide**. Le voile n'est que le cas le plus
+  récent : toute modale, tout `inert`, tout `aria-hidden` posé le temps d'un chargement produit le
+  même faux vert. **Avant un scan axe, attendre que l'écran soit RENDU À L'UTILISATEUR** (helper
+  `settleVeil` dans `tests/e2e/support.ts`). ⚠ Corollaire déjà vérifié : la couleur mesurée en
+  pleine transition n'est pas la couleur finale — la surbrillance d'étape passait par un
+  `text-muted-foreground` sur `bg-muted` à **3,93** avant de se poser sur sa vraie valeur AA. Un
+  scan trop tôt échoue pour une couleur qui n'existe qu'un instant ; un scan sur un sous-arbre
+  inert réussit sans rien lire. Les deux mentent.
 - 🔴 **jsdom n'a AUCUN moteur de mise en page** : `boundingBox`, `scrollHeight` et
   `getBoundingClientRect` y valent 0. Le **contraste** et le **reflow** (WCAG 1.4.10) ne se testent
   qu'en **Playwright**. Un test jsdom sur ces sujets est vert par construction — il n'atteste rien.
