@@ -68,6 +68,7 @@ Ce qu'il faut retenir en toute session :
 
 **blocking-tests** (must pass first — steps du job, un par ligne, tag = ce qui est gardé) :
 `Unit/Entity/UserInterfaceContractTest` (boot conteneur : `eraseCredentials`) ·
+`Unit/NoMergeConflictMarkerTest` (aucun marqueur de conflit Git commité — dépôt entier, `git grep` sur les fichiers SUIVIS ; écrit après que trois marqueurs de `stash pop` ont atteint `main` dans un journal Markdown, invisibles au linter comme à la revue) ·
 `Security/TenantIsolationTest` (isolation club) ·
 `Security/SeasonIsolationTest` (scoping saison + `X-Season-Id`) ·
 `Security/SeasonReadonlyTest` (saison archivée → 409) ·
