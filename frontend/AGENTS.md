@@ -156,7 +156,7 @@ data; avoiding it would mean duplicating the auth decision into a per-route `loa
 | `/admin/login` · `/admin` | SA0 session | Superadmin console behind `AdminGuard` → `AdminShell`. Separate identity — a club JWT never crosses this firewall. |
 | `/` | required | **Cockpit** (temporal home), not the planning |
 | `/planning` · `/matchs` · `/wizard` · `/club` · `/profile` | required | Under `AuthGuard` → `AppLayout` |
-| `*` (authed) | required | Redirects to `/`, not the raw error boundary |
+| `*` (authed) | required | **Renders the 404 screen** (`app/NotFoundPage`) inside `AppLayout` — header and nav kept. ⚠ It used to redirect silently to `/`: a stale link teleported the manager home with no explanation, and the 404 screen had nowhere to live. Same for `/admin/*`. |
 
 ---
 
