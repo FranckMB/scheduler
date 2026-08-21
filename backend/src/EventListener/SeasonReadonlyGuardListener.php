@@ -34,7 +34,10 @@ final class SeasonReadonlyGuardListener implements EventSubscriberInterface
         $instance = \is_array($controller) ? $controller[0] : $controller;
 
         if ($instance instanceof SeasonScopedWriteInterface) {
-            $this->seasonAccessGuard->assertWritable($event->getRequest());
+            $request = $event->getRequest();
+            // SEC-13 : la saison de la CIBLE (résolue par le contrôleur hors filtres),
+            // pas seulement celle du header — le garde prend la plus stricte des deux.
+            $this->seasonAccessGuard->assertWritable($request, $instance->writeTargetSeasonId($request));
         }
     }
 }

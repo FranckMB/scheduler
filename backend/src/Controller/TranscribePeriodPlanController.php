@@ -9,8 +9,10 @@ use App\Service\ManagementAccessGuard;
 use App\Service\PeriodPlanTranscriber;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SocleGuard;
+use App\Service\WriteTargetSeasonResolver;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
@@ -36,7 +38,16 @@ final class TranscribePeriodPlanController extends AbstractController implements
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly SocleGuard $socleGuard,
         private readonly PeriodPlanTranscriber $transcriber,
+        private readonly WriteTargetSeasonResolver $writeTargetSeasonResolver,
     ) {}
+
+    // SEC-13 — la cible est le SchedulePlan (de période) nommé dans l'URL.
+    public function writeTargetSeasonId(Request $request): ?string
+    {
+        $id = $request->attributes->get('id');
+
+        return \is_string($id) ? $this->writeTargetSeasonResolver->ofSchedulePlan($id) : null;
+    }
 
     #[Route('/api/schedule_plans/{id}/transcribe-from-socle', name: 'api_schedule_plan_transcribe_from_socle', methods: ['POST'])]
     public function __invoke(string $id): JsonResponse

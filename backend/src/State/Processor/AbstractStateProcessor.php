@@ -20,6 +20,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\LockMode;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\OptimisticLockException;
+use Error;
 use ReflectionClass;
 use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -87,8 +88,12 @@ abstract class AbstractStateProcessor implements ProcessorInterface
 
         // Archived-season writes are refused (409). Only season-scoped entities
         // are gated — Club/User/Season carry no seasonId and stay editable.
+        // SEC-13 : on passe aussi la saison de l'ENTITÉ ciblée, pas seulement celle
+        // du header. Inobservable en HTTP aujourd'hui (le provider est déjà
+        // season-filtré), mais une garde qui ne vaut que sur un chemin est une garde
+        // qu'on croira valable sur les deux ; falsifiée au niveau unitaire.
         if (method_exists($this->getEntityClass(), 'setSeasonId')) {
-            $this->seasonAccessGuard->assertWritable($request);
+            $this->seasonAccessGuard->assertWritable($request, $this->targetSeasonIdOf($data));
         }
 
         if ($operation instanceof DeleteOperationInterface) {
@@ -298,6 +303,27 @@ abstract class AbstractStateProcessor implements ProcessorInterface
             $field,
             implode(', ', $accepted),
         ));
+    }
+
+    /**
+     * SEC-13 — la saison de l'entité ciblée, ou null quand elle n'en porte pas encore
+     * une : sur un POST frais la propriété typée `seasonId` n'est pas initialisée (elle
+     * l'est plus loin, dans processPost), et y accéder lèverait une Error. On retombe
+     * alors sur le header/saison courante (aucune régression).
+     */
+    private function targetSeasonIdOf(mixed $data): ?string
+    {
+        if (!\is_object($data) || !method_exists($data, 'getSeasonId')) {
+            return null;
+        }
+
+        try {
+            $seasonId = $data->getSeasonId();
+        } catch (Error) {
+            return null;
+        }
+
+        return \is_string($seasonId) && '' !== $seasonId ? $seasonId : null;
     }
 
     /**

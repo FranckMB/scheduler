@@ -28,6 +28,16 @@ final class ReorderTeamsController extends AbstractController implements SeasonS
         private readonly ManagementAccessGuard $managementAccessGuard,
     ) {}
 
+    /**
+     * SEC-13 — écriture de COLLECTION (réordonner des équipes en masse) : aucune
+     * ressource unique dont dériver la saison. Le header/saison courante gouverne,
+     * comme avant. Choix écrit et revu, exigé par SeasonScopedWriteInterface.
+     */
+    public function writeTargetSeasonId(Request $request): ?string
+    {
+        return null;
+    }
+
     #[Route('/api/teams/reorder', name: 'api_teams_reorder', methods: ['POST'])]
     public function __invoke(Request $request): JsonResponse
     {

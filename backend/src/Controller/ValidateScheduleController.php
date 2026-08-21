@@ -12,9 +12,11 @@ use App\Service\ManagementAccessGuard;
 use App\Service\OverlayManager;
 use App\Service\ScheduleCapabilityResolver;
 use App\Service\SchedulePlanProvisioner;
+use App\Service\WriteTargetSeasonResolver;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -42,7 +44,16 @@ final class ValidateScheduleController extends AbstractController implements Sea
         private readonly OverlayManager $overlayManager,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly ScheduleCapabilityResolver $capabilityResolver,
+        private readonly WriteTargetSeasonResolver $writeTargetSeasonResolver,
     ) {}
+
+    // SEC-13 — la cible est le Schedule nommé dans l'URL (id de version).
+    public function writeTargetSeasonId(Request $request): ?string
+    {
+        $id = $request->attributes->get('id');
+
+        return \is_string($id) ? $this->writeTargetSeasonResolver->ofSchedule($id) : null;
+    }
 
     #[Route('/api/schedules/{id}/validate', name: 'api_schedule_validate', methods: ['POST'])]
     public function __invoke(string $id): JsonResponse

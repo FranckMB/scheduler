@@ -18,6 +18,7 @@ use App\Service\ManagementAccessGuard;
 use App\Service\ManualEditService;
 use App\Service\MoveSlotService;
 use App\Service\SchedulePlanProvisioner;
+use App\Service\WriteTargetSeasonResolver;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
@@ -38,7 +39,24 @@ final class ManualEditController extends AbstractController implements SeasonSco
         private readonly LoggerInterface $logger,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly MoveSlotService $moveSlotService,
+        private readonly WriteTargetSeasonResolver $writeTargetSeasonResolver,
     ) {}
+
+    /**
+     * SEC-13 — la cible dépend du geste : place-slot vise un Schedule (id = schedule),
+     * lock/move visent un créneau (id = schedule-slot). On branche sur le nom de route.
+     */
+    public function writeTargetSeasonId(Request $request): ?string
+    {
+        $id = $request->attributes->get('id');
+        if (!\is_string($id)) {
+            return null;
+        }
+
+        return 'api_schedule_place_slot' === $request->attributes->get('_route')
+            ? $this->writeTargetSeasonResolver->ofSchedule($id)
+            : $this->writeTargetSeasonResolver->ofScheduleSlot($id);
+    }
 
     #[Route('/api/schedule-slots/{id}/manual-edit/lock', name: 'api_manual_edit_lock', methods: ['POST'])]
     public function applyLock(string $id, Request $request): JsonResponse
