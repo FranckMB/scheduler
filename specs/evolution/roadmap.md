@@ -12,9 +12,11 @@
 >
 > ⚠ **Deux séries coexistent dans ce fichier, ne jamais les confondre.** Le **backlog** (`Pn-x`/`SEC-n`/`DOC-n`,
 > compté par le `(N)` ci-dessus) et les **findings d'audit** (`AUD-*`, section dédiée en bas, compteur propre —
-> `grep -cE '^\| AUD-' specs/evolution/roadmap.md`). Les deux numérotations ont grandi séparément : le `SEC-13`
-> du backlog (rituel ZAP) n'a rien à voir avec le `SEC-13` d'audit (validation du `config`, livrée). Le préfixe
-> `AUD-` existe pour rendre l'amalgame impossible.
+> `grep -cE '^\| AUD-' specs/evolution/roadmap.md`). Les deux numérotations ont grandi séparément, et le préfixe
+> **`AUD-`** existe pour rendre l'amalgame impossible. ⚑ **L'exemple qui vivait ici a été DÉSAMORCÉ le
+> 2026-08-21** : le rituel ZAP portait `SEC-13`, comme un finding d'audit livré (validation du `config`) — ET
+> comme un second item de backlog né depuis. Trois sens pour un id. Le rituel est devenu **SEC-19** ; les traces
+> d'août qui disent « SEC-13 » dans l'état des lieux parlent de l'**audit**, pas du backlog.
 >
 > **Corollaire à ne pas contourner** : si vous cherchez « est-ce que X est fait ? », ce fichier ne répond pas —
 > [`etat-des-lieux.md`](../courantes/etat-des-lieux.md) répond. Et si un sujet a été **tranché contre** une option
@@ -169,7 +171,7 @@
 | P4-10 | **Désactiver « Régénérer » si rien n'a changé** | ⚪ | M | Demande une détection de changement fiable |
 | P4-12 | **`*PeriodOverride` — parité miroir à durcir (les 2 jumeaux)** | ⚪ | S | (a) `createEntityFromInput` = check-then-insert non atomique → POST concurrents → 500 au lieu de 422 ; (b) `#[ApiFilter(SearchFilter)]` inerte (le provider custom lit les params à la main — ne sert que le snapshot OpenAPI) ; (c) le provider ré-implémente `provideCollection` au lieu du hook `applyRequestFilters` ; (e) la règle de défaut reprise (CLUB/COACH/TEAM gardées, FACILITY droppée) est **dupliquée** PHP `activePermanentForReprise` + TS `defaultKept` sans source partagée — une édition unilatérale ferait diverger checklist et payload. Toucher `TeamPeriodOverride` **et** `ConstraintPeriodOverride` ensemble |
 | P4-18 | **DA « ça sent le basket »** | ⚪ | S/M | L'app est visuellement neutre alors qu'elle s'adresse à des clubs de basket : fond de bandeau évoquant un parquet, illustrations d'états vides, iconographie. **Justification = mono-sport assumé, PAS préparation multi-sport.** Argument de démo et de vente. **Garde-fou de coût** : regrouper les assets en **un seul thème** — pour qu'un changement de parti pris reste une PR et non une chasse au trésor. Sobriété : un fond + les états vides suffisent |
-| SEC-13 | **Rituel pré-prod ZAP + Nuclei** | 🟡 | S | Dès qu'une préprod/prod existe : ZAP **baseline** avant chaque release + scan **actif** une fois avant la vraie mise en prod (préprod uniquement, compte de test) ; Nuclei **mensuel sur l'hôte exposé** (configs nginx/TLS, empreintes CVE). Procédure prête → [`docs/security/scanners.md`](../../docs/security/scanners.md) §Rituel — il ne reste qu'à la dérouler le jour venu. Né du cadrage outillage SEC A19 (2026-08-05) |
+| SEC-19 | **Rituel pré-prod ZAP + Nuclei** | 🟡 | S | Dès qu'une préprod/prod existe : ZAP **baseline** avant chaque release + scan **actif** une fois avant la vraie mise en prod (préprod uniquement, compte de test) ; Nuclei **mensuel sur l'hôte exposé** (configs nginx/TLS, empreintes CVE). Procédure prête → [`docs/security/scanners.md`](../../docs/security/scanners.md) §Rituel — il ne reste qu'à la dérouler le jour venu. Né du cadrage outillage SEC A19 (2026-08-05) |
 | P4-54 | **Console super-admin — SA4 v2 puis SA5** | ⚪ | M | SA0→SA4 v1 livrés + monitoring + alerting (état des lieux §1.8). Suite au signal → [`console-superadmin.md`](console-superadmin.md). ⚠ Suspension de club et approbation fallback **délibérément différées** au premier cas réel |
 | P4-80 | **Rector est borné à la série 2.5 — la 2.6 rend deux gates CI mutuellement exclusifs** | ⚪ | XS | Mesuré au lot Dependabot du 2026-08-11 (PR #504). Rector **2.6.0 et 2.6.1** ré-impriment `src/Security/JwtCookieFactory.php` et `src/Controller/MercureAuthController.php` en remplaçant `Cookie::SAMESITE_STRICT` par le FQCN `\Symfony\Component\HttpFoundation\Cookie::…`, alors que l'import est **présent** (`JwtCookieFactory.php:8`) ; CS-Fixer (`fully_qualified_strict_types` + `import_symbols`) le ré-importe aussitôt. `rector` et `phpstan` (qui porte CS-Fixer) étant **tous deux des required checks de `main`**, aucun des deux ne peut être vert en même temps que l'autre — plus aucune PR backend ne passerait. ⚑ **La faute est dans l'OUTIL, pas dans notre code, et c'est vérifié** : `rector --output-format=json` rend `applied_rectors: []` sur ces fichiers — **aucune règle ne se déclenche**, c'est le ré-imprimeur qui déraille. Ce n'est donc pas une convention nouvelle à adopter. `composer.json` porte `~2.5.9` (les patches 2.5.x continuent d'arriver, la 2.6 est tenue dehors) — **ce n'est PAS le motif interdit du pin Symfony** (là, Flex fait le travail et c'est le lock qui bloque ; ici l'outil est cassé et rien ne le corrige à notre place). À faire : suivre l'amont, relever la borne dès qu'une 2.6.x n'exhibe plus le défaut, et re-tester la convergence `rector` → `cs-fix` → `rector`. **2.6.2 (sortie 2026-08-12) testée le 2026-08-13 : défaut toujours présent** — mêmes ré-impressions FQCN sur les deux fichiers témoins, `applied_rectors: []`, changelog muet ; borne inchangée. **2.6.1 re-testée le 2026-08-15** (Dependabot #549 avait réécrit la borne en `~2.6.1`) : **défaut TOUJOURS présent**, mesuré et non déduit — `JwtCookieFactory.php:51` et `MercureAuthController.php:106` repassent en FQCN ; borne `~2.5.9` restaurée sur la branche Dependabot, les 4 autres montées du lot conservées. ⚑ Ce qu'on rate en attendant, désormais chiffré : la 2.6 apporte **`ParamAndEnvAttributeRector`** (`#[Autowire('%env(X)%')]` → `#[Autowire(env: 'X')]`), **10 fichiers concernés** — c'est le gain à encaisser le jour où la borne pourra monter |
 | P4-69 | **Forfait général : un 3ᵉ état du périmètre engagé** | ⚪ | M | **Ouvert §8.1 de [`ffbb-appariement-source-de-verite.md`](ffbb-appariement-source-de-verite.md) — « réel, pas prioritaire » (fondateur).** Une équipe en forfait général a des matchs (donc `EngagedTeamGuard` la verrouille) mais n'a potentiellement plus besoin de ses créneaux, réallouables. Forfait ≠ désengagement dans notre modèle : il faudra un 3ᵉ état. Axe périmètre engagé (§7.1) → NR obligatoire le jour où c'est traité |
@@ -182,7 +184,7 @@
 > **Pourquoi cette section (fondateur, 2026-08-09)** : les gestes « à faire le jour où on ouvre » s'accumulaient
 > en notes éparses — cette liste les tient au même endroit pour y voir clair le jour venu. Elle mélange des
 > **gestes d'exploitation** (pas de code) et des **lignes de code** à livrer avant l'ouverture publique.
-> S'y ajoutent deux rituels déjà tracés ailleurs : **SEC-13** (ZAP baseline + Nuclei, ligne P4 ci-dessus)
+> S'y ajoutent deux rituels déjà tracés ailleurs : **SEC-19** (ZAP baseline + Nuclei, ligne P4 ci-dessus)
 > et le **dump pré-migration** ([`deploy.md`](../../docs/ops/deploy.md)).
 
 | # | Sujet | Impact | Effort | Note |
@@ -207,8 +209,9 @@
 > corrigé, ouvert, ou aggravé depuis trois mois ? »). Les éditions vivent dans [`../audit/`](../audit/) ;
 > **cette section est le miroir ACTIONNABLE de leur reste-à-faire** — l'audit constate, la roadmap engage.
 >
-> ⚠ **Espace de noms distinct du backlog.** Un `SEC-13` d'audit n'est PAS le `SEC-13` du backlog ci-dessus
-> (rituel ZAP) — les deux séries ont grandi séparément. D'où le préfixe **`AUD-`** ici : il rend la collision
+> ⚠ **Espace de noms distinct du backlog.** Un `SEC-n` d'audit n'est PAS le `SEC-n` du backlog ci-dessus —
+> les deux séries ont grandi séparément. (L'ancienne collision d'exemple, `SEC-13`, a été levée le 2026-08-21 :
+> le rituel ZAP est désormais `SEC-19`.) D'où le préfixe **`AUD-`** ici : il rend la collision
 > impossible à commettre. Le compteur du titre de ce fichier ne les compte pas (son `grep` cible `Pn`/`SEC-n`/`DOC-n`) ;
 > **cette section porte son propre compteur**, à entretenir à la même règle : un finding corrigé quitte la
 > section et laisse sa trace dans [`../courantes/etat-des-lieux.md`](../courantes/etat-des-lieux.md).
