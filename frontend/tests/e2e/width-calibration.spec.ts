@@ -108,6 +108,13 @@ test.describe("largeurs sur 1920×1080", () => {
     const selects = page.locator("select[aria-label='Genre'], select[aria-label='Niveau de jeu'], select[aria-label='Catégorie']");
     await expect(selects.first()).toBeVisible({ timeout: 30_000 });
 
+    // ⚠ **Cette mesure dépend des POLICES de la machine qui l'exécute, et la CI fait foi.**
+    // Mesuré le 2026-08-21 : « — catégorie — » fait **92,6 px** en local et **103 px** en CI —
+    // même chaîne, même pile `system-ui`, polices installées différentes. Conséquence à
+    // connaître avant de dimensionner une colonne : un vert local ne prouve rien si la marge
+    // est au rasoir. C'est ainsi que `w-36` est passé ici et a rougi là-bas — et c'était la CI
+    // qui avait raison, le placeholder ÉTAIT coupé.
+    //
     // ⚠ **Le témoin, et ce qu'il a coûté de ne pas l'avoir.** La première version de ce test
     // mesurait les sélecteurs du FORMULAIRE d'ajout, dont la valeur sélectionnée est « — » :
     // 14 px, qui tiennent partout. Le test passait, et il passait ENCORE en remettant la
@@ -134,12 +141,14 @@ test.describe("largeurs sur 1920×1080", () => {
         return { label: el.getAttribute("aria-label"), text: probe.textContent, textWidth, usable };
       });
 
-      // « — » (le placeholder du formulaire d'ajout) ne prouve rien : on ne compte que les
-      // valeurs réelles.
-      if ("—" === verdict.text?.trim() || "" === (verdict.text ?? "").trim()) {
-        continue;
+      // ⚠ On ASSERTE sur tout ce qui est AFFICHÉ, placeholder compris : un « — catégorie — »
+      // coupé est le même défaut qu'un « Homme » coupé, et c'est exactement ce que la CI a
+      // trouvé là où le club de dev ne le montrait pas. Seul le COMPTE du témoin ignore les
+      // « — » nus : eux ne prouvent rien, ils tiennent partout.
+      const isPlaceholder = "" === (verdict.text ?? "").trim() || (verdict.text ?? "").trim().startsWith("—");
+      if (!isPlaceholder) {
+        measured += 1;
       }
-      measured += 1;
       expect(
         Math.ceil(verdict.textWidth),
         `« ${verdict.text} » (${verdict.label}) demande ${Math.ceil(verdict.textWidth)} px et n'en reçoit que ${Math.floor(verdict.usable)} : la valeur est COUPÉE à l'écran, exactement le défaut « Homn » pour « Homme »`,

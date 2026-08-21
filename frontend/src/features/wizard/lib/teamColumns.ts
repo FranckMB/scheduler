@@ -24,8 +24,14 @@
 export const TEAM_COLUMNS = {
   /** Nom : occupe la place restante, mais PLAFONNÉE — « SM1 » n'a pas besoin de 1050 px. */
   name: "min-w-0 flex-1 max-w-xl",
-  /** Catégorie : « Senior », « U21 », « Loisir adulte »… */
-  category: "w-36",
+  /**
+   * Catégorie. ⚠ Dimensionnée sur son **placeholder** « — catégorie — » (~103 px), plus long
+   * que toutes ses valeurs — c'est lui qu'un club NEUF a sous les yeux, et `w-36` le coupait.
+   * Attrapé par la CI, pas en local : la marge y était de 100 px offerts contre ~101 demandés,
+   * un écart de rendu de police suffisait à faire basculer. Une borne au rasoir n'est pas une
+   * borne.
+   */
+  category: "w-40",
   /** Genre : « Homme », « Femme », « Mixte » — 80 px les coupaient. */
   gender: "w-28",
   /** Niveau de jeu : « Départemental » est la plus longue du catalogue. */
