@@ -330,15 +330,4 @@ class ConstraintStateProcessor extends AbstractStateProcessor
     {
         return ConstraintRuleType::tryFrom($value ?? '') ?? throw $this->unknownEnumValue('ruleType', $value, ConstraintRuleType::values());
     }
-
-    /** @param list<string> $accepted */
-    private function unknownEnumValue(string $field, ?string $value, array $accepted): UnprocessableEntityHttpException
-    {
-        return new UnprocessableEntityHttpException(\sprintf(
-            '« %s » n\'est pas une valeur connue pour %s. Valeurs acceptées : %s.',
-            $value ?? '(absent)',
-            $field,
-            implode(', ', $accepted),
-        ));
-    }
 }

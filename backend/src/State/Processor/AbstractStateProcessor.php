@@ -282,6 +282,25 @@ abstract class AbstractStateProcessor implements ProcessorInterface
     protected function afterPersist(object $entity): void {}
 
     /**
+     * Une valeur d'enum PRÉSENTE mais inconnue → 422 nommé, jamais un repli silencieux.
+     *
+     * ⚑ Maison unique du libellé depuis AUD-BCK-14 : deux processeurs le rendent (contraintes
+     * et entrées de calendrier), et deux formulations qui dérivent, c'est un message d'erreur
+     * qui ne se reconnaît plus d'un écran à l'autre.
+     *
+     * @param list<string> $accepted
+     */
+    protected function unknownEnumValue(string $field, ?string $value, array $accepted): UnprocessableEntityHttpException
+    {
+        return new UnprocessableEntityHttpException(\sprintf(
+            '« %s » n\'est pas une valeur connue pour %s. Valeurs acceptées : %s.',
+            $value ?? '(absent)',
+            $field,
+            implode(', ', $accepted),
+        ));
+    }
+
+    /**
      * P4-25 — le verrou optimiste, câblé une fois pour toutes.
      *
      * ⚑ Le défaut : `processPut` remplaçait tous les champs éditables sans jamais regarder
