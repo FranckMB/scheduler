@@ -9337,7 +9337,7 @@
                         "description": "Schedule is validated (read-only), or a generation is running for the club (body carries code=generation_in_progress)"
                     },
                     "422": {
-                        "description": "Refused with nothing written. Either the solver refused the move (broken rules named for display), OR the eviction target is invalid (body carries code=evict_target_mismatch), OR the eviction target is locked (body carries code=target_locked)",
+                        "description": "Refused with nothing written. Either the solver refused the move (broken rules named for display), OR no venue window is open at the destination \u2014 nonexistent target or closed day (body carries code=slot_unavailable), OR the eviction target is invalid (body carries code=evict_target_mismatch), OR the eviction target is locked (body carries code=target_locked)",
                         "content": {
                             "application/json": {
                                 "schema": {
@@ -9352,7 +9352,7 @@
                                         "code": {
                                             "type": "string",
                                             "nullable": true,
-                                            "description": "evict_target_mismatch or target_locked when the eviction pre-check refused (no engine call)"
+                                            "description": "slot_unavailable, evict_target_mismatch or target_locked when a server pre-check refused (no engine call)"
                                         },
                                         "error": {
                                             "type": "string",

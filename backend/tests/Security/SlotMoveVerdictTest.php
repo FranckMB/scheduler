@@ -13,6 +13,7 @@ use App\Entity\Sport;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\Venue;
+use App\Entity\VenueTrainingSlot;
 use App\Enum\LockLevel;
 use App\Enum\LockOrigin;
 use App\Enum\ScheduleStatus;
@@ -544,6 +545,21 @@ final class SlotMoveVerdictTest extends KernelTestCase
             $this->em->flush();
             $venueIds[] = $venue->getId();
         }
+
+        // La fenêtre de gymnase de DESTINATION de tous les déplacements du test : venue2, jeudi (4),
+        // 20:00 (schedulePlanId null = grille de saison, ce que charge buildForClubSeason). Depuis
+        // la garde précoce de move(), un déplacement vers un triplet SANS fenêtre lève
+        // SlotUnavailableException avant le moteur — sans cette fenêtre, tout le test rougirait.
+        $window = (new VenueTrainingSlot)
+            ->setClubId($clubId)
+            ->setSeasonId($seasonId)
+            ->setVenueId($venueIds[1])
+            ->setDayOfWeek(4)
+            ->setStartTime(DateTimeImmutable::createFromFormat('!H:i', '20:00'))
+            ->setDurationMinutes(90)
+            ->setCapacity(1);
+        $this->em->persist($window);
+        $this->em->flush();
 
         $sport = (new Sport)->setName('Basketball')->setSlug('bball-' . $suffix)->setIsActive(true);
         $this->em->persist($sport);

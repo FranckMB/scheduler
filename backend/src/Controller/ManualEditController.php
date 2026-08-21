@@ -145,6 +145,10 @@ final class ManualEditController extends AbstractController implements SeasonSco
         } catch (ScheduleGenerationInProgressException) {
             // Déplacer pendant qu'une génération réécrit le planning écraserait son résultat.
             return $this->json(['code' => 'generation_in_progress'], Response::HTTP_CONFLICT);
+        } catch (SlotUnavailableException) {
+            // Aucune fenêtre de gymnase à la destination (cible inexistante ou jour fermé) : le
+            // créneau n'existe pas, rien à faire juger, rien écrit. Miroir exact de placeSlot.
+            return $this->json(['code' => 'slot_unavailable', 'error' => 'Aucun créneau de gymnase n\'est ouvert à cet horaire.'], Response::HTTP_UNPROCESSABLE_ENTITY);
         } catch (EvictTargetMismatchException) {
             // La cible d'éviction est incohérente (introuvable, autre planning, ne siège pas là) :
             // rien n'est écrit, le moteur n'est pas appelé.

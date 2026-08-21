@@ -408,6 +408,13 @@ jobs:
       - name: SlotPlacementVerdictTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SlotPlacementVerdictTest.php --group phase1'
 
+      # Résidu de P2-43 — la garde PRÉCOCE de move() sur la grille : ce que l'écran Gymnases
+      # OFFRE, le serveur l'accepte ; ce qu'il n'offre pas (triplet inexistant, jour fermé), il le
+      # refuse sans appeler le moteur ; la durée écrite est TOUJOURS celle de l'emplacement, jamais
+      # celle qui voyageait avec l'équipe. Compteur de requêtes moteur, saison ET période.
+      - name: SlotMoveGridParityTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/Security/SlotMoveGridParityTest.php --group phase1'
+
       # P2-9ter — le fichier portait déjà #[Group('phase1')] sans qu'AUCUN step de CE job
       # ne le lance : il tournait bien, mais dans `unit-tests` (qui exécute `phpunit
       # tests/`) — c'est-à-dire APRÈS `blocking-tests` et sans gater `build-docker`. Il ne
