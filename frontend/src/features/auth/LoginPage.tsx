@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useNavigation } from "react-router";
 
 import { apiErrorMessage } from "@/shared/api/errors";
@@ -7,6 +7,7 @@ import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { PasswordInput } from "@/shared/components/ui/password-input";
 import { Spinner } from "@/shared/components/ui/spinner";
+import { clearSessionExpired, peekSessionExpired } from "@/shared/lib/sessionExpiredNotice";
 
 import { AuthLayout } from "./AuthLayout";
 import { useLogin } from "./queries";
@@ -19,6 +20,16 @@ export function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // P5-14 — la session a-t-elle expiré juste avant ce retour ? Marqueur one-shot posé
+  // par client.ts sur un 401. On PEEK (lecture pure) dans l'initialiseur — sûr sous
+  // StrictMode qui double-invoque — puis on CLEAR dans un effet (pas de setState dans
+  // l'effet : la règle `react-hooks/set-state-in-effect` l'interdit, et c'est de
+  // toute façon un simple nettoyage). Le bloc apparaît donc dès le premier rendu, une
+  // seule fois : au second montage le marqueur a été retiré.
+  const [sessionExpired] = useState(peekSessionExpired);
+  useEffect(() => {
+    clearSessionExpired();
+  }, []);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -42,6 +53,17 @@ export function LoginPage() {
         </>
       }
     >
+      {/* P5-14 — réassurance quand on ARRIVE ici parce que la session a expiré. Bloc
+          `role="status"` poli (une réassurance ne doit pas interrompre une frappe en
+          cours), titre en h2 (jamais un second h1 de la page), et « Se reconnecter »
+          EST le formulaire déjà présent — pas de page séparée. Le focus va au champ
+          e-mail (le vrai geste), pas au bloc. */}
+      {sessionExpired ? (
+        <div role="status" aria-live="polite" className="mb-4 rounded-md border border-border bg-card p-3 text-left">
+          <h2 className="text-sm font-semibold text-foreground">Fin du temps réglementaire.</h2>
+          <p className="mt-1 text-sm text-foreground">Votre session a expiré après une période d'inactivité — c'est pour protéger les données du club. Reconnectez-vous, vous reprendrez là où vous en étiez.</p>
+        </div>
+      ) : null}
       <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="email">Email</Label>

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { consumeSessionExpired } from "@/shared/lib/sessionExpiredNotice";
 import { useAuthStore } from "@/shared/stores/authStore";
 
 import { api } from "./client";
@@ -73,6 +74,7 @@ describe("api client — 401 handling", () => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     useAuthStore.getState().setAuthenticated(true);
+    window.sessionStorage.clear();
   });
 
   function stub401(): void {
@@ -106,5 +108,29 @@ describe("api client — 401 handling", () => {
 
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
     expect(assign).toHaveBeenCalledWith("/login");
+  });
+
+  // P5-14 — un 401 hors login POSE le marqueur d'expiration AVANT de rediriger :
+  // LoginPage l'affichera au lieu d'une redirection muette.
+  it("un 401 hors login marque l'expiration (lu par LoginPage)", async () => {
+    stub401();
+    vi.stubGlobal("location", { assign: vi.fn() });
+    useAuthStore.getState().setAuthenticated(true);
+
+    const client = api.extend({ baseUrl: "http://localhost/api/" });
+    await expect(client.get("teams").json()).rejects.toBeDefined();
+
+    expect(consumeSessionExpired()).toBe(true);
+  });
+
+  it("un 401 sur /api/login ne marque PAS d'expiration (mauvais identifiants, personne n'était connecté)", async () => {
+    stub401();
+    vi.stubGlobal("location", { assign: vi.fn() });
+    useAuthStore.getState().setAuthenticated(true);
+
+    const client = api.extend({ baseUrl: "http://localhost/api/" });
+    await expect(client.post("login").json()).rejects.toBeDefined();
+
+    expect(consumeSessionExpired()).toBe(false);
   });
 });

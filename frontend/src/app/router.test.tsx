@@ -1,3 +1,5 @@
+import { isValidElement, type ReactElement } from "react";
+import { Navigate } from "react-router";
 import { describe, expect, it } from "vitest";
 
 import { routes } from "./router";
@@ -55,6 +57,25 @@ describe("router — les filets du découpage", () => {
     const catchAll = admin?.children?.find((r) => "*" === r.path);
     expect(catchAll, "le catch-all /admin doit être frère du shell, pas son enfant").toBeDefined();
     expect(catchAll?.element).toBeDefined();
+  });
+
+  // P5-14 — une URL inconnue n'est plus TÉLÉPORTÉE en silence (Navigate) : elle rend
+  // une vraie 404. Le NR vise le mode de régression exact : quelqu'un « simplifie »
+  // en remettant un <Navigate>, et l'écran 404 disparaît sans qu'aucun test de page
+  // ne le voie.
+  it("le catch-all APP rend un écran 404, pas un <Navigate> muet", () => {
+    const authed = findLayoutWithChildren(root, ["/planning", "/wizard"]);
+    const catchAll = authed?.children?.find((r) => "*" === r.path);
+    expect(catchAll?.element, "le catch-all app doit avoir un element").toBeDefined();
+    expect(isValidElement(catchAll?.element)).toBe(true);
+    expect((catchAll?.element as ReactElement).type, "le catch-all app ne doit plus être un <Navigate>").not.toBe(Navigate);
+  });
+
+  it("le catch-all ADMIN rend un écran 404, pas un <Navigate> muet", () => {
+    const admin = root.children?.find((r) => "/admin" === r.path);
+    const catchAll = admin?.children?.find((r) => "*" === r.path);
+    expect(catchAll?.element).toBeDefined();
+    expect((catchAll?.element as ReactElement).type, "le catch-all admin ne doit plus être un <Navigate>").not.toBe(Navigate);
   });
 
   it("les pages lourdes sont bien LAZY (sinon le découpage ne sert à rien)", () => {

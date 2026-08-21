@@ -1,6 +1,10 @@
 import * as Sentry from "@sentry/react";
 import { useEffect } from "react";
-import { useNavigate, useRouteError } from "react-router";
+import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router";
+
+import { ForbiddenPage } from "@/app/ForbiddenPage";
+import { OfflineScreen } from "@/app/OfflineScreen";
+import { ServerErrorScreen } from "@/app/ServerErrorScreen";
 
 /**
  * Le filet des erreurs de ROUTE — indispensable depuis le découpage en chunks (P4-6).
@@ -35,39 +39,42 @@ export function RouteErrorBoundary() {
     });
   }, [error, chunkFailed, offline]);
 
-  return (
-    <div className="flex flex-col items-center justify-center gap-4 p-10 text-center text-foreground">
-      <h1 className="text-lg font-semibold">
-        {offline ? "Vous semblez hors ligne" : staleDeploy ? "Une nouvelle version est disponible" : "Cette page n'a pas pu être ouverte"}
-      </h1>
-      <p className="max-w-md text-sm text-muted-foreground">
-        {offline
-          ? "Le chargement de cette page a échoué faute de connexion. Reconnectez-vous au réseau, puis réessayez — le reste de l'application reste utilisable."
-          : staleDeploy
-            ? "L'application a été mise à jour pendant votre navigation. Rechargez la page pour continuer — vos données ne sont pas perdues."
-            : "Le chargement de cette page a échoué. Réessayez, ou rechargez la page si le problème persiste."}
-      </p>
-      <div className="flex gap-2">
-        {/* Réessayer AVANT recharger : une panne passagère (paquet perdu) se rejoue
-            sans perdre l'état non persisté — c'est le geste que l'ErrorBoundary
-            React offre déjà pour les throws de rendu. */}
-        <button
-          type="button"
-          onClick={() => void navigate(0)}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90"
-        >
-          Réessayer
-        </button>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          Recharger la page
-        </button>
+  // P5-14 — la porte 403 : un consommateur `throw`e une `Response` 403 (idiome
+  // react-router). Muette sur les droits ? Non — le 403 assume le refus d'accès ;
+  // c'est la 404 (refus tenant) qui reste muette.
+  if (isRouteErrorResponse(error) && 403 === error.status) {
+    return <ForbiddenPage />;
+  }
+
+  // Hors ligne : le chargement a échoué faute de réseau. Écran PLEINE PAGE (rien
+  // derrière), pas le bandeau d'usage normal (hors lot). « Réessayer » rejoue la
+  // navigation sans recharger le document.
+  if (offline) {
+    return <OfflineScreen onRetry={() => void navigate(0)} />;
+  }
+
+  // Déploiement pendant la session : un chunk haché a disparu. Cas à part — sa copie
+  // n'est PAS dans les maquettes P5-14 (pas une 500), et son geste est « Recharger »
+  // (le retry sans reload ne peut pas ramener un asset supprimé). Conservé tel quel.
+  if (staleDeploy) {
+    return (
+      <div className="flex min-h-[70vh] flex-col items-center justify-center gap-4 p-10 text-center text-foreground">
+        <h1 className="text-lg font-semibold">Une nouvelle version est disponible</h1>
+        <p className="max-w-md text-sm text-muted-foreground">L'application a été mise à jour pendant votre navigation. Rechargez la page pour continuer — vos données ne sont pas perdues.</p>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => void navigate(0)} className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90">
+            Réessayer
+          </button>
+          <button type="button" onClick={() => window.location.reload()} className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted">
+            Recharger la page
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  // Ni offline ni déploiement : erreur de route générique → l'écran 500 partagé.
+  return <ServerErrorScreen onRetry={() => void navigate(0)} />;
 }
 
 /**

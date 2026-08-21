@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -6,12 +7,13 @@ import { useAuthStore } from "@/shared/stores/authStore";
 
 import { AuthGuard } from "./AuthGuard";
 
-const { meState, info } = vi.hoisted(() => ({
-  meState: { data: undefined as unknown },
+const { meState, info, refetch } = vi.hoisted(() => ({
+  meState: { data: undefined as unknown, isError: false },
   info: vi.fn(),
+  refetch: vi.fn(),
 }));
 
-vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: meState.data, isLoading: false, isError: false }) }));
+vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: meState.data, isLoading: false, isError: meState.isError, refetch }) }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { info } }));
 
 // Onboarding lock is keyed on the baseline (main plan) existing, not the legacy
@@ -37,6 +39,7 @@ function renderAt(path: string) {
         </Route>
         <Route path="/wizard" element={<div>WIZARD</div>} />
         <Route path="/waiting" element={<div>WAITING</div>} />
+        <Route path="/login" element={<div>LOGIN</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -45,6 +48,7 @@ function renderAt(path: string) {
 describe("AuthGuard — onboarding lock", () => {
   beforeEach(() => {
     info.mockClear();
+    meState.isError = false;
     useAuthStore.setState({ isAuthenticated: true });
   });
 
@@ -95,5 +99,55 @@ describe("AuthGuard — onboarding lock", () => {
     renderAt("/");
     expect(screen.getByText("COCKPIT")).toBeInTheDocument();
     expect(info).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * P5-14 (axe auth) — le VRAI défaut corrigé : `AuthGuard` envoyait TOUT `isError`
+ * de /api/me vers /login, y compris un 5xx ou une panne réseau — « le serveur
+ * tombe et l'app dit reconnectez-vous ». Or le vrai 401 est déjà éjecté par
+ * client.ts (qui vide l'auth). Ici : réseau coupé → écran hors-ligne ; sinon →
+ * écran 500 avec « Réessayer » = refetch. JAMAIS /login sur un échec non-401.
+ */
+describe("AuthGuard — échec de /api/me (ne jamais mentir « reconnectez-vous »)", () => {
+  beforeEach(() => {
+    info.mockClear();
+    refetch.mockClear();
+    meState.data = undefined;
+    meState.isError = false;
+    useAuthStore.setState({ isAuthenticated: true });
+  });
+
+  it("sans session (store vidé par un 401, cf. client.ts) → /login, comportement INCHANGÉ", () => {
+    useAuthStore.setState({ isAuthenticated: false });
+    renderAt("/");
+    expect(screen.getByText("LOGIN")).toBeInTheDocument();
+  });
+
+  it("un 5xx (serveur tombé) → écran 500, JAMAIS /login", () => {
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    meState.isError = true;
+    renderAt("/");
+    expect(screen.getByRole("heading", { name: /arrêt de jeu imprévu/i })).toBeInTheDocument();
+    expect(screen.queryByText("LOGIN")).toBeNull();
+    onLine.mockRestore();
+  });
+
+  it("réseau coupé → écran hors-ligne, JAMAIS /login", () => {
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    meState.isError = true;
+    renderAt("/");
+    expect(screen.getByRole("heading", { name: /pas de réseau/i })).toBeInTheDocument();
+    expect(screen.queryByText("LOGIN")).toBeNull();
+    onLine.mockRestore();
+  });
+
+  it("« Réessayer » relance le fetch de /api/me (refetch), sans recharger la page", async () => {
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    meState.isError = true;
+    renderAt("/");
+    await userEvent.click(screen.getByRole("button", { name: /réessayer/i }));
+    expect(refetch).toHaveBeenCalled();
+    onLine.mockRestore();
   });
 });

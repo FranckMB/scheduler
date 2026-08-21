@@ -28,7 +28,7 @@ describe("ErrorBoundary", () => {
     expect(screen.getByText("all good")).toBeInTheDocument();
   });
 
-  it("catches a render throw and shows the branded fallback + reload", () => {
+  it("catches a render throw and shows the shared 500 screen (P5-14) with Réessayer", () => {
     // React logs the caught error; silence it so the test output stays clean.
     vi.spyOn(console, "error").mockImplementation(() => {});
     render(
@@ -36,8 +36,8 @@ describe("ErrorBoundary", () => {
         <Boom />
       </ErrorBoundary>,
     );
-    expect(screen.getByText(/erreur inattendue/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /recharger/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /arrêt de jeu imprévu/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /réessayer/i })).toBeInTheDocument();
   });
 
   it("recovers in-app when Réessayer is clicked and the cause is gone (no reload)", async () => {
@@ -48,7 +48,7 @@ describe("ErrorBoundary", () => {
         <MaybeBoom />
       </ErrorBoundary>,
     );
-    expect(screen.getByText(/erreur inattendue/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /arrêt de jeu imprévu/i })).toBeInTheDocument();
 
     flag.throws = false; // the transient cause is gone
     await userEvent.click(screen.getByRole("button", { name: /réessayer/i }));

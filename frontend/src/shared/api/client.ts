@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/react";
 import ky from "ky";
 
 import { recordIncident } from "@/shared/api/lastIncidentStore";
+import { markSessionExpired } from "@/shared/lib/sessionExpiredNotice";
 import { useAuthStore } from "@/shared/stores/authStore";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 
@@ -95,6 +96,10 @@ export const api = ky.create({
           || state.request.url.includes("/api/dev/demo-register");
         if (state.response.status === 401 && !callerHandles401) {
           useAuthStore.getState().clear();
+          // P5-14 — marquer l'expiration AVANT de rediriger : LoginPage lit ce
+          // marqueur one-shot au montage et explique le retour au formulaire
+          // (« Fin du temps réglementaire »), au lieu d'une redirection muette.
+          markSessionExpired();
           if (typeof window !== "undefined") {
             window.location.assign("/login");
           }

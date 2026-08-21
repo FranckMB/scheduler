@@ -1,7 +1,8 @@
-import { createBrowserRouter, Navigate, RouterProvider, type RouteObject } from "react-router";
+import { createBrowserRouter, RouterProvider, type RouteObject } from "react-router";
 
 import { AppLayout } from "@/app/AppLayout";
 import { AuthGuard } from "@/app/AuthGuard";
+import { NotFoundPage } from "@/app/NotFoundPage";
 import { RootShell } from "@/app/RootShell";
 import { RouteErrorBoundary } from "@/app/RouteErrorBoundary";
 import { AdminGuard } from "@/features/admin/AdminGuard";
@@ -69,8 +70,11 @@ export const routes: RouteObject[] = [
             ],
           },
           // Hors du shell LAZY : une URL admin inconnue ne doit pas télécharger la
-          // console entière pour être simplement redirigée.
-          { path: "*", element: <Navigate to="/admin" replace /> },
+          // console entière. Une vraie 404 (P5-14, EAGER, écran minuscule) plutôt
+          // qu'une téléportation muette ; geste « Retour à la console » → /admin. Pas
+          // de « Contacter le support » ici : l'admin a une identité séparée, sans
+          // canal de signalement de club.
+          { path: "*", element: <NotFoundPage homeTo="/admin" homeLabel="Retour à la console" showSupport={false} /> },
         ],
       },
       {
@@ -153,8 +157,11 @@ export const routes: RouteObject[] = [
             path: "/nouveautes",
             lazy: async () => ({ Component: (await import("@/features/release-notes/ReleaseNotesPage")).ReleaseNotesPage }),
           },
-          // Unknown authed URL (e.g. the removed /pending-members) → home, not the raw error boundary.
-          { path: "*", element: <Navigate to="/" replace /> },
+          // URL authentifiée inconnue → une vraie 404 (P5-14, EAGER), sous AppLayout
+          // (en-tête et navigation conservés). Plus de téléportation muette vers
+          // l'accueil : une URL inconnue le DIT. Cette même 404 sert au refus tenant
+          // (ressource d'un autre club → 404, jamais 403) — copie muette sur les droits.
+          { path: "*", element: <NotFoundPage /> },
         ],
       },
         ],
