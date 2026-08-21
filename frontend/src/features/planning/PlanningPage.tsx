@@ -22,7 +22,7 @@ import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import { type Compromise, EngineTimeoutError, EngineVerificationInterruptedError, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
+import { type Compromise, EngineTimeoutError, EngineVerificationInterruptedError, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError, VerdictAbandonedError } from "./api";
 import { CompromiseList } from "./CompromiseList";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { DriftBanner } from "./DriftBanner";
@@ -810,6 +810,12 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
           toast.success(compromises.length > 0 ? `Séance placée — ${compromises.length} compromis` : "Séance placée.");
         },
         onError: (error) => {
+          // Lot C PR-2 : un ABANDON volontaire est déjà NOMMÉ + resynchronisé par le hook —
+          // surtout pas le doubler d'un « réessayez » (VerdictAbandonedError étant une sous-classe
+          // de EngineVerificationInterruptedError, il faut l'intercepter AVANT cette branche).
+          if (error instanceof VerdictAbandonedError) {
+            return;
+          }
           if (error instanceof MoveRejectedError) {
             toast.error(error.violations[0]?.message ?? "Placement refusé par le moteur.");
             setHighlightSlotIds(violationHighlightSlotIds(error.violations, slots));

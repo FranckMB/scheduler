@@ -103,7 +103,10 @@ for (const mode of MODES) {
       // libellé en accent. La mesure a valu son prix — le fond teinté qu'on lui destinait
       // (`bg-accent/10`) tombait à 4.18:1 en clair, et `bg-muted` au survol à 4.37:1. Sur
       // le fond nu il passe (4.77:1). Ce jeton est désormais du TEXTE : il se garde ici.
-      for (const token of ["text-warning", "text-success", "text-accent"]) {
+      // `text-foreground` (lot C PR-2) : le texte du panneau du VOILE BLOQUANT — panneau `bg-card`,
+      // bouton d'abandon `bg-background`. Le voile n'apparaît que le temps d'une mutation, donc axe
+      // ne l'échantillonne JAMAIS sur un écran : on verrouille sa paire ici, dans les deux thèmes.
+      for (const token of ["text-warning", "text-success", "text-accent", "text-foreground"]) {
         const fg = of(token, "color");
         out[`${token} on background`] = ratio(fg, bg);
         out[`${token} on card`] = ratio(fg, card);

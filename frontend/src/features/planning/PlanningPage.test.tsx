@@ -79,6 +79,14 @@ vi.mock("./api", () => {
       this.name = "EngineVerificationInterruptedError";
     }
   }
+  // Lot C PR-2 : l'ABANDON volontaire (sous-classe) — classe RÉELLE pour que le garde
+  // `error instanceof VerdictAbandonedError` de doPlace/doMove ne casse pas (instanceof undefined).
+  class VerdictAbandonedError extends EngineVerificationInterruptedError {
+    constructor() {
+      super();
+      this.name = "VerdictAbandonedError";
+    }
+  }
   return {
   OverlaysExistError,
   MoveRejectedError,
@@ -87,6 +95,7 @@ vi.mock("./api", () => {
   SlotEditError,
   EngineTimeoutError,
   EngineVerificationInterruptedError,
+  VerdictAbandonedError,
   reopenSchedule: vi.fn(),
   fillSchedule: vi.fn(() => Promise.resolve({ id: "sched-fill" })),
   listSchedules: vi.fn(() => Promise.resolve([{ id: SID, name: "Planning A", status: "COMPLETED", score: 9051, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", planType: "SEASON", schedulePlanId: "season-plan" }])),
@@ -1129,7 +1138,7 @@ describe("PlanningPage (integration)", () => {
       await armMoveFrom(user, "U11");
       await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
 
-      await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 2, startTime: "19:00", venueId: "venue-1" }));
+      await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 2, startTime: "19:00", venueId: "venue-1" }, expect.any(AbortSignal)));
     });
 
     it("clic sur une case OCCUPÉE → modale (essai dryRun), puis move RÉEL AVEC evictSlotId à la confirmation SEULEMENT", async () => {
@@ -1149,11 +1158,11 @@ describe("PlanningPage (integration)", () => {
       expect(await within(dialog).findByText(/Ce créneau est occupé par/i)).toBeInTheDocument();
       expect(within(dialog).getByText("U13")).toBeInTheDocument();
       await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledTimes(1));
-      expect(vi.mocked(moveSlot).mock.calls[0]).toEqual(["slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2", dryRun: true }]);
+      expect(vi.mocked(moveSlot).mock.calls[0]).toEqual(["slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2", dryRun: true }, expect.any(AbortSignal)]);
 
       await user.click(await within(dialog).findByRole("button", { name: /Déplacer et évincer/ }));
       // Le move réel (sans dryRun) n'a lieu qu'à la confirmation.
-      await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2" }));
+      await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2" }, expect.any(AbortSignal)));
     });
 
     it("après éviction, le raccourci REMET l'évincée sur la case libérée par la source (placeSlot)", async () => {
@@ -1170,7 +1179,7 @@ describe("PlanningPage (integration)", () => {
       // Le raccourci propose de remettre U13 sur l'ANCIENNE case de la source (lundi 18:00, venue-1).
       const shortcut = await screen.findByRole("button", { name: /Remettre U13/ });
       await user.click(shortcut);
-      await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-2", dayOfWeek: 1, startTime: "18:00", venueId: "venue-1" }));
+      await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-2", dayOfWeek: 1, startTime: "18:00", venueId: "venue-1" }, expect.any(AbortSignal)));
     });
 
     it("cible verrouillée concurremment → 422 target_locked pendant l'essai : message propre, modale fermée, mode cible ARMÉ", async () => {
@@ -1204,7 +1213,7 @@ describe("PlanningPage (integration)", () => {
       await user.click(driftButton);
       await user.click(await screen.findByRole("button", { name: /Placer ici/ }));
 
-      await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-1", dayOfWeek: 2, startTime: "19:00", venueId: "venue-1" }));
+      await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-1", dayOfWeek: 2, startTime: "19:00", venueId: "venue-1" }, expect.any(AbortSignal)));
     });
 
     it("P2-44 comblement : une version de PÉRIODE à la dérive offre « Combler automatiquement » → fillSchedule sur SA version", async () => {
@@ -1277,7 +1286,7 @@ describe("PlanningPage (integration)", () => {
 
       // Le 2e appel remet slot-1 à SA position d'origine (lundi 18:00, venue-1).
       await vi.waitFor(() => expect(vi.mocked(moveSlot)).toHaveBeenCalledTimes(2));
-      expect(vi.mocked(moveSlot).mock.calls[1]).toEqual(["slot-1", { dayOfWeek: 1, startTime: "18:00", venueId: "venue-1" }]);
+      expect(vi.mocked(moveSlot).mock.calls[1]).toEqual(["slot-1", { dayOfWeek: 1, startTime: "18:00", venueId: "venue-1" }, expect.any(AbortSignal)]);
     });
 
     it("undo d'une éviction : move inverse PUIS replacement ; échec partiel = message honnête", async () => {
@@ -1300,7 +1309,7 @@ describe("PlanningPage (integration)", () => {
 
       // Inverse tenté, replacement tenté, et le message dit la vérité : la source est revenue,
       // l'évincée reste à replacer.
-      await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-2", dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", durationMinutes: 90 }));
+      await vi.waitFor(() => expect(vi.mocked(placeSlot)).toHaveBeenCalledWith(SID, { teamId: "team-2", dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", durationMinutes: 90 }, expect.any(AbortSignal)));
       await vi.waitFor(() => expect(useToastStore.getState().toasts.some((t) => "error" === t.variant && /U11 est revenue/.test(t.message) && /U13 reste à replacer/.test(t.message))).toBe(true));
     });
   });
@@ -1533,7 +1542,7 @@ describe("PlanningPage (integration)", () => {
 
       // L'essai part AUSSITÔT, en dryRun.
       await vi.waitFor(() =>
-        expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2", dryRun: true }),
+        expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2", dryRun: true }, expect.any(AbortSignal)),
       );
       const dialog = await screen.findByRole("dialog");
       // Les compromis nommés s'affichent dans la modale (cassé ET rétabli).
@@ -1545,7 +1554,7 @@ describe("PlanningPage (integration)", () => {
       await user.click(within(dialog).getByRole("button", { name: /Déplacer et évincer/ }));
       // Le move RÉEL part, SANS dryRun.
       await vi.waitFor(() =>
-        expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2" }),
+        expect(vi.mocked(moveSlot)).toHaveBeenCalledWith("slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2" }, expect.any(AbortSignal)),
       );
     });
 
@@ -1625,7 +1634,7 @@ describe("PlanningPage (integration)", () => {
       // Le second essai porte le MÊME dryRun sur la MÊME cible, et le verdict s'affiche.
       await within(dialog).findByRole("button", { name: /Déplacer et évincer/ });
       expect(vi.mocked(moveSlot)).toHaveBeenCalledTimes(2);
-      expect(vi.mocked(moveSlot).mock.calls[1]).toEqual(["slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2", dryRun: true }]);
+      expect(vi.mocked(moveSlot).mock.calls[1]).toEqual(["slot-1", { dayOfWeek: 3, startTime: "18:00", venueId: "venue-1", evictSlotId: "slot-2", dryRun: true }, expect.any(AbortSignal)]);
     });
 
     it("case VIDE → AUCUN essai : moveSlot appelé une seule fois, SANS dryRun (D-8)", async () => {

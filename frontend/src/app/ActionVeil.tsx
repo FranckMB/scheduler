@@ -1,0 +1,260 @@
+import { useIsFetching, useIsMutating } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+import { abortLongActions } from "@/shared/lib/longActionAbort";
+import { toast } from "@/shared/stores/toastStore";
+
+import "./ActionVeil.css";
+
+/**
+ * Le VOILE BLOQUANT (lot C PR-2). Entre deux clics, quand ça charge, l'écran devient
+ * inclicable — « pour bloquer les impatients » : sans lui, l'app n'a pas le temps de suivre et le
+ * gestionnaire voit apparaître n'importe quoi.
+ *
+ * Décisions tranchées (fondateur) :
+ *  - Blocage IMMÉDIAT (inert + overlay), voile visible seulement à ~250 ms : un clic de 90 ms est
+ *    mangé sans que rien ne clignote.
+ *  - Trois contextes : `Enregistrement` · `Changement de page` · `Traitement long`, priorité
+ *    long > enregistrement > page.
+ *  - Global par défaut, exemptions NOMMÉES par `meta.veil` (`false` = jamais ; `"long"` = long).
+ *  - `Changement de page` = un PREMIER chargement (query sans données en cache), jamais un refetch.
+ *  - Deux échappatoires : au bout de 10 s les contextes COURTS préviennent ET relâchent (une panne
+ *    réseau ne doit pas geler l'app jusqu'au F5), le contexte LONG ne relâche JAMAIS au chrono
+ *    (relâcher autoriserait un second déplacement concurrent) — il a un bouton « Abandonner ».
+ *
+ * Monté dans `Providers` (scope react-query, pas routeur : les étapes du wizard sont du zustand,
+ * invisibles de `useNavigation`). Le `<Toaster />` reste FRÈRE, hors du wrapper inert : les toasts
+ * d'erreur et l'avertissement de relâche doivent rester lisibles.
+ *
+ * Échelle des z-index (mini-barème) : barre de navigation `z-50` (`app/RootShell.tsx`) < voile
+ * `z-[60]`. Le voile passe au-dessus de tout ce qui vit dans l'app.
+ */
+
+const REVEAL_MS = 250; // le voile n'apparaît qu'au-delà (les clics, eux, sont bloqués dès 0 ms)
+const RELEASE_MS = 10_000; // contextes courts seulement : prévenir + relâcher
+const ROTATE_MS = 2_600; // rotation des phrases (contextes courts)
+const LONG_STEP_MS = [5_000, 12_000, 25_000] as const; // paliers du traitement long (le 4ᵉ persiste)
+
+type Context = "long" | "saving" | "loading";
+
+const SAVING_PHRASES = [
+  "Enregistrement en cours…",
+  "On note ça au tableau.",
+  "Encore une seconde — rien n'est perdu.",
+  "Toujours en cours. L'écran vous rend la main dès que c'est fait.",
+];
+const LOADING_PHRASES = [
+  "Chargement…",
+  "On sort le matériel.",
+  "Encore un instant.",
+  "Toujours en cours — la connexion traîne un peu.",
+];
+// 4 PALIERS (pas une boucle : le dernier PERSISTE — le bout-en-bout dépasse 30 s sur un club dense,
+// une phrase qui revient ferait croire au plantage).
+const LONG_PALIERS = [
+  "Le moteur vérifie votre déplacement…",
+  "Il rejoue chaque règle sur le planning entier : coachs, gymnases, catégories.",
+  "Sur un club chargé, ça peut demander une minute. Personne ne perd sa place.",
+  "Toujours en cours. Rien n'est perdu — vous pouvez abandonner ce déplacement.",
+];
+// Phrases STABLES pour le lecteur d'écran (annoncées UNE fois). La rotation, elle, est décorative
+// (aria-hidden) — précédent maison AUD-FRT-23/24 : martelée dans le live, elle couvrirait la page.
+const STABLE_TEXT: Record<Context, string> = {
+  saving: "Enregistrement en cours, veuillez patienter.",
+  loading: "Chargement de la page en cours.",
+  long: "Vérification de votre déplacement par le moteur en cours.",
+};
+
+const STABLE_ID = "action-veil-stable";
+
+/** Tableau tactique décoratif : une flèche se trace, un joueur se replace. SVG + CSS pur. */
+function TacticalScene() {
+  return (
+    <svg data-testid="veil-scene" aria-hidden="true" viewBox="0 0 120 90" className="mx-auto h-24 w-32">
+      {/* Demi-terrain en filigrane */}
+      <g fill="none" stroke="var(--muted-foreground)" strokeWidth="1.5" opacity=".35">
+        <rect x="6" y="6" width="108" height="78" rx="4" />
+        <path d="M60 6v78" />
+        <circle cx="60" cy="45" r="12" />
+        <path d="M6 30h16v30H6z" />
+        <path d="M114 30h-16v30h16z" />
+      </g>
+      {/* Flèche de jeu qui se trace */}
+      <path
+        className="av-arrow"
+        d="M34 62 C 46 40, 62 40, 82 30"
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeDasharray="130"
+      />
+      <path className="av-arrowhead" d="M82 30l-9 1 4 8z" fill="var(--accent)" />
+      {/* Joueur qui se replace le long de la flèche */}
+      <circle className="av-player" cx="34" cy="62" r="5" fill="var(--accent)" />
+    </svg>
+  );
+}
+
+export function ActionVeil({ children }: { children: React.ReactNode }) {
+  // false !== veil : voilé PAR DÉFAUT (tout ce qui n'est pas exempté `veil:false`).
+  const longPending = useIsMutating({ predicate: (m) => "long" === m.options.meta?.veil });
+  const savingCount = useIsMutating({ predicate: (m) => false !== m.options.meta?.veil });
+  // Un PREMIER chargement seulement (pas de données en cache) — jamais un refetch d'arrière-plan.
+  const firstLoads = useIsFetching({ predicate: (q) => false !== q.options.meta?.veil && undefined === q.state.data });
+
+  const context: Context | null = longPending > 0 ? "long" : savingCount > 0 ? "saving" : firstLoads > 0 ? "loading" : null;
+  const busy = null !== context;
+
+  const [released, setReleased] = useState(false);
+  const [showPanel, setShowPanel] = useState(false);
+  const [rot, setRot] = useState(0);
+  const [palier, setPalier] = useState(0);
+
+  // Une fois relâché (10 s), on le reste JUSQU'AU SETTLE — sinon le voile reviendrait et clignoterait.
+  const active = busy && !released;
+
+  // Focus : on SUIT le dernier élément réellement focalisé (focusin), pour le mémoriser À
+  // L'OUVERTURE du voile — l'`inert` (React 19.2, natif) déplace le focus vers le body SANS émettre
+  // de focusin, donc la réf garde bien l'élément d'AVANT. Restauré à la levée (settle, relâche,
+  // abandon). Aucun accès aux refs en phase de rendu (interdit par le lint) : tout vit en effet.
+  const lastFocus = useRef<HTMLElement | null>(null);
+  const restoreTarget = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && target !== document.body) {
+        lastFocus.current = target;
+      }
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
+  useEffect(() => {
+    if (active) {
+      restoreTarget.current = lastFocus.current;
+      return;
+    }
+    const target = restoreTarget.current;
+    restoreTarget.current = null;
+    if (null !== target && target.isConnected) {
+      target.focus();
+    }
+  }, [active]);
+
+  // Phase 1 : le voile devient VISIBLE à 250 ms (les clics sont déjà bloqués depuis 0 ms). Le reset
+  // vit dans le cleanup — pas de setState synchrone dans le corps d'un effet (lint du dépôt).
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+    const t = setTimeout(() => setShowPanel(true), REVEAL_MS);
+    return () => {
+      clearTimeout(t);
+      setShowPanel(false);
+    };
+  }, [active]);
+
+  // Relâche à 10 s — CONTEXTES COURTS uniquement. Le long ne relâche jamais au chrono. Le drapeau se
+  // réarme au settle via le cleanup (quand `busy`/`context` retombent).
+  useEffect(() => {
+    if (!busy || "long" === context) {
+      return;
+    }
+    const t = setTimeout(() => {
+      setReleased(true);
+      toast.info("Ça dure plus que prévu — l'action continue en arrière-plan, l'écran vous rend la main.");
+    }, RELEASE_MS);
+    return () => {
+      clearTimeout(t);
+      setReleased(false);
+    };
+  }, [busy, context]);
+
+  // Rotation des phrases (contextes courts).
+  useEffect(() => {
+    if (!active || ("saving" !== context && "loading" !== context)) {
+      return;
+    }
+    const t = setInterval(() => setRot((n) => (n + 1) % 4), ROTATE_MS);
+    return () => {
+      clearInterval(t);
+      setRot(0);
+    };
+  }, [active, context]);
+
+  // Paliers du traitement long (le dernier persiste — pas de boucle).
+  useEffect(() => {
+    if (!active || "long" !== context) {
+      return;
+    }
+    const timers = LONG_STEP_MS.map((ms, i) => setTimeout(() => setPalier(i + 1), ms));
+    return () => {
+      timers.forEach(clearTimeout);
+      setPalier(0);
+    };
+  }, [active, context]);
+
+  // En contexte long, le focus va au bouton d'abandon dès l'apparition du voile.
+  const abandonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if ("long" === context && showPanel) {
+      abandonRef.current?.focus();
+    }
+  }, [context, showPanel]);
+
+  const isLong = "long" === context;
+  const visibleText = "loading" === context ? LOADING_PHRASES[rot] : isLong ? LONG_PALIERS[palier] : SAVING_PHRASES[rot];
+
+  return (
+    <>
+      {/* `display:contents` : transparent à la mise en page. `inert` natif (React 19.2) : pas de
+          ref manuelle. Le contenu derrière est neutralisé dès que ça bloque. */}
+      <div data-testid="veil-content" style={{ display: "contents" }} inert={active || undefined}>
+        {children}
+      </div>
+      {active
+        ? createPortal(
+            <div
+              data-testid="action-veil"
+              // pointer-events auto DÈS la phase 0 (transparent) : le clic est capté avant même
+              // que le voile ne s'affiche. Scrim OPAQUE (bg-background/60) en phase 1, JAMAIS de
+              // blur (le flou signalerait « cliquable pour fermer », ce qui serait faux ici).
+              className={`fixed inset-0 z-[60] flex items-center justify-center p-4 transition-colors ${showPanel ? "bg-background/60" : "bg-transparent"}`}
+            >
+              {showPanel && null !== context ? (
+                <div
+                  className="relative w-full max-w-sm rounded-2xl border border-border bg-card p-6 text-center shadow-lg"
+                  {...(isLong
+                    ? { role: "dialog", "aria-modal": true, "aria-labelledby": STABLE_ID }
+                    : { role: "status", "aria-live": "polite", "aria-busy": true })}
+                >
+                  <TacticalScene />
+                  {/* SEULE la phrase stable vit dans la région live (annoncée une fois). */}
+                  <p id={STABLE_ID} className="sr-only">
+                    {STABLE_TEXT[context]}
+                  </p>
+                  {/* Rotation / paliers : décor visuel, aria-hidden (pas de martèlement lecteur d'écran). */}
+                  <p aria-hidden="true" className="mt-4 text-sm font-medium text-foreground">
+                    {visibleText}
+                  </p>
+                  {isLong ? (
+                    <button
+                      ref={abandonRef}
+                      type="button"
+                      onClick={abortLongActions}
+                      className="mt-5 inline-flex items-center justify-center rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    >
+                      Abandonner ce déplacement
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}

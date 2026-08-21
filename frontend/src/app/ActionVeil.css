@@ -1,0 +1,33 @@
+/*
+ * Scène du voile bloquant (lot C PR-2) : un TABLEAU TACTIQUE de coach — une flèche de jeu se
+ * trace, un joueur se replace — en boucle 2 s. Namespacée `av-` : ce motif n'existe que dans cet
+ * écran (GenerationWaiting garde sa grille + son ballon, motif distinct). Couleurs par les tokens
+ * (`var(--muted-foreground|border|accent)`), une seule scène pour les deux thèmes.
+ * `prefers-reduced-motion` fige tout (flèche tracée, joueur à l'arrivée).
+ */
+
+@keyframes av-draw {
+  0% { stroke-dashoffset: 130; }
+  45%, 60% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 130; }
+}
+@keyframes av-run {
+  0%, 8% { transform: translate(0, 0); }
+  50%, 60% { transform: translate(54px, -34px); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes av-head {
+  0%, 40% { opacity: 0; }
+  55%, 70% { opacity: 1; }
+  85%, 100% { opacity: 0; }
+}
+
+.av-arrow { animation: av-draw 2s ease-in-out infinite; }
+.av-player { animation: av-run 2s ease-in-out infinite; }
+.av-arrowhead { animation: av-head 2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .av-arrow { animation: none; stroke-dashoffset: 0; }
+  .av-player { animation: none; transform: translate(54px, -34px); }
+  .av-arrowhead { animation: none; opacity: 1; }
+}
