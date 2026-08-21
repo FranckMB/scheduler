@@ -37,18 +37,26 @@ test("double-clic pendant une mutation ralentie → UN seul appel réseau (le vo
   await page.getByLabel("Catégorie").selectOption({ label: "Senior" });
 
   const addBtn = page.getByRole("button", { name: "Ajouter l'équipe" });
+  // ⚠ Point de départ HONNÊTE : le bouton est `disabled={create.isPending || categoriesLoading}`
+  // (TeamsStep). Sur une CI lente les catégories n'ont pas fini de charger ici — un `mouse.click`
+  // BRUT tomberait dans le vide (bouton désactivé → aucun POST → aucun voile → témoin rouge, le vrai
+  // défaut débusqué en CI). On attend donc qu'il soit ACTIVABLE avant de mesurer et de cliquer.
+  // (Et le bouton étant `ml-auto`, sa position se stabilise seulement une fois le select Catégorie
+  // rempli — mesurer avant fausserait les coordonnées du 2e clic.)
+  await expect(addBtn, "le bouton d'ajout doit devenir activable (catégories chargées)").toBeEnabled();
   const box = await addBtn.boundingBox();
   expect(box, "le bouton d'ajout doit être mesurable").not.toBeNull();
   const cx = box!.x + box!.width / 2;
   const cy = box!.y + box!.height / 2;
 
-  // 1er clic : déclenche la mutation ralentie + le voile.
-  await page.mouse.click(cx, cy);
+  // 1er clic : un VRAI geste (`addBtn.click()` passe par l'actionnabilité) → mutation ralentie + voile.
+  await addBtn.click();
 
   // TÉMOIN : le voile s'est interposé (overlay plein écran). Sans lui, la garantie ne prouve rien.
   await expect(page.getByTestId("action-veil"), "le voile bloquant doit s'interposer pendant la mutation").toBeVisible();
 
-  // 2e clic d'impatient, AU MÊME endroit, PENDANT la mutation : il retombe sur l'overlay, mangé.
+  // 2e clic d'impatient BRUT — JAMAIS un `locator.click()`, qui attendrait sagement la levée du voile
+  // et ne prouverait plus rien. AU MÊME endroit, PENDANT la mutation : il retombe sur l'overlay, mangé.
   await page.mouse.click(cx, cy);
 
   // La mutation ralentie se termine → le voile tombe.
