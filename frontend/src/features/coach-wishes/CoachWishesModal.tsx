@@ -108,7 +108,7 @@ export function CoachWishesModal({ mother, weekFilter, onClose }: { mother: Cale
   const title = null === weekFilter ? `Doléances des coachs — ${mother.title}` : "Doléances des coachs — semaine";
 
   return (
-    <Modal label="Doléances des coachs" title={title} onClose={onClose} className="max-w-2xl">
+    <Modal label="Doléances des coachs" title={title} onClose={onClose} size="lg">
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <ResourceFilter viewMode="coach" groups={coachGroups} selected={coachFilter} onToggle={(id) => setCoachFilter((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))} onClear={() => setCoachFilter([])} />
         <ResourceFilter viewMode="equipe" groups={teamGroups} selected={teamFilter} onToggle={(id) => setTeamFilter((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))} onClear={() => setTeamFilter([])} />

@@ -730,7 +730,7 @@ function ClubActionsDialog({ club, onClose }: { club: AdminClub; onClose: () => 
     .map((arg) => ({ label: arg.label, value: arg.choices.find((c) => c.value === argValues[arg.key])?.label ?? argValues[arg.key] }));
 
   return (
-    <Modal label={`Actions support — ${club.name}`} title={`Actions support — ${club.name}`} onClose={onClose}>
+    <Modal label={`Actions support — ${club.name}`} title={`Actions support — ${club.name}`} onClose={onClose} size="xl">
       <div className="mt-4 space-y-4">
         {actions.isPending ? <p className="text-sm text-muted-foreground">Chargement du catalogue…</p> : null}
         {actions.isError ? <p className="text-sm text-destructive">Catalogue d’actions indisponible.</p> : null}

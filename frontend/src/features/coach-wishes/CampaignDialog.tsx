@@ -232,7 +232,7 @@ export function CampaignDialog({ entry, season, existing, onClose }: CampaignDia
   const tabs = null === campaign ? [{ id: "reglages", label: "Réglages" }] : [{ id: "reglages", label: "Réglages" }, { id: "coachs", label: `Coachs (${campaign.coaches.length})` }];
 
   return (
-    <Modal label="Solliciter les coachs" title="Solliciter les coachs" onClose={onClose} className="max-w-lg">
+    <Modal label="Solliciter les coachs" title="Solliciter les coachs" onClose={onClose}>
       {/* P3-15 — DEUX MOMENTS, DEUX ONGLETS. On règle une fois (semaines, équipes, date
           limite), puis on revient suivre les réponses et envoyer. Tout empiler faisait une
           modale « BEAUCOUP TROP longue, c'est pas jouable » (fondateur).

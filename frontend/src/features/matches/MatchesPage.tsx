@@ -361,7 +361,7 @@ export function MatchesPage() {
         <HabitsLinksDialog teams={teams.data ?? []} tiers={priorityTiers.data ?? []} venues={venues.data ?? []} fixtures={allFixtures} onClose={() => setHabitsDialogOpen(false)} />
       ) : null}
       {accessDialogOpen ? (
-        <Modal label="Accès match" title="Accès match des gymnases" onClose={() => setAccessDialogOpen(false)}>
+        <Modal label="Accès match" title="Accès match des gymnases" onClose={() => setAccessDialogOpen(false)} size="lg">
           <div className="flex flex-col gap-3">
             <p className="text-xs text-muted-foreground">
               Les créneaux accordés les jours de match — un gymnase sans fenêtre n'accueille pas de

@@ -193,7 +193,7 @@ export function WeekPickerDialog({ title, startDate, endDate, weeks, season, bus
   );
 
   return (
-    <Modal label="Choisir les semaines" title="Quelles semaines ajuster ?" onClose={onClose} className="max-w-md">
+    <Modal label="Choisir les semaines" title="Quelles semaines ajuster ?" onClose={onClose}>
       {"weeks" === state ? (
         <>
           <p className="mt-2 text-sm text-muted-foreground">« {title} » couvre plusieurs semaines. Chaque segment coché devient un planning indépendant — scindez-le en semaines ou fusionnez des segments voisins à votre main.</p>

@@ -155,7 +155,7 @@ export function SeasonSchedulesModal({ schedules, entries = [], schedulesResolve
   };
 
   return (
-    <Modal label="Plannings de la saison" title="Plannings de la saison" onClose={onClose} className="max-w-lg">
+    <Modal label="Plannings de la saison" title="Plannings de la saison" onClose={onClose} size="lg">
       <ul className="mt-4 space-y-2">
         {rows.map((row) => {
           const resumeBlocked = row.isOverlay && row.isOpen && (null === row.schedulePlanId || !entryByPlan.has(row.schedulePlanId));

@@ -162,7 +162,7 @@ export function RedateEventsDialog({ sourceSeasonId, targetSeasonId, targetSeaso
   }
 
   return (
-    <Modal label="Reconduire les événements" title="Reconduire les événements" onClose={onClose}>
+    <Modal label="Reconduire les événements" title="Reconduire les événements" onClose={onClose} size="lg">
       {"pending" === decision ? (
         <div className="flex justify-center py-8">
           <Spinner />
