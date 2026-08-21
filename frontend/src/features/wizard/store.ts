@@ -1,8 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import { armNavTransition } from "@/shared/stores/navTransitionStore";
-
 import type { DeepLinkOrigin } from "./lib/deepLink";
 import { WIZARD_STEPS, type WizardStepId } from "./lib/steps";
 
@@ -47,39 +45,25 @@ export const useWizardStore = create<WizardState>()(
       maxIndex: 0,
       mode: "season",
       calendarEntryId: null,
-      // Chaque changement d'étape est une TRANSITION déclenchée par le gestionnaire : elle arme le
-      // contexte « Changement de page » du voile (lot C). Un simple montage du wizard, lui, n'arme
-      // rien — cf. `shared/stores/navTransitionStore`.
-      setStep: (stepId) => {
-        armNavTransition();
-        set({ stepId });
-      },
-      jumpTo: (stepId) => {
-        armNavTransition();
-        set((state) => ({ stepId, maxIndex: Math.max(state.maxIndex, indexOf(stepId)) }));
-      },
-      next: () => {
-        armNavTransition();
+      // ⚠ Actions NEUTRES : elles n'arment PAS le voile. L'armement (`armNavTransition`) appartient
+      // au GESTE — le clic de navigation, dans les handlers de `WizardLayout` (rail, Suivant,
+      // Précédent) — jamais à l'action de store, qui sert aussi au guidage AUTOMATIQUE au montage
+      // (`WizardLayout` appelle `jumpTo` tout seul : deep-link, repli sur le premier trou, recap).
+      // Armer ici gelait le formulaire à l'ARRIVÉE — le bug d'origine revenu par la porte de service.
+      setStep: (stepId) => set({ stepId }),
+      jumpTo: (stepId) => set((state) => ({ stepId, maxIndex: Math.max(state.maxIndex, indexOf(stepId)) })),
+      next: () =>
         set((state) => {
           const ni = Math.min(indexOf(state.stepId) + 1, WIZARD_STEPS.length - 1);
           return { stepId: WIZARD_STEPS[ni].id, maxIndex: Math.max(state.maxIndex, ni) };
-        });
-      },
-      prev: () => {
-        armNavTransition();
+        }),
+      prev: () =>
         set((state) => {
           const i = indexOf(state.stepId);
           return { stepId: WIZARD_STEPS[Math.max(i - 1, 0)].id };
-        });
-      },
-      startPeriodMode: (calendarEntryId) => {
-        armNavTransition();
-        set({ mode: "period", calendarEntryId, stepId: "constraints", maxIndex: WIZARD_STEPS.length - 1 });
-      },
-      exitPeriodMode: () => {
-        armNavTransition();
-        set({ mode: "season", calendarEntryId: null, stepId: "teams" });
-      },
+        }),
+      startPeriodMode: (calendarEntryId) => set({ mode: "period", calendarEntryId, stepId: "constraints", maxIndex: WIZARD_STEPS.length - 1 }),
+      exitPeriodMode: () => set({ mode: "season", calendarEntryId: null, stepId: "teams" }),
       deepLinkOrigin: null,
       setDeepLinkOrigin: (deepLinkOrigin) => set({ deepLinkOrigin }),
       clearDeepLinkOrigin: () => set({ deepLinkOrigin: null }),

@@ -17,6 +17,7 @@ import { useSchedules } from "@/features/planning/queries";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { cn } from "@/shared/lib/utils";
+import { armNavTransition } from "@/shared/stores/navTransitionStore";
 
 import { toast } from "@/shared/stores/toastStore";
 
@@ -460,7 +461,11 @@ export function WizardPage() {
                   <button
                     type="button"
                     disabled={locked}
-                    onClick={() => setStep(step.id)}
+                    onClick={() => {
+                      // GESTE de navigation → arme le voile « changement de page » (lot C).
+                      armNavTransition();
+                      setStep(step.id);
+                    }}
                     aria-current={step.id === stepId ? "step" : undefined}
                     // WCAG 2.5.3 : le nom accessible CONTIENT le texte visible, l'état s'ajoute.
                     aria-label={done ? `${step.label} — étape terminée` : undefined}
@@ -546,13 +551,26 @@ export function WizardPage() {
             "generate" === stepId ? "" : "sticky bottom-0",
           )}
         >
-          <Button variant="outline" disabled={0 === index} onClick={prev}>
+          <Button
+            variant="outline"
+            disabled={0 === index}
+            onClick={() => {
+              armNavTransition(); // GESTE → arme le voile
+              prev();
+            }}
+          >
             Précédent
           </Button>
           <div className="flex items-center gap-2">
             {footerExtra}
             {isLast ? null : (
-              <Button disabled={blocked} onClick={next}>
+              <Button
+                disabled={blocked}
+                onClick={() => {
+                  armNavTransition(); // GESTE → arme le voile
+                  next();
+                }}
+              >
                 {"recap" === stepId ? "Continuer vers la génération" : "Suivant"}
               </Button>
             )}

@@ -14,6 +14,7 @@ import { useEntryConflicts, useSchedulePlans } from "@/features/cockpit/queries"
 import { useReservations, useTeamPeriodOverrides, useWizardTeamTagAssignments, useWizardTeamTags } from "@/features/wizard/queries";
 import { coachFullName } from "@/shared/lib/coachName";
 import { readFailed, readLoading } from "@/shared/lib/readState";
+import { armNavTransition } from "@/shared/stores/navTransitionStore";
 import { toast } from "@/shared/stores/toastStore";
 import { useCredits } from "@/shared/credits/useCredits";
 import { Button } from "@/shared/components/ui/button";
@@ -1076,6 +1077,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
   // (venue view, filtered to that venue) so the concerned `vide` cell is visible.
   const focusVenue = useCallback(
     (venueId: string) => {
+      armNavTransition(); // GESTE (clic sur un diagnostic) arme le voile changement de page
       setViewMode("gymnase");
       clearResourceFilter();
       toggleResource(venueId);
@@ -1270,9 +1272,15 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
               schedules={schedules}
               scopePlanId={scopePlanId}
               selectedScheduleId={validScheduleId}
-              onSelectSchedule={setSelectedScheduleId}
+              onSelectSchedule={(id) => {
+                armNavTransition(); // GESTE (selecteur de version) arme le voile ; les appels programmatiques non
+                setSelectedScheduleId(id);
+              }}
               viewMode={viewMode}
-              onViewMode={setViewMode}
+              onViewMode={(mode) => {
+                armNavTransition(); // GESTE (bascule de vue) arme le voile
+                setViewMode(mode);
+              }}
               isGenerating={showGenerationWaiting || regenerateMutation.isPending || regenerateOverlayMutation.isPending}
               actionBusy={actionBusy}
               disableRegenerate={regenerateDisabled}

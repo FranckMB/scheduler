@@ -197,7 +197,7 @@ page` : voir la puce dédiée.
   rail de retouche (le verdict moteur, > 30 s mesuré sur un club dense) ; « changement de page »
   pour le premier chargement d'une requête **sans données en cache** — mais **UNIQUEMENT s'il suit
   une TRANSITION déclenchée par le gestionnaire** (changement d'étape du wizard, de vue/version du
-  planning ; déclencheur commun `shared/stores/navTransitionStore`, armé depuis les stores) ; tout
+  planning ; déclencheur commun `shared/stores/navTransitionStore`) ; tout
   le reste est « enregistrement ». ⚠ Un **refetch d'arrière-plan ne voile jamais** (le prédicat est
   `undefined === q.state.data`, la même notion que `readState`) — **et le simple montage d'un écran
   non plus** (correction 2026-08-21, GO fondateur). Pourquoi : le blocage à 0 ms sert à manger le
@@ -216,6 +216,16 @@ page` : voir la puce dédiée.
   saisie rentre, aucun `inert` ; transition lente → l'écran se fige ET le montre. ⚠ Ne jamais fondre
   les deux régimes en un seul : le NR `ActionVeil.test` garde l'asymétrie (`enregistrement` inert dès
   0 ms, `page` pas avant 250 ms).
+- ⚠ **L'armement appartient au GESTE, pas à l'action de store.** `armNavTransition()` est appelé
+  dans les **handlers de clic** de la navigation (`WizardLayout` : rail d'étapes, Suivant/Précédent ;
+  `PlanningPage` : bascule de vue, sélecteur de version, clic sur un diagnostic), JAMAIS dans les
+  actions du store (`wizard/store`, `planning/store` sont NEUTRES). Raison : ces actions servent
+  aussi au guidage AUTOMATIQUE — `WizardLayout` appelle `jumpTo` tout seul au montage (deep-link,
+  repli sur le premier trou, recap), et `PlanningPage` appelle `setSelectedScheduleId`
+  programmatiquement (atterrir sur la version en vigueur, onSuccess d'un solve). Armer dans le store
+  gelait l'écran à l'ARRIVÉE — le bug d'origine revenu par la porte de service, invisible en local
+  (course de quelques ms) et rouge en CI. Gardé par le NR `WizardPage.test` (jumpTo du store n'arme
+  pas ; clic Suivant arme).
 - **Les seules exemptions légitimes à ce jour** : les 4 mutations de lancement de solve (elles
   rendent 202 et passent la main à `GenerationWaiting` — les voiler ferait clignoter voile → écran
   d'attente) et la query `useScheduleStatus` (son premier fetch vit sous cet écran).

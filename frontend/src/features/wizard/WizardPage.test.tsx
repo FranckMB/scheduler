@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
+import { useNavTransition } from "@/shared/stores/navTransitionStore";
 
 // Established club (a main plan exists) → free wizard navigation, not guided.
 vi.mock("@/features/auth/queries", () => ({
@@ -85,6 +86,7 @@ vi.mock("./api", async (orig) => ({
 
 beforeEach(() => {
   useWizardStore.setState({ stepId: "teams", mode: "season", calendarEntryId: null });
+  useNavTransition.setState({ token: 0 }); // NR voile : aucune transition en cours entre deux tests
   vi.mocked(api.listTeams).mockResolvedValue([{ id: "t1", name: "SF1", sportCategoryId: "cat1", priorityTierId: 1, tierOrder: 0, gender: null, level: null, sessionsPerWeek: 2, isActive: true }]);
   deleteEntryMutateAsync.mockClear();
   periodPlanId = "plan-x";
@@ -292,5 +294,37 @@ describe("bandeau de période — la forme (P4-38)", () => {
     // titre et les dates » en n'en vérifiant aucune : vider la ligne 2 le laissait vert
     // (revue #350).
     expect(await screen.findByText(/^du 16-10-2026 au 31-10-2026$/)).toBeInTheDocument();
+  });
+});
+
+
+/**
+ * NR — l'armement du voile appartient au GESTE, jamais à l'action de store (lot C, GO fondateur).
+ * WizardLayout appelle `jumpTo` TOUT SEUL au montage (deep-link, repli sur le premier trou, recap) :
+ * si `armNavTransition` vivait dans l'action de store, arriver sur /wizard armerait le voile et
+ * gèlerait le formulaire — le bug d'origine revenu par la porte de service. Falsifié dans les deux
+ * sens : ce garde rougit si l'armement redescend un jour dans le store, OU s'il quitte le clic.
+ */
+describe("Wizard — le voile s'arme au GESTE, pas au montage (NR)", () => {
+  it("les actions de nav du store (jumpTo/setStep/next/prev) — comme WizardLayout les appelle au montage — n'arment PAS le voile", () => {
+    // WizardLayout appelle `jumpTo` TOUT SEUL au montage (deep-link, repli sur le premier trou,
+    // recap) : ce ne sont pas des gestes. L'action de store doit donc être NEUTRE. Si l'armement
+    // redescend un jour dans le store, ce test rougit.
+    const before = useNavTransition.getState().token;
+    useWizardStore.getState().jumpTo("venues");
+    useWizardStore.getState().setStep("coaches");
+    useWizardStore.getState().next();
+    useWizardStore.getState().prev();
+    expect(useNavTransition.getState().token).toBe(before);
+  });
+
+  it("le MÊME changement d'étape déclenché par un CLIC (Suivant) arme le voile", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<WizardPage />, { route: "/wizard" });
+    await screen.findByDisplayValue("SF1");
+    const before = useNavTransition.getState().token;
+    await user.click(screen.getByRole("button", { name: "Suivant" }));
+    // L'armement est SYNCHRONE dans le handler du bouton (armNavTransition avant next()).
+    await waitFor(() => expect(useNavTransition.getState().token).toBeGreaterThan(before));
   });
 });
