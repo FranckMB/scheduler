@@ -9,9 +9,13 @@ import threading
 import time
 from typing import Any
 
+import pytest
+
 import app.main as main
 from app.schemas.input_schema import ScheduleInputSchema
+from app.schemas.validate_input_schema import ValidateAssignmentsInputSchema
 from app.solver.constraints import parse_v2_constraints
+from tests.support.pipeline import make_team, make_venue
 
 _MINIMAL_OUTPUT = {
     "status": "completed",
@@ -213,6 +217,82 @@ def test_a_placement_never_waits_behind_a_running_generate() -> None:
         return "ok"
 
     assert asyncio.run(scenario()) == "ok"
+
+
+def _verdict_input() -> ValidateAssignmentsInputSchema:
+    """L'entrée la plus petite qui soit VALIDE — le sujet est l'attente, pas le contenu."""
+    return ValidateAssignmentsInputSchema.model_validate(
+        {
+            "clubId": "club-b",
+            "seasonId": "season",
+            "venues": [make_venue("A", [(4, "18:00")])],
+            "teams": [make_team("U13")],
+            "coaches": [],
+            "constraints": [],
+            "slotTemplates": [],
+            "candidate": {"teamId": "U13", "venueId": "A", "dayOfWeek": 4, "startTime": "18:00", "durationMinutes": 90},
+        }
+    )
+
+
+def test_a_verdict_never_waits_behind_a_running_placement() -> None:
+    """AUD-ENG-33 — le rail VERDICT a son propre budget, comme le placement a le sien.
+
+    C'est la classe d'incident d'ENG-30, réintroduite par la porte du voisin. Placement et
+    verdict partageaient `_placement_semaphore` (défaut 1) alors que leurs budgets sont
+    ASYMÉTRIQUES, et mesurés :
+
+      * `/place-matches`  — solveur 30 s (`MatchPlacementPayloadBuilder.php`), transport 60 s ;
+      * `/validate-assignments` — solveur 2 s, transport **20 s** (`MoveSlotService.php`), une
+        valeur calée sur mesure : « 9 à 9,6 s de calcul réel constatés sur le club réel ».
+
+    Un placement du club A pouvait donc tenir l'unique jeton jusqu'à 30 s pendant que le
+    verdict du club B, lui, abandonne à 20 s : **une action LÉGALE d'un club échouait à cause
+    d'un autre**, et le gestionnaire lisait un message honnête sur une cause fausse.
+
+    ⚠ **Ce test exerce l'ENDPOINT, pas deux objets.** Sa première version se contentait
+    d'acquérir `_verdict_semaphore` pendant que `_placement_semaphore` était tenu : elle
+    restait VERTE quand on recâblait l'endpoint sur le sémaphore de placement, puisque les
+    deux objets existaient toujours. Elle ne gardait donc rien du câblage — le seul endroit
+    où le défaut vit. Falsification faite : recâbler `/validate-assignments` sur
+    `_placement_semaphore` fait maintenant tomber ce test.
+    """
+    monkeypatch = pytest.MonkeyPatch()
+    # Le solveur est remplacé : le sujet est l'ATTENTE, pas le calcul.
+    monkeypatch.setattr(
+        main, "validate_assignment", lambda *_args, **_kwargs: {"valid": True, "violations": [], "compromises": []}
+    )
+
+    async def scenario() -> str:
+        async with main._placement_semaphore:  # un placement de matchs du club A est en vol
+            # Le verdict du club B doit passer SANS attendre ce placement.
+            await asyncio.wait_for(main.validate_assignments(_verdict_input()), timeout=1.0)
+        return "ok"
+
+    try:
+        assert asyncio.run(scenario()) == "ok"
+    finally:
+        monkeypatch.undo()
+
+
+def test_two_placements_are_still_serialised() -> None:
+    """Le pendant, même raisonnement qu'ENG-30 : séparer les rails ne RELÂCHE rien.
+
+    Élargir `max_concurrent_placements` à 2 aurait été la correction paresseuse — elle aurait
+    aussi autorisé deux placements de 30 s en parallèle, et n'aurait toujours pas garanti
+    qu'un verdict ne se retrouve pas derrière eux. Un budget propre, pas un budget plus large.
+    """
+
+    async def scenario() -> bool:
+        async with main._placement_semaphore:
+            try:
+                await asyncio.wait_for(main._placement_semaphore.acquire(), timeout=0.2)
+            except TimeoutError:
+                return True
+            main._placement_semaphore.release()
+            return False
+
+    assert asyncio.run(scenario()), "un second placement ne doit pas démarrer pendant le premier"
 
 
 def test_two_generations_are_still_serialised() -> None:

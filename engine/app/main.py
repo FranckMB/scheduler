@@ -133,6 +133,10 @@ _solve_semaphore = asyncio.Semaphore(settings.max_concurrent_solves)
 # sémaphore plus large : élargir le partagé aurait aussi autorisé deux GÉNÉRATIONS
 # simultanées, ce que `max_concurrent_solves` borne délibérément.
 _placement_semaphore = asyncio.Semaphore(settings.max_concurrent_placements)
+# AUD-ENG-33 — et le rail VERDICT a le sien, pour la même raison d'un cran : un placement de
+# 30 s tenait le jeton pendant qu'un verdict, qui abandonne à 20 s côté client, attendait. Le
+# détail des budgets et le résidu assumé vivent dans `core/config.py`, à côté du réglage.
+_verdict_semaphore = asyncio.Semaphore(settings.max_concurrent_verdicts)
 
 
 class SerializableModel(BaseModel):
@@ -786,8 +790,9 @@ async def validate_assignments(input_data: ValidateAssignmentsInputSchema) -> Va
     et on demande au solveur si le modèle HARD reste faisable. Réponse booléenne du
     MOTEUR + règles cassées NOMMÉES pour l'UI. Même garde de version MAJOR-only que
     les deux autres endpoints (un seul contrat). Le verrou club est préfixé pour ne
-    jamais s'asseoir derrière un solve hebdomadaire, et le sémaphore de placement
-    borne la concurrence (l'appel est court : baseline figée, un seul candidat)."""
+    jamais s'asseoir derrière un solve hebdomadaire, et depuis AUD-ENG-33 le rail a son
+    PROPRE sémaphore (l'appel est court — baseline figée, un seul candidat — mais il abandonne
+    à 20 s côté client : le faire attendre derrière un placement de 30 s le condamnait)."""
     contract_version = read_contract_version()
     if input_data.version.split(".")[0] != contract_version.split(".")[0]:
         raise HTTPException(
@@ -796,7 +801,7 @@ async def validate_assignments(input_data: ValidateAssignmentsInputSchema) -> Va
         )
 
     lock = await get_club_lock(f"validate:{input_data.club_id}")
-    async with lock, _placement_semaphore:
+    async with lock, _verdict_semaphore:
         result = await asyncio.to_thread(validate_assignment, input_data, contract_version=contract_version)
     return ValidateAssignmentsOutputSchema.model_validate(result)
 
