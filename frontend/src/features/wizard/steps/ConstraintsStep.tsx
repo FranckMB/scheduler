@@ -14,6 +14,7 @@ import { groupTeamsByTier, tierGroupLabel } from "@/shared/lib/teamTiers";
 
 import { groupConstraints, orderedTagNames } from "../lib/constraintOrder";
 import { groupedCoaches } from "../lib/ranking";
+import { constraintPredicateParts, constraintTarget } from "@/features/planning/lib/describeConstraint";
 import { groupTagsByAxis, tagLabel } from "../lib/tagLabels";
 import { excludeTagNames, targetTagNames } from "@/shared/lib/tagTeamIds";
 import { cn } from "@/shared/lib/utils";
@@ -977,26 +978,87 @@ export function ConstraintsStep() {
       {0 === list.length ? (
         <EmptyHint>Aucune contrainte dans cette famille.</EmptyHint>
       ) : (
-        <div className="flex flex-col gap-3">
-          {sections.map((section) => (
-            <div key={section.key}>
-              <p data-testid="constraint-section" className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{section.label}</p>
-              <ul className="flex flex-col gap-1">
-                {section.items.map((c: Constraint) => (
-                  <li key={c.id} data-constraint-id={c.id} className={cn("flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-sm", editingId === c.id ? "border-accent ring-1 ring-accent" : "border-border")}>
-                    <span className="flex-1">{c.name}</span>
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
-                    <button type="button" aria-label="Modifier" className="rounded p-1 text-muted-foreground hover:text-foreground" onClick={() => editConstraint(c)}>
-                      <Pencil className="size-4" />
-                    </button>
-                    <button type="button" aria-label="Supprimer" className="rounded p-1 text-muted-foreground hover:text-destructive" onClick={() => setPendingDelete(c)}>
-                      <Trash2 className="size-4" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        // P4-107 (4ᵉ tranche) — un vrai `<table>` avec `<thead>`/`<tbody>`, pas une grille de
+        // `<div>` : c'est la seule règle de sévérité HAUTE rendue par la passe de design sur ce
+        // lot, et c'est ce qui fait annoncer « Règle : pas après » par un lecteur d'écran au
+        // lieu d'une bouillie de cellules. `overflow-x-auto` garde la promesse sur petit écran.
+        // ⚠ Le tableau est BORNÉ, et c'est le même raisonnement que le reste du lot : cinq
+        // colonnes de contenu court étalées sur 1650 px rejouent le défaut qu'on corrige —
+        // les actions se retrouvent à ~700 px du libellé qu'elles concernent. La ligne doit
+        // se lire comme UNE unité. (Choix ergonomique : le corpus de design est muet sur la
+        // largeur d'un tableau de données — cf. `frontend-spec.md` §6.9.)
+        <div className="max-w-5xl overflow-x-auto rounded-lg border border-border">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th scope="col" className="px-3 py-2 font-semibold">Cible</th>
+                <th scope="col" className="px-3 py-2 font-semibold">Règle</th>
+                <th scope="col" className="px-3 py-2 font-semibold">Valeur</th>
+                <th scope="col" className="px-3 py-2 font-semibold">Niveau</th>
+                {/* Colonne d'actions : nommée pour le lecteur d'écran, muette à l'œil. */}
+                <th scope="col" className="px-3 py-2 font-semibold"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            {sections.map((section) => (
+              <tbody key={section.key}>
+                <tr>
+                  {/* `rowgroup` : cette cellule TITRE un groupe de lignes, elle n'est pas un
+                      en-tête de colonne — sans quoi elle se glisserait parmi les cinq. */}
+                  <th scope="rowgroup" colSpan={5} data-testid="constraint-section" className="bg-muted/40 px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {section.label}
+                  </th>
+                </tr>
+                {section.items.map((c: Constraint) => {
+                  // Le VOCABULAIRE vient du foyer unique (`describeConstraint`), celui-là même
+                  // que lit le panneau de créneau du planning — jamais du `name`, texte libre
+                  // qui peut être périmé ou copié d'une autre règle (docblock du module).
+                  const parts = constraintPredicateParts(c, (id) => venueName.get(id));
+                  const target = constraintTarget(c, { venueName: (id) => venueName.get(id), teamName: (id) => teamName.get(id), coachName: (id) => coachName.get(id), tagLabel });
+
+                  return (
+                    <tr key={c.id} data-constraint-id={c.id} className={cn("border-b border-border/60 last:border-0", editingId === c.id ? "bg-accent/10 ring-1 ring-inset ring-accent" : "")}>
+                      <td className="px-3 py-2 align-top">{target ?? "—"}</td>
+                      {0 === parts.length ? (
+                        // Règle non descriptible fidèlement (clé inconnue, `forcedDays` LEGACY
+                        // ambigu, gymnase supprimé) : on rend le NOM en entier plutôt qu'une
+                        // cellule vide, qui laisserait croire qu'il n'y a rien à appliquer.
+                        <td className="px-3 py-2 align-top text-muted-foreground" colSpan={2}>{c.name}</td>
+                      ) : (
+                        <>
+                          <td className="px-3 py-2 align-top">
+                            {parts.map((part, i) => (
+                              <div key={`v${i}`}>{part.verb}</div>
+                            ))}
+                          </td>
+                          <td className="px-3 py-2 align-top font-medium">
+                            {parts.map((part, i) => (
+                              <div key={`w${i}`}>{part.value}</div>
+                            ))}
+                          </td>
+                        </>
+                      )}
+                      <td className="px-3 py-2 align-top">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{RULE_LABEL[c.ruleType]}</span>
+                      </td>
+                      <td className="px-3 py-2 align-top">
+                        {/* `p-1.5 -m-1.5` : 28 px cliquables autour d'une icône de 16, SANS
+                            épaissir la ligne — la passe de design nommait `w-6 h-6` comme le
+                            mauvais exemple de cible de clic. */}
+                        <div className="flex items-center justify-end gap-1">
+                          <button type="button" aria-label="Modifier" className="-m-1.5 rounded p-1.5 text-muted-foreground hover:text-foreground" onClick={() => editConstraint(c)}>
+                            <Pencil className="size-4" />
+                          </button>
+                          <button type="button" aria-label="Supprimer" className="-m-1.5 rounded p-1.5 text-muted-foreground hover:text-destructive" onClick={() => setPendingDelete(c)}>
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            ))}
+          </table>
         </div>
       )}
         </>

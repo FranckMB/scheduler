@@ -795,8 +795,43 @@ Playwright — `tests/e2e/width-calibration.spec.ts` (fiche à 832 px et paragra
 1920×1080) et `tests/e2e/modal-reachability.spec.ts` (le palier `xl` atteint 1152 px et s'y
 arrête).
 
-⚠ **Reste ouvert** : l'inventaire des écrans DENSES (grille de planning, wizard contraintes,
-module matchs), qui n'est pas traité par cette tranche — `specs/evolution/roadmap.md`, P4-107.
+**Écrans denses : la largeur se DÉPENSE, elle ne se subit pas (4ᵉ tranche, 2026-08-21).** Un
+écran dense n'a pas de cap — le défaut n'est jamais « trop étroit », c'est « la place est là et
+personne ne s'en sert ». Deux formes, mesurées à 1920×1080 :
+
+- **Une liste de lignes courtes devient un TABLEAU**, pas une pile de barres pleine largeur.
+  Les contraintes du wizard étalaient ~50 caractères sur ~1650 px avec les actions à ~1400 px du
+  libellé qu'elles concernent. `<table>` + `<thead>`/`<tbody>` **sémantiques** — pas une grille de
+  `<div>` : c'est la seule règle de sévérité HAUTE rendue par la passe de design sur ce lot, et
+  c'est elle qui fait annoncer « Règle : pas après » par un lecteur d'écran. Les regroupements
+  survivent en lignes d'en-tête (`<th scope="rowgroup">`, pour ne pas polluer les en-têtes de
+  colonnes). Cible de clic : `p-1.5 -m-1.5` autour d'une icône de 16 px donne 28 px cliquables
+  **sans épaissir la ligne**.
+- **Un champ se dimensionne sur la valeur qu'il doit MONTRER.** Le tableau Équipes faisait
+  l'inverse : le nom prenait ~1050 px pour afficher `SM1` pendant que les sélecteurs coupaient
+  leur propre valeur (« Homn » pour « Homme ») — nommément un DON'T du corpus de design
+  (« Overflow or cut off »).
+
+⚑ **Ce que le corpus de design ne dit PAS, et qu'on n'a donc pas le droit de lui faire dire** :
+il est muet sur les lignes de groupe dans un tableau, sur la largeur d'un tableau de données, sur
+la taille d'une tuile de KPI et sur les accordéons. La borne de la bande de cartes du Récap est
+un choix ERGONOMIQUE (distance œil-chiffre), pas une prescription : `max-w-3xl` est un jeton du
+corpus emprunté hors de sa règle (elle porte sur la longueur de ligne d'un TEXTE).
+
+**La hauteur suit la même règle.** La grille de saisie Gymnases affiche 08:00→23:00 : la plage
+reste ENTIÈRE (on y crée des créneaux au clic — rogner rendrait 09:00 inatteignable, et P4-37
+interdit de masquer ce qui existe), mais la vue **s'ouvre positionnée sur la bande utile** du
+gymnase affiché. Positionnement **instantané** (`useLayoutEffect`, jamais `smooth` : au montage
+il n'y a aucun saut à adoucir, et animer fabriquerait le « forced scroll effect » que le corpus
+interdit), rejoué au changement de gymnase (chaque gymnase a SA bande), et **jamais** repris une
+fois que l'utilisateur a défilé. Aucune annonce lecteur d'écran : le DOM ne change pas, seul
+l'offset diffère — la gouttière d'heures collante affiche « 17:30 » et dit à elle seule qu'on
+n'est pas au début.
+
+⚠ **Reste hors de ce chantier** : la grille de PLANNING, qui est réellement saturée (5 jours ×
+9 gymnases débordent au-delà de 1920) — autre problème, autres leviers ; et le module matchs, dont
+la refonte UX a son propre cadrage (P2-26). Le pseudo-tableau en `<span>` de l'étape Équipes
+(`TeamsStep.tsx`) reste lui aussi en l'état : ce lot n'y touche que des largeurs.
 
 ---
 

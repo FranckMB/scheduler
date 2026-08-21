@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef } from "react";
+
 import type { Closure } from "@/features/cockpit/api";
 import type { VenueMatchWindow } from "@/features/matches/api";
 import { formatDuration } from "@/shared/lib/duration";
@@ -58,11 +60,47 @@ export function VenueAvailabilityGrid({ venue, slots, selectedSlotId, onAdd, onS
   const rows = Array.from({ length: (gridEnd - gridStart) / STEP }, (_, i) => gridStart + i * STEP);
   const gridTemplateRows = `1.5rem repeat(${rows.length}, ${ROW_H}px)`;
 
+  // P4-107 (4ᵉ tranche) — **la vue s'ouvre sur la bande UTILE, sans que rien ne soit masqué.**
+  //
+  // La plage reste 08:00→23:00 (étendue si besoin) parce qu'on CRÉE ici des créneaux au clic :
+  // rogner rendrait 09:00 inatteignable, et P4-37 interdit de cacher ce qui existe. Mais sur un
+  // club réel tout se passe entre 17:30 et 21:00 : l'écran s'ouvrait donc sur neuf heures vides,
+  // et la bande utile était coupée en bas.
+  //
+  // ⚠ Trois précautions, chacune pour une raison :
+  //  1. `useLayoutEffect` et non `useEffect` : la position est posée AVANT la peinture, sinon on
+  //     voit la grille à 08:00 puis sauter.
+  //  2. **Jamais `smooth`.** Au montage, l'utilisateur n'a jamais vu 08:00 — il n'y a aucun saut
+  //     à adoucir, et animer fabriquerait le « forced scroll effect » que le corpus de design
+  //     interdit. Rien ne bouge, donc rien à annoncer non plus : le DOM est identique, seul
+  //     l'offset diffère, et la gouttière d'heures collante affiche « 17:30 » — elle dit à elle
+  //     seule qu'on n'est pas au début.
+  //  3. **On ne reprend JAMAIS la main** sur un défilement déjà fait par l'utilisateur : le
+  //     repositionnement ne se rejoue qu'au changement de GYMNASE (chaque gymnase a sa propre
+  //     bande utile), gardé par un ref — un state re-rendrait pour rien.
+  const scrollBoxRef = useRef<HTMLDivElement>(null);
+  const positionedFor = useRef<string | null>(null);
+  const firstSlotMin = slots.length > 0 ? Math.min(...slots.map((s) => startMinutes(s.startTime))) : null;
+  useLayoutEffect(() => {
+    const box = scrollBoxRef.current;
+    if (null === box || positionedFor.current === venue.id) {
+      return;
+    }
+    positionedFor.current = venue.id;
+    // Grille vide : rien à viser, on reste en haut (c'est aussi ce que voit un club neuf).
+    if (null === firstSlotMin) {
+      return;
+    }
+    // Une heure de marge au-dessus du premier créneau : on veut voir qu'il y a « avant ».
+    const target = Math.max(0, ((firstSlotMin - 60 - gridStart) / STEP) * ROW_H);
+    box.scrollTop = target;
+  }, [venue.id, firstSlotMin, gridStart]);
+
   return (
     // P4-37 — la grille DÉFILE en interne au lieu de pousser la page. Elle n'avait aucune
     // borne verticale : passer de 22h à 23h l'aurait allongée d'autant, aggravant un
     // problème qui existait déjà. `max-h` + `overflow-y-auto` la bornent au viewport.
-    <div className="max-h-[min(70vh,40rem)] overflow-auto rounded-lg border border-border bg-card">
+    <div ref={scrollBoxRef} className="max-h-[min(70vh,40rem)] overflow-auto rounded-lg border border-border bg-card">
       <div className="grid text-xs" style={{ gridTemplateColumns, gridTemplateRows }}>
         {/* Coin figé sur les DEUX axes : il masque la gouttière quand elle défile sous
             l'en-tête, sinon les heures passeraient par-dessus les noms de jours. */}
