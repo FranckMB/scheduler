@@ -1,6 +1,6 @@
 # Testing Strategy — Amateo
 
-Last verified @ 2026-08-20 (**rotation de fraîcheur, P2-44 PR-3** — graphe des jobs reconfronté à `ci.yml` : les SEPT jobs sans `needs` ET dont rien ne dépend — `frontend`, `secrets-scan`, `semgrep`, `dependency-audit`, `rector`, `engine-semantics`, `smoke-tests` — sont bien isolés (`lint`/`phpstan` alimentent `blocking-tests`, `engine-tests` alimente `build-docker`, tous deux donc NON isolés malgré l'absence de `needs`) ✓ ; `unit-tests: needs blocking-tests` ✓ ; `build-docker: needs [blocking-tests, engine-tests]` ✓ ; `ClubQuotaTest` reste le step qui garde les 4 routes de solve (`generate`/`regenerate`/`regenerate-from`/`fill`) ✓). Historique des passes : `git log -p --follow docs/testing/testing-strategy.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-21 (recalé par l'ajout du §3bis — l'instrumentation des parcours e2e, PR-1 du lot P4-122. Re-vérifié DANS CETTE PASSE, et rien d'autre : les cibles que ce document prescrit existent bien (`make -C frontend e2e`, `make -C backend tests-complete`, `make -C engine test` — toutes présentes dans leur Makefile) ; le piège §2 « `phpunit tests/` entier en CI contre les trois testsuites de `phpunit.xml.dist` » est inchangé ; et le §3bis lui-même est adossé au code livré (`frontend/tests/e2e/fixtures.ts`, les 9 specs qui importent `test` depuis `./fixtures`, la purge Mailpit de `submitRegister`) ainsi qu'à un fait mesuré — le `messenger-worker` trouvé arrêté depuis 9 h, et le self-heal de `make e2e` sauté par une invocation `npx playwright test` directe. ⚠ Vérification volontairement ÉTROITE : le graphe complet des jobs de `ci.yml`, reconfronté à la passe du 2026-08-20, ne l'a pas été à nouveau ici)
 
 Scope: backend + engine. The rebuilt frontend has its own tests (Vitest + RTL unit/integration with `vi.mock`, Playwright e2e in `frontend/tests/e2e`, and the container screenshot pipelines). Companion to [`/CLAUDE.md`](../../CLAUDE.md) §4 and [`../project-map.md`](../project-map.md).
 
@@ -86,6 +86,32 @@ Groups (PHP attributes): `#[Group('phase1')]`, `#[Group('integration')]`, `#[Gro
 Run: `cd engine && make test` (pytest + ruff + mypy, inside the engine container).
 
 ---
+
+## 3bis. Les parcours e2e disent POURQUOI quand ils cassent
+
+⚑ **Convention : un spec e2e importe `test` (et `expect`) depuis `./fixtures`, jamais depuis
+`@playwright/test`.** La fixture y est `auto` : elle enregistre les réponses `/api/*` de statut
+≥ 400 et les **attache au rapport quand, et seulement quand, le test tombe**
+(`frontend/tests/e2e/fixtures.ts`).
+
+Elle existe parce que le dépôt a payé son absence : le 2026-08-21, `journey.spec.ts` est tombé
+**deux fois en CI** (PR #684 puis #687) sur `element(s) not found`, trois tentatives chacune, puis
+une relance complète VERTE. Ce message dit ce qui MANQUE à l'écran ; il ne dit pas si le serveur a
+refusé, s'il a répondu 422, ou si c'est la liste qui n'a pas suivi. Deux enquêtes pour rien.
+
+⚠ **Ce n'est pas une assertion, délibérément.** Des 4xx légitimes traversent ces parcours (gardes
+fail-closed, refus de rôle, 404 anti-énumération des pages à token) : en faire un échec
+transformerait un comportement voulu en faux rouge. **On collecte, on n'accuse pas.**
+
+⚠ **Un piège d'environnement à connaître avant d'accuser le code** : les mails partent par le bus,
+donc par le conteneur `messenger-worker` — qui **s'arrête sur son time-limit horaire**. Worker
+mort = aucun mail de vérification = tout parcours qui s'inscrit échoue dans `fetchVerificationToken`,
+un échec qui ressemble à un bug produit. La cible `make -C frontend e2e` le relève d'elle-même
+(`compose up -d --wait`) ; une invocation `npx playwright test` directe, elle, **saute ce
+self-heal** (il est conditionné à l'absence de `E2E_BASE_URL`). Constaté le 2026-08-21 : worker
+arrêté depuis 9 h. Et la boîte Mailpit est désormais **vidée avant chaque inscription**
+(`submitRegister`) — accumulée sur des dizaines de runs locaux, la recherche `to:{email}` finissait
+par ne plus rendre le bon message.
 
 ## 4. How to run locally
 

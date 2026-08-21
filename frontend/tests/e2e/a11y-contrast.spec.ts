@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 import { expectNoContrastViolations, forceTheme, registerAndVerify, settleVeil, uniqueAra } from "./support";
 

@@ -23,6 +23,13 @@ interface RegisterOpts {
 
 /** Fill and submit the register form, then assert the "check your email" state. */
 export async function submitRegister(page: Page, opts: RegisterOpts): Promise<void> {
+  // ⚑ Boîte VIDÉE avant d'inscrire. `fetchVerificationToken` cherche `to:{email}` et prend le
+  // PREMIER résultat : sur une Mailpit qui s'accumule (des dizaines de runs locaux, la base dev
+  // n'étant jamais réinitialisée), la recherche finit par ne plus rendre le bon message et le
+  // parcours échoue dans la lecture du mail — un échec qui ressemble à un bug produit et n'en
+  // est pas. Constaté le 2026-08-21 en local. Best-effort : en CI la boîte est neuve, c'est un
+  // no-op ; si Mailpit ne répond pas, on continue — ce n'est pas le sujet du test.
+  await page.request.delete(`${MAILPIT_URL}/api/v1/messages`).catch(() => undefined);
   await page.goto("/register");
   // Étape 1 = choix du sport (basket) → étape 2 = les champs (retour fondateur 2026-07-18).
   await page.getByRole("button", { name: /continuer/i }).click();
@@ -145,4 +152,33 @@ export async function settleVeil(page: Page): Promise<void> {
   // encore apparu » — sans elle, un `toBeHidden` immédiat passerait AVANT que le voile ne s'arme.
   await page.waitForTimeout(120);
   await expect(page.getByTestId("action-veil")).toBeHidden({ timeout: 20_000 });
+}
+
+/**
+ * **Enregistre les appels d'API qui ÉCHOUENT, pour qu'un parcours qui casse dise POURQUOI.**
+ *
+ * ⚑ Écrit après l'avoir payé deux fois dans la même journée (2026-08-21, PR #684 puis #687) :
+ * `journey.spec.ts` a échoué sur `expect(page.locator('input[value="SM1"]')).toBeVisible()` —
+ * « element(s) not found », trois tentatives, puis une relance complète verte. Ce message dit ce
+ * qui MANQUE à l'écran ; il ne dit pas si la création d'équipe a été refusée par le serveur, si
+ * elle a répondu 422, ou si c'est la liste qui ne s'est pas rafraîchie. Deux enquêtes pour rien.
+ *
+ * ⚠ **Ce n'est pas une assertion, et c'est délibéré.** On n'échoue PAS sur un appel en erreur :
+ * certains parcours en provoquent exprès (fail-closed, 404 attendus, refus de rôle). On COLLECTE,
+ * et l'appelant attache la liste au rapport quand le test tombe — le diagnostic arrive avec
+ * l'échec, sans transformer un 4xx légitime en faux rouge.
+ *
+ * Retourne le tableau vivant : il se remplit au fil du test.
+ */
+export function watchFailedApiCalls(page: Page): string[] {
+  const failures: string[] = [];
+  page.on("response", (response) => {
+    const url = new URL(response.url());
+    if (!url.pathname.startsWith("/api/") || response.status() < 400) {
+      return;
+    }
+    failures.push(`${response.request().method()} ${url.pathname}${url.search} → ${response.status()}`);
+  });
+
+  return failures;
 }
