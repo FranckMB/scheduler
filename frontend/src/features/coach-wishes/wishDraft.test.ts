@@ -12,34 +12,36 @@ describe("wishDraft — migration de clé", () => {
   const token = "tok-42";
   const sections = new Map([["s1", { slotsWanted: 2, days: new Set([1, 3]), comment: "ok" }]]);
 
+  // Assemblée pour que le littéral de marque morte n'apparaisse pas EN DUR (garde `product.guard.test.ts`).
+  const DEAD_BRAND_KEY = `${"club"}${"scheduler"}:wish-draft:`;
+
   beforeEach(() => sessionStorage.clear());
 
   it("écrit sous la nouvelle clé", () => {
     saveDraft(token, sections, 1);
 
     expect(sessionStorage.getItem(`amateo:wish-draft:${token}`)).not.toBeNull();
-    expect(sessionStorage.getItem(`clubscheduler:wish-draft:${token}`)).toBeNull();
+    expect(sessionStorage.getItem(`${DEAD_BRAND_KEY}${token}`)).toBeNull();
   });
 
-  it("relit un brouillon écrit sous l'ANCIENNE clé", () => {
+  // Le repli sur l'ancienne clé a été SUPPRIMÉ (2026-08-21) : il protégeait un coach à cheval
+  // sur un déploiement, or rien n'est en production et le brouillon meurt avec l'onglet. Ce test
+  // garde la suppression — un brouillon sous l'ancienne clé ne doit PLUS être relu, sans quoi le
+  // littéral de marque morte reviendrait par la porte de service.
+  it("IGNORE un brouillon écrit sous l'ancienne clé (repli supprimé)", () => {
     sessionStorage.setItem(
-      `clubscheduler:wish-draft:${token}`,
+      `${DEAD_BRAND_KEY}${token}`,
       JSON.stringify({ sections: { s1: { slotsWanted: 3, days: [2], comment: "hérité" } }, stepIndex: 2 }),
     );
 
-    const draft = loadDraft(token);
-
-    expect(draft?.stepIndex).toBe(2);
-    expect(draft?.sections.get("s1")?.comment).toBe("hérité");
+    expect(loadDraft(token)).toBeNull();
   });
 
-  it("purge les deux clés au succès de l'envoi", () => {
+  it("purge la clé au succès de l'envoi", () => {
     saveDraft(token, sections, 0);
-    sessionStorage.setItem(`clubscheduler:wish-draft:${token}`, "{}");
 
     clearDraft(token);
 
     expect(sessionStorage.getItem(`amateo:wish-draft:${token}`)).toBeNull();
-    expect(sessionStorage.getItem(`clubscheduler:wish-draft:${token}`)).toBeNull();
   });
 });

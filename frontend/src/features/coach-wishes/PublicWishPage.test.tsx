@@ -29,7 +29,10 @@ const context = (over: Partial<PublicWishContext> = {}): PublicWishContext => ({
 
 const httpError = (status: number): HTTPError => new HTTPError(new Response(null, { status }), new Request("http://x/api/coach-wishes/public/tok"), {} as never);
 
-const DRAFT_KEY = (token: string): string => `clubscheduler:wish-draft:${token}`;
+// Clé COURANTE du brouillon (`wishDraft.ts`). Elle portait l'ancien nom de produit jusqu'au
+// 2026-08-21 : le repli de lecture a été supprimé, ce test seede donc la vraie clé — sans quoi
+// il vérifiait une restauration que le code ne fait plus.
+const DRAFT_KEY = (token: string): string => `amateo:wish-draft:${token}`;
 
 function renderAt() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
