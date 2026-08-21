@@ -63,7 +63,7 @@ une copie lisible, et le jeton reviendrait en `localStorage`.
 Les deux extrémités mentent, en sens inverse :
 
 - **en production**, le nginx du front écoute en 80 derrière la terminaison TLS et
-  réécrit `X-Forwarded-Proto` avec `$scheme` (`docker/frontend/nginx.prod.conf:57`)
+  réécrit `X-Forwarded-Proto` avec `$scheme` (`docker/frontend/nginx.conf:53,69,81` — une seule conf depuis P4-118)
   → `isSecure()` répond **faux**, et le cookie serait parti **sans `Secure`** ;
 - **en CI**, l'e2e dockerisé tape `http://frontend-dev:5173`
   (`docker-compose.yml:59`), une origine non sûre où un cookie `Secure` ne serait

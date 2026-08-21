@@ -28,14 +28,21 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost/ || exit 1
 
-# prod — même runtime, avec `nginx.prod.conf`.
-# ⚠ Cet étage se justifiait par une conf prod « sans le proxy /engine/ de debug ». Ce proxy a
-# été retiré du DEV aussi le 2026-07-31 : depuis, les deux confs sont IDENTIQUES aux
-# commentaires près (vérifié au diff le 2026-08-19, audit DOC-32). Le dédoublement ne porte
-# donc plus aucune différence — fusion à instruire (P4-118), pas au détour d'une PR de doc.
+# prod — **strictement le même runtime** (P4-118, 2026-08-21).
+#
+# Cet étage portait une seconde conf, `nginx.prod.conf`, qui se justifiait par une prod « sans le
+# proxy /engine/ de debug ». Ce proxy a été retiré du DEV aussi le 2026-07-31 : les deux fichiers
+# étaient depuis IDENTIQUES aux commentaires près, et on maintenait deux copies d'une même vérité.
+# ⚠ La divergence aurait été SILENCIEUSE — personne ne diffe deux confs nginx — et elle se serait
+# jouée du mauvais côté : durcir le dev sans que la prod suive, alors que c'est la prod qui sert
+# les vrais clubs. `nginx.prod.conf` est donc supprimé, il n'y a plus qu'UNE conf.
+#
+# ⚑ L'étage, lui, RESTE — vide. Le nom `prod` est un contrat nommé à deux endroits : le scan
+# Trivy de la CI (`docker build --target prod`) et `docker-compose.prod.yml`. Le garder coûte une
+# ligne et laisse la couture nommée là où une vraie différence prod se poserait un jour ; le
+# supprimer obligerait à toucher ces deux fichiers pour ne gagner qu'un nom.
 FROM runtime AS prod
-COPY docker/frontend/nginx.prod.conf /etc/nginx/conf.d/default.conf
 
-# Étage par défaut (le dernier) = runtime dev, pour que `docker build` nu et le compose dev
-# prennent `nginx.conf`. La CI construit la prod via --target prod.
+# Étage par défaut (le dernier) = le même runtime, pour que `docker build` nu et le compose dev
+# marchent sans `--target`.
 FROM runtime
