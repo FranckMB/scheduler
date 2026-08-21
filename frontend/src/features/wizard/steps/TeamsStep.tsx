@@ -14,6 +14,8 @@ import { Select } from "@/shared/components/ui/select";
 import { groupTeamsByTier, TIER_MEANING, tierGroupLabel } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
+import { TEAM_COLUMNS } from "../lib/teamColumns";
+
 import type { Gender, PriorityTier, SharedTrainingGroup, SportCategory, Team, TeamLevel, TeamPayload } from "../api";
 import { useWizardFooter } from "../lib/footerSlot";
 import { orderedTeams, teamsOfTier } from "../lib/ranking";
@@ -132,19 +134,19 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete, rankLabel
         ) : null}
         <Input
           aria-label="Nom"
-          className="h-8 flex-1"
+          className={cn("h-8", TEAM_COLUMNS.name)}
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={() => name.trim() && name !== team.name && onField(team, { name: name.trim() })}
         />
-        <Select aria-label="Catégorie" className="h-8 w-28" value={team.sportCategoryId} onChange={(e) => onField(team, { sportCategoryId: e.target.value })}>
+        <Select aria-label="Catégorie" className={cn("h-8", TEAM_COLUMNS.category)} value={team.sportCategoryId} onChange={(e) => onField(team, { sportCategoryId: e.target.value })}>
           {categories.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
         </Select>
-        <Select aria-label="Genre" className="h-8 w-20" value={team.gender ?? ""} onChange={(e) => onField(team, { gender: (e.target.value || null) as Gender | null })}>
+        <Select aria-label="Genre" className={cn("h-8", TEAM_COLUMNS.gender)} value={team.gender ?? ""} onChange={(e) => onField(team, { gender: (e.target.value || null) as Gender | null })}>
           {GENDERS.map((g) => (
             <option key={g.value} value={g.value}>
               {g.label}
@@ -153,7 +155,7 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete, rankLabel
         </Select>
         <Select
             aria-label="Niveau de jeu"
-            className="h-8 w-32"
+            className={cn("h-8", TEAM_COLUMNS.level)}
             value={team.level ?? ""}
             disabled={engaged}
             onChange={(e) => onField(team, { level: (e.target.value || null) as TeamLevel | null })}
@@ -168,7 +170,7 @@ function TeamRow({ team, number, categories, tiers, onField, onDelete, rankLabel
           aria-label="Séances/sem"
           type="number"
           min={1}
-          className="h-8 w-16"
+          className={cn("h-8", TEAM_COLUMNS.sessions)}
           value={sessions}
           onChange={(e) => setSessions(e.target.value)}
           onBlur={() => Number(sessions) !== team.sessionsPerWeek && onField(team, { sessionsPerWeek: Number(sessions) })}
@@ -708,12 +710,12 @@ function TeamsEditor() {
               FORMULAIRE, dont les colonnes diffèrent de celles de la liste (rang ici,
               numéro et suppression là-bas). */}
           <div aria-hidden="true" className="mb-1 flex flex-wrap items-end gap-2 px-3 text-xs font-medium text-muted-foreground">
-            <span className="min-w-0 flex-1">Nom de l'équipe</span>
-            <span className="w-28">Catégorie</span>
-            <span className="w-24">Genre</span>
-            <span className="w-32">Niveau de jeu</span>
-            <span className="w-16">Séances</span>
-            <span className="w-32">Rang</span>
+            <span className={TEAM_COLUMNS.name}>Nom de l'équipe</span>
+            <span className={TEAM_COLUMNS.category}>Catégorie</span>
+            <span className={TEAM_COLUMNS.gender}>Genre</span>
+            <span className={TEAM_COLUMNS.level}>Niveau de jeu</span>
+            <span className={TEAM_COLUMNS.sessions}>Séances</span>
+            <span className={TEAM_COLUMNS.tier}>Rang</span>
             <span className="ml-auto w-8" />
           </div>
           <form onSubmit={addTeam} className="mb-6 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-card p-3 text-sm">
@@ -723,7 +725,7 @@ function TeamsEditor() {
               aria-invalid={nameError}
               aria-describedby={nameError ? "team-name-error" : undefined}
               placeholder="Nom de l'équipe"
-              className={cn("h-8 min-w-0 flex-1", nameError ? "border-destructive focus-visible:ring-destructive" : "")}
+              className={cn("h-8", TEAM_COLUMNS.name, nameError ? "border-destructive focus-visible:ring-destructive" : "")}
               value={name}
               onChange={(e) => {
                 setName(e.target.value);
@@ -736,7 +738,7 @@ function TeamsEditor() {
               aria-label="Catégorie"
               aria-invalid={catError}
               aria-describedby={catError ? "team-cat-error" : undefined}
-              className={cn("h-8 w-28", catError ? "border-destructive focus-visible:ring-destructive" : "")}
+              className={cn("h-8", TEAM_COLUMNS.category, catError ? "border-destructive focus-visible:ring-destructive" : "")}
               value={effectiveCat}
               onChange={(e) => {
                 setCatId(e.target.value);
@@ -750,22 +752,22 @@ function TeamsEditor() {
                 </option>
               ))}
             </Select>
-            <Select aria-label="Genre" className="h-8 w-24" value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
+            <Select aria-label="Genre" className={cn("h-8", TEAM_COLUMNS.gender)} value={gender} onChange={(e) => setGender(e.target.value as Gender | "")}>
               {GENDERS.map((g) => (
                 <option key={g.value} value={g.value}>
                   {g.label}
                 </option>
               ))}
             </Select>
-            <Select aria-label="Niveau de jeu" className="h-8 w-32" value={level} onChange={(e) => setLevel(e.target.value as TeamLevel | "")}>
+            <Select aria-label="Niveau de jeu" className={cn("h-8", TEAM_COLUMNS.level)} value={level} onChange={(e) => setLevel(e.target.value as TeamLevel | "")}>
               {LEVELS.map((l) => (
                 <option key={l.value} value={l.value}>
                   {l.label}
                 </option>
               ))}
             </Select>
-            <Input aria-label="Séances/sem" type="number" min={1} className="h-8 w-16" value={sessions} onChange={(e) => setSessions(e.target.value)} />
-            <Select aria-label="Rang" className="h-8 w-32" value={tierId} onChange={(e) => setTierId(Number(e.target.value))}>
+            <Input aria-label="Séances/sem" type="number" min={1} className={cn("h-8", TEAM_COLUMNS.sessions)} value={sessions} onChange={(e) => setSessions(e.target.value)} />
+            <Select aria-label="Rang" className={cn("h-8", TEAM_COLUMNS.tier)} value={tierId} onChange={(e) => setTierId(Number(e.target.value))}>
               {tiers.map((t) => (
                 <option key={t.id} value={t.id}>
                   {tierGroupLabel(t)}
@@ -813,11 +815,11 @@ function TeamsEditor() {
                 {byRank ? <span className="w-6 text-center">#</span> : null}
                 <SortHeader column="rang" sort={sort} onSort={setSort} className="w-6 text-center" label="Rang" />
                 {byRank ? <span className="w-14" /> : null}
-                <SortHeader column="name" sort={sort} onSort={setSort} className="min-w-0 flex-1" label="Nom de l'équipe" />
-                <SortHeader column="category" sort={sort} onSort={setSort} className="w-28" label="Catégorie" />
-                <SortHeader column="gender" sort={sort} onSort={setSort} className="w-20" label="Genre" />
-                <SortHeader column="level" sort={sort} onSort={setSort} className="w-32" label="Niveau de jeu" />
-                <SortHeader column="sessions" sort={sort} onSort={setSort} className="w-16" label="Séances" />
+                <SortHeader column="name" sort={sort} onSort={setSort} className={TEAM_COLUMNS.name} label="Nom de l'équipe" />
+                <SortHeader column="category" sort={sort} onSort={setSort} className={TEAM_COLUMNS.category} label="Catégorie" />
+                <SortHeader column="gender" sort={sort} onSort={setSort} className={TEAM_COLUMNS.gender} label="Genre" />
+                <SortHeader column="level" sort={sort} onSort={setSort} className={TEAM_COLUMNS.level} label="Niveau de jeu" />
+                <SortHeader column="sessions" sort={sort} onSort={setSort} className={TEAM_COLUMNS.sessions} label="Séances" />
                 <span className="w-8 text-right">Suppr.</span>
               </div>
               {byRank ? (

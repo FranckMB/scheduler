@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -492,7 +492,11 @@ describe("ConstraintsStep — edit an existing constraint", () => {
     renderWithProviders(<ConstraintsStep />);
 
     await user.click(screen.getByRole("button", { name: "Gymnase" }));
-    expect(screen.getByText("SM1 · impose Gymnase A")).toBeInTheDocument();
+    // P4-107 (4ᵉ tranche) : la ligne ne rend plus le nom composé mais ses COLONNES — on
+    // assert donc la cible, le verbe et la valeur, ce qui en dit plus que l'ancien texte.
+    const forcedRow = screen.getByRole("row", { name: /SM1/ });
+    expect(forcedRow).toHaveTextContent("impose");
+    expect(forcedRow).toHaveTextContent("Gymnase A");
 
     // Enter edit mode → the form pre-fills from config.
     await user.click(screen.getByRole("button", { name: "Modifier" }));
@@ -599,11 +603,18 @@ describe("ConstraintsStep — P4-95 : la ligne ciblée est surlignée et amenée
 
   it("deep-link ?edit= → la ligne cible est surlignée ET scrollée (block center)", async () => {
     const raf = runRafImmediately();
-    renderWithProviders(<ConstraintsStep />, { route: "/wizard?step=constraints&edit=c-time&from=planning" });
+    const { container } = renderWithProviders(<ConstraintsStep />, { route: "/wizard?step=constraints&edit=c-time&from=planning" });
 
     // La ligne cible existe et porte la marque d'édition (surlignage accent).
-    const row = await screen.findByText("Toutes les équipes · pas après 21:00");
-    const li = row.closest("[data-constraint-id]");
+    // ⚠ P4-107 (4ᵉ tranche) : on ne la cherche plus par son nom composé — la ligne le rend
+    // désormais en COLONNES (cible / règle / valeur). On la cherche par son identifiant,
+    // qui est justement ce que le deep-link vise.
+    const li = await waitFor(() => {
+      const found = container.querySelector('[data-constraint-id="c-time"]');
+      expect(found).not.toBeNull();
+
+      return found;
+    });
     expect(li).not.toBeNull();
     expect(li?.className).toContain("ring-accent");
     // Et la LIGNE elle-même a été amenée à l'écran (pas seulement le formulaire).
@@ -631,7 +642,7 @@ describe("ConstraintsStep — P4-95 : la ligne ciblée est surlignée et amenée
     const { container } = renderWithProviders(<ConstraintsStep />, { route: "/wizard?step=constraints&edit=inconnue&from=planning" });
 
     // La contrainte s'affiche, mais AUCUNE ligne n'est en édition.
-    expect(await screen.findByText("Toutes les équipes · pas après 21:00")).toBeInTheDocument();
+    await waitFor(() => expect(container.querySelector('[data-constraint-id="c-time"]')).not.toBeNull());
     expect(container.querySelector('[data-constraint-id="c-time"]')?.className).not.toContain("ring-accent");
   });
 });
@@ -1515,4 +1526,79 @@ describe("ConstraintsStep — onglet Mutualisation", () => {
     expect(screen.getByText(/Chargement du planning de la période/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Créer le groupe" })).toBeNull();
   });
+
+  /**
+   * P4-107 (4ᵉ tranche) — **la liste des contraintes devient un TABLEAU.**
+   *
+   * Elle vivait en barres pleine largeur : ~50 caractères étalés sur 1650 px à 1920, et les
+   * icônes modifier/supprimer à ~1400 px du libellé qu'elles concernent. Le tableau ramène
+   * les actions près du contenu et rend la colonne « Règle » balayable.
+   *
+   * ⚠ **`<table>` sémantique, avec `<thead>`/`<tbody>` — pas une grille de `<div>`.** C'est la
+   * seule règle de sévérité HAUTE qu'ait rendue la passe de design `ui-ux-pro-max` sur ce lot
+   * (« Missing thead or tbody » / « Div grid for table-like layouts »). Un tableau de données
+   * qui n'en est pas un est illisible au lecteur d'écran : pas d'en-tête annoncé par cellule.
+   *
+   * ⚑ Les REGROUPEMENTS survivent (décision fondateur) : « Âge », « S · Fanion »… restent des
+   * lignes d'en-tête de groupe, et les trois tests de groupement ci-dessus continuent de lire
+   * `constraint-section`. Le corpus de design est MUET sur les lignes de groupe dans un
+   * tableau — le choix d'un `<tbody>` par groupe est le nôtre, pas le sien.
+   */
+  describe("le tableau des contraintes", () => {
+    const timeRow = {
+      id: "c-cols",
+      name: "SM1 · pas après 21:00",
+      scope: "TEAM",
+      scopeTargetId: "t1",
+      family: "TIME",
+      ruleType: "PREFERRED",
+      config: { maxStartTime: "21:00" },
+      isActive: true,
+    } as Constraint;
+
+    it("est un vrai tableau : en-têtes Cible / Règle / Valeur / Niveau", () => {
+      h.list = [timeRow];
+      renderWithProviders(<ConstraintsStep />);
+
+      // La 5ᵉ colonne porte un nom RÉSERVÉ AU LECTEUR D'ÉCRAN : un en-tête muet laisserait une
+      // colonne sans annonce. Les lignes de groupe (« Âge », « S · Fanion ») sont des
+      // `rowheader`, pas des `columnheader` — sinon elles pollueraient cette liste.
+      expect(screen.getAllByRole("columnheader").map((e) => e.textContent)).toEqual(["Cible", "Règle", "Valeur", "Niveau", "Actions"]);
+    });
+
+    it("sépare le verbe de sa valeur, et NOMME la cible dans sa colonne", () => {
+      h.list = [timeRow];
+      renderWithProviders(<ConstraintsStep />);
+
+      const cells = screen.getAllByRole("cell").map((e) => e.textContent);
+      // La cible est dérivée du scope (jamais du `name`, texte libre qui peut mentir) ; le
+      // verbe et la valeur viennent du foyer unique `describeConstraint`.
+      expect(cells.slice(0, 4)).toEqual(["SM1", "pas après", "21:00", "Préféré"]);
+    });
+
+    it("rend les TROIS bornes d'une contrainte horaire — n'en montrer qu'une mentirait par omission", () => {
+      h.list = [{ ...timeRow, config: { maxStartTime: "21:00", minStartTime: "17:00", maxEndTime: "22:30" } }];
+      renderWithProviders(<ConstraintsStep />);
+
+      const row = screen.getAllByRole("row").find((r) => null !== r.querySelector("[data-constraint-id]") || null !== r.closest("[data-constraint-id]"));
+      expect(row?.textContent).toContain("pas après");
+      expect(row?.textContent).toContain("21:00");
+      expect(row?.textContent).toContain("pas avant");
+      expect(row?.textContent).toContain("17:00");
+      expect(row?.textContent).toContain("fini avant");
+      expect(row?.textContent).toContain("22:30");
+    });
+
+    it("retombe sur le NOM quand la règle n'est pas descriptible — jamais une cellule vide", () => {
+      // `forcedDays` est LEGACY et ambigu (ENG-16) : `describeConstraint` refuse de le décrire.
+      // Une cellule vide laisserait croire qu'il n'y a rien à appliquer.
+      // ⚠ Rester dans la famille de l'onglet ACTIF (TIME) : une contrainte d'une autre
+      // famille n'est pas listée du tout, et le test passerait à vide.
+      h.list = [{ ...timeRow, id: "c-legacy", name: "SM1 · règle héritée", config: { legacyUnknownKey: true } }];
+      renderWithProviders(<ConstraintsStep />);
+
+      expect(screen.getByText("SM1 · règle héritée")).toBeInTheDocument();
+    });
+  });
 });
+

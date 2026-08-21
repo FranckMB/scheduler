@@ -94,4 +94,62 @@ test.describe("largeurs sur 1920×1080", () => {
     // Deuxième sens : une borne qui écraserait le texte serait un autre défaut.
     expect(Math.round(paragraph!.width), "le paragraphe est anormalement étroit — la borne ne doit pas écraser le texte").toBeGreaterThan(300);
   });
+
+  test("étape Équipes : aucun sélecteur ne coupe la valeur qu'il affiche", async ({ page }) => {
+    test.setTimeout(90_000);
+    await login(page);
+
+    // ⚠ **Le seul test qui puisse voir ce défaut.** jsdom n'a aucun moteur de mise en page :
+    // le test unitaire ne garde que la PARITÉ des largeurs entre les trois rendus de colonnes
+    // (`teamColumns.ts`). Qu'une valeur SÉLECTIONNÉE tienne dans son champ — « Homme » rendu
+    // « Homn », le défaut constaté par le fondateur à 1920 — ne se mesure qu'ici.
+    await page.goto("/wizard");
+    await page.getByRole("button", { name: "Équipes" }).first().click();
+    const selects = page.locator("select[aria-label='Genre'], select[aria-label='Niveau de jeu'], select[aria-label='Catégorie']");
+    await expect(selects.first()).toBeVisible({ timeout: 30_000 });
+
+    // ⚠ **Le témoin, et ce qu'il a coûté de ne pas l'avoir.** La première version de ce test
+    // mesurait les sélecteurs du FORMULAIRE d'ajout, dont la valeur sélectionnée est « — » :
+    // 14 px, qui tiennent partout. Le test passait, et il passait ENCORE en remettant la
+    // largeur fautive (`w-20`) — il ne gardait rien. On exige donc d'avoir mesuré de VRAIES
+    // valeurs, celles des lignes de la liste.
+    await expect(page.getByRole("button", { name: "Supprimer" }).first()).toBeVisible({ timeout: 30_000 });
+    const count = await selects.count();
+    let measured = 0;
+
+    for (let i = 0; i < count; i++) {
+      const verdict = await selects.nth(i).evaluate((el: HTMLSelectElement) => {
+        // Largeur du TEXTE de l'option sélectionnée, mesurée à la police réelle du champ.
+        const style = window.getComputedStyle(el);
+        const probe = document.createElement("span");
+        probe.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${style.font}`;
+        probe.textContent = el.options[el.selectedIndex]?.text ?? "";
+        document.body.append(probe);
+        const textWidth = probe.getBoundingClientRect().width;
+        probe.remove();
+        // Place réellement offerte au texte : largeur du champ moins ses rembourrages (le
+        // droit contient le chevron).
+        const usable = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+
+        return { label: el.getAttribute("aria-label"), text: probe.textContent, textWidth, usable };
+      });
+
+      // « — » (le placeholder du formulaire d'ajout) ne prouve rien : on ne compte que les
+      // valeurs réelles.
+      if ("—" === verdict.text?.trim() || "" === (verdict.text ?? "").trim()) {
+        continue;
+      }
+      measured += 1;
+      expect(
+        Math.ceil(verdict.textWidth),
+        `« ${verdict.text} » (${verdict.label}) demande ${Math.ceil(verdict.textWidth)} px et n'en reçoit que ${Math.floor(verdict.usable)} : la valeur est COUPÉE à l'écran, exactement le défaut « Homn » pour « Homme »`,
+      ).toBeLessThanOrEqual(Math.floor(verdict.usable));
+    }
+
+    expect(
+      measured,
+      "aucune valeur RÉELLE mesurée (que des « — » du formulaire d'ajout) : le scénario ne met rien à l'épreuve — attendre les lignes de la liste",
+    ).toBeGreaterThan(2);
+  });
 });
+

@@ -59,6 +59,56 @@ const asDayNums = (v: unknown): number[] =>
 
 const daysPhrase = (nums: number[]): string => nums.map(dayLabelLong).filter((label) => "" !== label).join(", ");
 
+/**
+ * Une règle décomposée : le VERBE et sa VALEUR, séparés — « pas après » / « 19:00 ».
+ *
+ * ⚠ **Pourquoi cette forme existe à côté de la phrase.** Le panneau de créneau du planning lit
+ * une phrase ; le tableau des contraintes du wizard (P4-107) a besoin des deux moitiés dans deux
+ * colonnes. Les mots sont les MÊMES et ne vivent qu'ICI : la phrase est désormais COMPOSÉE à
+ * partir de ces parties, elle ne les redit pas. Deux vocabulaires divergents seraient exactement
+ * la duplication de vérité que ce module a été écrit pour éviter.
+ *
+ * `verbFirst` porte le seul écart de forme du français : on dit « impose Matéo » (verbe d'abord)
+ * mais « lundi interdit » (verbe après). Sans lui, composer la phrase inventerait un ordre.
+ */
+export interface ConstraintPredicatePart {
+  verb: string;
+  value: string;
+  verbFirst: boolean;
+}
+
+/**
+ * Les règles d'une contrainte, décomposées — vide quand rien n'est descriptible fidèlement
+ * (même portée que `describeConstraint` : une clé inconnue ou un gymnase introuvable ne produit
+ * RIEN plutôt qu'une approximation).
+ *
+ * ⚠ Une contrainte TIME en porte jusqu'à TROIS (« pas après », « pas avant », « fini avant ») :
+ * l'appelant qui n'en rend qu'une MENT par omission.
+ */
+export function constraintPredicateParts(constraint: Constraint, venueName: VenueNameFn): ConstraintPredicatePart[] {
+  const cfg = constraint.config ?? {};
+  switch (constraint.family) {
+    case "TIME":
+      return timeParts(cfg);
+    case "DAY":
+      return dayParts(cfg);
+    case "FACILITY":
+      return facilityParts(cfg, venueName);
+    case "COACH_AVAILABILITY":
+      return coachParts(cfg);
+    default:
+      return [];
+  }
+}
+
+/** Le « qui » d'une contrainte — exposé pour la colonne « Cible » du tableau du wizard. */
+export function constraintTarget(constraint: Constraint, lookups: ConstraintTargetLookups): string | null {
+  return resolveTarget(constraint, lookups);
+}
+
+/** Une partie rendue en français : « impose Matéo », « lundi, mardi interdits ». */
+const phrase = (part: ConstraintPredicatePart): string => (part.verbFirst ? `${part.verb} ${part.value}` : `${part.value} ${part.verb}`);
+
 export function describeConstraint(constraint: Constraint, lookups: ConstraintTargetLookups): string | null {
   const predicate = buildPredicate(constraint, lookups.venueName);
   if (null === predicate) {
@@ -104,86 +154,81 @@ function resolveTarget(constraint: Constraint, lookups: ConstraintTargetLookups)
 }
 
 function buildPredicate(constraint: Constraint, venueName: VenueNameFn): string | null {
-  const cfg = constraint.config ?? {};
-  switch (constraint.family) {
-    case "TIME":
-      return timePredicate(cfg);
-    case "DAY":
-      return dayPredicate(cfg);
-    case "FACILITY":
-      return facilityPredicate(cfg, venueName);
-    case "COACH_AVAILABILITY":
-      return coachPredicate(cfg);
-    default:
-      return null;
-  }
+  // La phrase est COMPOSÉE des parties — un seul endroit porte les mots (cf.
+  // `ConstraintPredicatePart`). Plusieurs parties (TIME) se joignent par une virgule, dans
+  // l'ordre du wizard : « pas après » d'abord (la borne la plus lue), puis « pas avant »,
+  // puis « fini avant ».
+  const parts = constraintPredicateParts(constraint, venueName);
+
+  return 0 === parts.length ? null : parts.map(phrase).join(", ");
 }
 
-function timePredicate(cfg: Record<string, unknown>): string | null {
-  // Même ordre que le wizard : « pas après » d'abord (la borne la plus lue), puis « pas
-  // avant », puis « fini avant » (fin de séance, toujours dure côté engine).
-  const parts = [
-    asTime(cfg.maxStartTime) && `pas après ${asTime(cfg.maxStartTime)}`,
-    asTime(cfg.minStartTime) && `pas avant ${asTime(cfg.minStartTime)}`,
-    asTime(cfg.maxEndTime) && `fini avant ${asTime(cfg.maxEndTime)}`,
-  ].filter((p): p is string => "string" === typeof p);
+const timeVerb = (verb: string, value: string | null): ConstraintPredicatePart | null => (null === value ? null : { verb, value, verbFirst: true });
 
-  return 0 === parts.length ? null : parts.join(", ");
+function timeParts(cfg: Record<string, unknown>): ConstraintPredicatePart[] {
+  return [
+    timeVerb("pas après", asTime(cfg.maxStartTime)),
+    timeVerb("pas avant", asTime(cfg.minStartTime)),
+    // maxEndTime = fin de séance, toujours dure côté engine (le chemin soft ne lit que
+    // min/maxStartTime).
+    timeVerb("fini avant", asTime(cfg.maxEndTime)),
+  ].filter((p): p is ConstraintPredicatePart => null !== p);
 }
 
-function dayPredicate(cfg: Record<string, unknown>): string | null {
+function dayParts(cfg: Record<string, unknown>): ConstraintPredicatePart[] {
   const forbidden = asDayNums(cfg.forbiddenDays);
   if (forbidden.length > 0) {
-    return `${daysPhrase(forbidden)} interdit${forbidden.length > 1 ? "s" : ""}`;
+    // Verbe APRÈS la valeur : « lundi, mardi interdits ». C'est le seul cas de la famille.
+    return [{ verb: `interdit${forbidden.length > 1 ? "s" : ""}`, value: daysPhrase(forbidden), verbFirst: false }];
   }
   // whitelist (`allowedDays`) : seuls ces jours sont permis. Le LEGACY `forcedDays` (avant
   // ENG-16) a le MÊME sens côté wizard mais désigne « au moins une séance ces jours » côté
   // engine — ambigu, donc non décrit : on retombe sur le nom plutôt que de risquer le contresens.
   const allowed = asDayNums(cfg.allowedDays);
 
-  return allowed.length > 0 ? `uniquement ${daysPhrase(allowed)}` : null;
+  return allowed.length > 0 ? [{ verb: "uniquement", value: daysPhrase(allowed), verbFirst: true }] : [];
 }
 
-function facilityPredicate(cfg: Record<string, unknown>, venueName: VenueNameFn): string | null {
-  const named = (id: string | null, verb: (name: string) => string): string | null => {
+function facilityParts(cfg: Record<string, unknown>, venueName: VenueNameFn): ConstraintPredicatePart[] {
+  const named = (id: string | null, verb: string): ConstraintPredicatePart[] => {
     if (null === id) {
-      return null;
+      return [];
     }
     const name = venueName(id);
 
-    // Gymnase introuvable (désactivé, données antérieures) → null : jamais « préfère undefined ».
-    return undefined === name ? null : verb(name);
+    // Gymnase introuvable (désactivé, données antérieures) → rien : jamais « préfère undefined ».
+    return undefined === name ? [] : [{ verb, value: name, verbFirst: true }];
   };
 
   const forced = asVenueId(cfg.forcedVenueId);
   if (null !== forced) {
-    return named(forced, (name) => `impose ${name}`);
+    return named(forced, "impose");
   }
   const minAt = asVenueId(cfg.minAtVenueId);
   if (null !== minAt) {
     const count = Number.isInteger(cfg.minAtVenueCount) && (cfg.minAtVenueCount as number) > 0 ? (cfg.minAtVenueCount as number) : 1;
 
-    return named(minAt, (name) => `au moins ${count} séance${count > 1 ? "s" : ""} à ${name}`);
+    return named(minAt, `au moins ${count} séance${count > 1 ? "s" : ""} à`);
   }
   const forbidden = asVenueId(cfg.forbiddenVenueId);
   if (null !== forbidden) {
-    return named(forbidden, (name) => `évite ${name}`);
+    return named(forbidden, "évite");
   }
   const preferred = asVenueId(cfg.preferredVenueId);
 
-  return null !== preferred ? named(preferred, (name) => `préfère ${name}`) : null;
+  return null !== preferred ? named(preferred, "préfère") : [];
 }
 
-function coachPredicate(cfg: Record<string, unknown>): string | null {
+function coachParts(cfg: Record<string, unknown>): ConstraintPredicatePart[] {
   const from = asTime(cfg.fromTime);
   const until = asTime(cfg.untilTime);
   const window = from && until ? ` de ${from} à ${until}` : from ? ` à partir de ${from}` : until ? ` jusqu'à ${until}` : "";
 
   const available = asDayNums(cfg.availableDays);
   if (available.length > 0) {
-    return `disponible uniquement ${daysPhrase(available)}${window}`;
+    return [{ verb: "disponible uniquement", value: `${daysPhrase(available)}${window}`, verbFirst: true }];
   }
   const unavailable = asDayNums(cfg.unavailableDays);
 
-  return unavailable.length > 0 ? `indisponible ${daysPhrase(unavailable)}${window}` : null;
+  return unavailable.length > 0 ? [{ verb: "indisponible", value: `${daysPhrase(unavailable)}${window}`, verbFirst: true }] : [];
 }

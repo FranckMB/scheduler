@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
+import { TEAM_COLUMNS } from "../lib/teamColumns";
+
 import type { SharedTrainingGroup, Team } from "../api";
 
 const baseTeam: Team = {
@@ -381,4 +383,35 @@ describe("TeamsStep", () => {
 
     expect(screen.getByRole("button", { name: /Descendre Alpha/ })).toBeDisabled();
   });
+
+  /**
+   * P4-107 (4ᵉ tranche) — **les trois rendus des mêmes colonnes ne peuvent plus diverger.**
+   *
+   * L'étape rend les mêmes colonnes à TROIS endroits : l'en-tête du formulaire d'ajout, le
+   * formulaire, et l'en-tête + les lignes de la liste. Chacun portait ses classes, et ils
+   * avaient DÉJÀ divergé — le Genre valait `w-24` en haut et `w-20` en bas, si bien que les
+   * deux tableaux ne s'alignaient pas. `TEAM_COLUMNS` est désormais leur maison unique.
+   *
+   * ⚠ **Ce que ce test NE prouve PAS, et il faut le savoir en le lisant** : que « Homme » tienne
+   * dans son sélecteur. jsdom n'a aucun moteur de mise en page — aucune largeur n'y existe. Il
+   * garde la PARITÉ (modifier un seul site rougit) ; la troncature réelle se mesure en
+   * Playwright, `tests/e2e/width-calibration.spec.ts`.
+   */
+  it("la largeur d'une colonne est la MÊME dans le formulaire et dans la ligne", () => {
+    // L'équipe par défaut du harnais suffit : le sujet est la largeur, pas la donnée.
+    renderWithProviders(<TeamsStep />);
+
+    // Les DEUX sélecteurs « Genre » de l'écran — celui du formulaire d'ajout et celui de la
+    // ligne — sont exactement ce qui avait divergé (`w-24` en haut, `w-20` en bas).
+    const widthOf = (el: HTMLElement): string | undefined => el.className.split(/\s+/).find((c) => c.startsWith("w-"));
+    const widths = screen.getAllByLabelText("Genre").map((el) => widthOf(el as HTMLElement));
+    expect(widths.length).toBeGreaterThan(1);
+    expect(new Set(widths).size, `les deux sites doivent porter la MÊME largeur, trouvé ${widths.join(" / ")}`).toBe(1);
+    expect(widths[0]).toBe(TEAM_COLUMNS.gender);
+    // Falsifié dans l'autre sens : ni l'une ni l'autre des deux valeurs divergentes d'avant —
+    // `w-20` coupait « Homme » en « Homn », et `w-24` était l'autre moitié du désalignement.
+    expect(TEAM_COLUMNS.gender).not.toBe("w-20");
+    expect(TEAM_COLUMNS.gender).not.toBe("w-24");
+  });
 });
+

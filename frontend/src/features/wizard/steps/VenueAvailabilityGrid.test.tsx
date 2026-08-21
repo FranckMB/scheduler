@@ -151,3 +151,58 @@ describe("VenueAvailabilityGrid — fermetures de gymnase", () => {
     expect(screen.queryByText(/Indispo/)).toBeNull();
   });
 });
+
+/**
+ * P4-107 (4ᵉ tranche) — **la vue s'ouvre sur la bande utile, sans rien masquer.**
+ *
+ * La plage reste 08:00→23:00 (on crée ici des créneaux au clic : rogner rendrait 09:00
+ * inatteignable, et P4-37 interdit de cacher ce qui existe). Ce qui change est l'OFFSET
+ * d'ouverture — sur un club réel, tout se passe entre 17:30 et 21:00, et l'écran s'ouvrait sur
+ * neuf heures vides.
+ *
+ * ⚑ **Ce test-ci n'est PAS un test de mise en page**, et c'est pourquoi il est légitime en
+ * jsdom : `scrollTop` y est une propriété ordinaire, et la valeur posée est de l'ARITHMÉTIQUE
+ * (rangs × hauteur de rang), pas une mesure. Ce que jsdom ne peut pas dire — que la bande utile
+ * est réellement à l'écran — se mesure en Playwright.
+ */
+describe("VenueAvailabilityGrid — l'ouverture vise la bande utile", () => {
+  /** La boîte défilante : le seul ancêtre qui porte `overflow-auto`. */
+  const scrollBox = (container: HTMLElement): HTMLElement => container.querySelector(".overflow-auto") as HTMLElement;
+
+  it("ouvre une heure AVANT le premier créneau — pas au sommet d'une plage vide", () => {
+    const { container } = render(<VenueAvailabilityGrid venue={venue} slots={[slot({ startTime: "17:30:00" })]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} />);
+
+    // 17:30 moins 1 h de marge = 16:30, soit 34 quarts d'heure après 08:00 → 34 × 11 px.
+    expect(scrollBox(container).scrollTop).toBe(374);
+  });
+
+  it("grille VIDE : on reste en haut — un club neuf n'a aucune bande utile à viser", () => {
+    const { container } = render(<VenueAvailabilityGrid venue={venue} slots={[]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} />);
+
+    expect(scrollBox(container).scrollTop).toBe(0);
+  });
+
+  it("ne REPREND JAMAIS la main sur un défilement de l'utilisateur", () => {
+    const slots = [slot({ startTime: "17:30:00" })];
+    const { container, rerender } = render(<VenueAvailabilityGrid venue={venue} slots={slots} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} />);
+
+    // L'utilisateur remonte voir le matin, puis n'importe quel re-rendu survient (sélection
+    // d'un créneau, arrivée des fermetures…). Le replacer serait lui arracher l'écran des mains.
+    scrollBox(container).scrollTop = 0;
+    rerender(<VenueAvailabilityGrid venue={venue} slots={slots} selectedSlotId="s1" onAdd={vi.fn()} onSelect={vi.fn()} />);
+
+    expect(scrollBox(container).scrollTop).toBe(0);
+  });
+
+  it("mais se REPLACE quand on change de gymnase — chaque gymnase a SA bande utile", () => {
+    const { container, rerender } = render(<VenueAvailabilityGrid venue={venue} slots={[slot({ startTime: "17:30:00" })]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} />);
+    scrollBox(container).scrollTop = 0;
+
+    const other = { ...venue, id: "v2", name: "Gymnase B" } as Venue;
+    rerender(<VenueAvailabilityGrid venue={other} slots={[slot({ id: "s9", venueId: "v2", startTime: "20:00:00" })]} selectedSlotId={null} onAdd={vi.fn()} onSelect={vi.fn()} />);
+
+    // 20:00 moins 1 h = 19:00, soit 44 quarts d'heure après 08:00.
+    expect(scrollBox(container).scrollTop).toBe(484);
+  });
+
+});
