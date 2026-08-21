@@ -2108,11 +2108,11 @@ final readonly class CustomRoutesOpenApiFactory implements OpenApiFactoryInterfa
                     '400' => new Response('Missing or invalid field (dayOfWeek, startTime or venueId)'),
                     '404' => new Response('Slot not found'),
                     '409' => new Response('Schedule is validated (read-only), or a generation is running for the club (body carries code=generation_in_progress)'),
-                    '422' => $this->jsonResponse('Refused with nothing written. Either the solver refused the move (broken rules named for display), OR the eviction target is invalid (body carries code=evict_target_mismatch), OR the eviction target is locked (body carries code=target_locked)', [
+                    '422' => $this->jsonResponse('Refused with nothing written. Either the solver refused the move (broken rules named for display), OR no venue window is open at the destination — nonexistent target or closed day (body carries code=slot_unavailable), OR the eviction target is invalid (body carries code=evict_target_mismatch), OR the eviction target is locked (body carries code=target_locked)', [
                         'type' => 'object',
                         'properties' => [
                             'valid' => ['type' => 'boolean', 'enum' => [false]],
-                            'code' => ['type' => 'string', 'nullable' => true, 'description' => 'evict_target_mismatch or target_locked when the eviction pre-check refused (no engine call)'],
+                            'code' => ['type' => 'string', 'nullable' => true, 'description' => 'slot_unavailable, evict_target_mismatch or target_locked when a server pre-check refused (no engine call)'],
                             'error' => ['type' => 'string', 'nullable' => true, 'description' => 'Human message for the eviction pre-check refusal'],
                             'violations' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => [
                                 'rule' => ['type' => 'string', 'description' => 'Machine code of the broken rule (UI branches on it)'],

@@ -1,6 +1,13 @@
-Last verified @ 2026-08-20 (régénéré après `docker compose restart php-fpm` — piège opcache, `backend/AGENTS.md` §17 — pour la nouvelle route de lecture `GET /api/schedules/{id}/socle-deviation` (P2-44 PR-5) : **167 → 168 paths**, addition PURE, aucun path retiré, aucun schéma existant modifié)
+Last verified @ 2026-08-21 (régénéré après `docker compose restart php-fpm` — piège opcache, `backend/AGENTS.md` §17 — pour la garde précoce de move : le 422 de `POST /api/schedule-slots/{id}/move` annonce désormais `slot_unavailable` — **0 path ajouté/retiré**, deux descriptions seules du 422 existant)
 
 Changements récents :
+- **Garde précoce de move sur la grille (2026-08-21)** : **0 path** — `POST /api/schedule-slots/{id}/move`
+  refuse désormais AVANT le moteur un triplet sans fenêtre de gymnase (cible inexistante ou jour fermé)
+  en **422 `slot_unavailable`**, miroir de `place-slot`. Le snapshot ne bouge que de deux descriptions
+  du 422 existant : la phrase du `description` (ajout du cas `slot_unavailable`) et celle de la propriété
+  `code` (`slot_unavailable, evict_target_mismatch or target_locked`). Aucun schéma de réponse modifié,
+  aucun champ de requête ajouté (move ne reçoit AUCUNE durée du client — LA RÈGLE : la durée vient de
+  l'emplacement). Contrat backend⇄engine **inchangé** (`CONTRACT_VERSION` 2.13, zéro appel moteur).
 - **P2-44 PR-5 — les écarts NOMMÉS vs le socle (2026-08-20)** : **+1 path** —
   `GET /api/schedules/{id}/socle-deviation` (200 : `socleScheduleId` + `moved[]` {teamId, from, to}
   + `unplaced[]` {teamId, dayOfWeek, startTime, venueId, reason **nullable**} ; 422 plan SEASON ou

@@ -80,6 +80,8 @@ final class MoveSlotService
 
     /**
      * @throws ScheduleGenerationInProgressException une génération tourne pour ce club (→ 409)
+     * @throws SlotUnavailableException              aucune fenêtre de gymnase à la destination — cible
+     *                                               inexistante ou jour fermé (→ 422 `slot_unavailable`)
      * @throws EvictTargetMismatchException          l'occupant à évincer ne siège pas à la cible (→ 422)
      * @throws EvictTargetLockedException            l'occupant à évincer est verrouillé, D3 (→ 422)
      * @throws EngineTimeoutException                le moteur a été trop lent (→ 504 `engine_timeout`)
@@ -106,22 +108,50 @@ final class MoveSlotService
             throw new ScheduleGenerationInProgressException;
         }
 
-        // (1bis) Éviction éventuelle : on VALIDE la cible AVANT tout appel moteur (D3 : un verrou
-        //        est souverain, un occupant verrouillé fait échouer ici sans jamais consulter le moteur).
+        // (2) Baseline figée SANS la source → et la GRILLE de gymnase (`venues`) du MÊME payload,
+        //     dont on tire la durée de la fenêtre. UN SEUL payload construit : tous les refus
+        //     pré-moteur lisent CETTE grille, jamais un second calcul. L'évincé, lui, est retiré
+        //     de la baseline APRÈS coup (il dépend de la durée de fenêtre, résolue juste en dessous).
+        $payload = $this->buildBasePayload($schedule, $slot, null);
+
+        // (2bis) LA RÈGLE : un emplacement est défini à l'écran Gymnases, et lui seul dit sa taille.
+        //        La durée d'une séance ne VOYAGE donc JAMAIS avec l'équipe déplacée — elle est celle
+        //        de la FENÊTRE de destination (venueId + dayOfWeek + startTime), lue dans le payload
+        //        du moteur. Aucune fenêtre à ce triplet — cible inexistante OU jour fermé, la grille
+        //        de `buildForOverlay`/`buildForClubSeason` excluant DÉJÀ les deux (jour fermé, gymnase
+        //        désactivé), saison comme période — le créneau n'existe pas : on tranche AVANT le
+        //        moteur, y compris en dryRun (un essai doit refuser vite).
+        $durationMinutes = $this->resolveWindowDurationMinutes($payload, $venueId, $dayOfWeek, $startTime);
+        if (null === $durationMinutes) {
+            throw new SlotUnavailableException;
+        }
+
+        // (2ter) Éviction éventuelle, RÉSOLUE APRÈS la durée de fenêtre : l'occupant à évincer est
+        //        jugé sur l'occupation RÉELLE du candidat [début, début + durée de la FENÊTRE[ — pas
+        //        la durée de la source, qui ne s'applique plus (LA RÈGLE). D3 : un occupant verrouillé
+        //        fait échouer ici sans jamais consulter le moteur. L'évincé est alors retiré de la
+        //        baseline (sinon le candidat se heurterait à l'occupant qu'il libère).
         $evicted = null === $evictSlotId
             ? null
-            : $this->resolveEvictionTarget($slot, $schedule, $evictSlotId, $dayOfWeek, $startTime, $venueId);
+            : $this->resolveEvictionTarget($slot, $schedule, $evictSlotId, $dayOfWeek, $startTime, $venueId, $durationMinutes);
+        if ($evicted instanceof ScheduleSlotTemplate) {
+            $evictedId = $evicted->getId();
+            $currentTemplates = \is_array($payload['slotTemplates'] ?? null) ? $payload['slotTemplates'] : [];
+            $payload['slotTemplates'] = array_values(array_filter(
+                $currentTemplates,
+                static fn (mixed $entry): bool => !\is_array($entry) || (string) ($entry['id'] ?? '') !== $evictedId,
+            ));
+        }
 
-        // (2)+(3) baseline figée SANS la source (ni l'occupant évincé) → verdict moteur sur le candidat.
-        $payload = $this->buildBasePayload($schedule, $slot, $evicted);
+        // (3) Le candidat : l'équipe posée dans l'emplacement de destination, à la durée de la
+        //     FENÊTRE. Le solveur ne lit pas `candidate.durationMinutes` (il dérive tout de la
+        //     grille) — cette valeur ne sert qu'à l'écriture serveur qui suivra un « oui ».
         $payload['candidate'] = [
             'teamId' => $slot->getTeamId(),
             'venueId' => $venueId,
             'dayOfWeek' => $dayOfWeek,
             'startTime' => $startTime->format('H:i'),
-            // La durée est CELLE de la séance déplacée (le déplacement la préserve) — côté serveur,
-            // jamais du client.
-            'durationMinutes' => $slot->getDurationMinutes(),
+            'durationMinutes' => $durationMinutes,
         ];
         // P2-32 — l'état « AVANT » du candidat pour le DELTA de compromis : le placement d'ORIGINE
         // de la source (elle est retirée de la baseline, cf. buildBasePayload). Lu du slot AVANT
@@ -164,7 +194,10 @@ final class MoveSlotService
         $slot
             ->setDayOfWeek($dayOfWeek)
             ->setStartTime($startTime)
-            ->setVenueId($venueId);
+            ->setVenueId($venueId)
+            // LA RÈGLE : la durée écrite est TOUJOURS celle de l'emplacement de destination, jamais
+            // celle que la source portait — sinon la séance emporterait sa taille d'un gymnase à l'autre.
+            ->setDurationMinutes($durationMinutes);
 
         $response = ['valid' => true, 'violations' => [], 'compromises' => $compromises];
         if ($evicted instanceof ScheduleSlotTemplate) {
@@ -317,8 +350,14 @@ final class MoveSlotService
      * validation a lieu AVANT le moteur : introuvable / d'un autre planning / égal à la source /
      * ne siégeant pas à la cible → {@see EvictTargetMismatchException} ; verrouillé →
      * {@see EvictTargetLockedException} (D3 : un verrou est souverain, le moteur n'est pas appelé).
+     *
+     * ⚠ `$candidateDurationMinutes` est la durée de la FENÊTRE de destination (LA RÈGLE), PAS celle
+     * de la source : le candidat occupera `[startTime, startTime + durée de la fenêtre[`, et c'est
+     * cette occupation-là qui décide s'il chevauche l'occupant. Juger sur la durée source raterait
+     * un occupant que la fenêtre (plus longue) recouvre, ou en accuserait un que la fenêtre (plus
+     * courte) laisse tranquille.
      */
-    private function resolveEvictionTarget(ScheduleSlotTemplate $source, Schedule $schedule, string $evictSlotId, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId): ScheduleSlotTemplate
+    private function resolveEvictionTarget(ScheduleSlotTemplate $source, Schedule $schedule, string $evictSlotId, int $dayOfWeek, DateTimeImmutable $startTime, string $venueId, int $candidateDurationMinutes): ScheduleSlotTemplate
     {
         $evicted = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->find($evictSlotId);
         if (!$evicted instanceof ScheduleSlotTemplate
@@ -328,10 +367,10 @@ final class MoveSlotService
         }
 
         // L'occupant doit SIÉGER à la cible : même gymnase + même jour + chevauchement horaire
-        // avec la fenêtre du candidat [startTime, startTime + durée du candidat[.
+        // avec la fenêtre du candidat [startTime, startTime + durée de la FENÊTRE de destination[.
         if ($evicted->getVenueId() !== $venueId
             || $evicted->getDayOfWeek() !== $dayOfWeek
-            || !$this->overlaps($startTime, $source->getDurationMinutes(), $evicted->getStartTime(), $evicted->getDurationMinutes())) {
+            || !$this->overlaps($startTime, $candidateDurationMinutes, $evicted->getStartTime(), $evicted->getDurationMinutes())) {
             throw new EvictTargetMismatchException;
         }
 
