@@ -14,6 +14,7 @@ import { useEntryConflicts, useSchedulePlans } from "@/features/cockpit/queries"
 import { useReservations, useTeamPeriodOverrides, useWizardTeamTagAssignments, useWizardTeamTags } from "@/features/wizard/queries";
 import { coachFullName } from "@/shared/lib/coachName";
 import { readFailed, readLoading } from "@/shared/lib/readState";
+import { armNavTransition } from "@/shared/stores/navTransitionStore";
 import { toast } from "@/shared/stores/toastStore";
 import { useCredits } from "@/shared/credits/useCredits";
 import { Button } from "@/shared/components/ui/button";
@@ -22,7 +23,7 @@ import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 
-import { type Compromise, EngineTimeoutError, EngineVerificationInterruptedError, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError } from "./api";
+import { type Compromise, EngineTimeoutError, EngineVerificationInterruptedError, type EvictedSlot, GenerationInProgressError, type MoveViolation, MoveRejectedError, OverlaysExistError, type Slot, SlotEditError, TargetLockedError, VerdictAbandonedError } from "./api";
 import { CompromiseList } from "./CompromiseList";
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 import { DriftBanner } from "./DriftBanner";
@@ -810,6 +811,12 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
           toast.success(compromises.length > 0 ? `Séance placée — ${compromises.length} compromis` : "Séance placée.");
         },
         onError: (error) => {
+          // Lot C PR-2 : un ABANDON volontaire est déjà NOMMÉ + resynchronisé par le hook —
+          // surtout pas le doubler d'un « réessayez » (VerdictAbandonedError étant une sous-classe
+          // de EngineVerificationInterruptedError, il faut l'intercepter AVANT cette branche).
+          if (error instanceof VerdictAbandonedError) {
+            return;
+          }
           if (error instanceof MoveRejectedError) {
             toast.error(error.violations[0]?.message ?? "Placement refusé par le moteur.");
             setHighlightSlotIds(violationHighlightSlotIds(error.violations, slots));
@@ -1070,6 +1077,7 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
   // (venue view, filtered to that venue) so the concerned `vide` cell is visible.
   const focusVenue = useCallback(
     (venueId: string) => {
+      armNavTransition(); // GESTE (clic sur un diagnostic) arme le voile changement de page
       setViewMode("gymnase");
       clearResourceFilter();
       toggleResource(venueId);
@@ -1264,9 +1272,15 @@ export function PlanningPage({ embedded = false, scopePlanId = null, calendarEnt
               schedules={schedules}
               scopePlanId={scopePlanId}
               selectedScheduleId={validScheduleId}
-              onSelectSchedule={setSelectedScheduleId}
+              onSelectSchedule={(id) => {
+                armNavTransition(); // GESTE (selecteur de version) arme le voile ; les appels programmatiques non
+                setSelectedScheduleId(id);
+              }}
               viewMode={viewMode}
-              onViewMode={setViewMode}
+              onViewMode={(mode) => {
+                armNavTransition(); // GESTE (bascule de vue) arme le voile
+                setViewMode(mode);
+              }}
               isGenerating={showGenerationWaiting || regenerateMutation.isPending || regenerateOverlayMutation.isPending}
               actionBusy={actionBusy}
               disableRegenerate={regenerateDisabled}

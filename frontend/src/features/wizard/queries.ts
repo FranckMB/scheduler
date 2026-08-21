@@ -738,6 +738,8 @@ export function useScheduleStatus(id: string | null) {
     queryKey: ["wizard", "schedule_status", id],
     queryFn: () => wizardApi.getSchedule(id ?? ""),
     enabled: null !== id,
+    // Lot C PR-2 : son premier fetch vit SOUS GenerationWaiting — le voiler par-dessus clignoterait.
+    meta: { veil: false },
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if ("PENDING" !== status && "GENERATING" !== status) {
@@ -762,6 +764,8 @@ export function useScheduleStatus(id: string | null) {
 export function useLaunchGeneration() {
   const queryClient = useQueryClient();
   return useMutation({
+    // Lot C PR-2 : rend 202 puis passe la main à GenerationWaiting — exempté du voile bloquant.
+    meta: { veil: false },
     mutationFn: async ({
       schedulePlanId,
       existingScheduleId,

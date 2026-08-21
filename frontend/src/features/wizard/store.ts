@@ -45,6 +45,11 @@ export const useWizardStore = create<WizardState>()(
       maxIndex: 0,
       mode: "season",
       calendarEntryId: null,
+      // ⚠ Actions NEUTRES : elles n'arment PAS le voile. L'armement (`armNavTransition`) appartient
+      // au GESTE — le clic de navigation, dans les handlers de `WizardLayout` (rail, Suivant,
+      // Précédent) — jamais à l'action de store, qui sert aussi au guidage AUTOMATIQUE au montage
+      // (`WizardLayout` appelle `jumpTo` tout seul : deep-link, repli sur le premier trou, recap).
+      // Armer ici gelait le formulaire à l'ARRIVÉE — le bug d'origine revenu par la porte de service.
       setStep: (stepId) => set({ stepId }),
       jumpTo: (stepId) => set((state) => ({ stepId, maxIndex: Math.max(state.maxIndex, indexOf(stepId)) })),
       next: () =>

@@ -1,15 +1,52 @@
 import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 
 import { download, slugFilename } from "@/shared/lib/download";
 import { errorMessage } from "@/shared/lib/errorMessage";
+import { registerLongAction, unregisterLongAction } from "@/shared/lib/longActionAbort";
 import { isScheduleStreamConnected, useScheduleStream } from "@/shared/lib/scheduleStream";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { LockLevel, PlaceSlotBody, SlotMovePatch } from "./api";
-import { EngineTimeoutError, GenerationInProgressError, MoveRejectedError, OverlaysExistError, SlotEditError, TargetLockedError } from "./api";
+import { EngineTimeoutError, GenerationInProgressError, MoveRejectedError, OverlaysExistError, SlotEditError, TargetLockedError, VerdictAbandonedError } from "./api";
 import * as planningApi from "./api";
+
+/**
+ * Lot C PR-2 — un TRAITEMENT LONG (rail de retouche) enregistre son `AbortController` le temps de
+ * l'appel, pour que le bouton « Abandonner » du voile bloquant puisse l'aborter, et le retire au
+ * settle (succès, refus ou abandon). Le `signal` file jusqu'à ky.
+ */
+function runLongAction<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = registerLongAction();
+  return fn(controller.signal).finally(() => unregisterLongAction(controller));
+}
+
+/** Le paquet réinvalidé après un déplacement/placement ACCEPTÉ — et après un ABANDON (le serveur a
+ *  pu l'appliquer quand même). Maison unique pour que les deux chemins restent alignés. */
+function invalidateMovePacket(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: ["slots"] });
+  void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+  void queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
+  // P2-44 PR-5 : le placement qui change rejoue le diff socle↔période.
+  void queryClient.invalidateQueries({ queryKey: ["socle-deviation"] });
+}
+
+/**
+ * Le onError du rail move/place. Un ABANDON volontaire (voile bloquant) est intercepté ICI : on
+ * resynchronise le paquet d'un geste accepté (le serveur a pu écrire avant l'abort) et on NOMME
+ * l'abandon — jamais « réessayez ». Tout le reste passe au feedback existant (métier tu, transport
+ * toasté).
+ */
+function onSlotEditError(queryClient: QueryClient, error: unknown): void {
+  if (error instanceof VerdictAbandonedError) {
+    invalidateMovePacket(queryClient);
+    toast.info("Déplacement abandonné. Le serveur a pu l'appliquer quand même — le planning a été rechargé.");
+    return;
+  }
+  ownSlotEditFeedback(error);
+}
 
 /**
  * P2-30 — le rail de retouche (move/place) délègue le feedback des refus au niveau `mutate()`
@@ -161,7 +198,10 @@ export function useLockSlot() {
 export function useMoveSlot() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: SlotMovePatch }) => planningApi.moveSlot(id, patch),
+    // Lot C PR-2 : traitement LONG (verdict moteur, > 30 s sur un club dense) → voile non
+    // relâchable au chrono, bouton d'abandon.
+    meta: { veil: "long" },
+    mutationFn: ({ id, patch }: { id: string; patch: SlotMovePatch }) => runLongAction((signal) => planningApi.moveSlot(id, patch, signal)),
     // Un déplacement accepté change le placement (slots) ET pose le marqueur « score
     // périmé » sur le planning (schedules) — et le moteur a rejugé la légalité, donc les
     // diagnostics du planning peuvent bouger : on rafraîchit les trois. Un refus throw :
@@ -169,16 +209,11 @@ export function useMoveSlot() {
     // ⚠ P2-30 : le TOAST vit désormais côté page (mutate-level) — l'éviction, l'annulation et
     // le raccourci ont besoin des NOMS d'équipes et de l'issue exacte ; un toast générique ici
     // en aurait fait deux. La page centralise donc tous les mots du geste.
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["slots"] });
-      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
-      void queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
-      // P2-44 PR-5 : un déplacement accepté change les écarts vs le socle — on relit le diff.
-      void queryClient.invalidateQueries({ queryKey: ["socle-deviation"] });
-    },
+    onSuccess: () => invalidateMovePacket(queryClient),
     // Le hook POSSÈDE son feedback (sinon le filet global toaste « Problème de connexion »
-    // sur un refus métier) : il tait le métier, ne parle que d'un vrai transport.
-    onError: ownSlotEditFeedback,
+    // sur un refus métier) : il tait le métier, ne parle que d'un vrai transport ; un ABANDON
+    // resynchronise (le serveur a pu écrire) et se NOMME.
+    onError: (error) => onSlotEditError(queryClient, error),
   });
 }
 
@@ -193,7 +228,10 @@ export function useMoveSlot() {
  */
 export function useMoveDryRun() {
   return useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: SlotMovePatch }) => planningApi.moveSlot(id, { ...patch, dryRun: true }),
+    // Lot C PR-2 : l'essai passe aussi sous le voile LONG (mêmes secondes que le vrai geste) —
+    // abandonnable, mais SANS resync (un essai n'écrit jamais : la modale garde sa phase interrupted).
+    meta: { veil: "long" },
+    mutationFn: ({ id, patch }: { id: string; patch: SlotMovePatch }) => runLongAction((signal) => planningApi.moveSlot(id, { ...patch, dryRun: true }, signal)),
     // La page possède TOUT le feedback de l'essai : un refus métier ferme la modale et le toast
     // contextuel, un ÉCHEC de l'essai (timeout, moteur indisponible) laisse la modale ouverte en
     // état d'échec qui NOMME la cause. Le hook se tait donc (mais désarme le filet global, qui
@@ -211,16 +249,13 @@ export function useMoveDryRun() {
 export function usePlaceSlot() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ scheduleId, body }: { scheduleId: string; body: PlaceSlotBody }) => planningApi.placeSlot(scheduleId, body),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["slots"] });
-      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
-      void queryClient.invalidateQueries({ queryKey: ["diagnostics"] });
-      // P2-44 PR-5 : placer une séance à la dérive change les écarts vs le socle — on relit le diff.
-      void queryClient.invalidateQueries({ queryKey: ["socle-deviation"] });
-    },
-    // Idem move : le hook possède son feedback, le filet global ne double plus (cf. useMoveSlot).
-    onError: ownSlotEditFeedback,
+    // Lot C PR-2 : traitement LONG (même verdict moteur que move).
+    meta: { veil: "long" },
+    mutationFn: ({ scheduleId, body }: { scheduleId: string; body: PlaceSlotBody }) => runLongAction((signal) => planningApi.placeSlot(scheduleId, body, signal)),
+    onSuccess: () => invalidateMovePacket(queryClient),
+    // Idem move : le hook possède son feedback, le filet global ne double plus ; un ABANDON
+    // resynchronise et se NOMME.
+    onError: (error) => onSlotEditError(queryClient, error),
   });
 }
 
@@ -387,6 +422,8 @@ export function useRegenerateFromVersion() {
 export function useRegenerateOverlay() {
   const queryClient = useQueryClient();
   return useMutation({
+    // Lot C PR-2 : rend 202 puis passe la main à GenerationWaiting — voiler par-dessus clignoterait.
+    meta: { veil: false },
     mutationFn: async (schedulePlanId: string) => {
       const created = await planningApi.createOverlayVersion(schedulePlanId);
       await planningApi.generateSchedule(created.id);
@@ -406,6 +443,8 @@ export function useRegenerateOverlay() {
 export function useRegenerate() {
   const queryClient = useQueryClient();
   return useMutation({
+    // Lot C PR-2 : rend 202 puis passe la main à GenerationWaiting — exempté du voile.
+    meta: { veil: false },
     mutationFn: (id: string) => planningApi.regenerate(id),
     // A NEW version row appears — refresh the version list (the current structure
     // is unchanged, so no need to refetch the reference families). Return the
@@ -428,6 +467,8 @@ export function useRegenerate() {
 export function useFillSchedule() {
   const queryClient = useQueryClient();
   return useMutation({
+    // Lot C PR-2 : rend 202 puis passe la main à GenerationWaiting — exempté du voile.
+    meta: { veil: false },
     mutationFn: (id: string) => planningApi.fillSchedule(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["schedules"] }),
     onError: (error) => void errorMessage(error).then((message) => toast.error(message)),

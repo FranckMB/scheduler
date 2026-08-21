@@ -182,6 +182,67 @@ data; avoiding it would mean duplicating the auth decision into a per-route `loa
   `collection()` unwraps it; `collectionAll()` pages via `?page=N` and dedupes by `id`.
   There is **no `useInfiniteQuery`** anywhere.
 
+### Toute mutation VOILE l'écran — l'exemption se déclare, elle ne se devine pas
+
+Lot C (2026-08-21). `app/ActionVeil.tsx`, monté dans `Providers`, bloque l'écran pendant qu'une
+action rend la main : `inert` natif (React 19) sur le contenu + overlay qui capte les clics. Le
+voile n'est **visible qu'après 250 ms** (sinon il clignote à chaque clic de 90 ms). ⚠ **Le MOMENT
+du blocage dépend du contexte** — 0 ms pour `enregistrement`/`long`, 250 ms pour `changement de
+page` : voir la puce dédiée.
+
+- **Le régime est GLOBAL par défaut.** Tu n'as rien à câbler en écrivant une nouvelle mutation :
+  elle voile. C'est le contraire qui se déclare — `meta: { veil: false }` — et une exemption sans
+  raison écrite est une régression déguisée.
+- **Trois contextes**, priorité *long > enregistrement > page* : `meta: { veil: "long" }` pour le
+  rail de retouche (le verdict moteur, > 30 s mesuré sur un club dense) ; « changement de page »
+  pour le premier chargement d'une requête **sans données en cache** — mais **UNIQUEMENT s'il suit
+  une TRANSITION déclenchée par le gestionnaire** (changement d'étape du wizard, de vue/version du
+  planning ; déclencheur commun `shared/stores/navTransitionStore`) ; tout
+  le reste est « enregistrement ». ⚠ Un **refetch d'arrière-plan ne voile jamais** (le prédicat est
+  `undefined === q.state.data`, la même notion que `readState`) — **et le simple montage d'un écran
+  non plus** (correction 2026-08-21, GO fondateur). Pourquoi : le blocage à 0 ms sert à manger le
+  2ᵉ clic d'un geste **déjà parti** ; une arrivée n'a rien lancé, il n'y a aucune double-soumission
+  à empêcher — et comme le voile est invisible sous 250 ms, geler un formulaire déjà peint mange
+  les frappes **sans le moindre retour visuel** (l'utilisateur croit son clavier mort). L'ancienne
+  règle voilait tout premier chargement : elle gelait le formulaire de l'étape 1 du wizard à
+  l'arrivée (`journey.spec.ts`, `veil-double-click.spec.ts`).
+- **Le MOMENT du blocage n'est PAS le même selon le contexte** (asymétrie voulue, GO fondateur
+  2026-08-21 — dérivé `blocking` dans `ActionVeil`) : `enregistrement` et `traitement long` bloquent
+  **dès 0 ms** (ils protègent un geste RÉELLEMENT parti, dont le blocage immédiat mange le 2ᵉ clic) ;
+  `changement de page` ne bloque qu'**à 250 ms**, quand le voile devient VISIBLE. Pourquoi : sur un
+  CHARGEMENT rien n'est parti, aucune double-soumission à empêcher — rien à protéger avant que
+  l'utilisateur ne VOIE pourquoi il est bloqué ; bloquer à 0 ms (voile encore invisible) mangerait
+  des frappes **en silence**, à l'arrivée comme sur une transition. Effet : transition < 250 ms → la
+  saisie rentre, aucun `inert` ; transition lente → l'écran se fige ET le montre. ⚠ Ne jamais fondre
+  les deux régimes en un seul : le NR `ActionVeil.test` garde l'asymétrie (`enregistrement` inert dès
+  0 ms, `page` pas avant 250 ms).
+- ⚠ **L'armement appartient au GESTE, pas à l'action de store.** `armNavTransition()` est appelé
+  dans les **handlers de clic** de la navigation (`WizardLayout` : rail d'étapes, Suivant/Précédent ;
+  `PlanningPage` : bascule de vue, sélecteur de version, clic sur un diagnostic), JAMAIS dans les
+  actions du store (`wizard/store`, `planning/store` sont NEUTRES). Raison : ces actions servent
+  aussi au guidage AUTOMATIQUE — `WizardLayout` appelle `jumpTo` tout seul au montage (deep-link,
+  repli sur le premier trou, recap), et `PlanningPage` appelle `setSelectedScheduleId`
+  programmatiquement (atterrir sur la version en vigueur, onSuccess d'un solve). Armer dans le store
+  gelait l'écran à l'ARRIVÉE — le bug d'origine revenu par la porte de service, invisible en local
+  (course de quelques ms) et rouge en CI. Gardé par le NR `WizardPage.test` (jumpTo du store n'arme
+  pas ; clic Suivant arme).
+- **Les seules exemptions légitimes à ce jour** : les 4 mutations de lancement de solve (elles
+  rendent 202 et passent la main à `GenerationWaiting` — les voiler ferait clignoter voile → écran
+  d'attente) et la query `useScheduleStatus` (son premier fetch vit sous cet écran).
+  ⚠ **`useRegenerateFromVersion` n'en fait PAS partie** et ne doit pas y entrer : `/regenerate-from`
+  ne lance **aucun solve** (`RegenerateFromVersionController.php:102-104`, 200 synchrone), c'est un
+  restore **destructif** — le voile est exactement la protection anti-double-clic qu'il réclame.
+- **Deux régimes de sortie.** Contextes courts : au-delà de 10 s on prévient **et on relâche** (une
+  panne réseau ne doit pas rendre l'app inutilisable jusqu'au F5). Contexte long : **jamais de
+  relâche au chrono** — relâcher autoriserait un second déplacement par-dessus le premier ; la
+  sortie est le bouton **« Abandonner ce déplacement »**, qui `abort()` la requête. L'abandon
+  volontaire se distingue par `VerdictAbandonedError extends EngineVerificationInterruptedError` —
+  la classe mère garde ses consommateurs justes par héritage.
+- **Rôles ARIA : deux régimes, c'est voulu.** Sans bouton → `role="status"` + `aria-live="polite"`.
+  Avec le bouton d'abandon, le voile **est** un dialogue → `role="dialog"` + `aria-modal`. Jamais
+  `alertdialog` : rien d'urgent, et il volerait le focus. Seule la phrase **stable** vit dans la
+  région live, la rotation est `aria-hidden` (AUD-FRT-23/24).
+
 ### Taille de texte : plancher 12 px, sauf dans les grilles
 
 Le corps de texte descend à `text-xs` (0,75 rem = **12 px**) et pas en dessous — pas

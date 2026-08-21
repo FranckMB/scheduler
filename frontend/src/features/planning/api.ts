@@ -527,6 +527,22 @@ export class EngineVerificationInterruptedError extends Error {
 }
 
 /**
+ * Lot C PR-2 — l'attente du verdict a été ABANDONNÉE VOLONTAIREMENT par le gestionnaire (bouton
+ * « Abandonner ce déplacement » du voile bloquant), pas coupée par un timeout client. Sous-classe
+ * de {@link EngineVerificationInterruptedError} À DESSEIN : même honnêteté (le geste n'a PAS
+ * abouti côté client, mais le serveur a PU l'appliquer une seconde plus tard), et les branches qui
+ * consomment déjà la classe mère (panneau `interrupted`, modale d'essai en échec) restent justes
+ * PAR HÉRITAGE. Le distinguo sert au rail : sur un abandon, on resynchronise le paquet d'un
+ * déplacement accepté (le serveur a pu écrire) et on NOMME l'abandon, sans « réessayez ».
+ */
+export class VerdictAbandonedError extends EngineVerificationInterruptedError {
+  constructor() {
+    super();
+    this.name = "VerdictAbandonedError";
+  }
+}
+
+/**
  * P4-119 (a) — le rail de retouche (déplacer / placer / essai) attend le VERDICT du moteur. Côté
  * serveur : construction du snapshot PUIS un budget transport de 20 s vers le moteur
  * (`MoveSlotService::VALIDATE_HTTP_TIMEOUT_SECONDS`), soit un bout-en-bout mesuré > 30 s sur un club
@@ -586,16 +602,18 @@ export class SlotEditError extends Error {
  * génération en cours (409 `generation_in_progress`) un {@link GenerationInProgressError}.
  * Les trois champs sont obligatoires côté serveur (l'UI les envoie toujours ensemble).
  */
-export async function moveSlot(id: string, patch: SlotMovePatch): Promise<SlotMoveResult> {
+export async function moveSlot(id: string, patch: SlotMovePatch, signal?: AbortSignal): Promise<SlotMoveResult> {
   try {
     // Un 200 {valid:false} (essai REFUSÉ) résout ici SANS lever : seul un 422 (refus réel) devient
     // un MoveRejectedError ci-dessous. `compromises` est normalisé à [] — jamais absent à la lecture.
-    const result = await api.post(`schedule-slots/${id}/move`, { json: patch, timeout: MOVE_VERDICT_TIMEOUT_MS }).json<SlotMoveResult>();
+    // `signal` (lot C PR-2) : l'abandon volontaire du voile bloquant abort la requête ky.
+    const result = await api.post(`schedule-slots/${id}/move`, { json: patch, timeout: MOVE_VERDICT_TIMEOUT_MS, signal }).json<SlotMoveResult>();
     return { ...result, compromises: result.compromises ?? [] };
   } catch (error) {
     // P4-119 (b) : un abandon CLIENT (timeout ky / abort) ≠ un moteur en panne — on le NOMME.
     if (isClientInterruption(error)) {
-      throw new EngineVerificationInterruptedError();
+      // Lot C PR-2 : un abort VOLONTAIRE (le signal a été aborté) est DISTINCT d'un timeout ky.
+      throw true === signal?.aborted ? new VerdictAbandonedError() : new EngineVerificationInterruptedError();
     }
     if (error instanceof HTTPError) {
       // ky 2.x parse le corps d'erreur sur error.data (re-lire la réponse throw).
@@ -629,14 +647,15 @@ export async function moveSlot(id: string, patch: SlotMovePatch): Promise<SlotMo
  * refusé ({@link MoveRejectedError}) ; 422 codé (`slot_unavailable`/`duration_mismatch`) →
  * {@link SlotEditError} ; 409 → {@link GenerationInProgressError}.
  */
-export async function placeSlot(scheduleId: string, body: PlaceSlotBody): Promise<PlaceSlotResult> {
+export async function placeSlot(scheduleId: string, body: PlaceSlotBody, signal?: AbortSignal): Promise<PlaceSlotResult> {
   try {
-    const result = await api.post(`schedules/${scheduleId}/place-slot`, { json: body, timeout: MOVE_VERDICT_TIMEOUT_MS }).json<PlaceSlotResult>();
+    const result = await api.post(`schedules/${scheduleId}/place-slot`, { json: body, timeout: MOVE_VERDICT_TIMEOUT_MS, signal }).json<PlaceSlotResult>();
     return { ...result, compromises: result.compromises ?? [] };
   } catch (error) {
     // P4-119 (b) : un abandon CLIENT (timeout ky / abort) ≠ un moteur en panne — on le NOMME.
     if (isClientInterruption(error)) {
-      throw new EngineVerificationInterruptedError();
+      // Lot C PR-2 : un abort VOLONTAIRE (le signal a été aborté) est DISTINCT d'un timeout ky.
+      throw true === signal?.aborted ? new VerdictAbandonedError() : new EngineVerificationInterruptedError();
     }
     if (error instanceof HTTPError) {
       const data = ((error as { data?: unknown }).data ?? {}) as { code?: string; error?: string; violations?: MoveViolation[] };

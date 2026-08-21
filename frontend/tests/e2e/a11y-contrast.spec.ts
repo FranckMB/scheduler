@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoContrastViolations, forceTheme, registerAndVerify, uniqueAra } from "./support";
+import { expectNoContrastViolations, forceTheme, registerAndVerify, settleVeil, uniqueAra } from "./support";
 
 /**
  * WCAG 2.2 AA colour-contrast (1.4.3) on the real rendered app — the axis jsdom
@@ -49,6 +49,13 @@ for (const mode of MODES) {
     await page.getByRole("button", { name: "Ajouter l'équipe" }).click();
     await page.getByRole("button", { name: "Suivant" }).click();
     await expect(page.getByRole("heading", { name: /Étape 2\/6/ })).toBeVisible();
+    // ⚠ Scanner un écran SETTLED, pas en pleine transition d'étape. Le clic « Suivant » est une
+    // transition (lot C) : le temps qu'elle se pose, la surbrillance de l'étape courante dans le
+    // rail n'a pas encore sa couleur finale (bref `text-muted-foreground` sur `bg-muted` ≈ 3.93).
+    // Avant que le voile ne diffère son blocage à 250 ms, l'`inert` couvrait ce sous-arbre et axe
+    // le SAUTAIT — un faux vert qui ne vérifiait rien de cet écran. On attend donc le settle : axe
+    // valide alors la vraie couleur (`text-foreground`, AA). cf. `settleVeil`.
+    await settleVeil(page);
     await expectNoContrastViolations(page, `wizard · gymnases (${mode})`);
   });
 }
@@ -103,7 +110,10 @@ for (const mode of MODES) {
       // libellé en accent. La mesure a valu son prix — le fond teinté qu'on lui destinait
       // (`bg-accent/10`) tombait à 4.18:1 en clair, et `bg-muted` au survol à 4.37:1. Sur
       // le fond nu il passe (4.77:1). Ce jeton est désormais du TEXTE : il se garde ici.
-      for (const token of ["text-warning", "text-success", "text-accent"]) {
+      // `text-foreground` (lot C PR-2) : le texte du panneau du VOILE BLOQUANT — panneau `bg-card`,
+      // bouton d'abandon `bg-background`. Le voile n'apparaît que le temps d'une mutation, donc axe
+      // ne l'échantillonne JAMAIS sur un écran : on verrouille sa paire ici, dans les deux thèmes.
+      for (const token of ["text-warning", "text-success", "text-accent", "text-foreground"]) {
         const fg = of(token, "color");
         out[`${token} on background`] = ratio(fg, bg);
         out[`${token} on card`] = ratio(fg, card);
