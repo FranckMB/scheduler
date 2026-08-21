@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { AppRouter } from "@/app/router";
 import { ErrorBoundary } from "@/app/ErrorBoundary";
 import { Providers } from "@/app/providers";
+import { seedOnlineFromNavigator } from "@/shared/lib/online";
 import { readPersistedThemeMode } from "@/shared/stores/themeStore";
 import "@/index.css";
 
@@ -26,6 +27,11 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 // same predicate (=== "dark") + persisted-shape source as useApplyTheme, so the
 // pre-paint class and the post-hydration class never disagree.
 document.documentElement.classList.toggle("dark", "dark" === readPersistedThemeMode());
+
+// P5-14 — SEED de l'état réseau AVANT le render : l'onlineManager de react-query naît optimiste
+// (`#online = true`) et ne bascule que sur les événements window. Sans ce seed, un onglet ouvert
+// DÉJÀ hors ligne se croirait en ligne (bandeau muet, mutations lancées au lieu d'être mises en file).
+seedOnlineFromNavigator();
 
 const container = document.getElementById("root");
 if (!container) {

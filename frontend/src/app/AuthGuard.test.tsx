@@ -1,7 +1,8 @@
+import { onlineManager } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAuthStore } from "@/shared/stores/authStore";
 
@@ -116,6 +117,10 @@ describe("AuthGuard — échec de /api/me (ne jamais mentir « reconnectez-vous 
     meState.data = undefined;
     meState.isError = false;
     useAuthStore.setState({ isAuthenticated: true });
+    onlineManager.setOnline(true); // état réseau = source de vérité unique (useOnline) ; on mute la PROD
+  });
+  afterEach(() => {
+    onlineManager.setOnline(true); // singleton global : ne pas laisser un test hors ligne polluer un autre
   });
 
   it("sans session (store vidé par un 401, cf. client.ts) → /login, comportement INCHANGÉ", () => {
@@ -125,29 +130,28 @@ describe("AuthGuard — échec de /api/me (ne jamais mentir « reconnectez-vous 
   });
 
   it("un 5xx (serveur tombé) → écran 500, JAMAIS /login", () => {
-    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    onlineManager.setOnline(true); // en ligne : un échec non-réseau
     meState.isError = true;
     renderAt("/");
     expect(screen.getByRole("heading", { name: /arrêt de jeu imprévu/i })).toBeInTheDocument();
     expect(screen.queryByText("LOGIN")).toBeNull();
-    onLine.mockRestore();
   });
 
   it("réseau coupé → écran hors-ligne, JAMAIS /login", () => {
-    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    // On mute la PROD (le vrai onlineManager), pas `navigator.onLine` : depuis la convergence P5-14,
+    // c'est `useOnline()` (→ onlineManager) qui tranche.
+    onlineManager.setOnline(false);
     meState.isError = true;
     renderAt("/");
     expect(screen.getByRole("heading", { name: /pas de réseau/i })).toBeInTheDocument();
     expect(screen.queryByText("LOGIN")).toBeNull();
-    onLine.mockRestore();
   });
 
   it("« Réessayer » relance le fetch de /api/me (refetch), sans recharger la page", async () => {
-    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    onlineManager.setOnline(true);
     meState.isError = true;
     renderAt("/");
     await userEvent.click(screen.getByRole("button", { name: /réessayer/i }));
     expect(refetch).toHaveBeenCalled();
-    onLine.mockRestore();
   });
 });

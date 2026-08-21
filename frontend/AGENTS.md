@@ -238,6 +238,18 @@ page` : voir la puce dédiée.
   sortie est le bouton **« Abandonner ce déplacement »**, qui `abort()` la requête. L'abandon
   volontaire se distingue par `VerdictAbandonedError extends EngineVerificationInterruptedError` —
   la classe mère garde ses consommateurs justes par héritage.
+- ⚠ **Une mutation en PAUSE n'est PAS un geste en vol** (2026-08-22). Hors ligne, TanStack ne
+  démarre pas la mutation : elle part `isPaused: true` et attend le réseau (`networkMode` par
+  défaut `"online"`). Le prédicat `saving` du voile l'**exclut** — sinon l'écran se bloquait à
+  0 ms puis annonçait à 10 s que « l'action continue en arrière-plan », alors qu'elle est
+  simplement garée. ⚠ Le contexte **`long` ne l'exclut pas** : un déplacement sous verdict garé
+  pourrait repartir plus tard, il doit rester sous le régime bouton-Abandonner plutôt que d'être
+  relâché en silence. Le compteur du bandeau hors-ligne lit ces mêmes mutations en pause, donc le
+  chiffre affiché est toujours RÉEL.
+- ⚠ **L'état réseau a UNE source : `shared/lib/online.ts`** (`useOnline`, adossé à l'`onlineManager`
+  de TanStack — celui-là même qui décide de la pause). Ne relis jamais `navigator.onLine` en
+  parallèle : le bandeau et la file de mutations pourraient se contredire. L'`onlineManager` naît
+  **optimiste**, d'où le seed depuis `navigator.onLine` dans `main.tsx` avant le render.
 - **Rôles ARIA : deux régimes, c'est voulu.** Sans bouton → `role="status"` + `aria-live="polite"`.
   Avec le bouton d'abandon, le voile **est** un dialogue → `role="dialog"` + `aria-modal`. Jamais
   `alertdialog` : rien d'urgent, et il volerait le focus. Seule la phrase **stable** vit dans la

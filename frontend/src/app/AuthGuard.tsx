@@ -5,6 +5,7 @@ import { OfflineScreen } from "@/app/OfflineScreen";
 import { ServerErrorScreen } from "@/app/ServerErrorScreen";
 import { useMe } from "@/features/auth/queries";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
+import { useOnline } from "@/shared/lib/online";
 import { useAuthStore } from "@/shared/stores/authStore";
 import { toast } from "@/shared/stores/toastStore";
 
@@ -33,6 +34,9 @@ export function AuthGuard() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { data, isLoading, isError, refetch } = useMe();
   const location = useLocation();
+  // Source de vérité UNIQUE de l'état réseau (P5-14), appelée inconditionnellement (hook) AVANT les
+  // sorties anticipées. Après le seed du boot, équivaut à `navigator.onLine` à l'instant de décision.
+  const online = useOnline();
 
   // First-time club: locked to the wizard until a main plan exists (baseline),
   // but the account-menu routes (profile, club) stay reachable. Landing on the
@@ -64,7 +68,7 @@ export function AuthGuard() {
     // rediriger vers /login (le mensonge « reconnectez-vous » quand le serveur
     // tombe). Réseau coupé → écran hors-ligne ; sinon → écran 500 ; « Réessayer »
     // relance le fetch de /api/me.
-    if ("undefined" !== typeof navigator && false === navigator.onLine) {
+    if (!online) {
       return <OfflineScreen onRetry={() => void refetch()} />;
     }
     return <ServerErrorScreen onRetry={() => void refetch()} />;

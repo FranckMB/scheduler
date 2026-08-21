@@ -1,5 +1,7 @@
 import { Outlet, useNavigation } from "react-router";
 
+import { OfflineBanner } from "@/app/OfflineBanner";
+
 /**
  * La racine technique du routeur : elle ne rend aucune UI propre, elle porte le
  * retour d'attente de TOUTE navigation.
@@ -17,6 +19,10 @@ export function RootShell() {
   return (
     <>
       {navigating ? <NavigationPending /> : null}
+      {/* Le bandeau hors-ligne (P5-14) : premier enfant EN FLUX, AVANT l'Outlet. Il empile au-dessus
+          de tout le contenu de page, il ne recouvre pas (aucun overlay, aucun z-index). RootShell est
+          sous Providers (react-query dispo) et couvre TOUTES les routes, page publique comprise. */}
+      <OfflineBanner />
       <Outlet />
     </>
   );
