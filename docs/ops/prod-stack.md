@@ -47,6 +47,50 @@ stage prod red le job même si aucun build dev ne l'utilise.
 - Mercure : `cors_origins` = `PUBLIC_BASE_URL` seul ; le navigateur passe par le
   proxy frontend (`/.well-known/mercure`).
 
+## Accès opérateur à la base — jamais un port ouvert (décision 2026-08-21)
+
+**Postgres ne publie AUCUN port hôte en prod** (`docker-compose.prod.yml`, service `postgres` :
+pas de `ports:`) — il n'existe que sur le réseau Docker interne. **Ne l'ouvre jamais.** Un
+Postgres joignable depuis Internet est balayé en heures, et cette base contient des données
+personnelles de licenciés, mineurs compris.
+
+**Pas de bastion.** Un bastion se justifie sur un réseau privé à plusieurs machines, pour avoir un
+point d'entrée unique et audité. Sur une machine unique, l'hôte **EST** ce point d'entrée : ajouter
+un bastion, c'est une seconde machine à patcher et à surveiller pour zéro sécurité de plus.
+✅ **L'hébergeur est CHOISI : Scaleway, produit Instances** (décision fondateur 2026-08-21) — une
+VM auto-gérée qui porte toute la stack Docker, **pas** de base managée. Le raisonnement ci-dessus
+s'applique donc tel quel. ⚠ Si un jour la base passait sur un **Postgres managé** (Scaleway
+Database ou autre), l'accès passerait par le réseau privé du fournisseur et ses ACL d'IP, et le
+tunnel ci-dessous n'aurait plus lieu d'être — la présente section serait à réécrire, pas à adapter.
+
+Deux gestes, par ordre de préférence :
+
+```bash
+# 1. Rien n'écoute, rien n'est publié — le plus sûr.
+ssh <hôte> 'docker compose exec postgres psql -U <rôle> -d clubscheduler'
+
+# 2. Tunnel SSH, seulement si un client graphique est nécessaire (DBeaver, TablePlus).
+#    Exige de publier le port sur la LOOPBACK de l'hôte (127.0.0.1:5432:5432), JAMAIS 0.0.0.0.
+ssh -N -L 5433:localhost:5432 <hôte>   # puis se connecter à localhost:5433
+```
+
+SSH **par clé, authentification par mot de passe désactivée**.
+
+### Avec quel rôle — la question qui compte
+
+Trois rôles, et confondre les deux premiers est le risque réel (→ [`../security/rls.md`](../security/rls.md)) :
+
+| Rôle | Portée | Usage |
+|---|---|---|
+| `app_user` | NOSUPERUSER, DML, **scopé par RLS** | la connexion runtime de l'application, jamais un humain |
+| `clubscheduler` | propriétaire non-superuser, policies `admin_all` → **traverse le RLS, voit TOUS les clubs** | migrations et gestes de support qui l'exigent vraiment |
+| *(à créer, P5)* lecture seule | `SELECT` seulement, **sans** `admin_all` donc scopé lui aussi | l'exploration courante depuis un poste |
+
+⚠ **Le danger n'est pas théorique** : ouvrir un client graphique sur une session `clubscheduler`,
+c'est rapatrier sur un portable les données personnelles de **tous** les clubs — et un `UPDATE`
+mal collé y touche de vraies données de vrais clients, sans filet. Le rôle lecture seule existe
+pour que le geste courant ne puisse rien casser ni tout voir.
+
 ## Limites RAM (INF-03) & logs
 
 `mem_limit` par service (base v3 §2.2, ajustés pour laisser la limite PHP mordre
