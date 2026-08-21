@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRef, useImperativeHandle, useMemo, type ReactNode, type Ref } from "react";
 
 import { registerLongAction, unregisterLongAction } from "@/shared/lib/longActionAbort";
+import { armNavTransition, useNavTransition } from "@/shared/stores/navTransitionStore";
 import { useToastStore } from "@/shared/stores/toastStore";
 
 import { ActionVeil } from "./ActionVeil";
@@ -78,6 +79,7 @@ async function advance(ms: number) {
 beforeEach(() => {
   vi.useFakeTimers();
   useToastStore.setState({ toasts: [] });
+  useNavTransition.setState({ token: 0 }); // aucune transition en cours entre deux tests
 });
 afterEach(() => {
   vi.runOnlyPendingTimers();
@@ -131,10 +133,29 @@ describe("ActionVeil — blocage immédiat, voile différé", () => {
   });
 });
 
-describe("ActionVeil — premier chargement vs refetch d'arrière-plan (Changement de page)", () => {
-  it("premier chargement SANS cache → voile", async () => {
+describe("ActionVeil — « Changement de page » : un premier chargement ne voile qu'APRÈS une transition", () => {
+  // RÈGLE CORRIGÉE (GO fondateur 2026-08-21). Le premier chargement d'un écran ne voile QUE s'il
+  // suit une transition d'étape/vue déclenchée par le gestionnaire (`armNavTransition`). Sur un
+  // simple montage il ne voile PLUS — c'était le bug : geler un formulaire déjà peint SANS retour
+  // visuel (le voile est invisible sous 250 ms), donc manger les frappes en silence. Falsifié dans
+  // les deux sens ci-dessous.
+  it("premier chargement SANS transition (simple montage) → PAS de voile (le bug d'hier)", async () => {
+    const qc = newClient();
+    renderVeil(<QueryProbe />, qc); // aucune transition armée : c'est une ARRIVÉE
+    await flush();
+    await advance(300);
+
+    expect(content()).not.toHaveAttribute("inert");
+    expect(overlay()).toBeNull();
+  });
+
+  it("le MÊME premier chargement, APRÈS une transition d'étape/vue → voile", async () => {
     const qc = newClient();
     renderVeil(<QueryProbe />, qc);
+    await flush(); // la query est en premier chargement (jamais résolue), mais aucun geste encore
+
+    // Le gestionnaire change d'étape/de vue → la fenêtre « page » s'arme, le chargement en vol voile.
+    act(() => armNavTransition());
     await flush();
 
     expect(content()).toHaveAttribute("inert");
@@ -142,14 +163,15 @@ describe("ActionVeil — premier chargement vs refetch d'arrière-plan (Changeme
     expect(screen.getByRole("status")).toBeInTheDocument();
   });
 
-  it("refetch d'arrière-plan (données EN CACHE) → JAMAIS de voile", async () => {
+  it("refetch d'arrière-plan (données EN CACHE), même après une transition → JAMAIS de voile", async () => {
     const qc = newClient();
     qc.setQueryData(["probe"], { x: 1 });
     renderVeil(<QueryProbe />, qc);
+    act(() => armNavTransition());
     await flush();
     await advance(300);
 
-    // La query refetch (queryFn ne résout jamais) mais data est présente → pas un premier chargement.
+    // data présente → pas un premier chargement, même sous une transition : rien ne voile.
     expect(content()).not.toHaveAttribute("inert");
     expect(overlay()).toBeNull();
   });

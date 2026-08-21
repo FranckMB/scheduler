@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { abortLongActions } from "@/shared/lib/longActionAbort";
+import { useNavTransition } from "@/shared/stores/navTransitionStore";
 import { toast } from "@/shared/stores/toastStore";
 
 import "./ActionVeil.css";
@@ -18,7 +19,12 @@ import "./ActionVeil.css";
  *  - Trois contextes : `Enregistrement` · `Changement de page` · `Traitement long`, priorité
  *    long > enregistrement > page.
  *  - Global par défaut, exemptions NOMMÉES par `meta.veil` (`false` = jamais ; `"long"` = long).
- *  - `Changement de page` = un PREMIER chargement (query sans données en cache), jamais un refetch.
+ *  - `Changement de page` = un premier chargement (query sans données en cache) QUI SUIT une
+ *    TRANSITION d'étape/vue déclenchée par le gestionnaire — jamais un refetch, et surtout JAMAIS
+ *    le simple montage d'un écran (règle corrigée le 2026-08-21, GO fondateur : le blocage à 0 ms
+ *    sert à manger le 2ᵉ clic d'un geste DÉJÀ parti ; une arrivée n'a rien lancé, et comme le voile
+ *    est invisible sous 250 ms, geler un formulaire déjà peint mange les frappes SANS retour visuel
+ *    — pire que pas de voile). Déclencheur : `shared/stores/navTransitionStore`.
  *  - Deux échappatoires : au bout de 10 s les contextes COURTS préviennent ET relâchent (une panne
  *    réseau ne doit pas geler l'app jusqu'au F5), le contexte LONG ne relâche JAMAIS au chrono
  *    (relâcher autoriserait un second déplacement concurrent) — il a un bouton « Abandonner ».
@@ -32,6 +38,7 @@ import "./ActionVeil.css";
  */
 
 const REVEAL_MS = 250; // le voile n'apparaît qu'au-delà (les clics, eux, sont bloqués dès 0 ms)
+const NAV_SETTLE_MS = 300; // fenêtre « page » : grâce après une transition (démarrage des requêtes + anti-voile-fantôme)
 const RELEASE_MS = 10_000; // contextes courts seulement : prévenir + relâcher
 const ROTATE_MS = 2_600; // rotation des phrases (contextes courts)
 const LONG_STEP_MS = [5_000, 12_000, 25_000] as const; // paliers du traitement long (le 4ᵉ persiste)
@@ -104,7 +111,35 @@ export function ActionVeil({ children }: { children: React.ReactNode }) {
   // Un PREMIER chargement seulement (pas de données en cache) — jamais un refetch d'arrière-plan.
   const firstLoads = useIsFetching({ predicate: (q) => false !== q.options.meta?.veil && undefined === q.state.data });
 
-  const context: Context | null = longPending > 0 ? "long" : savingCount > 0 ? "saving" : firstLoads > 0 ? "loading" : null;
+  // « Changement de page » — RÈGLE CORRIGÉE (GO fondateur 2026-08-21). Un premier chargement ne
+  // voile QUE s'il suit une TRANSITION déclenchée par le gestionnaire (changement d'étape/vue),
+  // JAMAIS sur le simple montage d'un écran : le blocage anti-double-clic sert à manger le 2ᵉ clic
+  // d'un geste déjà parti ; une arrivée n'a rien lancé. Et comme le voile est invisible sous
+  // 250 ms, geler un formulaire déjà peint mange les frappes SANS retour visuel — le pire échec.
+  const navToken = useNavTransition((s) => s.token);
+  const seenNavToken = useRef(navToken); // au montage : la valeur courante → une arrivée n'ouvre RIEN
+  const [navWindow, setNavWindow] = useState(false);
+  useEffect(() => {
+    if (navToken === seenNavToken.current) {
+      return; // pas de nouveau geste (couvre le tout premier rendu)
+    }
+    seenNavToken.current = navToken;
+    setNavWindow(true);
+  }, [navToken]);
+  // La fenêtre se referme au SETTLE (plus aucun premier chargement en vol), après un court délai. Ce
+  // délai fait DEUX choses : il laisse les requêtes déclenchées par le geste DÉMARRER (elles partent
+  // au tick suivant, `firstLoads` est encore 0 à l'instant du geste), et il GARANTIT que la fenêtre
+  // ne peut pas rester armée si le geste ne lance aucune requête — sinon un voile fantôme resterait.
+  useEffect(() => {
+    if (!navWindow || firstLoads > 0) {
+      return;
+    }
+    const t = setTimeout(() => setNavWindow(false), NAV_SETTLE_MS);
+    return () => clearTimeout(t);
+  }, [navWindow, firstLoads]);
+
+  const context: Context | null =
+    longPending > 0 ? "long" : savingCount > 0 ? "saving" : navWindow && firstLoads > 0 ? "loading" : null;
   const busy = null !== context;
 
   const [released, setReleased] = useState(false);

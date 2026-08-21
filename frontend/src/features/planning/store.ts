@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { armNavTransition } from "@/shared/stores/navTransitionStore";
+
 /**
  * Which resource axis drives the grid sub-columns. Same data, different display.
  *
@@ -36,9 +38,18 @@ export const usePlanningStore = create<PlanningState>()(
       selectedScheduleId: null,
       selectedSlotId: null,
       resourceFilter: [],
+      // Changer de vue ou de VERSION est une transition de navigation (lot C) : elle arme le
+      // contexte « Changement de page » du voile, exactement comme un changement d'étape du wizard.
+      // Le premier montage du planning, lui, n'arme rien — cf. `shared/stores/navTransitionStore`.
       // Switching view invalidates the resource selection (different resource set).
-      setViewMode: (viewMode) => set({ viewMode, resourceFilter: [], selectedSlotId: null }),
-      setSelectedScheduleId: (selectedScheduleId) => set({ selectedScheduleId, selectedSlotId: null }),
+      setViewMode: (viewMode) => {
+        armNavTransition();
+        set({ viewMode, resourceFilter: [], selectedSlotId: null });
+      },
+      setSelectedScheduleId: (selectedScheduleId) => {
+        armNavTransition();
+        set({ selectedScheduleId, selectedSlotId: null });
+      },
       setSelectedSlotId: (selectedSlotId) => set({ selectedSlotId }),
       toggleResource: (id) =>
         set((state) => ({

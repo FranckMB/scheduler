@@ -192,10 +192,18 @@ action rend la main : `inert` natif (React 19) sur le contenu + overlay qui capt
   elle voile. C'est le contraire qui se déclare — `meta: { veil: false }` — et une exemption sans
   raison écrite est une régression déguisée.
 - **Trois contextes**, priorité *long > enregistrement > page* : `meta: { veil: "long" }` pour le
-  rail de retouche (le verdict moteur, > 30 s mesuré sur un club dense) ; le premier chargement
-  d'une requête **sans données en cache** pour « changement de page » ; tout le reste est
-  « enregistrement ». ⚠ Un **refetch d'arrière-plan ne voile jamais** — le prédicat est
-  `undefined === q.state.data`, la même notion que `readState`.
+  rail de retouche (le verdict moteur, > 30 s mesuré sur un club dense) ; « changement de page »
+  pour le premier chargement d'une requête **sans données en cache** — mais **UNIQUEMENT s'il suit
+  une TRANSITION déclenchée par le gestionnaire** (changement d'étape du wizard, de vue/version du
+  planning ; déclencheur commun `shared/stores/navTransitionStore`, armé depuis les stores) ; tout
+  le reste est « enregistrement ». ⚠ Un **refetch d'arrière-plan ne voile jamais** (le prédicat est
+  `undefined === q.state.data`, la même notion que `readState`) — **et le simple montage d'un écran
+  non plus** (correction 2026-08-21, GO fondateur). Pourquoi : le blocage à 0 ms sert à manger le
+  2ᵉ clic d'un geste **déjà parti** ; une arrivée n'a rien lancé, il n'y a aucune double-soumission
+  à empêcher — et comme le voile est invisible sous 250 ms, geler un formulaire déjà peint mange
+  les frappes **sans le moindre retour visuel** (l'utilisateur croit son clavier mort). L'ancienne
+  règle voilait tout premier chargement : elle gelait le formulaire de l'étape 1 du wizard à
+  l'arrivée (`journey.spec.ts`, `veil-double-click.spec.ts`).
 - **Les seules exemptions légitimes à ce jour** : les 4 mutations de lancement de solve (elles
   rendent 202 et passent la main à `GenerationWaiting` — les voiler ferait clignoter voile → écran
   d'attente) et la query `useScheduleStatus` (son premier fetch vit sous cet écran).

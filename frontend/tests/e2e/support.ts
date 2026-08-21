@@ -126,3 +126,22 @@ export async function forceTheme(page: Page, mode: "dark" | "light"): Promise<vo
     { key: THEME_STORAGE_KEY, m: mode },
   );
 }
+
+/**
+ * Attend que le VOILE BLOQUANT (lot C, `app/ActionVeil`) se soit LEVÉ avant d'interagir.
+ *
+ * Le voile est LÉGITIME sur une TRANSITION déclenchée par le gestionnaire (changement d'étape du
+ * wizard, de vue/version du planning) : le temps que la destination charge ses données, le contenu
+ * passe `inert`. ⚠ Un `fill` tombé pendant l'`inert` est perdu EN SILENCE — Playwright n'attend
+ * PAS l'inert pour un `fill` (contrairement à un `click`, qui attend le hit-test de l'overlay).
+ * On respecte donc le voile, on ne le contourne pas : on attend qu'il se lève, comme un humain qui
+ * attend que la page réponde avant de taper. À appeler juste avant un `fill` qui suit une
+ * transition. Idempotent : sans voile, ne coûte que la petite fenêtre de détection.
+ */
+export async function settleVeil(page: Page): Promise<void> {
+  // Laisse la transition armer le voile (montage + démarrage des premiers chargements de la
+  // destination), puis attend sa levée. La temporisation borne la course « le voile n'est pas
+  // encore apparu » — sans elle, un `toBeHidden` immédiat passerait AVANT que le voile ne s'arme.
+  await page.waitForTimeout(120);
+  await expect(page.getByTestId("action-veil")).toBeHidden({ timeout: 20_000 });
+}
