@@ -20,8 +20,10 @@ use Symfony\Contracts\HttpClient\ResponseInterface;
  * D2 — the PDF export gains a second section : a "team × day" matrix (rows = teams,
  * columns = the days actually used, cell = gym + time, NO coach), grouped by priority
  * tier S→A→B→C→D. It is a MULTI-page, back-compatible add : the manager grid (page 1)
- * and the single-section worker payload do not change ; the matrix only appears on a
- * genuinely multi-venue export, and each rank group is kept whole in pagination.
+ * and the single-section worker payload do not change ; chaque groupe de rang est gardé
+ * entier dans la pagination. ⚑ Depuis le 2026-08-21 la matrice est rendue TOUJOURS, quel que
+ * soit le nombre de gymnases (décision fondateur) — le seuil « ≥ 2 gymnases » venait d'une
+ * justification de déclencheur prise pour la raison d'être de la vue.
  *
  * The pure builders are exercised through reflection with a hand-built ScheduleExportData
  * (its collaborators are `final` and not doubled), exactly like the XLSX sibling test.
@@ -31,20 +33,23 @@ use Symfony\Contracts\HttpClient\ResponseInterface;
 #[Group('phase1')]
 final class PdfTeamDayMatrixTest extends TestCase
 {
-    public function testMatrixAppearsOnlyWhenPlacementsSpanTwoVenues(): void
+    public function testTheMatrixIsRenderedEvenOnASingleVenueClub(): void
     {
-        // Two venues among the PLACEMENTS → matrix. The trigger reads the reality of the
-        // placements, never the $data->venues map (which lists every club venue).
-        self::assertTrue($this->hasMatrix($this->data([
-            $this->slot('t-a', 'v-a', 1, '18:30'),
-            $this->slot('t-b', 'v-b', 3, '20:00'),
-        ])));
-
-        // Same $venues map, but every placement in ONE venue → no matrix (mono-gymnase rule).
-        self::assertFalse($this->hasMatrix($this->data([
+        // ⚑ Décision fondateur 2026-08-21 — **les DEUX vues, toujours.** La matrice était
+        // conditionnée à « ≥ 2 gymnases parmi les placements », au motif qu'elle « lève
+        // l'ambiguïté sur le gymnase » : c'était la justification d'un DÉCLENCHEUR, pas la
+        // raison d'être de la vue. Les deux répondent à deux questions différentes — la grille
+        // dit « qui occupe quel gymnase ce jour-là », la matrice dit « quand s'entraîne CETTE
+        // équipe », une ligne à lire. Un club mono-gymnase a le même besoin.
+        $singleVenue = $this->buildMatrix($this->data([
             $this->slot('t-a', 'v-a', 1, '18:30'),
             $this->slot('t-b', 'v-a', 3, '20:00'),
-        ])), 'un seul gymnase distinct parmi les placements : pas de matrice, même si le club a d’autres gymnases');
+        ]));
+
+        self::assertStringContainsString('U13 F', $singleVenue, 'un club mono-gymnase doit AUSSI recevoir sa matrice équipes × jours');
+        self::assertStringContainsString('U15 M', $singleVenue);
+        // Et la matrice porte bien son sens : le gymnase et l'heure, pas seulement le nom.
+        self::assertStringContainsString('18:30', $singleVenue);
     }
 
     public function testMatrixCellCarriesVenueAndTimeButNeverTheCoach(): void
@@ -165,7 +170,14 @@ final class PdfTeamDayMatrixTest extends TestCase
      * pdf-worker n'a pas puppeteer côté frontend). Un export mono-section envoie EXACTEMENT
      * l'ancien payload — aucune clé `multiSection` ; un export multi-section l'ajoute à true.
      */
-    public function testSingleSectionWorkerPayloadIsUnchangedAndMultiSectionAddsTheFlag(): void
+    /**
+     * ⚑ Le payload ne connaît plus qu'un seul mode. Il portait `multiSection` **seulement**
+     * quand une matrice était présente, pour que le chemin mono-section du worker reste
+     * byte-identique à l'historique. Depuis le 2026-08-21 la matrice est TOUJOURS rendue
+     * (décision fondateur) : il n'y a plus de mono-section à préserver, et laisser le drapeau
+     * conditionnel n'aurait fait que garder un chemin mort des deux côtés.
+     */
+    public function testTheWorkerPayloadAlwaysCarriesTheMultiSectionFlag(): void
     {
         $captured = [];
         $client = new MockHttpClient(function (string $method, string $url, array $options) use (&$captured): ResponseInterface {
@@ -179,12 +191,10 @@ final class PdfTeamDayMatrixTest extends TestCase
         $prop->setValue($generator, $client);
         $call = new ReflectionMethod(PdfGenerator::class, 'callWorker');
 
-        $call->invoke($generator, '<html></html>', 'schedule-x-all.pdf', false);
-        $call->invoke($generator, '<html></html>', 'schedule-x-all.pdf', true);
+        $call->invoke($generator, '<html></html>', 'schedule-x-all.pdf');
 
-        self::assertSame(['html', 'filename', 'landscape'], array_keys($captured[0]), 'mono-section : payload historique inchangé, aucune clé en plus');
-        self::assertArrayNotHasKey('multiSection', $captured[0]);
-        self::assertTrue($captured[1]['multiSection'] ?? null, 'multi-section : le drapeau est ajouté à true');
+        self::assertSame(['html', 'filename', 'landscape', 'multiSection'], array_keys($captured[0]), 'le payload porte exactement ces quatre clés — aucune de plus (le PNG et sa `pngSection` sont retirés)');
+        self::assertTrue($captured[0]['multiSection'], 'les deux sections partent toujours');
     }
 
     /**
@@ -303,13 +313,6 @@ final class PdfTeamDayMatrixTest extends TestCase
             coachNames: $coachNames,
             teamRanks: $teamRanks,
         );
-    }
-
-    private function hasMatrix(ScheduleExportData $data): bool
-    {
-        $generator = new ReflectionClass(PdfGenerator::class)->newInstanceWithoutConstructor();
-
-        return (bool) new ReflectionMethod(PdfGenerator::class, 'hasMatrix')->invoke($generator, $data);
     }
 
     private function buildMatrix(ScheduleExportData $data, ?string $venueId = null): string

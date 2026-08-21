@@ -1,4 +1,4 @@
-Last verified @ 2026-08-21 (régénéré après `docker compose restart php-fpm` — piège opcache, `backend/AGENTS.md` §17 — pour la garde précoce de move : le 422 de `POST /api/schedule-slots/{id}/move` annonce désormais `slot_unavailable` — **0 path ajouté/retiré**, deux descriptions seules du 422 existant)
+Last verified @ 2026-08-21 (régénéré après `docker compose restart php-fpm` — piège opcache, `backend/AGENTS.md` §17. Deux changements du même jour, dans cet ordre : (1) la garde précoce de move — le 422 de `POST /api/schedule-slots/{id}/move` (#680) ; (2) le **retrait de l'export PNG** — la propriété `pngExportUrl` disparaît des schémas `Schedule`. **Aucun path ajouté ni supprimé** par (2) : c'est un retrait de propriété pur)
 
 Changements récents :
 - **Garde précoce de move sur la grille (2026-08-21)** : **0 path** — `POST /api/schedule-slots/{id}/move`

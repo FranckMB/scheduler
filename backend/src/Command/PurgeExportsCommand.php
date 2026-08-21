@@ -18,7 +18,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 /**
  * P4-52 — la rétention des rendus d'export.
  *
- * Les PDF/PNG s'écrivent dans `public/exports` (`PdfGenerator`) et **ne repartaient jamais** :
+ * Les PDF s'écrivent dans `public/exports` (`PdfGenerator`) et **ne repartaient jamais** :
  * une saison de régénérations laisse autant de fichiers, indéfiniment.
  *
  * ⚑ Le rendu est servi **publiquement par design** (`nginx.prod.conf` : « SEC-14 : proxy
@@ -58,7 +58,7 @@ final class PurgeExportsCommand extends Command
      * (`PdfGenerator`), d'où la classe volontairement étroite : **ni `/` ni `.`** ne peuvent
      * entrer dans un nom accepté. Un `.+` aurait laissé passer `../../etc/passwd.pdf`.
      */
-    private const string RENDER_PATTERN = '/^schedule-([0-9a-f-]{36})-[a-z0-9-]+\.(pdf|png)$/i';
+    private const string RENDER_PATTERN = '/^schedule-([0-9a-f-]{36})-[a-z0-9-]+\.pdf$/i';
 
     public function __construct(
         private readonly ManagerRegistry $managerRegistry,

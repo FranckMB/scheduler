@@ -7,7 +7,7 @@ namespace App\Export;
 use App\Entity\ScheduleSlotTemplate;
 
 /**
- * Resolved data for one schedule export, shared by the PDF/PNG grid generator
+ * Resolved data for one schedule export, shared by the PDF grid generator
  * and the Excel generator so the slot fetch + name/colour maps live in one place
  * (previously copy-pasted across both). Rendering diverges; the data does not.
  *

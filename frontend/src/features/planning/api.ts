@@ -135,10 +135,9 @@ export interface Schedule {
    *  (season versions share the season plan; a period's versions share its plan). Groups the
    *  version selector, replacing the removed `calendarEntryId`. */
   schedulePlanId: string | null;
-  /** PDF/PNG export lifecycle (async worker): null | pending | generating | completed | failed. */
+  /** PDF export lifecycle (async worker): null | pending | generating | completed | failed. */
   pdfExportStatus?: string | null;
   pdfExportUrl?: string | null;
-  pngExportUrl?: string | null;
   /** Teams in the frozen solve input — divergence banner ("générée avec N équipes"). */
   generatedTeamCount?: number | null;
   /** Hash of the frozen solve input for this version. */
@@ -164,15 +163,12 @@ export interface Schedule {
 /** Export scope: all venues (null) or a single one. */
 export type ExportVenueScope = string | null;
 
-/** Queue a PDF+PNG export (async worker). Poll the schedule for pdfExportStatus/Url. */
-/** P3-20 — quelle VUE l'image PNG photographie. « grid » = la grille (défaut historique). */
-export type ExportView = "grid" | "club";
-
-export const exportSchedulePdf = (id: string, venueId: ExportVenueScope, view: ExportView = "grid"): Promise<unknown> =>
+/** Queue a PDF export (async worker). Poll the schedule for pdfExportStatus/Url. */
+export const exportSchedulePdf = (id: string, venueId: ExportVenueScope): Promise<unknown> =>
   api
     .post(`schedules/${id}/export-pdf`, {
       // Le corps reste VIDE dans le cas par défaut : mêmes octets qu'avant P3-20.
-      json: { ...(null === venueId ? {} : { venueId }), ...("club" === view ? { view } : {}) },
+      json: null === venueId ? {} : { venueId },
     })
     .json();
 

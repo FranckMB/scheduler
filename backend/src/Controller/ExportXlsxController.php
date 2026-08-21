@@ -18,7 +18,7 @@ use Symfony\Component\HttpKernel\Attribute\AsController;
 /**
  * Excel export of a schedule (flat data table). Synchronous — PhpSpreadsheet is
  * fast and needs no headless browser, so the .xlsx streams straight back as a
- * download instead of going through the async PDF/PNG worker queue.
+ * download instead of going through the async PDF worker queue.
  */
 #[AsController]
 final class ExportXlsxController extends AbstractController

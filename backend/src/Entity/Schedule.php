@@ -165,9 +165,6 @@ class Schedule implements TenantOwnedInterface
     #[ORM\Column(type: 'string', length: 2048, nullable: true)]
     private ?string $pdfExportUrl = null;
 
-    #[ORM\Column(type: 'string', length: 2048, nullable: true)]
-    private ?string $pngExportUrl = null;
-
     public function __construct()
     {
         $this->id = $this->newUuid();
@@ -521,18 +518,6 @@ class Schedule implements TenantOwnedInterface
     public function setPdfExportUrl(?string $pdfExportUrl): self
     {
         $this->pdfExportUrl = $pdfExportUrl;
-
-        return $this;
-    }
-
-    public function getPngExportUrl(): ?string
-    {
-        return $this->pngExportUrl;
-    }
-
-    public function setPngExportUrl(?string $pngExportUrl): self
-    {
-        $this->pngExportUrl = $pngExportUrl;
 
         return $this;
     }

@@ -82,7 +82,7 @@ final class ExportPdfHandlerRlsTest extends KernelTestCase
         $this->clearGuc();
 
         $pdfGenerator = $this->createMock(PdfGenerator::class);
-        $pdfGenerator->method('generate')->willReturn(['pdf' => '/exports/x.pdf', 'png' => null]);
+        $pdfGenerator->method('generate')->willReturn(['pdf' => '/exports/x.pdf']);
         $hub = $this->createMock(HubInterface::class);
         $hub->method('publish')->willReturnCallback(static fn (Update $u): string => 'id');
 
