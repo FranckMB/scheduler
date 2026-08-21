@@ -43,6 +43,31 @@ cycle RED → GREEN → REFACTOR avant d'être considéré livrable.
 
 ### Outils de test (versions fixées)
 
+**Deux plafonds, pas un — et ils ne se recouvrent pas** (P4-116, 2026-08-21). Un test d'écran
+peut rougir de deux façons qui n'ont pas la même cause et ne se règlent pas au même endroit :
+
+| Plafond | Qui l'impose | Valeur | Ce qu'il garde |
+|---|---|---|---|
+| `testTimeout` | Vitest (`vitest.config.ts`) | **15 s** (défaut 5 s) | transformer un test **PENDU** en échec |
+| `asyncUtilTimeout` | testing-library (`src/test/setup.ts`) | **5 s** (défaut **1 s**) | le budget de `findBy*` / `waitFor` |
+
+⚠ **`findBy*` et `waitFor` n'obéissent PAS à `testTimeout`.** C'est le piège qui a rendu le
+diagnostic d'origine incomplet : un `findByRole` qui abandonne au bout d'une seconde rapporte
+« Unable to find an element », un échec qui RESSEMBLE à une assertion fausse — on ne le relie
+pas spontanément à la charge de la machine. Les échecs mesurés sous contention tombaient à
+**1,3 s**, très loin des 5 s qu'on croyait en cause.
+
+⚑ **Pourquoi 15 s et pas 5 s.** Le cas le plus lourd du dépôt met **5,2 s sans aucune charge
+concurrente** (`PeriodStructure.test.tsx` › « déplacer un créneau réservé » : une grille hebdo
+entière, des centaines de cellules, re-rendue à chacun de ses quatre gestes). C'est du travail
+réel. Un plafond qui rougit là-dessus ne mesure plus rien — il produit du bruit selon qui
+tourne à côté. ⚠ **Le corollaire à ne pas perdre** : `slowTestThreshold` est posé à **3 s** pour
+que « lent » veuille encore dire quelque chose maintenant que le plafond a bougé (le défaut de
+300 ms surlignait à peu près tous les tests d'écran, donc ne signalait plus rien). Un test
+au-delà de 3 s est colorié dans le rapport : c'est là qu'on regarde si le scénario a dérivé,
+**avant** qu'il n'atteigne le plafond.
+
+
 | Outil | Version (`frontend/package.json`) | Rôle |
 |------|---------|------|
 | Vitest | 4.x | Runner de test (config `vitest.config.ts` : jsdom, `globals`, setup `src/test/setup.ts`, exclut `tests/e2e/`) |
