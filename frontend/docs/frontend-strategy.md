@@ -140,7 +140,7 @@ sur la confirmation d'un geste destructif, et sa ligne la plus proche dit « no 
 scroll », l'axe opposé. **Il n'aurait pas attrapé le défaut de reflow du même jour.** Ce qui
 valide, ce sont les gardes : Vitest, l'e2e Playwright, les tests d'a11y.
 
-Ce qu'il apporte quand on le sollicite, mesuré deux fois :
+Ce qu'il apporte quand on le sollicite, mesuré trois fois :
 
 - **Landing, PR #502** (apparence) : 2 échecs WCAG de contraste invisibles aux gardes jsdom, 2 bugs
   de rendu, une rupture de ton, et 17 tirets cadratins de cadence IA.
@@ -153,6 +153,16 @@ Ce qu'il apporte quand on le sollicite, mesuré deux fois :
   listé sept manques (barème `z-index`, retour du focus, flou trompeur, contraste par thème, chemin
   d'échec, chiffres tabulaires, `inert`). **Aucun de ces défauts n'était visuel** — c'est pourquoi la
   règle ne parle plus seulement d'apparence.
+- **Largeurs, 2026-08-21** (P4-107 3ᵉ tranche) : il a imposé **une borne à la décision** — une
+  échelle qui grandit avec le viewport doit TERMINER sur un plafond fixe (`DON'T Full-width text on
+  large screens`, `DON'T Let text span full viewport width`) — et rappelé la seule mesure chiffrée
+  de son corpus, 65-75 caractères par ligne, **valable à l'intérieur d'un conteneur élargi** : c'est
+  d'elle que vient le `[&_p]:max-w-prose` de `FichePage`. ⚑ **Et une de ses conclusions a été
+  ÉCARTÉE, ce qui vaut d'être écrit** : il désignait le vrai coupable dans le shell pleine largeur
+  (son corpus nomme `w-full (no max-width)` comme l'anti-pattern) et prescrivait de le re-capper à
+  `max-w-7xl`. C'est la décision fondateur du 2026-08-18, prise sur usage réel d'écrans denses —
+  **une règle générique de corpus ne renverse pas un retour terrain**. La passe TRANCHE contre un
+  corpus ; elle ne connaît ni l'usage ni l'historique du produit.
 
 ---
 

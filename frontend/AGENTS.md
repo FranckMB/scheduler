@@ -232,9 +232,16 @@ POST/PUT/DELETE'd immediately via TanStack mutations. "Suivant" only validates a
 
 ## Primitives that matter (`shared/components/ui/`)
 
-Beyond the obvious (`button`, `input`, `select`, `card`, `modal`, `menu`, `accordion`), three
-carry product rules — reuse them instead of rolling your own:
+Beyond the obvious (`button`, `input`, `select`, `card`, `menu`, `accordion`), these carry
+product rules — reuse them instead of rolling your own:
 
+- **`modal`** — its width is a **named palier** (`size`: sm/md/lg/xl), and there is deliberately
+  **no `className` prop**: six callers had each patched their own `max-w-…` before P4-107's 3rd
+  tranche. The scale and its ceilings live in `MODAL_WIDTH` — see `frontend/docs/frontend-spec.md`
+  §6.9.
+- **`fiche-page`** — the frame of a "fiche" screen (Club, Profil, Nouveautés): 832 px centred,
+  with help paragraphs bounded to a readable line length. A new fiche uses it; it never rolls its
+  own `mx-auto max-w-*` (same §6.9).
 - **`delete-confirm`** — destructive confirmation that *announces its impacts* ("N réservations
   seront retirées"). Deleting without stating what it takes away is the bug it exists to prevent.
 - **`load-error-hint`** — "the read failed, here is a retry". Pairs with `readState` below.

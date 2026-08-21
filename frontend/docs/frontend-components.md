@@ -1,6 +1,6 @@
 # FORWARD Components Spec — Pages & Shared Components (hors wizard)
 
-Last verified @ 2026-08-19 (**rotation de fraîcheur** — re-vérifié contre `frontend/src/shared/components/ui/` : **aucun composant cité qui n'existe pas** (les chemins référencés résolvent tous), et le doc ne documente PAS la prop `impacts` de `DeleteConfirm`, supprimée la veille — donc rien à y corriger de ce côté. ⚠ Vérification HONNÊTEMENT PARTIELLE et je le dis : ce fichier fait plus de 1000 lignes et ne cite qu'un seul chemin de composant ; ce qui a été confronté, ce sont les chemins et les changements RÉCENTS, pas chacune de ses affirmations d'usage. Un prochain passage devra le découper ou le confronter écran par écran) — *(historique des passes retiré le 2026-08-19, audit DOC-33 : 3 entrées empilées. Un stamp REMPLACE, il ne s'empile pas ; l'historique vit dans git : `git log -p --follow frontend/docs/frontend-components.md`)*
+Last verified @ 2026-08-21 (re-vérifié contre `frontend/src/shared/components/ui/` à l'occasion de P4-107 3ᵉ tranche : le tableau des primitives partagées annonçait pour `Modal` une prop **`open` qui n'a jamais existé** — le composant se monte conditionnellement par l'appelant — et ignorait `label` ; `ConfirmDialog` était décrit avec un `message` inexistant (c'est `description`) et sans `confirmPhrase`. Les deux lignes sont corrigées et la nouvelle primitive `FichePage` y entre. ⚠ Vérification HONNÊTEMENT PARTIELLE, et je le redis : ce fichier fait plus de 1000 lignes ; ce qui a été confronté au code cette fois, ce sont les **props des primitives partagées** et les chemins qu'elles citent, pas chacune de ses affirmations d'usage écran par écran. Le découpage réclamé par la passe précédente reste à faire)
 
 > 🛑 **Ce document est SUPERSEDED. Il ne décrit pas le frontend livré.**
 >
@@ -539,9 +539,10 @@ de la présentation + accessibilité.
 | `EmptyState` | État vide avec icône + message + action optionnelle | `icon`, `title`, `description`, `action` | DiagnosticsPage, TierListPage |
 | `Menu` / `MenuItem` | Dropdown accessible (burger, motif APG menu-button) — focus au 1er item à l'ouverture, flèches ↑/↓ (roving), Esc/Tab ferment + rendent le focus au déclencheur, clic-dehors, `z-50` au-dessus du plein écran wizard, sans dépendance | `label`, `trigger`, `children` / `onSelect` \| `to` (NavLink, état actif), `icon` | AppLayout (menu compte : Club · Profil · Thème · Logout) |
 | `AccordionSection` | Section dépliable (`aria-expanded`/`aria-controls`, chevron) | `title`, `defaultOpen`, `children` | ClubPage (sections Demandes / Visuel) |
-| `Modal` | Modal accessible (focus trap, Escape, backdrop) | `open`, `onClose`, `title`, `children` | PostEditDialog, confirmations |
+| `Modal` | Modal accessible (focus trap, Escape, backdrop), **hauteur bornée + contenu défilant**, **largeur par palier nommé** | `label`, `title`, `onClose`, `children`, `size` (`sm`\|`md`\|`lg`\|`xl`, défaut `md`) | cockpit, wizard, matchs, planning, admin |
+| `FichePage` | Le cadre des pages « fiche » : 832 px centrés + paragraphes bornés à la longueur de ligne lisible | `className` (rythme vertical de la page), `children` | ClubPage, ProfilePage, ReleaseNotesPage |
 | `Toast` | Notification temporaire (succès, erreur, info) | `variant`, `message`, `duration` | Toutes les pages (mutations) |
-| `ConfirmDialog` | Dialogue de confirmation (action destructive) | `title`, `message`, `confirmLabel`, `onConfirm` | Suppression d'équipe, reset planning |
+| `ConfirmDialog` | Dialogue de confirmation (action destructive) — panneau jumeau de `Modal`, **largeur lue dans `MODAL_WIDTH.sm`** | `open`, `title`, `description`, `confirmLabel`, `confirmPhrase`, `onConfirm`, `onCancel` | Suppression d'équipe, reset club |
 
 ### Règles shared components
 
