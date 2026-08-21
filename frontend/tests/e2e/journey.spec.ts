@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { registerAndVerify, settleVeil, uniqueAra } from "./support";
+import { registerAndVerify, uniqueAra } from "./support";
 
 /**
  * THE end-to-end journey (audit P0.2, FRT-05): a fresh club walks the whole
@@ -29,10 +29,6 @@ test("full journey: wizard → generation → validated planning → cockpit", a
 
   // --- Step 2 · venue + two weekly slots (2 sessions to place).
   await expect(page.getByRole("heading", { name: /Étape 2\/6/ })).toBeVisible();
-  // Le clic « Suivant » est une transition d'étape → le voile bloquant (lot C) s'interpose le temps
-  // que l'étape charge. On attend sa LEVÉE avant de saisir : un `fill` tombé pendant l'inert est
-  // perdu en silence (cf. `settleVeil`). On respecte le voile, on ne le contourne pas.
-  await settleVeil(page);
   await page.getByLabel("Nom du gymnase").fill("Gymnase E2E");
   await page.getByRole("button", { name: "Ajouter un gymnase" }).click();
   // Created venue is auto-selected in the venue picker; the grid is open.
@@ -56,7 +52,6 @@ test("full journey: wizard → generation → validated planning → cockpit", a
 
   // --- Step 3 · coach.
   await expect(page.getByRole("heading", { name: /Étape 3\/6/ })).toBeVisible();
-  await settleVeil(page); // même raison qu'à l'étape 2 : attendre la levée du voile de transition
   await page.getByLabel("Prénom").fill("Coa");
   await page.getByLabel("Nom", { exact: true }).fill("Ch");
   await page.getByRole("button", { name: "Ajouter le coach" }).click();

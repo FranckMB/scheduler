@@ -149,18 +149,38 @@ describe("ActionVeil — « Changement de page » : un premier chargement ne voi
     expect(overlay()).toBeNull();
   });
 
-  it("le MÊME premier chargement, APRÈS une transition d'étape/vue → voile", async () => {
+  it("APRÈS une transition : le blocage n'arrive qu'à 250 ms (voile visible), PAS à 0 ms", async () => {
     const qc = newClient();
     renderVeil(<QueryProbe />, qc);
-    await flush(); // la query est en premier chargement (jamais résolue), mais aucun geste encore
+    await flush(); // premier chargement en vol (jamais résolu), aucun geste encore
 
-    // Le gestionnaire change d'étape/de vue → la fenêtre « page » s'arme, le chargement en vol voile.
+    // Transition → la fenêtre « page » s'arme. MAIS sur un chargement rien n'est parti : avant que
+    // le voile ne soit VISIBLE, on ne bloque PAS (sinon on mange des frappes en silence).
     act(() => armNavTransition());
     await flush();
+    expect(content()).not.toHaveAttribute("inert"); // ROUGE sous l'ancienne règle (inert dès 0 ms)
+    expect(overlay()).toBeNull();
 
-    expect(content()).toHaveAttribute("inert");
+    // À 250 ms : le voile devient VISIBLE et le blocage COMMENCE, au même instant.
     await advance(250);
+    expect(content()).toHaveAttribute("inert");
+    expect(overlay()).toBeInTheDocument();
     expect(screen.getByRole("status")).toBeInTheDocument();
+  });
+
+  it("ANTI-fusion : le contexte `enregistrement`, lui, reste `inert` DÈS 0 ms (asymétrie voulue)", async () => {
+    // Garde-fou : `page` bloque à 250 ms, mais `enregistrement` protège un geste RÉELLEMENT parti et
+    // bloque à 0 ms. Cette asymétrie est le cœur du réglage — la falsifier interdit de « simplifier »
+    // les deux contextes en un seul plus tard.
+    const ctl = createRef<Ctl>();
+    const qc = newClient();
+    renderVeil(<MutationProbe ref={ctl} />, qc);
+
+    act(() => ctl.current!.start());
+    await flush();
+
+    expect(content()).toHaveAttribute("inert"); // 0 ms, bien avant tout REVEAL
+    expect(screen.queryByRole("status")).toBeNull(); // et pourtant invisible avant 250 ms
   });
 
   it("refetch d'arrière-plan (données EN CACHE), même après une transition → JAMAIS de voile", async () => {

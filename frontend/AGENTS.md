@@ -185,8 +185,10 @@ data; avoiding it would mean duplicating the auth decision into a per-route `loa
 ### Toute mutation VOILE l'écran — l'exemption se déclare, elle ne se devine pas
 
 Lot C (2026-08-21). `app/ActionVeil.tsx`, monté dans `Providers`, bloque l'écran pendant qu'une
-action rend la main : `inert` natif (React 19) sur le contenu + overlay qui capte les clics **dès
-0 ms**, voile **visible seulement après 250 ms** (sinon il clignote à chaque clic de 90 ms).
+action rend la main : `inert` natif (React 19) sur le contenu + overlay qui capte les clics. Le
+voile n'est **visible qu'après 250 ms** (sinon il clignote à chaque clic de 90 ms). ⚠ **Le MOMENT
+du blocage dépend du contexte** — 0 ms pour `enregistrement`/`long`, 250 ms pour `changement de
+page` : voir la puce dédiée.
 
 - **Le régime est GLOBAL par défaut.** Tu n'as rien à câbler en écrivant une nouvelle mutation :
   elle voile. C'est le contraire qui se déclare — `meta: { veil: false }` — et une exemption sans
@@ -204,6 +206,16 @@ action rend la main : `inert` natif (React 19) sur le contenu + overlay qui capt
   les frappes **sans le moindre retour visuel** (l'utilisateur croit son clavier mort). L'ancienne
   règle voilait tout premier chargement : elle gelait le formulaire de l'étape 1 du wizard à
   l'arrivée (`journey.spec.ts`, `veil-double-click.spec.ts`).
+- **Le MOMENT du blocage n'est PAS le même selon le contexte** (asymétrie voulue, GO fondateur
+  2026-08-21 — dérivé `blocking` dans `ActionVeil`) : `enregistrement` et `traitement long` bloquent
+  **dès 0 ms** (ils protègent un geste RÉELLEMENT parti, dont le blocage immédiat mange le 2ᵉ clic) ;
+  `changement de page` ne bloque qu'**à 250 ms**, quand le voile devient VISIBLE. Pourquoi : sur un
+  CHARGEMENT rien n'est parti, aucune double-soumission à empêcher — rien à protéger avant que
+  l'utilisateur ne VOIE pourquoi il est bloqué ; bloquer à 0 ms (voile encore invisible) mangerait
+  des frappes **en silence**, à l'arrivée comme sur une transition. Effet : transition < 250 ms → la
+  saisie rentre, aucun `inert` ; transition lente → l'écran se fige ET le montre. ⚠ Ne jamais fondre
+  les deux régimes en un seul : le NR `ActionVeil.test` garde l'asymétrie (`enregistrement` inert dès
+  0 ms, `page` pas avant 250 ms).
 - **Les seules exemptions légitimes à ce jour** : les 4 mutations de lancement de solve (elles
   rendent 202 et passent la main à `GenerationWaiting` — les voiler ferait clignoter voile → écran
   d'attente) et la query `useScheduleStatus` (son premier fetch vit sous cet écran).

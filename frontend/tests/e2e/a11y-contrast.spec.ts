@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoContrastViolations, forceTheme, registerAndVerify, uniqueAra } from "./support";
+import { expectNoContrastViolations, forceTheme, registerAndVerify, settleVeil, uniqueAra } from "./support";
 
 /**
  * WCAG 2.2 AA colour-contrast (1.4.3) on the real rendered app — the axis jsdom
@@ -49,6 +49,13 @@ for (const mode of MODES) {
     await page.getByRole("button", { name: "Ajouter l'équipe" }).click();
     await page.getByRole("button", { name: "Suivant" }).click();
     await expect(page.getByRole("heading", { name: /Étape 2\/6/ })).toBeVisible();
+    // ⚠ Scanner un écran SETTLED, pas en pleine transition d'étape. Le clic « Suivant » est une
+    // transition (lot C) : le temps qu'elle se pose, la surbrillance de l'étape courante dans le
+    // rail n'a pas encore sa couleur finale (bref `text-muted-foreground` sur `bg-muted` ≈ 3.93).
+    // Avant que le voile ne diffère son blocage à 250 ms, l'`inert` couvrait ce sous-arbre et axe
+    // le SAUTAIT — un faux vert qui ne vérifiait rien de cet écran. On attend donc le settle : axe
+    // valide alors la vraie couleur (`text-foreground`, AA). cf. `settleVeil`.
+    await settleVeil(page);
     await expectNoContrastViolations(page, `wizard · gymnases (${mode})`);
   });
 }

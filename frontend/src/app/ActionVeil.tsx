@@ -14,8 +14,12 @@ import "./ActionVeil.css";
  * gestionnaire voit apparaître n'importe quoi.
  *
  * Décisions tranchées (fondateur) :
- *  - Blocage IMMÉDIAT (inert + overlay), voile visible seulement à ~250 ms : un clic de 90 ms est
- *    mangé sans que rien ne clignote.
+ *  - Blocage à 0 ms (inert + overlay) pour `Enregistrement` et `Traitement long` — ils protègent un
+ *    geste RÉELLEMENT parti, dont le blocage immédiat mange le 2ᵉ clic ; voile visible seulement à
+ *    ~250 ms, donc un clic de 90 ms est mangé sans que rien ne clignote. ⚠ Le `Changement de page`,
+ *    lui, ne bloque qu'à 250 ms — quand le voile est VISIBLE (voir `blocking`, GO fondateur
+ *    2026-08-21) : sur un chargement rien n'est parti, rien à protéger avant que l'utilisateur ne
+ *    VOIE pourquoi il est bloqué — sinon des frappes sont mangées en silence.
  *  - Trois contextes : `Enregistrement` · `Changement de page` · `Traitement long`, priorité
  *    long > enregistrement > page.
  *  - Global par défaut, exemptions NOMMÉES par `meta.veil` (`false` = jamais ; `"long"` = long).
@@ -150,6 +154,17 @@ export function ActionVeil({ children }: { children: React.ReactNode }) {
   // Une fois relâché (10 s), on le reste JUSQU'AU SETTLE — sinon le voile reviendrait et clignoterait.
   const active = busy && !released;
 
+  // MOMENT du blocage (`inert` + overlay) — asymétrie VOULUE (GO fondateur 2026-08-21) :
+  //  - `enregistrement` et `long` bloquent dès 0 ms (`active`) : ils protègent un geste RÉELLEMENT
+  //    parti, et le blocage immédiat mange son 2ᵉ clic — c'est leur raison d'être.
+  //  - `page` (changement d'étape/vue) ne bloque qu'à 250 ms, quand le voile devient VISIBLE
+  //    (`showPanel`) : sur un CHARGEMENT rien n'est parti, aucune double-soumission à empêcher, donc
+  //    rien à protéger avant que l'utilisateur ne VOIE pourquoi. Effet : transition < 250 ms → la
+  //    saisie rentre normalement, aucun `inert` ; transition lente → l'écran se fige ET le montre —
+  //    plus une seule frappe mangée en silence, ni à l'arrivée ni sur une transition.
+  //  ⚠ Ne JAMAIS fondre les deux régimes en un seul : le NR `ActionVeil.test` garde l'asymétrie.
+  const blocking = active && ("loading" !== context || showPanel);
+
   // Focus : on SUIT le dernier élément réellement focalisé (focusin), pour le mémoriser À
   // L'OUVERTURE du voile — l'`inert` (React 19.2, natif) déplace le focus vers le body SANS émettre
   // de focusin, donc la réf garde bien l'élément d'AVANT. Restauré à la levée (settle, relâche,
@@ -166,8 +181,10 @@ export function ActionVeil({ children }: { children: React.ReactNode }) {
     document.addEventListener("focusin", onFocusIn);
     return () => document.removeEventListener("focusin", onFocusIn);
   }, []);
+  // Clé sur `blocking`, pas `active` : le focus n'est déplacé que quand l'`inert` s'applique
+  // réellement (donc à 250 ms pour le contexte page). Sauver/restaurer autour de CE moment.
   useEffect(() => {
-    if (active) {
+    if (blocking) {
       restoreTarget.current = lastFocus.current;
       return;
     }
@@ -176,10 +193,11 @@ export function ActionVeil({ children }: { children: React.ReactNode }) {
     if (null !== target && target.isConnected) {
       target.focus();
     }
-  }, [active]);
+  }, [blocking]);
 
-  // Phase 1 : le voile devient VISIBLE à 250 ms (les clics sont déjà bloqués depuis 0 ms). Le reset
-  // vit dans le cleanup — pas de setState synchrone dans le corps d'un effet (lint du dépôt).
+  // Phase 1 : le voile devient VISIBLE à 250 ms. Pour `enregistrement`/`long` les clics sont déjà
+  // bloqués depuis 0 ms ; pour `page`, le blocage COMMENCE ici (voir `blocking`). Le reset vit dans
+  // le cleanup — pas de setState synchrone dans le corps d'un effet (lint du dépôt).
   useEffect(() => {
     if (!active) {
       return;
@@ -246,16 +264,18 @@ export function ActionVeil({ children }: { children: React.ReactNode }) {
     <>
       {/* `display:contents` : transparent à la mise en page. `inert` natif (React 19.2) : pas de
           ref manuelle. Le contenu derrière est neutralisé dès que ça bloque. */}
-      <div data-testid="veil-content" style={{ display: "contents" }} inert={active || undefined}>
+      <div data-testid="veil-content" style={{ display: "contents" }} inert={blocking || undefined}>
         {children}
       </div>
-      {active
+      {blocking
         ? createPortal(
             <div
               data-testid="action-veil"
-              // pointer-events auto DÈS la phase 0 (transparent) : le clic est capté avant même
-              // que le voile ne s'affiche. Scrim OPAQUE (bg-background/60) en phase 1, JAMAIS de
-              // blur (le flou signalerait « cliquable pour fermer », ce qui serait faux ici).
+              // L'overlay capte les clics tant que ça BLOQUE (voir `blocking`) : pour
+              // `enregistrement`/`long`, dès la phase 0 transparente (le clic est capté avant même
+              // que le voile ne s'affiche) ; pour `page`, seulement à 250 ms, une fois VISIBLE.
+              // Scrim OPAQUE (bg-background/60) en phase 1, JAMAIS de blur (le flou signalerait
+              // « cliquable pour fermer », ce qui serait faux ici).
               className={`fixed inset-0 z-[60] flex items-center justify-center p-4 transition-colors ${showPanel ? "bg-background/60" : "bg-transparent"}`}
             >
               {showPanel && null !== context ? (
