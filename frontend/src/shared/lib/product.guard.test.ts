@@ -13,18 +13,18 @@ import { PRODUCT_NAME, PUBLISHER_NAME } from "./product";
  * renommage coûteux — des libellés d'écran à retrouver un par un. Un
  * « ClubScheduler » littéral échoue ici, en nommant le fichier et la ligne.
  *
- * UN littéral technique reste, EXCLU par écrit et pour un temps borné : l'ANCIENNE
- * clé de brouillon de vœux (`clubscheduler:wish-draft:<token>`), que `wishDraft.ts`
- * n'ÉCRIT plus — il l'a renommée — mais LIT encore en repli, pour ne pas jeter la
- * saisie d'un coach en cours au moment du déploiement. C'est une clé de PERSISTANCE,
- * pas un texte lu par un humain, et le repli s'enlève après une saison
- * (`wishDraft.test.ts` garde les trois comportements). Une exclusion sans raison
- * écrite serait une régression déguisée.
+ * ⚑ La garde est ABSOLUE depuis le 2026-08-21 : plus AUCUNE exception. Il en restait une,
+ * bornée dans le temps — l'ancienne clé de brouillon de vœux, que `wishDraft.ts` n'écrivait
+ * plus mais lisait encore en repli pour ne pas jeter la saisie d'un coach à cheval sur un
+ * déploiement. Ce repli est SUPPRIMÉ : il protégeait une population vide (rien n'est en
+ * production, et le brouillon vit en `sessionStorage`, donc il meurt avec l'onglet — la
+ * fenêtre se réduisait à un onglet ouvert pile pendant un déploiement). Le retirer MAINTENANT
+ * coûte zéro ; après la mise en production, il aurait coûté le travail d'un bénévole.
+ * Corollaire : une exception qui reviendrait ici doit porter sa raison ET sa date de retrait,
+ * sinon elle devient permanente par oubli.
  */
 const SRC_ROOT = join(import.meta.dirname, "..", "..");
 
-/** Sous-chaîne technique tolérée : l'ANCIENNE clé de brouillon, lue en repli, jamais écrite. */
-const TECHNICAL_EXCEPTION = "clubscheduler:wish-draft:";
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = [];
@@ -54,7 +54,6 @@ describe("product identity", () => {
       const lines = readFileSync(file, "utf8").split("\n");
       lines.forEach((line, index) => {
         if (!/clubscheduler/i.test(line)) return;
-        if (line.includes(TECHNICAL_EXCEPTION)) return;
         offenders.push(`${file.replace(`${SRC_ROOT}/`, "")}:${index + 1}`);
       });
     }
