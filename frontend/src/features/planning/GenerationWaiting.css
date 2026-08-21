@@ -66,11 +66,45 @@
   100% { transform: translateY(126px); opacity: 0; }
 }
 
+/* État ARRÊTÉ (P5-14 PR-2 — « le service de calcul ne répond pas »). La classe `gw-halted` vit
+   sur le cadre : le décor tourne au ralenti SANS faire croire qu'un calcul avance. Cases VIDES
+   (opacity 0), animations neutralisées, chrono barré ; le seul mouvement est le ballon posé au
+   sol (rendu hors `gw-anim`, cf. ci-dessous).
+
+   ⚠ PIÈGE VÉRIFIÉ : le bloc `prefers-reduced-motion` plus bas force `.gw-anim { opacity: 1
+   !important }` (cases PLEINES, l'état final de l'ATTENTE). Transposé tel quel à l'arrêt, un
+   utilisateur reduced-motion verrait une grille PLEINE sous un titre « service en panne » — un
+   faux état de SUCCÈS (passe de design P5-14). L'override d'arrêt DOIT battre ce bloc : la
+   spécificité `.gw-halted .gw-anim` (0,2,0) l'emporte sur `.gw-anim` (0,1,0), à !important égal,
+   quel que soit le media. Résultat : sous reduced-motion EN arrêté → tout statique, cases VIDES. */
+.gw-halted .gw-anim {
+  animation: none !important;
+  opacity: 0 !important;
+}
+
+/* Le ballon au repos qui roule doucement (arrêt). Une UNIQUE keyframe lente, ease-in-out,
+   aller-retour (pas de reprise brusque), sans avancer vers la grille (il ne « remplit » rien) :
+   « en vie mais à l'arrêt », jamais « ça calcule » — passe de design P5-14 (pas de rythme, pas
+   d'accumulation, un seul élément animé, 3-6 s+). Rendu HORS `gw-anim`, donc épargné par
+   l'override ci-dessus. */
+@keyframes gw-roll {
+  0% { transform: translateX(0) rotate(0deg); }
+  50% { transform: translateX(34px) rotate(52deg); }
+  100% { transform: translateX(0) rotate(0deg); }
+}
+.gw-restball {
+  animation: gw-roll 6s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 /* prefers-reduced-motion : animations coupées, ballon figé sur sa dernière case,
-   créneaux tous remplis. Comportement CONSERVÉ du design d'origine. */
+   créneaux tous remplis. Comportement CONSERVÉ du design d'origine (état ATTENTE).
+   Le ballon au repos de l'ARRÊT ne roule pas non plus (il est posé). */
 @media (prefers-reduced-motion: reduce) {
   .gw-anim { animation: none !important; opacity: 1 !important; }
   .gw-puffring { opacity: 0 !important; }
   .gw-bx { transform: translateX(180px); }
   .gw-by { transform: translateY(436px); }
+  .gw-restball { animation: none !important; }
 }

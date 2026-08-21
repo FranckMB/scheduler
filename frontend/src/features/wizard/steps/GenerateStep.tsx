@@ -8,7 +8,9 @@ import type { ToReplaceEntry } from "@/features/planning/lib/toReplaceReason";
 
 import { useMe } from "@/features/auth/queries";
 import { anchorIsWritable, useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
+import { isServiceDown } from "@/features/planning/lib/serviceFailure";
 import { isSeasonPlanType } from "@/features/planning/lib/versions";
+import { GenerationServiceDown } from "@/features/planning/GenerationServiceDown";
 import { GenerationWaiting } from "@/features/planning/GenerationWaiting";
 import { PlanningPage } from "@/features/planning/PlanningPage";
 import { useDiagnostics, useSchedules } from "@/features/planning/queries";
@@ -160,6 +162,17 @@ export function GenerateStep() {
   const failedDiagnostics = useDiagnostics(failedRunId);
   const failureExplanations = (failedDiagnostics.data ?? []).filter((d) => "ERROR" === d.severity);
   const failureSuggestions = failureExplanations.flatMap((d) => (Array.isArray(d.suggestions) ? d.suggestions.filter((x): x is string => "string" === typeof x) : []));
+  // P5-14 PR-2 — l'AIGUILLAGE panne du service vs planning infaisable. Deux entrées vers l'écran B
+  // (« le service de calcul ne répond pas ») : `timedOut` (le service ne répond plus) et un run
+  // FAILED dont TOUS les diagnostics ERROR sont des types de PANNE (`isServiceDown`). Tout le reste
+  // — infaisable, `launch.isError` (échec réseau du POST : le service n'a même pas été sollicité,
+  // rail hors-ligne/500 déjà livré) — garde l'affichage de causes EXISTANT, INCHANGÉ. On n'ajoute
+  // AUCUN second affichage de causes.
+  const runReachedFailed = "FAILED" === status || (!localRunActive && null !== lastFailedRun);
+  const serviceDown = failed && (timedOut || (runReachedFailed && isServiceDown(failedDiagnostics.data ?? [])));
+  // Le run échoué pour la corrélation du signalement contextuel : le run dont on lit les
+  // diagnostics, sinon (timeout, jamais passé FAILED) le run LOCAL qui n'a pas répondu.
+  const downScheduleId = failedRunId ?? scheduleId;
   const waiting = !showPlanning && (launching || (null !== scheduleId && "FAILED" !== status && !timedOut));
   // Lot C (défaut terrain fondateur 2026-08-21) — la fenêtre LOCALE que seul GenerateStep connaît :
   // entre le POST et le premier refetch de la liste, la version fraîche n'est pas encore dans
@@ -281,6 +294,12 @@ export function GenerateStep() {
       </p>
 
       {failed ? (
+        serviceDown ? (
+          // P5-14 PR-2 — écran B : la panne du service, disculpant l'utilisateur. « Réessayer » =
+          // le `start` ci-dessus (crédits/portée conservés) ; le scheduleId du run échoué corrèle
+          // le signalement contextuel.
+          <GenerationServiceDown onRetry={start} creditsBlocked={creditsBlocked} creditSuffix={creditSuffix} scheduleId={downScheduleId} />
+        ) : (
         <div className="flex flex-col items-center gap-4 py-12 text-center">
           <AlertTriangle className="size-14 text-destructive" />
           <div className="space-y-2">
@@ -318,6 +337,7 @@ export function GenerateStep() {
             Réessayer{creditSuffix}
           </Button>
         </div>
+        )
       ) : waiting ? (
         <GenerationWaiting />
       ) : (

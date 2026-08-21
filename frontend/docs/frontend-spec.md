@@ -4,14 +4,15 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-22 (recalé — **§6.8, le BANDEAU hors-ligne (P5-14 PR-1)** : `app/OfflineBanner.tsx`,
-son montage EN FLUX dans `app/RootShell.tsx`, la source unique `shared/lib/online.ts` et le seed de
-`main.tsx`, la convergence de `RouteErrorBoundary`/`AuthGuard`, et l'exclusion des mutations en PAUSE
-du prédicat `saving` d'`app/ActionVeil.tsx` (`long` relu et vérifié INCHANGÉ) — tous confrontés au code,
-ainsi que les faits de `@tanstack/query-core` 5.101.4 qui fondent la copie (no-op de
-`resumePausedMutations()` hors ligne, absence de persistance). Les puces voisines (écrans système,
-voile) relues : inchangées. Historique des passes : `git log -p --follow frontend/docs/frontend-spec.md`
-(un stamp REMPLACE, il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-22 (recalé — **§6.8, l'écran « le service de calcul ne répond pas »**
+(P5-14 PR-2) : `features/planning/GenerationServiceDown.tsx`, l'extraction `GenerationScene`
+(`halted`) que `GenerationWaiting` consomme à rendu inchangé, le bloc `.gw-halted` de
+`GenerationWaiting.css` qui bat l'override reduced-motion, le miroir
+`features/planning/lib/serviceFailure.ts` et son garde de parité
+`backend/tests/CrossStack/EngineFailureTypeMirrorTest`, plus l'aiguillage de
+`features/wizard/steps/GenerateStep.tsx` — tous confrontés au code. La puce du bandeau hors-ligne
+(PR-1) relue : inchangée. Historique des passes : `git log -p --follow
+frontend/docs/frontend-spec.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
 
 ---
 
@@ -833,8 +834,51 @@ sous le régime bouton-Abandonner, jamais relâché en silence.
 `aria-live="polite"` ne reçoit que les **transitions** — le compteur qui s'incrémente ne ré-annonce
 pas (patron AUD-FRT-23/24). La couleur ne porte jamais seule le sens (icône + phrase distinctes).
 
-**Hors de cette tranche** : l'écran « le service de calcul ne répond pas » (PR-2) et la
-**503/maintenance**, qui est un geste d'ops (Caddy `handle_errors`), pas du code applicatif.
+**L'écran « LE SERVICE DE CALCUL NE RÉPOND PAS » (livré le 2026-08-22)** —
+`features/planning/GenerationServiceDown.tsx`. ⚠ Il ne passe **pas** par `SystemScreen` : celle-ci
+sert les écrans système de ROUTE, alors qu'ici c'est un **état du rail de génération**, dont la
+scène EST l'identité. Il réutilise la scène de `GenerationWaiting` **sans la dupliquer** — le décor
+est extrait en `GenerationScene` (cadre + deux bandes + mini-grille), avec un prop `halted` ; ce
+n'est pas un `variant` déguisé, c'est un décor à deux états.
+
+**À l'arrêt veut dire à l'arrêt** : aucune case ne se remplit, le chrono est barré, le ballon roule
+au sol — un seul mouvement, lent et **arythmique**, qui ne vise aucune case. L'écran ne doit pas être
+mort, mais il ne doit **jamais** laisser croire qu'un calcul tourne.
+⚠ **Piège CSS, corrigé et gardé** : le bloc `prefers-reduced-motion` force `.gw-anim { opacity: 1
+!important }`. Transposé tel quel, l'état arrêté aurait affiché une grille **PLEINE** — l'inverse de
+l'intention, et une faute de VÉRACITÉ, pas de cosmétique. L'override `.gw-halted .gw-anim` le bat
+par spécificité, et un test lit le CSS source (jsdom ne calcule aucune mise en page).
+
+**La DISTINCTION, qui est la vraie raison de cet écran** : jusqu'ici, un service injoignable et un
+planning **infaisable** empruntaient le même chemin d'échec — alors que les gestes attendus sont
+opposés (attendre vs corriger ses contraintes). Elle se dérive du **`type`** du diagnostic, via
+`features/planning/lib/serviceFailure.ts` (**miroir déclaré**) : `engine_timeout`, `engine_error`,
+`internal_error`, `engine_status` sont écrits **uniquement par le backend quand le service n'a pas
+répondu**. ⚠ **`engine_failed` en est EXCLU à dessein** — il signifie que le moteur A RÉPONDU
+« failed », donc que le planning est infaisable. `isServiceDown` n'est vrai que si les diagnostics
+ERROR sont **non vides et TOUS** dans la liste.
+⚠ **Aucun affichage de causes en parallèle** : celui de P4-99 (`failureExplanations` /
+`failureSuggestions`) reste seul et **inchangé** ; on n'a ajouté qu'un aiguillage.
+Le miroir est gardé **dans les deux sens** par `backend/tests/CrossStack/EngineFailureTypeMirrorTest`
+(groupe `contract`, job `engine-semantics`, required check) — sans lui, un type ajouté au handler
+ferait classer une **panne** en « infaisable », en silence.
+
+**« Il n'y a rien à corriger de votre côté »** est la seule phrase auto-disculpante du jeu d'écrans,
+et elle est là pour ça : c'est le seul écran qu'on peut confondre avec une faute de saisie.
+
+⚠ **La « référence support » n'est jamais fabriquée.** L'échec de génération est **asynchrone** — le
+POST rend 202, l'échec arrive en `status: FAILED` dans des réponses **200** — or `lastIncidentStore`
+ne retient un `X-Request-Id` que sur un **≥ 500**. La ligne « Code incident » ne s'affiche donc que
+si une valeur fraîche existe (rare ici). La corrélation honnête est le **`scheduleId`**, joint
+automatiquement au signalement — à condition que « Contacter le support » ouvre `FeedbackDialog` en
+**`variant="contextual"`** : en `free`, le contexte reste à quai.
+
+**`launch.isError` seul ne route PAS vers cet écran** : un 4xx est du métier servi (422 épinglage
+orphelin, 403 crédits) et garde son `launchReason` ; un échec réseau du POST relève du rail
+hors-ligne/500 — le service de calcul n'a même pas été sollicité.
+
+**Hors de cette tranche** : la **503/maintenance**, geste d'ops (Caddy `handle_errors`), pas du code
+applicatif ; et cet écran dans la boucle de travail `/planning`, qui garde son traitement propre.
 
 ---
 

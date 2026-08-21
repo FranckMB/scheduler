@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HTTPError } from "ky";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -48,6 +48,9 @@ vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: { setS
 // CÂBLAGE GenerateStep→PlanningPage de la transcription (P2-44) qu'on épingle ici.
 vi.mock("@/features/planning/PlanningPage", () => ({ PlanningPage: (props: { embedded?: boolean; scopePlanId?: string | null; calendarEntryId?: string | null; toReplace?: unknown[] | null }) => <div data-testid="planning" data-scope={props.scopePlanId ?? ""} data-entry={props.calendarEntryId ?? ""} data-toreplace={String((props.toReplace ?? []).length)} /> }));
 vi.mock("@/features/planning/GenerationWaiting", () => ({ GenerationWaiting: () => <div data-testid="generation-waiting" /> }));
+// P5-14 PR-2 — l'écran « le service de calcul ne répond pas » (écran B). Mocké pour épingler
+// l'AIGUILLAGE (quand GenerateStep y route + quel scheduleId il lui passe pour la corrélation).
+vi.mock("@/features/planning/GenerationServiceDown", () => ({ GenerationServiceDown: (props: { scheduleId?: string | null }) => <div data-testid="service-down" data-schedule={props.scheduleId ?? ""} /> }));
 // P2-44 — errorMessage mocké pour un motif SERVI observable (le 409 socle non pointé s'affiche).
 vi.mock("@/shared/lib/errorMessage", () => ({ errorMessage: async (e: unknown) => (e as { reason?: string }).reason ?? "Une erreur est survenue" }));
 vi.mock("../lib/useStepValidation", () => ({ useStepValidation: () => ({ errors: [], warnings: [], pending: false }) }));
@@ -483,5 +486,91 @@ describe("GenerateStep — fenêtre locale POST→refetch : l'écran d'attente p
 
     expect(screen.getByTestId("planning")).toBeInTheDocument();
     expect(screen.queryByTestId("generation-waiting")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * P5-14 PR-2 — l'AIGUILLAGE vers l'écran « le service de calcul ne répond pas » (écran B).
+ * La branche `failed` route désormais :
+ *   · `timedOut` (le service ne répond plus) → écran B ;
+ *   · run FAILED dont les diagnostics ERROR sont TOUS des types de panne (`isServiceDown`) → écran B ;
+ *   · sinon (planning infaisable, `launch.isError`) → l'affichage de causes EXISTANT, INCHANGÉ.
+ *
+ * ⚠ Falsification dans les deux sens : une panne classée « infaisable » (pas d'écran B) OU un
+ * infaisable classé « panne » (l'écran de causes P4-99 disparaît) rougit. On n'ajoute AUCUN
+ * second affichage de causes — l'existant reste seul.
+ */
+describe("GenerateStep — aiguillage panne du service vs planning infaisable (P5-14)", () => {
+  beforeEach(() => {
+    h.mode = "season";
+    h.status = null;
+    h.schedules = [];
+    h.diagnostics = [];
+  });
+
+  it("run FAILED avec des diagnostics de PANNE → écran B, jamais l'écran de causes", () => {
+    h.status = "FAILED";
+    h.diagnostics = [{ id: "d1", severity: "ERROR", type: "engine_timeout", message: "Schedule generation timed out.", suggestions: [] }];
+    renderStep();
+
+    expect(screen.getByTestId("service-down")).toBeInTheDocument();
+    // L'écran de causes existant (« n'a pas abouti ») ne s'affiche pas en parallèle.
+    expect(screen.queryByText(/n'a pas abouti/)).not.toBeInTheDocument();
+  });
+
+  it("run FAILED INFAISABLE (diagnostic métier) → l'écran de causes EXISTANT, inchangé — pas d'écran B", () => {
+    h.status = "FAILED";
+    h.diagnostics = [
+      { id: "d1", severity: "ERROR", type: "session_below_effective_min", message: "Le planning n'a pas pu être généré : il faut placer 84 séances pour 82 créneaux.", suggestions: ["Ajoutez de la disponibilité de gymnase."] },
+    ];
+    renderStep();
+
+    expect(screen.getByText(/n'a pas abouti/)).toBeInTheDocument();
+    expect(screen.getByText(/84 séances pour 82 créneaux/)).toBeInTheDocument();
+    expect(screen.queryByTestId("service-down")).not.toBeInTheDocument();
+  });
+
+  it("run FAILED MÉLANGÉ (panne + infaisable) → écran de causes existant (un métier suffit à disculper le service)", () => {
+    h.status = "FAILED";
+    h.diagnostics = [
+      { id: "d1", severity: "ERROR", type: "engine_timeout", message: "Schedule generation timed out.", suggestions: [] },
+      { id: "d2", severity: "ERROR", type: "session_below_effective_min", message: "Capacité insuffisante.", suggestions: [] },
+    ];
+    renderStep();
+
+    expect(screen.getByText(/n'a pas abouti/)).toBeInTheDocument();
+    expect(screen.queryByTestId("service-down")).not.toBeInTheDocument();
+  });
+
+  it("TIMEOUT (le service ne répond plus) → écran B", async () => {
+    vi.useFakeTimers();
+    try {
+      renderStep();
+      fireEvent.click(screen.getByRole("button", { name: /Lancer la génération/ }));
+      // Flush du mutateAsync (le scheduleId LOCAL est posé, l'effet arme le setTimeout de garde).
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // 20 min sans réponse (TIMEOUT_MS) : le garde bascule `timedOut`.
+      await act(async () => {
+        vi.advanceTimersByTime(20 * 60 * 1000 + 1);
+      });
+
+      expect(screen.getByTestId("service-down")).toBeInTheDocument();
+      expect(screen.queryByTestId("generation-waiting")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("run FAILED en `engine_failed` (le moteur a RÉPONDU « failed ») → écran de causes, jamais B", () => {
+    // `engine_failed` = planning infaisable renvoyé par le moteur, exclu à dessein de la liste
+    // de panne : il route vers l'affichage de causes existant, comme n'importe quel infaisable.
+    h.status = "FAILED";
+    h.diagnostics = [{ id: "d1", severity: "ERROR", type: "engine_failed", message: "Schedule generation failed.", suggestions: [] }];
+    renderStep();
+
+    expect(screen.queryByTestId("service-down")).not.toBeInTheDocument();
+    expect(screen.getByText(/n'a pas abouti/)).toBeInTheDocument();
   });
 });
