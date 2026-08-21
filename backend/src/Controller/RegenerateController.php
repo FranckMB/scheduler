@@ -11,10 +11,12 @@ use App\Service\GenerationComplexityGuard;
 use App\Service\ManagementAccessGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\SocleGuard;
+use App\Service\WriteTargetSeasonResolver;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
@@ -47,7 +49,16 @@ final class RegenerateController extends AbstractController implements SeasonSco
         private readonly GenerationComplexityGuard $complexityGuard,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly SocleGuard $socleGuard,
+        private readonly WriteTargetSeasonResolver $writeTargetSeasonResolver,
     ) {}
+
+    // SEC-13 — la cible est le Schedule nommé dans l'URL (id de version).
+    public function writeTargetSeasonId(Request $request): ?string
+    {
+        $id = $request->attributes->get('id');
+
+        return \is_string($id) ? $this->writeTargetSeasonResolver->ofSchedule($id) : null;
+    }
 
     #[Route('/api/schedules/{id}/regenerate', name: 'api_schedule_regenerate', methods: ['POST'])]
     public function __invoke(string $id): JsonResponse

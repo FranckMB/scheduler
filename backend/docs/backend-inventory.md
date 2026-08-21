@@ -3,7 +3,7 @@
 > Backward inventory of the existing backend (Symfony 7.4 + API Platform). This document
 > describes what exists in the codebase at the time of verification — it is not a roadmap.
 
-Last verified @ 2026-08-21 (recalé par le **retrait de l'export PNG** — décision fondateur. Re-vérifié DANS CETTE PASSE : la ligne `/api/schedules/{id}/export-pdf` (confrontée à `ExportPdfController`, `PdfGenerator`, `SpreadsheetGenerator` et `frontend/worker.js`) et la ligne `CalendarEntry` recalée la veille. Ce qui a changé sous cette ligne : plus de PNG, plus de sélecteur de vue, et la matrice équipes × jours devient INCONDITIONNELLE — le seuil « ≥ 2 gymnases » est supprimé des deux générateurs. ⚠ Vérification volontairement ÉTROITE : le reste de l'inventaire n'a pas été confronté au code cette fois)
+Last verified @ 2026-08-21 (recalé par le **retrait de l'export PNG** — décision fondateur. Re-vérifié DANS CETTE PASSE : la ligne `/api/schedules/{id}/export-pdf` (confrontée à `ExportPdfController`, `PdfGenerator`, `SpreadsheetGenerator` et `frontend/worker.js`) et la ligne `CalendarEntry` recalée la veille. Ce qui a changé sous cette ligne : plus de PNG, plus de sélecteur de vue, et la matrice équipes × jours devient INCONDITIONNELLE — le seuil « ≥ 2 gymnases » est supprimé des deux générateurs. ⚠ Vérification volontairement ÉTROITE : le reste de l'inventaire n'a pas été confronté au code cette fois. **SEC-13 (même jour)** : la résolution du seasonId (§ read-only) confrontée à `SeasonAccessGuard`, `WriteTargetSeasonResolver` et les 10 contrôleurs `SeasonScopedWriteInterface`)
 
 ---
 
@@ -520,9 +520,14 @@ superadmin n'a pas de tenant, §3 :
 2. **Résolution du seasonId** : attribut `_season_id`, sinon header `X-Season-Id` (validé →
    403 si étranger/inconnu), sinon la **saison courante dérivée du calendrier** via
    `SeasonResolver::currentAmong` (pivot 15 juillet — remplace l'ancien lookup unique
-   `status='active'`). Le listener pose aussi `_season_readonly` (saison archivée →
-   écriture 409, cf. `SeasonReadonlyTest`) et active le filtre Doctrine **`season_filter`**
-   (frontière de correction intra-club, en plus du `TenantFilter` club_id).
+   `status='active'`). Le listener pose aussi `_season_readonly` de la saison SÉLECTIONNÉE
+   (saison archivée → écriture 409, cf. `SeasonReadonlyTest`) et active le filtre Doctrine
+   **`season_filter`** (frontière de correction intra-club, en plus du `TenantFilter` club_id).
+   ⚠ **SEC-13** : `SeasonAccessGuard` ne se fie plus au seul header — il prend la **plus stricte**
+   de la saison sélectionnée ET de la saison de la RESSOURCE écrite (résolue hors filtres par
+   `WriteTargetSeasonResolver`, chaque contrôleur `SeasonScopedWriteInterface` répondant
+   `writeTargetSeasonId()`). Sans header, écrire sur un plan/planning d'une saison archivée
+   (`clear-grid`/`transcribe`/`/fill`) est désormais refusé 409 au lieu de détruire en silence.
 3. **Validation d'appartenance** : si un `clubId` est résolu et un utilisateur est authentifié,
    le listener vérifie qu'un `ClubUser` **actif** existe pour `(userId, clubId)`. Sinon → 403
    (bloque un header `X-Club-Id` spoofé ; une membership `pending` n'a accès à rien).

@@ -8,6 +8,7 @@ use App\Enum\SchedulePlanType;
 use App\Service\ManagementAccessGuard;
 use App\Service\SchedulePlanProvisioner;
 use App\Service\VenuePeriodGrid;
+use App\Service\WriteTargetSeasonResolver;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -41,7 +42,21 @@ final class VenuePeriodGridActionController extends AbstractController implement
         private readonly ManagementAccessGuard $managementAccessGuard,
         private readonly SchedulePlanProvisioner $schedulePlanProvisioner,
         private readonly VenuePeriodGrid $venuePeriodGrid,
+        private readonly WriteTargetSeasonResolver $writeTargetSeasonResolver,
     ) {}
+
+    /**
+     * SEC-13 — ⚠ la cible (le plan de période) vit dans le CORPS, pas dans l'URL :
+     * c'est ce cas qui interdit un mécanisme fondé sur la seule route. On dérive la
+     * saison du plan nommé par `schedulePlanId` (les deux actions le portent).
+     */
+    public function writeTargetSeasonId(Request $request): ?string
+    {
+        $decoded = json_decode((string) $request->getContent(), true);
+        $planId = \is_array($decoded) ? ($decoded['schedulePlanId'] ?? null) : null;
+
+        return \is_string($planId) && '' !== $planId ? $this->writeTargetSeasonResolver->ofSchedulePlan($planId) : null;
+    }
 
     public function __invoke(): JsonResponse
     {

@@ -35,7 +35,7 @@ Rien n'est installé sur le poste : tout tourne en GitHub Actions ou via image D
   dev, code de test) ; cas ponctuels en commentaire **inline `nosemgrep: <rule>` motivé**
   sur la ligne même. Ne jamais élargir pour faire passer la CI.
 
-## Rituel pré-production (ZAP + Nuclei) — roadmap SEC-13
+## Rituel pré-production (ZAP + Nuclei) — roadmap SEC-19
 
 Le jour où une préprod/prod existe :
 
