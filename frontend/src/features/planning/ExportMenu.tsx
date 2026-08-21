@@ -1,20 +1,21 @@
-import { Download, FileImage, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { Select } from "@/shared/components/ui/select";
 import { useCredits } from "@/shared/credits/useCredits";
 
-import type { ExportView, Venue } from "./api";
+import type { Venue } from "./api";
 import { type ExportFormat, useScheduleExport } from "./queries";
 
 /**
- * Export the currently viewed schedule to PDF / PNG / Excel, scoped to every gym
+ * Export the currently viewed schedule to PDF / Excel, scoped to every gym
  * or a single one (venue-only, per product). Each export fits one landscape page.
  *
- * P3-20 — deux réglages, pas un : le **périmètre** (quels gymnases) et la **vue de l'image**
- * (grille jours × gymnases, ou « par club » équipes × jours). La vue ne concerne que le PNG :
- * le PDF et l'Excel portent déjà les deux (section 2 / 2ᵉ feuille), une image non.
+ * ⚑ **Un seul réglage : le périmètre** (quels gymnases). Il n'y a plus de choix de VUE —
+ * chaque export porte les DEUX (la grille jours × gymnases, puis la matrice équipes × jours,
+ * en section 2 du PDF et en 2ᵉ feuille de l'Excel). Le sélecteur de vue n'existait que pour
+ * l'image PNG, retirée le 2026-08-21 : une image ne se feuillette pas, un document si.
  */
 export function ExportMenu({
   scheduleId,
@@ -37,13 +38,9 @@ export function ExportMenu({
 }) {
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<string>(""); // "" = all venues
-  // P3-20 — la vue que l'IMAGE photographie. Le PDF et l'Excel portent DÉJÀ les deux vues
-  // (grille + matrice équipes × jours) : seul le PNG doit choisir, puisqu'une image ne peut
-  // pas être feuilletée. Défaut « grid » = le comportement historique, à l'octet près.
-  const [view, setView] = useState<ExportView>("grid");
   const rootRef = useRef<HTMLDivElement>(null);
   const { run, busy } = useScheduleExport(scheduleId, exportName);
-  // §4bis pt 2 — les TROIS exports (PDF/PNG/Excel) consomment 1 crédit : chaque
+  // §4bis pt 2 — les DEUX exports (PDF/Excel) consomment 1 crédit : chaque
   // entrée affiche le solde et se désactive à 0 (Découverte bridée). null = offre
   // non bridée (payant/bêta/démo) : ni suffixe, ni blocage.
   const credits = useCredits();
@@ -77,7 +74,6 @@ export function ExportMenu({
   const scopeLabel = null === venueId ? "tous les gymnases" : (venues.find((v) => v.id === venueId)?.name ?? "un gymnase");
   const formats: { key: ExportFormat; label: string; icon: typeof FileText }[] = [
     { key: "pdf", label: "PDF", icon: FileText },
-    { key: "png", label: "Image (PNG)", icon: FileImage },
     { key: "xlsx", label: "Excel", icon: FileSpreadsheet },
   ];
 
@@ -109,21 +105,14 @@ export function ExportMenu({
               </option>
             ))}
           </Select>
-          <label className="mb-1 block text-xs font-medium text-muted-foreground" htmlFor="export-view">
-            Vue de l'image
-          </label>
-          <Select id="export-view" aria-label="Vue de l'image exportée" className="mb-1 h-9 w-full" value={view} onChange={(e) => setView(e.target.value as ExportView)}>
-            <option value="grid">Grille (jours × gymnases)</option>
-            <option value="club">Par club (équipes × jours)</option>
-          </Select>
-          <p className="mb-3 text-xs leading-tight text-muted-foreground">Le PDF et l'Excel contiennent les deux vues.</p>
+          <p className="mb-3 text-xs leading-tight text-muted-foreground">Chaque export contient les deux vues : la grille (jours × gymnases) et la vue par club (équipes × jours).</p>
           <div className="flex flex-col gap-1">
             {formats.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
                 type="button"
                 disabled={null !== busy || creditsBlocked}
-                onClick={() => void run(key, venueId, view)}
+                onClick={() => void run(key, venueId)}
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-50"
               >
                 {busy === key ? <Loader2 className="size-4 animate-spin" /> : <Icon className="size-4" />}

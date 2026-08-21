@@ -49,7 +49,7 @@ class SpreadsheetGenerator
     /** @return string binary .xlsx content */
     public function generate(Schedule $schedule, ?string $venueId = null): string
     {
-        return $this->render($this->exportData->load($schedule, $venueId));
+        return $this->render($this->exportData->load($schedule, $venueId), $venueId);
     }
 
     /**
@@ -58,7 +58,7 @@ class SpreadsheetGenerator
      *
      * @return string binary .xlsx content
      */
-    public function render(ScheduleExportData $data): string
+    public function render(ScheduleExportData $data, ?string $scopeVenueId = null): string
     {
         $venueName = static fn (string $id): string => $data->venues[$id]['name'] ?? '';
 
@@ -135,7 +135,7 @@ class SpreadsheetGenerator
         $sheet->freezePane('A2');
 
         // Second sheet, added AFTER "Planning" is complete so that sheet is never touched.
-        $this->appendTeamDayMatrix($spreadsheet, $data);
+        $this->appendTeamDayMatrix($spreadsheet, $data, $scopeVenueId);
 
         return $this->toBinary($spreadsheet);
     }
@@ -150,33 +150,37 @@ class SpreadsheetGenerator
      * Empty windows (`$data->emptySlots`) belong to no team, so they NEVER enter the matrix ;
      * they stay in the Planning sheet as "(vide)" rows.
      *
-     * Not added at all when the placements span a single venue : the matrix exists to
-     * disambiguate WHICH gym, and a venue-scoped export (all slots share the venue) or a
-     * single-gym club has nothing to disambiguate — the Planning sheet already says it better.
-     * The trigger reads the REALITY of the placements, not the `$venueId` argument nor
-     * `$data->venues` (which always holds every club venue regardless of scope).
+     * **Toujours ajoutée** (décision fondateur 2026-08-21). Elle l'était auparavant seulement
+     * quand les placements couvraient ≥ 2 gymnases, au motif qu'elle « lève l'ambiguïté sur le
+     * gymnase » — mais c'est la justification d'un DÉCLENCHEUR, pas la raison d'être de la vue.
+     * Les deux feuilles répondent à deux questions distinctes : Planning dit « qui occupe quel
+     * gymnase ce jour-là », la matrice dit « quand s'entraîne CETTE équipe », une ligne à lire.
+     * Un club mono-gymnase a le même besoin de donner à chaque équipe sa ligne.
+     *
+     * ⚠ **Ce seuil rendait un SECOND service, qui devait donc être repris ailleurs** : il
+     * garantissait qu'un export limité à UN gymnase n'atteigne jamais cette feuille. D'où le
+     * paramètre de portée ci-dessous — sans lui, un export scopé aurait listé toutes les
+     * équipes de la saison, et celles qui s'entraînent AILLEURS seraient passées pour des
+     * équipes sans entraînement, sur un document remis aux familles. Même règle et même raison
+     * que `PdfGenerator::buildMatrixSection`, qui la porte depuis P3-20.
      *
      * ⚠ Same D-18 discipline as the Planning sheet : the model is indexed by (team, day) and
      * PROJECTED onto ordered rows/columns — never written positionally. A day column and its
      * cells are always looked up by the SAME day key, so no silent column-shift can happen.
      */
-    private function appendTeamDayMatrix(Spreadsheet $spreadsheet, ScheduleExportData $data): void
+    private function appendTeamDayMatrix(Spreadsheet $spreadsheet, ScheduleExportData $data, ?string $scopeVenueId = null): void
     {
         $venueName = static fn (string $id): string => $data->venues[$id]['name'] ?? '';
 
-        $venuesUsed = [];
+        // Les LIGNES dépendent de la PORTÉE. Export « tous les gymnases » : TOUTES les équipes
+        // de la saison — une équipe sans séance est un trou du planning, la première chose que
+        // le gestionnaire doit voir, jamais une ligne masquée. Export limité à UN gymnase :
+        // seules les équipes qui y ont une séance, sinon une équipe qui s'entraîne ailleurs
+        // passerait pour une équipe sans entraînement.
+        $placedTeamIds = [];
         foreach ($data->slots as $slot) {
-            $venuesUsed[$slot->getVenueId()] = true;
+            $placedTeamIds[$slot->getTeamId()] = true;
         }
-        if (\count($venuesUsed) < 2) {
-            return; // mono-gymnase en portée : la matrice n'apporte rien que la feuille Planning ne dise mieux.
-        }
-
-        // Rows = EVERY team of the season : a team with no session is a hole in the planning, the
-        // first thing a manager must see — it keeps its row with empty cells, it is never hidden.
-        // No misleading empty row can leak in from a reduced scope : a venue-scoped export has a
-        // single distinct venue and returns above, so the matrix only ever renders on a full
-        // multi-venue club export, where "all season teams" is exactly the right set.
         // P4-106 (décision fondateur 2026-08-18) : AUCUNE colonne « Rang ». Le rang est une
         // information de GESTION — un export part au gymnase et aux familles, la priorisation
         // interne des équipes n'a rien à y faire. L'ordre des lignes (catégorie puis nom) ne
@@ -184,6 +188,9 @@ class SpreadsheetGenerator
         /** @var array<string, array{name: string, category: string}> $teams */
         $teams = [];
         foreach ($data->teamNames as $teamId => $name) {
+            if (null !== $scopeVenueId && !isset($placedTeamIds[$teamId])) {
+                continue;
+            }
             $teams[$teamId] = ['name' => $name, 'category' => $data->teamCategories[$teamId] ?? ''];
         }
 

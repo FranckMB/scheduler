@@ -11,7 +11,7 @@ use PHPUnit\Framework\TestCase;
 /**
  * P4-52 — les quatre verdicts de la purge des rendus.
  *
- * Les PDF/PNG s'écrivaient dans `public/exports` et **ne repartaient jamais**. Le rendu étant
+ * Les PDF s'écrivaient dans `public/exports` et **ne repartaient jamais**. Le rendu étant
  * servi publiquement par design (SEC-14 : « proxy PUBLIC par design »), la rétention borne
  * deux choses d'un coup : le disque, et la durée pendant laquelle un vieux rendu reste
  * atteignable par son URL.

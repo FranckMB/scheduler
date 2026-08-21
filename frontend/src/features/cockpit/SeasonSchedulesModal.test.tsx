@@ -203,7 +203,7 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
   // l'export) : c'est sa façon de la mesurer qui était fausse. Ces boutons s'annonçaient
   // "menuitem" dans un role="menu" sans aucune navigation aux flèches — un menu ARIA promet ce
   // clavier-là. On ne promet plus ce qu'on n'implémente pas.
-  it("export expands an inline format picker (PDF / Excel / PNG), no clipped dropdown", async () => {
+  it("export expands an inline format picker (PDF / Excel), no clipped dropdown", async () => {
     open([plan({ id: "v1", status: "COMPLETED" })]);
     expect(screen.queryByRole("button", { name: "PDF" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /^Exporter/ }));
@@ -211,7 +211,8 @@ describe("SeasonSchedulesModal — plannings, not versions", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "PDF" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Excel" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "PNG" })).toBeInTheDocument();
+    // Le PNG a été RETIRÉ du produit le 2026-08-21 : il ne doit plus être proposé nulle part.
+    expect(screen.queryByRole("button", { name: "PNG" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "PDF" }));
     expect(run).toHaveBeenCalledWith("pdf", null);
   });

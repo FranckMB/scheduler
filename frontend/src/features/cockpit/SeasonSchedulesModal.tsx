@@ -27,7 +27,6 @@ interface SeasonSchedulesModalProps {
 const EXPORT_FORMATS: { key: ExportFormat; label: string }[] = [
   { key: "pdf", label: "PDF" },
   { key: "xlsx", label: "Excel" },
-  { key: "png", label: "PNG" },
 ];
 
 /**

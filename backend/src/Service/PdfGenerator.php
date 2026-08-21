@@ -8,7 +8,6 @@ use App\Entity\Club;
 use App\Entity\Schedule;
 use App\Entity\ScheduleSlotTemplate;
 use App\Export\ExportEmptyWindow;
-use App\Export\ExportView;
 use App\Export\ScheduleExportData;
 use App\Export\ScheduleExportDataProvider;
 use App\Storage\LogoStorage;
@@ -24,14 +23,17 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
  * Renders a weekly training schedule as a landscape grid (days × venues, time
  * down the rows) and hands the HTML to the Puppeteer worker.
  *
- * Section 1 (page 1) is the manager grid — the worker fits it to a single A4
- * landscape page (shrinking the font as needed) and shoots the PNG from it.
- * On a multi-venue export a second section is appended: a "team × day" matrix
- * (one line per team, grouped by rank) flowing onto page(s) 2+, so a manager can
- * hand each team the page that concerns it. The worker's multi-section mode is
- * opt-in and back-compatible — a single-section call produces the same one-page
- * PDF as before. Scope is either every venue or a single one; a single-venue (or
- * single-gym) export carries no matrix — nothing to disambiguate.
+ * **Deux sections, toujours** (décision fondateur 2026-08-21) — elles répondent à deux
+ * questions distinctes, et c'est pour ça qu'aucune ne se déduit de l'autre :
+ *   1. la **grille** du gestionnaire (jours × gymnases) : qui occupe quel gymnase ce jour-là,
+ *      ajustée par le worker à une seule page A4 paysage (la police rétrécit au besoin) ;
+ *   2. la **matrice équipes × jours** (une ligne par équipe, groupée par rang) : quand
+ *      s'entraîne CETTE équipe — la page qu'on donne à chaque équipe.
+ *
+ * ⚠ La matrice était auparavant conditionnée à « ≥ 2 gymnases utilisés ». Ce seuil venait de
+ * la justification du DÉCLENCHEUR (lever l'ambiguïté sur le gymnase), prise à tort pour la
+ * raison d'être de la vue : un club mono-gymnase a le même besoin de donner à chaque équipe sa
+ * ligne. Même geste côté Excel (`SpreadsheetGenerator::appendTeamDayMatrix`).
  */
 class PdfGenerator
 {
@@ -69,33 +71,29 @@ class PdfGenerator
     }
 
     /**
-     * @return array{pdf: string, png: ?string}
+     * @return array{pdf: string}
      */
-    public function generate(Schedule $schedule, ?string $venueId = null, ?string $view = null): array
+    public function generate(Schedule $schedule, ?string $venueId = null): array
     {
         $data = $this->exportData->load($schedule, $venueId);
         // P3-20 — la vue « club » (matrice équipes × jours) est ce que le gestionnaire veut
         // EN IMAGE. On ne fabrique pas une 5ᵉ mise en forme pour ça : c'est la section 2 déjà
         // rendue ici qui est photographiée, le worker choisissant simplement quelle section
         // il garde à l'écran avant le screenshot.
-        $clubView = ExportView::CLUB === $view;
-        // A "team × day" matrix is appended as a second section on a genuinely multi-venue
-        // export (see hasMatrix) — OR whenever the club view is explicitly requested: un
-        // gestionnaire qui demande cette vue doit la recevoir, même sur un club mono-gymnase
-        // où elle n'apparaîtrait pas d'elle-même. That is exactly when the PDF becomes
-        // multi-page, so the two facts are the same flag: it drives both the HTML and the
-        // worker's multi-section paging.
-        $multiSection = $this->hasMatrix($data) || $clubView;
-        $html = $this->buildHtml($schedule, $data, $venueId, $multiSection);
+        // ⚑ **Les DEUX vues, toujours** (décision fondateur 2026-08-21). La matrice ne dépend
+        // plus du nombre de gymnases : elle répond à une AUTRE question que la grille — « quand
+        // s'entraîne cette équipe », une ligne à lire, là où la grille dit « qui occupe quel
+        // gymnase ce jour-là ». Le seuil « ≥ 2 gymnases » venait d'une justification de
+        // DÉCLENCHEUR (lever l'ambiguïté sur le gymnase) prise à tort pour la raison d'être de
+        // la vue : un club mono-gymnase a le même besoin de donner à chaque équipe SA ligne.
+        $html = $this->buildHtml($schedule, $data, $venueId, true);
         // Scope suffix keeps the all-venues and per-venue exports as distinct files. Le jeton
         // de VUE compte autant : la page qui attend l'export compare ce suffixe pour ne pas
         // saisir le fichier d'une autre demande — sans lui, une image « par club » servirait
         // la grille rendue une seconde plus tôt. La vue « grid » ne porte AUCUN jeton : son
         // nom de fichier reste byte-identique à l'historique.
         $scope = null === $venueId ? 'all' : substr($venueId, 0, 8);
-        $scope .= $clubView ? '-club' : '';
         $pdfFilename = \sprintf('schedule-%s-%s.pdf', $schedule->getId(), $scope);
-        $pngFilename = \sprintf('schedule-%s-%s.png', $schedule->getId(), $scope);
 
         // The Puppeteer worker (a separate container) both creates this dir and
         // writes the files, as its own uid — PHP only reads back the result, so we
@@ -103,37 +101,24 @@ class PdfGenerator
         // the worker, and forced a world-writable chmod).
 
         try {
-            $this->callWorker($html, $pdfFilename, $multiSection, $clubView);
+            $this->callWorker($html, $pdfFilename);
         } catch (TransportExceptionInterface $e) {
             throw new RuntimeException('PDF worker unreachable: ' . $e->getMessage(), $e->getCode(), $e);
         }
 
-        $pngPath = self::OUTPUT_DIR . '/' . $pngFilename;
-
-        return [
-            'pdf' => self::PUBLIC_PATH . '/' . $pdfFilename,
-            'png' => is_file($pngPath) ? self::PUBLIC_PATH . '/' . $pngFilename : null,
-        ];
+        return ['pdf' => self::PUBLIC_PATH . '/' . $pdfFilename];
     }
 
-    private function callWorker(string $html, string $filename, bool $multiSection = false, bool $clubView = false): void
+    private function callWorker(string $html, string $filename): void
     {
-        // Single-section exports keep the EXACT historical payload (no extra key), so the
-        // worker takes its unchanged one-page path and produces the same file as before.
-        // The multi-section flag is added ONLY when a matrix section is present.
+        // L'export porte TOUJOURS ses deux sections depuis le retrait du PNG : le drapeau
+        // reste explicite dans le payload plutôt qu'implicite côté worker.
         $json = [
             'html' => $html,
             'filename' => $filename,
             'landscape' => true,
+            'multiSection' => true,
         ];
-        if ($multiSection) {
-            $json['multiSection'] = true;
-        }
-        // P3-20 — quelle section l'IMAGE photographie. Absent = la grille (page 1), le
-        // comportement historique : un worker qui ignorerait la clé rendrait le même PNG.
-        if ($clubView) {
-            $json['pngSection'] = 'matrix';
-        }
 
         $response = $this->httpClient->request('POST', self::PDF_WORKER_URL, [
             'json' => $json,
@@ -232,8 +217,7 @@ class PdfGenerator
         $grid = [] === $columns
             ? '<p class="empty">Aucun créneau planifié.</p>'
             : \sprintf('<table><thead>%s</thead><tbody>%s</tbody></table>', $header, $rows);
-        // Section 1 = the manager grid (page 1). The worker scales THIS section to one page
-        // and shoots the PNG from it, exactly as before.
+        // Section 1 = the manager grid (page 1). The worker scales THIS section to one page.
         $body = \sprintf('<section class="page-grid">%s</section>', $grid);
         // Section 2 = the "team × day" matrix, on its own page(s). Only present on a
         // multi-venue export — the same condition that set $multiSection.
@@ -406,24 +390,6 @@ class PdfGenerator
         }
 
         return \sprintf('<tr>%s</tr><tr>%s</tr>', $dayRow, $venueRow);
-    }
-
-    /**
-     * Whether the "team × day" matrix (section 2) is worth appending.
-     *
-     * Same trigger as the XLSX second sheet (SpreadsheetGenerator::appendTeamDayMatrix): the
-     * matrix exists to disambiguate WHICH gym, so it only makes sense once the placements span
-     * ≥ 2 distinct venues. It reads the REALITY of the placements — never the $venueId argument
-     * nor $data->venues, which always holds every club venue regardless of scope.
-     */
-    private function hasMatrix(ScheduleExportData $data): bool
-    {
-        $venuesUsed = [];
-        foreach ($data->slots as $slot) {
-            $venuesUsed[$slot->getVenueId()] = true;
-        }
-
-        return \count($venuesUsed) >= 2;
     }
 
     /**

@@ -56,7 +56,7 @@ final readonly class ExportPdfHandler
             // publish a failure on the requesting club's topic.
             $this->hub->publish(ClubTopicUpdate::private(
                 MercureTopic::for($clubId, $message->getScheduleId()),
-                json_encode(['pdfExportStatus' => 'failed', 'pdfExportUrl' => null, 'pngExportUrl' => null], \JSON_THROW_ON_ERROR),
+                json_encode(['pdfExportStatus' => 'failed', 'pdfExportUrl' => null], \JSON_THROW_ON_ERROR),
             ));
 
             return;
@@ -66,12 +66,9 @@ final readonly class ExportPdfHandler
         $this->entityManager->flush();
 
         try {
-            $result = $this->pdfGenerator->generate($schedule, $message->getVenueId(), $message->getView());
+            $result = $this->pdfGenerator->generate($schedule, $message->getVenueId());
             $schedule->setPdfExportStatus('completed');
             $schedule->setPdfExportUrl($result['pdf']);
-            // Always overwrite (null if this run produced no PNG) so a previous,
-            // different-scope export URL can never be served for this one.
-            $schedule->setPngExportUrl($result['png']);
         } catch (Throwable) {
             $schedule->setPdfExportStatus('failed');
             $schedule->setPdfExportUrl(null);
@@ -98,7 +95,6 @@ final readonly class ExportPdfHandler
         $this->hub->publish(ClubTopicUpdate::private($topic, json_encode([
             'pdfExportStatus' => $schedule->getPdfExportStatus(),
             'pdfExportUrl' => $schedule->getPdfExportUrl(),
-            'pngExportUrl' => $schedule->getPngExportUrl(),
         ], \JSON_THROW_ON_ERROR)));
     }
 }

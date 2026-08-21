@@ -155,9 +155,6 @@ class ScheduleResource
     #[Groups(['read'])]
     public ?string $pdfExportUrl = null;
 
-    #[Groups(['read'])]
-    public ?string $pngExportUrl = null;
-
     /**
      * Number of teams in the frozen solve input (planning-versions divergence
      * banner: "generated with N teams — the structure has changed since").
@@ -232,7 +229,6 @@ class ScheduleResource
         $dto->solverWallTimeMs = $entity->getSolverWallTimeMs();
         $dto->pdfExportStatus = $entity->getPdfExportStatus();
         $dto->pdfExportUrl = $entity->getPdfExportUrl();
-        $dto->pngExportUrl = $entity->getPngExportUrl();
         $snapshotTeams = $entity->getSnapshotData()['teams'] ?? null;
         $dto->generatedTeamCount = \is_array($snapshotTeams) ? \count($snapshotTeams) : null;
 

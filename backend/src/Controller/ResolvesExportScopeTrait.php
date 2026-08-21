@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * Shared by the export controllers (PDF/PNG + XLSX): read the optional export
+ * Shared by the export controllers (PDF + XLSX): read the optional export
  * scope (a single venue) from the request body and validate it belongs to the
  * schedule's club+season, so a foreign/unknown venue id can't be smuggled in.
  * One home for the tenant-scoped venue check keeps both endpoints in lockstep.

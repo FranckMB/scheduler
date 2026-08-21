@@ -221,7 +221,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': { target: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080', changeOrigin: true },
-      // Fichiers PDF/PNG exportés, servis depuis le `public/exports` du backend.
+      // Fichiers PDF exportés, servis depuis le `public/exports` du backend.
       '/exports': { target: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8080', changeOrigin: true },
       '/.well-known/mercure': { target: process.env.MERCURE_PROXY_TARGET ?? 'http://127.0.0.1:3000', changeOrigin: true },
       // FRT-17 : PAS de proxy `/engine` — le frontend ne contacte JAMAIS l'engine
@@ -323,17 +323,23 @@ Messenger ; handler backend `ExportPdfHandler`).
 
 - **Périmètre au choix** : tous les gymnases, ou **un seul** (`{ venueId }` dans le body) —
   chaque export tient sur une page paysage.
-- **Vue de l'IMAGE au choix (P3-20, 2026-08-18)** : `{ view: "club" }` dans le body — « Grille »
-  (jours × gymnases, défaut) ou « Par club » (équipes × jours). Le réglage ne concerne que le
-  **PNG** : le PDF et l'Excel portent déjà les deux vues (section 2 / 2ᵉ feuille), une image ne
-  se feuillette pas. ⚑ **Aucune mise en forme serveur nouvelle** : le worker Puppeteer
-  photographie la **section 2 déjà rendue** — il masque la section non demandée et ajuste
-  celle qui reste (`pngSection` ; absent = la grille, comportement historique à l'octet près, et
-  le **PDF est identique dans les deux cas**). Demander la vue club **force** la matrice même sur
-  un club mono-gymnase, où `hasMatrix()` la refuserait. La valeur est en **liste blanche stricte**
-  (`App\Export\ExportView`, hors du contrôleur pour être vérifiable sans base) : inconnue → **400**,
-  jamais un repli silencieux. Elle porte aussi un **jeton dans le nom de fichier** (`-club`) —
-  `useScheduleExport` compare ce suffixe pour ne pas saisir l'export d'un autre onglet.
+- **Deux formats, deux vues, aucun réglage de vue (2026-08-21)** : PDF et Excel, chacun portant
+  **les DEUX** vues — la grille (jours × gymnases) puis la matrice **équipes × jours** (section 2
+  du PDF, 2ᵉ feuille de l'Excel). Il n'y a plus de sélecteur : il n'existait que pour l'**image
+  PNG**, retirée du produit le même jour (décision fondateur — elle *photographiait* une des deux
+  sections déjà rendues, sans rien apporter qu'un format qui ne se feuillette pas ; décision
+  fermée dans l'état des lieux §2).
+- **La matrice est INCONDITIONNELLE depuis cette date.** Elle dépendait de « ≥ 2 gymnases parmi
+  les placements », au motif qu'elle « lève l'ambiguïté sur le gymnase ». C'était la justification
+  d'un **déclencheur**, prise pour la raison d'être de la vue : les deux répondent à deux
+  questions distinctes — la grille dit *qui occupe quel gymnase ce jour-là*, la matrice dit *quand
+  s'entraîne CETTE équipe*, une ligne à lire — et le second besoin existe avec un seul gymnase.
+  ⚠ **Les LIGNES de la matrice dépendent en revanche de la PORTÉE** : export « tous les gymnases »
+  → toutes les équipes de la saison (une équipe sans séance est un trou du planning, à voir) ;
+  export limité à UN gymnase → seules les équipes qui y ont une séance, sinon une équipe
+  s'entraînant ailleurs passerait pour une équipe sans entraînement sur un document remis aux
+  familles. Cette règle vivait dans le PDF depuis P3-20 ; l'Excel la porte depuis le retrait du
+  seuil, qui la lui tenait lieu de garde.
   ⚠ **Les lignes de la matrice suivent la PORTÉE** : sur « tous les gymnases », toutes les
   équipes de la saison (une équipe sans séance est le trou qu'il faut voir) ; sur **un seul
   gymnase**, seules les équipes qui y sont placées — les données d'export portent toujours

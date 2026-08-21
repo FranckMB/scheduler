@@ -23455,12 +23455,6 @@
                             "null"
                         ]
                     },
-                    "pngExportUrl": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
                     "generatedTeamCount": {
                         "description": "Number of teams in the frozen solve input (planning-versions divergence\nbanner: \"generated with N teams \u2014 the structure has changed since\").",
                         "type": [
@@ -23686,12 +23680,6 @@
                             "null"
                         ]
                     },
-                    "pngExportUrl": {
-                        "type": [
-                            "string",
-                            "null"
-                        ]
-                    },
                     "generatedTeamCount": {
                         "description": "Number of teams in the frozen solve input (planning-versions divergence\nbanner: \"generated with N teams \u2014 the structure has changed since\").",
                         "type": [
@@ -23871,12 +23859,6 @@
                                 ]
                             },
                             "pdfExportUrl": {
-                                "type": [
-                                    "string",
-                                    "null"
-                                ]
-                            },
-                            "pngExportUrl": {
                                 "type": [
                                     "string",
                                     "null"

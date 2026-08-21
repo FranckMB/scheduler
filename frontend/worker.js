@@ -11,7 +11,7 @@ const OUTPUT_DIR = '/app/backend/public/exports';
 const A4 = { w: 794, h: 1123 };
 const MARGIN = 24;
 
-async function generateFiles(html, filename, landscape, multiSection, pngSection) {
+async function generateFiles(html, filename, landscape, multiSection) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
   const pageW = landscape ? A4.h : A4.w;
@@ -33,7 +33,7 @@ async function generateFiles(html, filename, landscape, multiSection, pngSection
 
     const geom = { pageW, pageH, availW, availH };
     if (multiSection) {
-      await renderMultiSection(page, filename, landscape, geom, pngSection);
+      await renderMultiSection(page, filename, landscape, geom);
     } else {
       await renderSinglePage(page, filename, landscape, geom);
     }
@@ -76,21 +76,13 @@ async function renderSinglePage(page, filename, landscape, { pageW, pageH, avail
     document.body.style.transform = `scale(${s})`;
   }, scale);
   await page.setViewport({ width: pageW, height: pageH });
-  const pngFilename = path.basename(filename).replace(/\.pdf$/, '.png');
-  const pngPath = path.join(OUTPUT_DIR, pngFilename);
-  await page.screenshot({ path: pngPath, type: 'png', clip: { x: 0, y: 0, width: pageW, height: pageH } });
 }
 
 // Multi-section export : section 1 (`.page-grid`) is the manager grid — fitted to
 // page 1 exactly like the single-page path — and section 2 (`.page-matrix`, forced
 // onto a new page by CSS `break-before: page`) is the team × day matrix, which
 // flows onto page(s) 2+ at natural size.
-//
-// The PDF is IDENTICAL either way. Only the PNG changes: `pngSection` says which
-// section the image is shot from — absent/'grid' = page 1 (the manager grid, the
-// historical behaviour), 'matrix' = the team × day matrix (P3-20, "la vue par club"
-// en image). The image is one landscape page in both cases.
-async function renderMultiSection(page, filename, landscape, { pageW, pageH, availW, availH }, pngSection) {
+async function renderMultiSection(page, filename, landscape, { pageW, pageH, availW, availH }) {
   // Measure the GRID section AND the header above it : page 1 carries the document
   // header (club title bar) THEN the grid, and both must fit one page. Measuring the
   // grid alone let the header's height spill the grid's tail onto page 2.
@@ -143,37 +135,6 @@ async function renderMultiSection(page, filename, landscape, { pageW, pageH, ava
     printBackground: true,
     margin: { top: `${MARGIN}px`, bottom: `${MARGIN}px`, left: `${MARGIN}px`, right: `${MARGIN}px` },
   });
-
-  // PNG — one section only, chosen by `pngSection`. The PDF is already written, so the
-  // DOM can be reshaped freely from here on.
-  if (pngSection === 'matrix') {
-    // "Par club" : hide the grid (and drop its zoom, which no longer means anything),
-    // then fit the matrix in the room left under the header, same discipline as above.
-    const mm = await page.evaluate(() => {
-      const grid = document.querySelector('.page-grid');
-      if (grid) { grid.style.zoom = ''; grid.style.display = 'none'; }
-      const el = document.querySelector('.page-matrix');
-      // `break-before: page` only speaks to print — on screen the section simply moves up.
-      if (el) el.style.breakBefore = 'auto';
-      const rect = el ? el.getBoundingClientRect() : null;
-      return { top: rect ? rect.top : 0, h: el ? el.scrollHeight : 0, w: el ? el.scrollWidth : 0 };
-    });
-    const usableH = availH - FIT_INSET - mm.top;
-    const matrixScale = Math.min(1, (usableH / (mm.h || availH)) * SAFETY, availW / (mm.w || availW));
-    await page.evaluate((s) => {
-      const el = document.querySelector('.page-matrix');
-      if (el) el.style.zoom = String(s);
-    }, matrixScale);
-  } else {
-    await page.evaluate(() => {
-      const m = document.querySelector('.page-matrix');
-      if (m) m.style.display = 'none';
-    });
-  }
-  await page.setViewport({ width: pageW, height: pageH });
-  const pngFilename = path.basename(filename).replace(/\.pdf$/, '.png');
-  const pngPath = path.join(OUTPUT_DIR, pngFilename);
-  await page.screenshot({ path: pngPath, type: 'png', clip: { x: 0, y: 0, width: pageW, height: pageH } });
 }
 
 const server = http.createServer(async (req, res) => {
@@ -188,7 +149,7 @@ const server = http.createServer(async (req, res) => {
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
-        const { html, filename, landscape, multiSection, pngSection } = JSON.parse(body);
+        const { html, filename, landscape, multiSection } = JSON.parse(body);
 
         if (!html || !filename) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -196,7 +157,7 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        await generateFiles(html, filename, landscape === true, multiSection === true, pngSection === 'matrix' ? 'matrix' : 'grid');
+        await generateFiles(html, filename, landscape === true, multiSection === true);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));

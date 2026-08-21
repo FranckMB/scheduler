@@ -10,7 +10,7 @@ use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
 /**
- * The schedule export endpoints (PDF/PNG async + XLSX sync) are authenticated,
+ * The schedule export endpoints (PDF async + XLSX sync) are authenticated,
  * routed, and fail-closed on an unknown schedule. The tenant scoping + actual
  * file production are covered by ExportPdfHandlerRlsTest and manual e2e.
  */

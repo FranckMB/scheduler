@@ -127,10 +127,14 @@ final class SpreadsheetTeamDayMatrixTest extends TestCase
         self::assertStringNotContainsString('Jean Dupont', $cell);
     }
 
-    public function testSingleVenueOmitsTheMatrixEntirely(): void
+    public function testTheMatrixIsAddedEvenOnASingleVenueClub(): void
     {
-        // Tous les créneaux dans UN gymnase (réalité des placements, pas l'argument $venueId ni
-        // $data->venues qui liste tout le club) : la matrice n'ajoute rien, une seule feuille.
+        // ⚑ Décision fondateur 2026-08-21 — **les DEUX vues, toujours.** La 2ᵉ feuille était
+        // omise quand tous les créneaux tenaient dans UN gymnase, au motif qu'elle « lève
+        // l'ambiguïté sur le gymnase » : justification d'un DÉCLENCHEUR prise pour la raison
+        // d'être de la vue. La feuille Planning dit « qui occupe quel gymnase ce jour-là » ; la
+        // matrice dit « quand s'entraîne CETTE équipe », une ligne à lire — un club
+        // mono-gymnase a le même besoin de donner à chaque équipe sa ligne.
         $data = new ScheduleExportData(
             slots: [
                 $this->slot('t-u13', 'v-a', 1, '18:30'),
@@ -144,8 +148,8 @@ final class SpreadsheetTeamDayMatrixTest extends TestCase
 
         $book = $this->renderAndReadBack($data);
 
-        self::assertSame(1, $book->getSheetCount());
-        self::assertSame(['Planning'], $book->getSheetNames());
+        self::assertSame(2, $book->getSheetCount(), 'un club mono-gymnase reçoit AUSSI sa matrice');
+        self::assertStringContainsString('Gymnase Municipal', $this->matrixCell($book, 'U13 F', 'Lundi'));
     }
 
     public function testTwoSlotsSameDayAreBothKeptInTheCell(): void
