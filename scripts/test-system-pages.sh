@@ -9,7 +9,7 @@
 #   par `sed` (ports locaux, auto_https off, cible du proxy). On ne maintient
 #   jamais une seconde conf qui dériverait de la vraie.
 #
-# Six cas assertés au curl :
+# Huit cas assertés au curl :
 #   1. amont injoignable → GET /            → 503 + « Le gymnase est fermé »
 #   2. amont injoignable → GET /config.js   → le VRAI config de la landing (marqueur
 #      discriminant + Content-Type JS), et l'équivalent sous maintenance (cas 3ter)

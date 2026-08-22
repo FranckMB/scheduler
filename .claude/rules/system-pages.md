@@ -38,8 +38,22 @@ paths:
 - **Passe de design obligatoire** dès qu'on remanie l'apparence — ce sont des pages **publiques** :
   agent `ui-ux-pro-max`, bornée à l'apparence, elle ne valide rien. ⚠ **Le contraste WCAG se
   vérifie dans un vrai navigateur**, dans les DEUX thèmes (jsdom n'atteste rien).
+- ⚠ **Le bloc `/config.js` DOIT vivre dans un `route {}`.** Hors `route`, Caddy réordonne les
+  directives selon SON ordre canonique, où **`rewrite` passe AVANT `handle`** : le rewrite global
+  vers la page tire en premier, l'URI vaut déjà `/system-pages/…` quand le matcher `/config.js`
+  est enfin testé, et le bloc devient du **code mort** — la page sert alors son propre HTML au
+  `<script src>`, `window.LANDING_CONFIG` reste indéfini, et l'écran tombe silencieusement sur son
+  repli sans marque. Vécu et corrigé le 2026-08-22 (revue sécu). **Se tranche au `caddy adapt`,
+  jamais à la lecture** : le JSON adapté donne l'ordre réel des handlers.
+  Le `status 200` explicite du config.js dans `handle_errors` est du même ordre — sans lui il
+  hérite du 502/503/504 de la requête d'origine.
+- ⚠ **Une assertion doit DISCRIMINER.** Asserter `LANDING_CONFIG` sur la réponse `/config.js` est
+  un faux positif : `system-pages/503.html` contient lui-même `if (!window.LANDING_CONFIG)`, donc
+  le test lisait la page d'erreur et passait au vert sur une conf morte. Asserter l'**affectation**
+  (`window.LANDING_CONFIG = {`), le **Content-Type JS**, le **statut**, et l'**absence** du
+  marqueur de la page. Règle générale : un marqueur présent des DEUX côtés ne prouve rien.
 - **Non testé = inexistant** : [`../../scripts/test-system-pages.sh`](../../scripts/test-system-pages.sh)
-  (Docker seul, six cas au curl) prouve le comportement de bout en bout, sa conf de test étant
+  (Docker seul, huit cas au curl) prouve le comportement de bout en bout, sa conf de test étant
   **dérivée par `sed`** de `Caddyfile.example` — une seule source. Toucher une page ou le
   câblage Caddy sans repasser ce script, c'est livrer à l'aveugle.
 - ⚠ **Statut `503`, jamais 200** — pour la panne comme pour la maintenance (+ `Retry-After` en
