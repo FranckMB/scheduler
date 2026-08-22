@@ -1,6 +1,6 @@
 # Living Specs System
 
-Last verified @ 2026-08-19 (rotation de fraîcheur — re-vérifié : `backend/tests/Unit/Documentation/{DocPlacementTest,DocStampFreshnessTest,BlockingTestsListMatchesCiTest}.php` existent tous les trois, tout juste) — *(historique des passes retiré le 2026-08-19, audit DOC-33 : 2 entrées empilées. Un stamp REMPLACE, il ne s'empile pas ; l'historique vit dans git : `git log -p --follow specs/README.md`)*
+Last verified @ 2026-08-22 (rotation de fraîcheur — re-vérifié contre le code : les quatre gardes `backend/tests/Unit/Documentation/{DocPlacementTest,DocStampFreshnessTest,RoadmapIdentityTest}.php` et `BlockingTestsListMatchesCiTest.php` existent et passent. **Corrigé ce jour** : la note finale promettait l'inverse de l'encadré ci-dessous — « does not promise automated drift checks » alors que quatre tests les exécutent depuis le 2026-08-08.)
 
 ## 3-Tier Structure
 
@@ -51,7 +51,7 @@ Le 2026-08-08, cette commande a sorti **9 fichiers sur 16** — dont un modifié
 
 **La date est celle du STATUT, pas celle de la dernière édition de fond.** On date le jour où l'on statue sur le fichier ; ce qui a été recalé, et quand, se dit dans la parenthèse (« statut posé ce jour ; contenu recalé jusqu'au JJ par … »). Dater de la dernière édition de fond paraît plus fidèle mais se mord la queue : le commit qui pose le stamp est lui-même une édition, donc le stamp naîtrait déjà en retard sur son propre fichier.
 
-> **Ce n'est plus une promesse : c'est un test.** `backend/tests/Unit/Documentation/DocStampFreshnessTest.php` exécute la règle ci-dessus (groupe `phase1`, donc joué par `unit-tests` — un contexte requis de `main`). Son voisin `BlockingTestsListMatchesCiTest.php` fait le même travail pour la liste des blocking-tests de `CLAUDE.md` §4 contre les steps réels de `ci.yml`, dans les deux sens. Les deux sont nés du même constat : dans ce dépôt, **le seul document qui cesse de mentir est celui qu'un test surveille** — le premier de la série étant `engine/tests/test_contract_version_doc_sync.py`.
+> **Ce n'est plus une promesse : c'est un test.** `backend/tests/Unit/Documentation/DocStampFreshnessTest.php` exécute la règle ci-dessus (groupe `phase1`, donc joué par `unit-tests` — un contexte requis de `main`). Son voisin `BlockingTestsListMatchesCiTest.php` fait le même travail pour la liste des blocking-tests de `CLAUDE.md` §4 contre les steps réels de `ci.yml`, dans les deux sens. `RoadmapIdentityTest.php` (2026-08-22) tient la roadmap elle-même : **un identifiant désigne un item et un seul** — il est cité depuis le code, les commits et les PR, donc le réattribuer casse ces références en silence — et le compteur du titre « Roadmap (N) » dit la vérité. Il est né d'une récidive : `P4-119` et `P5-19` désignaient chacun deux items, alors que `P4-119` est cité dans une vingtaine d'endroits de `frontend/src/features/planning/`. Les deux sont nés du même constat : dans ce dépôt, **le seul document qui cesse de mentir est celui qu'un test surveille** — le premier de la série étant `engine/tests/test_contract_version_doc_sync.py`.
 
 ## Files Overview
 
@@ -62,5 +62,11 @@ Le 2026-08-08, cette commande a sorti **9 fichiers sur 16** — dont un modifié
 
 ## Notes
 
-This README documents the manual maintenance obligations for the living specs system.
-It does not promise automated drift checks or CI enforcement.
+This README documents the maintenance obligations for the living specs system.
+
+⚠ **Ce fichier a longtemps fini par « does not promise automated drift checks or CI enforcement ».**
+C'était faux depuis le 2026-08-08, et contredit dix lignes plus haut par son propre encadré : quatre
+tests du dossier `backend/tests/Unit/Documentation/` exécutent ces règles, et ils tournent dans
+`unit-tests` — un contexte requis de `main`. Ce qui reste **manuel**, et qu'aucun test ne remplace :
+juger si le contenu d'une spec dit encore la vérité. Une machine tient les invariants de FORME
+(placement, fraîcheur d'un stamp, unicité d'un identifiant, décompte) ; elle ne sait pas lire.
