@@ -4,7 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { ArrowUpDown, ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { Button } from "@/shared/components/ui/button";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { DeleteConfirm } from "@/shared/components/ui/delete-confirm";

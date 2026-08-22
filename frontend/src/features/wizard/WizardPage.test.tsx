@@ -6,7 +6,7 @@ import { renderWithProviders } from "@/test/utils";
 import { useNavTransition } from "@/shared/stores/navTransitionStore";
 
 // Established club (a main plan exists) → free wizard navigation, not guided.
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useMe: () => ({ data: { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "b1", hasFinishedVersion: true }, club: { id: "c", name: "C", onboardingCompleted: true } } }),
   // Le panneau des règles du système (dans l'étape Contraintes) lit la saison de travail pour
   // savoir si elle est archivée (lecture seule). Non-archivée par défaut ici.

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import { useWorkingSeason } from "@/features/auth/queries";
+import { useWorkingSeason } from "@/shared/session/queries";
 import { Button } from "@/shared/components/ui/button";
 import { LoadErrorHint } from "@/shared/components/ui/load-error-hint";
 import { Select } from "@/shared/components/ui/select";

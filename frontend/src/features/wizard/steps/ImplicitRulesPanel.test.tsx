@@ -15,7 +15,7 @@ vi.mock("../api", () => ({
 }));
 
 const workingSeason = vi.hoisted(() => ({ value: { isReadonly: false } as { isReadonly: boolean } | null }));
-vi.mock("@/features/auth/queries", () => ({ useWorkingSeason: () => workingSeason.value }));
+vi.mock("@/shared/session/queries", () => ({ useWorkingSeason: () => workingSeason.value }));
 
 const RESOLVED = (over: Partial<Record<ImplicitRuleSetting["ruleKey"], Partial<ImplicitRuleSetting>>> = {}): ImplicitRuleSetting[] =>
   [

@@ -1,13 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { MeResponse, MeSeason } from "@/features/auth/api";
+import type { MeResponse, MeSeason } from "@/shared/session/api";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 import { ReadonlySeasonBanner } from "./ReadonlySeasonBanner";
 
 let meData: Partial<MeResponse> | undefined;
 
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useMe: () => ({ data: meData }),
 }));
 

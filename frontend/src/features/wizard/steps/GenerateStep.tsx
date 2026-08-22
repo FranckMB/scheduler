@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { ToReplaceEntry } from "@/features/planning/lib/toReplaceReason";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { anchorIsWritable, useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
 import { isServiceDown } from "@/features/planning/lib/serviceFailure";
 import { isSeasonPlanType } from "@/features/planning/lib/versions";

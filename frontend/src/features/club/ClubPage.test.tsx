@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { MeResponse } from "@/features/auth/api";
+import type { MeResponse } from "@/shared/session/api";
 
 type ClubMock = (Partial<NonNullable<MeResponse["club"]>> & { name: string }) | null;
 type MeData = { role: string; club: ClubMock; seasonPlan?: MeResponse["seasonPlan"]; seasons?: MeResponse["seasons"]; currentSeasonId?: string | null };
@@ -11,8 +11,10 @@ const me: { data: MeData; isLoading: boolean } = {
   isLoading: false,
 };
 
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useMe: () => me,
+}));
+vi.mock("@/features/auth/queries", () => ({
   usePendingMembers: () => ({ data: { members: [] }, isLoading: false }),
   useApproveMember: () => ({ mutate: vi.fn(), isPending: false }),
   useRejectMember: () => ({ mutate: vi.fn(), isPending: false }),

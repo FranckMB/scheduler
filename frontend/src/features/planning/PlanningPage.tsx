@@ -4,7 +4,8 @@ import { AlertTriangle, CheckCircle2, GitCompare, Loader2, Lock, Pencil, Sparkle
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
-import { useMe, useRenamePlanning, useWorkingSeason } from "@/features/auth/queries";
+import { useRenamePlanning } from "@/features/auth/queries";
+import { useMe, useWorkingSeason } from "@/shared/session/queries";
 import { FeedbackButton } from "@/features/feedback/FeedbackButton";
 import { useWizardStore } from "@/features/wizard/store";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.

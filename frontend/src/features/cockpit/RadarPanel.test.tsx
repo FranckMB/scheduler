@@ -92,7 +92,7 @@ vi.mock("@/features/planning/queries", () => ({
 vi.mock("@/features/coach-wishes/campaignQueries", () => ({ useCoachWishCampaigns: () => ({ data: campaignsData, isError: false }) }));
 // Saison de travail couvrant les fixtures FUTURE (2999) : le clamp saison des
 // créations de vacances (revue #260 round 1) laisse passer les dates de test.
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useWorkingSeason: () => ({ id: "sn1", name: "2998-2999", startDate: "2998-08-01", endDate: "2999-07-31", isCurrent: true, isReadonly: false }),
   useMe: () => ({ data: meData }),
 }));

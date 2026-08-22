@@ -1,4 +1,4 @@
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 
 /**
  * « Socle validé » = le plan de la SAISON pointe une version (chosenScheduleId).

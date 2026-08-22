@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { useWorkingSeason } from "@/features/auth/queries";
+import { useWorkingSeason } from "@/shared/session/queries";
 import type { Schedule } from "@/features/planning/api";
 import { IN_FLIGHT_STATUSES } from "@/features/planning/lib/scheduleStatus";
 import { useDeleteSchedule, useSchedules } from "@/features/planning/queries";

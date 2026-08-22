@@ -29,7 +29,7 @@ const tiersState = { data: [
   { id: 3, label: "B", name: "Moyenne", color: null },
 ] as { id: number; label: string; name: string; color: string | null }[] };
 
-vi.mock("@/features/auth/queries", () => ({ useWorkingSeason: () => ({ startDate: "2025-09-01", endDate: "2026-06-30" }) }));
+vi.mock("@/shared/session/queries", () => ({ useWorkingSeason: () => ({ startDate: "2025-09-01", endDate: "2026-06-30" }) }));
 vi.mock("@/features/wizard/queries", () => ({
   useWizardTeams: () => ({ data: teamsState.data }),
   useWizardCoaches: () => ({ data: coachesState.data }),

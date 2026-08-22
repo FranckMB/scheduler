@@ -20,7 +20,7 @@ import { toast } from "@/shared/stores/toastStore";
 import { MatchWindowsEditor } from "@/features/matches/MatchWindowsEditor";
 import { useVenueMatchWindows } from "@/features/matches/queries";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 
 import type { FfbbSalle, Venue, VenueTrainingSlot } from "../api";
 import { DAYS, durationOptions, DURATIONS, hhmm } from "../lib/days";

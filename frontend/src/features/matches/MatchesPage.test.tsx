@@ -15,7 +15,7 @@ const { placeFixture, unplaceFixture } = vi.hoisted(() => ({
 // Matches are unlocked only once the season's socle is validated. `club`
 // (avec entitlements) est mutable pour piloter le solde de crédits par test.
 const meState = vi.hoisted(() => ({ club: undefined as Record<string, unknown> | undefined }));
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useMe: () => ({ data: { seasonPlan: { id: "p1", name: "Planning", chosenScheduleId: "s1", hasFinishedVersion: true }, club: meState.club } }),
 }));
 

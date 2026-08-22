@@ -14,7 +14,7 @@ const { meState, info, refetch } = vi.hoisted(() => ({
   refetch: vi.fn(),
 }));
 
-vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: meState.data, isLoading: false, isError: meState.isError, refetch }) }));
+vi.mock("@/shared/session/queries", () => ({ useMe: () => ({ data: meState.data, isLoading: false, isError: meState.isError, refetch }) }));
 vi.mock("@/shared/stores/toastStore", () => ({ toast: { info } }));
 
 // Onboarding lock is keyed on the baseline (main plan) existing, not the legacy

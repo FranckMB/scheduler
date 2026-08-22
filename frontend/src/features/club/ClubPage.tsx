@@ -2,8 +2,8 @@ import { Crop, ImagePlus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import { useMe } from "@/features/auth/queries";
-import type { FfbbOrganisme, MeResponse } from "@/features/auth/api";
+import { useMe } from "@/shared/session/queries";
+import type { FfbbOrganisme, MeResponse } from "@/shared/session/api";
 import { PendingMembersSection } from "@/features/auth/PendingMembersSection";
 import { MembersSection } from "@/features/club/MembersSection";
 import { AccordionSection } from "@/shared/components/ui/accordion";

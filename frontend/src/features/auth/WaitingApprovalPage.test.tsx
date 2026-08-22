@@ -3,11 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { MeResponse } from "./api";
+import type { MeResponse } from "@/shared/session/api";
 
 const h = { me: vi.fn(), navigate: vi.fn(), logout: vi.fn() };
 
-vi.mock("./api", () => ({ getMe: () => h.me() }));
+vi.mock("@/shared/session/api", () => ({ getMe: () => h.me() }));
 vi.mock("./queries", () => ({ useLogout: () => h.logout }));
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),

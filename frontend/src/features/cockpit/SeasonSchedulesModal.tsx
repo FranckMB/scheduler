@@ -2,7 +2,7 @@ import { Download, Eye, Loader2, Pencil, Star } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import { useMe, useWorkingSeason } from "@/features/auth/queries";
+import { useMe, useWorkingSeason } from "@/shared/session/queries";
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
 import { type ExportFormat, useScheduleExport } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";

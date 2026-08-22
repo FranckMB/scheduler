@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { STATUS_LABELS, type Schedule } from "@/features/planning/api";
 import { usePlanningStore } from "@/features/planning/store";
 import { useWizardStore } from "@/features/wizard/store";

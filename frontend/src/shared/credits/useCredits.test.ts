@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ClubEntitlements } from "@/features/auth/api";
+import type { ClubEntitlements } from "@/shared/session/api";
 
 import { deriveCredits } from "./useCredits";
 

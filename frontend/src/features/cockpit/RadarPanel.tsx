@@ -1,7 +1,7 @@
 import { AlertTriangle, CalendarClock, CalendarOff, ChevronDown, MapPin, MessageSquare, OctagonX, PartyPopper, Pencil } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 
-import { useWorkingSeason } from "@/features/auth/queries";
+import { useWorkingSeason } from "@/shared/session/queries";
 import { useUnavailabilityImpact, useVenues, useVenueUnavailabilities } from "@/features/matches/queries";
 import { useSchedules, useSlots } from "@/features/planning/queries";
 import { usePlanningStore } from "@/features/planning/store";

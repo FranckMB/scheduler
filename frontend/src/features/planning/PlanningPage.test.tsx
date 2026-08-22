@@ -200,7 +200,7 @@ function makeConflicts(partial: Partial<EntryConflictsResponse> = {}): EntryConf
   };
 }
 
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useMe: () => ({
     data: {
       id: "u1", membershipStatus: "active", role: "admin", club: { id: "c", name: "C" },
@@ -208,8 +208,10 @@ vi.mock("@/features/auth/queries", () => ({
       seasons: [{ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }], currentSeasonId: "sn1",
     },
   }),
-  useRenamePlanning: () => ({ mutate: renameSpy, isPending: false }),
   useWorkingSeason: () => ({ id: "sn1", name: "2025-2026", startDate: "2025-09-01", endDate: "2026-06-30", isCurrent: true, isReadonly: false }),
+}));
+vi.mock("@/features/auth/queries", () => ({
+  useRenamePlanning: () => ({ mutate: renameSpy, isPending: false }),
 }));
 
 // P2-8 : la toolbar lit les gestes (Valider…) du bloc `capabilities` serveur, plus d'un

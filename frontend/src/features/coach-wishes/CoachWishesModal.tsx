@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 
 import type { CalendarEntry } from "@/features/cockpit/api";
 import { periodAdjustWeeks } from "@/features/cockpit/lib/date";
-import { useWorkingSeason } from "@/features/auth/queries";
+import { useWorkingSeason } from "@/shared/session/queries";
 import { ResourceFilter } from "@/features/planning/ResourceFilter";
 import { usePriorityTiers, useWizardCoachPlayers, useWizardCoaches, useWizardTeamCoaches, useWizardTeams } from "@/features/wizard/queries";
 import { dayLabel } from "@/features/wizard/lib/days";

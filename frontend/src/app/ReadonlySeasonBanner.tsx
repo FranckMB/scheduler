@@ -1,6 +1,6 @@
 import { Lock } from "lucide-react";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 
 /**
