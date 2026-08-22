@@ -133,6 +133,9 @@ AGE_VIOLATION_WEIGHT = "age_violation"
 
 HARD = "HARD"
 PREFERRED = "PREFERRED"
+# Lot PASSERELLES — l'intensité d'une passerelle (``teamLinks[].intensity``). ``MANDATORY`` pose
+# l'anti-chevauchement DUR ; ``PREFERRED`` est un terme d'objectif (``objective.add_team_link_penalty``).
+MANDATORY = "MANDATORY"
 
 
 def _record_closure(model: Any, var: BoolVarLike, cause: dict[str, Any]) -> None:
@@ -251,6 +254,9 @@ class HardConstraintStats:
     # P2-27 — contraintes de mutualisation (réification + égalité EXACTE) posées. 0 quand le
     # bloc ``sharedTrainings`` est absent/vide (chemin byte-identique, goldens inchangés).
     shared_training: int = 0
+    # Lot PASSERELLES — contraintes d'anti-chevauchement DUR des passerelles MANDATORY posées. 0
+    # quand le bloc ``teamLinks`` est absent/vide ou tout PREFERRED (chemin byte-identique).
+    team_link: int = 0
     # Littéraux de violation AGRÉGÉS des règles implicites passées en PREFERRED, prêts pour
     # l'objectif : ``(literal, weight_name)``. Vide quand tout est HARD (défaut). Hors du
     # total : ce sont des termes d'objectif, pas des contraintes dures.
@@ -282,6 +288,7 @@ class HardConstraintStats:
             + self.salarie_distribution
             + self.max_consecutive_sessions
             + self.shared_training
+            + self.team_link
         )
 
 
@@ -300,6 +307,7 @@ def add_level_1_hard_constraints(
     team_coach_map: dict[str, list[str]] | None = None,
     team_player_map: dict[str, list[str]] | None = None,
     shared_trainings: Iterable[Any] = (),
+    team_links: Iterable[Any] = (),
 ) -> HardConstraintStats:
     """Add the implicit + derived + new-implicit level-1 hard constraints to a CP-SAT model.
 
@@ -448,6 +456,12 @@ def add_level_1_hard_constraints(
     # 13. P2-27 — mutualisation : chaque groupe déclaré partage EXACTEMENT K séances. Vide ⇒
     # aucune pose (chemin byte-identique, goldens inchangés).
     stats.shared_training = add_shared_training_constraints(model, assignment_list, shared_trainings=shared_trainings)
+
+    # 14. Lot PASSERELLES — anti-chevauchement DUR des passerelles MANDATORY. Vide/tout PREFERRED
+    # ⇒ aucune pose (chemin byte-identique). Les PREFERRED vivent dans l'objectif.
+    stats.team_link = add_team_link_constraints(
+        model, assignment_list, team_links=team_links, shared_trainings=shared_trainings
+    )
 
     return stats
 
@@ -2716,6 +2730,154 @@ def add_shared_training_constraints(
     return added
 
 
+# Lot PASSERELLES — une PLACE d'équipe pour l'anti-chevauchement des passerelles :
+# ``(start_min, end_min, day_int, venue_id, var)``. ``var`` est la BoolVar CP-SAT d'une séance
+# LIBRE, ou ``None`` pour une séance VERROUILLÉE (présente en constante, pas de variable).
+TeamLinkPlacement = tuple[int, int, int, str, "BoolVarLike | None"]
+
+
+def team_link_placements_by_team(
+    assignments: Iterable[AssignmentInput] | Mapping[Any, BoolVarLike] | None,
+    locked_slots: Iterable[Any],
+) -> dict[str, list[TeamLinkPlacement]]:
+    """Regroupe, PAR ÉQUIPE, toutes ses PLACES candidates — séances libres (à variable) ET
+    séances verrouillées (constantes) — sous la forme ``(start, end, day, venue, var|None)``.
+
+    SOURCE UNIQUE partagée par la pose HARD (``add_team_link_constraints``, qui passe des
+    ``AssignmentVariable``) et la pénalité SOFT (``objective.add_team_link_penalty``, qui passe les
+    ``list[dict]`` de production) : l'entrée est NORMALISÉE ici (``_normalise_assignments``), donc les
+    deux jugent le chevauchement sur EXACTEMENT la même géométrie. Une séance sans intervalle
+    exploitable (``_extract_interval`` renvoie None) est ignorée : sans horaire, « se chevaucher »
+    n'a pas de sens.
+    """
+    by_team: dict[str, list[TeamLinkPlacement]] = defaultdict(list)
+    for assignment in _normalise_assignments(assignments):
+        team_id = assignment.team_id
+        venue_id = assignment.venue_id
+        if team_id is None or venue_id is None:
+            continue
+        start, end, day = _extract_interval(assignment)
+        if start is None or end is None or day is None:
+            continue
+        by_team[str(team_id)].append((start, end, int(day), str(venue_id), assignment.var))
+    for locked in locked_slots or ():
+        team_id_l = _get(locked, "team_id", "teamId", default=None)
+        venue_id_l = _get(locked, "venue_id", "venueId", default=None)
+        day_l = _get(locked, "day_of_week", "dayOfWeek", default=None)
+        start_l = _get(locked, "start_time", "startTime", default=None)
+        if team_id_l is None or venue_id_l is None or day_l is None or start_l is None:
+            continue
+        duration_l = int(_get(locked, "duration_minutes", "durationMinutes", default=DEFAULT_SESSION_MINUTES))
+        start_min = _time_to_minutes(start_l)
+        by_team[str(team_id_l)].append((start_min, start_min + duration_l, int(day_l), str(venue_id_l), None))
+    return by_team
+
+
+def team_share_declared_pairs(shared_trainings: Iterable[Any]) -> set[frozenset[str]]:
+    """Les paires d'équipes déclarées MUTUALISÉES (membres d'un même groupe ``sharedTrainings``).
+
+    C'est l'unique condition de l'EXEMPTION doctrinale (arbitrage n°3) : deux séances de deux
+    équipes passerelées ne sont exemptes de l'anti-chevauchement QUE si elles sont sur la MÊME
+    case (gymnase, jour, heure) ET que ces deux équipes partagent un groupe déclaré. Renvoie le
+    set des ``frozenset({tA, tB})`` de tous les couples intra-groupe."""
+    pairs: set[frozenset[str]] = set()
+    for group in shared_trainings or ():
+        members = [str(t) for t in (_get(group, "teamIds", "team_ids", default=()) or ())]
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                pairs.add(frozenset({members[i], members[j]}))
+    return pairs
+
+
+def iter_team_link_overlaps(
+    placements_a: list[TeamLinkPlacement],
+    placements_b: list[TeamLinkPlacement],
+    *,
+    share_declared: bool,
+) -> Iterable[tuple[TeamLinkPlacement, TeamLinkPlacement]]:
+    """Énumère les paires (place de A, place de B) qui SE CHEVAUCHENT dans le temps et ne sont
+    PAS exemptes — le CŒUR de la sémantique passerelle, partagé HARD ⇄ SOFT.
+
+    Chevauchement = même jour + intervalles ``[start, end)`` qui s'intersectent, **quel que soit
+    le gymnase** (doctrine n°2 : cross-gymnase compris). EXEMPTION (arbitrage n°3) : une paire sur
+    la MÊME case (gymnase, jour, heure de début) est exemptée UNIQUEMENT si ``share_declared`` —
+    c'est alors la séance mutualisée volontaire. C'est PLUS STRICT que la tolérance coach D-14
+    (``same_venue_allowed``) : même gymnase + même horaire SANS groupe déclaré reste un
+    chevauchement. Deux séances SÉPARÉES des mêmes équipes (hors case commune) restent soumises."""
+    for a_start, a_end, a_day, a_venue, a_var in placements_a:
+        for b_start, b_end, b_day, b_venue, b_var in placements_b:
+            if a_day != b_day:
+                continue
+            if not _intervals_overlap(a_start, a_end, b_start, b_end):
+                continue
+            same_case = a_venue == b_venue and a_start == b_start
+            if same_case and share_declared:
+                continue
+            yield (a_start, a_end, a_day, a_venue, a_var), (b_start, b_end, b_day, b_venue, b_var)
+
+
+def add_team_link_constraints(
+    model: Any,
+    assignments: Sequence[AssignmentVariable],
+    *,
+    team_links: Iterable[Any] = (),
+    shared_trainings: Iterable[Any] = (),
+) -> int:
+    """Lot PASSERELLES — anti-chevauchement DUR des passerelles ``MANDATORY``.
+
+    Pour chaque passerelle MANDATORY (deux équipes partageant des joueurs), les séances des deux
+    équipes ne doivent JAMAIS se chevaucher dans le temps (patron de ``add_coach_player_non_overlap``
+    :585-667, mais ``same_venue_allowed=False`` et l'exemption groupe-mutualisé à la place — c'est
+    PLUS STRICT que la tolérance coach D-14, doctrine n°3). Selon la nature de chaque place :
+
+      * libre ⇔ libre : ``var_a + var_b <= 1`` (exclusion mutuelle, comme la contrainte 4) ;
+      * libre ⇔ verrouillé : le verrou est SOUVERAIN — la séance libre est forcée à 0 et
+        ``_record_closure`` enregistre la cause NOMMANT la passerelle (rail P4-99). Si la libre
+        est la seule fenêtre de son équipe, la génération sort INFEASIBLE et ``candidate_closures``
+        porte la cause (jamais un « non » nu) ;
+      * verrou ⇔ verrou : DEUX actes volontaires du gestionnaire qui se contredisent — on ne pose
+        AUCUNE contrainte (poser ``1 + 1 <= 1`` rendrait INFEASIBLE muet). La violation est
+        ANNONCÉE post-solve par ``result_builder._diagnose_team_links`` (« un verrou HARD est
+        souverain mais diagnostiqué », CLAUDE.md §6).
+
+    ``team_links`` vide (ou aucune MANDATORY) ⇒ retour immédiat, chemin byte-identique (patron
+    ``add_shared_training_constraints``). Les passerelles ``PREFERRED`` ne sont PAS traitées ici :
+    elles vivent dans l'objectif (``objective.add_team_link_penalty``).
+    """
+    mandatory = [link for link in (team_links or ()) if str(_get(link, "intensity", default=PREFERRED)) == MANDATORY]
+    if not mandatory:
+        return 0
+
+    placements = team_link_placements_by_team(assignments, getattr(model, "locked_slots", ()) or ())
+    share_pairs = team_share_declared_pairs(shared_trainings)
+
+    added = 0
+    for link in mandatory:
+        team_a = str(_get(link, "teamAId", "team_a_id", default=""))
+        team_b = str(_get(link, "teamBId", "team_b_id", default=""))
+        if not team_a or not team_b or team_a == team_b:
+            continue
+        link_id = str(_get(link, "id", default=f"{team_a}_{team_b}"))
+        share_declared = frozenset({team_a, team_b}) in share_pairs
+        cause = {"kind": "team_link", "constraintId": link_id, "label": None}
+        for (_as, _ae, _ad, _av, a_var), (_bs, _be, _bd, _bv, b_var) in iter_team_link_overlaps(
+            placements.get(team_a, []), placements.get(team_b, []), share_declared=share_declared
+        ):
+            if a_var is not None and b_var is not None:
+                model.Add(a_var + b_var <= 1)
+                added += 1
+            elif a_var is not None:  # b verrouillé : la libre s'écarte, cause nommée.
+                model.Add(a_var == 0)
+                _record_closure(model, a_var, cause)
+                added += 1
+            elif b_var is not None:
+                model.Add(b_var == 0)
+                _record_closure(model, b_var, cause)
+                added += 1
+            # else : deux verrous → rien posé, diagnostic post-solve (jamais INFEASIBLE muet).
+    return added
+
+
 def _to_day_int(value: Any) -> int | None:
     """Best-effort weekday int. Legacy string day names (e.g. 'monday') and other
     non-numeric values are skipped, never crash the whole solve (audit review)."""
@@ -3121,10 +3283,15 @@ __all__ = [
     "add_one_session_per_day_constraints",
     "add_room_at_most_one",
     "add_salarie_distribution_constraints",
+    "add_shared_training_constraints",
+    "add_team_link_constraints",
     "add_team_no_overlap",
     "add_time_window_constraints",
     "diagnose_locked_slot_violations",
+    "iter_team_link_overlaps",
     "parse_v2_constraints",
+    "team_link_placements_by_team",
+    "team_share_declared_pairs",
 ]
 
 

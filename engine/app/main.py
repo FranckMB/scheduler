@@ -44,6 +44,7 @@ from app.solver.objective import (
     add_preferred_day_bonus,
     add_preferred_time_bonus,
     add_spacing_penalty,
+    add_team_link_penalty,
     add_venue_preference_bonus,
     build_stability_terms,
     is_team_satisfied_by_hard_locks,
@@ -573,6 +574,7 @@ def _solve(
         team_coach_map=team_coach_map,
         team_player_map=team_player_map,
         shared_trainings=data.get("sharedTrainings", []),
+        team_links=data.get("teamLinks", []),
     )
 
     _time_window_added, conflicts = add_time_window_constraints(model, model.x, parsed["time_windows"])
@@ -646,6 +648,16 @@ def _solve(
         )
     )
 
+    # Lot PASSERELLES PR-2 — malus des passerelles PREFERRED (poids dérivé du tier), termes déjà
+    # pondérés repliés dans le PLACEMENT (phase 1). Vide/tout MANDATORY ⇒ [] (chemin byte-identique).
+    team_link_penalty_terms = add_team_link_penalty(
+        model,
+        assignments,
+        team_links=data.get("teamLinks", []),
+        shared_trainings=data.get("sharedTrainings", []),
+        teams=data.get("teams", []),
+    )
+
     # Phase 1 installs the PLACEMENT objective only; the chaining terms are built
     # into the model but kept out of the objective (apply_chaining=False) so their
     # tiny coefficients never wreck the placement optimality proof.
@@ -656,6 +668,7 @@ def _solve(
         soft_terms=soft_terms,
         hard_satisfied_team_ids=hard_satisfied_team_ids,
         apply_chaining=False,
+        extra_placement_terms=team_link_penalty_terms,
         # A person chains a back-to-back pair as coach OR as player of the team;
         # the map is built once from the constraint links (l.446) and the chaining
         # terms are built once here, so phase 2 (which reuses chaining_terms) is

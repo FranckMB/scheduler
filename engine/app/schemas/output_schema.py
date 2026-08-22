@@ -45,6 +45,9 @@ class DiagnosticCauseSchema(SerializableModel):
         "day_conflict",
         "day_forbidden",
         "forced_venue_elsewhere",
+        # Lot PASSERELLES PR-2 — un candidat LIBRE fermé parce qu'il chevauchait la séance
+        # VERROUILLÉE d'une équipe passerelée MANDATORY (``constraintId`` = id de la passerelle).
+        "team_link",
     ]
     constraint_id: str | None = Field(default=None, alias="constraintId")
     label: str | None = None
@@ -67,6 +70,10 @@ class DiagnosticSchema(SerializableModel):
         "implicit_rule_not_honored",
         "session_below_effective_min",
         "shared_training_not_honored",
+        # Lot PASSERELLES PR-2 — deux équipes déclarées passerelle (partage de joueurs) ont des
+        # séances qui se chevauchent dans le temps : SOFT concédé (PREFERRED) ou verrous HARD qui
+        # se chevauchent sur une MANDATORY (jamais INFEASIBLE muet — CLAUDE.md §6).
+        "team_link_not_honored",
         "soft_lock_moved",
         "unplaced",
         "unplaced_match",

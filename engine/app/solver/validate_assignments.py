@@ -9,6 +9,7 @@ from ortools.sat.python import cp_model
 from app.schemas.validate_input_schema import CandidateAssignmentSchema, ValidateAssignmentsInputSchema
 from app.solver.compromise import CompromiseTermInfo, compute_compromises
 from app.solver.constraints import (
+    MANDATORY,
     HardConstraintStats,
     ParsedConstraints,
     add_level_1_hard_constraints,
@@ -16,6 +17,7 @@ from app.solver.constraints import (
     diagnose_candidate_conflicts,
     parse_v2_constraints,
     resolve_implicit_rules,
+    team_share_declared_pairs,
 )
 from app.solver.model import (
     DEFAULT_SESSION_MINUTES,
@@ -34,6 +36,7 @@ from app.solver.objective import (
     add_preferred_day_bonus,
     add_preferred_time_bonus,
     add_spacing_penalty,
+    add_team_link_penalty,
     add_venue_preference_bonus,
 )
 
@@ -116,6 +119,72 @@ def _shared_training_move_violation(
     return None
 
 
+def _team_link_move_violation(
+    team_links: list[dict[str, Any]],
+    shared_trainings: list[dict[str, Any]],
+    baseline_slots: list[dict[str, Any]],
+    candidate: dict[str, Any],
+    team_names: dict[str, str],
+) -> dict[str, Any] | None:
+    """Lot PASSERELLES PR-2 — refus NOMMÉ (MIROIR MANDATORY) quand un déplacement CRÉE un
+    chevauchement sur une passerelle ``MANDATORY`` (patron ``_shared_training_move_violation``).
+
+    On juge l'ÉTAT CONCRET proposé (baseline gelée + candidat) de façon déterministe : la séance
+    candidate de ``c_team`` chevauche-t-elle une séance de l'équipe LIÉE, même jour, intervalles
+    intersectés (cross-gymnase compris, doctrine n°2) ? EXEMPTION : même case (gymnase, jour,
+    heure) ET les deux équipes partagent un groupe ``sharedTrainings`` déclaré. Le HARD posé dans
+    ``_apply_hard`` rendrait bien le solve INFEASIBLE, mais ``diagnose_candidate_conflicts`` ne
+    saurait pas l'attribuer — ce miroir le NOMME avant le solve.
+
+    Message français nommant les deux équipes ; aucun identifiant interne. ``None`` si rien à dire.
+    """
+    mandatory = [link for link in team_links if str(link.get("intensity") or "PREFERRED") == MANDATORY]
+    if not mandatory:
+        return None
+
+    c_team = str(candidate["team_id"])
+    c_start = int(candidate["start"])
+    c_end = int(candidate["end"])
+    c_day = int(candidate["day"])
+    c_venue = str(candidate["venue_id"])
+    share_pairs = team_share_declared_pairs(shared_trainings)
+
+    by_team: dict[str, list[tuple[int, int, int, str]]] = {}
+    for slot in baseline_slots:
+        by_team.setdefault(str(slot["team_id"]), []).append(
+            (int(slot["start"]), int(slot["end"]), int(slot["day"]), str(slot["venue_id"]))
+        )
+
+    def _team_name(team_id: str) -> str:
+        return team_names.get(team_id) or team_id
+
+    for link in mandatory:
+        team_a = str(link.get("teamAId") or link.get("team_a_id") or "")
+        team_b = str(link.get("teamBId") or link.get("team_b_id") or "")
+        if c_team not in (team_a, team_b) or team_a == team_b or not team_a or not team_b:
+            continue
+        other = team_b if c_team == team_a else team_a
+        share_declared = frozenset({team_a, team_b}) in share_pairs
+        for o_start, o_end, o_day, o_venue in by_team.get(other, []):
+            if o_day != c_day or not (c_start < o_end and o_start < c_end):
+                continue
+            if o_venue == c_venue and o_start == c_start and share_declared:
+                continue  # séance mutualisée déclarée : chevauchement volontaire, autorisé.
+            return {
+                "rule": "team_link_broken",
+                "message": (
+                    f"Ce déplacement fait chevaucher {_team_name(c_team)} et {_team_name(other)}, "
+                    "déclarées en passerelle obligatoire : elles partagent des joueurs et ne peuvent "
+                    "pas s'entraîner en même temps."
+                ),
+                "team_id": c_team,
+                "venue_id": c_venue,
+                "day_of_week": c_day,
+                "start_time": str(candidate["start_time"]),
+            }
+    return None
+
+
 def _build_assignments(
     model: ScheduleCpModel,
     team_coach_map: dict[str, list[str]],
@@ -177,6 +246,7 @@ def _apply_hard(
         team_coach_map=team_coach_map,
         team_player_map=team_player_map,
         shared_trainings=data.get("sharedTrainings", []),
+        team_links=data.get("teamLinks", []),
     )
     add_time_window_constraints(model, model.x, parsed["time_windows"])
     return stats
@@ -281,6 +351,17 @@ def _evaluate_state(
     )
     soft_terms.extend(stats.implicit_soft_terms)
 
+    # Lot PASSERELLES PR-2 — malus des passerelles PREFERRED, avec ``info_out`` : un chevauchement
+    # créé par le déplacement remonte alors comme COMPROMIS nommé (rail P2-32, arbitrage n°4).
+    team_link_penalty_terms = add_team_link_penalty(
+        model,
+        assignments,
+        team_links=data.get("teamLinks", []),
+        shared_trainings=data.get("sharedTrainings", []),
+        teams=data.get("teams", []),
+        info_out=info,
+    )
+
     add_level_2_objective(
         model,
         assignments,
@@ -289,6 +370,7 @@ def _evaluate_state(
         apply_chaining=True,
         team_player_map=team_player_map,
         info_out=info,
+        extra_placement_terms=team_link_penalty_terms,
     )
 
     _, solver = _solve(model, timeout_seconds=timeout_seconds, seed=seed)
@@ -443,6 +525,26 @@ def validate_assignment(
     )
     if shared_violation is not None:
         return {"valid": False, "violations": [shared_violation], "compromises": [], "metrics": metrics}
+
+    # Lot PASSERELLES PR-2 — miroir MANDATORY : un déplacement qui fait chevaucher deux équipes
+    # passerelées obligatoires est refusé, NOMMÉ (le HARD posé plus bas le rendrait INFEASIBLE mais
+    # sans l'attribuer). Patron du miroir mutualisation ci-dessus.
+    team_link_violation = _team_link_move_violation(
+        data.get("teamLinks", []) or [],
+        data.get("sharedTrainings", []) or [],
+        baseline_slots,
+        {
+            "team_id": c_team,
+            "venue_id": c_venue,
+            "day": c_day,
+            "start": c_start_min,
+            "end": c_end_min,
+            "start_time": c_start_text,
+        },
+        team_names,
+    )
+    if team_link_violation is not None:
+        return {"valid": False, "violations": [team_link_violation], "compromises": [], "metrics": metrics}
 
     assignments = _build_assignments(model, team_coach_map, frozen_keys)
     # Le candidat est epingle SEPAREMENT du gel de baseline (model.Add, pas
