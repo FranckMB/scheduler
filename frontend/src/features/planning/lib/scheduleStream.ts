@@ -9,6 +9,9 @@ import { api } from "@/shared/api/client";
 /**
  * FRT-04 — la consommation Mercure côté front, en UN seul endroit.
  *
+ * Le temps réel appartient au PLANNING — remonté de `shared/` le 2026-08-22 (P4-123) :
+ * seuls planning et wizard l'écoutent, ce n'est pas du socle partagé.
+ *
  * Le backend publie l'avancement des générations sur `club:{clubId}:schedule:{id}`
  * (topics privés, SEC-05/06) ; jusqu'ici personne n'écoutait — le front pollait à
  * 2,5 s. Ce module ouvre UN EventSource par session, abonné au TEMPLATE du club

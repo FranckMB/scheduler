@@ -141,7 +141,7 @@ vi.mock("react-router", async (orig) => ({ ...(await orig<typeof import("react-r
 
 // Le flux Mercure ouvre un `EventSource` (absent de jsdom) dès qu'une génération est
 // en vol : on le neutralise pour éprouver GenerationWaiting sans toucher au réseau.
-vi.mock("@/shared/lib/scheduleStream", () => ({
+vi.mock("@/features/planning/lib/scheduleStream", () => ({
   useScheduleStream: () => false,
   isScheduleStreamConnected: () => false,
 }));
