@@ -1,18 +1,18 @@
 # Flux nominal : de l'appel backend a la reponse du moteur
 
-Last verified @ 2026-08-22 (P4-120 — premiere verification stampee de ce fichier, contre le code : contrat 2.13 (`engine/CONTRACT_VERSION`) et comparaison MAJOR seule ✓ · verrou asyncio par club qui ATTEND, jamais de 503 (`app/main.py:127-128`) ✓ · `lockLevel` chaine libre, pas un enum (`input_schema.py:229`) ✓ · `solverTimeoutSeconds` defaut 650 (`input_schema.py:242`) ✓ · paliers workers 1/8 au seuil 200 (`_adaptive_workers`, `app/main.py:442`) ✓ · poids objectif dont `spacing` (`objective.py`) ✓ · `venue_minimum_unreachable` existe ✓ · `solver_version` = version("ortools"), pin `>=9.11,<10` (`pyproject.toml:14`) ✓ · topic `club:{clubId}:schedule:{scheduleId}` (`MercureTopic.php`) ✓. **Un fait corrige** : l'exemple de payload disait `"version": "2.1"` — le backend emet exactement `2.13` (egalite stricte gardee par `PayloadVersionMatchesContractVersionTest`) ; l'exemple montre desormais le payload reel, la tolerance MAJOR reste expliquee en prose)
+Last verified @ 2026-08-22 (P4-120 — premiere verification stampee de ce fichier, contre le code : contrat 2.14 (`engine/CONTRACT_VERSION`) et comparaison MAJOR seule ✓ · verrou asyncio par club qui ATTEND, jamais de 503 (`app/main.py:127-128`) ✓ · `lockLevel` chaine libre, pas un enum (`input_schema.py:229`) ✓ · `solverTimeoutSeconds` defaut 650 (`input_schema.py:242`) ✓ · paliers workers 1/8 au seuil 200 (`_adaptive_workers`, `app/main.py:442`) ✓ · poids objectif dont `spacing` (`objective.py`) ✓ · `venue_minimum_unreachable` existe ✓ · `solver_version` = version("ortools"), pin `>=9.11,<10` (`pyproject.toml:14`) ✓ · topic `club:{clubId}:schedule:{scheduleId}` (`MercureTopic.php`) ✓. **Un fait corrige** : l'exemple de payload disait `"version": "2.1"` — le backend emet exactement `2.14` (egalite stricte gardee par `PayloadVersionMatchesContractVersionTest`) ; l'exemple montre desormais le payload reel, la tolerance MAJOR reste expliquee en prose)
 
 > Ce document decrit le chemin complet d'une requete de generation d'emploi du temps, du moment ou le backend construit le payload jusqu'a la notification en temps reel du frontend. Destine aux developpeurs travaillant sur l'integration backend/engine.
 
 ---
 
-## 1. Le backend construit le payload (contrat 2.13)
+## 1. Le backend construit le payload (contrat 2.14)
 
-Quand un utilisateur clique sur "Generer l'emploi du temps" dans le frontend, le backend assemble un objet JSON conforme au schema `ScheduleInputSchema` (version de contrat **2.13**, fichier `engine/CONTRACT_VERSION`). Voici la structure complete, avec des explications inline.
+Quand un utilisateur clique sur "Generer l'emploi du temps" dans le frontend, le backend assemble un objet JSON conforme au schema `ScheduleInputSchema` (version de contrat **2.14**, fichier `engine/CONTRACT_VERSION`). Voici la structure complete, avec des explications inline.
 
 ```json
 {
-  "version": "2.13",
+  "version": "2.14",
   "clubId": "550e8400-e29b-41d4-a716-446655440000",
   "seasonId": "660e8400-e29b-41d4-a716-446655440001",
 
@@ -127,7 +127,7 @@ Quand un utilisateur clique sur "Generer l'emploi du temps" dans le frontend, le
 
 ### Explications par section
 
-- **`version`** : version du contrat (actuellement `2.13`). Le moteur ne compare que le **MAJOR** : `"2.0"` et `"2.1"` passent tous les deux ; un payload `1.x` ou `3.x` est refuse.
+- **`version`** : version du contrat (actuellement `2.14`). Le moteur ne compare que le **MAJOR** : `"2.0"` et `"2.1"` passent tous les deux ; un payload `1.x` ou `3.x` est refuse.
 - **`clubId` / `seasonId`** : identifiants du club et de la saison en cours. Le moteur ne les utilise pas pour le calcul, mais les inclut dans les logs et les diagnostics.
 - **`venues`** : liste des salles. Chaque salle porte ses **creneaux d'entrainement** explicites dans la cle `trainingSlots` : `{dayOfWeek, startTime, durationMinutes, capacity}`. Il n'existe **ni** cle `availability` **ni** champ `endTime` (la fin se deduit de `startTime + durationMinutes`) — les schemas Pydantic sont `extra=forbid`, donc une cle inconnue provoque un `422`. La `capacity` indique combien d'equipes peuvent occuper le creneau simultanement (gymnase divisible : le backend envoie `canSplit ? capacity : 1`).
 - **`teams`** : liste des equipes. Le champ `sportCategoryId` est **requis** (son absence provoque un `422`). Le `priorityTierId` identifie le rang de priorite (1 = S ... 5 = D), dont le poids est code en dur cote moteur.
@@ -158,7 +158,7 @@ Avant de lancer le solveur, le moteur acquiert un verrou asyncio specifique au `
 
 ### Verification de version
 
-Le moteur verifie que le **MAJOR** de `version` correspond au MAJOR de son contrat (`2` pour le contrat `2.13`) : `"2.0"` comme `"2.13"` sont acceptes — le MINOR est ignore. C'est pourquoi la version que le PAYLOAD s'attribue (constante PHP du builder) DOIT valoir exactement `engine/CONTRACT_VERSION` et non « un `2.x` quelconque » : sinon un changement de forme du payload sans bump de MAJOR passerait inapercu des deux cotes. Cette egalite stricte est gardee par `PayloadVersionMatchesContractVersionTest`. Si le MAJOR differe, le moteur retourne une erreur indiquant la version attendue et la version recue.
+Le moteur verifie que le **MAJOR** de `version` correspond au MAJOR de son contrat (`2` pour le contrat `2.14`) : `"2.0"` comme `"2.14"` sont acceptes — le MINOR est ignore. C'est pourquoi la version que le PAYLOAD s'attribue (constante PHP du builder) DOIT valoir exactement `engine/CONTRACT_VERSION` et non « un `2.x` quelconque » : sinon un changement de forme du payload sans bump de MAJOR passerait inapercu des deux cotes. Cette egalite stricte est gardee par `PayloadVersionMatchesContractVersionTest`. Si le MAJOR differe, le moteur retourne une erreur indiquant la version attendue et la version recue.
 
 ---
 
@@ -340,7 +340,7 @@ Le frontend ecoute ce topic via `EventSource`. Des que l'evenement arrive, le fr
 
 ## Resume du flux en 5 etapes
 
-1. **Backend** : construit le payload (contrat 2.13) a partir des entites du club (equipes, salles, entraineurs, contraintes)
+1. **Backend** : construit le payload (contrat 2.14) a partir des entites du club (equipes, salles, entraineurs, contraintes)
 2. **Moteur** : valide le payload, acquiert le verrou club, verifie le MAJOR de la version
 3. **Solveur** : construit le modele, ajoute les contraintes HARD, definit l'objectif, resout dans le budget adaptatif (60/180/600 s selon la taille du probleme)
 4. **Moteur** : retourne `ScheduleOutputSchema` avec creneaux, diagnostics, metriques

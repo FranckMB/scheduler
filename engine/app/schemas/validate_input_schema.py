@@ -6,6 +6,7 @@ from pydantic import Field
 
 from app.schemas.input_schema import (
     MAX_SHARED_TRAINING_GROUPS,
+    MAX_TEAM_LINKS,
     CoachSchema,
     ConstraintV2Schema,
     ImplicitRulesSchema,
@@ -13,6 +14,7 @@ from app.schemas.input_schema import (
     ScheduleSlotTemplateSchema,
     SerializableModel,
     SharedTrainingGroupSchema,
+    TeamLinkSchema,
     TeamSchema,
     VenueSchema,
 )
@@ -76,6 +78,9 @@ class ValidateAssignmentsInputSchema(SerializableModel):
     shared_trainings: list[SharedTrainingGroupSchema] = Field(
         default_factory=list, alias="sharedTrainings", max_length=MAX_SHARED_TRAINING_GROUPS
     )
+    # Lot PASSERELLES — le verdict accepte AUSSI le bloc `teamLinks` (parité de vocabulaire avec
+    # /generate). ACCEPTÉ mais NON consommé en PR-1. Absent/vide ⇒ aucun effet (rétro-compat).
+    team_links: list[TeamLinkSchema] = Field(default_factory=list, alias="teamLinks", max_length=MAX_TEAM_LINKS)
     candidate: CandidateAssignmentSchema
     # P2-32 — l'état « AVANT » du candidat, pour le DELTA de compromis. Pour un DÉPLACEMENT le
     # backend y pose le placement d'origine de la source (même forme que ``candidate``) : « avant »

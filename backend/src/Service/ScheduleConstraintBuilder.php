@@ -18,6 +18,7 @@ use App\Entity\SharedTrainingGroupTeam;
 use App\Entity\SportCategory;
 use App\Entity\Team;
 use App\Entity\TeamCoach;
+use App\Entity\TeamLink;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
 use App\Entity\Venue;
@@ -53,7 +54,7 @@ final class ScheduleConstraintBuilder
      * Elle DOIT valoir exactement la valeur du fichier — gardé par
      * `PayloadVersionMatchesContractVersionTest`.
      */
-    public const string CONTRACT_VERSION = '2.13';
+    public const string CONTRACT_VERSION = '2.14';
     private const CACHE_TTL_SECONDS = 14_400;
     private const DEFAULT_SOLVER_SEED = 42;
     /**
@@ -193,6 +194,10 @@ final class ScheduleConstraintBuilder
             reservations: $em->getRepository(Reservation::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null], ['id' => 'ASC']),
             // Base-plan mutualisation groups (schedulePlanId IS NULL, P2-27).
             sharedTrainingGroups: $em->getRepository(SharedTrainingGroup::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId, 'schedulePlanId' => null], ['id' => 'ASC']),
+            // Passerelles (lot PASSERELLES) : STRUCTURE de club+saison (patron Team/Coach, PAS
+            // ancré au plan) — la même déclaration nourrit socle et périodes. Filtrée au roster
+            // dans serializeTeamLinks. Inerte en PR-1 (le moteur l'accepte, ne la consomme pas).
+            teamLinks: $em->getRepository(TeamLink::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId], ['id' => 'ASC']),
         );
 
         $this->currentAvailabilitiesByVenue = [];
@@ -387,6 +392,10 @@ final class ScheduleConstraintBuilder
             // Period mutualisation groups: this plan's own (schedulePlanId = planId, P2-27). Un
             // membre désactivé pour la période est filtré au roster dans serializeSharedTrainings.
             sharedTrainingGroups: $em->getRepository(SharedTrainingGroup::class)->findBy(['schedulePlanId' => $schedulePlanId], ['id' => 'ASC']),
+            // Passerelles : STRUCTURE de club+saison (patron Team/Coach) — mêmes lignes que le
+            // socle, jamais des copies ancrées au plan. Le roster de période filtre : une équipe
+            // désactivée pour la période sort du payload, son lien est abandonné (serializeTeamLinks).
+            teamLinks: $em->getRepository(TeamLink::class)->findBy(['clubId' => $clubId, 'seasonId' => $seasonId], ['id' => 'ASC']),
             // ADR-0002 inv. 5 — le bloc `implicitRules` résout la COPIE de CE plan (repli saison
             // si legacy), jamais la portée saison directement : c'est ce que buildForClubSeason
             // (plan null) fait, ici on porte la période.
@@ -506,6 +515,7 @@ final class ScheduleConstraintBuilder
      * @param array<Constraint>            $constraints
      * @param array<Reservation>           $reservations           persistent team→slot HARD pins (base/overlay)
      * @param array<SharedTrainingGroup>   $sharedTrainingGroups   P2-27 mutualisation groups (base: plan NULL / period: = planId)
+     * @param array<TeamLink>              $teamLinks              lot PASSERELLES — club+season bridges (roster-filtered)
      *
      * @return array<string, mixed>
      */
@@ -523,6 +533,7 @@ final class ScheduleConstraintBuilder
         array $constraints = [],
         array $reservations = [],
         array $sharedTrainingGroups = [],
+        array $teamLinks = [],
         ?string $schedulePlanId = null,
     ): array {
         $serializedConstraints = array_merge(
@@ -571,6 +582,11 @@ final class ScheduleConstraintBuilder
             // bloc `sharedTrainings` du payload. Vide (aucun groupe) ⇒ [] : chemin byte-identique
             // côté moteur (default_factory=list). Gardé par SharedTrainingPayloadParityTest.
             'sharedTrainings' => $this->serializeSharedTrainings($sharedTrainingGroups, $teams),
+            // Lot PASSERELLES — ce que le club STOCKE (passerelles club+saison) devient le bloc
+            // `teamLinks` du payload, FILTRÉ au roster (les deux équipes présentes). Vide ⇒ [] :
+            // chemin byte-identique côté moteur (default_factory=list). Inerte en PR-1 (accepté,
+            // non consommé). Gardé par TeamLinkPayloadParityTest.
+            'teamLinks' => $this->serializeTeamLinks($teamLinks, $teams),
         ];
     }
 
@@ -736,6 +752,44 @@ final class ScheduleConstraintBuilder
                 'id' => $group->getId(),
                 'teamIds' => $teamIds,
                 'commonSessions' => $group->getCommonSessions(),
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Sérialise les passerelles en `{id, teamAId, teamBId, intensity}`. FILTRÉ au ROSTER du
+     * payload : une passerelle dont l'une des deux équipes est absente du roster (désactivée pour
+     * la période) est ABANDONNÉE — jamais un teamId fantôme (miroir de serializeSharedTrainings).
+     * `intensity` = l'intensité CÔTÉ ENTRAÎNEMENT (PREFERRED/MANDATORY). Inerte en PR-1.
+     *
+     * @param array<TeamLink> $links
+     * @param array<Team>     $teams
+     *
+     * @return array<int, array{id: string, teamAId: string, teamBId: string, intensity: string}>
+     */
+    private function serializeTeamLinks(array $links, array $teams): array
+    {
+        if ([] === $links) {
+            return [];
+        }
+
+        $rosterIds = [];
+        foreach ($teams as $team) {
+            $rosterIds[$team->getId()] = true;
+        }
+
+        $result = [];
+        foreach ($links as $link) {
+            if (!isset($rosterIds[$link->getTeamAId()], $rosterIds[$link->getTeamBId()])) {
+                continue; // une équipe hors roster : le lien n'a pas de sens dans ce payload
+            }
+            $result[] = [
+                'id' => $link->getId(),
+                'teamAId' => $link->getTeamAId(),
+                'teamBId' => $link->getTeamBId(),
+                'intensity' => $link->getTrainingIntensity()->value,
             ];
         }
 

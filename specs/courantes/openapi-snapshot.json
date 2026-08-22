@@ -26294,6 +26294,11 @@
                     "linkType": {
                         "default": "",
                         "type": "string"
+                    },
+                    "trainingIntensity": {
+                        "description": "Intensit\u00e9 c\u00f4t\u00e9 entra\u00eenement (PREFERRED par d\u00e9faut).",
+                        "default": "",
+                        "type": "string"
                     }
                 }
             },
@@ -26335,6 +26340,17 @@
                             "string",
                             "null"
                         ]
+                    },
+                    "trainingIntensity": {
+                        "enum": [
+                            "PREFERRED",
+                            "MANDATORY"
+                        ],
+                        "description": "Intensit\u00e9 c\u00f4t\u00e9 entra\u00eenement. Optionnel : absent \u21d2 PREFERRED (r\u00e9tro-compatible).",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
                     }
                 }
             },
@@ -26368,6 +26384,11 @@
                         "type": "string"
                     },
                     "linkType": {
+                        "default": "",
+                        "type": "string"
+                    },
+                    "trainingIntensity": {
+                        "description": "Intensit\u00e9 c\u00f4t\u00e9 entra\u00eenement (PREFERRED par d\u00e9faut).",
                         "default": "",
                         "type": "string"
                     }
@@ -26407,6 +26428,11 @@
                                 "type": "string"
                             },
                             "linkType": {
+                                "default": "",
+                                "type": "string"
+                            },
+                            "trainingIntensity": {
+                                "description": "Intensit\u00e9 c\u00f4t\u00e9 entra\u00eenement (PREFERRED par d\u00e9faut).",
                                 "default": "",
                                 "type": "string"
                             }

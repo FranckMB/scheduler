@@ -1,6 +1,13 @@
-Last verified @ 2026-08-21 (régénéré après `docker compose restart php-fpm` — piège opcache, `backend/AGENTS.md` §17. Deux changements du même jour, dans cet ordre : (1) la garde précoce de move — le 422 de `POST /api/schedule-slots/{id}/move` (#680) ; (2) le **retrait de l'export PNG** — la propriété `pngExportUrl` disparaît des schémas `Schedule`. **Aucun path ajouté ni supprimé** par (2) : c'est un retrait de propriété pur)
+Last verified @ 2026-08-22 (régénéré après `docker compose restart php-fpm` — piège opcache, `backend/AGENTS.md` §17. Lot PASSERELLES PR-1 : la propriété `trainingIntensity` apparaît aux schémas `TeamLink` (lecture ET écriture — enum PREFERRED/MANDATORY, défaut PREFERRED). **Aucun path ajouté ni supprimé** : c'est un ajout de propriété pur. Contrat backend⇄engine **2.13 → 2.14**)
 
 Changements récents :
+- **Passerelles PR-1 — intensité côté entraînement (2026-08-22)** : **0 path** — les schémas
+  `TeamLink` (input `TeamLinkInput` + output `TeamLink`) gagnent la propriété optionnelle
+  `trainingIntensity` (enum `PREFERRED`/`MANDATORY`, défaut `PREFERRED`) : l'intensité qui, en PR-2,
+  gouvernera le solveur d'ENTRAÎNEMENT seul (le rail matchs garde sa pénalité SOFT). Ajout de
+  propriété pur, aucun path modifié. Contrat backend⇄engine **2.13 → 2.14** (bloc optionnel
+  `teamLinks` au payload `/generate` et au schéma `/validate-assignments`, **ACCEPTÉ mais non
+  consommé** par le moteur — inertie prouvée : goldens et score de smoke inchangés).
 - **Garde précoce de move sur la grille (2026-08-21)** : **0 path** — `POST /api/schedule-slots/{id}/move`
   refuse désormais AVANT le moteur un triplet sans fenêtre de gymnase (cible inexistante ou jour fermé)
   en **422 `slot_unavailable`**, miroir de `place-slot`. Le snapshot ne bouge que de deux descriptions

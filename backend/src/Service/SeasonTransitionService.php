@@ -351,6 +351,9 @@ final class SeasonTransitionService
             $copy->setTeamAId($teamAId);
             $copy->setTeamBId($teamBId);
             $copy->setLinkType($link->getLinkType());
+            // Passerelles PR-1 : l'intensité côté entraînement se recopie en N+1 (l'oublier
+            // serait une régression silencieuse — gardé par le test de transition).
+            $copy->setTrainingIntensity($link->getTrainingIntensity());
             $this->entityManager->persist($copy);
         }
 

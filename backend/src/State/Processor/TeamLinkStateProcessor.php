@@ -9,6 +9,7 @@ use App\ApiResource\TeamLinkResource;
 use App\Dto\TeamLinkInput;
 use App\Entity\Team;
 use App\Entity\TeamLink;
+use App\Enum\TeamLinkIntensity;
 use App\Enum\TeamLinkType;
 
 /**
@@ -71,6 +72,12 @@ class TeamLinkStateProcessor extends AbstractStateProcessor
         $entity->setTeamBId($teamBId);
         if (null !== $input->linkType) {
             $entity->setLinkType(TeamLinkType::from($input->linkType));
+        }
+        // Absent ⇒ PREFERRED (rétro-compatible) : le défaut de l'entité tient sur une
+        // création ; sur une édition on ne rétrograde pas silencieusement une valeur
+        // envoyée. Seule une intensité EXPLICITE écrase.
+        if (null !== $input->trainingIntensity) {
+            $entity->setTrainingIntensity(TeamLinkIntensity::from($input->trainingIntensity));
         }
 
         // Foreign/unknown teams resolve to null through the tenant+season

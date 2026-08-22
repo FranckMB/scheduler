@@ -523,6 +523,13 @@ jobs:
       - name: SharedTrainingPayloadParityTest
         run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/CrossStack/SharedTrainingPayloadParityTest.php --group phase1'
 
+      # Lot PASSERELLES PR-1 : ce qui est STOCKÉ (passerelles club+saison {teamAId, teamBId,
+      # intensity}) == le bloc `teamLinks` émis au moteur, socle ET période, FILTRÉ au roster —
+      # falsifié dans les deux sens (une passerelle stockée apparaît avec son intensité, un lien
+      # nommant une équipe hors roster de période ne fuit pas).
+      - name: TeamLinkPayloadParityTest
+        run: docker compose exec -T -e APP_ENV=test php-fpm sh -c 'cd /app/backend && php vendor/bin/phpunit tests/CrossStack/TeamLinkPayloadParityTest.php --group phase1'
+
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
