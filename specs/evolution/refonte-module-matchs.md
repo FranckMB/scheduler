@@ -24,7 +24,22 @@
 
 ---
 
-## 1. Le problème en une phrase
+## 1. Le problème en une phrase — et la MISSION (précisée fondateur, 2026-08-22)
+
+**La vérité ABSOLUE, c'est FBI** : c'est là que les matchs se saisissent, c'est ce que la ligue
+voit. Le module n'est PAS un planificateur rival — il est **le guide qui amène la vision du
+gestionnaire jusque dans FBI sans rien oublier, dans les délais de réponse, ou vers une dérogation
+quand la vision ne passe pas**. Un écart app⇄FBI n'est jamais un conflit d'autorité : c'est une
+ALERTE (« ta saisie FBI ne dit pas ce que tu voulais »). Cible humaine nommée : **un gestionnaire
+de 50 ans doit s'en sortir facilement**.
+
+« Façon wizard » se lit dans CE cadre — trois qualités à transposer, PAS un tunnel d'étapes
+obligées : (a) **il guide** (on sait toujours où on en est et quel est le prochain geste),
+(b) **un geste à la fois** (l'écran ne montre que ce qui sert maintenant), (c) **les allers-retours
+sont faciles** (circuler librement sans rien perdre). La liberté de circulation fait partie de la
+simplicité.
+
+### 1bis. Le problème d'origine
 
 Le module matchs est **fonctionnellement complet** (palier A soldé) mais son écran unique est **surchargé et
 non intuitif** : 8 boutons d'action à plat, 4 blocs empilés dans une colonne, 5 modales de même poids, aucune
@@ -283,8 +298,11 @@ d'actions hebdomadaire, et l'image idéale (TypicalWeekendGrid) se cache derriè
 | **L7** | **La semaine devient l'axe primaire.** | Week-end seulement, `externalRef` jamais rendu (§6ter-6) | Filtre semaine (défaut proposé : **semaine ISO** — « journée FFBB » reste l'ouvert §10) ; le week-end reste le rendu de grille ; le **n° de rencontre s'affiche** dans la grille et les listes (repère, jamais clé — fait #2 §4). |
 | **L8** | **RMM-0 recalibré — R1 est TOMBÉE.** | Le registre §6bis supposait la modale mono-taille ; depuis P4-107 (#675, 2026-08-21) `modal.tsx:30-34` porte l'échelle `size` sm/md/lg, gardée par `modal-size.test.tsx` | Le lot devient une pure CONSOMMATION : `size="lg"` sur les dialogues du module + `title` de secours sur B1-B5 + selects élargis + R2 (colonne `20rem`, `MatchesPage.tsx:240`). Plus rien à construire. |
 
-**Ordre de code inchangé** (séquencement validé §9) : RMM-0 (L8) → RMM-2 (L2) → RMM-1 (L1+L3+L4+L5+L6+L7).
-L4 est DANS RMM-1 : c'est un geste UI sur une API existante, pas un lot backend.
+| **L9** | **La VUE DE SAISIE FBI** — la matérialisation de « sans qu'il oublie qqch » (mission §1). | La liste « À placer » s'arrête à PLACED ; rien ne présente ce qui RESTE À SAISIR dans FBI | Au moment d'ouvrir FBI : la **liste à recopier** — matchs domicile `PLACED` non `SUBMITTED` de la semaine/phase, dans l'ordre, avec les champs que FBI demande (n° de rencontre, date, heure, salle) ; cocher = le geste L4 ; la checklist se vide ; l'échéance (RMM-6) affichée à côté. Zéro backend : c'est une PROJECTION des fixtures existants. |
+
+**Ordre de code inchangé** (séquencement validé §9) : RMM-0 (L8) → RMM-2 (L2) → RMM-1 (L1+L3+L4+L5+L6+L7+**L9**).
+L4 est DANS RMM-1 : c'est un geste UI sur une API existante, pas un lot backend. L9 en est le
+débouché naturel — la même donnée, présentée pour la transcription.
 
 ---
 
@@ -448,8 +466,10 @@ validation de besoin + `/plan` (CLAUDE.md §7).
 
 ## 12. En une phrase
 
-Le module matchs est complet mais son écran est un fourre-tout ; on le **réorganise à la façon du wizard**
-(set-up guidé vs boucle hebdomadaire, radar en fil conducteur), on ajoute le **gardien** qui prévient le
+Le module matchs est complet mais son écran est un fourre-tout ; on en fait **le guide qui amène la
+vision du gestionnaire jusque dans FBI sans rien oublier** (mission §1 — FBI est la vérité absolue,
+l'app prépare, vérifie et liste ce qui reste à saisir), avec les trois qualités du wizard — guider,
+un geste à la fois, allers-retours faciles, jamais un tunnel ; on ajoute le **gardien** qui prévient le
 gestionnaire des conflits qu'il découvre aujourd'hui trop tard, on rend **honorable la rotation A/B** qu'il
 dessine à la main, et on branche progressivement le **palier B déjà spécifié** — sans jamais promettre ce que
 la FFBB ne permet pas : le **canal** FBI reste manuel, mais son fichier est traité en **source de données de
