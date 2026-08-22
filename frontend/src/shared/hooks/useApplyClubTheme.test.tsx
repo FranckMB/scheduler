@@ -9,7 +9,7 @@ import { useApplyClubTheme } from "./useApplyClubTheme";
 type Club = { accentColor: string | null; accentColorDark: string | null; accentPalette: string[] | null };
 let club: Club | null = null;
 
-vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: club ? { club } : undefined }) }));
+vi.mock("@/shared/session/queries", () => ({ useMe: () => ({ data: club ? { club } : undefined }) }));
 
 const accentVar = () => document.documentElement.style.getPropertyValue("--accent");
 

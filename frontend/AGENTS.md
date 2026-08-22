@@ -293,7 +293,7 @@ Donc : pour un champ, assertion EXPLICITE du nom —
 
 ### Generation status = SSE, polling as fallback (FRT-04)
 
-`shared/lib/scheduleStream.ts` holds the ONE `EventSource` per session (ref-counted
+`features/planning/lib/scheduleStream.ts` holds the ONE `EventSource` per session (ref-counted
 singleton): auth via `GET /api/mercure/auth` (httpOnly cookie + `topicTemplate` — the front
 never knows its clubId), subscription to the template itself, events invalidate the
 react-query caches. `features/planning/queries.ts` and `features/wizard/queries.ts` keep

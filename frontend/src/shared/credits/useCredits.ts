@@ -1,5 +1,5 @@
-import { useMe } from "@/features/auth/queries";
-import type { ClubEntitlements } from "@/features/auth/api";
+import { useMe } from "@/shared/session/queries";
+import type { ClubEntitlements } from "@/shared/session/api";
 
 /**
  * Le solde de crédits de sortie, prêt à afficher — ou `null` quand il n'y a rien

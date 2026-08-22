@@ -1,4 +1,4 @@
-import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
+import { IN_FLIGHT_STATUSES } from "@/shared/lib/scheduleStatus";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
 import { download, slugFilename } from "@/shared/lib/download";
 import { errorMessage } from "@/shared/lib/errorMessage";
 import { registerLongAction, unregisterLongAction } from "@/shared/lib/longActionAbort";
-import { isScheduleStreamConnected, useScheduleStream } from "@/shared/lib/scheduleStream";
+import { isScheduleStreamConnected, useScheduleStream } from "./lib/scheduleStream";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { LockLevel, PlaceSlotBody, SlotMovePatch } from "./api";

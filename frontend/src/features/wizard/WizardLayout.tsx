@@ -5,7 +5,7 @@ import { useBlocker, useNavigate, useSearchParams } from "react-router";
 
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { useCalendarEntry, useDeleteEntry, usePeriodAnchor } from "@/features/cockpit/queries";
 import { frDateNumeric } from "@/features/cockpit/lib/date";
 import { CoachWishesModal } from "@/features/coach-wishes/CoachWishesModal";

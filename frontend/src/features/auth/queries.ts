@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiErrorMessage } from "@/shared/api/errors";
 import type { AssignableRole } from "@/shared/lib/roles";
 import { useAuthStore } from "@/shared/stores/authStore";
-import { useSeasonStore } from "@/shared/stores/seasonStore";
 import { toast } from "@/shared/stores/toastStore";
 
 import * as authApi from "./api";
@@ -15,34 +14,6 @@ import * as authApi from "./api";
  */
 function toastServerError(err: unknown): void {
   void apiErrorMessage(err).then((message) => toast.error(message));
-}
-
-/** Current user + club + membership status (server source of truth). */
-export function useMe() {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  return useQuery({
-    queryKey: ["me"],
-    queryFn: authApi.getMe,
-    enabled: isAuthenticated,
-    retry: false,
-    staleTime: 60_000,
-  });
-}
-
-/**
- * The season the user is WORKING IN: the explicit selection (X-Season-Id,
- * seasonStore) first, else the calendar-current one. null while `me` loads.
- * Même dérivation que PlanningPage (workingSeason) — source partagée.
- */
-export function useWorkingSeason(): authApi.MeSeason | null {
-  const { data: me } = useMe();
-  const selectedSeasonId = useSeasonStore((s) => s.selectedSeasonId);
-  return (
-    me?.seasons.find((sn) => sn.id === selectedSeasonId)
-    ?? me?.seasons.find((sn) => sn.id === (me.currentSeasonId ?? ""))
-    ?? me?.seasons.find((sn) => sn.isCurrent)
-    ?? null
-  );
 }
 
 /**

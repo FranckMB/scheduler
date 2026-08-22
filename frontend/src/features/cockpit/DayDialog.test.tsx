@@ -77,7 +77,7 @@ vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknow
 // Partiel : clampRangeToSeason (clamp saison des créations, revue #260) reste le vrai.
 vi.mock("./lib/date", async (orig) => ({ ...(await orig<typeof import("./lib/date")>()), todayISO: () => "2026-05-12" }));
 // Saison de travail couvrant les dates de test : le clamp laisse créer.
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useWorkingSeason: () => ({ id: "sn1", name: "2025-2026", startDate: "2025-08-01", endDate: "2026-07-31", isCurrent: true, isReadonly: false }),
   useMe: () => ({ data: meData }),
 }));

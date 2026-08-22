@@ -2,7 +2,7 @@ import { Lock } from "lucide-react";
 import { useState } from "react";
 import { Navigate } from "react-router";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { useSchedules } from "@/features/planning/queries";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 

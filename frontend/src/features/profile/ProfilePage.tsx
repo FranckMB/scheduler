@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 
-import { useLogout, useMe } from "@/features/auth/queries";
+import { useLogout } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { FichePage } from "@/shared/components/ui/fiche-page";

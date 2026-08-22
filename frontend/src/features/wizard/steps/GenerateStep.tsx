@@ -1,4 +1,4 @@
-import { IN_FLIGHT_STATUSES } from "@/features/planning/lib/scheduleStatus";
+import { IN_FLIGHT_STATUSES } from "@/shared/lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
 import { HTTPError } from "ky";
 import { AlertTriangle, CopyPlus, Rocket } from "lucide-react";
@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { ToReplaceEntry } from "@/features/planning/lib/toReplaceReason";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { anchorIsWritable, useCalendarEntry, usePeriodAnchor } from "@/features/cockpit/queries";
 import { isServiceDown } from "@/features/planning/lib/serviceFailure";
 import { isSeasonPlanType } from "@/features/planning/lib/versions";

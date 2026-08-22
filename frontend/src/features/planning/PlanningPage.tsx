@@ -1,10 +1,11 @@
-import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
+import { IN_FLIGHT_STATUSES } from "@/shared/lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, GitCompare, Loader2, Lock, Pencil, Sparkles, Star, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
-import { useMe, useRenamePlanning, useWorkingSeason } from "@/features/auth/queries";
+import { useRenamePlanning } from "@/features/auth/queries";
+import { useMe, useWorkingSeason } from "@/shared/session/queries";
 import { FeedbackButton } from "@/features/feedback/FeedbackButton";
 import { useWizardStore } from "@/features/wizard/store";
 // Same ["priority_tiers"] query key as the matches/wizard hooks — one cache entry.

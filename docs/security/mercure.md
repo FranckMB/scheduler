@@ -80,7 +80,7 @@ on the next poll).
   and the browser only sends it to the hub, same-origin via the vite/nginx
   proxies. Guarded by `backend/tests/Api/MercureAuthTest.php` (phase1 — the
   claim's club scope is a tenant boundary).
-- **Client**: `frontend/src/shared/lib/scheduleStream.ts` — ONE ref-counted
+- **Client**: `frontend/src/features/planning/lib/scheduleStream.ts` — ONE ref-counted
   `EventSource` per session, subscribed to the **template itself as topic**
   (the response's `topicTemplate`; the hub matches every exact
   `club:X:schedule:<uuid>` topic against it, so all the club's generations

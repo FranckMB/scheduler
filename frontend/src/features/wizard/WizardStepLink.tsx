@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { cn } from "@/shared/lib/utils";
 
 import { stepLockReason, wizardDeepLinkHref, type DeepLinkOriginToken } from "./lib/deepLink";

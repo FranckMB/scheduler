@@ -4,7 +4,7 @@ import { CalendarPlus, CalendarRange, Check } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { transitionSeason } from "@/features/auth/api";
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { RedateEventsDialog } from "@/features/season-transition/RedateEventsDialog";
 import { useWizardStore } from "@/features/wizard/store";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";

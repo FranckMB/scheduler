@@ -1,6 +1,6 @@
 # Génération d'un planning — conduite normalisée (bout en bout)
 
-Last verified @ 2026-08-19 (**règle d'atterrissage embarqué arbitrée + verdict d'échec durable**, re-vérifié contre `GenerateStep.tsx`/`PlanningPage.tsx`/`pickLandingSchedule.ts` : §2 « Affichage » recalé — l'écran EMBARQUÉ atterrit désormais sur la version la **plus récente** du plan en portée, le POINTEUR ne l'emporte que sur `/planning` autonome et au cockpit ; le push one-shot de `GenerateStep` a été supprimé et le verdict d'échec de l'étape se dérive de la LISTE, plus du state local ; la promesse « pointeur d'abord, contrat inchangé » qui décrivait l'ancien comportement était devenue fausse. Reste vérifié : la chaîne `POST /api/schedules/{id}/generate` → Messenger → moteur → import → Mercure ✓ · le topic `club:{clubId}:schedule:{scheduleId}` ✓ · le verrou par club ✓ · l'abonné Mercure frontend `scheduleStream.ts` ✓ ; détail : `etat-des-lieux.md` §3) — *(historique des passes retiré le 2026-08-19, audit DOC-33 ; il vit dans git : `git log -p --follow specs/courantes/generation-pipeline.md`)*
+Last verified @ 2026-08-22 (rotation de fraîcheur — re-vérifié contre le code : la chaîne `POST /api/schedules` (DRAFT) et `POST /api/schedules/{id}/generate` existent (debug:router) ✓ · topic `club:{clubId}:schedule:{scheduleId}` (`MercureTopic.php`) ✓ · verrou par club (`ClubGenerationLock.php`, Redis `nx`/`ex`) ✓ · l'abonné Mercure frontend existe ✓ — **et son chemin est recalé dans la même passe** : `scheduleStream.ts` a REMONTÉ de `shared/lib/` vers `features/planning/lib/` (P4-123, le temps réel appartient au planning) — c'est cette PR même qui le déplace, la rotation a attrapé la mention que la passe de déplacement avait manquée) — *(historique des passes retiré le 2026-08-19, audit DOC-33 ; il vit dans git : `git log -p --follow specs/courantes/generation-pipeline.md`)*
 
 > Vérité courante. Décrit ce qui **doit** se passer, zone par zone, quand un
 > gestionnaire lance une génération : ce que fait le frontend, ce que fait le
@@ -46,7 +46,7 @@ via `POST /generate` ; backend → frontend via Mercure SSE `club:{clubId}:sched
 - **Attente** (`features/wizard/steps/GenerateStep.tsx` + `useScheduleStatus`) : poll
   `GET /api/schedules/{id}` tant que le statut ∈ `{PENDING, GENERATING}`. Garde-fou
   client `TIMEOUT_MS = 5 min` → sinon écran d'échec + réessai.
-- **Le frontend CONSOMME désormais Mercure** (FRT-04) — `shared/lib/scheduleStream.ts` ouvre
+- **Le frontend CONSOMME désormais Mercure** (FRT-04) — `features/planning/lib/scheduleStream.ts` ouvre
   **UN EventSource par session**, abonné au TEMPLATE du club (`club:{clubId}:schedule:{id}` tel
   quel : le hub matche chaque topic exact contre lui), donc toutes les générations du club
   arrivent sur la même connexion sans connaître leurs ids à l'avance. L'authentification est un

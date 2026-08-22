@@ -7,7 +7,7 @@ import { useAuthStore } from "@/shared/stores/authStore";
 import { Button } from "@/shared/components/ui/button";
 
 import { AuthLayout } from "./AuthLayout";
-import { getMe } from "./api";
+import { getMe } from "@/shared/session/api";
 import { useLogout } from "./queries";
 
 /**

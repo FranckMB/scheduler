@@ -8,7 +8,7 @@ import { useWizardStore } from "./store";
 
 // Statut de club piloté par test : établi (version finie) = navigation libre ; onboarding = guidé.
 let me: { seasonPlan: { hasFinishedVersion: boolean } } | undefined = { seasonPlan: { hasFinishedVersion: true } };
-vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: me }) }));
+vi.mock("@/shared/session/queries", () => ({ useMe: () => ({ data: me }) }));
 
 beforeEach(() => {
   me = { seasonPlan: { hasFinishedVersion: true } };

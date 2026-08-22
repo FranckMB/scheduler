@@ -1,7 +1,7 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { readState, type ReadState } from "@/shared/lib/readState";
-import { isScheduleStreamConnected, useScheduleStream } from "@/shared/lib/scheduleStream";
+import { isScheduleStreamConnected, useScheduleStream } from "@/features/planning/lib/scheduleStream";
 
 import { activeTeams, pausedTeamIds } from "./lib/activeLayer";
 

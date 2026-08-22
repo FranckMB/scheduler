@@ -1,5 +1,5 @@
-import type { ScheduleStatus } from "@/features/planning/api";
-import { isTerminalStatus } from "@/features/planning/lib/scheduleStatus";
+import type { ScheduleStatus } from "@/shared/lib/scheduleStatus";
+import { isTerminalStatus } from "@/shared/lib/scheduleStatus";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";
@@ -8,6 +8,9 @@ import { api } from "@/shared/api/client";
 
 /**
  * FRT-04 — la consommation Mercure côté front, en UN seul endroit.
+ *
+ * Le temps réel appartient au PLANNING — remonté de `shared/` le 2026-08-22 (P4-123) :
+ * seuls planning et wizard l'écoutent, ce n'est pas du socle partagé.
  *
  * Le backend publie l'avancement des générations sur `club:{clubId}:schedule:{id}`
  * (topics privés, SEC-05/06) ; jusqu'ici personne n'écoutait — le front pollait à

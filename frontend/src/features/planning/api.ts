@@ -2,6 +2,7 @@ import { HTTPError, TimeoutError } from "ky";
 
 import { api } from "@/shared/api/client";
 import { sortByName } from "@/shared/lib/nameOrder";
+import type { ScheduleStatus } from "@/shared/lib/scheduleStatus";
 
 /**
  * Planning read API. Tenant (club) + active season are resolved server-side from
@@ -43,7 +44,6 @@ async function collectionAll<T extends { id: string }>(path: string, searchParam
   return all;
 }
 
-export type ScheduleStatus = "DRAFT" | "PENDING" | "GENERATING" | "COMPLETED" | "FAILED";
 /** Canonical FR labels for a schedule status (toolbar + cockpit banner). */
 export const STATUS_LABELS: Record<ScheduleStatus, string> = {
   DRAFT: "Brouillon",

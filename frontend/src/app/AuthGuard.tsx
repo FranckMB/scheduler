@@ -3,7 +3,7 @@ import { Navigate, Outlet, useLocation } from "react-router";
 
 import { OfflineScreen } from "@/app/OfflineScreen";
 import { ServerErrorScreen } from "@/app/ServerErrorScreen";
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
 import { useOnline } from "@/shared/lib/online";
 import { useAuthStore } from "@/shared/stores/authStore";

@@ -3,7 +3,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { MeResponse, MeSeason } from "@/features/auth/api";
+import type { MeResponse, MeSeason } from "@/shared/session/api";
 import { useSeasonStore } from "@/shared/stores/seasonStore";
 import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
 import { useWizardStore } from "@/features/wizard/store";
@@ -12,7 +12,7 @@ import { SeasonSelector } from "./SeasonSelector";
 let meData: Partial<MeResponse> | undefined;
 const transitionMock = vi.fn();
 
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useMe: () => ({ data: meData }),
 }));
 vi.mock("@/features/auth/api", () => ({

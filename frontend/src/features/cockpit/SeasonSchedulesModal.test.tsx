@@ -24,7 +24,7 @@ let seasonIsReadonly = false;
 vi.mock("@/features/planning/store", () => ({ usePlanningStore: (sel: (s: unknown) => unknown) => sel({ setSelectedScheduleId }) }));
 vi.mock("@/features/wizard/store", () => ({ useWizardStore: { getState: () => ({ jumpTo, startPeriodMode, exitPeriodMode }) } }));
 vi.mock("@/features/planning/queries", () => ({ useScheduleExport: () => ({ run, busy: null }), useSchedules: () => ({ data: [] }) }));
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useMe: () => ({ data: { seasonPlan: { name: "Planning de la saison 2026-2027" } } }),
   useWorkingSeason: () => ({ id: "sn1", name: "2026-2027", startDate: "2026-08-01", endDate: "2027-07-31", isCurrent: true, isReadonly: seasonIsReadonly }),
 }));

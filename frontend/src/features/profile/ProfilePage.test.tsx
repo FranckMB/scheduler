@@ -18,11 +18,13 @@ vi.mock("./queries", () => ({
   useDownloadMyData: () => ({ mutate: exportMut, isPending: false }),
 }));
 
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useMe: () => ({
     data: { id: "u1", email: "flo@club.fr", pendingEmail, firstName: "Flo", lastName: "Journey", role: "admin", club: { name: "BCCL" } },
     isLoading: false,
   }),
+}));
+vi.mock("@/features/auth/queries", () => ({
   useLogout: () => logoutFn,
 }));
 

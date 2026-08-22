@@ -1,4 +1,4 @@
-import type { DeletionImpact } from "@/features/wizard/api";
+import type { DeletionImpact } from "@/shared/api/deletionImpact";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 
 interface DeleteConfirmProps {

@@ -6,7 +6,7 @@ import { renderWithProviders } from "@/test/utils";
 
 // P2-25 — SlotDetail porte désormais un lien « Corriger cette contrainte » (WizardStepLink →
 // useMe pour le verrou du mode guidé). Club établi (version finie) → lien actif, pas verrouillé.
-vi.mock("@/features/auth/queries", () => ({
+vi.mock("@/shared/session/queries", () => ({
   useMe: () => ({ data: { seasonPlan: { hasFinishedVersion: true } } }),
 }));
 

@@ -1,6 +1,6 @@
 import { CalendarPlus } from "lucide-react";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { useTransitionUiStore } from "@/shared/stores/transitionUiStore";
 import { todayDate } from "@/shared/lib/clock";
 

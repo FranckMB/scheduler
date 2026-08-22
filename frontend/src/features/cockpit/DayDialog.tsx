@@ -11,7 +11,7 @@ import { Modal } from "@/shared/components/ui/modal";
 import { toast } from "@/shared/stores/toastStore";
 
 import type { CalendarEntry, PublicHoliday, SchedulePlan, SchoolHoliday } from "./api";
-import { useWorkingSeason } from "@/features/auth/queries";
+import { useWorkingSeason } from "@/shared/session/queries";
 
 import { clampRangeToSeason, frDateShort, groupCoverageSlots, periodWeeksToAdjust, todayISO, weeksCovering } from "./lib/date";
 import { seasonLockTitle, useSocleValidated } from "./lib/socle";

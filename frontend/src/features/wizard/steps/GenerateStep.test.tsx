@@ -30,7 +30,7 @@ const h = {
   transcribe: vi.fn().mockResolvedValue({ id: "sched-t", versionNumber: 1, copiedCount: 5, toReplace: [{ teamId: "t1", dayOfWeek: 3, startTime: "18:00:00", venueId: "v1", reason: "venue_closed" }] }),
 };
 
-vi.mock("@/features/auth/queries", () => ({ useMe: () => ({ data: { club: { name: "BCCL" }, role: h.role } }) }));
+vi.mock("@/shared/session/queries", () => ({ useMe: () => ({ data: { club: { name: "BCCL" }, role: h.role } }) }));
 vi.mock("@/features/cockpit/queries", () => ({
   useCalendarEntry: () => ({ data: null === h.entryId ? null : { id: h.entryId, periodType: h.entryPeriodType } }),
   usePeriodAnchor: () => ("period" === h.mode && null !== h.planId ? { state: "period", planId: h.planId } : { state: "base", planId: null }),

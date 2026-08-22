@@ -2,7 +2,8 @@ import { CalendarCheck2, Flag, LogOut, Menu as MenuIcon, Moon, Settings, Sparkle
 import { useState } from "react";
 import { NavLink, Outlet, useNavigation } from "react-router";
 
-import { useLogout, useMe } from "@/features/auth/queries";
+import { useLogout } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { FeedbackDialog } from "@/features/feedback/FeedbackDialog";
 import { WhatsNewModal } from "@/features/release-notes/WhatsNewModal";
 import { Button } from "@/shared/components/ui/button";

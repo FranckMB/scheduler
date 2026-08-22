@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { useMe } from "@/features/auth/queries";
+import { useMe } from "@/shared/session/queries";
 import { useThemeStore } from "@/shared/stores/themeStore";
 import { accentForMode, readableForeground } from "@/shared/lib/color";
 
