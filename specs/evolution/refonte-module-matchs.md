@@ -92,6 +92,23 @@ Deux temps que l'écran actuel **écrase sur une seule page** :
 
 ---
 
+### 3.3 Le rythme RÉEL — trois phases (précision fondateur, 2026-08-22)
+
+Le « geste récurrent » du §3.2 n'est pas une boucle hebdomadaire uniforme. Le fondateur le précise :
+
+1. **SET-UP** — la semaine idéale A/B, avec les contraintes et les gymnases disponibles (§3.1).
+2. **PLACEMENT par RAFALES** — le batch FBI d'une **phase de poule** arrive (plusieurs semaines de
+   matchs d'un coup) ; il est placé « un peu chaque jour », semaine par semaine, jusqu'à épuisement.
+3. **AJUSTEMENT continu** — entre deux rafales, rien de spécial **sauf** l'ajustement subi : gymnase
+   indispo, dérogation qui oblige à bouger — jusqu'à la rafale de la phase suivante.
+
+Conséquence de conception : la **semaine** reste le grain de travail PENDANT une rafale (le filtre
+FBI, L7), mais le rail d'étapes (L3) ne doit pas se présenter comme une boucle hebdo toujours
+active — une semaine entre deux rafales est en état « veille / ajustement », et comme L3 dérive
+tout des données, cet état tombe naturellement (tout est SUBMITTED → rien à faire).
+
+---
+
 ## 4. Le challenge — quatre faits durs qui recadrent le besoin
 
 1. **« Import FBI par API » — impossible aujourd'hui, mais FBI est une SOURCE de plein droit.** L'API FFBB
@@ -271,6 +288,40 @@ L4 est DANS RMM-1 : c'est un geste UI sur une API existante, pas un lot backend.
 
 ---
 
+## 6quinquies. Changement de gymnase & dépendances au planning de saison (vérifié 2026-08-22)
+
+Réponses aux deux questions fondateur de la passe de conception — chaque fait lu dans le code.
+
+**Changement de gymnase (l'ajustement de la phase 3) — la chaîne existante et son trou :**
+- **Détection** : `VenueUnavailability` (cockpit) + flux d'impact **alerte-seulement** listant les
+  `affectedFixtures` avec leur statut (`frontend/src/features/matches/api.ts:331`) ; radar
+  `ACCESS_WINDOW_LOST` / `VENUE_OVERLAP`, recalculés à la volée.
+- **Réparation** : manuelle — panel, changer gymnase/heure (PUT), ou replacement auto.
+- ⚠ **Un match `SUBMITTED` dont le gymnase meurt est COINCÉ** : panel read-only
+  (`PlacementPanel.tsx:109`), aucun geste de sortie de `SUBMITTED` (§6ter-7). La réversibilité de
+  **L4** n'est donc pas un confort : c'est **LE chemin de réparation** de la phase d'ajustement.
+  Enchaînement RMM-4 : après réparation, l'app SAIT que FBI porte l'ancienne salle — elle peut
+  marquer « diverge de FBI depuis votre changement » au lieu de s'en remettre à la mémoire du
+  gestionnaire.
+
+**Dépendances au planning de saison — à sens unique :**
+- **Matchs ← entraînements : forte, câblée.** Le placement projette les entraînements EFFECTIFS
+  date par date (`MatchPlacementPayloadBuilder:261-294`) via `EffectiveScheduleResolver` : une
+  période active CAPTURE la date (overlay, y compris null = fermeture), sinon la version pointée
+  du plan de saison. Le placement voit donc socle, périodes et fermetures.
+- **Entraînements ← matchs : quasi nulle, par choix de modèle.** « Repos après jour de match » lit
+  `team.matchDay`, champ DÉCLARÉ (`TeamStateProcessor:98`), jamais dérivé des fixtures réels.
+  ⚠ Précision fondateur 2026-08-22 : **le jour de repos se définit par rapport à la semaine idéale
+  A/B** — voir l'impact modèle au §8.
+- ⚠ **La couture qui n'existe pas** : rouvrir/régénérer le planning de saison ne marque PAS les
+  matchs placés — `Fixture` est ABSENT du listener de péremption
+  (`ResourceChangeStaleScheduleListener`, liste des entités écoutées vérifiée). Le placement a été
+  calculé contre une projection qui n'existe plus ; le seul filet est le radar, qui ne parle que si
+  on ouvre le module. **C'est un déclencheur à part entière du « gardien » (RMM-3)** : « le
+  planning de saison a changé depuis ta dernière visite », pas seulement les matchs adverses.
+
+---
+
 ## 7. Le « gardien » — le cœur de l'angoisse du gestionnaire
 
 Le sous-jacent « il ne sait pas si les données reçues sont à jour, et il découvre les conflits **après coup** »
@@ -309,6 +360,16 @@ tracker de dérogation (RMM-7).
    ligue/comité, accès gymnase, indispos) restent les seules HARD ; l'image A/B **pèse dans l'objectif** et
    ne refuse jamais un placement — ni du solveur, ni manuel. Le radar peut signaler « hors image », il ne
    bloque pas.
+**Troisième décision (fondateur, 2026-08-22) : le jour de REPOS se définit par rapport à la semaine
+idéale A/B** — pas par un jour unique déclaré. Aujourd'hui la règle implicite « repos après jour de
+match » du solveur d'ENTRAÎNEMENT lit `team.matchDay` (champ unique, déclaré à la main) : il ne peut
+pas représenter une alternance. Impact sur le périmètre de RMM-5 : l'image A/B nourrit **aussi** le
+côté entraînement — à terme, `matchDay` se DÉRIVE de l'image (fin de la double déclaration), et la
+règle de repos suit. ⚠ Tension à trancher à la conception de RMM-5 : le planning d'entraînement est
+UNE semaine type uniforme, il n'alterne pas — options : repos sur l'UNION des jours A et B, ou
+pondération. Ni `TeamMatchHabit` (unique par `team+day_of_week`, sans dimension type-de-semaine) ni
+`team.matchDay` ne savent porter l'A/B aujourd'hui — c'est le lot RMM-5 qui l'introduit.
+
 2. **Modélisation : propriété du CRÉNEAU de match partagé** — N équipes déclarées sur un créneau, qui
    alternent (SM1/SM2 sur le 20h30). Continuité naturelle avec la couche SOFT « habitudes » du solveur de
    placement (`TeamMatchHabit` est déjà un SOFT protégé) : l'A/B en est l'**extension à parité**.
@@ -338,9 +399,9 @@ quel palier chaque lot appartient — **ne pas créer de doublon de vérité**.
 | **RMM-0** | **Correctifs de lisibilité immédiats** : les 5 bloquant-décision du registre (§6bis) — `title` sur tout libellé tronqué, selects lisibles, et **consommer l'échelle `size` de la modale, LIVRÉE depuis par P4-107** (recalibrage §6quater L8 : plus rien à construire, le lot a baissé de prix). **Une PR courte, AVANT la refonte** (la décision d'appariement est bloquée aujourd'hui). | Front | — | **P2-26** (correctif anticipé) |
 | **RMM-1** | **Refonte UX pure** : séparer SET-UP / geste récurrent, boucle semaine-par-semaine, hiérarchie d'actions, radar en fil conducteur, états vides, filtre par semaine, n° de rencontre affiché. Critère §6bis : aucun libellé décisionnel tronqué, R1/R2 traités à la racine. **Zéro backend.** | Front | — (aucun comportement moteur touché) | **P2-26** (ce fichier = son détail) |
 | **RMM-2** | Extraire le **stepper/rail du wizard** dans `shared/` + exploiter `tabs` ; mutualiser la grille temporelle. Prérequis technique de RMM-1. | Front | — | P2-26 |
-| **RMM-3** | **Gardien à l'ouverture** : recalcul radar + résumé « nouveaux conflits depuis la dernière visite ». Nécessite une **persistance légère** de l'état radar (le radar est stateless aujourd'hui). | Back + Front | contrainte sémantique (conflits) → NR | **net-neuf** (à porter en ligne roadmap) |
+| **RMM-3** | **Gardien à l'ouverture** : recalcul radar + résumé « nouveaux conflits depuis la dernière visite » — déclencheurs incluant **« le planning de saison a changé »** (§6quinquies : une régénération est invisible au module aujourd'hui). Nécessite une **persistance légère** de l'état radar (le radar est stateless aujourd'hui). | Back + Front | contrainte sémantique (conflits) → NR | **net-neuf** (à porter en ligne roadmap) |
 | **RMM-4** | **FBI source de plein droit + réconciliation** : chaque dépôt xlsx = **ingestion datée** (fraîcheur affichée) ; le diff présente **chaque écart domicile** (heure/salle/date) au gestionnaire qui tranche — garder l'app (et corriger FBI) ou prendre le fichier — au lieu de mettre à jour en silence (décision §5). Réutilise le diff de `FbiFixtureImporter`. | Back + Front | — | **net-neuf** (canal manuel — fait #1 du §4) |
-| **RMM-5** | **Rotation A/B** : modèle (alternance sur **créneau partagé** — cas SM1/SM2, §8) + payload/solveur (SOFT « respecte l'image A/B ») + UI SET-UP deux semaines. | Model + Engine + Front | **contrat backend↔engine** + **contrainte sémantique** → NR (contract test + smoke-solver) | **net-neuf** (§8) |
+| **RMM-5** | **Rotation A/B** : modèle (alternance sur **créneau partagé** — cas SM1/SM2, §8) + payload/solveur (SOFT « respecte l'image A/B ») + UI SET-UP deux semaines + **le jour de repos d'entraînement suit l'image** (3ᵉ décision §8 — `matchDay` devient dérivé, la règle implicite côté entraînement aussi). | Model + Engine + Front | **contrat backend↔engine** + **contrainte sémantique** → NR (contract test + smoke-solver) | **net-neuf** (§8) |
 | **RMM-6** | **Échéances ligue/comité** : deadlines + rappel cockpit (radar matchs « deadline J-6 »). | Back + Front | — | **palier B** — [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) §8 |
 | **RMM-7** | **Workflow dérogation** : brouillon + suivi d'état + deadline (tracker + rédacteur, PAS connecteur ligue). Une dérogation **acceptée** peut fonder une règle durable (cas SM2 20h30 → alternance A/B, §8) : le tracker doit pouvoir la **graduer en règle du modèle**. | Back + Front | — | **palier B** — `gestion-matchs-ffbb.md` §8 |
 | **RMM-8** | **Matrice trajet** + conflits spatiaux (empreinte AWAY réelle). Infra partagée avec l'entraînement (FF#5). | Back + Engine | contrainte sémantique → NR | **palier B/vision** — `gestion-matchs-ffbb.md` §7 + roadmap « Matrice de temps de trajet » |
