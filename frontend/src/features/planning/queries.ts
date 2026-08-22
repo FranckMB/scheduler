@@ -1,4 +1,4 @@
-import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
+import { IN_FLIGHT_STATUSES } from "@/shared/lib/scheduleStatus";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { useCallback, useState } from "react";

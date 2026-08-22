@@ -39,7 +39,8 @@ final class TsUnionsMatchPhpEnumsTest extends TestCase
      * @var array<string, string>
      */
     public const array MIRRORED = [
-        'ScheduleStatus' => 'planning/api.ts',
+        // P4-123 — l'union descend dans shared/lib/ (résorption AUD-FRT-21) ; le chemin remonte de src/features via `../`.
+        'ScheduleStatus' => '../shared/lib/scheduleStatus.ts',
         'ScheduleDiagnosticSeverity' => 'planning/api.ts',
         'SchedulePlanType' => 'planning/api.ts',
         'LockLevel' => 'planning/api.ts',

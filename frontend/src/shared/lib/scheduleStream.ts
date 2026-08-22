@@ -1,5 +1,5 @@
-import type { ScheduleStatus } from "@/features/planning/api";
-import { isTerminalStatus } from "@/features/planning/lib/scheduleStatus";
+import type { ScheduleStatus } from "@/shared/lib/scheduleStatus";
+import { isTerminalStatus } from "@/shared/lib/scheduleStatus";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useSyncExternalStore } from "react";

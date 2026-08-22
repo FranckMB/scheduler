@@ -1,4 +1,4 @@
-import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
+import { IN_FLIGHT_STATUSES } from "@/shared/lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, GitCompare, Loader2, Lock, Pencil, Sparkles, Star, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

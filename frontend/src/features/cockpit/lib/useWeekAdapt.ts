@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { useWorkingSeason } from "@/shared/session/queries";
 import type { Schedule } from "@/features/planning/api";
-import { IN_FLIGHT_STATUSES } from "@/features/planning/lib/scheduleStatus";
+import { IN_FLIGHT_STATUSES } from "@/shared/lib/scheduleStatus";
 import { useDeleteSchedule, useSchedules } from "@/features/planning/queries";
 import { toast } from "@/shared/stores/toastStore";
 

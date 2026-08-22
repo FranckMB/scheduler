@@ -1,4 +1,4 @@
-import { IN_FLIGHT_STATUSES } from "@/features/planning/lib/scheduleStatus";
+import { IN_FLIGHT_STATUSES } from "@/shared/lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
 import { HTTPError } from "ky";
 import { AlertTriangle, CopyPlus, Rocket } from "lucide-react";
