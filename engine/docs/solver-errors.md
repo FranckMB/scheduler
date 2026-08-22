@@ -1,5 +1,7 @@
 # Erreurs et diagnostics du solveur
 
+Last verified @ 2026-08-22 (P4-120 — premiere verification stampee de ce fichier, contre le code : `/implicit-constraints` existe (`app/main.py:809`) ✓ · verrou par club qui attend sans 503 ✓ · `coach_overload` compte des JOURS via `maxDaysOverride` (`result_builder.py:561,1658`) ✓ · `UNPLACED_PENALTY` 100 000 ✓ · chainage plafonne a 8 (`CHAINING_TIER_WEIGHTS`) ✓ · semantique 2.8 de `session_below_effective_min` ✓. **Quatre faits corriges dans la meme passe** : `SCORE_FORMULA_VERSION` disait V7 (code : V11) ; les poids de confort dataient d'avant V10 (`preferred` ±60 → ±10, jours/heures +30 → +5, avec la regle V10 « le remplissage prime ») ; `shared_training_not_honored` (ERROR, mutualisation) manquait au catalogue alors que le fichier promet de TOUT recenser ; le « dayOfWeek sans borne » est circonscrit a `VenueTrainingSlotSchema`)
+
 > Ce document recense toutes les erreurs que le moteur peut produire, avec leurs causes et les actions correctives. Destine aux developpeurs et aux utilisateurs avances du club.
 
 ---
@@ -19,7 +21,7 @@ Ces erreurs sont retournees directement par l'API FastAPI, avant meme que le sol
 - Cle inconnue dans le payload (les schemas sont `extra=forbid`)
 - `version: "1.0"` alors que le moteur parle le **MAJOR 2** du contrat `2.13` (`"2.0"` comme `"2.1"` passent)
 
-**Attention — deux pieges qui ne provoquent PAS de 422** : `lockLevel` est une **chaine libre**, pas un enum (un `"FORT"` est accepte et simplement traite comme non-`HARD`), et `dayOfWeek` est un entier **sans borne** (un `8` passe la validation).
+**Attention — deux pieges qui ne provoquent PAS de 422** : `lockLevel` est une **chaine libre**, pas un enum (un `"FORT"` est accepte et simplement traite comme non-`HARD`), et le `dayOfWeek` d'un creneau de gymnase (`VenueTrainingSlotSchema`) est un entier **sans borne** — un `8` passe la validation (d'autres schemas du meme payload, eux, sont bornes `ge=1, le=7` : la tolerance n'est pas une regle generale).
 
 **Que faire** : corriger le payload. Le detail de l'erreur 422 indique exactement quel champ est en cause et pourquoi.
 
@@ -70,6 +72,7 @@ Les diagnostics apparaissent dans le tableau `diagnostics[]` de la reponse. Ils 
 | `unplaced_match` | ERROR | Un match n'a pas pu etre place | Emis par `/place-matches` (rail synchrone, ADR-0003), pas par le solve hebdomadaire. | Ouvrir un creneau compatible, ou revoir la fenetre de la journee. |
 | `day_constraint_conflict` | ERROR | Les regles de jours d'une equipe se contredisent | Un jour est a la fois impose (`forcedDays`) et interdit (`forbiddenDays`), ou tous les jours de la liste blanche (`allowedDays`) sont interdits. L'equipe est alors forcee a 0 seance. | Retirer le recouvrement entre la regle "uniquement / impose" et la regle "evite". |
 | `venue_minimum_unreachable` | ERROR | Un plancher "au moins N seances dans ce gymnase" est inatteignable | Le gymnase offre a l'equipe moins de **jours distincts** que N (elle joue au plus une seance par jour). | Baisser N, ou ouvrir des creneaux sur d'autres jours dans ce gymnase. |
+| `shared_training_not_honored` | ERROR | Un groupe de mutualisation (K seances communes) n'est pas honore | Deux regimes, un seul code : sur INFEASIBLE, cause **certaine** — aucune fenetre de gymnase n'a une capacite ≥ la taille du groupe (le moteur ne l'affirme que quand la capacite l'exclut de facon prouvee) ; sur un solve abouti, defense en profondeur — le nombre reel de seances communes differe du K declare. | Ouvrir un creneau assez capacitaire pour le groupe, ou reduire K / la taille du groupe. |
 | `constraint_not_honored` | INFO / WARNING | Une contrainte saisie n'a pas pu etre appliquee | **INFO** : un verrou HARD l'a ecrasee (P2-9) — indisponibilite coach, fenetre horaire, jour exclu, gymnase interdit. Le verrou prime, la contrainte devient inatteignable. **WARNING** : la contrainte est arrivee sans equipe cible et n'a donc pu etre appliquee a personne. | INFO : retirer le verrou, ou assumer qu'il prime — c'est une decision de gestionnaire, pas une erreur. WARNING : verifier le ciblage de la regle cote backend. |
 
 ---
@@ -134,8 +137,10 @@ Le score est un nombre entier qui reflete la qualite globale de la solution.
 La version actuelle de la formule est :
 
 ```
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V7"
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V11"
 ```
+
+⚠ Cette constante bouge plus vite que la prose : en cas de doute, `app/solver/objective.py` fait foi — c'est elle qu'il faut lire, pas ce fichier.
 
 Ce code est incremente chaque fois que les poids de l'objectif changent. Cela permet de comparer des scores entre generations ayant la meme version de formule. Ne pas comparer un score genere avec `T24_LEVEL_2_FIXED_WEIGHTS_V7` a un score genere avec une version anterieure.
 
@@ -149,7 +154,7 @@ Supposons un club avec :
 - U13M2 (C, 2 seances) : 1 seance placee = 1 x 10 = 10
 - Ecole de basket (D, 1 seance) : 0 seance placee = 0
 
-Score de base = 62 210. S'y ajoutent ensuite les termes soft **reels** de l'objectif : `session_count` (+20 par seance placee), `preferred` / `avoided_venue` (+60 / -60 sur le gymnase prefere ou evite), `preferred_day` et `preferred_time` (+30), `rest` (+3, lendemain de match libre), `spacing` (-2, deux seances sur des jours consecutifs), le bonus de chainage (au plus 8) et la penalite `UNPLACED_PENALTY` (-100 000 par equipe totalement non placee).
+Score de base = 62 210. S'y ajoutent ensuite les termes soft **reels** de l'objectif (poids `LEVEL_2_OBJECTIVE_WEIGHTS`, `app/solver/objective.py`) : `session_count` (+20 par seance placee), `preferred` / `avoided_venue` (+10 / -10 sur le gymnase prefere ou evite), `preferred_day` et `preferred_time` (+5), `rest` (+3, lendemain de match libre), `spacing` (-2, deux seances sur des jours consecutifs), le bonus de chainage (au plus 8, `CHAINING_TIER_WEIGHTS`) et la penalite `UNPLACED_PENALTY` (-100 000 par equipe totalement non placee). Depuis V10 (arbitrage fondateur 2026-08-15 : « le remplissage prime sur le confort »), tous les poids de confort sont recales **sous** la valeur d'une seance nue (tier D 1 + session_count 20 = 21) : le confort departage des solutions qui placent le MEME nombre de seances, jamais une seance contre un confort.
 
 L'objectif ne contient **ni** bonus de preservation des verrous `SOFT` **ni** penalite de surcharge d'entraineur : `soft_lock_moved` et `coach_overload` sont des **diagnostics post-solve**, le solveur les constate apres coup au lieu de les optimiser.
 

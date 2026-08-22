@@ -1,5 +1,7 @@
 # Documentation metier du moteur de generation
 
+Last verified @ 2026-08-22 (P4-120 — premiere verification stampee de ce fichier, contre le code : poids de tiers S 10000/A 1000/B 100/C 10/D 1 fixes dans `app/solver/objective.py` ✓ · budget adaptatif 60/180/600 s plafonne par le payload (`_adaptive_timeout`, `app/main.py:410-425`) ✓ · capacite de creneau derivee backend `canSplit ? capacity : 1` (`ScheduleConstraintBuilder.php:822`) ✓ · `soft_lock_moved` et `constraint_not_honored` existent (`result_builder.py`, `constraints.py`) ✓ · MIN_SESSIONS cible soft ENG-18 (`constraints.py:311`) ✓. **Trois faits corriges dans la meme passe** : `orToolsWeight` n'a jamais quitte le payload (requis et ignore, `input_schema.py:63`) ; les implicites ne sont plus « toujours actives non configurables » — cinq sont reglables via `implicitRules` et `MAX_CONSECUTIVE_DAYS` (P2-42) nait ETEINTE ; les trois paliers du budget sont nommes ; et une 4e correction posee dans la foulee, attrapee en verifiant le doc VOISIN `constraint-coverage.md` : la famille `FACILITY_CAPACITY` etait encore documentee VIVANTE alors qu'elle est retiree depuis le 2026-08-08 — la premiere passe de verification de ce fichier l'avait manquee, preuve que verifier les docs UN PAR UN ne suffit pas, il faut aussi les confronter entre eux)
+
 > Ce document explique le domaine de la planification sportive et ce que le moteur `engine` resout. Destine aux nouveaux developpeurs rejoignant le projet ClubScheduler.
 
 ---
@@ -58,7 +60,7 @@ Une regle metier qui faconne l'emploi du temps. Chaque contrainte a :
   - `DAY` : jours preferes ou interdits (ex. "pas le vendredi", "preferer le mardi")
   - `FACILITY` : assignation de salle (ex. "le SM1 doit etre au Gymnase A")
   - `COACH_AVAILABILITY` : indisponibilite d'un entraineur (ex. "Maxime Dupont indisponible le mercredi")
-  - `FACILITY_CAPACITY` : nombre maximum d'equipes **simultanees** sur un creneau d'un gymnase. Elle ne peut que **resserrer** la capacite du creneau, jamais l'elargir. Ce n'est **pas** une fermeture : une fermeture temporaire est etendue **cote backend** en `FACILITY` / `forbiddenVenueId` par equipe
+  - ~~`FACILITY_CAPACITY`~~ : famille **RETIRÉE le 2026-08-08** (`app/main.py:483-484` — aucun chemin UI ne la creait). Le plafond d'equipes simultanees vit desormais **par creneau** : `VenueTrainingSlot.capacity`, derive cote backend (`canSplit ? capacity : 1`). Quant aux fermetures temporaires : depuis 5b (#263) elles **retirent les creneaux** du payload les jours fermes (`VenueClosureDays`), l'ancienne expansion en `forbiddenVenueId` est supprimee aussi
 
 - **Type de regle (`ruleType`)** :
   - `HARD` : doit absolument etre respectee. Si ce n'est pas possible, le solveur declare l'instance infaisable
@@ -70,7 +72,14 @@ Une regle metier qui faconne l'emploi du temps. Chaque contrainte a :
 
 ### Contraintes implicites
 
-Ces regles sont toujours actives, meme si l'utilisateur ne les configure pas :
+Regles actives **par defaut**, sans que l'utilisateur ait rien a saisir. Nuance importante depuis
+les regles implicites « bien-etre » : cinq d'entre elles sont desormais **reglables** via le bloc
+`implicitRules` du payload (`resolve_implicit_rules`, `app/solver/constraints.py`) — intensite
+`HARD`/`PREFERRED` et seuils (`minRestDays`, `maxConsecutive`, `maxConsecutiveDays`). Sans bloc :
+defauts historiques, tout `HARD`. Une seule **nait ETEINTE** : `MAX_CONSECUTIVE_DAYS` (P2-42,
+« pas N jours d'entrainement d'affilee » pour une EQUIPE — a ne pas confondre avec
+`MAX_CONSECUTIVE_SESSIONS`, qui borne les creneaux d'une PERSONNE dans une journee) : absente du
+payload, elle est `OFF`.
 
 | Contrainte | Description |
 |------------|-------------|
@@ -117,7 +126,7 @@ Les equipes sont classees par tiers. Quand les ressources sont rares, les equipe
 
 Le poids determine combien de points rapporte chaque seance placee. Placer une seance du SM1 (S) rapporte 10 000 points. Placer une seance d'une equipe D rapporte 1 point. Ainsi, si le Gymnase A n'a qu'un seul creneau libre le lundi a 19h00, le moteur le donnera au SM1 plutot qu'a l'ecole de basket.
 
-Ces poids sont **fixes et codes en dur** dans le solveur (garantie de priorite stricte S ≫ A ≫ B ≫ C ≫ D). Ils ne sont **pas** parametrables par club : le champ `orToolsWeight` autrefois transmis a ete retire du payload (accepte puis ignore).
+Ces poids sont **fixes et codes en dur** dans le solveur (`app/solver/objective.py`, garantie de priorite stricte S ≫ A ≫ B ≫ C ≫ D). Ils ne sont **pas** parametrables par club : le champ `orToolsWeight` est toujours **present et requis** dans le payload (`app/schemas/input_schema.py`, `PriorityTierSchema`) mais **aucun code ne le lit** — accepte puis ignore. Le retirer du schema serait un changement de contrat (version a bumper), pas un nettoyage silencieux.
 
 ---
 
@@ -131,4 +140,4 @@ Le moteur retourne trois choses :
 
 Le moteur ne garantit pas que toutes les equipes auront toutes leurs seances. Si le club a 40 equipes et seulement 2 gymnases, certaines equipes de faible priorite risquent de rester sans creneau. C'est un choix explicite : il vaut mieux un emploi du temps partiel mais realiste, qu'un emploi du temps complet mais impossible a tenir.
 
-Le **temps de calcul** s'adapte a la taille du probleme (equipes x gymnases) : ~60 s pour un petit club, jusqu'a 600 s pour un gros, sans jamais depasser le plafond demande. Inutile d'attendre 10 min pour un club a 8 equipes.
+Le **temps de calcul** s'adapte a la taille du probleme (`_adaptive_timeout`, `app/main.py` : complexite = equipes × gymnases, paliers ≤50 → 60 s · ≤200 → 180 s · au-dela → 600 s), toujours plafonne par le budget du payload (`solverTimeoutSeconds`) : le gestionnaire n'attend jamais plus que ce qu'il a demande. Inutile d'attendre 10 min pour un club a 8 equipes.

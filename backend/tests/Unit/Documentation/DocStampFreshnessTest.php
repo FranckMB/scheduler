@@ -87,9 +87,6 @@ final class DocStampFreshnessTest extends TestCase
         'backend/docs/RLS.md' => 'jamais stampé (antérieur au garde) — P4-120',
         'backend/docs/schedule-generation-guide.md' => 'jamais stampé (antérieur au garde) — P4-120',
         'backend/docs/TENANT.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'engine/docs/business.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'engine/docs/nominal-flow.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'engine/docs/solver-errors.md' => 'jamais stampé (antérieur au garde) — P4-120',
     ];
 
     public function testEveryWatchedDocumentCarriesAStamp(): void
