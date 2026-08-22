@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <!--
+    Page « maintenance planifiée » — servie par CADDY, hors de l'application, quand
+    l'interrupteur à fichier témoin est armé (docs/ops/Caddyfile.example : matcher
+    `file` sur maintenance.on, AVANT le reverse_proxy). Répond 503 + Retry-After.
+
+    Contraintes DURES (règle .claude/rules/system-pages.md), identiques à 503.html :
+      · ZÉRO build, fichier autonome, servi tel quel depuis le disque de la VM ;
+      · CSS INLINE · police system-ui SEULE · SVG inline · < 100 Ko ;
+      · le SEUL chargement réseau est /config.js (même origine, servi du disque) ;
+      · AUCUN littéral de marque dans ce HTML — la marque n'apparaît QUE via config.js.
+        Sans lui : titre neutre, logotype masqué, page ENTIÈREMENT fonctionnelle.
+  -->
+  <title>Maintenance planifiée</title>
+  <style>
+    /* Palette DUPLIQUÉE de la landing (dupliquer est VOULU, jamais une dépendance). */
+    :root {
+      --paper: #faf9f7;
+      --surface: #ffffff;
+      --ink: #191714;
+      --ink-2: #57534c;
+      --muted: #6d675d;
+      --line: #e7e3dc;
+      --accent: #c2571e;
+      --accent-ink: #9c4210;
+      --accent-deep: #7e340a;
+      --accent-soft: #faf0e8;
+      --radius: 14px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #14120e;
+        --surface: #1e1b16;
+        --ink: #f7f4ee;
+        --ink-2: #cfc8bb;
+        --muted: #a79f90;
+        --line: #332e27;
+        --accent: #e79457;
+        --accent-ink: #f0a869;
+        --accent-deep: #d97d3c;
+        --accent-soft: #2a2118;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      min-height: 100vh; min-height: 100dvh;   /* dvh : centrage juste sur mobile */
+      display: flex; align-items: center; justify-content: center;
+      background: var(--paper); color: var(--ink);
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      padding: 32px 24px;
+    }
+    main { max-width: 560px; width: 100%; text-align: center; }
+    .logotype {
+      font-size: 20px; font-weight: 800; letter-spacing: -0.02em;
+      color: var(--ink); margin-bottom: 40px; display: none;
+    }
+    .logotype .dot { color: var(--accent); }
+    .mark {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 76px; height: 76px; border-radius: 999px;
+      background: var(--accent-soft); color: var(--accent-ink);
+      margin-bottom: 28px;
+    }
+    .mark svg { width: 38px; height: 38px; display: block; }
+    h1 {
+      font-size: clamp(26px, 5vw, 36px); line-height: 1.12; letter-spacing: -0.02em;
+      font-weight: 800; text-wrap: balance; margin-bottom: 16px;
+    }
+    p.lede {
+      font-size: 17px; color: var(--ink-2); max-width: 46ch;
+      margin: 0 auto; text-wrap: pretty;
+    }
+    .ctas {
+      margin-top: 34px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+    }
+    .btn {
+      display: inline-block; padding: 12px 22px; border-radius: 10px;
+      font-weight: 650; font-size: 15.5px; text-decoration: none; text-align: center;
+      border: 1.5px solid transparent;
+      transition: border-color 120ms ease;
+    }
+    @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+    .btn-ghost { border-color: var(--line); color: var(--ink); background: var(--surface); }
+    .btn-ghost:hover { border-color: var(--muted); }
+    .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+    [data-cta="support"] { display: none; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="logotype" data-brand-logotype href="/"><span data-brand></span><span class="dot">.</span></a>
+
+    <span class="mark" aria-hidden="true">
+      <!-- Un rouleau de peinture : « on refait le parquet ». SVG inline, aucun asset réseau. -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="13" height="6" rx="1.5" />
+        <path d="M16 7h3a1.5 1.5 0 0 1 1.5 1.5V11a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 0 10 14v2" />
+        <rect x="8.5" y="16" width="3" height="5" rx="1" />
+      </svg>
+    </span>
+
+    <h1>On refait le parquet.</h1>
+    <p class="lede">
+      Maintenance planifiée&nbsp;: on ponce, on vernit, on repeint les lignes.
+      On en profite pour graisser les rouages.
+    </p>
+
+    <div class="ctas">
+      <a class="btn btn-ghost" href="#" data-cta="support">Prévenir le support</a>
+    </div>
+  </main>
+
+  <!-- Même origine, même disque : Caddy sert /config.js depuis landing/config.js.
+       Sur une app VIVANTE cette requête part au proxy comme aujourd'hui, sans
+       conséquence — cette page n'est alors jamais affichée. -->
+  <script src="/config.js"></script>
+  <script>
+    (function () {
+      if (!window.LANDING_CONFIG) return; // repli SANS marque, page fonctionnelle.
+      var c = window.LANDING_CONFIG;
+      if (c.brand) {
+        document.title = c.brand + " — " + document.title;
+        var slots = document.querySelectorAll("[data-brand]");
+        for (var i = 0; i < slots.length; i++) slots[i].textContent = c.brand;
+        var logo = document.querySelector("[data-brand-logotype]");
+        if (logo) logo.style.display = "inline-block";
+      }
+      if (c.contactEmail) {
+        var mail = document.querySelector('[data-cta="support"]');
+        if (mail) {
+          mail.href = "mailto:" + c.contactEmail
+            + "?subject=" + encodeURIComponent("Maintenance planifiée");
+          mail.style.display = "inline-block";
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

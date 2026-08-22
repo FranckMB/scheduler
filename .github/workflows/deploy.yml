@@ -303,6 +303,14 @@ jobs:
           "${SSH[@]}" "rm -rf '$DEPLOY_PATH/landing.new' '$DEPLOY_PATH/landing.old'"
           "${SCP[@]}" -r landing "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/landing.new"
           "${SSH[@]}" "if [ -d '$DEPLOY_PATH/landing' ]; then mv '$DEPLOY_PATH/landing' '$DEPLOY_PATH/landing.old'; fi; mv '$DEPLOY_PATH/landing.new' '$DEPLOY_PATH/landing'"
+          # Les pages système (503 + maintenance, statique pur — docs/ops/Caddyfile.example)
+          # partent avec la MÊME version que l'app, exactement comme la landing : même
+          # rollback, même dépôt atomique (dossier NEUF puis bascule, `.old` gardé un cycle).
+          # ⚠ `system-pages/` est un FRÈRE de `landing/`, jamais dedans : le domaine nu
+          #   sert `landing/` et n'exposerait pas 503.html à côté de la page de vente.
+          "${SSH[@]}" "rm -rf '$DEPLOY_PATH/system-pages.new' '$DEPLOY_PATH/system-pages.old'"
+          "${SCP[@]}" -r system-pages "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/system-pages.new"
+          "${SSH[@]}" "if [ -d '$DEPLOY_PATH/system-pages' ]; then mv '$DEPLOY_PATH/system-pages' '$DEPLOY_PATH/system-pages.old'; fi; mv '$DEPLOY_PATH/system-pages.new' '$DEPLOY_PATH/system-pages'"
           # Executed as a FILE, never piped: `docker compose run` reads stdin
           # and would swallow the rest of a piped script (silent half-deploy).
           "${SSH[@]}" "DEPLOY_PATH='$DEPLOY_PATH' VERSION='$VERSION' bash '$DEPLOY_PATH/remote-deploy.sh'"

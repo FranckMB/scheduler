@@ -129,19 +129,25 @@ Le modèle : [`Caddyfile.example`](Caddyfile.example). Trois blocs — la page (
 sur des fichiers du disque), la redirection `www`, et l'app (`reverse_proxy` vers 8081 =
 `FRONTEND_PORT` de `.env.prod`, seul port publié par la stack, sur localhost uniquement).
 
-⚠ **La page de vente est déposée par le workflow de déploiement** (`landing/` → 
-`$DEPLOY_PATH/landing`, §1.6) : le dossier n'existe donc qu'**après le premier déploiement**.
-Avant lui, le domaine nu répond 404 — c'est normal, pas une panne de Caddy.
+⚠ **La page de vente ET les pages système sont déposées par le workflow de déploiement**
+(`landing/` → `$DEPLOY_PATH/landing`, `system-pages/` → `$DEPLOY_PATH/system-pages`, §1.6) :
+ces dossiers n'existent donc qu'**après le premier déploiement**. Avant lui, le domaine nu
+répond 404 — c'est normal, pas une panne de Caddy. Et le bloc d'erreur du site `app.` retombe
+sur le gestionnaire par défaut de Caddy (5xx à corps vide, jamais un 200) tant que
+`system-pages/` n'existe pas.
 
 ⚠ **Droits de lecture** : Caddy tourne sous l'utilisateur `caddy`, pas sous l'utilisateur de
-déploiement. Il lui faut la traversée sur `$DEPLOY_PATH` et la lecture sur `landing/` :
+déploiement. Il lui faut la traversée sur `$DEPLOY_PATH` et la lecture sur `landing/` **et**
+`system-pages/` :
 
 ```bash
 sudo chmod o+x /srv/clubscheduler            # traverser, sans lire le reste
 sudo chmod -R o+rX /srv/clubscheduler/landing
+sudo chmod -R o+rX /srv/clubscheduler/system-pages
 ```
 
-Vérifier plutôt que supposer : `sudo -u caddy cat /srv/clubscheduler/landing/index.html | head -1`.
+Vérifier plutôt que supposer : `sudo -u caddy cat /srv/clubscheduler/landing/index.html | head -1`
+et `sudo -u caddy cat /srv/clubscheduler/system-pages/503.html | head -1`.
 
 ### 1.6 Armer le workflow de déploiement
 
@@ -238,6 +244,36 @@ supprimer).
 - Sentry : erreurs runtime des 3 zones.
 - Sur la VM : `docker compose -f docker-compose.prod.yml --env-file .env.prod ps`
   → tout doit être `healthy`.
+
+### Maintenance planifiée
+
+Pour couper volontairement l'app derrière une page « on refait le parquet » (déploiement lourd,
+migration risquée, intervention base), Caddy porte un **interrupteur à fichier témoin**
+(`docs/ops/Caddyfile.example`). Le matcher est évalué à **chaque requête** : allumer/éteindre
+agit **immédiatement, sans reload Caddy**.
+
+⚠ Le témoin vit à `$DEPLOY_PATH/maintenance.on`, **HORS** du dossier `system-pages/` que le
+deploy bascule — sinon un déploiement pendant la fenêtre l'effacerait en silence.
+
+**Allumer** (puis vérifier qu'on répond bien 503) :
+
+```bash
+ssh <hôte> "touch /srv/clubscheduler/maintenance.on"
+curl -sS -o /dev/null -w '%{http_code}\n' https://app.amateo.app/     # attendu : 503
+```
+
+**Éteindre** (puis vérifier la réouverture) :
+
+```bash
+ssh <hôte> "rm -f /srv/clubscheduler/maintenance.on"
+curl -sS -o /dev/null -w '%{http_code}\n' https://app.amateo.app/     # attendu : 200
+```
+
+⚠ **Anti-oubli** : `remote-deploy.sh` avertit **bruyamment** en fin de deploy si le témoin est
+encore présent. C'est un **rappel**, pas une garantie — il ne le retire jamais tout seul (une
+fenêtre peut délibérément durer plus qu'un deploy) et n'échoue pas le deploy (le deploy, lui,
+a réussi). La vraie garantie qu'une fenêtre n'a pas été oubliée, c'est le **503 qu'une sonde
+voit**.
 
 ### Changer un secret / une variable d'env
 

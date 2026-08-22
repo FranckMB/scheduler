@@ -24,6 +24,7 @@ scoring objective. **Backend** orchestrates/persists/exposes the API, **engine**
 | `engine/` | Python 3.12 · FastAPI · OR-Tools CP-SAT | `app/main.py` | Schedule solver (`POST /generate`, `POST /place-matches`) |
 | `frontend/` | TS · React 19 · Vite · Tailwind 4 | `src/main.tsx` | UI — auth · planning work-loop · data-entry wizard |
 | `landing/` | HTML/CSS statique (zéro build) | `index.html` | Page de vente publique — **hors app**, aucun lien avec `frontend/` ; marque/liens dans `config.js` seul |
+| `system-pages/` | HTML/CSS statique (zéro build) | `503.html` | Pages servies **quand l'app est morte** (503 subie + maintenance) — par **Caddy**, hors Docker ; frère de `landing/`, marque jamais en littéral (`.claude/rules/system-pages.md`) |
 | `specs/` | Markdown | `specs/README.md` | Living specs (initiales/courantes/evolution) |
 
 **Boundaries (critical — never cross):** `frontend → backend` via `/api/*` · `backend → engine` via
