@@ -13,6 +13,7 @@ use App\Entity\SchedulePlan;
 use App\Entity\SharedTrainingGroup;
 use App\Entity\SharedTrainingGroupTeam;
 use App\Entity\Team;
+use App\Entity\TeamLink;
 use App\Entity\TeamPeriodOverride;
 use App\Entity\TeamTag;
 use App\Entity\TeamTagAssignment;
@@ -134,6 +135,9 @@ use Doctrine\ORM\Events;
 #[AsEntityListener(event: Events::postPersist, method: 'teamTouched', entity: Team::class)]
 #[AsEntityListener(event: Events::postUpdate, method: 'teamTouched', entity: Team::class)]
 #[AsEntityListener(event: Events::postRemove, method: 'teamTouched', entity: Team::class)]
+#[AsEntityListener(event: Events::postPersist, method: 'teamLinkTouched', entity: TeamLink::class)]
+#[AsEntityListener(event: Events::postUpdate, method: 'teamLinkTouched', entity: TeamLink::class)]
+#[AsEntityListener(event: Events::postRemove, method: 'teamLinkTouched', entity: TeamLink::class)]
 #[AsEntityListener(event: Events::postPersist, method: 'teamTagAssignmentTouched', entity: TeamTagAssignment::class)]
 #[AsEntityListener(event: Events::postUpdate, method: 'teamTagAssignmentTouched', entity: TeamTagAssignment::class)]
 #[AsEntityListener(event: Events::postRemove, method: 'teamTagAssignmentTouched', entity: TeamTagAssignment::class)]
@@ -222,6 +226,14 @@ final class ResourceChangeStaleScheduleListener
 
     public function teamTouched(Team $entity): void
     {
+        $this->markClubSeason($entity->getClubId(), $entity->getSeasonId());
+    }
+
+    public function teamLinkTouched(TeamLink $entity): void
+    {
+        // Passerelle = STRUCTURE de club+saison (patron teamTouched) : elle nourrit /generate
+        // pour TOUS les plans du club+saison (socle ET périodes, mêmes lignes). L'invalidation du
+        // cache payload est portée à part par CacheInvalidationListener (générique, via getClubId).
         $this->markClubSeason($entity->getClubId(), $entity->getSeasonId());
     }
 

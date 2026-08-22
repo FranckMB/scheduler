@@ -116,6 +116,7 @@ refusé 409, route sous les gardes rôle+tenant) ·
 `CrossStack/ImplicitRulePayloadParityTest` (règles implicites bien-être : ce qui est STOCKÉ **dans la portée du plan** == le bloc `implicitRules` que SON payload émet, défauts compris — un plan de période émet sa COPIE prise à sa naissance et une modification de saison ne redescend PAS ; un plan né avant la copie retombe sur le bloc saison ; falsifié dans les deux sens) ·
 `CrossStack/PreviousAssignmentsPayloadParityTest` (placement précédent ÉMIS au moteur == placements de la version source en base — falsifié dans les deux sens ; source explicite / repli dernière COMPLETED / première génération = pas de bloc / overlay = sa propre lignée jamais le socle / HARD inclus ; une dernière COMPLETED née d'une transcription (P2-44 PR-4, ADR-0004) compte comme n'importe quelle COMPLETED : ses placements, et EUX seuls, sont émis ; ET le précédent n'entre pas dans le hash de snapshot — pas de dérive `snapshotHash` ⇄ `currentStructureHash`) ·
 `CrossStack/SharedTrainingPayloadParityTest` (mutualisation : ce qui est STOCKÉ — groupes {équipes, K} ancrés au plan — == le bloc `sharedTrainings` émis au moteur, socle ET période, portée dérivée du plan ; falsifié dans les deux sens — un groupe stocké apparaît, un groupe d'une autre portée ne fuit pas) ·
+`CrossStack/TeamLinkPayloadParityTest` (passerelles : ce qui est STOCKÉ — {teamAId, teamBId, intensity} de club+saison (STRUCTURE, patron Team/Coach) — == le bloc `teamLinks` émis au moteur, socle ET période, FILTRÉ au roster ; falsifié dans les deux sens — une passerelle stockée apparaît avec son intensité, un lien nommant une équipe désactivée pour la période ne fuit pas) ·
 `Security/SocleDeviationParityTest` (les écarts NOMMÉS d'une version de FERMETURE vs le socle pointé, route de lecture `GET /schedules/{id}/socle-deviation` : séances DÉPLACÉES (appariement chronologique socle→période) et NON REPLACÉES (reliquat du socle, raison SERVIE par la sélection — team_reduced/venue_disabled/venue_closed, `null` quand inexpliquée, jamais fabriquée) ; ni les inchangées ni les nouvelles ne sont rapportées, une équipe désactivée n'a aucun écart ; falsifié dans les deux sens, plus 422 saison/vacances, 409 non-COMPLETED/socle non pointé, tenant, lecture ouverte au Membre).
 Detail: `docs/testing/testing-strategy.md`.
 
@@ -162,7 +163,7 @@ Detail: `docs/testing/testing-strategy.md`.
   signifie pas « plan sans version » — un plan futur DÉJÀ généré est balayé lui aussi. Corollaire : la
   grille copiée ne peut périmer en silence que pour une période **déjà commencée**.
 - **Contrat backend⇄engine** : schemas Pydantic ⇄ payload, version `engine/CONTRACT_VERSION`
-  (**2.13**, un seul contrat pour les 3 endpoints `/generate` · `/place-matches` · `/validate-assignments`),
+  (**2.14**, un seul contrat pour les 3 endpoints `/generate` · `/place-matches` · `/validate-assignments`),
   **sync manuelle, pas de codegen** — gardé par `ContractSchemaTest` +
   `MatchPlacementContractSchemaTest` + `ValidateAssignmentsContractSchemaTest`.
 - **FFBB outbound** : hosts hard-codés (SSRF-safe), best-effort, le frontend n'appelle jamais FFBB.

@@ -23,11 +23,16 @@ MAX_SLOTS_PER_VENUE = 1000
 MAX_SLOTS_TOTAL = 3000
 MAX_TAGS_PER_TEAM = 50
 # P2-27 — mutualisation : plafonds du bloc `sharedTrainings`. 50 groupes (~10x un gros club
-# FFBB), 2..10 équipes par groupe (cap technique fondateur, minimum métier 2). Défense en
-# profondeur : le backend borne déjà à la saisie (422), ceci est la dernière ligne au bord.
+# FFBB), 2..10 équipes par groupe (cap technique fondateur, minimum métier 2). ⚠ La FORME
+# (2..10, doublons) est bornée à la saisie backend, mais le NOMBRE de groupes ne l'est PAS
+# (mesuré 2026-08-22) : ce cap au bord est la SEULE borne du compte — dette P4, roadmap.
 MAX_SHARED_TRAINING_GROUPS = 50
 MIN_TEAMS_PER_SHARED_GROUP = 2
 MAX_TEAMS_PER_SHARED_GROUP = 10
+# Lot PASSERELLES — plafond du bloc `teamLinks` : 50 passerelles (~10x un gros club FFBB).
+# Défense en profondeur : le backend borne à la SAISIE (TeamLinkStateProcessor::MAX_TEAM_LINKS,
+# miroir manuel de cette constante), ceci est la dernière ligne au bord.
+MAX_TEAM_LINKS = 50
 
 
 class SerializableModel(BaseModel):
@@ -218,6 +223,21 @@ class SharedTrainingGroupSchema(SerializableModel):
     common_sessions: int = Field(alias="commonSessions", ge=1)
 
 
+class TeamLinkSchema(SerializableModel):
+    """Lot PASSERELLES — deux équipes déclarées partager des joueurs (« passerelle »).
+
+    ``intensity`` gouverne le CÔTÉ ENTRAÎNEMENT uniquement : ``PREFERRED`` (objectif souple)
+    ou ``MANDATORY`` (contrainte dure). En PR-1 le bloc est ACCEPTÉ mais PAS consommé : aucun
+    ``y`` posé, goldens inchangés. Un bloc ``teamLinks`` absent/vide ⇒ chemin byte-identique
+    (patron ``sharedTrainings``).
+    """
+
+    id: str
+    team_a_id: str = Field(alias="teamAId")
+    team_b_id: str = Field(alias="teamBId")
+    intensity: Literal["PREFERRED", "MANDATORY"] = "PREFERRED"
+
+
 class ScheduleSlotTemplateSchema(SerializableModel):
     id: str
     team_id: str = Field(alias="teamId")
@@ -268,6 +288,10 @@ class ScheduleInputSchema(SerializableModel):
     shared_trainings: list[SharedTrainingGroupSchema] = Field(
         default_factory=list, alias="sharedTrainings", max_length=MAX_SHARED_TRAINING_GROUPS
     )
+    # Lot PASSERELLES — passerelles déclarées (deux équipes partageant des joueurs). ACCEPTÉ mais
+    # NON consommé en PR-1 : absent/vide ⇒ payload byte-identique (patron sharedTrainings), goldens
+    # et score inchangés. Cap 50 miroité à la saisie backend (TeamLinkStateProcessor).
+    team_links: list[TeamLinkSchema] = Field(default_factory=list, alias="teamLinks", max_length=MAX_TEAM_LINKS)
 
     @model_validator(mode="after")
     def _bound_total_slots(self) -> ScheduleInputSchema:

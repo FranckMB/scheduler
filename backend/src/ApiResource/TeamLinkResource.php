@@ -52,6 +52,10 @@ class TeamLinkResource
     #[Groups(['read'])]
     public string $linkType = '';
 
+    /** Intensité côté entraînement (PREFERRED par défaut). */
+    #[Groups(['read'])]
+    public string $trainingIntensity = '';
+
     public static function fromEntity(TeamLink $entity): self
     {
         $dto = new self;
@@ -62,6 +66,7 @@ class TeamLinkResource
         $dto->teamAId = $entity->getTeamAId();
         $dto->teamBId = $entity->getTeamBId();
         $dto->linkType = $entity->getLinkType()->value;
+        $dto->trainingIntensity = $entity->getTrainingIntensity()->value;
 
         return $dto;
     }

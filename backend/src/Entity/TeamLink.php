@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Enum\TeamLinkIntensity;
 use App\Enum\TeamLinkType;
 use App\Repository\TeamLinkRepository;
 use DateTimeImmutable;
@@ -64,6 +65,14 @@ class TeamLink implements TenantOwnedInterface
 
     #[ORM\Column(length: 20, enumType: TeamLinkType::class)]
     private TeamLinkType $linkType;
+
+    /**
+     * Intensité CÔTÉ ENTRAÎNEMENT (lot PASSERELLES). Défaut PREFERRED : l'existant
+     * (créé avant ce champ, migration DEFAULT 'PREFERRED') devient PREFERRED. Ne
+     * touche pas le rail matchs — arbitrage fondateur n°1.
+     */
+    #[ORM\Column(name: 'training_intensity', length: 20, enumType: TeamLinkIntensity::class, options: ['default' => 'PREFERRED'])]
+    private TeamLinkIntensity $trainingIntensity = TeamLinkIntensity::PREFERRED;
 
     public function __construct()
     {
@@ -176,6 +185,18 @@ class TeamLink implements TenantOwnedInterface
     public function setLinkType(TeamLinkType $linkType): self
     {
         $this->linkType = $linkType;
+
+        return $this;
+    }
+
+    public function getTrainingIntensity(): TeamLinkIntensity
+    {
+        return $this->trainingIntensity;
+    }
+
+    public function setTrainingIntensity(TeamLinkIntensity $trainingIntensity): self
+    {
+        $this->trainingIntensity = $trainingIntensity;
 
         return $this;
     }

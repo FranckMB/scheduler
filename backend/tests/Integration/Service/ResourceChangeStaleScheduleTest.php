@@ -11,6 +11,7 @@ use App\Entity\Schedule;
 use App\Entity\ScheduleDiagnostic;
 use App\Entity\Season;
 use App\Entity\SharedTrainingGroup;
+use App\Entity\TeamLink;
 use App\Entity\TeamTag;
 use App\Entity\Venue;
 use App\Entity\VenuePeriodOverride;
@@ -22,6 +23,8 @@ use App\Enum\ImplicitRuleKey;
 use App\Enum\ScheduleDiagnosticSeverity;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
+use App\Enum\TeamLinkIntensity;
+use App\Enum\TeamLinkType;
 use App\Service\ScheduleResultImporter;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
@@ -366,6 +369,47 @@ final class ResourceChangeStaleScheduleTest extends KernelTestCase
         );
     }
 
+    public function testATeamLinkMarksTheClubSeasonSchedules(): void
+    {
+        [$club, $season] = $this->seed();
+        $schedule = $this->seasonSchedule($club, $season);
+
+        $otherSeason = $this->season($club, '2026-2027', '2026-09-01', '2027-06-30');
+        $otherSchedule = $this->seasonSchedule($club, $otherSeason);
+        $this->em->flush();
+
+        // Une passerelle est STRUCTURE de club+saison (patron Team) : elle nourrit /generate pour
+        // tous les plans du club+saison → périme. Season-scopé : la N+1 reste intacte.
+        $this->storeTeamLink($club, $season);
+
+        self::assertTrue(
+            $this->reload($schedule)->isResourcesChangedSinceGeneration(),
+            'Une passerelle modifiée périme les plannings COMPLETED du club+saison.',
+        );
+        self::assertFalse(
+            $this->reload($otherSchedule)->isResourcesChangedSinceGeneration(),
+            'La frontière saison tient : une passerelle de la saison N ne périme pas la N+1.',
+        );
+    }
+
+    public function testAnImportClearsTheMarkerAfterATeamLinkChange(): void
+    {
+        [$club, $season] = $this->seed();
+        $schedule = $this->seasonSchedule($club, $season);
+        $this->em->flush();
+
+        $this->storeTeamLink($club, $season);
+        self::assertTrue($this->reload($schedule)->isResourcesChangedSinceGeneration());
+
+        $managed = $this->reload($schedule);
+        $this->importer->import($managed, ['slots' => []]);
+
+        self::assertFalse(
+            $this->reload($schedule)->isResourcesChangedSinceGeneration(),
+            'Un import de résultat solveur démarque le planning après un changement de passerelle.',
+        );
+    }
+
     public function testAResultEntityWriteMarksNothing(): void
     {
         [$club, $season] = $this->seed();
@@ -548,6 +592,33 @@ final class ResourceChangeStaleScheduleTest extends KernelTestCase
         $this->em->persist($group);
         $this->em->flush();
         $this->em->clear();
+    }
+
+    private function storeTeamLink(Club $club, Season $season): void
+    {
+        // Les teamAId/teamBId ne sont pas relus par le listener (dénormalisés) : deux uuids
+        // suffisent à déclencher le marquage club+saison. Normalisés pour l'invariant du couple.
+        $ids = [$this->uuid(), $this->uuid()];
+        sort($ids);
+        $link = (new TeamLink)
+            ->setClubId($club->getId())
+            ->setSeasonId($season->getId())
+            ->setTeamAId($ids[0])
+            ->setTeamBId($ids[1])
+            ->setLinkType(TeamLinkType::NOT_SIMULTANEOUS)
+            ->setTrainingIntensity(TeamLinkIntensity::PREFERRED);
+        $this->em->persist($link);
+        $this->em->flush();
+        $this->em->clear();
+    }
+
+    private function uuid(): string
+    {
+        $bytes = random_bytes(16);
+        $bytes[6] = \chr((\ord($bytes[6]) & 0x0F) | 0x40);
+        $bytes[8] = \chr((\ord($bytes[8]) & 0x3F) | 0x80);
+
+        return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
     }
 
     /** Ardoise propre : remet les marqueurs à false pour isoler le seul geste sous test. */

@@ -29,6 +29,7 @@ use App\Enum\ConstraintScope;
 use App\Enum\ScheduleStatus;
 use App\Enum\SeasonStatus;
 use App\Enum\TeamCoachRole;
+use App\Enum\TeamLinkIntensity;
 use App\Enum\TeamLinkType;
 use App\Service\ScheduleConstraintBuilder;
 use App\Service\SeasonAlreadyTransitionedException;
@@ -105,6 +106,8 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         self::assertContains($newTeamLink->getTeamAId(), $newTeamIds);
         self::assertContains($newTeamLink->getTeamBId(), $newTeamIds);
         self::assertLessThan(0, strcasecmp($newTeamLink->getTeamAId(), $newTeamLink->getTeamBId()));
+        // L'intensité côté entraînement suit la recopie (non-défaut : prouve le set).
+        self::assertSame(TeamLinkIntensity::MANDATORY, $newTeamLink->getTrainingIntensity());
 
         // Team: forcedVenueId remapped to the copied venue, name untouched.
         $newTeams = $this->em->getRepository(Team::class)->findBy(['seasonId' => $target->getId()], ['name' => 'ASC']);
@@ -395,6 +398,9 @@ final class SeasonTransitionServiceTest extends KernelTestCase
         $teamLink->setTeamAId($ids[0]);
         $teamLink->setTeamBId($ids[1]);
         $teamLink->setLinkType(TeamLinkType::NOT_SIMULTANEOUS);
+        // Intensité NON-DÉFAUT : la recopie N+1 doit la transporter (le test rougit si
+        // SeasonTransitionService omet setTrainingIntensity — la copie retomberait à PREFERRED).
+        $teamLink->setTrainingIntensity(TeamLinkIntensity::MANDATORY);
         $this->em->persist($teamLink);
 
         $link = new TeamCoach;

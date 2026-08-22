@@ -9,7 +9,10 @@ use App\ApiResource\TeamLinkResource;
 use App\Dto\TeamLinkInput;
 use App\Entity\Team;
 use App\Entity\TeamLink;
+use App\Enum\TeamLinkIntensity;
 use App\Enum\TeamLinkType;
+use Symfony\Component\Validator\ConstraintViolation;
+use Symfony\Component\Validator\ConstraintViolationList;
 
 /**
  * Wizard-surface structure entity (VenueMatchWindow idiom): not management
@@ -19,6 +22,15 @@ use App\Enum\TeamLinkType;
  */
 class TeamLinkStateProcessor extends AbstractStateProcessor
 {
+    /**
+     * Miroir MANUEL de `MAX_TEAM_LINKS` (engine/app/schemas/input_schema.py) — même
+     * régime que le contrat : pas de codegen, l'égalité est une discipline. Sans ce
+     * plafond à la SAISIE, la 51ᵉ passerelle ne casserait pas ici : elle ferait
+     * 422-FAILED la GÉNÉRATION (le bord Pydantic la refuse) — une panne loin de sa
+     * cause, le pire des modes. 50 ≈ 10x un gros club FFBB.
+     */
+    private const int MAX_TEAM_LINKS = 50;
+
     protected function getEntityClass(): string
     {
         return TeamLink::class;
@@ -29,6 +41,12 @@ class TeamLinkStateProcessor extends AbstractStateProcessor
      */
     protected function createEntityFromInput(object $input): TeamLink
     {
+        // Le count passe sous les filtres Doctrine tenant+saison : il ne voit que
+        // les passerelles de CE club et CETTE saison.
+        if ($this->entityManager->getRepository(TeamLink::class)->count([]) >= self::MAX_TEAM_LINKS) {
+            $this->refuse('Le nombre maximal de passerelles est atteint — supprimez-en une avant d\'en créer une nouvelle.');
+        }
+
         $entity = new TeamLink;
         $this->applyInput($entity, $input);
 
@@ -52,15 +70,27 @@ class TeamLinkStateProcessor extends AbstractStateProcessor
         return TeamLinkResource::fromEntity($entity);
     }
 
+    /**
+     * 422 NOMMÉ. ⚠ `new ValidationException('chaîne')` rend `violations: []` et
+     * « An error occurred » — le message n'atteint JAMAIS l'écran (mesuré 2026-08-22
+     * sur ce processor). Seule une vraie ConstraintViolationList voyage jusqu'au
+     * toast (`errorMessage.ts` lit `violations[].message`). Doctrine P5-14 : jamais
+     * « une erreur est survenue » quand la cause est connue.
+     */
+    private function refuse(string $message): never
+    {
+        throw new ValidationException(new ConstraintViolationList([new ConstraintViolation($message, null, [], null, null, null)]));
+    }
+
     private function applyInput(TeamLink $entity, TeamLinkInput $input): void
     {
         $teamAId = $input->teamAId;
         $teamBId = $input->teamBId;
         if (null === $teamAId || null === $teamBId) {
-            throw new ValidationException('Both teams are required.');
+            $this->refuse('Les deux équipes sont requises.');
         }
         if ($teamAId === $teamBId) {
-            throw new ValidationException('A team cannot be linked to itself.');
+            $this->refuse('Une équipe ne peut pas être liée à elle-même.');
         }
         // SYMMETRIC couple: normalize so SM1–SM2 and SM2–SM1 are the SAME row
         // (the DB unique then makes the duplicate a clean 422 below).
@@ -72,13 +102,19 @@ class TeamLinkStateProcessor extends AbstractStateProcessor
         if (null !== $input->linkType) {
             $entity->setLinkType(TeamLinkType::from($input->linkType));
         }
+        // Absent ⇒ PREFERRED (rétro-compatible) : le défaut de l'entité tient sur une
+        // création ; sur une édition on ne rétrograde pas silencieusement une valeur
+        // envoyée. Seule une intensité EXPLICITE écrase.
+        if (null !== $input->trainingIntensity) {
+            $entity->setTrainingIntensity(TeamLinkIntensity::from($input->trainingIntensity));
+        }
 
         // Foreign/unknown teams resolve to null through the tenant+season
         // filters → 422 (`findOneBy`, never `find()` — leçon PR B).
         $teamRepository = $this->entityManager->getRepository(Team::class);
         foreach ([$teamAId, $teamBId] as $teamId) {
             if (!$teamRepository->findOneBy(['id' => $teamId]) instanceof Team) {
-                throw new ValidationException('Unknown team for this club.');
+                $this->refuse('Équipe inconnue pour ce club.');
             }
         }
         // One couple = one link (readable 422; the DB unique is the backstop).
@@ -87,7 +123,7 @@ class TeamLinkStateProcessor extends AbstractStateProcessor
             'teamBId' => $teamBId,
         ]);
         if ($existing instanceof TeamLink && $existing->getId() !== $entity->getId()) {
-            throw new ValidationException('These two teams are already linked — edit the existing link.');
+            $this->refuse('Ces deux équipes sont déjà liées — modifiez la passerelle existante.');
         }
     }
 }
