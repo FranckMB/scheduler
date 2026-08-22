@@ -46,7 +46,7 @@ final class ClubApprovalController extends AbstractController
     public function show(string $token, Request $request): JsonResponse
     {
         if (!$this->clubApprovalPublicLimiter->create($request->getClientIp() ?? 'unknown')->consume(1)->isAccepted()) {
-            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+            return $this->json(['error' => 'Trop de tentatives — réessayez dans quelques minutes.'], 429);
         }
         $creationRequest = $this->resolveToken($token);
         if (!$creationRequest instanceof ClubCreationRequest) {
@@ -70,7 +70,7 @@ final class ClubApprovalController extends AbstractController
     public function decide(string $token, Request $request): JsonResponse
     {
         if (!$this->clubApprovalPublicLimiter->create($request->getClientIp() ?? 'unknown')->consume(1)->isAccepted()) {
-            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+            return $this->json(['error' => 'Trop de tentatives — réessayez dans quelques minutes.'], 429);
         }
         $creationRequest = $this->resolveToken($token);
         if (!$creationRequest instanceof ClubCreationRequest) {

@@ -48,10 +48,10 @@ class ReservationStateProcessor extends AbstractStateProcessor
     {
         $reservation = $this->entityManager->find(Reservation::class, $uriVariables['id'] ?? null);
         if (!$reservation instanceof Reservation) {
-            throw new NotFoundHttpException('Resource not found');
+            throw new NotFoundHttpException('Ressource introuvable.');
         }
         if (null !== $clubId && $reservation->getClubId() !== $clubId) {
-            throw new AccessDeniedHttpException('Access denied');
+            throw new AccessDeniedHttpException('Accès refusé.');
         }
 
         $materialised = $this->entityManager->getRepository(ScheduleSlotTemplate::class)->findBy([

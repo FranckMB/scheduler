@@ -101,7 +101,7 @@ final class AuthController extends AbstractController
     {
         // Rate-limit by client IP (anti-brute-force + anti-ARA-enumeration).
         if (!$this->authRegisterLimiter->create($request->getClientIp())->consume(1)->isAccepted()) {
-            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+            return $this->json(['error' => 'Trop de tentatives — réessayez dans quelques minutes.'], 429);
         }
 
         $data = json_decode((string) $request->getContent(), true);
@@ -123,16 +123,16 @@ final class AuthController extends AbstractController
         // oracle (A3). The success path returns an identical 202 for a fresh or an
         // already-registered email — existence is signalled only out-of-band by mail.
         if ('' === $email || !filter_var($email, \FILTER_VALIDATE_EMAIL)) {
-            return $this->json(['error' => 'A valid email is required'], 400);
+            return $this->json(['error' => 'Une adresse e-mail valide est requise.'], 400);
         }
         if (null !== ($passwordError = $this->passwordPolicy->validate($password))) {
             return $this->json(['error' => $passwordError], 400);
         }
         if ('' === $firstName || '' === $lastName) {
-            return $this->json(['error' => 'First name and last name are required'], 400);
+            return $this->json(['error' => 'Le prénom et le nom sont requis.'], 400);
         }
         if (!preg_match('/^[A-Z0-9]{3,20}$/', $ara)) {
-            return $this->json(['error' => 'ARA must be 3-20 uppercase alphanumeric characters'], 400);
+            return $this->json(['error' => 'L\'ARA doit comporter 3 à 20 caractères alphanumériques en majuscules.'], 400);
         }
         // RGPD : le consentement CGU/politique de confidentialité est requis —
         // validation payload-only, donc toujours enumeration-safe (A3).
@@ -159,7 +159,7 @@ final class AuthController extends AbstractController
         // club_name is required to CREATE a club. Keyed on the ARA (public), not the
         // email → still enumeration-safe: the 400 never depends on account existence.
         if (null === $existingClub && '' === $clubName) {
-            return $this->json(['error' => 'Club name is required to create a new club'], 400);
+            return $this->json(['error' => 'Le nom du club est requis pour créer un nouveau club.'], 400);
         }
 
         // Intent captured at register time: a club NAME rides on the token ONLY when this
@@ -244,7 +244,7 @@ final class AuthController extends AbstractController
     public function verifyEmail(Request $request): JsonResponse
     {
         if (!$this->authRegisterVerifyLimiter->create($request->getClientIp())->consume(1)->isAccepted()) {
-            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+            return $this->json(['error' => 'Trop de tentatives — réessayez dans quelques minutes.'], 429);
         }
 
         $data = json_decode((string) $request->getContent(), true);
@@ -252,7 +252,7 @@ final class AuthController extends AbstractController
 
         $token = $this->emailVerifier->resolve($rawToken);
         if (!$token instanceof EmailVerificationToken) {
-            return $this->json(['error' => 'Invalid or expired verification token'], 400);
+            return $this->json(['error' => 'Lien de vérification invalide ou expiré.'], 400);
         }
 
         $tokenId = (int) $token->getId();
@@ -263,7 +263,7 @@ final class AuthController extends AbstractController
         // club and make the user its admin — that would escalate above the join intent.
         $intentClubName = $token->getClubName();
         if (null === $intentClubName && null === $this->clubRepository->findOneBy(['ffbbClubCode' => $ara])) {
-            return $this->json(['error' => 'The club to join no longer exists'], 409);
+            return $this->json(['error' => 'Le club que vous vouliez rejoindre n\'existe plus.'], 409);
         }
 
         // Materialise the tenant now. Club-scoped inserts need the RLS GUC; set it once
@@ -688,7 +688,7 @@ final class AuthController extends AbstractController
     public function confirmEmailChange(Request $request): JsonResponse
     {
         if (!$this->emailChangeConfirmLimiter->create($request->getClientIp())->consume(1)->isAccepted()) {
-            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+            return $this->json(['error' => 'Trop de tentatives — réessayez dans quelques minutes.'], 429);
         }
 
         $data = json_decode((string) $request->getContent(), true);

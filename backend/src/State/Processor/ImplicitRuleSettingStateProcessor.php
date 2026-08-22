@@ -59,12 +59,12 @@ final class ImplicitRuleSettingStateProcessor implements ProcessorInterface
 
         [$clubId, $seasonId] = $this->resolveScope();
         if (null === $clubId || null === $seasonId) {
-            throw new NotFoundHttpException('Resource not found');
+            throw new NotFoundHttpException('Ressource introuvable.');
         }
 
         $ruleKey = ImplicitRuleKey::tryFrom((string) ($uriVariables['ruleKey'] ?? ''));
         if (null === $ruleKey) {
-            throw new NotFoundHttpException('Resource not found');
+            throw new NotFoundHttpException('Ressource introuvable.');
         }
 
         if ($operation instanceof DeleteOperationInterface) {

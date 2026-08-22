@@ -31,7 +31,7 @@ final class ExportPdfController extends AbstractController
         $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
 
         if (!$schedule instanceof Schedule) {
-            return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Planning introuvable.'], Response::HTTP_NOT_FOUND);
         }
 
         // BCK-07: make the tenant boundary explicit (RLS already fail-closes the
@@ -39,7 +39,7 @@ final class ExportPdfController extends AbstractController
         // schedule controllers) instead of relying on RLS alone.
         $currentClubId = $this->resolveCurrentClubId($this->requestStack);
         if (null !== $currentClubId && $schedule->getClubId() !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         // Optional export scope: a single venue (validated against this schedule's

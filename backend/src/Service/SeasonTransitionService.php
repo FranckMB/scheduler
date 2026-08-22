@@ -63,7 +63,7 @@ final class SeasonTransitionService
 
         $current = $this->seasonResolver->currentSeason($clubId, $today);
         if (!$current instanceof Season || $current->getId() !== $source->getId()) {
-            throw new ConflictHttpException('Only the current season can be transitioned.');
+            throw new ConflictHttpException('Seule la saison en cours peut être basculée.');
         }
 
         // P1-5 (décision fondateur 2026-08-04) — l'abonnement se paie PAR SAISON :

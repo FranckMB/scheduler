@@ -61,12 +61,12 @@ final class GenerateScheduleController extends AbstractController implements Sea
         }
 
         if (!$schedule instanceof Schedule) {
-            return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Planning introuvable.'], Response::HTTP_NOT_FOUND);
         }
 
         $currentClubId = $this->resolveCurrentClubId();
         if (null !== $currentClubId && $schedule->getClubId() !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         // ADR-0002 inv. 1 : la version CHOISIE est le planning en vigueur — la
@@ -91,7 +91,7 @@ final class GenerateScheduleController extends AbstractController implements Sea
         if (null !== $violation) {
             return $this->json([
                 'error' => \sprintf(
-                    'Generation blocked: too many %s (%d, limit %d). Reduce the season data before generating.',
+                    'Génération bloquée : trop de %s (%d, limite %d).',
                     $violation['cap'],
                     $violation['count'],
                     $violation['limit'],

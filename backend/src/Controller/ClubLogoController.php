@@ -60,11 +60,11 @@ final class ClubLogoController extends AbstractController
             return $this->json(['error' => 'No file uploaded (field "file").'], Response::HTTP_BAD_REQUEST);
         }
         if ($file->getSize() > self::MAX_BYTES) {
-            return $this->json(['error' => 'Logo too large (max 500 KB).'], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->json(['error' => 'Le logo est trop volumineux (500 Ko maximum).'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
         $mime = (string) $file->getMimeType();
         if (!isset(self::ALLOWED[$mime])) {
-            return $this->json(['error' => 'Unsupported format (PNG, JPEG or WebP only).'], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->json(['error' => 'Format non pris en charge (PNG, JPEG ou WebP uniquement).'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $bytes = file_get_contents($file->getPathname());

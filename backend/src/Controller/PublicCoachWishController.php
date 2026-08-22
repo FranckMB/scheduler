@@ -69,7 +69,7 @@ final class PublicCoachWishController extends AbstractController
         // requêtes tomberaient dans le même compartiment. L'IP réelle derrière le reverse-proxy
         // dépend de `trusted_proxies` (framework.yaml, repli `private_ranges`).
         if (!$this->coachWishPublicLimiter->create($request->getClientIp() ?? 'unknown')->consume(1)->isAccepted()) {
-            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+            return $this->json(['error' => 'Trop de tentatives — réessayez dans quelques minutes.'], 429);
         }
         $entity = $this->resolveToken($token);
         if (null === $entity) {
@@ -147,7 +147,7 @@ final class PublicCoachWishController extends AbstractController
         // requêtes tomberaient dans le même compartiment. L'IP réelle derrière le reverse-proxy
         // dépend de `trusted_proxies` (framework.yaml, repli `private_ranges`).
         if (!$this->coachWishPublicLimiter->create($request->getClientIp() ?? 'unknown')->consume(1)->isAccepted()) {
-            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+            return $this->json(['error' => 'Trop de tentatives — réessayez dans quelques minutes.'], 429);
         }
         $entity = $this->resolveToken($token);
         if (null === $entity) {

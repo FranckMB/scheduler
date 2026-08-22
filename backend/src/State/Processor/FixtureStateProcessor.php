@@ -195,7 +195,7 @@ class FixtureStateProcessor extends AbstractStateProcessor
             return;
         }
         if (null === $this->entityManager->find(Competition::class, $competitionId)) {
-            throw new UnprocessableEntityHttpException('Unknown competition for this club/season.');
+            throw new UnprocessableEntityHttpException('Compétition inconnue pour ce club et cette saison.');
         }
     }
 }

@@ -112,7 +112,7 @@ class UserStateProcessor extends AbstractStateProcessor
     {
         $user = $this->security->getUser();
         if (!$user instanceof User || $id !== $user->getId()) {
-            throw new NotFoundHttpException('Resource not found');
+            throw new NotFoundHttpException('Ressource introuvable.');
         }
     }
 }

@@ -112,7 +112,7 @@ class TenantFilterListener implements EventSubscriberInterface
         // frontière tenant : sa forme se valide comme celle de la saison (l. 166),
         // et un écart se refuse — jamais une normalisation silencieuse.
         if (!$this->isUuid($clubId)) {
-            $event->setResponse(new JsonResponse(['error' => 'You do not have access to this club'], 403));
+            $event->setResponse(new JsonResponse(['error' => 'Vous n\'avez pas accès à ce club.'], 403));
 
             return;
         }
@@ -129,7 +129,7 @@ class TenantFilterListener implements EventSubscriberInterface
             ]);
             if (null === $membership) {
                 $event->setResponse(new JsonResponse(
-                    ['error' => 'You do not have access to this club'],
+                    ['error' => 'Vous n\'avez pas accès à ce club.'],
                     403,
                 ));
 
@@ -163,7 +163,7 @@ class TenantFilterListener implements EventSubscriberInterface
                 // season (drop the header, reload) without conflating it with a
                 // legitimate authorization 403 (role/voter denials).
                 $event->setResponse(new JsonResponse(
-                    ['error' => 'You do not have access to this season'],
+                    ['error' => 'Vous n\'avez pas accès à cette saison.'],
                     403,
                     [self::STALE_SEASON_HEADER => '1'],
                 ));

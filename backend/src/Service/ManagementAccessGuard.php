@@ -57,7 +57,7 @@ final class ManagementAccessGuard
             : null;
 
         if (!$membership instanceof ClubUser || !$this->clubUserRepository->isManagementRole($membership->getRole())) {
-            throw new AccessDeniedHttpException('Management role required.');
+            throw new AccessDeniedHttpException('Cette action est réservée aux gestionnaires.');
         }
     }
 }

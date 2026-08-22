@@ -47,7 +47,7 @@ final class SeasonTransitionController extends AbstractController
         // 404 semantics honest even off-RLS (tests, admin connection).
         $source = $this->seasonRepository->find($id);
         if (!$source instanceof Season || $source->getClubId() !== $clubId) {
-            return $this->json(['error' => 'Season not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Saison introuvable.'], Response::HTTP_NOT_FOUND);
         }
 
         $user = $this->getUser();
@@ -55,7 +55,7 @@ final class SeasonTransitionController extends AbstractController
             ? $this->clubUserRepository->findActiveMembership($user->getId(), $clubId)
             : null;
         if (!$membership instanceof ClubUser || !$this->clubUserRepository->isManagementRole($membership->getRole())) {
-            return $this->json(['error' => 'Management role required.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Cette action est réservée aux gestionnaires.'], Response::HTTP_FORBIDDEN);
         }
 
         try {

@@ -196,7 +196,7 @@ final class SeasonReadonlyTest extends WebTestCase
         // Message EXACT du garde saison, pas juste « archived » : la page d'erreur
         // HTML de test cite du code source (noms de méthodes en « ...Archived »), donc
         // seul le libellé complet distingue CE garde du 409 de SocleGuard.
-        self::assertStringContainsString('This season is archived (read-only).', (string) $this->client->getResponse()->getContent());
+        self::assertStringContainsString('Cette saison est archivée — elle est en lecture seule.', (string) $this->client->getResponse()->getContent());
     }
 
     /**
@@ -216,7 +216,7 @@ final class SeasonReadonlyTest extends WebTestCase
             'CONTENT_TYPE' => 'application/json',
         ], json_encode(['schedulePlanId' => $planId, 'venueId' => $this->uuid()], \JSON_THROW_ON_ERROR));
         self::assertResponseStatusCodeSame(409);
-        self::assertStringContainsString('This season is archived (read-only).', (string) $this->client->getResponse()->getContent());
+        self::assertStringContainsString('Cette saison est archivée — elle est en lecture seule.', (string) $this->client->getResponse()->getContent());
     }
 
     /**
@@ -246,7 +246,7 @@ final class SeasonReadonlyTest extends WebTestCase
             'venueId' => $this->uuid(),
         ], \JSON_THROW_ON_ERROR));
         self::assertResponseStatusCodeSame(409);
-        self::assertStringContainsString('This season is archived (read-only).', (string) $this->client->getResponse()->getContent());
+        self::assertStringContainsString('Cette saison est archivée — elle est en lecture seule.', (string) $this->client->getResponse()->getContent());
     }
 
     /**
@@ -265,7 +265,7 @@ final class SeasonReadonlyTest extends WebTestCase
             'CONTENT_TYPE' => 'application/json',
         ], '{}');
         self::assertResponseStatusCodeSame(409);
-        self::assertStringContainsString('This season is archived (read-only).', (string) $this->client->getResponse()->getContent());
+        self::assertStringContainsString('Cette saison est archivée — elle est en lecture seule.', (string) $this->client->getResponse()->getContent());
     }
 
     /**
@@ -284,7 +284,7 @@ final class SeasonReadonlyTest extends WebTestCase
         ], json_encode(['schedulePlanId' => $planId, 'venueId' => $this->uuid()], \JSON_THROW_ON_ERROR));
         // Le garde ne mord pas : l'action s'exécute (grille vide → idempotent → 200).
         self::assertResponseStatusCodeSame(200);
-        self::assertStringNotContainsString('This season is archived (read-only).', (string) $this->client->getResponse()->getContent());
+        self::assertStringNotContainsString('Cette saison est archivée — elle est en lecture seule.', (string) $this->client->getResponse()->getContent());
     }
 
     protected function setUp(): void

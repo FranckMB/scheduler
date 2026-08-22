@@ -38,7 +38,7 @@ final class RoadmapIdentityTest extends TestCase
      * sous-item dérivé de `P5-4`, pas une coquille. L'oublier était mon premier essai — le
      * compteur du titre m'a alors accusé d'un écart qui venait de MA lecture, pas du fichier.
      */
-    private const ITEM_LINE = '/^\| ([A-Z]+[0-9]*-[0-9]+[a-z]?) \|/';
+    private const ITEM_LINE = '/^\| ([A-Z]+\d*-\d+[a-z]?) \|/';
 
     public function testEveryIdentifierDesignatesExactlyOneItem(): void
     {

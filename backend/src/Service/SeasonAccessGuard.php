@@ -45,7 +45,7 @@ final class SeasonAccessGuard
     {
         // (1) Saison sélectionnée archivée — comportement historique, inchangé.
         if (true === $request?->attributes->get('_season_readonly')) {
-            throw new ConflictHttpException('This season is archived (read-only).');
+            throw new ConflictHttpException('Cette saison est archivée — elle est en lecture seule.');
         }
 
         // (2) SEC-13 — saison de la RESSOURCE ciblée archivée, même si la sélection
@@ -62,7 +62,7 @@ final class SeasonAccessGuard
         $siblings = $this->entityManager->getRepository(Season::class)
             ->findBy(['clubId' => $season->getClubId()], ['startDate' => 'ASC']);
         if (SeasonResolver::isReadonlyAmong($season, $siblings, $this->clock->now())) {
-            throw new ConflictHttpException('This season is archived (read-only).');
+            throw new ConflictHttpException('Cette saison est archivée — elle est en lecture seule.');
         }
     }
 }
