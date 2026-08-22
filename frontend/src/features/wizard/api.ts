@@ -2,6 +2,7 @@ import { HTTPError } from "ky";
 
 import { api } from "@/shared/api/client";
 import { collection, collectionAll } from "@/shared/api/collection";
+import type { DeletionImpact } from "@/shared/api/deletionImpact";
 import type { ToReplaceEntry } from "@/features/planning/lib/toReplaceReason";
 import { sortByName } from "@/shared/lib/nameOrder";
 
@@ -162,33 +163,10 @@ export const updateVenue = (id: string, body: VenuePayload): Promise<Venue> => a
 export const deleteVenue = (id: string): Promise<void> => api.delete(`venues/${id}`).then(() => undefined);
 
 /**
- * P3-16 — ce qu'une suppression VA détruire, calculé par le SERVEUR.
- *
- * ⚑ Ces compteurs étaient dérivés côté écran, depuis le cache react-query : la modale
- * annonçait 2 ou 3 familles quand la cascade en emportait dix. L'écran ne pouvait pas dire
- * vrai — il n'a chargé ici ni les matchs, ni les contraintes, ni les séances des autres
- * plannings. Le front AFFICHE désormais ce que le backend a compté (règle 🔴 maison).
+ * Les entités qu'une suppression peut viser. Le TYPE de l'impact (`DeletionImpact`)
+ * vit dans `@/shared/api/deletionImpact` (P4-123) ; le geste reste ici.
  */
 export type DeletableKind = "venue" | "team" | "coach" | "slot";
-
-export interface DeletionImpactLine {
-  key: string;
-  count: number;
-  /** Libellés PORTÉS PAR LE SERVEUR : une famille ajoutée au cascade s'affiche d'office. */
-  one: string;
-  many: string;
-}
-
-export interface DeletionImpact {
-  /** Le serveur REFUSERA le geste (équipe engagée) : ne pas l'offrir. */
-  blocked: boolean;
-  reason: string | null;
-  lines: DeletionImpactLine[];
-  /** Séances touchées vivant dans une version EN VIGUEUR. */
-  slotsInForce: number;
-  /** DOC-2 : matchs déjà déclarés à la fédération qui perdront leur salle. */
-  declaredFixtures: number;
-}
 
 const DELETION_IMPACT_PATH: Record<DeletableKind, string> = { venue: "venues", team: "teams", coach: "coaches", slot: "venue_training_slots" };
 
