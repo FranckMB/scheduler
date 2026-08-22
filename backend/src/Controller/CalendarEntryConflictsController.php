@@ -59,7 +59,7 @@ final class CalendarEntryConflictsController extends AbstractController
         }
 
         if ($entry->getClubId() !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         // Le pointeur est lu UNE fois, avant toute sortie : `seasonPlanChosen` ne doit

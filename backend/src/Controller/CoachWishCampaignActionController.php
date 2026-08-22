@@ -69,7 +69,7 @@ final class CoachWishCampaignActionController extends AbstractController
         $request = $this->requestStack->getCurrentRequest();
         $currentClubId = $this->resolveCurrentClubId();
         if (null !== $currentClubId && $campaign->getClubId() !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         // Une saison gelée est en lecture seule (invariant SeasonReadonly) : ces actions
@@ -77,7 +77,7 @@ final class CoachWishCampaignActionController extends AbstractController
         // Dérivation calendaire (isReadonlyAmong) + archivage manuel — même règle que la page
         // publique (le read-only n'est PAS posé sur le statut au roulement du 15-juillet).
         if ($this->seasonGuard->isReadonly($campaign)) {
-            return $this->json(['error' => 'This season is archived (read-only).'], Response::HTTP_CONFLICT);
+            return $this->json(['error' => 'Cette saison est archivée — elle est en lecture seule.'], Response::HTTP_CONFLICT);
         }
 
         if ('remind_coach_wish_campaign' === $request?->attributes->get('_route')) {

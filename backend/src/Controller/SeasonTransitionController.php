@@ -55,7 +55,7 @@ final class SeasonTransitionController extends AbstractController
             ? $this->clubUserRepository->findActiveMembership($user->getId(), $clubId)
             : null;
         if (!$membership instanceof ClubUser || !$this->clubUserRepository->isManagementRole($membership->getRole())) {
-            return $this->json(['error' => 'Management role required.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Cette action est réservée aux gestionnaires.'], Response::HTTP_FORBIDDEN);
         }
 
         try {

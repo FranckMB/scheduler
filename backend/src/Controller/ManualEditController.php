@@ -69,7 +69,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
         }
 
         if ($this->scheduleIsLocked($slot)) {
-            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before editing.'], Response::HTTP_CONFLICT);
+            return $this->json(['error' => 'Ce planning est validé (lecture seule) — rouvrez-le avant de le modifier.'], Response::HTTP_CONFLICT);
         }
 
         $data = json_decode($request->getContent(), true);
@@ -119,7 +119,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
         }
 
         if ($this->scheduleIsLocked($slot)) {
-            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before editing.'], Response::HTTP_CONFLICT);
+            return $this->json(['error' => 'Ce planning est validé (lecture seule) — rouvrez-le avant de le modifier.'], Response::HTTP_CONFLICT);
         }
 
         $data = json_decode($request->getContent(), true);
@@ -235,12 +235,12 @@ final class ManualEditController extends AbstractController implements SeasonSco
 
         $schedule = $this->findSchedule($id);
         if (!$schedule instanceof Schedule) {
-            return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Planning introuvable.'], Response::HTTP_NOT_FOUND);
         }
 
         // ADR-0002 inv. 1 : la version choisie du plan est le calendrier — lecture seule.
         if ($this->schedulePlanProvisioner->isChosen($schedule->getId())) {
-            return $this->json(['error' => 'This schedule is validated (read-only). Reopen it before editing.'], Response::HTTP_CONFLICT);
+            return $this->json(['error' => 'Ce planning est validé (lecture seule) — rouvrez-le avant de le modifier.'], Response::HTTP_CONFLICT);
         }
 
         $data = json_decode($request->getContent(), true);
@@ -289,7 +289,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
         // teamId malformé (non-UUID) ne doit pas remonter en 500 driver → try/catch, comme findSlot.
         $team = $this->findTeamInSchedule($teamId, $schedule);
         if (!$team instanceof Team) {
-            return $this->json(['error' => 'Unknown team for this schedule.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->json(['error' => 'Équipe inconnue pour ce planning.'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         // P2-32 — `dryRun` : essai sans écriture (même chemin jusqu'au verdict inclus).

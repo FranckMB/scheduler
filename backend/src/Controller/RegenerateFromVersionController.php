@@ -65,18 +65,18 @@ final class RegenerateFromVersionController extends AbstractController implement
         }
 
         if (!$source instanceof Schedule) {
-            return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Planning introuvable.'], Response::HTTP_NOT_FOUND);
         }
 
         $currentClubId = $this->resolveCurrentClubId();
         if (null !== $currentClubId && $source->getClubId() !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         // Season plans only — an overlay carries no restorable club structure.
         // ADR-0002 C4 : « socle ? » = plan.type === SEASON, plus calendarEntryId.
         if (!$this->schedulePlanProvisioner->isSeasonSchedule($source)) {
-            return $this->json(['error' => 'Only a season version can be regenerated from.'], Response::HTTP_CONFLICT);
+            return $this->json(['error' => 'Seule une version de saison peut servir de base à une régénération.'], Response::HTTP_CONFLICT);
         }
 
         // A DRAFT/FAILED/in-flight version has no meaningful structure to restore.

@@ -45,7 +45,7 @@ final class PasswordController extends AbstractController
     public function forgot(Request $request): JsonResponse
     {
         if (!$this->authPasswordForgotLimiter->create($request->getClientIp())->consume(1)->isAccepted()) {
-            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+            return $this->json(['error' => 'Trop de tentatives — réessayez dans quelques minutes.'], 429);
         }
 
         $data = json_decode((string) $request->getContent(), true);
@@ -95,7 +95,7 @@ final class PasswordController extends AbstractController
     public function reset(Request $request): JsonResponse
     {
         if (!$this->authPasswordResetLimiter->create($request->getClientIp())->consume(1)->isAccepted()) {
-            return $this->json(['error' => 'Too many attempts, please try again later'], 429);
+            return $this->json(['error' => 'Trop de tentatives — réessayez dans quelques minutes.'], 429);
         }
 
         $data = json_decode((string) $request->getContent(), true);
@@ -112,11 +112,11 @@ final class PasswordController extends AbstractController
         try {
             $user = $this->resetPasswordHelper->validateTokenAndFetchUser($token);
         } catch (ResetPasswordExceptionInterface) {
-            return $this->json(['error' => 'Invalid or expired reset token'], 400);
+            return $this->json(['error' => 'Lien de réinitialisation invalide ou expiré.'], 400);
         }
 
         if (!$user instanceof User) {
-            return $this->json(['error' => 'Invalid or expired reset token'], 400);
+            return $this->json(['error' => 'Lien de réinitialisation invalide ou expiré.'], 400);
         }
 
         $this->resetPasswordHelper->removeResetRequest($token);

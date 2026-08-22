@@ -79,7 +79,7 @@ final class VenuePeriodGridActionController extends AbstractController implement
         // autre club recopierait/viderait sa grille chez nous (et inversement).
         $currentClubId = $this->resolveCurrentClubId();
         if (null !== $currentClubId && $context['clubId'] !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         // Invariant fondateur n°1 : le planning principal n'est JAMAIS modifié par une

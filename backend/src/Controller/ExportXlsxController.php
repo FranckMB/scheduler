@@ -37,13 +37,13 @@ final class ExportXlsxController extends AbstractController
     {
         $schedule = $this->entityManager->getRepository(Schedule::class)->find($id);
         if (!$schedule instanceof Schedule) {
-            return new JsonResponse(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+            return new JsonResponse(['error' => 'Planning introuvable.'], Response::HTTP_NOT_FOUND);
         }
 
         // Explicit tenant boundary (RLS already fail-closes the find; defense-in-depth).
         $currentClubId = $this->resolveCurrentClubId($this->requestStack);
         if (null !== $currentClubId && $schedule->getClubId() !== $currentClubId) {
-            return new JsonResponse(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return new JsonResponse(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         $venueId = $this->resolveExportVenueId($this->entityManager, $this->requestStack, $schedule);

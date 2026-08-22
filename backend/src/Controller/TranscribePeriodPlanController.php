@@ -58,12 +58,12 @@ final class TranscribePeriodPlanController extends AbstractController implements
         // rend null. Le contrôleur re-vérifie le club en défense (tenant).
         $context = $this->schedulePlanProvisioner->fetchPlanContext($id);
         if (null === $context) {
-            return $this->json(['error' => 'Plan not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Plan introuvable.'], Response::HTTP_NOT_FOUND);
         }
 
         $currentClubId = $this->resolveCurrentClubId();
         if (null !== $currentClubId && $context['clubId'] !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         if (SchedulePlanType::SEASON === $context['type'] || null === $context['calendarEntryId']) {

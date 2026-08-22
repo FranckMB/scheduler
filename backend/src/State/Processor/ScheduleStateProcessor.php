@@ -71,7 +71,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
         // de valider le plan, pour exiger qu'il lui appartienne (voir plus bas).
         $resolvedSeasonId = $this->resolveSeasonId($clubId, $seasonId);
         if (null === $resolvedSeasonId) {
-            throw new UnprocessableEntityHttpException('No season could be resolved for this schedule.');
+            throw new UnprocessableEntityHttpException('Aucune saison n\'a pu être déterminée pour ce planning.');
         }
 
         $entry = null;
@@ -204,7 +204,7 @@ class ScheduleStateProcessor extends AbstractStateProcessor
                 // A version whose solve is still running cannot be deleted out
                 // from under the worker (its import would resurrect artifacts).
                 if ($this->capabilityResolver->isInFlight($schedule)) {
-                    throw new ConflictHttpException('This schedule is still generating. Wait for it to finish before deleting.');
+                    throw new ConflictHttpException('Ce planning est encore en cours de génération — attendez la fin avant de le supprimer.');
                 }
                 // La DERNIÈRE version terminée du plan de la saison ancre la saison :
                 // la supprimer laisserait un club établi sans aucun calendrier, donc

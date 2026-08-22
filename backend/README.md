@@ -225,6 +225,7 @@ backend/
 | [`docs/commands.md`](docs/commands.md) | **Référence complète des commandes** — cibles make, console `app:*`, pièges RLS (`dbal:run-sql`), scripts. |
 | [`docs/ffbb-api.md`](docs/ffbb-api.md) | **Intégration FFBB** — les routes des API publiques FFBB utilisées (Meilisearch + api.ffbb.com), confinement SSRF, cache. |
 | [`docs/constraint-coverage.md`](docs/constraint-coverage.md) | Couverture des besoins gestionnaire par le système de contraintes (✅/🟡/❌). |
+| [`docs/error-copy.md`](docs/error-copy.md) | **Copie des messages d'erreur** — la règle de langue (français dès qu'un gestionnaire peut lire ; anglais toléré = défense pure/API-only/admin/≥500), codes machine et 404 à parité intouchables. |
 | [`docs/constraints.md`](docs/constraints.md) · [`docs/generation-flow.md`](docs/generation-flow.md) · [`docs/schedule-generation-guide.md`](docs/schedule-generation-guide.md) | Docs pédagogiques (contraintes métier, pipeline de génération, guide pas-à-pas) — ex-`doc/`, fusionné 2026-07-11. |
 | [`AGENTS.md`](AGENTS.md) | Cheat-sheet agent (conventions CS-Fixer/PHPStan/Rector, flux services, gotchas). |
 

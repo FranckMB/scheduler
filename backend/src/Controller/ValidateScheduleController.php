@@ -67,18 +67,18 @@ final class ValidateScheduleController extends AbstractController implements Sea
         }
 
         if (!$schedule instanceof Schedule) {
-            return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Planning introuvable.'], Response::HTTP_NOT_FOUND);
         }
 
         $currentClubId = $this->resolveCurrentClubId();
         if (null !== $currentClubId && $schedule->getClubId() !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         // Note : le statut est RE-VÉRIFIÉ sous le verrou (voir plus bas). Ce pré-contrôle
         // n'existe que pour rendre un 409 franc sans ouvrir de transaction.
         if (ScheduleStatus::COMPLETED !== $schedule->getStatus()) {
-            return $this->json(['error' => 'Only a completed schedule can be validated.'], Response::HTTP_CONFLICT);
+            return $this->json(['error' => 'Seul un planning terminé peut être validé.'], Response::HTTP_CONFLICT);
         }
 
         // TOUT ce qui décide vit sous le verrou de portée du plan, DANS la transaction :

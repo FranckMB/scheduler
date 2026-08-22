@@ -83,12 +83,12 @@ final class FillPeriodPlanController extends AbstractController implements Seaso
             $source = null;
         }
         if (!$source instanceof Schedule) {
-            return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Planning introuvable.'], Response::HTTP_NOT_FOUND);
         }
 
         $currentClubId = $this->resolveCurrentClubId($this->requestStack);
         if (null !== $currentClubId && $source->getClubId() !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         // Périodes SEULEMENT : le comblement épingle une version puis place les trous — le socle,

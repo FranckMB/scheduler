@@ -38,7 +38,7 @@ trait ResolvesExportScopeTrait
             'seasonId' => $schedule->getSeasonId(),
         ]);
         if (!$venue instanceof Venue) {
-            throw new NotFoundHttpException('Venue not found.');
+            throw new NotFoundHttpException('Gymnase introuvable.');
         }
 
         return $venueId;

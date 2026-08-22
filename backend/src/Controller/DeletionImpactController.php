@@ -117,7 +117,7 @@ final class DeletionImpactController extends AbstractController
         }
 
         if ($ownerClubId !== $currentClubId) {
-            return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+            return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
         }
 
         return null;

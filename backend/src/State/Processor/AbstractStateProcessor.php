@@ -216,11 +216,11 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         $entity = $this->entityManager->find($this->getEntityClass(), $id);
 
         if (!$entity) {
-            throw new NotFoundHttpException('Resource not found');
+            throw new NotFoundHttpException('Ressource introuvable.');
         }
 
         if (null !== $clubId && $entity instanceof TenantOwnedInterface && $entity->getClubId() !== $clubId) {
-            throw new AccessDeniedHttpException('Access denied');
+            throw new AccessDeniedHttpException('Accès refusé.');
         }
 
         // BCK-09: a PUT must NEVER migrate an existing row to the request's current
@@ -249,11 +249,11 @@ abstract class AbstractStateProcessor implements ProcessorInterface
         $entity = $this->entityManager->find($this->getEntityClass(), $id);
 
         if (!$entity) {
-            throw new NotFoundHttpException('Resource not found');
+            throw new NotFoundHttpException('Ressource introuvable.');
         }
 
         if (null !== $clubId && $entity instanceof TenantOwnedInterface && $entity->getClubId() !== $clubId) {
-            throw new AccessDeniedHttpException('Access denied');
+            throw new AccessDeniedHttpException('Accès refusé.');
         }
 
         // Entities carry no ORM/DB cascade — a subclass may purge the deleted

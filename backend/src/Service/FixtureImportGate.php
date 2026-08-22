@@ -75,13 +75,13 @@ final class FixtureImportGate
         /** @var UploadedFile|null $file */
         $file = $request->files->get('file');
         if (!$file instanceof UploadedFile) {
-            return new JsonResponse(['error' => 'No file uploaded.'], Response::HTTP_BAD_REQUEST);
+            return new JsonResponse(['error' => 'Aucun fichier n\'a été envoyé.'], Response::HTTP_BAD_REQUEST);
         }
 
         if ('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' !== $file->getMimeType()
             && !str_ends_with(strtolower($file->getClientOriginalName()), '.xlsx')
         ) {
-            return new JsonResponse(['error' => 'Invalid file format. Only .xlsx files are accepted.'], Response::HTTP_BAD_REQUEST);
+            return new JsonResponse(['error' => 'Format de fichier invalide — seuls les fichiers .xlsx sont acceptés.'], Response::HTTP_BAD_REQUEST);
         }
 
         return $file;

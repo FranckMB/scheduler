@@ -42,7 +42,7 @@ final class SeasonAccessGuardTest extends TestCase
         $request->attributes->set('_season_readonly', true);
 
         $this->expectException(ConflictHttpException::class);
-        $this->expectExceptionMessage('This season is archived (read-only).');
+        $this->expectExceptionMessage('Cette saison est archivée — elle est en lecture seule.');
         $this->guard()->assertWritable($request);
     }
 
@@ -75,7 +75,7 @@ final class SeasonAccessGuardTest extends TestCase
         // Requête SANS `_season_readonly` (saison sélectionnée courante, writable),
         // mais la cible vit dans la saison archivée → 409, message byte-identique.
         $this->expectException(ConflictHttpException::class);
-        $this->expectExceptionMessage('This season is archived (read-only).');
+        $this->expectExceptionMessage('Cette saison est archivée — elle est en lecture seule.');
 
         $this->guard()->assertWritable(new Request, self::PAST_ID);
     }

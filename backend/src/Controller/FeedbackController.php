@@ -111,11 +111,11 @@ final class FeedbackController extends AbstractController
             // Forme validée avant le find() : un id non-UUID ferait lever le driver
             // (500) au lieu du 404 uniforme promis par le contrat (revue sécurité).
             if (!Uuid::isValid($scheduleId)) {
-                return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+                return $this->json(['error' => 'Planning introuvable.'], Response::HTTP_NOT_FOUND);
             }
             $schedule = $this->entityManager->getRepository(Schedule::class)->find($scheduleId);
             if (!$schedule instanceof Schedule || $schedule->getClubId() !== $clubId) {
-                return $this->json(['error' => 'Schedule not found.'], Response::HTTP_NOT_FOUND);
+                return $this->json(['error' => 'Planning introuvable.'], Response::HTTP_NOT_FOUND);
             }
             $context['scheduleId'] = $scheduleId;
             $context['seasonId'] = $schedule->getSeasonId();

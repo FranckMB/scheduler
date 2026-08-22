@@ -67,7 +67,7 @@ final class ReorderTeamsController extends AbstractController implements SeasonS
                 continue;
             }
             if (null !== $currentClubId && $team->getClubId() !== $currentClubId) {
-                return $this->json(['error' => 'Access denied.'], Response::HTTP_FORBIDDEN);
+                return $this->json(['error' => 'Accès refusé.'], Response::HTTP_FORBIDDEN);
             }
 
             $team->setPriorityTierId((int) $item['priorityTierId']);

@@ -216,7 +216,7 @@ final class MembershipController extends AbstractController
         // Réservé aux lignes DÉJÀ désactivées : une pending (`deactivatedAt=null`)
         // ne se « réactive » pas — l'approbation est son seul chemin d'activation.
         if (null === $target->getDeactivatedAt()) {
-            return $this->json(['error' => 'Not a deactivated membership'], 409);
+            return $this->json(['error' => 'Ce membre n\'est pas désactivé.'], 409);
         }
 
         $target->setIsActive(true);
@@ -249,7 +249,7 @@ final class MembershipController extends AbstractController
             }
 
             if ($requireActive && !$target->getIsActive()) {
-                return $this->json(['error' => 'Not an active membership'], 409);
+                return $this->json(['error' => 'Ce membre n\'est pas actif.'], 409);
             }
 
             if ($removesManagement
@@ -289,12 +289,12 @@ final class MembershipController extends AbstractController
                 return $default;
             }
 
-            return $this->json(['error' => 'Role is required'], 422);
+            return $this->json(['error' => 'Le rôle est requis.'], 422);
         }
 
         $role = \is_string($data['role']) ? ClubRole::tryFrom($data['role']) : null;
         if (!$role instanceof ClubRole) {
-            return $this->json(['error' => 'Invalid role'], 422);
+            return $this->json(['error' => 'Rôle invalide.'], 422);
         }
 
         return $role;
