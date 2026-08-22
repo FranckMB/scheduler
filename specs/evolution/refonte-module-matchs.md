@@ -137,6 +137,13 @@ tout des données, cet état tombe naturellement (tout est SUBMITTED → rien à
    officielles, un seul modèle — **API FFBB = le périmètre** (équipes, poules, adversaires), **FBI = les
    rencontres** (dates, heures, salles, n°). Chaque dépôt de xlsx est une **ingestion datée** qui alimente
    le diff, le radar et la fraîcheur (§7) — pas une corvée annexe.
+   ⚑ **Hiérarchie précisée (fondateur, 2026-08-22) : l'API est un MOYEN, l'import FBI fait AUTORITÉ.**
+   L'API FFBB est un confort — « magique » quand elle marche : pré-remplissage, périmètre, zéro
+   saisie. Mais **le vrai outil du gestionnaire, c'est FBI** : ce qu'il y saisit et ce qu'il en
+   exporte est l'acte officiel. En cas de recouvrement ou de désaccord entre une donnée venue de
+   l'API et une donnée venue d'un dépôt FBI, **le dépôt gagne** — et un rafraîchissement API
+   n'écrase JAMAIS en silence une donnée née d'un dépôt. La partition « API = périmètre, FBI =
+   rencontres » reste la règle de répartition nominale ; la hiérarchie tranche les chevauchements.
 
 2. **« Le numéro de rencontre est unique » — faux au niveau global.** Le « 26 » existe en RMU18 Brassage
    *et* en DF2 (fact mesuré F6). Il est modélisé (`Fixture.externalRef`) mais l'unicité est **composite**
@@ -166,10 +173,13 @@ tout des données, cet état tombe naturellement (tout est SUBMITTED → rien à
 - **Périmètre = large** : refonte UX (P2-26) **coordonnée avec** le programme palier B/C, **plus** les
   besoins net-neufs de l'entretien. Le tout se **livrera par lots** (§9), pas en une PR.
 - **Rotation A/B = vraie capacité de modèle à honorer** par le solveur (§8) — sort de la refonte UX pure.
-- **FBI = source de données de plein droit** (fondateur 2026-08-17) : même statut que l'API FFBB. Le canal
-  est un xlsx manuel (fait #1 du §4), mais chaque dépôt est une **ingestion datée** qui alimente le modèle,
-  le diff et le gardien. Deux sources, un modèle : **API FFBB = périmètre, FBI = rencontres**. La
-  réconciliation se fait par **diff au ré-import** — l'outil sécurise le geste FBI, il ne le remplace pas.
+- **FBI = source de données de plein droit** (fondateur 2026-08-17), **et depuis le 2026-08-22 la
+  source qui fait AUTORITÉ** : l'API FFBB est un moyen (« magique » — confort, pré-remplissage), le
+  dépôt FBI est l'acte du vrai outil du gestionnaire — au chevauchement, le dépôt gagne, jamais
+  d'écrasement silencieux par l'API (hiérarchie, §4 fait #1). Le canal est un xlsx manuel, chaque
+  dépôt est une **ingestion datée** qui alimente le modèle, le diff et le gardien. La partition
+  nominale demeure : **API FFBB = périmètre, FBI = rencontres**. La réconciliation se fait par
+  **diff au ré-import** — l'outil sécurise le geste FBI, il ne le remplace pas.
 - **Le radar existant devient le fil conducteur** du geste récurrent (« 3 litiges cette semaine → règle-les »),
   pas un pavé de plus dans une colonne pleine.
 - **Décisions de la revue lot-par-lot (fondateur 2026-08-17, 2ᵉ passe)** :
