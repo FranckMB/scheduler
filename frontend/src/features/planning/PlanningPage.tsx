@@ -1,6 +1,6 @@
 import { IN_FLIGHT_STATUSES } from "./lib/scheduleStatus";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CalendarX2, CheckCircle2, GitCompare, Loader2, Lock, Pencil, Sparkles, Star, Undo2, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, GitCompare, Loader2, Lock, Pencil, Sparkles, Star, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
@@ -18,7 +18,7 @@ import { armNavTransition } from "@/shared/stores/navTransitionStore";
 import { toast } from "@/shared/stores/toastStore";
 import { useCredits } from "@/shared/credits/useCredits";
 import { Button } from "@/shared/components/ui/button";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { EmptyState } from "@/shared/components/ui/empty-hint";
 import { Modal } from "@/shared/components/ui/modal";
 import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { FullPageSpinner } from "@/shared/components/ui/spinner";
@@ -100,20 +100,6 @@ function ValidateDialog({ hasAlerts, siblingCount, busy, onConfirm, onCancel }: 
         </Button>
       </div>
     </Modal>
-  );
-}
-
-function EmptyState({ title, description }: { title: string; description: string }) {
-  return (
-    <Card className="border-dashed">
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CalendarX2 className="size-5 text-muted-foreground" />
-          <CardTitle>{title}</CardTitle>
-        </div>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-    </Card>
   );
 }
 
