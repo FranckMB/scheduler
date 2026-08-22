@@ -307,13 +307,13 @@ d'actions hebdomadaire, et l'image idéale (TypicalWeekendGrid) se cache derriè
 | **L1** | **Deux espaces, deux routes.** | Tout sur `MatchesPage` (§6ter-1) | `/matchs` = la boucle hebdo (défaut) ; **« Configuration »** (route ou tab) héberge Engagements FFBB · Accès match · Habitudes & passerelles · **l'image A/B en écran de plein droit** (fin du toggle `typicalView`). Import FBI reste accessible des DEUX côtés — étape 1 de la boucle ET dépôt saisonnier (même dialogue, deux entrées). |
 | **L2** | **Le rail d'étapes s'extrait** (RMM-2, prérequis). | Stepper codé en dur dans `WizardLayout.tsx:152-155` sur `WIZARD_STEPS` | Composant `shared/` consommant un tableau d'étapes ; le wizard le consomme À RENDU IDENTIQUE (NR visuel), la boucle matchs le consomme avec ses 5 étapes. |
 | **L3** | **Les 5 étapes de la boucle sont DÉRIVÉES, jamais stockées.** | Aucune notion d'étape | Par semaine affichée : batch présent (des matchs existent) → collé au modèle (écarts vs habitudes) → litiges (compte radar) → domiciles posés (0 HOME `UNPLACED`) → saisi FBI (compte `SUBMITTED`). Le rail LIT les données — zéro état nouveau, zéro backend. |
-| **L4** | **Le geste manquant : « Marquer saisi dans FBI ».** | Aucune UI ne pose `SUBMITTED` (§6ter-7) | Bouton sur le panel d'un match PLACED (+ éventuel geste de lot « toute la semaine ») → PUT avec `status: SUBMITTED` — l'API l'accepte déjà (`FixtureStateProcessor.php:74`). C'est LE chaînon qui rend la boucle bouclable, et il est gratuit côté backend. ⚠ Réversible : un SUBMITTED redevient PLACED par le même rail (le panel read-only devra offrir la sortie). |
+| **L4** | **Le geste manquant : « Marquer saisi dans FBI ».** | Aucune UI ne pose `SUBMITTED` (§6ter-7) | Bouton sur le panel d'un match PLACED (+ éventuel geste de lot « toute la semaine ») → PUT avec `status: SUBMITTED` — l'API l'accepte déjà (`FixtureStateProcessor.php:74`). C'est LE chaînon qui rend la boucle bouclable, et il est gratuit côté backend. ⚠ Réversible : un SUBMITTED redevient PLACED par le même rail (le panel read-only devra offrir la sortie). ⚠ **Vocabulaire UI en français, jamais les codes** : Importé · Placé · **Saisi dans FBI** · Validé ligue — le fondateur lui-même a dû demander ce que « SUBMITTED » voulait dire (2026-08-22) ; le gestionnaire de 50 ans n'a aucune chance. |
 | **L5** | **Hiérarchie d'actions par étape.** | 6 boutons équipollents (§6ter-1) | L'action primaire = celle de l'étape courante du rail ; « Placer automatiquement » ne domine qu'à l'étape domiciles ; les 3 rares partent en Configuration ; « Nouveau match » secondaire. |
 | **L6** | **Contexte stable.** | Panel conditionnel (`MatchesPage.tsx:252`) ; mode échange invisible aux cellules (`:140-153`) ; raisons de non-placement volatiles (`:69`) | Slot de panel PERMANENT avec état vide (« Sélectionnez un match ») — fin du saut de colonne ; le mode échange se voit SUR la grille (style des cellules candidates + Échap pour sortir) ; les raisons de non-placement restent affichées tant que la semaine est à l'écran. |
-| **L7** | **La semaine devient l'axe primaire.** | Week-end seulement, `externalRef` jamais rendu (§6ter-6) | Filtre semaine (défaut proposé : **semaine ISO** — « journée FFBB » reste l'ouvert §10) ; le week-end reste le rendu de grille ; le **n° de rencontre s'affiche** dans la grille et les listes (repère, jamais clé — fait #2 §4). |
+| **L7** | **La semaine devient l'axe primaire** — CONFIRMÉ 2026-08-22 (la préconisation « vue équipe/semaine, miroir de l'écran FBI » tranche de fait). | Week-end seulement, `externalRef` jamais rendu (§6ter-6) | Axe = **semaine calendaire** ; la « journée » FFBB (n° de tour, qui se décroche du calendrier au premier report) n'est qu'une ÉTIQUETTE sur le match quand on la connaît ; le week-end reste le rendu de grille ; le **n° de rencontre s'affiche** dans la grille et les listes (repère, jamais clé — fait #2 §4). |
 | **L8** | **RMM-0 recalibré — R1 est TOMBÉE.** | Le registre §6bis supposait la modale mono-taille ; depuis P4-107 (#675, 2026-08-21) `modal.tsx:30-34` porte l'échelle `size` sm/md/lg, gardée par `modal-size.test.tsx` | Le lot devient une pure CONSOMMATION : `size="lg"` sur les dialogues du module + `title` de secours sur B1-B5 + selects élargis + R2 (colonne `20rem`, `MatchesPage.tsx:240`). Plus rien à construire. |
 
-| **L9** | **La VUE DE SAISIE FBI** — la matérialisation de « sans qu'il oublie qqch » (mission §1). | La liste « À placer » s'arrête à PLACED ; rien ne présente ce qui RESTE À SAISIR dans FBI | Au moment d'ouvrir FBI : la **liste à recopier** — matchs domicile `PLACED` non `SUBMITTED` de la semaine/phase, dans l'ordre, avec les champs que FBI demande (n° de rencontre, date, heure, salle) ; cocher = le geste L4 ; la checklist se vide ; l'échéance (RMM-6) affichée à côté. Zéro backend : c'est une PROJECTION des fixtures existants. |
+| **L9** | **La VUE DE SAISIE FBI** — la matérialisation de « sans qu'il oublie qqch » (mission §1). Précisée fondateur 2026-08-22. | La liste « À placer » s'arrête à PLACED ; rien ne présente ce qui RESTE À SAISIR dans FBI | La **liste à recopier**, organisée **par équipe / par semaine** (préconisation fondateur : coller à l'écran FBI pour que la saisie soit bête), filtrable équipe · date · semaine. Champs : **date + heure** (ce que FBI demande pour un domicile) + n° de rencontre et salle en repères. Cocher = le geste L4 ; **« tout marquer saisi » est acceptable mais ne coche QUE les lignes affichées à l'écran** (le filtre borne le lot — plus sûr) ; la checklist se vide ; l'échéance (RMM-6) affichée à côté. Bonus à l'étude : afficher si la ligue a posé officiel/arbitre (usage : solliciter des gens du club pour d'autres rencontres) — ⚠ suspendu à la vérification des colonnes du xlsx (§10). Zéro backend : une PROJECTION des fixtures existants. |
 
 **Ordre de code inchangé** (séquencement validé §9) : RMM-0 (L8) → RMM-2 (L2) → RMM-1 (L1+L3+L4+L5+L6+L7+**L9**).
 L4 est DANS RMM-1 : c'est un geste UI sur une API existante, pas un lot backend. L9 en est le
@@ -394,14 +394,21 @@ tracker de dérogation (RMM-7).
    ne refuse jamais un placement — ni du solveur, ni manuel. Le radar peut signaler « hors image », il ne
    bloque pas.
 **Troisième décision (fondateur, 2026-08-22) : le jour de REPOS se définit par rapport à la semaine
-idéale A/B** — pas par un jour unique déclaré. Aujourd'hui la règle implicite « repos après jour de
-match » du solveur d'ENTRAÎNEMENT lit `team.matchDay` (champ unique, déclaré à la main) : il ne peut
-pas représenter une alternance. Impact sur le périmètre de RMM-5 : l'image A/B nourrit **aussi** le
-côté entraînement — à terme, `matchDay` se DÉRIVE de l'image (fin de la double déclaration), et la
-règle de repos suit. ⚠ Tension à trancher à la conception de RMM-5 : le planning d'entraînement est
-UNE semaine type uniforme, il n'alterne pas — options : repos sur l'UNION des jours A et B, ou
-pondération. Ni `TeamMatchHabit` (unique par `team+day_of_week`, sans dimension type-de-semaine) ni
-`team.matchDay` ne savent porter l'A/B aujourd'hui — c'est le lot RMM-5 qui l'introduit.
+idéale A/B** — pas par un jour unique déclaré à part. Et la passe de tranchage du même jour l'a
+SIMPLIFIÉ : dans l'image, **le jour de match À DOMICILE d'une équipe est stable** (U18M/U21M jouent
+le dimanche — c'est le lieu/créneau qui alterne entre A et B, pas le jour) ; donc **UN jour de repos
+dérivé par équipe suffit** (« à domicile c'est le dimanche → idéalement pas d'entraînement le
+lundi. C'est tout »). La tension union/pondération TOMBE. Les matchs extérieurs (jour aléatoire posé
+par la FFBB) ne pilotent pas la règle hebdomadaire. À terme, `team.matchDay` se DÉRIVE de l'image
+(fin de la double déclaration), et la règle implicite de repos suit.
+
+**Quatrième décision (fondateur, 2026-08-22) : l'image A/B est FICTIVE — AUCUN ancrage calendaire à
+déclarer.** La question « qu'est-ce qui ancre A/B sur le calendrier réel » (ex-§10) est dissoute :
+on ne mappe pas les semaines réelles sur A/B a priori. La FFBB pose un jour (samedi/dimanche,
+aléatoire) par équipe et par week-end ; **le placement fait coller chaque rencontre reçue au bon
+jour du modèle quand c'est possible, sinon il respecte au maximum règles et contraintes, a
+minima**. Le rattachement A/B d'un week-end est une CORRESPONDANCE constatée (qui reçoit sur le
+créneau partagé), jamais une déclaration.
 
 2. **Modélisation : propriété du CRÉNEAU de match partagé** — N équipes déclarées sur un créneau, qui
    alternent (SM1/SM2 sur le 20h30). Continuité naturelle avec la couche SOFT « habitudes » du solveur de
@@ -432,11 +439,11 @@ quel palier chaque lot appartient — **ne pas créer de doublon de vérité**.
 | **RMM-0** | **Correctifs de lisibilité immédiats** : les 5 bloquant-décision du registre (§6bis) — `title` sur tout libellé tronqué, selects lisibles, et **consommer l'échelle `size` de la modale, LIVRÉE depuis par P4-107** (recalibrage §6quater L8 : plus rien à construire, le lot a baissé de prix). **Une PR courte, AVANT la refonte** (la décision d'appariement est bloquée aujourd'hui). | Front | — | **P2-26** (correctif anticipé) |
 | **RMM-1** | **Refonte UX pure** : séparer SET-UP / geste récurrent, boucle semaine-par-semaine, hiérarchie d'actions, radar en fil conducteur, états vides, filtre par semaine, n° de rencontre affiché. Critère §6bis : aucun libellé décisionnel tronqué, R1/R2 traités à la racine. **Zéro backend.** | Front | — (aucun comportement moteur touché) | **P2-26** (ce fichier = son détail) |
 | **RMM-2** | Extraire le **stepper/rail du wizard** dans `shared/` + exploiter `tabs` ; mutualiser la grille temporelle. Prérequis technique de RMM-1. | Front | — | P2-26 |
-| **RMM-3** | **Gardien à l'ouverture** : recalcul radar + résumé « nouveaux conflits depuis la dernière visite » — déclencheurs incluant **« le planning de saison a changé »** (§6quinquies : une régénération est invisible au module aujourd'hui). Nécessite une **persistance légère** de l'état radar (le radar est stateless aujourd'hui). | Back + Front | contrainte sémantique (conflits) → NR | **net-neuf** (à porter en ligne roadmap) |
-| **RMM-4** | **FBI source de plein droit + réconciliation** : chaque dépôt xlsx = **ingestion datée** (fraîcheur affichée) ; le diff présente **chaque écart domicile** (heure/salle/date) au gestionnaire qui tranche — garder l'app (et corriger FBI) ou prendre le fichier — au lieu de mettre à jour en silence (décision §5). Réutilise le diff de `FbiFixtureImporter`. | Back + Front | — | **net-neuf** (canal manuel — fait #1 du §4) |
+| **RMM-3** | **Gardien à l'ouverture** — TRANCHÉ 2026-08-22 : à l'**ouverture du module** (pas au login), persistance = **horodatage de visite** ; le RADAR porte les badges « nouveau depuis ta dernière visite » : **matchs à placer arrivés** · **nouveaux conflits** — pour inciter à aller traiter. Déclencheurs incluant **« le planning de saison a changé »** (§6quinquies : une régénération est invisible au module aujourd'hui). Nécessite une **persistance légère** de l'état radar (le radar est stateless aujourd'hui). | Back + Front | contrainte sémantique (conflits) → NR | **net-neuf** (à porter en ligne roadmap) |
+| **RMM-4** | **FBI source de plein droit + réconciliation** : chaque dépôt xlsx = **ingestion datée** (fraîcheur affichée) ; le diff présente **chaque écart domicile** (heure/salle/date) au gestionnaire qui tranche — garder l'app (et corriger FBI) ou prendre le fichier — au lieu de mettre à jour en silence (décision §5). **Forme tranchée 2026-08-22 : un écran « état app VS état fichier », choix par écart** ; reste la trace (§10). Réutilise le diff de `FbiFixtureImporter`. | Back + Front | — | **net-neuf** (canal manuel — fait #1 du §4) |
 | **RMM-5** | **Rotation A/B** : modèle (alternance sur **créneau partagé** — cas SM1/SM2, §8) + payload/solveur (SOFT « respecte l'image A/B ») + UI SET-UP deux semaines + **le jour de repos d'entraînement suit l'image** (3ᵉ décision §8 — `matchDay` devient dérivé, la règle implicite côté entraînement aussi). | Model + Engine + Front | **contrat backend↔engine** + **contrainte sémantique** → NR (contract test + smoke-solver) | **net-neuf** (§8) |
-| **RMM-6** | **Échéances ligue/comité** : deadlines + rappel cockpit (radar matchs « deadline J-6 »). | Back + Front | — | **palier B** — [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) §8 |
-| **RMM-7** | **Workflow dérogation** : brouillon + suivi d'état + deadline (tracker + rédacteur, PAS connecteur ligue). Une dérogation **acceptée** peut fonder une règle durable (cas SM2 20h30 → alternance A/B, §8) : le tracker doit pouvoir la **graduer en règle du modèle**. | Back + Front | — | **palier B** — `gestion-matchs-ffbb.md` §8 |
+| **RMM-6** | **Échéances ligue/comité** — TRANCHÉ 2026-08-22 : la ligue les envoie **par MAIL** au gestionnaire, donc **saisie manuelle**, et **PLUSIEURS échéances concurrentes** par groupes d'équipes (région le 2 sept, département le 10, autres le 15…) — la granularité est le groupe/la compétition, jamais une date unique de club. Deadlines + rappel cockpit (radar matchs « deadline J-6 ») + affichée sur la vue de saisie (L9). | Back + Front | — | **palier B** — [`gestion-matchs-ffbb.md`](gestion-matchs-ffbb.md) §8 |
+| **RMM-7** | **Workflow dérogation** : brouillon + suivi d'état + deadline (tracker + rédacteur, PAS connecteur ligue). **Déclencheur et rôle de l'app TRANCHÉS 2026-08-22** : le point de départ est un **conflit signalé** (par le radar ou par un humain — cas type : SF1 extérieur 16h, SM2 domicile 16h30, même coach) ; le geste est HUMAIN (le gestionnaire négocie avec le club adverse, puis informe la ligue) ; **l'app ne fait que signaler — et idéalement fournir le CONTACT du club adverse (téléphone, email)**, ce qui donne à l'annuaire adverse (RMM-9) son cas d'usage le plus concret. Une dérogation **acceptée** peut fonder une règle durable (cas SM2 20h30 → alternance A/B, §8) : le tracker doit pouvoir la **graduer en règle du modèle**. | Back + Front | — | **palier B** — `gestion-matchs-ffbb.md` §8 |
 | **RMM-8** | **Matrice trajet** + conflits spatiaux (empreinte AWAY réelle). Infra partagée avec l'entraînement (FF#5). | Back + Engine | contrainte sémantique → NR | **palier B/vision** — `gestion-matchs-ffbb.md` §7 + roadmap « Matrice de temps de trajet » |
 | **RMM-9** | **Annuaire adverse global** (table hors tenant, publique-seulement, enrichie par l'usage) + effet réseau (auto-remplissage heures/positions extérieures). | Back | isolation tenant → **test d'isolation dédié obligatoire** | **palier B/C** — `gestion-matchs-ffbb.md` §5bis/§11 |
 | **RMM-10** | **DOC-2** : avertir avant qu'un match `SUBMITTED`/`VALIDATED` ne perde sa salle (suppression gymnase / restauration de version). | Back + Front | **périmètre engagé** → NR | **DOC-2** (roadmap) — traiter avec **P3-16** |
@@ -451,18 +458,19 @@ validation de besoin + `/plan` (CLAUDE.md §7).
 
 ## 10. Ouvert — à trancher avec le gestionnaire avant de coder les lots concernés
 
-- **A/B (RMM-5)** : qu'est-ce qui **ancre** le rythme A/B sur le calendrier réel (n° de semaine ISO ? date
-  d'ancrage saison ? saisie manuelle) ? Faut-il des exceptions (une semaine où A et B s'inversent, journées
-  FFBB irrégulières) ? *(La modélisation, elle, est tranchée : créneau partagé, statut SOFT — §8.)*
-- **Gardien (RMM-3)** : périmètre du « depuis la dernière visite » — au **login** global, ou à l'**ouverture
-  du module** ? Quelle granularité de persistance (dernier hash de radar par saison ? horodatage de visite) ?
-- **Réconciliation FBI (RMM-4)** : la règle de vérité est tranchée (**choix par écart**, §5) ; reste la
-  forme UI de la résolution (liste d'écarts avec choix un à un ? tout-garder / tout-prendre en raccourci ?)
-  et la trace à conserver. (Rappel fait #1 : on ne peut pas écrire dans FBI.)
-- **Échéances (RMM-6)** : d'où viennent les dates limites (saisie manuelle du gestionnaire ? déductibles du
-  catalogue ligue ?) — l'API FFBB ne les fournit pas.
-- **Filtre par semaine (RMM-1)** : semaine calendaire ISO ou « journée » FFBB ? (les deux ne coïncident pas
-  toujours.)
+> Passe de tranchage du 2026-08-22 (fondateur) : **cinq des sept questions sont TOMBÉES** — leurs
+> décisions vivent dans les sections des lots (§5 · §8 · §9 · §6quater L9). Restent :
+
+- **Réconciliation FBI (RMM-4) — la TRACE seulement** (la forme est tranchée : écran « état app vs
+  état fichier », choix par écart). Proposition sur la table : la trace n'est PAS un journal —
+  c'est un pense-bête dont le seul travail est de détecter au **dépôt suivant** que la correction
+  FBI promise n'a pas été faite (« cet écart persiste ») ; elle meurt quand un dépôt confirme.
+  (Le fondateur évoquait ~24 h ; la borne « jusqu'au prochain dépôt » colle mieux au geste — à
+  confirmer.)
+- **Officiels / arbitres dans le xlsx FBI (L9)** : le fondateur veut NOTER si la ligue a posé un
+  officiel/arbitre — pas pour le gérer (pas notre sujet), mais pour **solliciter des gens du club**
+  sur les autres rencontres. ⚠ À vérifier sur un VRAI export avant de promettre : le xlsx
+  porte-t-il ces colonnes ?
 
 ---
 
