@@ -4,15 +4,12 @@
 > livré (`frontend/src/`). L'inventaire backward du backend est dans
 > `backend-inventory.md` — ce document le référence sans le dupliquer.
 
-Last verified @ 2026-08-22 (recalé — **§6.8, l'écran « le service de calcul ne répond pas »**
-(P5-14 PR-2) : `features/planning/GenerationServiceDown.tsx`, l'extraction `GenerationScene`
-(`halted`) que `GenerationWaiting` consomme à rendu inchangé, le bloc `.gw-halted` de
-`GenerationWaiting.css` qui bat l'override reduced-motion, le miroir
-`features/planning/lib/serviceFailure.ts` et son garde de parité
-`backend/tests/CrossStack/EngineFailureTypeMirrorTest`, plus l'aiguillage de
-`features/wizard/steps/GenerateStep.tsx` — tous confrontés au code. La puce du bandeau hors-ligne
-(PR-1) relue : inchangée. Historique des passes : `git log -p --follow
-frontend/docs/frontend-spec.md` (un stamp REMPLACE, il ne s'empile pas — DOC-33).
+Last verified @ 2026-08-22 (recalé — **§6.8 complété du bloc `<noscript>` et du pointeur
+`error-copy.md`** (P5-14 soldée) : confronté au code — `index.html` (bloc présent, sans marque,
+sans ressource externe), `tooling/noscript.test.ts` (4 assertions, RED prouvé sans le bloc),
+`shared/lib/errorMessage.ts:32-34` (corps 4xx repris tels quels, < 500 seulement),
+`PlanningToolbar.test.tsx` (score nulle part), `DiagnosticsPanel.tsx` (causes servies),
+`CompromiseList.tsx` (compromis servis, jamais dérivés).)
 
 ---
 
@@ -769,6 +766,7 @@ hors providers ; donc pas de `useQuery`, pas de `FeedbackDialog` à l'intérieur
 | **Hors ligne** (pleine page) | `app/OfflineScreen` | échec de chunk hors ligne, et échec au boot |
 | **500** | `app/ServerErrorScreen` | crash de rendu (`ErrorBoundary`), et 5xx au boot |
 | **Session expirée** | bloc dans `features/auth/LoginPage` | marqueur one-shot posé par `shared/api/client.ts` |
+| **JavaScript coupé** | bloc `<noscript>` statique dans `index.html` | le navigateur lui-même — seul canal qui s'affiche quand la SPA ne peut pas rendre |
 
 **La 404 sert AUSSI au refus tenant** — une ressource d'un autre club rend 404, jamais 403 (un 403
 confirmerait son existence). ⚠ **Sa copie doit rester MUETTE sur les droits** : y ajouter « vous n'avez
@@ -778,6 +776,17 @@ que c'est exactement l'« amélioration » qu'une relecture bien intentionnée a
 **Le 403 n'a aujourd'hui aucun chemin UI qui le produise** (le front masque les gestes de gestion en
 amont, `shared/lib/roles.ts` ; le 403 saison s'auto-guérit dans `client.ts`). L'écran et sa porte sont
 livrés quand même — décision fondateur : le jour où un Membre atteint une route de gestion, il existe.
+
+**JavaScript coupé (`<noscript>`, P5-14 vague 3)** : sans lui, `<div id="root">` reste vide
+— page blanche muette, le cas de panne le plus silencieux. Bloc statique français (cause + geste :
+réactiver puis recharger), **sans marque** (le `<title>` est l'unique littéral toléré d'`index.html`,
+`shared/lib/product.ts:8-11`), zéro ressource externe, thème `prefers-color-scheme` en CSS pur.
+Gardé par `frontend/tooling/noscript.test.ts` (existence, français, absence de marque, autonomie).
+
+**La copie des messages d'erreur SERVEUR a sa règle** : `backend/docs/error-copy.md` — français
+métier dès qu'un gestionnaire peut lire (nominal ou course), anglais toléré seulement hors de tout
+chemin UI. Le front n'a rien à traduire : `errorMessage.ts` reprend le corps 4xx tel quel, et il
+route sur `code`, jamais sur la phrase.
 
 **Session expirée — pourquoi un marqueur et pas une page** : le 401 est capté dans `client.ts`, mais
 « Se reconnecter » **EST** le formulaire de `/login` déjà présent ; une page dédiée ajouterait un clic

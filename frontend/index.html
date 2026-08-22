@@ -7,6 +7,41 @@
     <title>Amateo</title>
   </head>
   <body>
+    <!-- P5-14 (vague 3) — JS coupé : sans ce bloc, la SPA rend une page BLANCHE muette.
+         Copie neutre SANS marque (le <title> est l'unique exception, cf. shared/lib/product.ts),
+         zéro ressource externe, thème via prefers-color-scheme. Gardé par tooling/noscript.test.ts. -->
+    <noscript>
+      <style>
+        .nojs {
+          box-sizing: border-box;
+          min-height: 100dvh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          font-family: system-ui, sans-serif;
+          background: #f8fafc;
+          color: #0f172a;
+        }
+        .nojs > div { max-width: 34rem; text-align: center; }
+        .nojs h1 { font-size: 1.25rem; margin: 0 0 0.75rem; }
+        .nojs p { font-size: 1rem; line-height: 1.6; margin: 0; color: #475569; }
+        @media (prefers-color-scheme: dark) {
+          .nojs { background: #0f172a; color: #f1f5f9; }
+          .nojs p { color: #94a3b8; }
+        }
+      </style>
+      <div class="nojs">
+        <div>
+          <h1>JavaScript est désactivé</h1>
+          <p>
+            Cette application ne peut pas fonctionner sans JavaScript.
+            Réactivez-le dans les réglages de votre navigateur (ou dans votre
+            extension de blocage), puis rechargez la page.
+          </p>
+        </div>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
