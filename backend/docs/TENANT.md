@@ -1,5 +1,7 @@
 # ClubScheduler — Tenant Isolation Architecture
 
+Last verified @ 2026-08-22 (P4-120 — première vérification stampée de ce fichier, contre le code, **tout juste** sur huit sondages : priorité 7 APRÈS le firewall (`TenantFilterListener.php:55`) ✓ · skip `/api/admin/**` gardé par `AdminRequestBoundaryTest::testAnAdminRequestNeverSetsTheTenantGuc` (`:149`) ✓ · `TenantOwnedInterfaceCompletenessTest` existe (`tests/Security/`) ✓ · `tenant_filter` `enabled: false` (`doctrine.yaml:37`) ✓ · `findActiveClubIds` (`ClubUserRepository.php:59`) ✓ · `WriteTargetSeasonResolver` et `SeasonResolver` présents ✓ · `Version20260731090000` (drop `migration_user`) présente ✓ · SEC-13 « plus stricte des deux saisons » conforme à la livraison du 2026-08-21 ✓. « ClubScheduler » dans le titre : périmètre P5-21, laissé tel quel)
+
 ## Overview
 
 ClubScheduler is a **multi-tenant** application where every business entity belongs to exactly one club. Tenant isolation has **two layers, both active today**:

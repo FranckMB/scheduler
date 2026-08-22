@@ -71,22 +71,10 @@ final class DocStampFreshnessTest extends TestCase
         'specs/courantes/etat-des-lieux.md' => 'journal de traces datées ligne par ligne',
         // Snapshot généré : sa fraîcheur se prouve par le snapshot lui-même, pas par une date.
         'specs/courantes/openapi-snapshot.json' => 'artefact généré, pas de la prose',
-        // ── Dette AUD-DOC-31 / P4-120 ────────────────────────────────────────────────────
-        // Ces docs de zone n'ont JAMAIS porté de stamp : ils ne vivaient pas dans
-        // `specs/courantes/`, donc la migration ne leur a rien retiré — ce n'est pas une
-        // régression, c'est un trou préexistant que l'élargissement du garde rend enfin
-        // VISIBLE. Chacun sort de cette liste le jour où quelqu'un le vérifie et le date :
-        // poser un stamp sans avoir vérifié serait précisément le mensonge que ce test
-        // traque. Aucune ligne ne s'AJOUTE ici — un doc de zone neuf naît avec son stamp.
-        'backend/docs/commands.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'backend/docs/constraint-config-keys.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'backend/docs/constraint-coverage.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'backend/docs/constraints.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'backend/docs/ffbb-api.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'backend/docs/generation-flow.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'backend/docs/RLS.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'backend/docs/schedule-generation-guide.md' => 'jamais stampé (antérieur au garde) — P4-120',
-        'backend/docs/TENANT.md' => 'jamais stampé (antérieur au garde) — P4-120',
+        // ── P4-120 SOLDÉE le 2026-08-22 : les 12 docs de zone « jamais stampés » ont tous
+        // gagné leur stamp par une vérification contre le code (19 faits faux corrigés en
+        // chemin — trace état des lieux). Aucune ligne ne s'AJOUTE ici : un doc de zone
+        // neuf naît avec son stamp, et une exemption nouvelle exige sa raison structurelle.
     ];
 
     public function testEveryWatchedDocumentCarriesAStamp(): void

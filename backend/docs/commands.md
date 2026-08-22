@@ -1,5 +1,7 @@
 # Commandes backend — référence complète
 
+Last verified @ 2026-08-22 (P4-120 — première vérification stampée de ce fichier, contre le code : cibles Make toutes présentes dans `backend/Makefile` ✓ · horaires du catalogue sondés sur 7 jobs (`AdminJobCatalog.php` : digest 07:00, approbations 08:30, purges 02:00/02:15/02:30/03:45, imports trimestriels 04:00/04:30) ✓ · pièges RLS des commandes Doctrine ✓ · les 3 scripts de `backend/scripts/` existent ✓. **Deux faits corrigés** : `app:exports:purge` disait encore « PDF/PNG » alors que le PNG a quitté le projet le 2026-08-21 (motif `.pdf` seul, `PurgeExportsCommand.php:61`) ; les décomptes « 143 fichiers / 24 steps » étaient DOUBLEMENT faux (réel ce jour : 204/44) et sont remplacés par du sans-décompte — la règle anti-décompte existe précisément parce que ces deux-là ont pourri)
+
 > **Tout se lance dans le container** (`docker compose exec php-fpm …`) — les cibles `make`
 > le font pour toi. PHPUnit exige `APP_ENV=test` (sinon `test.service_container` introuvable).
 > La base : `make help` affiche cette liste côté Makefile.
@@ -11,7 +13,7 @@
 | `make install` | `composer install` dans le container |
 | `make test` | PHPStan + CS-Fixer + PHPUnit **`--testsuite Unit`** (⚠️ PAS le gate bloquant : ni `--group phase1`, ni `tests/` entier) |
 | `make tests-complete` | PHPStan + CS-Fixer + **`phpunit tests/`** (le DOSSIER entier — miroir EXACT du job CI `Unit Tests` ; seule cible qui voit Api/Command/Double/EventListener/MessageHandler/OpenApi/Validator) |
-| `make phpunit` | PHPUnit **`--group phase1`** seul (`APP_ENV=test` injecté) — ⚠ **ce n'est pas « le gate »** : le groupe compte 143 fichiers, le job CI `blocking-tests` en lance 24 en steps nommés. La cible **couvre** le gate mais ne s'y réduit pas (CLAUDE.md §4) |
+| `make phpunit` | PHPUnit **`--group phase1`** seul (`APP_ENV=test` injecté) — ⚠ **ce n'est pas « le gate »** : le groupe compte plusieurs fois plus de fichiers que le job CI `blocking-tests` n'a de steps nommés (les décomptes exacts pourrissent en jours — `ci.yml` fait foi). La cible **couvre** le gate mais ne s'y réduit pas (CLAUDE.md §4) |
 | `make tests-engine-semantics` | PHPUnit **`--group contract`** — les tests qui interrogent le **VRAI moteur** (job CI dédié et bloquant « Engine semantics ») : chaque clé de la liste blanche `config` doit **CHANGER** le résultat du solveur, le miroir de capacité doit rendre le même verdict que lui, le payload doit rester recevable. ⚠ `tests-complete` les **exclut** (`--exclude-group contract`), exactement comme `unit-tests` en CI : sans cette cible, ils ne tournent jamais en local |
 | `make db-init` | Crée + migre la base de **dev** — idempotent, ne détruit rien |
 | `make db-init-test` | Crée + migre la base de test (**pré-requis de toute suite**) |
@@ -39,7 +41,7 @@ Toutes manuelles sauf mention. Détail : `ls backend/src/Command/`.
 | `app:seasons:purge` | Supprime les saisons < N-1 (rétention : courante + précédente + futures) — **auto, quotidien à 03:00 (Europe/Paris)** |
 | `app:users:purge-inactive` | RGPD rétention : préavis email à 23 mois d'inactivité, anonymisation à 24 mois (préavis ≥ 1 mois exigé) — **auto, quotidien à 02:30** |
 | `app:audit:purge` | RGPD : purge le journal d'audit > 12 mois — **connexion admin** (append-only : le rôle runtime n'a pas de policy DELETE) — **auto, quotidien à 03:30** |
-| `app:exports:purge` | Supprime les rendus PDF/PNG **orphelins** (planning disparu) et ceux de **plus de 90 jours**, **sauf** l'export que pointe `Season.exportPdfUrl` — cet épinglage-là remplace la colonne `is_pinned` du croquis v3, qui aurait supposé un geste qu'aucun écran n'offre. **Connexion admin** (purge transverse : les policies RLS étant en `FORCE`, sans contexte de club une requête ne rend AUCUNE ligne) — **auto, quotidien à 03:45** ; `--dry-run` / `--days` |
+| `app:exports:purge` | Supprime les rendus PDF **orphelins** (planning disparu) et ceux de **plus de 90 jours** — le PNG a quitté TOTALEMENT le projet le 2026-08-21, le motif de fichier n'accepte plus que `.pdf` (`PurgeExportsCommand.php:61`) — **sauf** l'export que pointe `Season.exportPdfUrl` — cet épinglage-là remplace la colonne `is_pinned` du croquis v3, qui aurait supposé un geste qu'aucun écran n'offre. **Connexion admin** (purge transverse : les policies RLS étant en `FORCE`, sans contexte de club une requête ne rend AUCUNE ligne) — **auto, quotidien à 03:45** ; `--dry-run` / `--days` |
 | `app:purge-orphans` | Nettoie les orphelins logiques pré-cascade (réservations orphelines, liens pendants) — manuel |
 | `app:users:purge-unverified` | Supprime les comptes non vérifiés > 7 j — **auto, quotidien à 02:00** |
 | `app:clubs:purge-erased` | RGPD : purge le workspace des clubs dont le délai de grâce d'effacement (30 j) est échu — l'identité publique FFBB survit — **auto, quotidien à 02:15** |

@@ -1,5 +1,7 @@
 # `config` d'une contrainte — la liste blanche (SEC-13)
 
+Last verified @ 2026-08-22 (P4-120 — première vérification stampée de ce fichier, contre le code, **tout juste** : les clés de la table existent dans `ConstraintConfigValidator` (`minStartTime`/`maxEndTime` type time:63-65, `minAtVenueCount`:86, `fromTime`:96, `excludeTags`:48) ✓ · foyer unique `TeamTagResolver::resolveConstraintTeamIds` (`:278`) ✓ · `ConstraintKeysAreHonouredByEngineTest` existe et le job `engine-semantics` aussi (`ci.yml:790`) ✓ · migration `Version20260807190000` (suppression `coachId`) présente ✓ · `PlanVenueClosures::effectiveStateForPlan` (`:169`) ✓ · `POST /api/constraints/validate` (`ValidateConstraintsController.php:64`) ✓)
+
 > Source de vérité du code : `App\Service\ConstraintConfigValidator`.
 > Cette page explique le POURQUOI ; la liste qui fait foi est dans la classe.
 

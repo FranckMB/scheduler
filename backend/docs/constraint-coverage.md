@@ -1,5 +1,7 @@
 # Couverture des contraintes — besoins gestionnaire
 
+Last verified @ 2026-08-22 (P4-120 — première vérification stampée de ce fichier, contre le code : `maxConsecutiveDays` OFF par défaut et son test `engine/tests/semantic/test_consecutive_days.py` ✓ · ALIGN-07 gardé par `test_hard_lock_divisible_slot.py` ✓ · retrait de `FACILITY_CAPACITY` le 2026-08-08 confirmé (`engine/app/main.py:483-484`) — c'est ce doc qui disait VRAI, `business.md` corrigé dans la même passe ✓ · `spacing` −2 ✓ · les deux renvois de bas de page existent (`constraint-vocabulary.md` stampé 2026-08-20, `constraint-matrix.md`) ✓. **Deux faits corrigés** : `preferredVenueId` annoncé +60 (poids d'avant V10 — réel : +10) ; l'axe priorité laissait croire que `orToolsWeight` pilotait les poids alors qu'ils sont codés en dur et le champ ignoré)
+
 > **But** : liste **exhaustive** des besoins qu'un gestionnaire de club peut vouloir exprimer, et
 > **ce que l'application couvre** aujourd'hui — pour voir clairement les cas couverts (✅), partiels
 > (🟡) et **non couverts** (❌). Le vocabulaire moteur correspondant est détaillé dans
@@ -34,7 +36,7 @@
 | « Cette équipe joue dans tel gymnase (obligatoire) » | FACILITY `forcedVenueId` (HARD) | ✅ | SM4 → Jean Vilar |
 | « Réserver un gymnase à un groupe (exclusif) » | FACILITY `forcedVenueId`/`preferredVenueId` HARD + `targetTag` → interdit hors tag | ✅ | Camus réservé Loisir 1/2/3 |
 | « Éviter tel gymnase » (dur) | FACILITY `forbiddenVenueId` (HARD) | ✅ | Vétérans interdits sur 5 gymnases |
-| « Préférer tel gymnase » | FACILITY `preferredVenueId` (PREFERRED, +60) | ✅ soft | Matéo préféré aux Régionales |
+| « Préférer tel gymnase » | FACILITY `preferredVenueId` (PREFERRED, +10 — recalé sous la valeur d'une séance nue depuis V10 « le remplissage prime », `engine/app/solver/objective.py`) | ✅ soft | Matéo préféré aux Régionales |
 | « Pas ce type d'équipe dans ce gymnase » | FACILITY `forbiddenVenueId` + `targetTag` | ✅ | Jean Vilar pas de féminines |
 | « Gymnase fermé sur une période » | période cockpit `venue_closed` → **retrait des créneaux** du gymnase les jours fermés (`VenueClosureDays`, 5b #263 ; l'ancienne expansion `forbiddenVenueId` est supprimée) — sur-ferme sur tout le bloc si un jour se répète, jamais sous-ferme | ✅ | (calendrier cockpit) |
 | **« Au moins une séance dans tel gymnase »** | FACILITY `minAtVenueId` + `minAtVenueCount` (HARD, mode « au moins N ») — plancher, ≠ forçage ; les autres séances restent libres | ✅ *(ALIGN-05)* | « au moins 1 séance à Armand » ; fail-fast backend si N > séances/semaine |
@@ -55,7 +57,7 @@
 
 | Besoin | Mécanisme | Statut | Exemple BCCL |
 |---|---|---|---|
-| « Servir d'abord les équipes importantes » | PRIORITY_TIER `orToolsWeight` S=10000…D=1 | ✅ soft | rangs S/A/B/C/D |
+| « Servir d'abord les équipes importantes » | tiers S=10000…D=1, poids **codés en dur** dans le moteur (`objective.py` — le champ `orToolsWeight` du payload est requis mais IGNORÉ) | ✅ soft | rangs S/A/B/C/D |
 | « Garantir N séances/semaine par équipe » | `MIN_SESSIONS` — **cible soft**, pas un plancher dur | 🟡 | ⚠ « minimum » non garanti (audit ENG-18) |
 | « Jamais 2 équipes sur le même créneau » | `VENUE_AT_MOST_ONE` / capacité (implicite) | ✅ | — |
 | « Jour de repos après un match » | bonus soft `add_match_day_rest_bonus` | ✅ soft | — |

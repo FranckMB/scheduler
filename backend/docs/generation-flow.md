@@ -1,5 +1,7 @@
 # Documentation technique du flux de génération de planning
 
+Last verified @ 2026-08-22 (P4-120 — première vérification stampée de ce fichier, contre le code : `toArray(false)` sans exception HTTP (`EngineClient.php:39,58`) ✓ · `engine_timeout`/`engine_error` émis par le handler (`GenerateScheduleHandler.php:290,298`), `engine_failed` par `ScheduleDiagnosticsRecorder` (`:65,75`) ✓ · verrou Redis `nx`/`ex` (`ClubGenerationLock.php:26`) ✓ · payload SSE réduit à `status`/`score`/`unplaced`/`warnings` (`ScheduleProgressPublisher.php:41-44`) ✓ · budget adaptatif 60/180/600 plafonné 650 cohérent avec le moteur ✓. **Un fait corrigé** : le doc décrivait un statut `"infeasible"` sur le fil qui n'existe PAS — le schéma de sortie est `Literal["queued","generating","completed","failed"]` (`output_schema.py:130`), l'INFEASIBLE arrive en `"failed"` ; la ligne de tableau, le titre du §5.2 et l'exemple sont recalés)
+
 > ClubScheduler — Symfony 7 + API Platform + Messenger Redis + Mercure SSE. Contexte : BCCL (B CHARPENNES CROIX LUIZET, code FFBB ARA0069036, ligue ARA).
 
 ---
@@ -238,13 +240,12 @@ Note importante sur les réponses HTTP : `EngineClient` lit la réponse avec `to
 |----------------|-------------------|-----------------|
 | `200 OK` + `status: "completed"` | Import des créneaux | Aucun (ou diagnostics métier) |
 | `200 OK` + `status: "failed"` | Import diagnostics, statut `FAILED` | `conflict` + liste équipes non placées |
-| `200 OK` + `status: "infeasible"` | Import diagnostics, statut `FAILED` | `conflict` + liste équipes non placées |
 | `422 Unprocessable Entity` (corps sans `status`) | Traité comme `failed`, statut `FAILED` | `engine_failed` |
 | `500 Internal Server Error` (corps sans `status`) | Traité comme `failed`, statut `FAILED` | `engine_failed` |
 | Timeout HTTP (> 650 s) | Statut `FAILED` | `engine_timeout` |
 | Host unreachable | Statut `FAILED` | `engine_error` |
 
-> Exemple concret : si le BCCL ajoute une contrainte `HARD` "SM3 uniquement le mercredi après 20h" et que le mercredi soir est déjà saturé par SM1, SM2, SF1 et SF2, le solveur peut déclarer le problème infaisable. Il retourne `status: "infeasible"` avec un diagnostic listant SM3 comme équipe non placée.
+> Exemple concret : si le BCCL ajoute une contrainte `HARD` "SM3 uniquement le mercredi après 20h" et que le mercredi soir est déjà saturé par SM1, SM2, SF1 et SF2, le solveur peut déclarer le problème infaisable (INFEASIBLE côté CP-SAT). Il retourne alors `status: "failed"` avec un diagnostic listant SM3 comme équipe non placée.
 
 ---
 
@@ -271,7 +272,9 @@ Le moteur a trouvé un planning valide. `ScheduleResultImporter` exécute les op
    - `Schedule.score` → valeur du score objectif (ex: `117679`)
    - `Schedule.solverNbVariables` / `solverNbConstraints` / `solverNbConflicts` / `solverWallTimeMs` → métriques brutes du solveur. **Il n'existe pas de champ `solverMetrics`** : ce sont quatre colonnes distinctes, et l'historique par génération vit dans l'entité `SolverMetric` (alimentée par `SolverMetricsRecorder`).
 
-### 5.2 Cas : statut "failed" ou "infeasible"
+### 5.2 Cas : statut "failed"
+
+⚠ Il n'existe **pas** de statut `"infeasible"` sur le fil : le schéma de sortie du moteur est un `Literal["queued", "generating", "completed", "failed"]` (`output_schema.py:130`) — une instance INFEASIBLE arrive en `status: "failed"` avec ses diagnostics.
 
 Le moteur n'a pas pu produire de planning complet.
 

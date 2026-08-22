@@ -1,5 +1,7 @@
 # Guide de génération de planning — ClubScheduler
 
+Last verified @ 2026-08-22 (P4-120 — première vérification stampée de ce fichier, contre le code : `POST /api/schedules` et `POST /api/schedules/{id}/generate` existent (debug:router) ✓ · port 8080 = `NGINX_PORT` (`.env:6`) ✓ · statut `DRAFT` réel (`ScheduleStatus`) ✓ · gardes 409 version pointée / `GenerationComplexityGuard` / `OrphanPinGuard` présents dans le contrôleur ✓ · diagnostics `engine_timeout`/`engine_error`/`engine_failed` conformes au handler ✓ · rapports dev `var/generate` cohérents avec `make fix-perms` ✓. **Trois faits corrigés** : un Schedule est un planning d'ENTRAÎNEMENTS, pas « de matchs » ; la liste des refus pré-file s'est enrichie (caps métier par club, `SocleGuard` pour une période) ; la note « deux fichiers PDF+PNG » décrivait un export PNG qui a quitté TOTALEMENT le projet le 2026-08-21 — `pngExportUrl` n'existe plus)
+
 > Ce guide explique, étape par étape, comment générer un planning de matchs pour un club de basket dans le backend ClubScheduler. Il s'adresse aux développeurs juniors qui découvrent le projet.
 
 ---
@@ -60,7 +62,7 @@ Ces données sont suffisantes pour lancer une première génération sans rien c
 
 ## 2. Créer un Schedule (planning)
 
-Un **Schedule** est l'entité centrale qui représente un planning de matchs pour une saison donnée.
+Un **Schedule** est l'entité centrale qui représente un planning d'**entraînements** pour une saison donnée (les matchs ont leur propre rail synchrone — ADR-0003).
 
 ### Requête
 
@@ -133,7 +135,7 @@ Remplace `a1b2c3d4-...` par l'UUID retourné à l'étape précédente.
 
 ### Ce qui peut être refusé tout de suite
 
-Trois cas s'arrêtent **avant** la mise en file : rien n'est créé, aucun diagnostic n'est écrit, tu reçois l'erreur dans la réponse.
+Plusieurs gardes s'arrêtent **avant** la mise en file : rien n'est créé, aucun diagnostic n'est écrit, tu reçois l'erreur dans la réponse. Les trois du tableau sont les plus fréquents en dev ; s'y ajoutent les **caps métier par club** (offres/quotas/crédits — gardés par `Security/ClubQuotaTest` et `Security/PlanEntitlementsTest`) et, pour une génération de PÉRIODE, `SocleGuard` (pas de solve de période sans socle EN VIGUEUR — ADR-0002).
 
 | Code | Cause | Que faire |
 |------|-------|-----------|
@@ -479,14 +481,7 @@ curl -O "http://localhost:8080<pdfExportUrl>"   # ex. /exports/schedule-a1b2c3d4
 
 ### Note importante
 
-La génération produit **deux fichiers** simultanément :
-
-| Fichier | Format | Usage |
-|---------|--------|-------|
-| `schedule-{id}.pdf` | PDF A4 | Document imprimable |
-| `schedule-{id}.png` | PNG 794×1123 px | Aperçu numérique (page 1) |
-
-Le champ `pngExportUrl` est renseigné en même temps que `pdfExportUrl`. Si le PNG échoue (par exemple parce que le worker ne peut pas écrire dans le répertoire de sortie), le statut PDF reste `completed` — le PNG est best-effort.
+La génération produit **un seul fichier** : `schedule-{id}.pdf` (A4 imprimable). ⚠ L'export **PNG a quitté totalement le projet le 2026-08-21** (décision fondateur : aucune plus-value) — `pngExportUrl` n'existe plus nulle part dans `src/`, et `app:exports:purge` ne connaît plus que le motif `.pdf`. Si un document mentionne encore le PNG, il est périmé.
 
 ## 8.5 Rapports de diagnostic (dev)
 
