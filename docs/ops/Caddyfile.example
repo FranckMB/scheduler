@@ -6,15 +6,22 @@
 #
 # Deux sites, deux rôles :
 #   - le domaine NU sert la page de vente — des FICHIERS, aucune application ;
-#   - le sous-domaine `app.` sert l'application — transmise à la stack Docker.
+#   - le sous-domaine `app.` sert l'application — transmise à la stack Docker,
+#     AVEC ses écrans de secours (503 subie + maintenance choisie) servis par
+#     Caddy DEPUIS LE DISQUE quand la stack est morte ou volontairement coupée.
 #
-# ⚠ Le dossier de la page est déposé par le WORKFLOW DE DÉPLOIEMENT
-#   (.github/workflows/deploy.yml), sous DEPLOY_PATH. Il n'existe donc qu'APRÈS
-#   le premier déploiement : avant lui, le domaine nu répondra 404, et c'est normal.
-# ⚠ Caddy doit pouvoir LIRE ce dossier : il tourne sous l'utilisateur `caddy`, pas
+# ⚠ Deux dossiers sont déposés par le WORKFLOW DE DÉPLOIEMENT
+#   (.github/workflows/deploy.yml), sous DEPLOY_PATH : `landing/` (la page de vente)
+#   et `system-pages/` (503 + maintenance). Ils n'existent donc qu'APRÈS le premier
+#   déploiement : avant lui, le domaine nu répondra 404, et c'est normal.
+# ⚠ Caddy doit pouvoir LIRE ces dossiers : il tourne sous l'utilisateur `caddy`, pas
 #   sous l'utilisateur de déploiement. Voir docs/ops/deploy.md §1.5.
 
 amateo.app {
+	# ⚠ La racine est `landing/`, PAS le DEPLOY_PATH nu : sans quoi ce file_server
+	#   exposerait amateo.app/503.html et amateo.app/system-pages/ à côté de la page
+	#   de vente. `system-pages/` est un FRÈRE de `landing/`, jamais dedans — il
+	#   n'est atteignable que par les blocs internes du site `app.` ci-dessous.
 	root * /srv/clubscheduler/landing
 	file_server
 	encode gzip zstd
@@ -25,7 +32,81 @@ www.amateo.app {
 }
 
 app.amateo.app {
-	# 8081 = FRONTEND_PORT de .env.prod, le seul port publié par la stack,
-	# et seulement sur localhost — Caddy est la seule porte d'entrée.
-	reverse_proxy 127.0.0.1:8081
+	# Racine commune aux fichiers servis DU DISQUE (503, maintenance, et le
+	# config.js de la landing) — zéro dépendance à la stack Docker ou au réseau.
+	root * /srv/clubscheduler
+
+	# ── Interrupteur de MAINTENANCE — à fichier témoin ─────────────────────────
+	# Le matcher `file` est évalué à CHAQUE requête : poser (`touch`) ou retirer
+	# (`rm`) le témoin agit IMMÉDIATEMENT, sans reload Caddy.
+	# ⚠ Le témoin vit à $DEPLOY_PATH/maintenance.on, HORS du dossier `system-pages/`
+	#   basculé par le deploy. S'il vivait DANS system-pages/, la bascule atomique
+	#   du déploiement (mv system-pages.new → system-pages) l'effacerait EN SILENCE
+	#   au milieu d'une fenêtre de maintenance. Le garder à la racine du DEPLOY_PATH
+	#   le met hors d'atteinte de la bascule.
+	@maintenance file /maintenance.on
+	handle @maintenance {
+		header Retry-After 600
+		# config.js same-origin, servi du disque (rewrite vers landing/) — pour que
+		# la page de maintenance porte la marque sans dépendre de l'app.
+		@config-maint path /config.js
+		handle @config-maint {
+			rewrite * /landing/config.js
+			file_server
+		}
+		rewrite * /system-pages/maintenance.html
+		file_server {
+			# 503 + Retry-After, JAMAIS 200 : un 200 ferait indexer la page à la
+			# place de l'app, ferait dire « tout va bien » aux sondes (tuant le seul
+			# garde-fou anti-oubli), et servirait du HTML en succès aux fetch des
+			# onglets ouverts. Décision fondateur.
+			status 503
+		}
+	}
+
+	# ── Trafic normal ──────────────────────────────────────────────────────────
+	handle {
+		# 8081 = FRONTEND_PORT de .env.prod, le seul port publié par la stack, et
+		# seulement sur localhost — Caddy est la seule porte d'entrée.
+		reverse_proxy 127.0.0.1:8081
+	}
+
+	# ── 503 SUBIE — la stack est morte ─────────────────────────────────────────
+	# handle_errors ne se déclenche QUE sur les erreurs produites par CADDY
+	# LUI-MÊME — typiquement quand le reverse_proxy ne JOINT PAS l'amont
+	# (502/503/504).
+	# ⚠ GARANTIE STRUCTURELLE — pourquoi les 404/403 de l'APP ne peuvent PAS être
+	#   remplacés : une réponse de l'amont — 404 tenant, 403, 500 applicatif —
+	#   TRAVERSE le proxy telle quelle et n'entre JAMAIS ici. Les écrans de la SPA
+	#   restent souverains quand l'app vit ; cette page Caddy ne paraît que quand
+	#   elle est morte. Le matcher @down est une ceinture par-dessus les bretelles.
+	# ⚠ AVANT le premier déploiement, /srv/clubscheduler/system-pages/ n'existe pas :
+	#   le file_server échoue et Caddy retombe sur son gestionnaire d'erreur par
+	#   défaut → un 5xx à CORPS VIDE. Jamais pire, jamais un 200. (Prouvé : cas 6 de
+	#   scripts/test-system-pages.sh.)
+	handle_errors {
+		@down expression `{err.status_code} in [502, 503, 504]`
+		handle @down {
+			root * /srv/clubscheduler
+			@config path /config.js
+			handle @config {
+				rewrite * /landing/config.js
+				file_server
+			}
+			rewrite * /system-pages/503.html
+			file_server {
+				# Statut EXPLICITE : contrat déterministe pour sondes et crawlers, on
+				# ne dépend d'aucun comportement par défaut ambigu.
+				status 503
+			}
+		}
+	}
 }
+
+# ── NOTE sur /config.js ───────────────────────────────────────────────────────
+# Les pages 503/maintenance font `<script src="/config.js">`. Sur une app VIVANTE,
+# cette requête part au reverse_proxy comme n'importe quelle autre — sans
+# conséquence, la page d'erreur n'étant alors jamais affichée. Ce n'est QUE dans
+# les branches d'erreur/maintenance ci-dessus que le rewrite la sert du disque.
+# Ne pas « corriger » cette double route : c'est ce qui rend la marque disponible
+# quand tout le reste est mort.

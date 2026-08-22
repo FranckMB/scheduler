@@ -114,27 +114,39 @@ d'approbation)
 
 ---
 
-## FAMILLE B — Statique nginx (HORS app — quand l'app est MORTE)
+## FAMILLE B — Statique Caddy (HORS app — quand l'app est MORTE)
 
-**⚠ Limitation n° 5, la plus dure** : ces pages sont servies par nginx quand le backend (ou tout)
-est tombé. Donc : **HTML autonome en UN fichier** (CSS inline, images inline en data-URI ou SVG
-inline), **AUCUN JavaScript requis, AUCUNE requête externe**, **pas de sport** (aucune identité
-disponible), thème UNIQUEMENT via `prefers-color-scheme` en CSS. Poids total < 100 Ko par page.
-Aujourd'hui : **rien n'existe** — `docker/frontend/nginx.conf` et `docker/frontend/nginx.prod.conf`
-ne déclarent aucun `error_page` ; une panne rend la page blanche par défaut de nginx.
+> ⚑ **LIVRÉ le 2026-08-22** — et **ce n'est PAS un geste nginx**, malgré ce que disait cette
+> famille : ces pages sont servies par **Caddy** (sur la VM, hors Docker), jamais par le conteneur
+> `frontend`. Le cas « nginx vivant » est couvert par les écrans SPA (famille A). Fichiers réels :
+> `system-pages/503.html` et `system-pages/maintenance.html` ; câblage
+> [`../../docs/ops/Caddyfile.example`](../../docs/ops/Caddyfile.example) ; trace, copie fondateur
+> retenue et pièges : [`../courantes/etat-des-lieux.md`](../courantes/etat-des-lieux.md) ; règle de
+> zone `.claude/rules/system-pages.md`. La description ci-dessous garde sa valeur de CONTRAINTES ;
+> la copie livrée, elle, est celle du fondateur (voir chaque écran).
 
-### B1. `50x.html` — panne (502/503/504)
-- **Utilité** : le service est indisponible (incident). Message : « on est dessus, revenez dans
-  quelques minutes », ton calme, PAS de jargon. Illustration générique sport-neutre (ballon au
-  repos, banc de touche).
-- **Cadre** : plein viewport, contenu centré 560 px max.
+**⚠ Limitation n° 5, la plus dure** : ces pages sont servies par **Caddy** quand le backend (ou
+tout) est tombé. Donc : **HTML autonome en UN fichier** (CSS inline, images inline en data-URI ou
+SVG inline), **pas de sport** (aucune identité disponible), thème UNIQUEMENT via
+`prefers-color-scheme` en CSS. Poids total < 100 Ko par page. Le seul chargement réseau toléré est
+`/config.js` (même origine, servi du disque par Caddy) — sans lui, la page reste **entièrement
+fonctionnelle**, sans marque.
 
-### B2. `maintenance.html` — maintenance volontaire
-- **Utilité** : déploiement planifié. Message DIFFÉRENT de la panne : « maintenance en cours,
-  retour à HH:MM » (heure éditable dans le HTML).
-- Même contraintes que B1, visuel de la même famille mais distinct (outils, chrono).
+### B1. `503.html` — panne (502/503/504) — LIVRÉ
+- **Utilité** : le service est indisponible (incident), ton calme, PAS de jargon.
+- **Copie fondateur retenue** : « Le gymnase est fermé, on cherche les clés. » + rassurance sur les
+  données. Gestes *Réessayer maintenant* (repli `<a href="/">` sans JS) / *Prévenir le support*
+  (`mailto:` construit depuis `contactEmail`, masqué si le config n'a pas chargé).
+- **Cadre** : plein viewport, contenu centré 560 px max. Servie via `handle_errors` (502/503/504),
+  statut **503 explicite**.
 
-### (B3. 404 statique nginx — optionnel, faible priorité : la SPA attrape quasi tout.)
+### B2. `maintenance.html` — maintenance volontaire — LIVRÉ
+- **Utilité** : déploiement planifié. Message DIFFÉRENT de la panne.
+- **Copie fondateur retenue** : « On refait le parquet. » Interrupteur à **fichier témoin**
+  (`maintenance.on`), statut **503 + `Retry-After`** — jamais 200. (Pas de « retour à HH:MM » :
+  arbitrage 503/Retry-After, un 200 tuerait les sondes.)
+
+### (B3. 404 statique — optionnel, faible priorité : la SPA attrape quasi tout. Non fait.)
 
 ---
 
@@ -150,8 +162,9 @@ ne déclarent aucun `error_page` ; une panne rend la page blanche par défaut de
 3. **Attente de génération = scène ENCAPSULÉE**, pas un fond plein écran — le centre porte
    désormais la mini-grille + les textes (**plus de logo imposé depuis le 2026-08-17**, voir A1).
 4. **Crash/erreurs = génériques** (peuvent survenir avant auth).
-5. **Pages nginx = un fichier autonome**, zéro JS, zéro requête, pas de sport, thème par
-   `prefers-color-scheme` seul.
+5. **Pages Caddy = un fichier autonome**, pas de sport, thème par `prefers-color-scheme` seul ;
+   seul `/config.js` (même origine, disque) est toléré, et son absence ne casse rien (repli sans
+   marque). *(Famille B LIVRÉE le 2026-08-22 — `system-pages/`, servie par Caddy, pas nginx.)*
 
 + transverses : dark ET light (ou transparence bi-thème), contraste 4.5:1 dans les zones protégées,
 `prefers-reduced-motion`, budgets poids, SVG animé CSS de préférence, pas de Lottie, pas de police

@@ -116,3 +116,13 @@ else
 fi
 
 echo "==> Deploy $VERSION OK"
+
+# Anti-oubli : si l'interrupteur de MAINTENANCE (docs/ops/Caddyfile.example) est
+# encore armé, le dire fort. C'est un RAPPEL, pas une garantie — la vraie garantie
+# qu'une fenêtre de maintenance n'a pas été oubliée, c'est le 503 qu'une sonde voit.
+#   · PAS d'auto-suppression : une fenêtre peut délibérément durer plus qu'un deploy ;
+#   · PAS d'exit non-zéro : le deploy, lui, a bel et bien réussi.
+if [ -e "$DEPLOY_PATH/maintenance.on" ]; then
+  echo "==> ⚠ RAPPEL : le témoin de maintenance ($DEPLOY_PATH/maintenance.on) est TOUJOURS présent." >&2
+  echo "==>   Le site app. répond 503 « maintenance ». Retirer le témoin pour rouvrir : rm '$DEPLOY_PATH/maintenance.on'" >&2
+fi

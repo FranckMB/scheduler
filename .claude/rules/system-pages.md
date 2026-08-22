@@ -1,0 +1,51 @@
+---
+paths:
+  - "system-pages/**"
+---
+
+# Pages système — conventions & pièges (chargé quand system-pages/ est touché)
+
+> Les pages servies **quand l'application est morte** : la 503 subie (panne) et la page de
+> maintenance choisie. Servies par **Caddy**, sur la VM, hors Docker — jamais par la stack ni
+> par le conteneur `frontend`. **Elles n'ont pas d'`AGENTS.md`** : tout ce qui les concerne
+> tient ici. Câblage Caddy : [`../../docs/ops/Caddyfile.example`](../../docs/ops/Caddyfile.example) ;
+> dépôt + runbook : [`../../docs/ops/deploy.md`](../../docs/ops/deploy.md).
+
+- **Zéro build.** HTML/CSS statique servi tel quel — pas de npm, pas de bundler, pas de
+  transpilation. On édite `503.html` et `maintenance.html` directement. N'introduis **aucune**
+  chaîne de build : c'est ce qui rend ces pages increvables et déployables seules. C'est la
+  propriété qui compte — elles s'affichent **quand tout le reste est mort**, elles ne peuvent
+  donc venir ni du conteneur `frontend`, ni de l'app.
+- **Aucun lien avec `frontend/` ni `landing/`** — pas d'import de composant, pas de CSS partagé,
+  pas d'asset commun. La ressemblance visuelle est une **convention**, jamais une dépendance :
+  la palette est **DUPLIQUÉE** de la landing (dupliquer est le comportement VOULU).
+- **`system-pages/` est un FRÈRE de `landing/`, jamais dedans.** Le domaine nu sert `landing/`
+  avec un `file_server` ; ranger ces pages dans `landing/` exposerait `amateo.app/503.html` à
+  côté de la page de vente. Elles ne sont atteignables que par les blocs internes du site `app.`.
+- **Marque JAMAIS en littéral dans le HTML.** Le nom n'apparaît que via `landing/config.js`
+  (`<script src="/config.js">`, servi du disque par Caddy, même origine) — injecté par un script
+  inline `if (window.LANDING_CONFIG) …` dans le logotype et le `<title>`. **Sans lui : titre
+  neutre, logotype masqué, lien support masqué, page ENTIÈREMENT fonctionnelle.** Le repli est
+  *sans marque*, jamais une marque recréée. Aucun `mailto:` en dur : l'adresse vient de
+  `contactEmail`, et le lien reste masqué tant que le config n'a pas chargé.
+- **Zéro dépendance réseau, inventaire imposé** : CSS **inline** · police **`system-ui`
+  seule** (pas même une police auto-hébergée) · image **SVG inline ou rien** · **< 100 Ko** par
+  page · le seul chargement réseau est `/config.js`. Rien ne vient d'ailleurs.
+- **Thème** : `prefers-color-scheme` en **CSS pur**, palette dupliquée de la landing, les deux
+  variantes conçues ensemble. ⚠ Un accent qui « porte du texte » S'INVERSE entre thèmes (sombre
+  sur clair / clair sur sombre) : le bouton plein a ses **propres** tokens fond/texte pour rester
+  contrasté dans les deux sens — ne pas peindre du blanc sur un accent clair.
+- **Passe de design obligatoire** dès qu'on remanie l'apparence — ce sont des pages **publiques** :
+  agent `ui-ux-pro-max`, bornée à l'apparence, elle ne valide rien. ⚠ **Le contraste WCAG se
+  vérifie dans un vrai navigateur**, dans les DEUX thèmes (jsdom n'atteste rien).
+- **Non testé = inexistant** : [`../../scripts/test-system-pages.sh`](../../scripts/test-system-pages.sh)
+  (Docker seul, six cas au curl) prouve le comportement de bout en bout, sa conf de test étant
+  **dérivée par `sed`** de `Caddyfile.example` — une seule source. Toucher une page ou le
+  câblage Caddy sans repasser ce script, c'est livrer à l'aveugle.
+- ⚠ **Statut `503`, jamais 200** — pour la panne comme pour la maintenance (+ `Retry-After` en
+  maintenance). Un 200 ferait indexer la page à la place de l'app, dirait « tout va bien » aux
+  sondes (tuant le garde-fou anti-oubli), et servirait du HTML en succès aux `fetch` des onglets
+  ouverts. Décision fondateur.
+- ⚠ **Une erreur de l'APPLICATION n'est jamais remplacée** : `handle_errors` ne se déclenche que
+  sur les erreurs de Caddy lui-même (proxy qui ne joint pas l'amont). Un 404 tenant / 403 / 500
+  applicatif traverse le proxy tel quel — les écrans de la SPA restent souverains quand l'app vit.
