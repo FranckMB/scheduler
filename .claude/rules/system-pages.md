@@ -53,7 +53,7 @@ paths:
   (`window.LANDING_CONFIG = {`), le **Content-Type JS**, le **statut**, et l'**absence** du
   marqueur de la page. Règle générale : un marqueur présent des DEUX côtés ne prouve rien.
 - **Non testé = inexistant** : [`../../scripts/test-system-pages.sh`](../../scripts/test-system-pages.sh)
-  (Docker seul, huit cas au curl) prouve le comportement de bout en bout, sa conf de test étant
+  (Docker seul, tout au curl) prouve le comportement de bout en bout, sa conf de test étant
   **dérivée par `sed`** de `Caddyfile.example` — une seule source. Toucher une page ou le
   câblage Caddy sans repasser ce script, c'est livrer à l'aveugle.
 - ⚠ **Statut `503`, jamais 200** — pour la panne comme pour la maintenance (+ `Retry-After` en
