@@ -13,6 +13,10 @@
 > **Le palier A est LIVRÉ** — l'état courant du module vit dans
 > [`../courantes/module-matchs.md`](../courantes/module-matchs.md) ; le présent fichier ne décrit que
 > l'**ouvert**.
+> **Passe de conception du 2026-08-22 (fondateur)** : l'enchaînement ACTUEL est relevé clic par clic
+> (§6ter) et les **lignes de conception à modifier** sont posées (§6quater, L1-L8) — dont deux faits
+> neufs : **aucun geste ne pose `SUBMITTED`** (la boucle ne se boucle pas, L4) et **R1 est tombée**
+> (échelle de modale livrée par P4-107, RMM-0 recalibré L8).
 > **Revue lot-par-lot du 2026-08-17 (2ᵉ passe, fondateur)** : FBI acquiert le statut de **source de données
 > de plein droit** (§4 fait 1, §5) · le **cas fondateur de la rotation A/B** est capturé (SM1/SM2 20h30 sous
 > dérogation, §8) · un **registre de défauts de lisibilité** entre au cadrage (§6bis) et fonde le nouveau
@@ -209,6 +213,64 @@ sont détaillés dans l'audit du 2026-08-17 — à re-dérouler à l'implémenta
 
 ---
 
+## 6ter. L'enchaînement ACTUEL — le geste tel qu'il est codé (vérifié 2026-08-22)
+
+> Relevé clic par clic AVANT de dessiner la refonte : chaque constat est ancré `fichier:ligne`.
+> C'est la base factuelle des lignes de conception (§6quater) — une session future code sans re-tracer.
+
+1. **Arrivée `/matchs`** : une seule page, barre plate de 6 actions + feedback
+   (`MatchesPage.tsx:188-238`) — Placer automatiquement · Habitudes & passerelles · Accès match ·
+   Engagements FFBB · Importer FBI · Nouveau match. Aucune hiérarchie, aucun temps séparé.
+2. **Import du batch** : « Importer FBI » → dialogue à 3 états internes (fichier → analyse dry-run
+   avec table de mapping division→équipe préremplie depuis les mappings persistés → rapport)
+   (`ImportFbiDialog.tsx:22-34`). Les matchs naissent `UNPLACED` (`FbiFixtureImporter.php:516`).
+3. **Placement** : colonne gauche « À placer » (`UnplacedList`) → un clic sélectionne → le
+   `PlacementPanel` **APPARAÎT** dans la colonne, seulement si HOME + enveloppe résolue
+   (`MatchesPage.tsx:252`) — c'est le saut de contexte nommé au §6.5. Gymnase (select ~90 px, B-gênant
+   §6bis) + heure → « Placer » (PUT full-replace, status→PLACED, `api.ts:466-480`). Ou « Placer
+   automatiquement » (rail solveur synchrone) : toast « N placés · M non plaçables », les **raisons de
+   non-placement vivent dans une Map React locale** (`MatchesPage.tsx:69`) — un refresh les perd.
+4. **Ajustement** : le panel offre Retirer · Ancrer · Échanger · Modifier · Supprimer
+   (`PlacementPanel.tsx:170-205`). « Échanger » arme un mode où **le prochain clic grille change de
+   sens** (choix du partenaire, `MatchesPage.tsx:140-153`) — signalé par un bandeau (`:325-330`),
+   invisible au niveau des cellules : le « mode caché » du §6.5.
+5. **Litiges** : radar en colonne gauche, un clic sur un conflit sélectionne le match fautif
+   (`ConflictRadar.tsx:133-150`). Recalcul à la volée, rien persisté.
+6. **Navigation** : par WEEK-END seulement (précédent/suivant + toggle « semaine type »
+   `typicalView`) — ni filtre semaine, ni journée FFBB. Le **n° de rencontre (`externalRef`) n'est
+   affiché nulle part** (grep sur `features/matches/`, zéro rendu — il n'existe que comme donnée).
+7. **Clôture : IMPOSSIBLE aujourd'hui.** Aucun geste UI ne pose `SUBMITTED` (« saisi dans FBI »).
+   L'enum et ses effets existent — panel read-only (`PlacementPanel.tsx:109`), protection DOC-2
+   (`DeletionImpact.php:31`) — et **l'API accepte l'écriture du statut**
+   (`FixtureStateProcessor.php:74-76`) ; mais aucun bouton ne l'envoie. L'étape 5 de la boucle §6.3
+   (« marquer saisi dans FBI ») n'a **pas de geste** : la boucle du gestionnaire ne se boucle pas.
+
+Le SET-UP (§3.1) n'a pas d'espace : Engagements FFBB, Accès match, Habitudes vivent dans la barre
+d'actions hebdomadaire, et l'image idéale (TypicalWeekendGrid) se cache derrière un toggle.
+
+---
+
+## 6quater. Les lignes de conception à modifier (livrable, 2026-08-22)
+
+> **Le contrat de RMM-1 reste « zéro comportement moteur »** — chaque ligne ci-dessous est de la
+> structure d'écran ou un geste sur une API EXISTANTE. Une ligne = une décision, son ancre, sa cible.
+
+| # | Ligne de conception | Aujourd'hui (ancre) | Cible |
+|---|---|---|---|
+| **L1** | **Deux espaces, deux routes.** | Tout sur `MatchesPage` (§6ter-1) | `/matchs` = la boucle hebdo (défaut) ; **« Configuration »** (route ou tab) héberge Engagements FFBB · Accès match · Habitudes & passerelles · **l'image A/B en écran de plein droit** (fin du toggle `typicalView`). Import FBI reste accessible des DEUX côtés — étape 1 de la boucle ET dépôt saisonnier (même dialogue, deux entrées). |
+| **L2** | **Le rail d'étapes s'extrait** (RMM-2, prérequis). | Stepper codé en dur dans `WizardLayout.tsx:152-155` sur `WIZARD_STEPS` | Composant `shared/` consommant un tableau d'étapes ; le wizard le consomme À RENDU IDENTIQUE (NR visuel), la boucle matchs le consomme avec ses 5 étapes. |
+| **L3** | **Les 5 étapes de la boucle sont DÉRIVÉES, jamais stockées.** | Aucune notion d'étape | Par semaine affichée : batch présent (des matchs existent) → collé au modèle (écarts vs habitudes) → litiges (compte radar) → domiciles posés (0 HOME `UNPLACED`) → saisi FBI (compte `SUBMITTED`). Le rail LIT les données — zéro état nouveau, zéro backend. |
+| **L4** | **Le geste manquant : « Marquer saisi dans FBI ».** | Aucune UI ne pose `SUBMITTED` (§6ter-7) | Bouton sur le panel d'un match PLACED (+ éventuel geste de lot « toute la semaine ») → PUT avec `status: SUBMITTED` — l'API l'accepte déjà (`FixtureStateProcessor.php:74`). C'est LE chaînon qui rend la boucle bouclable, et il est gratuit côté backend. ⚠ Réversible : un SUBMITTED redevient PLACED par le même rail (le panel read-only devra offrir la sortie). |
+| **L5** | **Hiérarchie d'actions par étape.** | 6 boutons équipollents (§6ter-1) | L'action primaire = celle de l'étape courante du rail ; « Placer automatiquement » ne domine qu'à l'étape domiciles ; les 3 rares partent en Configuration ; « Nouveau match » secondaire. |
+| **L6** | **Contexte stable.** | Panel conditionnel (`MatchesPage.tsx:252`) ; mode échange invisible aux cellules (`:140-153`) ; raisons de non-placement volatiles (`:69`) | Slot de panel PERMANENT avec état vide (« Sélectionnez un match ») — fin du saut de colonne ; le mode échange se voit SUR la grille (style des cellules candidates + Échap pour sortir) ; les raisons de non-placement restent affichées tant que la semaine est à l'écran. |
+| **L7** | **La semaine devient l'axe primaire.** | Week-end seulement, `externalRef` jamais rendu (§6ter-6) | Filtre semaine (défaut proposé : **semaine ISO** — « journée FFBB » reste l'ouvert §10) ; le week-end reste le rendu de grille ; le **n° de rencontre s'affiche** dans la grille et les listes (repère, jamais clé — fait #2 §4). |
+| **L8** | **RMM-0 recalibré — R1 est TOMBÉE.** | Le registre §6bis supposait la modale mono-taille ; depuis P4-107 (#675, 2026-08-21) `modal.tsx:30-34` porte l'échelle `size` sm/md/lg, gardée par `modal-size.test.tsx` | Le lot devient une pure CONSOMMATION : `size="lg"` sur les dialogues du module + `title` de secours sur B1-B5 + selects élargis + R2 (colonne `20rem`, `MatchesPage.tsx:240`). Plus rien à construire. |
+
+**Ordre de code inchangé** (séquencement validé §9) : RMM-0 (L8) → RMM-2 (L2) → RMM-1 (L1+L3+L4+L5+L6+L7).
+L4 est DANS RMM-1 : c'est un geste UI sur une API existante, pas un lot backend.
+
+---
+
 ## 7. Le « gardien » — le cœur de l'angoisse du gestionnaire
 
 Le sous-jacent « il ne sait pas si les données reçues sont à jour, et il découvre les conflits **après coup** »
@@ -273,7 +335,7 @@ quel palier chaque lot appartient — **ne pas créer de doublon de vérité**.
 
 | ID | Lot | Type | Axe §7.1 → NR | Rattachement |
 |---|---|---|---|---|
-| **RMM-0** | **Correctifs de lisibilité immédiats** : les 5 bloquant-décision du registre (§6bis) — variant de taille de `Modal`, `title` sur tout libellé tronqué, selects lisibles. **Une PR courte, AVANT la refonte** (la décision d'appariement est bloquée aujourd'hui). | Front | — | **P2-26** (correctif anticipé) |
+| **RMM-0** | **Correctifs de lisibilité immédiats** : les 5 bloquant-décision du registre (§6bis) — `title` sur tout libellé tronqué, selects lisibles, et **consommer l'échelle `size` de la modale, LIVRÉE depuis par P4-107** (recalibrage §6quater L8 : plus rien à construire, le lot a baissé de prix). **Une PR courte, AVANT la refonte** (la décision d'appariement est bloquée aujourd'hui). | Front | — | **P2-26** (correctif anticipé) |
 | **RMM-1** | **Refonte UX pure** : séparer SET-UP / geste récurrent, boucle semaine-par-semaine, hiérarchie d'actions, radar en fil conducteur, états vides, filtre par semaine, n° de rencontre affiché. Critère §6bis : aucun libellé décisionnel tronqué, R1/R2 traités à la racine. **Zéro backend.** | Front | — (aucun comportement moteur touché) | **P2-26** (ce fichier = son détail) |
 | **RMM-2** | Extraire le **stepper/rail du wizard** dans `shared/` + exploiter `tabs` ; mutualiser la grille temporelle. Prérequis technique de RMM-1. | Front | — | P2-26 |
 | **RMM-3** | **Gardien à l'ouverture** : recalcul radar + résumé « nouveaux conflits depuis la dernière visite ». Nécessite une **persistance légère** de l'état radar (le radar est stateless aujourd'hui). | Back + Front | contrainte sémantique (conflits) → NR | **net-neuf** (à porter en ligne roadmap) |
