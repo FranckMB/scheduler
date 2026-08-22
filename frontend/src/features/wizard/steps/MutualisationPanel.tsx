@@ -6,11 +6,13 @@ import { ConfirmDialog } from "@/shared/components/ui/confirm-dialog";
 import { EmptyHint } from "@/shared/components/ui/empty-hint";
 import { Input } from "@/shared/components/ui/input";
 import { apiErrorMessage } from "@/shared/api/errors";
+import { HabitsLinksButton } from "@/features/matches/HabitsLinksButton";
+import { useTeamLinks } from "@/features/matches/queries";
 import { groupTeamsByTier } from "@/shared/lib/teamTiers";
 import { cn } from "@/shared/lib/utils";
 
 import type { PriorityTier, SharedTrainingGroup, Team } from "../api";
-import { alreadyGroupedTeamIds, groupContainingTeam, maxCommonSessions, rankCandidates, sharedGroupLabel } from "../lib/sharedTraining";
+import { alreadyGroupedTeamIds, groupContainingTeam, maxCommonSessions, sharedGroupLabel, splitByLinks, teamsLinkedTo } from "../lib/sharedTraining";
 import { useCreateSharedTrainingGroup, useDeleteSharedTrainingGroup, useSharedTrainingGroups, useTeamPeriodOverrides, useUpdateSharedTrainingGroup } from "../queries";
 
 /**
@@ -37,6 +39,9 @@ export function MutualisationPanel({
   // En portée socle le provider renvoie socle ET périodes : on ne garde que le socle.
   const scopeGroups = null === schedulePlanId ? allGroups.filter((g) => null === g.schedulePlanId) : allGroups;
   const { data: overrides = [] } = useTeamPeriodOverrides(schedulePlanId);
+  // Passerelles du club+saison (P2-34) — SERVIES par le backend, jamais redérivées : elles
+  // décident l'ORDRE d'affichage (équipes liées d'abord), une présentation, pas une permission.
+  const { data: teamLinks = [] } = useTeamLinks();
   const create = useCreateSharedTrainingGroup();
   const update = useUpdateSharedTrainingGroup();
   const del = useDeleteSharedTrainingGroup();
@@ -65,7 +70,12 @@ export function MutualisationPanel({
 
   // Ancre = première équipe cochée dans l'ordre d'affichage. Le split n'apparaît qu'à partir d'elle.
   const anchor = candidates.find((t) => checked.has(t.id)) ?? null;
-  const { near, far } = rankCandidates(candidates, anchor, checked);
+  const linkedIds = null === anchor ? new Set<string>() : teamsLinkedTo(teamLinks, anchor.id);
+  const { near, far } = splitByLinks(candidates, anchor, checked, linkedIds);
+  // Le split « liées / reste » n'a de sens que s'il y a des équipes PASSERELÉES à remonter : sans
+  // passerelle pour l'ancre, on garde la liste plate (toutes visibles) et le hint guide vers la
+  // déclaration — le bloc « liées » ne masque jamais les autres équipes pour rien.
+  const showSplit = candidates.some((t) => linkedIds.has(t.id));
 
   const resetForm = () => {
     setEditingId(null);
@@ -136,10 +146,21 @@ export function MutualisationPanel({
 
   return (
     <div>
-      <p className="mb-3 text-sm text-muted-foreground">
-        Déclarez que plusieurs équipes s'entraînent <strong>ensemble</strong> : cochez-les, puis indiquez combien de <strong>séances communes</strong> elles partagent
-        chaque semaine. Le système les placera au même créneau pour ce nombre de séances.
-      </p>
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          Déclarez que plusieurs équipes s'entraînent <strong>ensemble</strong> : cochez-les, puis indiquez combien de <strong>séances communes</strong> elles
+          partagent chaque semaine. Le système les placera au même créneau pour ce nombre de séances.
+        </p>
+        {/* L'écran unique des passerelles (module matchs) : déclarer un lien y remonte l'équipe liée
+            en tête de la sélection ci-dessous. Le dialog reste dans features/matches, ce bouton l'ouvre. */}
+        <HabitsLinksButton className="shrink-0" />
+      </div>
+
+      {0 === teamLinks.length && candidates.length > 0 ? (
+        <div className="mb-4">
+          <EmptyHint>Aucune passerelle déclarée — déclarez-les pour retrouver ici vos équipes liées.</EmptyHint>
+        </div>
+      ) : null}
 
       <div className="mb-4 rounded-lg border border-border bg-card p-3">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{null !== editingId ? "Modifier le groupe" : "Nouveau groupe"}</p>
@@ -148,13 +169,14 @@ export function MutualisationPanel({
           <EmptyHint>Ajoutez d'abord des équipes pour pouvoir les mutualiser.</EmptyHint>
         ) : (
           <>
-            {null === anchor ? (
-              // Rien de coché : liste plate (le split « proches » n'apparaît qu'à la première coche).
-              <div className="flex flex-col gap-1">{far.map(candidateRow)}</div>
+            {!showSplit ? (
+              // Rien de coché, ou aucune passerelle pour l'ancre : liste plate (toutes les équipes
+              // visibles). Le split « liées » n'apparaît qu'à partir d'une équipe passerelée.
+              <div className="flex flex-col gap-1">{candidates.map(candidateRow)}</div>
             ) : (
               <>
                 <fieldset className="min-w-0 border-0 p-0">
-                  <legend className="mb-1 text-xs font-semibold text-muted-foreground">Équipes proches</legend>
+                  <legend className="mb-1 text-xs font-semibold text-muted-foreground">Équipes liées</legend>
                   <div className="flex flex-col gap-1">{near.map(candidateRow)}</div>
                 </fieldset>
                 {far.length > 0 ? (

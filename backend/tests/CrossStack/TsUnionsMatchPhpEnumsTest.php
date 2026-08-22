@@ -63,6 +63,10 @@ final class TsUnionsMatchPhpEnumsTest extends TestCase
         'TeamLevel' => 'wizard/api.ts',
         'FixtureStatus' => 'matches/api.ts',
         'TeamLinkType' => 'matches/api.ts',
+        // Lot PASSERELLES PR-3 (2026-08-22) — l'intensité d'entraînement d'une passerelle
+        // (PREFERRED/MANDATORY) traverse la frontière : PR-1 l'avait laissée sans union TS
+        // (« aucune union requise en PR-1 ») car c'est l'écran de saisie (PR-3) qui la crée.
+        'TeamLinkIntensity' => 'matches/api.ts',
     ];
     private const string FRONT = __DIR__ . '/../../../frontend/src/features';
 

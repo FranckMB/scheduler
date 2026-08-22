@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/utils";
 
+import type { TeamLink } from "@/features/matches/api";
+
 import type { PriorityTier, SharedTrainingGroup, Team, TeamPeriodOverride } from "../api";
 
 const stgCreate = vi.fn();
@@ -12,6 +14,7 @@ const stgUpdate = vi.fn();
 const stgDelete = vi.fn();
 const sharedGroupsState: { data: SharedTrainingGroup[] } = { data: [] };
 const overridesState: { data: TeamPeriodOverride[] } = { data: [] };
+const teamLinksState: { data: TeamLink[] } = { data: [] };
 
 // Le mock IGNORE `schedulePlanId` (le provider renvoie socle+périodes) : c'est le PANNEAU qui
 // filtre le socle. Le rendre fidèle ferait passer sous silence ce tri côté client.
@@ -23,7 +26,19 @@ vi.mock("../queries", () => ({
   useDeleteSharedTrainingGroup: () => ({ mutate: stgDelete }),
 }));
 
+// Les passerelles décident l'ordre d'affichage (P2-34) — SERVIES par le module matchs. On les
+// pilote depuis le test ; le vrai hook ne doit pas partir en réseau ici.
+vi.mock("@/features/matches/queries", () => ({
+  useTeamLinks: () => ({ data: teamLinksState.data }),
+}));
+// L'écran unique (dialog + ses données matchs) est testé chez lui : ici on stube son bouton.
+vi.mock("@/features/matches/HabitsLinksButton", () => ({
+  HabitsLinksButton: () => <button type="button">Gérer les passerelles</button>,
+}));
+
 import { MutualisationPanel } from "./MutualisationPanel";
+
+const link = (teamAId: string, teamBId: string): TeamLink => ({ id: `${teamAId}-${teamBId}`, teamAId, teamBId, linkType: "NOT_SIMULTANEOUS", trainingIntensity: "PREFERRED" });
 
 const team = (over: Partial<Team> & Pick<Team, "id" | "name">): Team => ({
   sportCategoryId: "senior",
@@ -68,50 +83,76 @@ beforeEach(() => {
   stgDelete.mockClear();
   sharedGroupsState.data = [];
   overridesState.data = [];
+  teamLinksState.data = [];
 });
 
-describe("MutualisationPanel — le sélecteur d'équipes (cases + split proches/reste)", () => {
+describe("MutualisationPanel — le sélecteur d'équipes (cases + split liées/reste porté par les passerelles)", () => {
   it("liste toutes les équipes à plat tant que rien n'est coché (le split n'apparaît qu'à la première coche)", () => {
+    teamLinksState.data = [link("t1", "t4")];
     renderPanel();
-    // Pas de bloc « Équipes proches » avant la première coche.
-    expect(screen.queryByRole("group", { name: "Équipes proches" })).toBeNull();
+    // Pas de bloc « Équipes liées » avant la première coche.
+    expect(screen.queryByRole("group", { name: "Équipes liées" })).toBeNull();
     for (const name of ["SM1", "SM2", "SF1", "U11"]) {
       expect(screen.getByRole("checkbox", { name })).toBeInTheDocument();
     }
   });
 
-  it("dès qu'une équipe est cochée, remonte les proches (même catégorie + genre compatible) et replie le reste", async () => {
+  it("dès qu'une équipe passerelée est cochée, remonte l'équipe LIÉE (pas la catégorie) et replie le reste", async () => {
     const user = userEvent.setup();
+    // SM1 (senior/M) est passerelée à U11 (autre catégorie) — jamais « proche » par catégorie.
+    // C'est la PASSERELLE, pas l'heuristique supprimée, qui la remonte.
+    teamLinksState.data = [link("t1", "t4")];
     renderPanel();
 
     await user.click(screen.getByRole("checkbox", { name: "SM1" }));
 
-    // Proches = SM1 (cochée) + SM2 (senior/M). SF1 (senior/F) et U11 (u11) sont dans le reste.
-    const proches = screen.getByRole("group", { name: "Équipes proches" });
-    expect(within(proches).getByRole("checkbox", { name: "SM1" })).toBeInTheDocument();
-    expect(within(proches).getByRole("checkbox", { name: "SM2" })).toBeInTheDocument();
-    // Le reste est replié : SF1 n'est pas rendue tant qu'on ne déplie pas.
-    expect(screen.queryByRole("checkbox", { name: "SF1" })).toBeNull();
+    const liees = screen.getByRole("group", { name: "Équipes liées" });
+    expect(within(liees).getByRole("checkbox", { name: "SM1" })).toBeInTheDocument();
+    expect(within(liees).getByRole("checkbox", { name: "U11" })).toBeInTheDocument();
+    // SM2 (même catégorie mais NON liée) est dans le reste, replié.
+    expect(screen.queryByRole("checkbox", { name: "SM2" })).toBeNull();
 
     // …mais toujours atteignable en un clic.
     await user.click(screen.getByRole("button", { name: "Afficher toutes les équipes" }));
+    expect(screen.getByRole("checkbox", { name: "SM2" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "SF1" })).toBeInTheDocument();
-    expect(screen.getByRole("checkbox", { name: "U11" })).toBeInTheDocument();
+  });
+
+  it("sans passerelle pour l'ancre, PAS de bloc « liées » — la liste reste plate (toutes visibles)", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    await user.click(screen.getByRole("checkbox", { name: "SM1" }));
+    // Aucun bloc « liées », aucune équipe masquée : le reste ne se cache jamais pour rien.
+    expect(screen.queryByRole("group", { name: "Équipes liées" })).toBeNull();
+    for (const name of ["SM1", "SM2", "SF1", "U11"]) {
+      expect(screen.getByRole("checkbox", { name })).toBeInTheDocument();
+    }
   });
 
   it("avertit sans bloquer au-delà de 3 équipes cochées", async () => {
     const user = userEvent.setup();
     renderPanel();
-    for (const name of ["SM1", "SM2"]) {
+    // Sans passerelle : liste plate, toutes les cases visibles d'emblée.
+    for (const name of ["SM1", "SM2", "SF1", "U11"]) {
       await user.click(screen.getByRole("checkbox", { name }));
     }
-    await user.click(screen.getByRole("button", { name: "Afficher toutes les équipes" }));
-    await user.click(screen.getByRole("checkbox", { name: "SF1" }));
-    await user.click(screen.getByRole("checkbox", { name: "U11" }));
 
     expect(screen.getByRole("alert")).toHaveTextContent(/inhabituel/);
     // Jamais bloquant : le bouton reste actif (le serveur accepte jusqu'à 10).
     expect(screen.getByRole("button", { name: "Créer le groupe" })).toBeEnabled();
+  });
+
+  it("état vide : aucune passerelle déclarée → hint qui renvoie à l'écran des passerelles", () => {
+    renderPanel();
+    expect(screen.getByText(/Aucune passerelle déclarée/)).toBeInTheDocument();
+    // Le geste d'ouverture est offert (bouton « Gérer les passerelles »).
+    expect(screen.getByRole("button", { name: "Gérer les passerelles" })).toBeInTheDocument();
+  });
+
+  it("dès qu'une passerelle existe, le hint « aucune passerelle » disparaît", () => {
+    teamLinksState.data = [link("t1", "t2")];
+    renderPanel();
+    expect(screen.queryByText(/Aucune passerelle déclarée/)).toBeNull();
   });
 });
 

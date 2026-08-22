@@ -1,6 +1,6 @@
 # Module matchs (FFBB) — état livré
 
-Last verified @ 2026-08-22 (rotation de fraîcheur — re-vérifié contre le code : `SocleGuard::assertSeasonPlanChosen` (`backend/src/Service/SocleGuard.php:26`) ✓ · `Fixture.status` naît `UNPLACED` (`Entity/Fixture.php:70-71`) ✓ · verrou DÉDIÉ `MatchPlacementLock.php` distinct du verrou de génération (ADR-0003) ✓. **Un fait du stamp précédent corrigé** : il affirmait `CONTRACT_VERSION` = 2.12 — c'est **2.13** depuis le bump du contrat ; seule la valeur citée avait dérivé, le mécanisme « fichier unique lu par `engine/app/main.py`, un seul contrat pour les 3 endpoints » reste vrai. Ne PAS recopier la valeur dans un stamp : pointer `engine/CONTRACT_VERSION`, qui fait foi) — *(historique des passes retiré : un stamp REMPLACE, il ne s'empile pas ; l'historique vit dans git : `git log -p --follow specs/courantes/module-matchs.md`)*
+Last verified @ 2026-08-22 (édition lot PASSERELLES — la passerelle gagne un SECOND impact : `TeamLink.trainingIntensity` (`PREFERRED`/`MANDATORY`), gouvernant l'ENTRAÎNEMENT seul (arbitrage fondateur n°1). Re-vérifié contre le code : l'entité porte `trainingIntensity` défaut `PREFERRED` (`backend/src/Entity/TeamLink.php`, colonne `training_intensity` `DEFAULT 'PREFERRED'`) ✓ ; cap `MAX_TEAM_LINKS = 50` (`backend/src/State/Processor/TeamLinkStateProcessor.php`, 422 nommé) ✓ ; l'écran unique `HabitsLinksDialog` porte le choix Préféré/Obligatoire et s'ouvre du wizard via `HabitsLinksButton` ✓. Le détail moteur vit dans `engine/docs/constraint-vocabulary.md` §Passerelles. Le reste du fichier non re-vérifié cette passe — un stamp REMPLACE, l'historique vit dans git : `git log -p --follow specs/courantes/module-matchs.md`)
 
 > Graduation du comportement livré (skill `documentation-update`). Le besoin et la vision restent dans
 > [`../evolution/gestion-matchs-ffbb.md`](../evolution/gestion-matchs-ffbb.md) (paliers A/B/C), **cadrés
@@ -189,14 +189,18 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
   + gymnase optionnel — « SF3 = dimanche 17h30 à Coubertin ». **Une par jour et par équipe** (unique DB,
   422 lisible avant), N par équipe. **Recopiée à la bascule** (remap équipe+gymnase ; gymnase pendu →
   l'habitude survit en jour+heure). Solde le `Team.preferredMatchWindow` de P3-1.
-- **Passerelle** (`TeamLink`, nom NEUTRE — cross-module par conception, le solveur d'entraînement la
-  consommera un jour) : couple d'équipes **symétrique** (normalisation `teamAId < teamBId` → SM1–SM2 ≡
-  SM2–SM1, unique DB), deux types `TeamLinkType` : **`NOT_SIMULTANEOUS`** (« joueurs partagés » — aucune
-  entité joueur n'existe, le gestionnaire DÉCLARE le pont) et **`BACK_TO_BACK`** (« l'un après l'autre »,
-  implique la non-simultanéité). Équipe liée à elle-même → 422 ; équipe étrangère invisible → 422 sans
-  écriture. Cascade : suppression d'équipe purge habitudes + liens (les DEUX colonnes). Recopiée en N+1
-  re-normalisée. Solde le « volet joueur » de P3-1 **par décision** : pas de joueurs individuels, le lien
-  déclaré porte le besoin.
+- **Passerelle** (`TeamLink`, nom NEUTRE — cross-module par conception) : couple d'équipes **symétrique**
+  (normalisation `teamAId < teamBId` → SM1–SM2 ≡ SM2–SM1, unique DB). **DEUX impacts distincts depuis le
+  lot PASSERELLES** : (1) **côté MATCHS**, `TeamLinkType` — **`NOT_SIMULTANEOUS`** (« joueurs partagés » —
+  aucune entité joueur n'existe, le gestionnaire DÉCLARE le pont) et **`BACK_TO_BACK`** (« l'un après
+  l'autre », implique la non-simultanéité) — rail SOFT du radar/placement matchs, inchangé ; (2) **côté
+  ENTRAÎNEMENT**, `TeamLinkIntensity` **`PREFERRED`** (défaut, migration `DEFAULT 'PREFERRED'`) /
+  **`MANDATORY`** — honoré par le solveur d'entraînement (arbitrage fondateur n°1 : cette intensité ne
+  gouverne QUE l'entraînement, jamais les matchs ; détail moteur `engine/docs/constraint-vocabulary.md`
+  §Passerelles). Équipe liée à elle-même → 422 ; équipe étrangère invisible → 422 sans écriture ; **51ᵉ
+  passerelle → 422 nommé** (cap `MAX_TEAM_LINKS = 50` miroité du moteur). Cascade : suppression d'équipe
+  purge habitudes + liens (les DEUX colonnes). Recopiée en N+1 re-normalisée. Solde le « volet joueur » de
+  P3-1 **par décision** : pas de joueurs individuels, le lien déclaré porte le besoin.
 - **Effets immédiats, sans solveur** :
   - **Estimation d'heure extérieure** (résorbe l'angle mort PR-2) : un AWAY sans heure emprunte l'heure
     habituelle de son équipe **du même jour de semaine** → l'empreinte naît (`MatchFootprint::occupancyAt`),
@@ -221,10 +225,16 @@ les endpoints PR-1/PR-2 — aucun ajout backend.
     matchs horodatés ET ≥ 50 %** concordent (seuils fondateur) ; gymnase joint si ≥ 50 % des HOME placés du
     groupe le partagent (le libellé texte `fbiVenueLabel` n'est JAMAIS résolu — décision PR A). Suggestion
     = bouton « Accepter », jamais une écriture ; un jour déjà déclaré n'est pas re-suggéré.
-- **Saisie** : `/matchs` uniquement, bouton « Habitudes & passerelles » (`HabitsLinksDialog`) — l'inférence
-  exige des matchs importés, rien au wizard. Écritures non management-gated (patron `VenueMatchWindow`),
-  derrière le verrou socle de la page. Engine intouché par la PR C — habitudes et passerelles sont
-  consommées par le solveur de placement depuis la PR D (§ suivant).
+- **Saisie** : `HabitsLinksDialog`, **l'écran unique** des habitudes et passerelles. Ouvert depuis `/matchs`
+  (bouton « Habitudes & passerelles ») ET, depuis le lot PASSERELLES, **depuis le wizard** (étape
+  Mutualisation, bouton « Gérer les passerelles » → `HabitsLinksButton`, qui charge ses propres données
+  matchs ; le dialog reste dans `features/matches`). Chaque passerelle y porte le choix **« Préféré » /
+  « Obligatoire »** (intensité d'entraînement — `<Select>` labellisé par équipe, copie qui sépare l'effet
+  matchs de l'effet entraînement, création + édition `useUpdateTeamLink`). L'inférence d'habitude exige des
+  matchs importés (rien au wizard). Écritures non management-gated (patron `VenueMatchWindow`), derrière le
+  verrou socle de la page `/matchs`. Habitudes et passerelles sont consommées par le solveur de placement
+  matchs depuis la PR D (§ suivant) ; l'intensité d'entraînement, elle, par le solveur d'ENTRAÎNEMENT
+  (lot PASSERELLES — `engine/docs/constraint-vocabulary.md` §Passerelles).
 
 ## Solveur de placement — P1-4 PR D (2026-08-03, [ADR-0003](../../docs/architecture/adr-0003-match-placement-solve.md))
 

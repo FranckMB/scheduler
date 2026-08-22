@@ -1,4 +1,4 @@
-import type { Gender, SharedTrainingGroup, Team, TeamPeriodOverride } from "../api";
+import type { SharedTrainingGroup, Team, TeamPeriodOverride } from "../api";
 
 /**
  * P2-27 PR B — helpers PURS de la saisie de mutualisation au wizard (N équipes ensemble,
@@ -10,16 +10,17 @@ import type { Gender, SharedTrainingGroup, Team, TeamPeriodOverride } from "../a
  * (2..10 équipes, doublon, K > min sessionsPerWeek effectif, équipe d'un autre groupe du même
  * plan). Un 422 doit rester géré et affiché côté écran, jamais supposé impossible.
  *
- * ⚠ Le CLASSEMENT des candidats (`rankCandidates`) est un ORDRE D'AFFICHAGE, jamais une
- * permission : « équipes proches » remonte des candidats plausibles, rien n'est interdit, tout
- * reste cochable en un clic. C'est de la présentation (cf. `matches/lib/diagnostic.ts`), pas une
- * décision de comportement sur un enum de contrainte : ce module n'est donc PAS un miroir
- * déclaré, et il ne doit pas se déclarer comme tel (le registre des miroirs se repère au NOM de
- * son test de garde écrit en source — le citer ici enrôlerait ce module par accident).
+ * ⚠ Le CLASSEMENT des candidats (`splitByLinks`) est un ORDRE D'AFFICHAGE, jamais une permission :
+ * « équipes liées » remonte en tête les équipes PASSERELÉES à l'ancre — une donnée SERVIE par le
+ * backend (`GET /api/team_links`, `matches/api.ts`), jamais redérivée côté client (régime (1) de
+ * `.claude/rules/frontend.md`) — et rien n'est interdit, tout reste cochable en un clic. C'est de
+ * la présentation (cf. `matches/lib/diagnostic.ts`), pas une décision de comportement sur un enum
+ * de contrainte : ce module n'est donc PAS un miroir déclaré, et il ne doit pas se déclarer comme
+ * tel (le registre des miroirs se repère au NOM de son test de garde écrit en source — le citer
+ * ici enrôlerait ce module par accident).
  *
- * ⚠ AUCUN ordre d'âge entre catégories : `SportCategory` n'a pas de champ d'ordre, le déduire du
- * nom serait faux dès qu'un club nomme ses catégories autrement. Deux équipes « proches » le sont
- * par MÊME catégorie exacte + genre compatible, jamais par « catégorie voisine ».
+ * Solde P2-34 : l'heuristique catégorie+genre (`rankCandidates`, supprimée avec `gendersCompatible`)
+ * a cédé la place aux passerelles déclarées, le seul lien inter-équipes que le club a lui-même posé.
  */
 
 /**
@@ -81,39 +82,41 @@ export function sharedGroupLabel(teamIds: string[], commonSessions: number, team
 }
 
 /**
- * Genres compatibles pour le classement d'affichage : MIXTE va avec tout genre, un genre absent
- * (null) n'est jamais une raison de reléguer un candidat (on ne cache pas sur une donnée manquante).
+ * Les ids des équipes PASSERELÉES à `anchorId` — l'autre bout de chaque lien qui la nomme. Données
+ * SERVIES (les `TeamLink` du club+saison viennent du backend, jamais redérivées). Signature
+ * structurelle `{ teamAId, teamBId }` pour ne pas coupler ce lib wizard au type `TeamLink` du module
+ * matchs : c'est la MÊME donnée, lue par sa forme.
  */
-export function gendersCompatible(a: Gender | null, b: Gender | null): boolean {
-  if (null === a || null === b) {
-    return true;
-  }
-  if ("MIXTE" === a || "MIXTE" === b) {
-    return true;
+export function teamsLinkedTo(links: readonly { teamAId: string; teamBId: string }[], anchorId: string): Set<string> {
+  const linked = new Set<string>();
+  for (const link of links) {
+    if (link.teamAId === anchorId) {
+      linked.add(link.teamBId);
+    } else if (link.teamBId === anchorId) {
+      linked.add(link.teamAId);
+    }
   }
 
-  return a === b;
+  return linked;
 }
 
 /**
  * Classe les candidats en deux blocs D'AFFICHAGE relativement à l'équipe d'ancrage (la première
- * cochée) : « proches » = MÊME catégorie exacte + genre compatible, OU déjà cochés (un candidat
- * coché doit toujours rester atteignable pour être décoché) ; le reste va dans « far », déplié en
- * un clic. Sans ancre (rien de coché) : tout reste en `far` (liste plate, pas de bloc « proches »).
- * L'ORDRE des candidats est préservé dans chaque bloc.
+ * cochée) : « liées » = équipes PASSERELÉES à l'ancre (`linkedIds`, servi par le backend), OU déjà
+ * cochées (un candidat coché doit toujours rester atteignable pour être décoché) ; le reste va dans
+ * « far », déplié en un clic. Sans ancre (rien de coché) : tout reste en `far` (liste plate, pas de
+ * bloc « liées »). L'ORDRE des candidats est préservé dans chaque bloc.
  */
-export function rankCandidates(
+export function splitByLinks(
   candidates: Team[],
   anchor: Team | null,
   checkedIds: ReadonlySet<string>,
+  linkedIds: ReadonlySet<string>,
 ): { near: Team[]; far: Team[] } {
   const near: Team[] = [];
   const far: Team[] = [];
   for (const candidate of candidates) {
-    const isNear =
-      null !== anchor &&
-      (checkedIds.has(candidate.id) ||
-        (candidate.sportCategoryId === anchor.sportCategoryId && gendersCompatible(candidate.gender, anchor.gender)));
+    const isNear = null !== anchor && (checkedIds.has(candidate.id) || linkedIds.has(candidate.id));
     (isNear ? near : far).push(candidate);
   }
 
