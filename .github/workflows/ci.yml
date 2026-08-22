@@ -602,7 +602,7 @@ jobs:
         run: docker compose run --rm engine mypy
 
   engine-perf:
-    name: Engine Perf Gate
+    name: Engine Perf Gate (main only)
     runs-on: ubuntu-latest
     # Un step bloqué (verrou apt, téléchargement figé) consommerait sinon le défaut
     # GitHub de 6 h : il occupe un exécutant, bloque la file, et ne dit RIEN.
