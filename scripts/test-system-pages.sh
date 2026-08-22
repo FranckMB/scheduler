@@ -11,7 +11,8 @@
 #
 # Six cas assertés au curl :
 #   1. amont injoignable → GET /            → 503 + « Le gymnase est fermé »
-#   2. amont injoignable → GET /config.js   → config de la landing (LANDING_CONFIG)
+#   2. amont injoignable → GET /config.js   → le VRAI config de la landing (marqueur
+#      discriminant + Content-Type JS), et l'équivalent sous maintenance (cas 3ter)
 #   3. témoin de maintenance posé → GET /    → 503 + « On refait le parquet » + Retry-After
 #   4. témoin retiré, amont vivant → GET /   → 200, contenu de l'amont intact
 #   5. amont vivant répondant 404 → GET /x   → 404 de l'amont, corps INTACT
@@ -139,12 +140,22 @@ else
   ko "1. GET / → 503 + « Le gymnase est fermé » (status=$STATUS)"
 fi
 
-# Cas 2 — GET /config.js → le config de la landing, même origine
+# Cas 2 — GET /config.js → le config de la landing, même origine.
+# ⚠ Le marqueur DOIT discriminer : `LANDING_CONFIG` seul est présent DANS
+#   system-pages/503.html (son script de repli le teste), donc l'asserter revient
+#   à lire la page d'erreur et à passer au vert sur une conf CASSÉE — c'est
+#   exactement ce qui masquait le réordonnancement `rewrite` avant `handle`.
+#   On assert donc l'AFFECTATION (présente dans le seul config.js), la valeur
+#   qu'elle porte, le Content-Type JS, ET l'absence du marqueur de la page 503.
 get "/config.js"
-if body_has "LANDING_CONFIG"; then
-  ok "2. GET /config.js → config landing (LANDING_CONFIG), status=$STATUS"
+if body_has "window.LANDING_CONFIG = {" \
+   && body_has "brand:" \
+   && ! body_has "Le gymnase est fermé" \
+   && expect_status 200 \
+   && printf '%s' "$HEADERS" | grep -qiE '^Content-Type:[[:space:]]*(text|application)/javascript'; then
+  ok "2. GET /config.js → VRAI config landing en 200 (le 503 est à la PAGE, pas au script)"
 else
-  ko "2. GET /config.js → config landing (LANDING_CONFIG), status=$STATUS"
+  ko "2. GET /config.js → VRAI config landing (status=$STATUS, ct=$(printf '%s' "$HEADERS" | grep -i '^Content-Type' | tr -d '\r'))"
 fi
 
 # Cas 6 — system-pages ABSENT (état d'avant le premier déploiement) → 5xx corps vide
@@ -194,6 +205,16 @@ if expect_status 503 \
   ok "3. maintenance ON → 503 + « On refait le parquet » + Retry-After: 600"
 else
   ko "3. maintenance ON → 503 + « On refait le parquet » + Retry-After (status=$STATUS)"
+fi
+# Cas 3ter — même preuve de marque sur la branche MAINTENANCE : c'est un bloc
+# DISTINCT du handle_errors, il a son propre `route` et peut casser seul.
+get "/config.js"
+if body_has "window.LANDING_CONFIG = {" \
+   && ! body_has "On refait le parquet" \
+   && printf '%s' "$HEADERS" | grep -qiE '^Content-Type:[[:space:]]*(text|application)/javascript'; then
+  ok "3ter. maintenance ON → GET /config.js → VRAI config landing, status=$STATUS"
+else
+  ko "3ter. maintenance ON → GET /config.js → VRAI config landing (status=$STATUS)"
 fi
 rm -f "$STAGING/maintenance.on"
 # Vérif de symétrie : le retrait rouvre immédiatement (sans reload).
