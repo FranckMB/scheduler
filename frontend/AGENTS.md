@@ -228,7 +228,14 @@ page` : voir la puce dédiée.
   pas ; clic Suivant arme).
 - **Les seules exemptions légitimes à ce jour** : les 4 mutations de lancement de solve (elles
   rendent 202 et passent la main à `GenerationWaiting` — les voiler ferait clignoter voile → écran
-  d'attente) et la query `useScheduleStatus` (son premier fetch vit sous cet écran).
+  d'attente), la query `useScheduleStatus` (son premier fetch vit sous cet écran), et
+  `useMarkReleaseNotesSeen` — la première d'une **seconde famille** : la mutation d'ENTRETIEN qui
+  part **toute seule**, sans geste (le filigrane des nouveautés se pose en silence pour un nouvel
+  inscrit, ~1,5 s après l'arrivée sur le wizard). Le blocage à 0 ms protège un geste parti d'un
+  clic en mangeant le 2ᵉ clic ; ici AUCUN clic n'est parti, et le gel avalait les frappes du
+  gestionnaire en train de taper sa première équipe — flake e2e sur QUATRE PR (#684/#687/#689/#694)
+  avant que le trace Playwright la nomme (2026-08-22, NR : `WhatsNewModal.test`, voile monté en
+  vrai). Le critère de la famille : si la mutation peut partir SANS interaction, elle s'exempte.
   ⚠ **`useRegenerateFromVersion` n'en fait PAS partie** et ne doit pas y entrer : `/regenerate-from`
   ne lance **aucun solve** (`RegenerateFromVersionController.php:102-104`, 200 synchrone), c'est un
   restore **destructif** — le voile est exactement la protection anti-double-clic qu'il réclame.

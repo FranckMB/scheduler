@@ -1,7 +1,9 @@
-import { screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ActionVeil } from "@/app/ActionVeil";
 import { renderWithProviders } from "@/test/utils";
 
 import type { ReleaseNotesResponse } from "./api";
@@ -59,6 +61,34 @@ describe("WhatsNewModal", () => {
 
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
     expect(screen.queryByRole("dialog", { name: /quoi de neuf/i })).not.toBeInTheDocument();
+  });
+
+  // Bug e2e récurrent (#684/#687/#689/#694, diagnostiqué au trace le 2026-08-22) : le POST
+  // silencieux est une MUTATION — sans exemption `meta.veil`, l'ActionVeil rendait l'app `inert`
+  // à 0 ms (voile invisible sous 250 ms). Or ce POST part ~1,5 s après l'arrivée d'un nouvel
+  // inscrit sur le wizard : exactement quand il tape le nom de sa première équipe. Ses frappes
+  // étaient avalées SANS retour visuel — le mode d'échec que le fondateur a nommé « pire que pas
+  // de voile » (en-tête d'ActionVeil.tsx). Un POST d'entretien ne protège aucun geste parti.
+  it("le filigrane silencieux ne gèle JAMAIS l'écran — l'utilisateur est peut-être en train de taper", async () => {
+    mockGet.mockResolvedValue(response({ seenUpTo: null }));
+    // Le POST reste EN VOL pour toute la durée du test : c'est pendant ce vol que le voile mangeait.
+    mockSeen.mockReturnValue(new Promise(() => {}));
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ActionVeil>
+          <WhatsNewModal />
+        </ActionVeil>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(mockSeen).toHaveBeenCalledTimes(1));
+    // Laisser la propagation react-query (mutation pending → useIsMutating) se régler : sans ce
+    // battement, la version BOGUÉE passerait aussi — l'inert n'était pas encore posé.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+
+    expect(screen.getByTestId("veil-content")).not.toHaveAttribute("inert");
   });
 
   it("« J'ai compris » marque le journal lu et ferme la modale", async () => {

@@ -24,18 +24,21 @@ test("full journey: wizard → generation → validated planning → cockpit", a
   await page.getByLabel("Nom de l'équipe").fill("SM1");
   await page.getByLabel("Catégorie").selectOption({ label: "Senior" });
   await page.getByRole("button", { name: "Ajouter l'équipe" }).click();
-  // ⏱ **Budget EXPLICITE, et sélecteur ÉPROUVÉ.** La ligne apparaît après un POST puis un
-  // refetch de la liste : les 5 s par défaut de Playwright suffisent sur une machine calme et
-  // pas sur un runner chargé — ce test est tombé trois fois en CI à cet endroit (PR #684, #687,
-  // #689), sans qu'AUCUN appel d'API ne réponde ≥ 400 (l'instrumentation n'a rien eu à attacher,
-  // ce qui a éliminé d'emblée la piste « le serveur a refusé »).
+  // ⏱ Budget explicite : la ligne apparaît après un POST puis un refetch — les 5 s par défaut
+  // suffisent sur une machine calme, pas sur un runner chargé.
   //
-  // ⚠ **Une « amélioration » a été TENTÉE ici et RETIRÉE — la note reste pour qu'on ne la
-  // refasse pas.** `input[value="SM1"]` vise l'ATTRIBUT HTML, que React ne reflète qu'au
-  // montage ; passer à `getByRole("textbox", { name: "Nom", exact: true })` + `toHaveValue`
-  // paraissait plus juste (on lit la propriété, celle que l'utilisateur voit). Ça passait en
-  // LOCAL et rendait « element(s) not found » en CI, aux trois tentatives. Le raisonnement était
-  // peut-être bon, l'observation ne l'a pas suivi : on garde donc ce qui est MESURÉ vert.
+  // ⚑ **Ce point a flaké en CI sur QUATRE PR (#684, #687, #689, #694) et la cause n'était NI le
+  // sélecteur NI le budget** — deux diagnostics successifs ont été faux avant que le trace
+  // Playwright tranche (2026-08-22). La vraie chaîne : pour un nouvel inscrit, le filigrane des
+  // nouveautés se pose en silence (`POST /release-notes/seen`, WhatsNewModal) ~1,5 s après
+  // l'arrivée sur le wizard — pile pendant ce `fill`. Cette mutation sans exemption `meta.veil`
+  // faisait passer l'app `inert` à 0 ms (ActionVeil, voile invisible sous 250 ms) : les frappes
+  // de `fill` étaient avalées, `selectOption` survivait (événement programmatique), et le clic
+  // validait un nom VIDE. D'où la signature : échec ici sans AUCUN appel ≥ 400 attaché, nom
+  // vide mais catégorie choisie sur la capture. Corrigé à la SOURCE (`meta: { veil: false }`
+  // sur `useMarkReleaseNotesSeen` + test unitaire) — c'était un bug produit : un vrai
+  // utilisateur perdait ses frappes pareil. Si ce point re-flake un jour, ne pas retoucher le
+  // sélecteur : lire le trace (réseau + snapshots), c'est lui qui a parlé.
   await expect(page.locator('input[value="SM1"]')).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "Suivant" }).click();
 
