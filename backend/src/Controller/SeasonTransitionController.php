@@ -47,7 +47,7 @@ final class SeasonTransitionController extends AbstractController
         // 404 semantics honest even off-RLS (tests, admin connection).
         $source = $this->seasonRepository->find($id);
         if (!$source instanceof Season || $source->getClubId() !== $clubId) {
-            return $this->json(['error' => 'Season not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Saison introuvable.'], Response::HTTP_NOT_FOUND);
         }
 
         $user = $this->getUser();

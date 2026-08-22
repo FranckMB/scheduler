@@ -65,7 +65,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
         $slot = $this->findSlot($id);
 
         if (!$slot instanceof ScheduleSlotTemplate) {
-            return $this->json(['error' => 'Slot not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Ce créneau n\'existe plus — rechargez le planning.'], Response::HTTP_NOT_FOUND);
         }
 
         if ($this->scheduleIsLocked($slot)) {
@@ -115,7 +115,7 @@ final class ManualEditController extends AbstractController implements SeasonSco
         $slot = $this->findSlot($id);
 
         if (!$slot instanceof ScheduleSlotTemplate) {
-            return $this->json(['error' => 'Slot not found.'], Response::HTTP_NOT_FOUND);
+            return $this->json(['error' => 'Ce créneau n\'existe plus — rechargez le planning.'], Response::HTTP_NOT_FOUND);
         }
 
         if ($this->scheduleIsLocked($slot)) {
