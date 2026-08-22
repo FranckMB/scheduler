@@ -16,9 +16,17 @@ from .compromise import (
     FAMILY_DAY,
     FAMILY_MATCH_REST,
     FAMILY_SPACING,
+    FAMILY_TEAM_LINK,
     FAMILY_TIME,
     FAMILY_VENUE,
     CompromiseTermInfo,
+)
+from .constraints import (
+    MANDATORY,
+    PREFERRED,
+    iter_team_link_overlaps,
+    team_link_placements_by_team,
+    team_share_declared_pairs,
 )
 from .helpers import MISSING, assignment_team_id, assignment_var, get_field, scalar_id
 from .model import _format_time, _time_to_minutes
@@ -30,7 +38,12 @@ BoolVarLike = Any
 # si le nouveau terme est INERTE par défaut (la règle naît HARD, donc sans terme soft) :
 # garder V10 ferait désigner DEUX tables de poids différentes par un seul identifiant,
 # et cet identifiant ne sert qu'à ça. Cf. l'en-tête du module.
-SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V11"
+# V12 (Lot PASSERELLES PR-2) — l'objectif de PLACEMENT gagne la pénalité des passerelles
+# PREFERRED (``add_team_link_penalty``, poids dérivé du tier via ``TEAM_LINK_TIER_WEIGHTS``).
+# Le bump suit la même règle que V10/V11 : dès qu'un terme peut faire BOUGER le score rapporté,
+# l'identifiant du barème doit changer. INERTE par défaut (aucun ``teamLinks`` PREFERRED ⇒
+# aucune pénalité, goldens et score byte-identiques), mais présent dès qu'une passerelle l'est.
+SCORE_FORMULA_VERSION = "T24_LEVEL_2_FIXED_WEIGHTS_V12"
 
 LEVEL_2_OBJECTIVE_WEIGHTS = MappingProxyType(
     {
@@ -225,6 +238,38 @@ def is_team_satisfied_by_hard_locks(
 # Hence per-person max weight = 8. Order preserved (S>A>B>C>D); each term takes the
 # pair's highest tier (chaining SF1(S)+U15F(B) → 8, taken on the S).
 CHAINING_TIER_WEIGHTS = MappingProxyType(
+    {
+        "S": 8,
+        "A": 6,
+        "B": 4,
+        "C": 2,
+        "D": 1,
+    }
+)
+
+# Lot PASSERELLES PR-2 — MALUS par paire de placements CHEVAUCHANTS d'une passerelle PREFERRED
+# (deux équipes partageant des joueurs, arbitrage n°3). Table DÉDIÉE sur le patron de
+# ``CHAINING_TIER_WEIGHTS`` : le poids d'une paire = celui de la PLUS HAUTE des deux équipes
+# (``_higher_tier``), appliqué NÉGATIVEMENT dans l'objectif de placement.
+#
+# Preuve d'empilement — pourquoi une passerelle PREFERRED ne SUPPRIME jamais une séance (patron
+# des « ceilings » de CHAINING_TIER_WEIGHTS + du plancher missing_session) :
+#   0. Une séance placée vaut au minimum 21 (tier D 1 + session_count 20), et retirer une séance
+#      d'une équipe SOUS son quota déclenche missing_session (−1000) : le plancher réel d'une
+#      suppression est donc ≥ 1021 (identique aux plafonds chaînage/confort de ce module).
+#   1. Pour UNE passerelle donnée, une séance de A ne peut chevaucher qu'AU PLUS UNE séance de B :
+#      la contrainte 4 (``add_team_no_overlap``) interdit à B deux séances qui se chevaucheraient
+#      entre elles, donc a fortiori deux séances chevauchant le MÊME créneau de A. Une séance ne
+#      porte donc qu'UN malus (≤ 8) par passerelle où son équipe figure.
+#   2. Le pire empilement sur une séance = (nombre de passerelles de son équipe) × 8. Pour le
+#      rendre rentable il faudrait relâcher > 1021, soit > 127 passerelles PREFERRED chevauchantes
+#      sur cette seule séance — hors de portée (cap 50 passerelles/club, et une équipe n'en porte
+#      qu'une fraction). Le résiduel arithmétique est gardé, falsifiable, par le test NR pire-cas
+#      (``tests/semantic/test_team_link_never_drops_session`` + l'invariant hypothesis).
+#   3. Discriminance : à tier S le malus 8 > rest(3) + spacing(2) = 5, donc PREFERRED ORIENTE
+#      réellement le placement (il sépare quand c'est possible) ; à tier D il vaut 1 (un simple
+#      départage), cohérent avec le poids moindre d'une équipe de bas tier.
+TEAM_LINK_TIER_WEIGHTS = MappingProxyType(
     {
         "S": 8,
         "A": 6,
@@ -516,6 +561,95 @@ def add_missing_session_penalty(
     return terms
 
 
+def add_team_link_penalty(
+    model: Any,
+    assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike],
+    *,
+    team_links: Iterable[Any] = (),
+    shared_trainings: Iterable[Any] = (),
+    teams: Iterable[Any] = (),
+    info_out: list[CompromiseTermInfo] | None = None,
+) -> list[tuple[BoolVarLike, int]]:
+    """Lot PASSERELLES PR-2 — MALUS d'objectif par chevauchement d'une passerelle ``PREFERRED``.
+
+    Pour chaque passerelle PREFERRED (deux équipes partageant des joueurs) et chaque paire de
+    placements CHEVAUCHANTS non exemptée (``constraints.iter_team_link_overlaps`` — même géométrie
+    et même exemption doctrinale que la pose HARD), un malus ``−TEAM_LINK_TIER_WEIGHTS[tier]`` est
+    posé, ``tier`` = la PLUS HAUTE des deux équipes. Le maximiseur pousse alors les deux séances à
+    ne PAS coïncider quand c'est possible, sans jamais SUPPRIMER une séance (preuve d'empilement
+    sur ``TEAM_LINK_TIER_WEIGHTS``).
+
+    Le littéral pénalisé « les deux séances sont posées » :
+      * libre ⇔ libre : un ``ov`` réifié par ``ov >= var_a + var_b − 1`` (le maximiseur, malus
+        négatif, le maintient à ``max(0, var_a+var_b−1)``) ;
+      * libre ⇔ verrouillé : la séance verrouillée est TOUJOURS là, donc le littéral EST la
+        variable libre — pénaliser ``var`` décourage de la poser en chevauchement ;
+      * verrou ⇔ verrou : les deux constantes, aucune variable — rien à pénaliser (le
+        chevauchement, s'il subsiste, est ANNONCÉ par ``result_builder._diagnose_team_links``).
+
+    ``info_out`` (chemin ``/validate-assignments``) reçoit un ``CompromiseTermInfo`` par littéral
+    (MALUS : ``honored_when_active=False``) pour que le rail des compromis (P2-32) NOMME le
+    chevauchement créé par un déplacement accepté (arbitrage n°4). ``team_links`` vide/tout
+    MANDATORY ⇒ ``[]`` (chemin byte-identique, goldens inchangés)."""
+    preferred = [link for link in (team_links or ()) if str(_get(link, "intensity", default=PREFERRED)) != MANDATORY]
+    if not preferred:
+        return []
+
+    placements = team_link_placements_by_team(assignments, getattr(model, "locked_slots", ()) or ())
+    share_pairs = team_share_declared_pairs(shared_trainings)
+    teams_by_id = _teams_by_id(teams)
+
+    def _tier_of(team_id: str) -> str:
+        return _priority_tier_name({"team_id": team_id}, teams_by_id)
+
+    terms: list[tuple[BoolVarLike, int]] = []
+    for link in preferred:
+        team_a = str(_get(link, "teamAId", "team_a_id", default=""))
+        team_b = str(_get(link, "teamBId", "team_b_id", default=""))
+        if not team_a or not team_b or team_a == team_b:
+            continue
+        link_id = str(_get(link, "id", default=f"{team_a}_{team_b}"))
+        share_declared = frozenset({team_a, team_b}) in share_pairs
+        try:
+            weight = TEAM_LINK_TIER_WEIGHTS.get(_higher_tier(_tier_of(team_a), _tier_of(team_b)), 0)
+        except ValueError:
+            # Une équipe sans tier exploitable : on ne fabrique pas de poids, on n'oriente pas.
+            continue
+        if weight == 0:
+            continue
+
+        pair_index = 0
+        for (a_start, _a_end, a_day, a_venue, a_var), (_bs, _be, _bd, _bv, b_var) in iter_team_link_overlaps(
+            placements.get(team_a, []), placements.get(team_b, []), share_declared=share_declared
+        ):
+            if a_var is not None and b_var is not None:
+                overlap = model.NewBoolVar(f"team_link_{link_id}_{pair_index}".replace(":", "_"))
+                model.Add(overlap >= a_var + b_var - 1)
+                penalized: BoolVarLike = overlap
+            elif a_var is not None:  # b verrouillé, toujours présent → chevauchement ssi a posée.
+                penalized = a_var
+            elif b_var is not None:
+                penalized = b_var
+            else:
+                continue  # deux verrous : constante, rien à orienter (diagnostiqué post-solve).
+            pair_index += 1
+            terms.append((penalized, -int(weight)))
+            if info_out is not None:
+                info_out.append(
+                    CompromiseTermInfo(
+                        var=penalized,
+                        family=FAMILY_TEAM_LINK,
+                        honored_when_active=False,
+                        key=(FAMILY_TEAM_LINK, link_id),
+                        team_id=team_a,
+                        venue_id=a_venue,
+                        day_of_week=a_day,
+                        start_time=_format_time(a_start),
+                    )
+                )
+    return terms
+
+
 def add_level_2_objective(
     model: Any,
     assignments: Iterable[AssignmentLike] | Mapping[Any, BoolVarLike],
@@ -527,6 +661,7 @@ def add_level_2_objective(
     apply_chaining: bool = True,
     team_player_map: Mapping[str, list[str]] | None = None,
     info_out: list[CompromiseTermInfo] | None = None,
+    extra_placement_terms: Iterable[tuple[BoolVarLike, int]] = (),
 ) -> Level2ObjectiveStats:
     """Maximize the fixed T24 weighted score for candidate placements.
 
@@ -535,6 +670,11 @@ def add_level_2_objective(
     weights are added to the same linear term. Extra soft literals can be passed
     through soft_terms as (literal, weight_name) pairs or mapping/object
     values with var/weight_name fields.
+
+    *extra_placement_terms* are already-weighted ``(literal, int_weight)`` terms folded straight
+    into the PLACEMENT expression (no ``weight_name`` lookup) — the tier-derived passerelle malus
+    (``add_team_link_penalty``) rides here, so it is part of the placement optimum locked before
+    phase 2, exactly like the soft comfort terms.
 
     When *hard_satisfied_team_ids* is provided, teams whose weekly sessions are
     fully covered by HARD locks are excluded from the ``placed.Not() *
@@ -597,6 +737,13 @@ def add_level_2_objective(
         variable, weight_name = _soft_term_variable_and_weight(soft_term)
         variables.append(variable)
         coefficients.append(LEVEL_2_OBJECTIVE_WEIGHTS[weight_name])
+        soft_bonus_terms += 1
+
+    # Lot PASSERELLES PR-2 — les malus passerelle PREFERRED, déjà pondérés (poids dérivé du tier),
+    # entrent tels quels dans le placement (aucun ``weight_name`` : ce sont des entiers négatifs).
+    for extra_var, extra_weight in extra_placement_terms:
+        variables.append(extra_var)
+        coefficients.append(int(extra_weight))
         soft_bonus_terms += 1
 
     # Placement objective (tiers + session_count + unplaced penalty + soft terms).
@@ -1362,6 +1509,7 @@ __all__ = [
     "LEVEL_2_OBJECTIVE_WEIGHTS",
     "SCORE_FORMULA_VERSION",
     "STABILITY_TERM_WEIGHT",
+    "TEAM_LINK_TIER_WEIGHTS",
     "TIER_WEIGHT_NAMES",
     "UNPLACED_PENALTY",
     "Level2ObjectiveStats",
@@ -1369,6 +1517,7 @@ __all__ = [
     "add_level_2_objective",
     "add_missing_session_penalty",
     "add_preferred_day_bonus",
+    "add_team_link_penalty",
     "add_venue_preference_bonus",
     "build_stability_terms",
     "is_team_satisfied_by_hard_locks",

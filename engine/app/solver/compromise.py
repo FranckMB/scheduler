@@ -30,6 +30,9 @@ FAMILY_MATCH_REST = "match_rest"
 FAMILY_SPACING = "spacing"
 FAMILY_COACH_DAY_CAP = "coach_day_cap"
 FAMILY_IMPLICIT = "implicit_rule"
+# Lot PASSERELLES PR-2 — le chevauchement d'une passerelle PREFERRED créé par un déplacement
+# accepté (arbitrage n°4). Extension de la liste FERMÉE décidée par le fondateur pour ce lot.
+FAMILY_TEAM_LINK = "team_link"
 
 COMPROMISE_FAMILIES = frozenset(
     {
@@ -41,6 +44,7 @@ COMPROMISE_FAMILIES = frozenset(
         FAMILY_SPACING,
         FAMILY_COACH_DAY_CAP,
         FAMILY_IMPLICIT,
+        FAMILY_TEAM_LINK,
     }
 )
 
@@ -143,6 +147,12 @@ def _message(family: str, effect: str, rep: CompromiseTermInfo, names: dict[str,
             if broken
             else f"{coach} ne dépasse plus son plafond de jours d'entraînement."
         )
+    if family == FAMILY_TEAM_LINK:
+        return (
+            f"{team} chevauche désormais une équipe avec laquelle elle partage des joueurs."
+            if broken
+            else f"{team} ne chevauche plus l'équipe avec laquelle elle partage des joueurs."
+        )
     if family == FAMILY_CHAINING:
         where = f"au {venue}" if venue else ""
         when = f"le {day}" if day else ""
@@ -236,6 +246,7 @@ __all__ = [
     "FAMILY_IMPLICIT",
     "FAMILY_MATCH_REST",
     "FAMILY_SPACING",
+    "FAMILY_TEAM_LINK",
     "FAMILY_TIME",
     "FAMILY_VENUE",
     "CompromiseTermInfo",

@@ -17,7 +17,11 @@ from typing import Any
 
 from ortools.sat.python import cp_model
 
-from app.solver.constraints import ResolvedImplicitRules
+from app.solver.constraints import (
+    ResolvedImplicitRules,
+    iter_team_link_overlaps,
+    team_share_declared_pairs,
+)
 from app.solver.model import (
     DEFAULT_SESSION_MINUTES,
     SLOT_MINUTES,
@@ -301,6 +305,7 @@ def _generate_diagnostics(
         diagnostics.extend(_diagnose_unused_slots(model_data, slots))
     diagnostics.extend(_diagnose_conflicts(model_data, solver_status, slots, slot_capacities=slot_capacities))
     diagnostics.extend(_diagnose_shared_trainings(model_data, solver_status, slots))
+    diagnostics.extend(_diagnose_team_links(model_data, solver_status, slots))
     return diagnostics
 
 
@@ -1029,6 +1034,90 @@ def _diagnose_shared_trainings(
                     "createdAt": datetime.now(UTC).isoformat(),
                 }
             )
+    return diagnostics
+
+
+def _team_link_placements_from_slots(slots: list[dict[str, Any]]) -> dict[str, list[tuple[int, int, int, str, None]]]:
+    """Les PLACES finales par équipe, au format ``iter_team_link_overlaps`` (var toujours None :
+    on juge la solution posée, pas des variables). ``(start, end, day, venue, None)``."""
+    placements: dict[str, list[tuple[int, int, int, str, None]]] = defaultdict(list)
+    for slot in slots:
+        day = _slot_day(slot)
+        if day is None:
+            continue
+        try:
+            start = _time_to_minutes(str(slot["startTime"])[:5])
+        except (KeyError, ValueError, TypeError):
+            continue
+        duration = int(slot.get("durationMinutes") or DEFAULT_SESSION_MINUTES)
+        placements[str(slot["teamId"])].append((start, start + duration, day, str(slot["venueId"]), None))
+    return placements
+
+
+def _diagnose_team_links(
+    model_data: Mapping[str, Any] | Any,
+    solver_status: int,
+    slots: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Lot PASSERELLES PR-2 — NOMMER un chevauchement RÉSIDUEL entre deux équipes passerelées.
+
+    Un seul code ``team_link_not_honored`` (ERROR), sur un solve abouti : on lit les PLACES
+    finales et, pour chaque passerelle, on compte les chevauchements NON exemptés (même géométrie
+    et même exemption doctrinale que la pose — ``iter_team_link_overlaps``). Deux régimes convergent
+    ici, aucun n'est INFEASIBLE muet (CLAUDE.md §6) :
+
+      * ``PREFERRED`` — le solveur a CÉDÉ le malus (les deux séances coïncident malgré la pénalité) ;
+      * ``MANDATORY`` — le seul chevauchement possible est deux VERROUS HARD (``add_team_link_constraints``
+        ne pose rien entre deux constantes) : deux actes volontaires du gestionnaire qui se
+        contredisent, annoncés plutôt qu'avalés.
+
+    Message français nommant les deux équipes réelles ; aucun identifiant interne. Une séance
+    mutualisée DÉCLARÉE (même case + groupe partagé) n'est JAMAIS rapportée (exemption)."""
+    links = _collection(model_data, "teamLinks", "team_links")
+    if not links or solver_status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return []
+
+    team_names = _team_name_map(model_data)
+    share_pairs = team_share_declared_pairs(_collection(model_data, "sharedTrainings", "shared_trainings"))
+    placements = _team_link_placements_from_slots(slots)
+
+    diagnostics: list[dict[str, Any]] = []
+    for index, link in enumerate(links):
+        team_a = str(_get(link, "teamAId", "team_a_id", default=""))
+        team_b = str(_get(link, "teamBId", "team_b_id", default=""))
+        if not team_a or not team_b or team_a == team_b:
+            continue
+        share_declared = frozenset({team_a, team_b}) in share_pairs
+        overlaps = list(
+            iter_team_link_overlaps(
+                placements.get(team_a, []), placements.get(team_b, []), share_declared=share_declared
+            )
+        )
+        if not overlaps:
+            continue
+        intensity = str(_get(link, "intensity", default="PREFERRED"))
+        link_id = _get(link, "id", default=index)
+        diagnostics.append(
+            {
+                "id": f"team-link-not-honored-{link_id}",
+                "type": "team_link_not_honored",
+                "severity": "ERROR",
+                "message": (
+                    f"Les équipes {_label(team_a, team_names)} et {_label(team_b, team_names)}, déclarées "
+                    f"en passerelle, ont {len(overlaps)} séance(s) qui se chevauchent dans le temps"
+                    + (
+                        " : deux séances verrouillées se contredisent."
+                        if intensity == "MANDATORY"
+                        else " (chevauchement toléré à contrecœur)."
+                    )
+                ),
+                "suggestions": [
+                    "Déplacez l'une des séances pour qu'elles ne se chevauchent plus, "
+                    "ou déclarez ces équipes en séance mutualisée si le chevauchement est voulu.",
+                ],
+                "createdAt": datetime.now(UTC).isoformat(),
+            }
+        )
     return diagnostics
 
 
