@@ -24,18 +24,19 @@ test("full journey: wizard → generation → validated planning → cockpit", a
   await page.getByLabel("Nom de l'équipe").fill("SM1");
   await page.getByLabel("Catégorie").selectOption({ label: "Senior" });
   await page.getByRole("button", { name: "Ajouter l'équipe" }).click();
-  // ⚠ **On lit la VALEUR du champ, pas son attribut.** `input[value="SM1"]` visait l'ATTRIBUT
-  // HTML — un détail d'implémentation de React, qui met à jour la PROPRIÉTÉ `value` et ne
-  // reflète l'attribut qu'au montage. `toHaveValue` lit ce que l'utilisateur voit, et le
-  // champ est désigné par son nom accessible plutôt que par sa forme.
+  // ⏱ **Budget EXPLICITE, et sélecteur ÉPROUVÉ.** La ligne apparaît après un POST puis un
+  // refetch de la liste : les 5 s par défaut de Playwright suffisent sur une machine calme et
+  // pas sur un runner chargé — ce test est tombé trois fois en CI à cet endroit (PR #684, #687,
+  // #689), sans qu'AUCUN appel d'API ne réponde ≥ 400 (l'instrumentation n'a rien eu à attacher,
+  // ce qui a éliminé d'emblée la piste « le serveur a refusé »).
   //
-  // ⏱ Et le budget est EXPLICITE : la ligne apparaît après un POST + un refetch de la liste.
-  // Les 5 s par défaut de Playwright suffisent sur une machine calme et pas sur un runner
-  // chargé — ce test est tombé TROIS fois en CI ici (PR #684, #687, #689), toujours à cet
-  // endroit, sans qu'AUCUN appel d'API ne réponde ≥ 400 (l'instrumentation de cette PR le
-  // prouve : elle n'a rien eu à attacher). Ce n'était donc pas un refus serveur, mais une
-  // attente trop courte.
-  await expect(page.getByRole("textbox", { name: "Nom", exact: true })).toHaveValue("SM1", { timeout: 20_000 });
+  // ⚠ **Une « amélioration » a été TENTÉE ici et RETIRÉE — la note reste pour qu'on ne la
+  // refasse pas.** `input[value="SM1"]` vise l'ATTRIBUT HTML, que React ne reflète qu'au
+  // montage ; passer à `getByRole("textbox", { name: "Nom", exact: true })` + `toHaveValue`
+  // paraissait plus juste (on lit la propriété, celle que l'utilisateur voit). Ça passait en
+  // LOCAL et rendait « element(s) not found » en CI, aux trois tentatives. Le raisonnement était
+  // peut-être bon, l'observation ne l'a pas suivi : on garde donc ce qui est MESURÉ vert.
+  await expect(page.locator('input[value="SM1"]')).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "Suivant" }).click();
 
   // --- Step 2 · venue + two weekly slots (2 sessions to place).
