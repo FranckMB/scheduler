@@ -1,6 +1,6 @@
 # Vocabulaire des contraintes — ce que l'engine comprend
 
-Last verified @ 2026-08-20 (rotation de fraîcheur — **une contradiction interne CORRIGÉE** : la section « Ce que l'engine NE comprend PAS » déclarait encore `max_consecutive_days` « non modélisé » alors que le tableau des règles implicites du même document le documente comme livré, et que `add_max_consecutive_days_constraints` existe (`engine/app/solver/constraints.py:1309`) depuis P2-42, fusionné le 2026-08-19 — le doc mentait dans une moitié et disait vrai dans l'autre. Re-vérifié aussi : les familles implicites du tableau ont toutes leur `add_*` dans `engine/app/solver/constraints.py` — le tableau en compte **onze** avec `MAX_CONSECUTIVE_DAYS`, le stamp précédent n'en annonçait que dix. ⚠ Piège conservé du stamp précédent : un grep des libellés EN MAJUSCULES rend 0 pour plusieurs d'entre elles, le code les nomme en snake_case — chercher la mauvaise forme et conclure au mensonge serait plus rapide que juste.)
+Last verified @ 2026-08-22 (édition lot PASSERELLES — nouvelle section « Passerelles (`teamLinks`) », vérifiée contre le code : `MANDATORY` pose l'anti-chevauchement DUR `var_a + var_b ≤ 1` (`add_team_link_constraints`, `engine/app/solver/constraints.py`) ✓ ; `PREFERRED` pose un malus d'objectif `−TEAM_LINK_TIER_WEIGHTS[tier]`, tier le plus haut des deux, S8/A6/B4/C2/D1 (`objective.add_team_link_penalty` + `TEAM_LINK_TIER_WEIGHTS`) ✓ ; exemption séance mutualisée déclarée (`share_declared`) et diagnostic résiduel `team_link_not_honored` (`result_builder._diagnose_team_links`) ✓. Reste du fichier non re-vérifié cette passe — un stamp REMPLACE, l'historique vit dans git.)
 
 > **But** : lister **exhaustivement** tout le vocabulaire (familles + clés de `config`) que le
 > solveur CP-SAT (`engine/app/solver`) sait **parser et appliquer**. Source de vérité côté engine.
@@ -153,6 +153,27 @@ supérieur l'emporte dans l'objectif. Le **minimum de séances** du rang est une
 | `MAX_CONSECUTIVE_DAYS` | **dur ou soft, au choix du club** : une ÉQUIPE ne s'entraîne pas `maxConsecutiveDays` jours de suite (défaut 3, bornes 2-5). ⚠ À ne pas confondre avec `MAX_CONSECUTIVE_SESSIONS`, presque homonyme : celle-là vise une PERSONNE sur des créneaux dos-à-dos DANS UNE JOURNÉE. **Seule règle dont l'absence du payload signifie NON APPLIQUÉE** — les autres retombent sur HARD (P2-42, contrat 2.13) |
 | jour de repos après match | bonus soft (`add_match_day_rest_bonus`) : préfère laisser le lendemain d'un match libre |
 | espacement des jours (`spacing`) | **bonus soft** (`add_spacing_penalty`, poids `−2`) : malus sur deux séances d'une même équipe sur des jours consécutifs (jour, jour+1) — préfère espacer, ne bloque jamais (ALIGN-06) |
+
+## Passerelles (`teamLinks`) — anti-chevauchement d'ENTRAÎNEMENT entre deux équipes
+
+Bloc d'entrée `teamLinks[]` (couple `{teamAId, teamBId, intensity}`, lot PASSERELLES). L'`intensity`
+gouverne **UNIQUEMENT** le solveur d'entraînement — le rail matchs garde sa pénalité SOFT propre,
+insensible à ce réglage (arbitrage fondateur n°1). Deux régimes :
+
+| `intensity` | Effet moteur | Où |
+|---|---|---|
+| `MANDATORY` | **dur** : les séances des deux équipes ne se chevauchent JAMAIS dans le temps (`var_a + var_b ≤ 1`) — plus strict que la tolérance coach D-14 (`same_venue_allowed=False`) | `add_team_link_constraints` |
+| `PREFERRED` (défaut) | **soft** : malus `−TEAM_LINK_TIER_WEIGHTS[tier]` par chevauchement, `tier` = la PLUS HAUTE des deux équipes (S 8 · A 6 · B 4 · C 2 · D 1) — deux fanions qui coïncident coûtent plus que deux réserves ; oriente sans jamais SUPPRIMER une séance | `objective.add_team_link_penalty` |
+
+- **Exemption unique** : une séance **mutualisée DÉCLARÉE** (même case, groupe `sharedTrainings`
+  partagé) n'est jamais comptée comme chevauchement — dans les deux régimes.
+- **La simultanéité n'est jamais une décision du solveur** : sur `MANDATORY`, le seul chevauchement
+  résiduel possible est **deux verrous HARD** que le gestionnaire a posés lui-même (aucune contrainte
+  entre deux constantes — poser `1+1 ≤ 1` rendrait INFEASIBLE muet) ; sur `PREFERRED`, c'est un malus
+  que le maximiseur a **payé** faute de mieux. Dans les deux cas le résidu est **diagnostiqué**
+  (`result_builder._diagnose_team_links` → `team_link_not_honored`, ERROR, nommant les deux équipes),
+  jamais avalé.
+- `teamLinks` vide (ou aucune passerelle du régime visé) ⇒ chemin byte-identique, goldens inchangés.
 
 ## Ce qu'un verrou HARD écrase (P2-9)
 

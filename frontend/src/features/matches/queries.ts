@@ -268,6 +268,16 @@ export function useCreateTeamLink() {
   });
 }
 
+export function useUpdateTeamLink() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ link, input }: { link: matchesApi.TeamLink; input: { linkType?: matchesApi.TeamLinkType; trainingIntensity?: matchesApi.TeamLinkIntensity } }) =>
+      matchesApi.updateTeamLink(link, input),
+    onSuccess: () => invalidateTeamLinks(queryClient),
+    onError: (error) => void errorMessage(error).then((message) => toast.error(message)),
+  });
+}
+
 export function useDeleteTeamLink() {
   const queryClient = useQueryClient();
   return useMutation({

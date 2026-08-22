@@ -4,11 +4,11 @@ import type { SharedTrainingGroup, Team, TeamPeriodOverride } from "../api";
 import {
   alreadyGroupedTeamIds,
   effectiveSessionsPerWeek,
-  gendersCompatible,
   groupContainingTeam,
   maxCommonSessions,
-  rankCandidates,
   sharedGroupLabel,
+  splitByLinks,
+  teamsLinkedTo,
 } from "./sharedTraining";
 
 const team = (over: Partial<Team> & Pick<Team, "id" | "name">): Team => ({
@@ -96,45 +96,48 @@ describe("sharedGroupLabel — « SM1 + SM2 — 1 séance commune » (plural han
   });
 });
 
-describe("gendersCompatible — MIXTE fits any gender; null is never a reason to hide", () => {
-  it("matches equal genders", () => {
-    expect(gendersCompatible("M", "M")).toBe(true);
+describe("teamsLinkedTo — the OTHER end of every declared bridge naming the anchor (server-served)", () => {
+  const links = [
+    { teamAId: "a", teamBId: "b" },
+    { teamAId: "c", teamBId: "a" },
+    { teamAId: "d", teamBId: "e" },
+  ];
+
+  it("collects the partner from links naming the anchor, whichever side it sits on", () => {
+    expect(teamsLinkedTo(links, "a")).toEqual(new Set(["b", "c"]));
   });
-  it("separates M from F", () => {
-    expect(gendersCompatible("M", "F")).toBe(false);
-  });
-  it("lets MIXTE pair with any gender", () => {
-    expect(gendersCompatible("MIXTE", "F")).toBe(true);
-    expect(gendersCompatible("M", "MIXTE")).toBe(true);
-  });
-  it("treats an unspecified gender (null) as compatible — a ranking must never hide on missing data", () => {
-    expect(gendersCompatible(null, "F")).toBe(true);
-    expect(gendersCompatible("M", null)).toBe(true);
+
+  it("is empty when no bridge names the anchor", () => {
+    expect(teamsLinkedTo(links, "z")).toEqual(new Set());
+    expect(teamsLinkedTo([], "a")).toEqual(new Set());
   });
 });
 
-describe("rankCandidates — a DISPLAY split into « proches » and the rest, never a permission", () => {
-  const anchor = team({ id: "a", name: "SM1", sportCategoryId: "senior", gender: "M" });
-  const sameCat = team({ id: "b", name: "SM2", sportCategoryId: "senior", gender: "M" });
-  const mixteSameCat = team({ id: "c", name: "SM3", sportCategoryId: "senior", gender: "MIXTE" });
-  const wrongGender = team({ id: "d", name: "SF1", sportCategoryId: "senior", gender: "F" });
-  const otherCat = team({ id: "e", name: "U11", sportCategoryId: "u11", gender: "M" });
+describe("splitByLinks — a DISPLAY split « liées » (bridged to the anchor) then the rest, never a permission", () => {
+  const anchor = team({ id: "a", name: "SM1" });
+  const linked = team({ id: "b", name: "SF1" });
+  const other = team({ id: "e", name: "U11" });
 
-  it("with no anchor, nothing is « proche » — the whole list stays flat (far)", () => {
-    const { near, far } = rankCandidates([anchor, sameCat, otherCat], null, new Set());
+  it("with no anchor, nothing is « liée » — the whole list stays flat (far)", () => {
+    const { near, far } = splitByLinks([anchor, linked, other], null, new Set(), new Set(["b"]));
     expect(near).toEqual([]);
     expect(far.map((t) => t.id)).toEqual(["a", "b", "e"]);
   });
 
-  it("puts same-category, gender-compatible teams in « proches », the rest in far", () => {
-    const { near, far } = rankCandidates([sameCat, mixteSameCat, wrongGender, otherCat], anchor, new Set(["a"]));
-    expect(near.map((t) => t.id)).toEqual(["b", "c"]);
-    expect(far.map((t) => t.id)).toEqual(["d", "e"]);
+  it("puts bridged teams first, the rest in far — a declared passerelle lifts the linked team to the top", () => {
+    const { near, far } = splitByLinks([linked, other], anchor, new Set(["a"]), new Set(["b"]));
+    expect(near.map((t) => t.id)).toEqual(["b"]);
+    expect(far.map((t) => t.id)).toEqual(["e"]);
   });
 
-  it("keeps a checked team in « proches » so it can always be unchecked, even if far from the anchor", () => {
-    // otherCat (e) is far from the anchor by category, but it is CHECKED — it must remain reachable.
-    const { near, far } = rankCandidates([sameCat, otherCat], anchor, new Set(["a", "e"]));
+  it("with no bridge for the anchor, « liées » holds only the checked teams (nothing else lifted)", () => {
+    const { near, far } = splitByLinks([anchor, linked, other], anchor, new Set(["a"]), new Set());
+    expect(near.map((t) => t.id)).toEqual(["a"]);
+    expect(far.map((t) => t.id)).toEqual(["b", "e"]);
+  });
+
+  it("keeps a checked team in « liées » so it can always be unchecked, even if not bridged", () => {
+    const { near, far } = splitByLinks([linked, other], anchor, new Set(["a", "e"]), new Set());
     expect(near.map((t) => t.id)).toContain("e");
     expect(far.map((t) => t.id)).not.toContain("e");
   });

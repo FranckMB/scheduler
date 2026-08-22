@@ -347,12 +347,23 @@ export interface TeamMatchHabit {
 
 export type TeamLinkType = "NOT_SIMULTANEOUS" | "BACK_TO_BACK";
 
+/**
+ * Intensité d'une passerelle CÔTÉ ENTRAÎNEMENT (lot PASSERELLES, arbitrage fondateur n°1).
+ * Miroir de `App\Enum\TeamLinkIntensity`. Ne gouverne QUE le solveur d'entraînement — le rail
+ * matchs garde sa pénalité SOFT historique (`linkType`), insensible à ce réglage.
+ * `PREFERRED` (défaut) : le solveur préfère éviter le chevauchement des séances. `MANDATORY` :
+ * il l'interdit (contrainte dure — peut rendre le planning infaisable si trop contraint).
+ */
+export type TeamLinkIntensity = "PREFERRED" | "MANDATORY";
+
 /** A declared team bridge — symmetric (teamAId < teamBId), one per couple. */
 export interface TeamLink {
   id: string;
   teamAId: string;
   teamBId: string;
   linkType: TeamLinkType;
+  /** Training-only intensity (PREFERRED default). Never governs matches. */
+  trainingIntensity: TeamLinkIntensity;
 }
 
 export const getTeamMatchHabits = (): Promise<TeamMatchHabit[]> =>
@@ -365,8 +376,25 @@ export const deleteTeamMatchHabit = (id: string): Promise<void> => api.delete(`t
 
 export const getTeamLinks = (): Promise<TeamLink[]> => collectionAll<TeamLink>("team_links");
 
-export const createTeamLink = (input: { teamAId: string; teamBId: string; linkType: TeamLinkType }): Promise<TeamLink> =>
+export const createTeamLink = (input: { teamAId: string; teamBId: string; linkType: TeamLinkType; trainingIntensity?: TeamLinkIntensity }): Promise<TeamLink> =>
   api.post("team_links", { json: input }).json<TeamLink>();
+
+/**
+ * Edit an existing bridge — PUT is a full replace in this API, so the identity
+ * (teams + matches linkType) is echoed and only the changed axis moves. Today the
+ * one editable axis is the training intensity (matches linkType stays as declared).
+ */
+export const updateTeamLink = (link: TeamLink, input: { linkType?: TeamLinkType; trainingIntensity?: TeamLinkIntensity }): Promise<TeamLink> =>
+  api
+    .put(`team_links/${link.id}`, {
+      json: {
+        teamAId: link.teamAId,
+        teamBId: link.teamBId,
+        linkType: input.linkType ?? link.linkType,
+        trainingIntensity: input.trainingIntensity ?? link.trainingIntensity,
+      },
+    })
+    .json<TeamLink>();
 
 export const deleteTeamLink = (id: string): Promise<void> => api.delete(`team_links/${id}`).then(() => undefined);
 
