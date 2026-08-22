@@ -18,11 +18,13 @@ use App\Enum\SeasonStatus;
 use App\Enum\TeamLinkIntensity;
 use App\Enum\TeamLinkType;
 use App\Service\ScheduleConstraintBuilder;
+use App\State\Processor\TeamLinkStateProcessor;
 use App\Tests\ProvisionsPeriodPlanTrait;
 use App\Tests\TenantGucTrait;
 use DateTimeImmutable;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\Attributes\Group;
+use ReflectionClassConstant;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
 /**
@@ -53,6 +55,24 @@ final class TeamLinkPayloadParityTest extends KernelTestCase
      * Sens 1 — le socle émet EXACTEMENT ses passerelles stockées, avec leur intensité (MANDATORY
      * ici, pas le défaut : l'intensité VOYAGE). Un builder émettant [] échoue.
      */
+    /**
+     * Le cap de saisie backend est un MIROIR MANUEL de `MAX_TEAM_LINKS` (engine,
+     * input_schema.py) — même régime que CONTRACT_VERSION : pas de codegen, l'égalité
+     * est une discipline, et une discipline non testée dérive (la version l'a prouvé
+     * deux fois). Sans cette égalité, la 51ᵉ passerelle passerait la saisie et ferait
+     * 422-FAILED la GÉNÉRATION — une panne loin de sa cause.
+     */
+    public function testWriteCapMirrorsTheEngineEdgeCap(): void
+    {
+        $schema = file_get_contents(__DIR__ . '/../../../engine/app/schemas/input_schema.py');
+        self::assertIsString($schema);
+        self::assertSame(1, preg_match('/^MAX_TEAM_LINKS = (\d+)$/m', $schema, $m), 'MAX_TEAM_LINKS introuvable dans input_schema.py — le motif a changé, ce garde est aveugle.');
+
+        $mirrored = new ReflectionClassConstant(TeamLinkStateProcessor::class, 'MAX_TEAM_LINKS');
+
+        self::assertSame((int) $m[1], $mirrored->getValue(), 'Le cap de saisie backend a dérivé du cap au bord engine — recaler les DEUX littéraux ensemble.');
+    }
+
     public function testClubSeasonPayloadEmitsStoredLinksWithIntensity(): void
     {
         [$club, $season] = $this->seed();

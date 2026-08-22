@@ -22,6 +22,7 @@ use App\Enum\CompetitionType;
 use App\Enum\FixtureHomeAway;
 use App\Enum\FixtureStatus;
 use App\Enum\SeasonStatus;
+use App\Enum\TeamLinkType;
 use App\Service\SeasonResolver;
 use App\Tests\ChoosesPlanVersionTrait;
 use App\Tests\TenantGucTrait;
@@ -265,6 +266,58 @@ final class MatchTenantIsolationTest extends WebTestCase
             'teamAId' => $sm1->getId(), 'teamBId' => $sm1->getId(), 'linkType' => 'NOT_SIMULTANEOUS',
         ], \JSON_THROW_ON_ERROR));
         self::assertResponseStatusCodeSame(422);
+    }
+
+    /**
+     * Lot PASSERELLES PR-1 — le plafond se refuse à la SAISIE, jamais à la génération.
+     * Sans lui, la 51ᵉ passerelle passerait ici et ferait 422-FAILED le solve (le bord
+     * Pydantic `MAX_TEAM_LINKS` la refuse) : une panne loin de sa cause. Le miroir des
+     * deux littéraux est gardé par TeamLinkPayloadParityTest::testWriteCapMirrorsTheEngineEdgeCap.
+     */
+    public function testTheFiftyFirstTeamLinkIsRefusedAtWriteTime(): void
+    {
+        [$clubA, $userA, $seasonA] = $this->createClubUser('cap');
+        $headers = $this->authHeaders($userA) + ['CONTENT_TYPE' => 'application/json'];
+
+        // 11 équipes offrent 55 couples : on en persiste 50 directement (le rail API
+        // n'est pas le sujet ici), la 51ᵉ passe par l'API et doit être refusée.
+        $teams = [];
+        for ($i = 0; $i < 11; ++$i) {
+            $teams[] = $this->createTeam($clubA, $seasonA, 'Cap' . $i);
+        }
+        $seeded = 0;
+        for ($a = 0; $a < 11 && $seeded < 50; ++$a) {
+            for ($b = $a + 1; $b < 11 && $seeded < 50; ++$b) {
+                [$low, $high] = strcasecmp($teams[$a]->getId(), $teams[$b]->getId()) <= 0
+                    ? [$teams[$a], $teams[$b]] : [$teams[$b], $teams[$a]];
+                $link = new TeamLink;
+                $link->setClubId($clubA->getId());
+                $link->setSeasonId($seasonA->getId());
+                $link->setTeamAId($low->getId());
+                $link->setTeamBId($high->getId());
+                $link->setLinkType(TeamLinkType::NOT_SIMULTANEOUS);
+                $this->em->persist($link);
+                ++$seeded;
+            }
+        }
+        $this->em->flush();
+
+        // La 51ᵉ (le couple encore libre) est refusée avec un message NOMMÉ.
+        $this->client->request('POST', '/api/team_links', [], [], $headers, json_encode([
+            'teamAId' => $teams[9]->getId(), 'teamBId' => $teams[10]->getId(), 'linkType' => 'NOT_SIMULTANEOUS',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(422);
+        self::assertStringContainsString('nombre maximal de passerelles', (string) $this->client->getResponse()->getContent());
+
+        // Supprimer une passerelle rouvre la porte : le cap borne, il ne fige pas.
+        $one = $this->em->getRepository(TeamLink::class)->findOneBy(['clubId' => $clubA->getId()]);
+        self::assertInstanceOf(TeamLink::class, $one);
+        $this->em->remove($one);
+        $this->em->flush();
+        $this->client->request('POST', '/api/team_links', [], [], $headers, json_encode([
+            'teamAId' => $teams[9]->getId(), 'teamBId' => $teams[10]->getId(), 'linkType' => 'NOT_SIMULTANEOUS',
+        ], \JSON_THROW_ON_ERROR));
+        self::assertResponseStatusCodeSame(201);
     }
 
     protected function setUp(): void
