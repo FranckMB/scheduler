@@ -1,5 +1,7 @@
 # Documentation métier du système de contraintes
 
+Last verified @ 2026-08-22 (P4-120 — première vérification stampée de ce fichier, contre le code : tags système sondés présents dans `TeamTagService` (`EMB`, `PRE_REGION`, `LOISIR_JEUNE`, `HONNEUR`, `PROMOTION`, `MIXTE`) ✓ · retrait de `FACILITY_CAPACITY` (2026-08-08) déjà acté au §2.2 ✓ · `ConstraintValidationService` appelé par le SEUL `ValidateConstraintsController` — la note du §6 reste vraie ✓ · suppression de `config.coachId` (SEC-13) conforme ✓. **Quatre faits corrigés** : l'exemple du scope `FACILITY` décrivait encore la famille retirée « N équipes simultanées max » — en contradiction avec le §2.2 du MÊME fichier ; l'intersection de tags dite « logique future » est LIVRÉE depuis le 2026-08-15 (`targetTags`/`excludeTags`, P2-29) ; les implicites dites « codées en dur, non configurables » alors que les règles de bien-être se règlent via `implicitRules` et que `maxConsecutiveDays` naît ÉTEINTE ; le tableau §5 recalé en conséquence)
+
 > ClubScheduler — Symfony 7 + API Platform. Contexte : BCCL (B CHARPENNES CROIX LUIZET, code FFBB ARA0069036, ligue ARA).
 
 ---
@@ -10,7 +12,7 @@ Une **contrainte** est une règle métier qui façonne le planning d'entraîneme
 
 On distingue deux catégories :
 
-- **Règles implicites** : appliquées automatiquement par le moteur, sans intervention humaine. Par exemple, un entraîneur ne peut pas être sur deux terrains en même temps, ou une salle ne peut accueillir qu'une seule équipe par créneau. Ces règles sont codées en dur dans l'engine Python et ne sont pas configurables.
+- **Règles implicites** : appliquées automatiquement par le moteur, sans que l'utilisateur ait rien à saisir. Par exemple, un entraîneur ne peut pas être sur deux terrains en même temps, ou une salle ne peut accueillir qu'une seule équipe par créneau. Les invariants structurels (non-chevauchement, capacité) sont codés en dur ; les règles de **bien-être**, elles, sont désormais **réglables** via le bloc `implicitRules` du payload (intensité `HARD`/`PREFERRED`, seuils — et `maxConsecutiveDays`, P2-42, naît ÉTEINTE). Détail : `engine/docs/business.md` §Contraintes implicites.
 - **Contraintes utilisateur** : créées explicitement par l'administrateur du club via l'interface d'administration ou l'API. C'est ce document qui les décrit.
 
 Prenons un exemple concret au BCCL : l'équipe première masculine (SM1) s'entraîne le mardi et jeudi soir. Cette préférence n'est pas une règle universelle du basket, c'est une décision du club. C'est donc une contrainte utilisateur de type `DAY` + `PREFERRED`.
@@ -30,7 +32,7 @@ Le champ `scope` (enum `ConstraintScope`) définit la cible de la contrainte.
 | `CLUB` | Toutes les équipes du club (filtrables par tag via `targetTag`) | "Toutes les équipes jeunes finissent avant 19h30" |
 | `TEAM` | Une équipe spécifique (via `scopeTargetId` = UUID de l'équipe) | "SM3 ne s'entraîne que le mercredi" |
 | `COACH` | Un entraîneur spécifique (via `scopeTargetId` = UUID du coach) | "Enzo n'est pas disponible le vendredi" |
-| `FACILITY` | Une salle spécifique (via `scopeTargetId` = UUID du lieu) | "Au gymnase Matéo, 2 équipes simultanées maximum" |
+| `FACILITY` | Une salle spécifique (via `scopeTargetId` = UUID du lieu) | "Le gymnase ADN est fermé du 20 au 27 octobre" (fermeture datée, cf. §3.3 — l'ancien exemple « N équipes simultanées max » décrivait `FACILITY_CAPACITY`, retirée le 2026-08-08) |
 
 ### 2.2 Family — Quel type de règle ?
 
@@ -129,7 +131,7 @@ Une contrainte `CLUB` avec `config.targetTag = "JEUNE"` s'applique uniquement au
 | Genre | `FEMININE`, `MASCULINE`, `MIXTE` |
 | Niveau | `ELITE`, `REGIONAL`, `NATIONAL`, `DEPARTEMENTAL`, `LOISIR_ADULTE`, `LOISIR_JEUNE`, `HONNEUR`, `PROMOTION`, `PRE_REGION` |
 
-> Exemple : `targetTag: "U11"` cible toutes les équipes U11 du club (garçons et filles confondus). Pour cibler uniquement les U11 filles, on combinerait avec `targetTag: "FEMININE"` (deux contraintes distinctes, ou logique future d'intersection de tags).
+> Exemple : `targetTag: "U11"` cible toutes les équipes U11 du club (garçons et filles confondus). Pour cibler uniquement les U11 filles : `targetTags: ["U11", "FEMININE"]` — l'**intersection de tags est livrée** (P2-29, lot tags 2026-08-15), avec `excludeTags` en soustraction ; `targetTag` (singulier) reste la forme historique, équivalente à une liste d'un élément, et **mélanger les deux formes rend 422**. La sémantique exacte et les refus : [`constraint-config-keys.md`](constraint-config-keys.md) (foyer `TeamTagResolver`).
 
 ---
 
@@ -247,11 +249,11 @@ Le solveur CP-SAT (OR-Tools) raisonne sur des variables binaires du type "l'équ
 | | Implicites | Utilisateur |
 |--|-----------|------------|
 | **Gérées par** | Le moteur Python, automatiquement | L'administrateur du club via l'API ou l'interface |
-| **Configurables** | Non | Oui (CRUD complet) |
+| **Configurables** | Invariants structurels : non. Règles de bien-être : intensité/seuils via `implicitRules` (P2-42) | Oui (CRUD complet) |
 | **Stockage** | Code de l'engine | Table `Constraint` en base de données |
 | **Exemples** | Un entraîneur = une équipe à la fois. Une salle = une équipe à la fois. | Les jeunes doivent finir avant 19h30. SM3 préfère le mercredi. |
 | **Visibilité API** | Endpoint `POST /implicit-constraints` de l'**engine** (aucune route backend) — consommé par la commande `app:constraint:export-implicit` | Endpoint `/api/constraints` (CRUD complet) |
-| **Impact sur le score** | Toujours `HARD` (violations rendent le planning invalide) | Variable (`HARD`, `PREFERRED`, `BONUS`, `LOCK`) |
+| **Impact sur le score** | `HARD` par défaut ; les règles de bien-être peuvent être assouplies en `PREFERRED` (pénalité au lieu d'invalidité), et `maxConsecutiveDays` naît OFF | Variable (`HARD`, `PREFERRED`, `BONUS`, `LOCK`) |
 
 Les contraintes implicites sont les fondations du système. Sans elles, le solveur pourrait placer le coach Enzo sur deux terrains simultanément, ou assigner SM1 et SF3 dans la même salle à la même heure. Les contraintes utilisateur viennent affiner ce comportement de base pour refléter les réalités du BCCL : horaires des bus scolaires, disponibilités des salles municipales, préférences des entraîneurs bénévoles.
 
