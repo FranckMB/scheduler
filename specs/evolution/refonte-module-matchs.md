@@ -137,13 +137,17 @@ tout des données, cet état tombe naturellement (tout est SUBMITTED → rien à
    officielles, un seul modèle — **API FFBB = le périmètre** (équipes, poules, adversaires), **FBI = les
    rencontres** (dates, heures, salles, n°). Chaque dépôt de xlsx est une **ingestion datée** qui alimente
    le diff, le radar et la fraîcheur (§7) — pas une corvée annexe.
-   ⚑ **Hiérarchie précisée (fondateur, 2026-08-22) : l'API est un MOYEN, l'import FBI fait AUTORITÉ.**
-   L'API FFBB est un confort — « magique » quand elle marche : pré-remplissage, périmètre, zéro
-   saisie. Mais **le vrai outil du gestionnaire, c'est FBI** : ce qu'il y saisit et ce qu'il en
-   exporte est l'acte officiel. En cas de recouvrement ou de désaccord entre une donnée venue de
-   l'API et une donnée venue d'un dépôt FBI, **le dépôt gagne** — et un rafraîchissement API
-   n'écrase JAMAIS en silence une donnée née d'un dépôt. La partition « API = périmètre, FBI =
-   rencontres » reste la règle de répartition nominale ; la hiérarchie tranche les chevauchements.
+   ⚑ **Hiérarchie précisée (fondateur, 2026-08-22) : l'API est un MOYEN, l'import FBI fait FOI.**
+   Les deux sources sont CENSÉES porter le même niveau d'information — l'une nourrit l'autre — mais
+   cette équivalence est une **présomption à ~90 %, pas une certitude** (fondateur). C'est ce doute
+   qui fonde la règle de litige, pas une infériorité de l'API : l'API est un confort — « magique »
+   quand elle marche : pré-remplissage, périmètre, zéro saisie — tandis que **FBI est le vrai outil
+   du gestionnaire**, là où l'acte officiel se fait. Donc en cas de désaccord entre une donnée venue
+   de l'API et une donnée venue d'un dépôt FBI, **le dépôt fait foi** — et un rafraîchissement API
+   n'écrase JAMAIS en silence une donnée née d'un dépôt. Corollaire utile : un désaccord API⇄dépôt
+   n'est pas du bruit à avaler, c'est un **signal à MONTRER** (il infirme la présomption des 90 % —
+   le gestionnaire veut le savoir). La partition « API = périmètre, FBI = rencontres » reste la
+   règle de répartition nominale ; la hiérarchie tranche les chevauchements.
 
 2. **« Le numéro de rencontre est unique » — faux au niveau global.** Le « 26 » existe en RMU18 Brassage
    *et* en DF2 (fact mesuré F6). Il est modélisé (`Fixture.externalRef`) mais l'unicité est **composite**
@@ -174,9 +178,10 @@ tout des données, cet état tombe naturellement (tout est SUBMITTED → rien à
   besoins net-neufs de l'entretien. Le tout se **livrera par lots** (§9), pas en une PR.
 - **Rotation A/B = vraie capacité de modèle à honorer** par le solveur (§8) — sort de la refonte UX pure.
 - **FBI = source de données de plein droit** (fondateur 2026-08-17), **et depuis le 2026-08-22 la
-  source qui fait AUTORITÉ** : l'API FFBB est un moyen (« magique » — confort, pré-remplissage), le
-  dépôt FBI est l'acte du vrai outil du gestionnaire — au chevauchement, le dépôt gagne, jamais
-  d'écrasement silencieux par l'API (hiérarchie, §4 fait #1). Le canal est un xlsx manuel, chaque
+  source qui FAIT FOI en litige** : API et FBI sont censés porter la même information (l'un nourrit
+  l'autre) mais l'équivalence est présumée à ~90 %, pas certaine — d'où la règle : au désaccord, le
+  dépôt FBI gagne, jamais d'écrasement silencieux par l'API, et le désaccord se MONTRE (hiérarchie
+  et corollaire, §4 fait #1). Le canal est un xlsx manuel, chaque
   dépôt est une **ingestion datée** qui alimente le modèle, le diff et le gardien. La partition
   nominale demeure : **API FFBB = périmètre, FBI = rencontres**. La réconciliation se fait par
   **diff au ré-import** — l'outil sécurise le geste FBI, il ne le remplace pas.
