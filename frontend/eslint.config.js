@@ -72,11 +72,12 @@ export default defineConfig([
   // 6 fichiers, installées une par une sans que rien ne les voie : c'est la SILENCE de la
   // dérive qui est le problème, pas les 8 cas.
   //
-  // Cette règle ne les résorbe pas — elle empêche la 9e. Les 8 existantes sont listées en
-  // dette explicite juste en dessous, chacune nommée : une exception qu'on doit écrire est
-  // une exception qu'on voit, et qui coûte assez cher pour qu'on préfère la corriger.
-  // Résorption tracée en P4-119 (déplacer ce qui est PARTAGÉ vers `shared/`, ce qui est
-  // PLANNING vers `features/planning/`) — pas au détour d'un lot de finitions.
+  // Cette règle a d'abord empêché la 9e remontée pendant que les 8 existantes restaient en
+  // dette explicite ; une exception qu'on doit écrire est une exception qu'on voit, et qui
+  // coûte assez cher pour qu'on préfère la corriger.
+  // Résorbée le 2026-08-22 (P4-123) : la session est descendue dans `shared/session/`, le
+  // statut dans `shared/lib/`, `DeletionImpact` dans `shared/api/`, et le flux SSE est remonté
+  // chez `features/planning/`. La règle est désormais TOTALE — plus aucune exception de prod.
   {
     files: ['src/shared/**/*.{ts,tsx}'],
     ignores: [
@@ -85,13 +86,7 @@ export default defineConfig([
       // (`days`, `time`) gagne à être vérifié contre l'usage RÉEL qu'en font planning/wizard —
       // l'interdire pousserait à re-décrire l'usage dans le test, donc à le laisser dériver.
       '**/*.test.{ts,tsx}',
-      // Dette AUD-FRT-21, à résorber (P4-119) — aucune ligne à AJOUTER ici.
-      'src/shared/lib/socle.ts',                    // useMe
-      'src/shared/lib/scheduleStream.ts',           // ScheduleStatus + isTerminalStatus (planning)
-      'src/shared/hooks/useApplyDemoClock.ts',      // useMe
-      'src/shared/hooks/useApplyClubTheme.ts',      // useMe
-      'src/shared/credits/useCredits.ts',           // useMe + ClubEntitlements
-      'src/shared/components/ui/delete-confirm.tsx' // DeletionImpact (wizard)
+      // Dette AUD-FRT-21 résorbée le 2026-08-22 (P4-123) — aucune ligne à AJOUTER ici.
     ],
     rules: {
       'no-restricted-imports': [
